@@ -126,13 +126,13 @@ export function DynamicFormRenderer({
                 payload.data = hybridData;
             }
 
-            await apiFetch(url, {
+            const response = await apiFetch(url, {
                 method,
                 body: JSON.stringify(payload),
             });
 
             toast.success(`${name} saved successfully`);
-            onSuccess?.(values);
+            onSuccess?.(response);
         } catch (error: any) {
             console.error(error);
             toast.error(error.message || `Failed to save ${objectName || metadata?.name}`);
@@ -198,7 +198,7 @@ export function DynamicFormRenderer({
 
                 <Box display="flex" justifyContent="flex-end" gap={2} pt={2}>
                     {onCancel && (
-                        <Button variant="outlined" onClick={onCancel}>
+                        <Button variant="outlined" onClick={onCancel} sx={{ borderRadius: '10px', minHeight: 38 }}>
                             Cancel
                         </Button>
                     )}
@@ -206,7 +206,7 @@ export function DynamicFormRenderer({
                         type="submit"
                         variant="contained"
                         disabled={isSaving}
-                        sx={{ px: 4 }}
+                        sx={{ px: 3, borderRadius: '10px', minHeight: 38 }}
                     >
                         {isSaving ? 'Saving...' : `Save ${objectName}`}
                     </Button>

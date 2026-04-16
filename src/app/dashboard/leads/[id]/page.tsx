@@ -372,39 +372,58 @@ export default function LeadDetailPage() {
                                     <WorkspaceTab label="Audit" active={tabValue === "audit"} onClick={() => setTabValue("audit")} />
                                 </Stack>
 
-                                {tabValue === "activity" && (
-                                    <Stack direction="row" spacing={0.75} flexWrap="wrap">
-                                        <Select
-                                            size="small"
-                                            value={activityTypeFilter}
-                                            onChange={(e) => setActivityTypeFilter(String(e.target.value))}
-                                            sx={{ minWidth: 156, borderRadius: "8px", bgcolor: "background.paper" }}
-                                        >
-                                            <MenuItem value="ALL">All Activity Types</MenuItem>
-                                            {activityTypes.map((type) => (
-                                                <MenuItem key={type.id} value={type.id}>
-                                                    {type.name}
-                                                </MenuItem>
-                                            ))}
-                                        </Select>
-                                        <Select
-                                            size="small"
-                                            value={activityTimeFilter}
-                                            onChange={(e) => setActivityTimeFilter(e.target.value as ActivityTimeFilter)}
-                                            sx={{ minWidth: 132, borderRadius: "8px", bgcolor: "background.paper" }}
-                                        >
-                                            <MenuItem value="ALL">All Time</MenuItem>
-                                            <MenuItem value="TODAY">Today</MenuItem>
-                                            <MenuItem value="7D">Last 7 days</MenuItem>
-                                            <MenuItem value="30D">Last 30 days</MenuItem>
-                                        </Select>
-                                    </Stack>
-                                )}
                             </Stack>
                         </Box>
 
                         <Box sx={{ p: { xs: 1.25, md: 1.5 } }}>
-                            {tabValue === "activity" && <Timeline activities={filteredActivities} />}
+                            {tabValue === "activity" && (
+                                <Stack spacing={1.25}>
+                                    <Stack
+                                        direction={{ xs: "column", sm: "row" }}
+                                        spacing={0.75}
+                                        justifyContent="space-between"
+                                        alignItems={{ xs: "stretch", sm: "center" }}
+                                        sx={{
+                                            p: 1,
+                                            border: "1px solid",
+                                            borderColor: "divider",
+                                            borderRadius: "10px",
+                                            bgcolor: "surfaceContainerLowest",
+                                        }}
+                                    >
+                                        <Typography variant="caption" sx={{ fontWeight: 800, color: "text.secondary", textTransform: "uppercase", letterSpacing: "0.08em" }}>
+                                            Activity Filters
+                                        </Typography>
+                                        <Stack direction="row" spacing={0.75} flexWrap="wrap">
+                                            <Select
+                                                size="small"
+                                                value={activityTypeFilter}
+                                                onChange={(e) => setActivityTypeFilter(String(e.target.value))}
+                                                sx={{ minWidth: 148, borderRadius: "8px", bgcolor: "background.paper" }}
+                                            >
+                                                <MenuItem value="ALL">All Types</MenuItem>
+                                                {activityTypes.map((type) => (
+                                                    <MenuItem key={type.id} value={type.id}>
+                                                        {type.name}
+                                                    </MenuItem>
+                                                ))}
+                                            </Select>
+                                            <Select
+                                                size="small"
+                                                value={activityTimeFilter}
+                                                onChange={(e) => setActivityTimeFilter(e.target.value as ActivityTimeFilter)}
+                                                sx={{ minWidth: 120, borderRadius: "8px", bgcolor: "background.paper" }}
+                                            >
+                                                <MenuItem value="ALL">All Time</MenuItem>
+                                                <MenuItem value="TODAY">Today</MenuItem>
+                                                <MenuItem value="7D">7 Days</MenuItem>
+                                                <MenuItem value="30D">30 Days</MenuItem>
+                                            </Select>
+                                        </Stack>
+                                    </Stack>
+                                    <Timeline activities={filteredActivities} />
+                                </Stack>
+                            )}
 
                             {tabValue === "details" && (
                                 <Grid container spacing={1.25}>

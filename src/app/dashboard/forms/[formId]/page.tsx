@@ -1,82 +1,158 @@
-"use client";
+'use client';
 
-import { useEffect, useState } from "react";
-import { useParams } from "next/navigation";
-import { apiFetch } from "@/lib/api";
-import { FormEditor } from "@/components/forms/form-editor";
-import { SubmissionsTable } from "@/components/forms/submissions-table";
-import { AnalyticsDashboard } from "@/components/forms/form-analytics";
-import { Button } from "@/components/ui/button";
-import { ArrowLeft, ExternalLink } from "lucide-react";
-import Link from "next/link";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useEffect, useState } from 'react';
+import { useParams, useRouter } from 'next/navigation';
+import Link from 'next/link';
+import {
+    Box,
+    Button,
+    Card,
+    CircularProgress,
+    Divider,
+    Stack,
+    Tab,
+    Tabs,
+    Typography,
+    alpha,
+    useTheme,
+} from '@mui/material';
+import {
+    ArrowBack as ArrowBackIcon,
+    OpenInNew as OpenInNewIcon,
+} from '@mui/icons-material';
+import { apiFetch } from '@/lib/api';
+import { FormEditor } from '@/components/forms/form-editor';
+import { SubmissionsTable } from '@/components/forms/submissions-table';
+import { AnalyticsDashboard } from '@/components/forms/form-analytics';
+
+type BuilderTab = 'editor' | 'submissions' | 'analytics';
 
 export default function FormBuilderPage() {
+    const theme = useTheme();
     const params = useParams();
+    const router = useRouter();
     const formId = params.formId as string;
     const [form, setForm] = useState<any>(null);
     const [loading, setLoading] = useState(true);
+    const [activeTab, setActiveTab] = useState<BuilderTab>('editor');
 
     useEffect(() => {
-        if (formId) {
-            apiFetch(`/forms/${formId}`)
-                .then(setForm)
-                .catch(console.error)
-                .finally(() => setLoading(false));
-        }
+        if (!formId) return;
+
+        apiFetch(`/forms/${formId}`)
+            .then(setForm)
+            .catch(console.error)
+            .finally(() => setLoading(false));
     }, [formId]);
 
-    if (loading) return <div className="p-8">Loading form builder...</div>;
-    if (!form) return <div className="p-8">Form not found</div>;
+    if (loading) {
+        return (
+            <Box sx={{ minHeight: '60vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <CircularProgress />
+            </Box>
+        );
+    }
+
+    if (!form) {
+        return (
+            <Box sx={{ p: 3 }}>
+                <Typography variant="h6" sx={{ fontWeight: 700, mb: 1 }}>
+                    Form not found
+                </Typography>
+                <Button onClick={() => router.push('/dashboard/forms')} variant="outlined" sx={{ borderRadius: '10px' }}>
+                    Back to Forms
+                </Button>
+            </Box>
+        );
+    }
 
     return (
-        <div className="flex flex-col h-[calc(100vh-4rem)]">
-            <div className="flex items-center gap-4 px-6 py-4 border-b bg-background">
-                <Link href="/dashboard/forms">
-                    <Button variant="ghost" size="icon">
-                        <ArrowLeft className="h-4 w-4" />
+        <Box sx={{ px: { xs: 2, md: 3 }, py: { xs: 2, md: 2.5 }, maxWidth: 1700, mx: 'auto' }}>
+            <Stack spacing={2}>
+                <Box>
+                    <Button
+                        startIcon={<ArrowBackIcon />}
+                        onClick={() => router.push('/dashboard/forms')}
+                        sx={{ mb: 1, borderRadius: '10px', color: 'text.secondary', minHeight: 34 }}
+                    >
+                        Back
                     </Button>
-                </Link>
-                <div className="flex-1">
-                    <h1 className="text-lg font-semibold">{form.name}</h1>
-                    <div className="text-xs text-muted-foreground flex gap-2 items-center">
-                        <span className={`inline-block w-2 h-2 rounded-full ${form.isActive ? 'bg-green-500' : 'bg-gray-300'}`} />
-                        <span>{form.isActive ? 'Active' : 'Draft'}</span>
-                        <span>•</span>
-                        <a href={`/public-form/${form.id}`} target="_blank" className="text-primary hover:underline flex items-center gap-1" rel="noreferrer">
-                            View Public Page <ExternalLink className="h-3 w-3" />
-                        </a>
-                    </div>
-                </div>
-            </div>
+                    <Stack
+                        direction={{ xs: 'column', md: 'row' }}
+                        justifyContent="space-between"
+                        alignItems={{ xs: 'flex-start', md: 'center' }}
+                        spacing={1.5}
+                    >
+                        <Box>
+                            <Typography variant="h4" sx={{ fontWeight: 800, letterSpacing: -0.6 }}>
+                                {form.name}
+                            </Typography>
+                            <Stack direction="row" spacing={1} alignItems="center" sx={{ mt: 0.5, flexWrap: 'wrap' }}>
+                                <Typography variant="body2" color="text.secondary">
+                                    {form.isActive ? 'Active' : 'Draft'}
+                                </Typography>
+                                <Typography variant="body2" color="text.secondary">•</Typography>
+                                <Typography
+                                    component={Link}
+                                    href={`/public-form/${form.id}`}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    variant="body2"
+                                    sx={{
+                                        color: 'primary.main',
+                                        textDecoration: 'none',
+                                        fontWeight: 600,
+                                        display: 'inline-flex',
+                                        alignItems: 'center',
+                                        gap: 0.5,
+                                        '&:hover': { textDecoration: 'underline' },
+                                    }}
+                                >
+                                    View Public Page
+                                    <OpenInNewIcon sx={{ fontSize: 16 }} />
+                                </Typography>
+                            </Stack>
+                        </Box>
+                    </Stack>
+                </Box>
 
-            <Tabs defaultValue="editor" className="flex-1 flex flex-col overflow-hidden">
-                <div className="px-6 border-b bg-muted/10">
-                    <TabsList className="bg-transparent h-12">
-                        <TabsTrigger value="editor" className="data-[state=active]:bg-background data-[state=active]:shadow-sm">Builder</TabsTrigger>
-                        <TabsTrigger value="submissions" className="data-[state=active]:bg-background data-[state=active]:shadow-sm">Submissions</TabsTrigger>
-                        <TabsTrigger value="analytics" className="data-[state=active]:bg-background data-[state=active]:shadow-sm">Analytics</TabsTrigger>
-                    </TabsList>
-                </div>
+                <Card sx={{ borderRadius: '14px', border: '1px solid', borderColor: 'divider', overflow: 'hidden' }}>
+                    <Box sx={{ px: 1, py: 1, borderBottom: '1px solid', borderColor: 'divider', bgcolor: 'surfaceContainerLowest' }}>
+                        <Tabs
+                            value={activeTab}
+                            onChange={(_, value) => setActiveTab(value)}
+                            sx={{
+                                minHeight: 36,
+                                '& .MuiTabs-flexContainer': { gap: 0.5 },
+                            }}
+                        >
+                            <Tab value="editor" label="Builder" sx={{ minHeight: 36, borderRadius: '8px' }} />
+                            <Tab value="submissions" label="Submissions" sx={{ minHeight: 36, borderRadius: '8px' }} />
+                            <Tab value="analytics" label="Analytics" sx={{ minHeight: 36, borderRadius: '8px' }} />
+                        </Tabs>
+                    </Box>
 
-                <div className="flex-1 overflow-hidden bg-background">
-                    <TabsContent value="editor" className="h-full m-0 p-0 border-none outline-none data-[state=inactive]:hidden">
-                        <FormEditor initialForm={form} />
-                    </TabsContent>
+                    <Box sx={{ bgcolor: 'background.default' }}>
+                        {activeTab === 'editor' && (
+                            <Box sx={{ minHeight: 'calc(100vh - 240px)' }}>
+                                <FormEditor initialForm={form} />
+                            </Box>
+                        )}
 
-                    <TabsContent value="submissions" className="h-full m-0 p-6 overflow-y-auto data-[state=inactive]:hidden">
-                        <div className="max-w-6xl mx-auto">
-                            <SubmissionsTable formId={formId} />
-                        </div>
-                    </TabsContent>
+                        {activeTab === 'submissions' && (
+                            <Box sx={{ p: { xs: 1.5, md: 2 } }}>
+                                <SubmissionsTable formId={formId} />
+                            </Box>
+                        )}
 
-                    <TabsContent value="analytics" className="h-full m-0 p-6 overflow-y-auto data-[state=inactive]:hidden">
-                        <div className="max-w-6xl mx-auto">
-                            <AnalyticsDashboard formId={formId} />
-                        </div>
-                    </TabsContent>
-                </div>
-            </Tabs>
-        </div>
+                        {activeTab === 'analytics' && (
+                            <Box sx={{ p: { xs: 1.5, md: 2 } }}>
+                                <AnalyticsDashboard formId={formId} />
+                            </Box>
+                        )}
+                    </Box>
+                </Card>
+            </Stack>
+        </Box>
     );
 }
