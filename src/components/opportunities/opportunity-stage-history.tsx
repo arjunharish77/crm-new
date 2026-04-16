@@ -43,13 +43,13 @@ export function OpportunityStageHistoryList({ history }: OpportunityStageHistory
     }
 
     return (
-        <Stack spacing={2}>
+        <Stack spacing={1.25}>
             {history.map((item) => (
                 <Paper
                     key={item.id}
                     elevation={0}
                     sx={{
-                        p: 2,
+                        p: 1.5,
                         borderRadius: 3,
                         border: '1px solid',
                         borderColor: 'divider',
@@ -60,31 +60,31 @@ export function OpportunityStageHistoryList({ history }: OpportunityStageHistory
                         }
                     }}
                 >
-                    <Stack direction="row" spacing={2} alignItems="center">
+                    <Stack direction="row" spacing={1.5} alignItems="center">
                         <Avatar sx={{
-                            width: 32,
-                            height: 32,
+                            width: 30,
+                            height: 30,
                             bgcolor: 'secondaryContainer',
                             color: 'onSecondaryContainer'
                         }}>
-                            <HistoryIcon sx={{ fontSize: 18 }} />
+                            <HistoryIcon sx={{ fontSize: 16 }} />
                         </Avatar>
 
                         <Box sx={{ flexGrow: 1 }}>
-                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap', mb: 0.5 }}>
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, flexWrap: 'wrap', mb: 0.35 }}>
                                 {item.fromStage ? (
-                                    <Typography variant="body2" sx={{ fontWeight: 600, color: 'text.secondary' }}>
+                                    <Typography variant="body2" sx={{ fontWeight: 700, color: 'text.secondary' }}>
                                         {item.fromStage.name}
                                     </Typography>
                                 ) : (
-                                    <Typography variant="body2" sx={{ fontWeight: 600, color: 'text.disabled' }}>
+                                    <Typography variant="body2" sx={{ fontWeight: 700, color: 'text.disabled' }}>
                                         Initial
                                     </Typography>
                                 )}
 
                                 <ArrowIcon sx={{ fontSize: 14, color: 'text.disabled' }} />
 
-                                <Typography variant="body2" sx={{ fontWeight: 700, color: 'primary.main' }}>
+                                <Typography variant="body2" sx={{ fontWeight: 800, color: 'primary.main' }}>
                                     {item.toStage.name}
                                 </Typography>
                             </Box>

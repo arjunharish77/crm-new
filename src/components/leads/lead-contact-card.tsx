@@ -70,7 +70,7 @@ export function LeadContactCard({ lead, onCreateActivity, onCreateOpportunity }:
             <Card
                 elevation={0}
                 sx={{
-                    borderRadius: '24px',
+                    borderRadius: '16px',
                     border: '1px solid',
                     borderColor: 'divider',
                     bgcolor: 'surfaceContainerLowest',
@@ -82,15 +82,15 @@ export function LeadContactCard({ lead, onCreateActivity, onCreateOpportunity }:
                 }}
             >
                 {/* Header */}
-                <Box sx={{ p: 3, borderBottom: '1px solid', borderColor: alpha(theme.palette.divider, 0.5) }}>
+                <Box sx={{ p: 1.5, borderBottom: '1px solid', borderColor: alpha(theme.palette.divider, 0.5) }}>
                     <Stack direction="row" justifyContent="space-between" alignItems="flex-start">
                         <Box>
-                            <Typography variant="h5" sx={{ fontWeight: 800, mb: 0.5, letterSpacing: '-0.5px' }}>
+                            <Typography variant="h6" sx={{ fontWeight: 800, mb: 0.25, letterSpacing: '-0.2px' }}>
                                 {lead.name}
                             </Typography>
                             {lead.company && (
-                                <Stack direction="row" spacing={1} alignItems="center" sx={{ color: 'text.secondary' }}>
-                                    <BusinessIcon sx={{ fontSize: 16 }} />
+                                <Stack direction="row" spacing={0.75} alignItems="center" sx={{ color: 'text.secondary' }}>
+                                    <BusinessIcon sx={{ fontSize: 14 }} />
                                     <Typography variant="body2" sx={{ fontWeight: 500 }}>{lead.company}</Typography>
                                 </Stack>
                             )}
@@ -102,7 +102,7 @@ export function LeadContactCard({ lead, onCreateActivity, onCreateOpportunity }:
                                 textTransform: 'uppercase',
                                 fontSize: '0.625rem',
                                 letterSpacing: '0.05em',
-                                height: 24,
+                                height: 20,
                                 bgcolor: statusStyle.bgcolor,
                                 color: statusStyle.color,
                                 border: '1px solid',
@@ -113,22 +113,25 @@ export function LeadContactCard({ lead, onCreateActivity, onCreateOpportunity }:
                 </Box>
 
                 {/* Contact Info */}
-                <CardContent sx={{ p: 3, spaceY: 2 }}>
-                    <Stack spacing={2.5}>
+                <CardContent sx={{ p: 1.5, '&:last-child': { pb: 1.5 } }}>
+                    <Stack spacing={1.125}>
                         {lead.email && (
                             <Stack direction="row" alignItems="center" justifyContent="space-between" className="group">
-                                <Stack direction="row" spacing={2} alignItems="center" sx={{ flexGrow: 1 }}>
-                                    <Box sx={{ p: 1, borderRadius: '10px', bgcolor: 'surfaceContainerHigh', color: 'text.secondary', display: 'flex' }}>
-                                        <MailIcon sx={{ fontSize: 18 }} />
+                                <Stack direction="row" spacing={1.5} alignItems="center" sx={{ flexGrow: 1, minWidth: 0 }}>
+                                    <Box sx={{ p: 0.625, borderRadius: '7px', bgcolor: 'surfaceContainerHigh', color: 'text.secondary', display: 'flex' }}>
+                                        <MailIcon sx={{ fontSize: 15 }} />
                                     </Box>
                                     <Typography
                                         component="a"
                                         href={`mailto:${lead.email}`}
                                         variant="body2"
                                         sx={{
-                                            fontWeight: 600,
+                                            fontWeight: 700,
                                             color: 'text.primary',
                                             textDecoration: 'none',
+                                            overflow: 'hidden',
+                                            textOverflow: 'ellipsis',
+                                            whiteSpace: 'nowrap',
                                             '&:hover': { color: 'primary.main' }
                                         }}
                                     >
@@ -139,7 +142,7 @@ export function LeadContactCard({ lead, onCreateActivity, onCreateOpportunity }:
                                     <IconButton
                                         size="small"
                                         onClick={() => copyToClipboard(lead.email!, 'Email')}
-                                        sx={{ opacity: 0, '.group:hover &': { opacity: 1 }, transition: 'opacity 0.2s' }}
+                                        sx={{ opacity: 0, '.group:hover &': { opacity: 1 }, transition: 'opacity 0.2s', ml: 0.5 }}
                                     >
                                         <CopyIcon sx={{ fontSize: 16 }} />
                                     </IconButton>
@@ -149,16 +152,16 @@ export function LeadContactCard({ lead, onCreateActivity, onCreateOpportunity }:
 
                         {lead.phone && (
                             <Stack direction="row" alignItems="center" justifyContent="space-between" className="group">
-                                <Stack direction="row" spacing={2} alignItems="center" sx={{ flexGrow: 1 }}>
-                                    <Box sx={{ p: 1, borderRadius: '10px', bgcolor: 'surfaceContainerHigh', color: 'text.secondary', display: 'flex' }}>
-                                        <PhoneIcon sx={{ fontSize: 18 }} />
+                                <Stack direction="row" spacing={1.5} alignItems="center" sx={{ flexGrow: 1, minWidth: 0 }}>
+                                    <Box sx={{ p: 0.625, borderRadius: '7px', bgcolor: 'surfaceContainerHigh', color: 'text.secondary', display: 'flex' }}>
+                                        <PhoneIcon sx={{ fontSize: 15 }} />
                                     </Box>
                                     <Typography
                                         component="a"
                                         href={`tel:${lead.phone}`}
                                         variant="body2"
                                         sx={{
-                                            fontWeight: 600,
+                                            fontWeight: 700,
                                             color: 'text.primary',
                                             textDecoration: 'none',
                                             '&:hover': { color: 'primary.main' }
@@ -171,7 +174,7 @@ export function LeadContactCard({ lead, onCreateActivity, onCreateOpportunity }:
                                     <IconButton
                                         size="small"
                                         onClick={() => copyToClipboard(lead.phone!, 'Phone')}
-                                        sx={{ opacity: 0, '.group:hover &': { opacity: 1 }, transition: 'opacity 0.2s' }}
+                                        sx={{ opacity: 0, '.group:hover &': { opacity: 1 }, transition: 'opacity 0.2s', ml: 0.5 }}
                                     >
                                         <CopyIcon sx={{ fontSize: 16 }} />
                                     </IconButton>
@@ -181,19 +184,19 @@ export function LeadContactCard({ lead, onCreateActivity, onCreateOpportunity }:
                     </Stack>
                 </CardContent>
 
-                <Divider sx={{ mx: 3, opacity: 0.5 }} />
+                <Divider sx={{ mx: 1.5, opacity: 0.5 }} />
 
                 {/* Actions */}
-                <Box sx={{ p: 2 }}>
-                    <Stack spacing={1}>
+                <Box sx={{ p: 1.25 }}>
+                    <Stack spacing={0.625}>
                         <Button
                             onClick={onCreateActivity}
                             variant="contained"
                             fullWidth
                             startIcon={<ActivityIcon />}
                             sx={{
-                                borderRadius: '14px',
-                                py: 1.25,
+                                borderRadius: '10px',
+                                py: 0.8,
                                 fontWeight: 700,
                                 textTransform: 'none',
                                 boxShadow: 'none',
@@ -208,8 +211,8 @@ export function LeadContactCard({ lead, onCreateActivity, onCreateOpportunity }:
                             fullWidth
                             startIcon={<AddIcon />}
                             sx={{
-                                borderRadius: '14px',
-                                py: 1.25,
+                                borderRadius: '10px',
+                                py: 0.8,
                                 fontWeight: 700,
                                 textTransform: 'none'
                             }}

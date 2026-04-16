@@ -1,23 +1,28 @@
 "use client";
 
 import { Activity } from "@/types/activities";
-import { format, formatDistanceToNow } from "date-fns";
+import { format, formatDistanceToNow, isToday, isYesterday } from "date-fns";
 import * as LucideIcons from "lucide-react";
-import { User, FileText } from "lucide-react";
+import { FileText } from "lucide-react";
 import {
+    alpha,
+    Avatar,
     Box,
-    Typography,
+    Chip,
     Paper,
     Stack,
-    Avatar,
-    Chip,
-    Tooltip,
+    Typography,
     useTheme,
-    alpha
 } from "@mui/material";
 
 interface TimelineProps {
     activities: Activity[];
+}
+
+function getDayLabel(date: Date) {
+    if (isToday(date)) return "Today";
+    if (isYesterday(date)) return "Yesterday";
+    return format(date, "dd MMM yyyy");
 }
 
 export function Timeline({ activities }: TimelineProps) {
@@ -25,172 +30,194 @@ export function Timeline({ activities }: TimelineProps) {
 
     if (activities.length === 0) {
         return (
-            <Box sx={{
-                textAlign: 'center',
-                py: 6,
-                border: '2px dashed',
-                borderColor: 'divider',
-                borderRadius: 4,
-                color: 'text.secondary'
-            }}>
-                <FileText size={48} style={{ opacity: 0.2, marginBottom: 16 }} />
-                <Typography variant="h6" fontWeight={600}>No activities recorded yet</Typography>
-                <Typography variant="body2">Activity history will appear here</Typography>
+            <Box
+                sx={{
+                    textAlign: "center",
+                    py: 6,
+                    border: "1px dashed",
+                    borderColor: "divider",
+                    borderRadius: 4,
+                    color: "text.secondary",
+                    bgcolor: "surfaceContainerLowest",
+                }}
+            >
+                <FileText size={40} style={{ opacity: 0.18, marginBottom: 12 }} />
+                <Typography variant="subtitle1" fontWeight={700}>
+                    No activity yet
+                </Typography>
+                <Typography variant="body2">Activity history will appear here.</Typography>
             </Box>
         );
     }
 
-    const getIconAndStyle = (activity: Activity) => {
-        const type = activity.type;
-        const IconComponent = type?.icon ? (LucideIcons as any)[type.icon] : LucideIcons.FileText;
-        const Icon = IconComponent || LucideIcons.FileText;
-        const color = type?.color || theme.palette.grey[500];
-
-        return {
-            icon: <Icon size={16} />,
-            color: color,
-            bgcolor: alpha(color, 0.1)
-        };
-    };
+    const grouped = activities.reduce<Record<string, Activity[]>>((acc, activity) => {
+        const key = getDayLabel(new Date(activity.createdAt));
+        acc[key] = acc[key] || [];
+        acc[key].push(activity);
+        return acc;
+    }, {});
 
     return (
-        <Stack spacing={0} sx={{ position: 'relative', p: 1 }}>
-            {/* Vertical Line */}
-            <Box sx={{
-                position: 'absolute',
-                top: 20,
-                bottom: 20,
-                left: { xs: 28, md: '50%' },
-                width: '2px',
-                bgcolor: 'divider',
-                transform: { xs: 'none', md: 'translateX(-50%)' },
-                zIndex: 0
-            }} />
+        <Stack spacing={3}>
+            {Object.entries(grouped).map(([label, items]) => (
+                <Box key={label}>
+                    <Typography
+                        variant="caption"
+                        sx={{
+                            display: "inline-flex",
+                            mb: 1.5,
+                            px: 1.25,
+                            py: 0.5,
+                            borderRadius: 99,
+                            bgcolor: alpha(theme.palette.primary.main, 0.08),
+                            color: "primary.main",
+                            fontWeight: 800,
+                            letterSpacing: "0.04em",
+                            textTransform: "uppercase",
+                        }}
+                    >
+                        {label}
+                    </Typography>
 
-            {activities.map((activity, index) => {
-                const { icon, color, bgcolor } = getIconAndStyle(activity);
-                const activityDate = new Date(activity.createdAt);
+                    <Stack spacing={1.25}>
+                        {items.map((activity) => {
+                            const type = activity.type;
+                            const IconComponent = type?.icon
+                                ? (LucideIcons as any)[type.icon]
+                                : LucideIcons.FileText;
+                            const Icon = IconComponent || LucideIcons.FileText;
+                            const accent = type?.color || theme.palette.primary.main;
+                            const activityDate = new Date(activity.createdAt);
 
-                return (
-                    <Box key={activity.id} sx={{
-                        display: 'flex',
-                        flexDirection: { xs: 'row', md: index % 2 === 0 ? 'row' : 'row-reverse' },
-                        mb: 4,
-                        position: 'relative',
-                        zIndex: 1
-                    }}>
-                        {/* Timeline Dot/Icon */}
-                        <Box sx={{
-                            width: { xs: 56, md: '50%' },
-                            display: 'flex',
-                            justifyContent: { xs: 'flex-start', md: index % 2 === 0 ? 'flex-end' : 'flex-start' },
-                            alignItems: 'center',
-                            px: { xs: 0, md: 4 }
-                        }}>
-                            {/* Spacer for desktop alignment */}
-                        </Box>
-
-                        {/* Centered Icon */}
-                        <Avatar sx={{
-                            width: 40,
-                            height: 40,
-                            bgcolor: 'background.paper',
-                            border: '2px solid',
-                            borderColor: color,
-                            color: color,
-                            position: 'absolute',
-                            left: { xs: 8, md: '50%' },
-                            transform: { xs: 'none', md: 'translateX(-50%)' },
-                            zIndex: 2,
-                            boxShadow: theme.shadows[1]
-                        }}>
-                            {icon}
-                        </Avatar>
-
-                        {/* Content Card */}
-                        <Box sx={{
-                            width: { xs: 'calc(100% - 60px)', md: '50%' },
-                            pl: { xs: 8, md: index % 2 === 0 ? 0 : 6 },
-                            pr: { xs: 0, md: index % 2 === 0 ? 6 : 0 },
-                            textAlign: { xs: 'left', md: 'left' } // Always left align text in card
-                        }}>
-                            <Paper elevation={0} sx={{
-                                p: 2,
-                                borderRadius: 4,
-                                border: '1px solid',
-                                borderColor: 'divider',
-                                transition: 'all 0.2s',
-                                '&:hover': {
-                                    boxShadow: theme.shadows[2],
-                                    borderColor: 'primary.main'
-                                }
-                            }}>
-                                <Stack direction="row" alignItems="center" spacing={1} mb={1}>
-                                    <Typography variant="subtitle2" fontWeight={700}>
-                                        {activity.type?.name || 'Activity'}
-                                    </Typography>
-
-                                    {activity.isRecurring && (
-                                        <Tooltip title={`Recurring: ${activity.recurrenceRule || 'Custom'}`}>
-                                            <LucideIcons.Repeat size={14} color={theme.palette.primary.main} />
-                                        </Tooltip>
-                                    )}
-
-                                    {activity.slaStatus && activity.slaStatus !== 'PENDING' && (
-                                        <Chip
-                                            label={activity.slaStatus === 'MET' ? 'SLA Met' : 'SLA Breached'}
-                                            size="small"
-                                            color={activity.slaStatus === 'MET' ? 'success' : 'error'}
-                                            variant="outlined"
+                            return (
+                                <Paper
+                                    key={activity.id}
+                                    elevation={0}
+                                    sx={{
+                                        p: 1.5,
+                                        borderRadius: 3,
+                                        border: "1px solid",
+                                        borderColor: alpha(accent, 0.18),
+                                        bgcolor: "background.paper",
+                                    }}
+                                >
+                                    <Stack direction="row" spacing={1.5} alignItems="flex-start">
+                                        <Box
                                             sx={{
-                                                height: 20,
-                                                fontSize: '0.625rem',
-                                                fontWeight: 700,
-                                                borderRadius: 1
+                                                width: 52,
+                                                minWidth: 52,
+                                                textAlign: "center",
+                                                pt: 0.25,
                                             }}
-                                        />
-                                    )}
+                                        >
+                                            <Avatar
+                                                sx={{
+                                                    width: 32,
+                                                    height: 32,
+                                                    mx: "auto",
+                                                    mb: 0.5,
+                                                    bgcolor: alpha(accent, 0.1),
+                                                    color: accent,
+                                                    border: "1px solid",
+                                                    borderColor: alpha(accent, 0.18),
+                                                }}
+                                            >
+                                                <Icon size={14} />
+                                            </Avatar>
+                                            <Typography variant="caption" sx={{ display: "block", fontWeight: 700 }}>
+                                                {format(activityDate, "hh:mm a")}
+                                            </Typography>
+                                        </Box>
 
-                                    {activity.outcome && (
-                                        <Chip
-                                            label={activity.outcome}
-                                            size="small"
-                                            sx={{
-                                                height: 20,
-                                                fontSize: '0.625rem',
-                                                fontWeight: 700,
-                                                borderRadius: 1
-                                            }}
-                                        />
-                                    )}
-                                    <Box flexGrow={1} />
-                                    <Tooltip title={format(activityDate, 'PPpp')}>
-                                        <Typography variant="caption" color="text.secondary">
-                                            {formatDistanceToNow(activityDate, { addSuffix: true })}
-                                        </Typography>
-                                    </Tooltip>
-                                </Stack>
+                                        <Box sx={{ flex: 1, minWidth: 0 }}>
+                                            <Stack
+                                                direction={{ xs: "column", sm: "row" }}
+                                                spacing={1}
+                                                justifyContent="space-between"
+                                                alignItems={{ xs: "flex-start", sm: "center" }}
+                                                sx={{ mb: 0.75 }}
+                                            >
+                                                <Stack direction="row" spacing={0.75} alignItems="center" flexWrap="wrap">
+                                                    <Typography variant="body2" fontWeight={800}>
+                                                        {activity.type?.name || "Activity"}
+                                                    </Typography>
+                                                    {activity.outcome && (
+                                                        <Chip
+                                                            label={activity.outcome}
+                                                            size="small"
+                                                            sx={{
+                                                                height: 20,
+                                                                fontSize: "0.65rem",
+                                                                fontWeight: 700,
+                                                                borderRadius: 1.5,
+                                                                bgcolor: "surfaceContainerHighest",
+                                                            }}
+                                                        />
+                                                    )}
+                                                    {activity.slaStatus && activity.slaStatus !== "PENDING" && (
+                                                        <Chip
+                                                            label={activity.slaStatus}
+                                                            size="small"
+                                                            color={activity.slaStatus === "MET" ? "success" : "error"}
+                                                            variant="outlined"
+                                                            sx={{
+                                                                height: 20,
+                                                                fontSize: "0.65rem",
+                                                                fontWeight: 700,
+                                                                borderRadius: 1.5,
+                                                            }}
+                                                        />
+                                                    )}
+                                                </Stack>
 
-                                {activity.notes && (
-                                    <Typography variant="body2" color="text.secondary" sx={{ mb: 1, whiteSpace: 'pre-wrap' }}>
-                                        {activity.notes}
-                                    </Typography>
-                                )}
+                                                <Typography variant="caption" color="text.secondary">
+                                                    {formatDistanceToNow(activityDate, { addSuffix: true })}
+                                                </Typography>
+                                            </Stack>
 
-                                {activity.user && (
-                                    <Stack direction="row" alignItems="center" spacing={0.5} mt={1}>
-                                        <User size={12} color={theme.palette.text.disabled} />
-                                        <Typography variant="caption" color="text.disabled">
-                                            by {activity.user.name || activity.user.email}
-                                        </Typography>
+                                            {activity.notes ? (
+                                                <Typography
+                                                    variant="body2"
+                                                    sx={{
+                                                        color: "text.primary",
+                                                        mb: 0.75,
+                                                        whiteSpace: "pre-wrap",
+                                                        lineHeight: 1.45,
+                                                    }}
+                                                >
+                                                    {activity.notes}
+                                                </Typography>
+                                            ) : (
+                                                <Typography variant="body2" color="text.secondary" sx={{ mb: 0.75 }}>
+                                                    No notes were added for this activity.
+                                                </Typography>
+                                            )}
+
+                                            <Stack direction="row" spacing={1.25} flexWrap="wrap">
+                                                {activity.lead && (
+                                                    <Typography variant="caption" color="text.secondary">
+                                                        Lead: <strong>{activity.lead.name}</strong>
+                                                    </Typography>
+                                                )}
+                                                {activity.opportunity && (
+                                                    <Typography variant="caption" color="text.secondary">
+                                                        Opportunity: <strong>{activity.opportunity.title}</strong>
+                                                    </Typography>
+                                                )}
+                                                {activity.user && (
+                                                    <Typography variant="caption" color="text.secondary">
+                                                        by {activity.user.name || activity.user.email}
+                                                    </Typography>
+                                                )}
+                                            </Stack>
+                                        </Box>
                                     </Stack>
-                                )}
-                            </Paper>
-                        </Box>
-                    </Box>
-                );
-            })}
+                                </Paper>
+                            );
+                        })}
+                    </Stack>
+                </Box>
+            ))}
         </Stack>
     );
 }
-

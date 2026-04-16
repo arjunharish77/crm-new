@@ -33,8 +33,8 @@ export const M3Card = React.forwardRef<HTMLDivElement, MuiCardProps>((props, ref
     return (
         <motion.div
             whileHover={{
-                y: -4,
-                scale: 1.005,
+                y: -2,
+                scale: 1.002,
                 transition: { ...spring.micro }
             }}
             whileTap={{ scale: 0.995 }}
@@ -45,7 +45,7 @@ export const M3Card = React.forwardRef<HTMLDivElement, MuiCardProps>((props, ref
                 sx={{
                     transition: 'background-color 0.2s, border-color 0.2s',
                     '&:hover': {
-                        backgroundColor: (theme) => alpha(theme.palette.primary.main, 0.04),
+                        backgroundColor: (theme) => alpha(theme.palette.primary.main, 0.03),
                         borderColor: 'primary.main',
                     },
                     ...props.sx

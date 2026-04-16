@@ -46,8 +46,8 @@ import {
 import { useAuth } from '@/providers/auth-provider';
 import { apiFetch } from '@/lib/api';
 
-const drawerWidth = 280;
-const railWidth = 80;
+const drawerWidth = 248;
+const railWidth = 68;
 
 const openedMixin = (theme: Theme): CSSObject => ({
     width: drawerWidth,
@@ -75,8 +75,8 @@ const DrawerHeader = styled('div')(({ theme }) => ({
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'space-between',
-    padding: theme.spacing(0, 2),
-    minHeight: 64,
+    padding: theme.spacing(0, 1.5),
+    minHeight: 56,
 }));
 
 const StyledDrawer = styled(Drawer, { shouldForwardProp: (prop) => prop !== 'open' })(
@@ -173,11 +173,11 @@ export function NavigationDrawer({ open, toggleDrawer }: { open: boolean; toggle
                             if (isMobile) toggleDrawer();
                         }}
                         sx={{
-                            minHeight: 48,
+                            minHeight: 40,
                             justifyContent: open ? 'initial' : 'center',
-                            px: 2,
-                            borderRadius: active ? '16px 28px 28px 16px' : 28, // M3 indicative shape
-                            mx: open ? 0 : 1, // Add margin in rail mode for better centering
+                            px: 1.25,
+                            borderRadius: active ? '12px 20px 20px 12px' : 20,
+                            mx: open ? 0 : 0.75,
                             backgroundColor: active ? theme.palette.secondaryContainer : 'transparent',
                             color: active ? theme.palette.onSecondaryContainer : theme.palette.onSurfaceVariant,
                             '&:hover': {
@@ -193,7 +193,7 @@ export function NavigationDrawer({ open, toggleDrawer }: { open: boolean; toggle
                         <ListItemIcon
                             sx={{
                                 minWidth: 0,
-                                mr: open ? 2 : 'auto',
+                                mr: open ? 1.5 : 'auto',
                                 justifyContent: 'center',
                                 color: active ? theme.palette.onSecondaryContainer : theme.palette.onSurfaceVariant,
                                 transition: 'margin 0.2s',
@@ -203,8 +203,8 @@ export function NavigationDrawer({ open, toggleDrawer }: { open: boolean; toggle
                             {!open && active ? (
                                 <Box sx={{
                                     bgcolor: theme.palette.secondaryContainer,
-                                    p: 1,
-                                    borderRadius: 3,
+                                    p: 0.625,
+                                    borderRadius: 2,
                                     display: 'flex',
                                     alignItems: 'center',
                                     justifyContent: 'center',
@@ -221,8 +221,9 @@ export function NavigationDrawer({ open, toggleDrawer }: { open: boolean; toggle
                                 display: open ? 'block' : 'none', // Remove from DOM in rail mode to prevent text wrapping issues
                             }}
                             primaryTypographyProps={{
-                                variant: 'labelLarge',
+                                variant: 'body2',
                                 fontWeight: active ? 700 : 500,
+                                fontSize: '0.83rem',
                             }}
                         />
                     </ListItemButton>
@@ -249,10 +250,10 @@ export function NavigationDrawer({ open, toggleDrawer }: { open: boolean; toggle
                     <ListItemButton
                         onClick={onToggle}
                         sx={{
-                            mx: 2,
-                            borderRadius: 2,
-                            py: 1,
-                            minHeight: 40,
+                            mx: 1.5,
+                            borderRadius: 1.5,
+                            py: 0.5,
+                            minHeight: 30,
                             color: hasActiveChild ? 'primary.main' : 'text.secondary',
                         }}
                     >
@@ -269,7 +270,7 @@ export function NavigationDrawer({ open, toggleDrawer }: { open: boolean; toggle
                     <Divider sx={{ mx: 2, my: 1 }} />
                 )}
                 <Collapse in={(open || isMobile) && isOpen} timeout="auto" unmountOnExit>
-                    <List sx={{ px: (open || isMobile) ? 1.5 : 1, pt: 0 }}>
+                    <List sx={{ px: (open || isMobile) ? 1.25 : 0.75, pt: 0 }}>
                         {filtered.map(renderNavItem)}
                     </List>
                 </Collapse>
@@ -285,24 +286,24 @@ export function NavigationDrawer({ open, toggleDrawer }: { open: boolean; toggle
             <DrawerHeader>
                 {(open || isMobile) ? (
                     <>
-                        <Box display="flex" alignItems="center" gap={1.5} sx={{ px: 0 }}>
+                        <Box display="flex" alignItems="center" gap={1.25} sx={{ px: 0 }}>
                             <Box
                                 sx={{
-                                    width: 36,
-                                    height: 36,
+                                    width: 32,
+                                    height: 32,
                                     bgcolor: theme.palette.primary.main,
                                     color: theme.palette.primary.contrastText,
-                                    borderRadius: 2,
+                                    borderRadius: 1.75,
                                     display: 'flex',
                                     alignItems: 'center',
                                     justifyContent: 'center',
                                     fontWeight: 'bold',
-                                    fontSize: '1.1rem',
+                                    fontSize: '1rem',
                                 }}
                             >
                                 E
                             </Box>
-                            <Typography variant="titleMedium" sx={{ fontWeight: 700 }}>
+                            <Typography variant="body2" sx={{ fontWeight: 800, fontSize: '0.92rem' }}>
                                 Enterprise CRM
                             </Typography>
                         </Box>
@@ -320,18 +321,18 @@ export function NavigationDrawer({ open, toggleDrawer }: { open: boolean; toggle
                 )}
             </DrawerHeader>
 
-            <Box sx={{ flexGrow: 1, overflowY: 'auto', mt: 1 }}>
+            <Box sx={{ flexGrow: 1, overflowY: 'auto', mt: 0.25 }}>
                 {/* Main navigation */}
-                <List sx={{ px: 1.5 }}>
+                <List sx={{ px: 0.75 }}>
                     {navigation.filter(item => item.enabled !== false).map(renderNavItem)}
                 </List>
 
-                <Divider sx={{ my: 1.5, mx: 2 }} />
+                <Divider sx={{ my: 0.75, mx: 1.25 }} />
 
                 {/* Administration section */}
                 {renderSection('Administration', adminNavigation, adminOpen, () => setAdminOpen(!adminOpen))}
 
-                <Divider sx={{ my: 1.5, mx: 2 }} />
+                <Divider sx={{ my: 0.75, mx: 1.25 }} />
 
                 {/* Custom Objects section */}
                 {customObjects.length > 0 && renderSection('Custom Objects', customObjects.map(obj => ({
@@ -343,7 +344,7 @@ export function NavigationDrawer({ open, toggleDrawer }: { open: boolean; toggle
                 {/* Platform section (only for platform admins) */}
                 {user?.isPlatformAdmin && (
                     <>
-                        <Divider sx={{ my: 1.5, mx: 2 }} />
+                        <Divider sx={{ my: 0.75, mx: 1.25 }} />
                         {renderSection('Platform', platformNavigation, platformOpen, () => setPlatformOpen(!platformOpen))}
                     </>
                 )}

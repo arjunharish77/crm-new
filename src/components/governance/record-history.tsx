@@ -58,17 +58,17 @@ export function RecordHistory({ entityType, entityId }: RecordHistoryProps) {
     );
 
     return (
-        <Stack spacing={0} sx={{ p: 1 }}>
+        <Stack spacing={1.25} sx={{ p: 0.5 }}>
             {history.map((item, idx) => (
-                <Box key={item.id} sx={{ position: 'relative', pb: 3, pl: 3 }}>
+                <Box key={item.id} sx={{ position: 'relative', pl: 3 }}>
                     {/* Vertical Line */}
                     {idx < history.length - 1 && (
                         <Box
                             sx={{
                                 position: 'absolute',
                                 left: 11,
-                                top: 24,
-                                bottom: 0,
+                                top: 18,
+                                bottom: -14,
                                 width: 2,
                                 bgcolor: 'divider'
                             }}
@@ -96,13 +96,14 @@ export function RecordHistory({ entityType, entityId }: RecordHistoryProps) {
                     <Paper
                         variant="outlined"
                         sx={{
-                            p: 2,
-                            bgcolor: (theme) => alpha(theme.palette.background.paper, 0.5),
-                            borderColor: (theme) => alpha(theme.palette.divider, 0.1)
+                            p: 1.5,
+                            borderRadius: 3,
+                            bgcolor: (theme) => alpha(theme.palette.background.paper, 0.75),
+                            borderColor: (theme) => alpha(theme.palette.divider, 0.24)
                         }}
                     >
                         <Box display="flex" justifyContent="space-between" alignItems="flex-start" mb={1}>
-                            <Typography variant="subtitle2" component="span">
+                            <Typography variant="body2" component="span" sx={{ fontWeight: 800 }}>
                                 {item.action === 'CREATE' ? 'Created' : item.action === 'UPDATE' ? 'Updated' : item.action}
                             </Typography>
                             <Typography variant="caption" color="text.secondary">

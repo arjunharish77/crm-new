@@ -91,19 +91,27 @@ export function StandardDataGrid({
                 border: 'none',
                 cursor: 'pointer',
                 '--DataGrid-containerBackground': 'transparent',
+                '& .MuiDataGrid-toolbarContainer': {
+                    minHeight: 44,
+                },
                 '& .MuiDataGrid-columnHeaders': {
                     borderBottom: '1px solid',
                     borderColor: 'divider',
                     bgcolor: 'transparent',
+                    minHeight: '42px !important',
+                },
+                '& .MuiDataGrid-columnHeader': {
+                    py: 0,
                 },
                 '& .MuiDataGrid-columnHeaderTitle': {
                     fontWeight: 700,
-                    fontSize: '0.6875rem',
+                    fontSize: '0.64rem',
                     textTransform: 'uppercase',
                     letterSpacing: '0.08em',
                     color: 'text.secondary'
                 },
                 '& .MuiDataGrid-row': {
+                    minHeight: '46px !important',
                     transition: theme.transitions.create(['background-color'], {
                         duration: theme.transitions.duration.shorter,
                     }),
@@ -121,13 +129,18 @@ export function StandardDataGrid({
                 '& .MuiDataGrid-cell': {
                     borderBottom: '1px solid',
                     borderColor: alpha(theme.palette.divider, 0.5),
-                    py: 1,
+                    py: 0.75,
                     display: 'flex',
                     alignItems: 'center',
+                    fontSize: '0.86rem',
+                },
+                '& .MuiDataGrid-cellCheckbox, & .MuiDataGrid-columnHeaderCheckbox': {
+                    px: 0.75,
                 },
                 '& .MuiDataGrid-footerContainer': {
                     borderTop: '1px solid',
                     borderColor: 'divider',
+                    minHeight: 44,
                 },
                 minHeight: 400,
                 ...sx,
@@ -148,7 +161,7 @@ function CustomToolbar({
 
     return (
         <GridToolbarContainer sx={{ p: 0, flexDirection: 'column', alignItems: 'stretch' }}>
-            <Box sx={{ p: 1.5, display: 'flex', gap: 1, alignItems: 'center' }}>
+            <Box sx={{ px: 1.25, py: 0.875, display: 'flex', gap: 0.75, alignItems: 'center' }}>
                 <GridToolbarColumnsButton />
                 <GridToolbarFilterButton />
                 <GridToolbarDensitySelector />
@@ -158,7 +171,8 @@ function CustomToolbar({
 
             {showSelectAllOption && (
                 <Box sx={{
-                    p: 1.5,
+                    px: 1.25,
+                    py: 0.875,
                     bgcolor: alpha('#1b6c31', 0.08), // Using a soft primary container tint
                     display: 'flex',
                     justifyContent: 'center',
@@ -183,7 +197,8 @@ function CustomToolbar({
 
             {isAllSelected && (
                 <Box sx={{
-                    p: 1.5,
+                    px: 1.25,
+                    py: 0.875,
                     bgcolor: alpha('#1b6c31', 0.12),
                     display: 'flex',
                     justifyContent: 'center',

@@ -210,27 +210,27 @@ const getDesignTokens = (mode: 'light' | 'dark'): ThemeOptions => ({
     },
     typography: {
         fontFamily: '"Instrument Sans", "Avenir Next", "Segoe UI", sans-serif',
-        h1: { fontSize: '57px', lineHeight: '64px', letterSpacing: '-0.25px', fontWeight: 400 },
-        h2: { fontSize: '45px', lineHeight: '52px', letterSpacing: '0px', fontWeight: 400 },
-        h3: { fontSize: '36px', lineHeight: '44px', letterSpacing: '0px', fontWeight: 400 },
-        h4: { fontSize: '32px', lineHeight: '40px', letterSpacing: '0px', fontWeight: 400 },
-        h5: { fontSize: '28px', lineHeight: '36px', letterSpacing: '0px', fontWeight: 400 },
-        h6: { fontSize: '24px', lineHeight: '32px', letterSpacing: '0px', fontWeight: 400 },
-        subtitle1: { fontSize: '16px', lineHeight: '24px', letterSpacing: '0.15px', fontWeight: 500 },
-        subtitle2: { fontSize: '14px', lineHeight: '20px', letterSpacing: '0.1px', fontWeight: 500 },
-        body1: { fontSize: '16px', lineHeight: '24px', letterSpacing: '0.5px', fontWeight: 400 },
-        body2: { fontSize: '14px', lineHeight: '20px', letterSpacing: '0.25px', fontWeight: 400 },
+        h1: { fontSize: '50px', lineHeight: '56px', letterSpacing: '-0.3px', fontWeight: 500 },
+        h2: { fontSize: '40px', lineHeight: '46px', letterSpacing: '-0.2px', fontWeight: 500 },
+        h3: { fontSize: '31px', lineHeight: '38px', letterSpacing: '-0.1px', fontWeight: 600 },
+        h4: { fontSize: '27px', lineHeight: '34px', letterSpacing: '0px', fontWeight: 600 },
+        h5: { fontSize: '22px', lineHeight: '28px', letterSpacing: '0px', fontWeight: 700 },
+        h6: { fontSize: '18px', lineHeight: '24px', letterSpacing: '0px', fontWeight: 700 },
+        subtitle1: { fontSize: '15px', lineHeight: '22px', letterSpacing: '0.1px', fontWeight: 600 },
+        subtitle2: { fontSize: '13px', lineHeight: '18px', letterSpacing: '0.08px', fontWeight: 600 },
+        body1: { fontSize: '14px', lineHeight: '21px', letterSpacing: '0.25px', fontWeight: 400 },
+        body2: { fontSize: '13px', lineHeight: '18px', letterSpacing: '0.2px', fontWeight: 400 },
         button: { fontSize: '14px', lineHeight: '20px', letterSpacing: '0.1px', fontWeight: 500, textTransform: 'none' },
         caption: { fontSize: '12px', lineHeight: '16px', letterSpacing: '0.4px', fontWeight: 400 },
         overline: { fontSize: '12px', lineHeight: '16px', letterSpacing: '0.5px', fontWeight: 500, textTransform: 'uppercase' },
-        labelLarge: { fontSize: '14px', lineHeight: '20px', letterSpacing: '0.1px', fontWeight: 500 },
-        labelMedium: { fontSize: '12px', lineHeight: '16px', letterSpacing: '0.5px', fontWeight: 500 },
+        labelLarge: { fontSize: '13px', lineHeight: '18px', letterSpacing: '0.08px', fontWeight: 600 },
+        labelMedium: { fontSize: '11px', lineHeight: '14px', letterSpacing: '0.45px', fontWeight: 600 },
         labelSmall: { fontSize: '11px', lineHeight: '16px', letterSpacing: '0.5px', fontWeight: 500 },
-        titleMedium: { fontSize: '16px', lineHeight: '24px', letterSpacing: '0.15px', fontWeight: 500 },
-        titleSmall: { fontSize: '14px', lineHeight: '20px', letterSpacing: '0.1px', fontWeight: 500 },
+        titleMedium: { fontSize: '15px', lineHeight: '21px', letterSpacing: '0.12px', fontWeight: 600 },
+        titleSmall: { fontSize: '13px', lineHeight: '18px', letterSpacing: '0.08px', fontWeight: 600 },
     },
     shape: {
-        borderRadius: 16,
+        borderRadius: 14,
     },
     components: {
         // ─── Buttons ─────────────────────────────────────────────────
@@ -238,7 +238,7 @@ const getDesignTokens = (mode: 'light' | 'dark'): ThemeOptions => ({
             styleOverrides: {
                 root: {
                     borderRadius: '28px',
-                    padding: '12px 28px',
+                    padding: '9px 20px',
                     boxShadow: 'none',
                     textTransform: 'none',
                     fontWeight: 600,
@@ -254,10 +254,10 @@ const getDesignTokens = (mode: 'light' | 'dark'): ThemeOptions => ({
                     },
                 },
                 sizeSmall: {
-                    padding: '6px 16px',
-                    fontSize: '13px',
-                    borderRadius: '20px',
-                    height: '32px',
+                    padding: '4px 12px',
+                    fontSize: '12px',
+                    borderRadius: '18px',
+                    height: '28px',
                 },
                 contained: {
                     backgroundColor: md3Colors[mode].primary,
@@ -284,7 +284,7 @@ const getDesignTokens = (mode: 'light' | 'dark'): ThemeOptions => ({
                     },
                 },
                 text: {
-                    padding: '10px 16px',
+                    padding: '7px 12px',
                     '&:hover': {
                         backgroundColor: alpha(md3Colors[mode].primary, 0.08),
                     },
@@ -298,9 +298,10 @@ const getDesignTokens = (mode: 'light' | 'dark'): ThemeOptions => ({
         MuiIconButton: {
             styleOverrides: {
                 root: {
+                    padding: 8,
                     transition: `all ${duration.short4}ms ${m3Ease.standard}`,
                     '&:hover': {
-                        transform: 'scale(1.08)',
+                        transform: 'scale(1.04)',
                         backgroundColor: alpha(md3Colors[mode].onSurface, 0.08),
                     },
                     '&:active': {
@@ -330,14 +331,14 @@ const getDesignTokens = (mode: 'light' | 'dark'): ThemeOptions => ({
             styleOverrides: {
                 root: {
                     backgroundImage: 'none',
-                    borderRadius: '24px',
+                    borderRadius: '18px',
                     transition: `all ${duration.medium4}ms ${m3Ease.emphasized}`,
                     backgroundColor: md3Colors[mode].surfaceContainerLow,
                     border: `1px solid ${md3Colors[mode].outlineVariant}`,
                     boxShadow: 'none',
                     '&:hover': {
-                        boxShadow: '0px 8px 24px rgba(0, 0, 0, 0.08)',
-                        transform: 'translateY(-2px) scale(1.005)',
+                        boxShadow: '0px 6px 18px rgba(0, 0, 0, 0.06)',
+                        transform: 'translateY(-1px)',
                         backgroundColor: md3Colors[mode].surfaceContainer,
                         borderColor: md3Colors[mode].outlineVariant,
                     },
@@ -348,7 +349,7 @@ const getDesignTokens = (mode: 'light' | 'dark'): ThemeOptions => ({
             styleOverrides: {
                 root: {
                     backgroundImage: 'none',
-                    borderRadius: '16px',
+                    borderRadius: '14px',
                 },
             },
         },
@@ -356,34 +357,34 @@ const getDesignTokens = (mode: 'light' | 'dark'): ThemeOptions => ({
         MuiDialog: {
             styleOverrides: {
                 paper: {
-                    borderRadius: '28px',
+                    borderRadius: '20px',
                     backgroundImage: 'none',
                     backgroundColor: md3Colors[mode].surfaceContainerHigh,
-                    boxShadow: '0px 20px 60px rgba(0, 0, 0, 0.15)',
+                    boxShadow: '0px 16px 42px rgba(0, 0, 0, 0.14)',
                 },
             },
         },
         MuiDialogTitle: {
             styleOverrides: {
                 root: {
-                    fontSize: '24px',
+                    fontSize: '20px',
                     fontWeight: 600,
-                    padding: '24px 24px 16px',
+                    padding: '18px 18px 10px',
                 },
             },
         },
         MuiDialogContent: {
             styleOverrides: {
                 root: {
-                    padding: '8px 24px 24px',
+                    padding: '6px 18px 18px',
                 },
             },
         },
         MuiDialogActions: {
             styleOverrides: {
                 root: {
-                    padding: '8px 24px 24px',
-                    gap: '8px',
+                    padding: '4px 18px 18px',
+                    gap: '6px',
                 },
             },
         },
@@ -392,7 +393,7 @@ const getDesignTokens = (mode: 'light' | 'dark'): ThemeOptions => ({
             styleOverrides: {
                 paper: {
                     borderRight: 'none',
-                    borderRadius: '0 28px 28px 0',
+                    borderRadius: '0 22px 22px 0',
                     backgroundColor: md3Colors[mode].surfaceContainerLow,
                 },
             },
@@ -411,10 +412,11 @@ const getDesignTokens = (mode: 'light' | 'dark'): ThemeOptions => ({
         MuiListItemButton: {
             styleOverrides: {
                 root: {
-                    borderRadius: '28px',
+                    borderRadius: '22px',
+                    minHeight: 42,
                     transition: `all ${duration.short4}ms ${m3Ease.standard}`,
                     '&:hover': {
-                        transform: 'scale(1.02)',
+                        transform: 'scale(1.01)',
                     },
                 },
             },
@@ -433,7 +435,9 @@ const getDesignTokens = (mode: 'light' | 'dark'): ThemeOptions => ({
                 root: {
                     textTransform: 'none',
                     fontWeight: 500,
-                    fontSize: '14px',
+                    fontSize: '13px',
+                    minHeight: 40,
+                    padding: '8px 12px',
                     transition: `all ${duration.short4}ms ${m3Ease.standard}`,
                     '&.Mui-selected': {
                         fontWeight: 700,
@@ -446,7 +450,8 @@ const getDesignTokens = (mode: 'light' | 'dark'): ThemeOptions => ({
             styleOverrides: {
                 root: {
                     '& .MuiOutlinedInput-root': {
-                        borderRadius: '12px',
+                        minHeight: 40,
+                        borderRadius: '10px',
                         transition: `all ${duration.short4}ms ${m3Ease.standard}`,
                         '&.Mui-focused': {
                             backgroundColor: alpha(md3Colors[mode].primary, 0.04),
@@ -458,7 +463,7 @@ const getDesignTokens = (mode: 'light' | 'dark'): ThemeOptions => ({
         MuiSelect: {
             styleOverrides: {
                 root: {
-                    borderRadius: '12px',
+                    borderRadius: '10px',
                 },
             },
         },
@@ -489,11 +494,12 @@ const getDesignTokens = (mode: 'light' | 'dark'): ThemeOptions => ({
         MuiChip: {
             styleOverrides: {
                 root: {
-                    borderRadius: '8px',
+                    borderRadius: '7px',
                     fontWeight: 500,
+                    height: 24,
                     transition: `all ${duration.short3}ms ${m3Ease.standard}`,
                     '&:hover': {
-                        transform: 'scale(1.03)',
+                        transform: 'scale(1.01)',
                     },
                 },
             },

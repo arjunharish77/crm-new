@@ -59,16 +59,16 @@ export function StandardDialog({
                     display: "flex",
                     alignItems: "center",
                     justifyContent: "space-between",
-                    p: '24px 24px 16px',
+                    p: '18px 18px 10px',
                 }}
             >
                 <Box sx={{ display: "flex", alignItems: "center", gap: 1.5 }}>
                     {icon && (
                         <Box
                             sx={{
-                                width: 40,
-                                height: 40,
-                                borderRadius: '12px',
+                                width: 34,
+                                height: 34,
+                                borderRadius: '10px',
                                 bgcolor: alpha(theme.palette.primary.main, 0.08),
                                 display: "flex",
                                 alignItems: "center",
@@ -80,11 +80,11 @@ export function StandardDialog({
                         </Box>
                     )}
                     <Box>
-                        <Typography variant="h6" sx={{ fontWeight: 700, fontSize: '20px' }}>
+                        <Typography variant="h6" sx={{ fontWeight: 800, fontSize: '18px', lineHeight: 1.2 }}>
                             {title}
                         </Typography>
                         {subtitle && (
-                            <Typography variant="body2" color="text.secondary">
+                            <Typography variant="body2" color="text.secondary" sx={{ mt: 0.25 }}>
                                 {subtitle}
                             </Typography>
                         )}
@@ -102,12 +102,12 @@ export function StandardDialog({
                 </IconButton>
             </DialogTitle>
 
-            <DialogContent sx={{ px: 3, pb: actions ? 1 : 3, pt: 1 }}>
+            <DialogContent sx={{ px: 2.25, pb: actions ? 0.75 : 2.25, pt: 0.75 }}>
                 {children}
             </DialogContent>
 
             {actions && (
-                <DialogActions sx={{ px: 3, pb: 3, gap: 1 }}>
+                <DialogActions sx={{ px: 2.25, pb: 2.25, gap: 0.75 }}>
                     {actions}
                 </DialogActions>
             )}
