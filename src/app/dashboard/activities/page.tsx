@@ -112,21 +112,21 @@ export default function ActivitiesPage() {
     }, [fetchData]);
 
     return (
-        <Box sx={{ p: { xs: 2, md: 3 }, maxWidth: 1600, mx: 'auto' }}>
+        <Box sx={{ px: { xs: 2, md: 3 }, py: { xs: 2, md: 2.5 }, maxWidth: 1520, mx: 'auto' }}>
             {/* Header */}
             <Stack
                 direction={{ xs: 'column', sm: 'row' }}
                 justifyContent="space-between"
                 alignItems={{ xs: 'flex-start', sm: 'center' }}
                 spacing={2}
-                sx={{ mb: 4 }}
+                sx={{ mb: 2.5 }}
             >
                 <Box>
                     <Stack direction="row" spacing={2} alignItems="center">
                         <Typography variant="h4" sx={{ fontWeight: 700, letterSpacing: -0.5 }}>
                             Activities
                         </Typography>
-                        <Box sx={{ ml: 2 }}>
+                        <Box sx={{ ml: 1.5 }}>
                             <ViewSwitcher
                                 module="ACTIVITIES"
                                 currentFilters={filters}
@@ -134,14 +134,14 @@ export default function ActivitiesPage() {
                             />
                         </Box>
                     </Stack>
-                    <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+                    <Typography variant="body2" color="text.secondary" sx={{ mt: 0.25 }}>
                         Track and manage your sales interactions
                     </Typography>
                 </Box>
 
-                <Stack direction="row" spacing={1.5}>
+                <Stack direction="row" spacing={1}>
                     <Tooltip title="Refresh">
-                        <IconButton onClick={fetchData} sx={{ bgcolor: 'action.hover' }}>
+                        <IconButton onClick={fetchData} sx={{ bgcolor: 'action.hover', borderRadius: '10px' }}>
                             <RefreshIcon />
                         </IconButton>
                     </Tooltip>
@@ -150,7 +150,7 @@ export default function ActivitiesPage() {
                         startIcon={<FilterIcon />}
                         onClick={() => setFilterOpen(!filterOpen)}
                         sx={{
-                            borderRadius: '12px',
+                            borderRadius: '10px',
                             borderColor: filters.conditions.length > 0 ? 'primary.main' : 'divider',
                             bgcolor: filters.conditions.length > 0 ? alpha(theme.palette.primary.main, 0.05) : 'transparent'
                         }}
@@ -161,7 +161,7 @@ export default function ActivitiesPage() {
                                 ml: 1,
                                 bgcolor: 'primary.main',
                                 color: 'primary.contrastText',
-                                borderRadius: '50%',
+                                borderRadius: '999px',
                                 width: 20,
                                 height: 20,
                                 display: 'flex',
@@ -183,9 +183,9 @@ export default function ActivitiesPage() {
                 <Paper
                     elevation={0}
                     sx={{
-                        p: 3,
-                        mb: 3,
-                        borderRadius: '16px',
+                        p: 2,
+                        mb: 2,
+                        borderRadius: '12px',
                         border: '1px solid',
                         borderColor: 'divider',
                         bgcolor: alpha(theme.palette.primary.main, 0.02)
@@ -209,7 +209,7 @@ export default function ActivitiesPage() {
                 />
             ) : (
                 <>
-                    <Box sx={{ display: { xs: 'none', md: 'block' }, height: 'calc(100vh - 250px)', minHeight: 600 }}>
+                    <Box sx={{ display: { xs: 'none', md: 'block' }, height: 'calc(100vh - 230px)', minHeight: 540 }}>
                         <StandardDataGrid
                             rows={data}
                             columns={columns}

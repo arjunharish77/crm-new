@@ -185,7 +185,7 @@ export default function LeadDetailPage() {
                     <Button
                         startIcon={<ArrowBackIcon />}
                         onClick={() => router.back()}
-                        sx={{ mb: 0.75, borderRadius: 99, color: "text.secondary", minHeight: 34 }}
+                        sx={{ mb: 0.75, borderRadius: "10px", color: "text.secondary", minHeight: 34 }}
                     >
                         Back
                     </Button>
@@ -206,7 +206,7 @@ export default function LeadDetailPage() {
                                 color="secondary"
                                 startIcon={<AddIcon />}
                                 sx={{
-                                    borderRadius: 99,
+                                    borderRadius: "10px",
                                     px: 1.75,
                                     bgcolor: "secondaryContainer",
                                     color: "onSecondaryContainer",
@@ -221,7 +221,7 @@ export default function LeadDetailPage() {
                         defaultLeadId={lead.id}
                         onSuccess={loadData}
                         trigger={
-                            <Button variant="outlined" startIcon={<AddIcon />} sx={{ borderRadius: 99, px: 1.75, minHeight: 36 }}>
+                            <Button variant="outlined" startIcon={<AddIcon />} sx={{ borderRadius: "10px", px: 1.75, minHeight: 36 }}>
                                 Opportunity
                             </Button>
                         }
@@ -230,7 +230,7 @@ export default function LeadDetailPage() {
                         variant="contained"
                         startIcon={<EditIcon />}
                         onClick={() => setShowEditDialog(true)}
-                        sx={{ borderRadius: 99, px: 2, minHeight: 36 }}
+                        sx={{ borderRadius: "10px", px: 2, minHeight: 36 }}
                     >
                         Edit
                     </Button>
@@ -242,7 +242,7 @@ export default function LeadDetailPage() {
                     <Stack spacing={1.5} sx={{ position: { lg: "sticky" }, top: { lg: 16 } }}>
                         <Card
                             sx={{
-                                borderRadius: 6,
+                                borderRadius: "14px",
                                 overflow: "hidden",
                                 border: "1px solid",
                                 borderColor: alpha(theme.palette.primary.dark, 0.22),
@@ -298,7 +298,7 @@ export default function LeadDetailPage() {
                             </Grid>
                         </Card>
 
-                        <Card sx={{ borderRadius: 4, border: "1px solid", borderColor: "divider" }}>
+                        <Card sx={{ borderRadius: "12px", border: "1px solid", borderColor: "divider" }}>
                             <Box sx={{ px: 1.5, py: 1.125, borderBottom: "1px solid", borderColor: "divider" }}>
                                 <Typography variant="subtitle1" sx={{ fontWeight: 800 }}>
                                     Lead Properties
@@ -328,7 +328,7 @@ export default function LeadDetailPage() {
                             </Stack>
                         </Card>
 
-                        <Card sx={{ borderRadius: 4, border: "1px solid", borderColor: "divider", p: 1.5 }}>
+                        <Card sx={{ borderRadius: "12px", border: "1px solid", borderColor: "divider", p: 1.5 }}>
                             <Typography variant="subtitle1" sx={{ fontWeight: 800, mb: 1.125 }}>
                                 Quick Snapshot
                             </Typography>
@@ -348,7 +348,7 @@ export default function LeadDetailPage() {
                 </Grid>
 
                 <Grid size={{ xs: 12, lg: 8.2 }}>
-                    <Card sx={{ borderRadius: 4.5, border: "1px solid", borderColor: "divider", overflow: "hidden" }}>
+                    <Card sx={{ borderRadius: "14px", border: "1px solid", borderColor: "divider", overflow: "hidden" }}>
                         <Box
                             sx={{
                                 px: 1,
@@ -378,7 +378,7 @@ export default function LeadDetailPage() {
                                             size="small"
                                             value={activityTypeFilter}
                                             onChange={(e) => setActivityTypeFilter(String(e.target.value))}
-                                            sx={{ minWidth: 156, borderRadius: 2.5, bgcolor: "background.paper" }}
+                                            sx={{ minWidth: 156, borderRadius: "8px", bgcolor: "background.paper" }}
                                         >
                                             <MenuItem value="ALL">All Activity Types</MenuItem>
                                             {activityTypes.map((type) => (
@@ -391,7 +391,7 @@ export default function LeadDetailPage() {
                                             size="small"
                                             value={activityTimeFilter}
                                             onChange={(e) => setActivityTimeFilter(e.target.value as ActivityTimeFilter)}
-                                            sx={{ minWidth: 132, borderRadius: 2.5, bgcolor: "background.paper" }}
+                                            sx={{ minWidth: 132, borderRadius: "8px", bgcolor: "background.paper" }}
                                         >
                                             <MenuItem value="ALL">All Time</MenuItem>
                                             <MenuItem value="TODAY">Today</MenuItem>
@@ -437,7 +437,7 @@ export default function LeadDetailPage() {
                                             defaultLeadId={lead.id}
                                             onSuccess={loadData}
                                             trigger={
-                                                <Button variant="outlined" startIcon={<AddIcon />} sx={{ borderRadius: 99, minHeight: 34 }}>
+                                                <Button variant="outlined" startIcon={<AddIcon />} sx={{ borderRadius: "10px", minHeight: 34 }}>
                                                     New Opportunity
                                                 </Button>
                                             }
@@ -445,7 +445,7 @@ export default function LeadDetailPage() {
                                     </Stack>
 
                                     {opportunities.length === 0 ? (
-                                        <Paper sx={{ p: 3.5, textAlign: "center", borderRadius: 3, border: "1px dashed", borderColor: "divider" }}>
+                                        <Paper sx={{ p: 3.5, textAlign: "center", borderRadius: "10px", border: "1px dashed", borderColor: "divider" }}>
                                             <Typography variant="body2" color="text.secondary">No opportunities associated with this lead yet.</Typography>
                                         </Paper>
                                     ) : (
@@ -455,7 +455,7 @@ export default function LeadDetailPage() {
                                                     key={opp.id}
                                                     sx={{
                                                         p: 1.25,
-                                                        borderRadius: 2.5,
+                                                        borderRadius: "10px",
                                                         border: "1px solid",
                                                         borderColor: "divider",
                                                         bgcolor: "surfaceContainerLowest",
@@ -482,13 +482,13 @@ export default function LeadDetailPage() {
                             )}
 
                             {tabValue === "notes" && (
-                                <Paper sx={{ p: 1.25, borderRadius: 3, bgcolor: "surfaceContainerLowest" }}>
+                                <Paper sx={{ p: 1.25, borderRadius: "10px", bgcolor: "surfaceContainerLowest" }}>
                                     <NotesPanel entityType="lead" entityId={lead.id} currentUserId={user?.id} />
                                 </Paper>
                             )}
 
                             {tabValue === "audit" && (
-                                <Paper sx={{ p: 1.125, borderRadius: 3, bgcolor: "surfaceContainerLowest" }}>
+                                <Paper sx={{ p: 1.125, borderRadius: "10px", bgcolor: "surfaceContainerLowest" }}>
                                     <RecordHistory entityType="LEAD" entityId={lead.id} />
                                 </Paper>
                             )}
@@ -539,7 +539,7 @@ function MetricCell({ label, value }: { label: string; value: string }) {
 
 function SnapshotCard({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) {
     return (
-        <Paper sx={{ p: 1, borderRadius: 2.5, bgcolor: "surfaceContainerLowest", border: "1px solid", borderColor: "divider" }}>
+        <Paper sx={{ p: 1, borderRadius: "10px", bgcolor: "surfaceContainerLowest", border: "1px solid", borderColor: "divider" }}>
             <Stack spacing={0.375}>
                 <Box sx={{ color: "primary.main", display: "flex", alignItems: "center" }}>{icon}</Box>
                 <Typography variant="caption" color="text.secondary">
@@ -555,7 +555,7 @@ function SnapshotCard({ icon, label, value }: { icon: React.ReactNode; label: st
 
 function DetailPanel({ title, children }: { title: string; children: React.ReactNode }) {
     return (
-        <Card sx={{ borderRadius: 3.5, border: "1px solid", borderColor: "divider" }}>
+        <Card sx={{ borderRadius: "10px", border: "1px solid", borderColor: "divider" }}>
             <Box sx={{ px: 1.5, py: 1.125, borderBottom: "1px solid", borderColor: "divider" }}>
                 <Typography variant="subtitle1" sx={{ fontWeight: 800 }}>
                     {title}
@@ -584,7 +584,7 @@ function WorkspaceTab({ label, active, onClick }: { label: string; active: boole
         <Button
             onClick={onClick}
             sx={{
-                borderRadius: 2.5,
+                borderRadius: "8px",
                 px: 1.25,
                 py: 0.7,
                 minHeight: 34,

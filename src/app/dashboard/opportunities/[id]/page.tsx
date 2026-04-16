@@ -187,7 +187,7 @@ export default function OpportunityDetailPage() {
                     <Button
                         startIcon={<ArrowBackIcon />}
                         onClick={() => router.back()}
-                        sx={{ mb: 0.75, borderRadius: 99, color: "text.secondary", minHeight: 34 }}
+                        sx={{ mb: 0.75, borderRadius: "10px", color: "text.secondary", minHeight: 34 }}
                     >
                         Back
                     </Button>
@@ -209,7 +209,7 @@ export default function OpportunityDetailPage() {
                                 color="secondary"
                                 startIcon={<AddIcon />}
                                 sx={{
-                                    borderRadius: 99,
+                                    borderRadius: "10px",
                                     px: 1.75,
                                     bgcolor: "secondaryContainer",
                                     color: "onSecondaryContainer",
@@ -224,7 +224,7 @@ export default function OpportunityDetailPage() {
                         variant="contained"
                         startIcon={<EditIcon />}
                         onClick={() => setShowEditDialog(true)}
-                        sx={{ borderRadius: 99, px: 2, minHeight: 36 }}
+                        sx={{ borderRadius: "10px", px: 2, minHeight: 36 }}
                     >
                         Edit
                     </Button>
@@ -236,7 +236,7 @@ export default function OpportunityDetailPage() {
                     <Stack spacing={1.5} sx={{ position: { lg: "sticky" }, top: { lg: 16 } }}>
                         <Card
                             sx={{
-                                borderRadius: 6,
+                                borderRadius: "14px",
                                 overflow: "hidden",
                                 border: "1px solid",
                                 borderColor: alpha(theme.palette.secondary.main, 0.22),
@@ -284,7 +284,7 @@ export default function OpportunityDetailPage() {
                                             bgcolor: alpha("#fff", 0.14),
                                             color: "common.white",
                                             fontWeight: 800,
-                                            borderRadius: 99,
+                                            borderRadius: "8px",
                                             height: 22,
                                         }}
                                     />
@@ -295,7 +295,7 @@ export default function OpportunityDetailPage() {
                                             bgcolor: alpha("#fff", 0.1),
                                             color: "common.white",
                                             fontWeight: 800,
-                                            borderRadius: 99,
+                                            borderRadius: "8px",
                                             height: 22,
                                         }}
                                     />
@@ -309,7 +309,7 @@ export default function OpportunityDetailPage() {
                             </Grid>
                         </Card>
 
-                        <Card sx={{ borderRadius: 4, border: "1px solid", borderColor: "divider" }}>
+                        <Card sx={{ borderRadius: "12px", border: "1px solid", borderColor: "divider" }}>
                             <Box sx={{ px: 1.5, py: 1.125, borderBottom: "1px solid", borderColor: "divider" }}>
                                 <Typography variant="subtitle1" sx={{ fontWeight: 800 }}>
                                     Deal Properties
@@ -327,7 +327,7 @@ export default function OpportunityDetailPage() {
                             </Stack>
                         </Card>
 
-                        <Card sx={{ borderRadius: 4, border: "1px solid", borderColor: "divider" }}>
+                        <Card sx={{ borderRadius: "12px", border: "1px solid", borderColor: "divider" }}>
                             <Box sx={{ px: 1.5, py: 1.125, borderBottom: "1px solid", borderColor: "divider" }}>
                                 <Typography variant="subtitle1" sx={{ fontWeight: 800 }}>
                                     Stage Progression
@@ -343,7 +343,7 @@ export default function OpportunityDetailPage() {
                                             onClick={() => !active && handleStageChange(stage.id)}
                                             sx={{
                                                 justifyContent: "space-between",
-                                                borderRadius: 2.5,
+                                                borderRadius: "8px",
                                                 px: 1.25,
                                                 py: 0.8,
                                                 bgcolor: active ? "primary.main" : alpha(theme.palette.primary.main, 0.04),
@@ -373,7 +373,7 @@ export default function OpportunityDetailPage() {
                             </Stack>
                         </Card>
 
-                        <Card sx={{ borderRadius: 4, border: "1px solid", borderColor: "divider", p: 1.5 }}>
+                        <Card sx={{ borderRadius: "12px", border: "1px solid", borderColor: "divider", p: 1.5 }}>
                             <Typography variant="subtitle1" sx={{ fontWeight: 800, mb: 1.125 }}>
                                 Linked Lead
                             </Typography>
@@ -392,7 +392,7 @@ export default function OpportunityDetailPage() {
                                             </Typography>
                                         </Box>
                                     </Stack>
-                                    <Button component={Link} href={`/dashboard/leads/${opportunity.leadId}`} variant="outlined" sx={{ borderRadius: 99, minHeight: 34 }}>
+                                    <Button component={Link} href={`/dashboard/leads/${opportunity.leadId}`} variant="outlined" sx={{ borderRadius: "10px", minHeight: 34 }}>
                                         Open Lead
                                     </Button>
                                 </Stack>
@@ -406,7 +406,7 @@ export default function OpportunityDetailPage() {
                 </Grid>
 
                 <Grid size={{ xs: 12, lg: 8.2 }}>
-                    <Card sx={{ borderRadius: 4.5, border: "1px solid", borderColor: "divider", overflow: "hidden" }}>
+                    <Card sx={{ borderRadius: "14px", border: "1px solid", borderColor: "divider", overflow: "hidden" }}>
                         <Box
                             sx={{
                                 px: 1,
@@ -436,7 +436,7 @@ export default function OpportunityDetailPage() {
                                             size="small"
                                             value={activityTypeFilter}
                                             onChange={(e) => setActivityTypeFilter(String(e.target.value))}
-                                            sx={{ minWidth: 156, borderRadius: 2.5, bgcolor: "background.paper" }}
+                                            sx={{ minWidth: 156, borderRadius: "8px", bgcolor: "background.paper" }}
                                         >
                                             <MenuItem value="ALL">All Activity Types</MenuItem>
                                             {activityTypes.map((type) => (
@@ -449,7 +449,7 @@ export default function OpportunityDetailPage() {
                                             size="small"
                                             value={activityTimeFilter}
                                             onChange={(e) => setActivityTimeFilter(e.target.value as ActivityTimeFilter)}
-                                            sx={{ minWidth: 132, borderRadius: 2.5, bgcolor: "background.paper" }}
+                                            sx={{ minWidth: 132, borderRadius: "8px", bgcolor: "background.paper" }}
                                         >
                                             <MenuItem value="ALL">All Time</MenuItem>
                                             <MenuItem value="TODAY">Today</MenuItem>
@@ -490,13 +490,13 @@ export default function OpportunityDetailPage() {
                             {tabValue === "stage" && <OpportunityStageHistoryList history={history} />}
 
                             {tabValue === "notes" && (
-                                <Paper sx={{ p: 1.25, borderRadius: 3, bgcolor: "surfaceContainerLowest" }}>
+                                <Paper sx={{ p: 1.25, borderRadius: "10px", bgcolor: "surfaceContainerLowest" }}>
                                     <NotesPanel entityType="opportunity" entityId={opportunity.id} currentUserId={user?.id} />
                                 </Paper>
                             )}
 
                             {tabValue === "audit" && (
-                                <Paper sx={{ p: 1.125, borderRadius: 3, bgcolor: "surfaceContainerLowest" }}>
+                                <Paper sx={{ p: 1.125, borderRadius: "10px", bgcolor: "surfaceContainerLowest" }}>
                                     <RecordHistory entityType="OPPORTUNITY" entityId={opportunity.id} />
                                 </Paper>
                             )}
@@ -536,7 +536,7 @@ function MetricCell({ label, value }: { label: string; value: string }) {
 
 function DetailPanel({ title, children }: { title: string; children: React.ReactNode }) {
     return (
-        <Card sx={{ borderRadius: 3.5, border: "1px solid", borderColor: "divider" }}>
+        <Card sx={{ borderRadius: "10px", border: "1px solid", borderColor: "divider" }}>
             <Box sx={{ px: 1.5, py: 1.125, borderBottom: "1px solid", borderColor: "divider" }}>
                 <Typography variant="subtitle1" sx={{ fontWeight: 800 }}>
                     {title}
@@ -565,7 +565,7 @@ function WorkspaceTab({ label, active, onClick }: { label: string; active: boole
         <Button
             onClick={onClick}
             sx={{
-                borderRadius: 2.5,
+                borderRadius: "8px",
                 px: 1.25,
                 py: 0.7,
                 minHeight: 34,

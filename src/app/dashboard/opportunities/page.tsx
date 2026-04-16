@@ -286,7 +286,7 @@ export default function OpportunitiesPage() {
             }
         >
             <Box sx={{ flexGrow: 1, display: 'flex', flexDirection: 'column', height: '100%' }}>
-                <Box sx={{ p: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <Box sx={{ px: 2, py: 1.5, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <Stack direction="row" spacing={2} alignItems="center">
                         <Typography variant="h5" fontWeight={700}>Opportunities</Typography>
                         {/* Opportunity Type selector — switch between types to see their kanban */}
@@ -355,7 +355,7 @@ export default function OpportunitiesPage() {
 
                 <Divider />
 
-                <Box sx={{ flexGrow: 1, overflow: 'hidden', p: 2, bgcolor: 'background.default' }}>
+                <Box sx={{ flexGrow: 1, overflow: 'hidden', px: 2, py: 1.5, bgcolor: 'background.default' }}>
                     <StaggerContainer>
                         {loading ? (
                             <TableSkeleton rows={10} columns={4} />
@@ -404,7 +404,7 @@ export default function OpportunitiesPage() {
                                 </StaggerItem>
                             ) : (
                                 <StaggerItem>
-                                    <Card sx={{ height: '100%' }}>
+                                    <Card sx={{ height: '100%', borderRadius: '12px', overflow: 'hidden' }}>
                                         <StandardDataGrid
                                             rows={kanbanOpportunities}
                                             columns={columns}

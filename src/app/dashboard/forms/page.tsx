@@ -145,9 +145,9 @@ export default function FormsPage() {
     };
 
     return (
-        <Container maxWidth="xl" sx={{ py: 4 }}>
+        <Container maxWidth="xl" sx={{ py: 3 }}>
             {/* Header Section */}
-            <Box sx={{ mb: 4, display: 'flex', flexDirection: { xs: 'column', md: 'row' }, justifyContent: 'space-between', alignItems: { xs: 'start', md: 'center' }, gap: 2 }}>
+            <Box sx={{ mb: 3, display: 'flex', flexDirection: { xs: 'column', md: 'row' }, justifyContent: 'space-between', alignItems: { xs: 'start', md: 'center' }, gap: 2 }}>
                 <Box>
                     <Typography variant="h4" fontWeight={700} gutterBottom>
                         Forms
@@ -160,7 +160,7 @@ export default function FormsPage() {
                     variant="contained"
                     startIcon={<PlusIcon />}
                     onClick={() => setCreateOpen(true)}
-                    sx={{ borderRadius: 20, px: 3 }}
+                    sx={{ borderRadius: '10px', px: 2.25 }}
                 >
                     Create Form
                 </Button>
@@ -171,12 +171,12 @@ export default function FormsPage() {
                 elevation={0}
                 variant="outlined"
                 sx={{
-                    p: 2,
-                    mb: 4,
+                    p: 1.5,
+                    mb: 3,
                     display: 'flex',
                     alignItems: 'center',
                     gap: 2,
-                    borderRadius: 3,
+                    borderRadius: '12px',
                     bgcolor: 'background.paper'
                 }}
             >
@@ -194,7 +194,7 @@ export default function FormsPage() {
                     }}
                     sx={{ flexGrow: 1, maxWidth: 400 }}
                 />
-                <Button variant="outlined" startIcon={<FilterListIcon />} sx={{ borderRadius: 20 }}>
+                <Button variant="outlined" startIcon={<FilterListIcon />} sx={{ borderRadius: '10px' }}>
                     Filters
                 </Button>
             </Paper>
@@ -208,9 +208,9 @@ export default function FormsPage() {
                 <Paper
                     variant="outlined"
                     sx={{
-                        p: 8,
+                        p: 6,
                         textAlign: 'center',
-                        borderRadius: 3,
+                        borderRadius: '12px',
                         borderStyle: 'dashed',
                         bgcolor: alpha(theme.palette.primary.main, 0.02)
                     }}
@@ -221,7 +221,7 @@ export default function FormsPage() {
                         {searchQuery ? "Try adjusting your search terms" : "Create your first form to start collecting leads"}
                     </Typography>
                     {!searchQuery && (
-                        <Button variant="contained" onClick={() => setCreateOpen(true)} sx={{ borderRadius: 20 }}>
+                        <Button variant="contained" onClick={() => setCreateOpen(true)} sx={{ borderRadius: '10px' }}>
                             Create Form
                         </Button>
                     )}
@@ -233,7 +233,7 @@ export default function FormsPage() {
                             <Card
                                 variant="outlined"
                                 sx={{
-                                    borderRadius: 3,
+                                    borderRadius: '12px',
                                     transition: 'all 0.2s',
                                     '&:hover': {
                                         boxShadow: theme.shadows[4],
@@ -281,7 +281,7 @@ export default function FormsPage() {
                                         <Button
                                             size="small"
                                             endIcon={<EditIcon sx={{ fontSize: 16 }} />}
-                                            sx={{ borderRadius: 20 }}
+                                            sx={{ borderRadius: '10px' }}
                                         >
                                             Edit
                                         </Button>
@@ -297,7 +297,7 @@ export default function FormsPage() {
             <Dialog
                 open={createOpen}
                 onClose={() => setCreateOpen(false)}
-                PaperProps={{ sx: { borderRadius: 3, width: '100%', maxWidth: 400 } }}
+                PaperProps={{ sx: { borderRadius: '12px', width: '100%', maxWidth: 400 } }}
             >
                 <DialogTitle>Create New Form</DialogTitle>
                 <DialogContent>
@@ -315,14 +315,14 @@ export default function FormsPage() {
                     />
                 </DialogContent>
                 <DialogActions sx={{ p: 3 }}>
-                    <Button onClick={() => setCreateOpen(false)} sx={{ borderRadius: 20, color: 'text.secondary' }}>
+                    <Button onClick={() => setCreateOpen(false)} sx={{ borderRadius: '10px', color: 'text.secondary' }}>
                         Cancel
                     </Button>
                     <Button
                         onClick={handleCreate}
                         variant="contained"
                         disabled={!newFormName.trim() || creating}
-                        sx={{ borderRadius: 20 }}
+                        sx={{ borderRadius: '10px' }}
                     >
                         {creating ? "Creating..." : "Create & Edit"}
                     </Button>
@@ -334,7 +334,7 @@ export default function FormsPage() {
                 anchorEl={menuAnchor}
                 open={Boolean(menuAnchor)}
                 onClose={handleMenuClose}
-                PaperProps={{ sx: { borderRadius: 2, minWidth: 150 } }}
+                PaperProps={{ sx: { borderRadius: '10px', minWidth: 150 } }}
             >
                 <MenuItem onClick={() => {
                     router.push(`/dashboard/forms/${selectedFormId}`);

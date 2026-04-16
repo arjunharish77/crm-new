@@ -211,7 +211,7 @@ export function FormEditor({ initialForm }: EditorProps) {
                 <Paper
                     elevation={0}
                     sx={{
-                        width: 280,
+                        width: 260,
                         borderRight: `1px solid ${theme.palette.divider}`,
                         display: 'flex',
                         flexDirection: 'column',
@@ -221,7 +221,7 @@ export function FormEditor({ initialForm }: EditorProps) {
                         backdropFilter: 'blur(8px)'
                     }}
                 >
-                    <Box sx={{ p: 3, borderBottom: `1px solid ${theme.palette.divider}` }}>
+                    <Box sx={{ p: 2, borderBottom: `1px solid ${theme.palette.divider}` }}>
                         <Typography variant="subtitle2" fontWeight={700} sx={{ letterSpacing: 0.5, textTransform: 'uppercase', fontSize: '0.75rem', color: 'text.secondary' }}>
                             Form Components
                         </Typography>
@@ -229,7 +229,7 @@ export function FormEditor({ initialForm }: EditorProps) {
                             Drag fields to the canvas
                         </Typography>
                     </Box>
-                    <List sx={{ flex: 1, overflowY: 'auto', p: 2 }}>
+                    <List sx={{ flex: 1, overflowY: 'auto', p: 1.5 }}>
                         {FIELD_TYPES.map(t => (
                             <DraggableTool key={t.type} type={t.type} label={t.label} icon={t.icon} />
                         ))}
@@ -241,13 +241,13 @@ export function FormEditor({ initialForm }: EditorProps) {
                     sx={{
                         flex: 1,
                         bgcolor: alpha(theme.palette.primary.main, 0.02),
-                        p: 6,
+                        p: 3,
                         overflowY: 'auto',
                         display: 'flex',
                         flexDirection: 'column',
                         alignItems: 'center',
                         position: 'relative',
-                        gap: 4
+                        gap: 2.5
                     }}
                 >
                     {/* Toolbar */}
@@ -256,8 +256,8 @@ export function FormEditor({ initialForm }: EditorProps) {
                         sx={{
                             width: '100%',
                             maxWidth: 800,
-                            p: 3,
-                            borderRadius: '24px',
+                            p: 2,
+                            borderRadius: '12px',
                             display: 'flex',
                             justifyContent: 'space-between',
                             alignItems: 'center',
@@ -276,7 +276,7 @@ export function FormEditor({ initialForm }: EditorProps) {
                                 startIcon={<CodeIcon />}
                                 size="small"
                                 onClick={() => setEmbedDialogOpen(true)}
-                                sx={{ borderRadius: 20 }}
+                                sx={{ borderRadius: '10px' }}
                             >
                                 Embed
                             </Button>
@@ -286,7 +286,7 @@ export function FormEditor({ initialForm }: EditorProps) {
                                 size="small"
                                 onClick={handleSave}
                                 disabled={saving}
-                                sx={{ borderRadius: 20 }}
+                                sx={{ borderRadius: '10px' }}
                             >
                                 {saving ? "Saving..." : "Save"}
                             </Button>
@@ -323,7 +323,7 @@ export function FormEditor({ initialForm }: EditorProps) {
                         </Tabs>
                     </Box>
 
-                    <Box sx={{ flex: 1, overflowY: 'auto', p: 3 }}>
+                    <Box sx={{ flex: 1, overflowY: 'auto', p: 2 }}>
                         {activeTab === "field" && (
                             selectedField ? (
                                 <Stack spacing={3}>
@@ -614,7 +614,7 @@ function DraggableTool({ type, label, icon: Icon }: any) {
             sx={{
                 mb: 1,
                 border: `1px solid ${theme.palette.divider}`,
-                borderRadius: 2,
+                borderRadius: '10px',
                 '&:hover': {
                     borderColor: 'primary.main',
                     bgcolor: alpha(theme.palette.primary.main, 0.04)
@@ -645,8 +645,8 @@ function DroppableCanvas({ fields, selectedId, onSelect }: any) {
                 maxWidth: 800,
                 minHeight: 600,
                 flex: 1,
-                borderRadius: 3,
-                p: 4,
+                borderRadius: '12px',
+                p: 3,
                 bgcolor: 'background.paper',
                 transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
                 ...(fields.length === 0 && {
@@ -710,16 +710,16 @@ function SortableField({ field, isSelected, onSelect }: any) {
             }}
             sx={{
                 position: 'relative',
-                p: 3,
-                borderRadius: '16px',
+                p: 2,
+                borderRadius: '10px',
                 border: '1px solid',
                 borderColor: isSelected ? 'primary.main' : 'transparent',
                 bgcolor: isSelected ? alpha(theme.palette.primary.main, 0.05) : 'transparent',
                 '&:hover': {
                     bgcolor: alpha(theme.palette.action.hover, 0.08),
                     borderColor: isSelected ? 'primary.main' : 'divider',
-                    transform: 'translateY(-2px)',
-                    boxShadow: '0 4px 12px rgba(0,0,0,0.05)'
+                    transform: 'translateY(-1px)',
+                    boxShadow: '0 2px 8px rgba(0,0,0,0.05)'
                 },
                 cursor: 'pointer',
                 transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)'

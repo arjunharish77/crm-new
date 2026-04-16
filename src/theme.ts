@@ -230,23 +230,23 @@ const getDesignTokens = (mode: 'light' | 'dark'): ThemeOptions => ({
         titleSmall: { fontSize: '13px', lineHeight: '18px', letterSpacing: '0.08px', fontWeight: 600 },
     },
     shape: {
-        borderRadius: 14,
+        borderRadius: 3,
     },
     components: {
         // ─── Buttons ─────────────────────────────────────────────────
         MuiButton: {
             styleOverrides: {
                 root: {
-                    borderRadius: '28px',
-                    padding: '9px 20px',
+                    borderRadius: '12px',
+                    padding: '8px 18px',
                     boxShadow: 'none',
                     textTransform: 'none',
                     fontWeight: 600,
                     letterSpacing: '0.1px',
                     transition: `all ${duration.medium2}ms ${m3Ease.emphasized}`,
                     '&:hover': {
-                        boxShadow: '0px 2px 6px rgba(0, 0, 0, 0.15)',
-                        transform: 'translateY(-1px) scale(1.01)',
+                        boxShadow: '0px 2px 6px rgba(0, 0, 0, 0.12)',
+                        transform: 'translateY(-1px)',
                     },
                     '&:active': {
                         transform: 'translateY(0) scale(0.97)',
@@ -256,7 +256,7 @@ const getDesignTokens = (mode: 'light' | 'dark'): ThemeOptions => ({
                 sizeSmall: {
                     padding: '4px 12px',
                     fontSize: '12px',
-                    borderRadius: '18px',
+                    borderRadius: '10px',
                     height: '28px',
                 },
                 contained: {
@@ -284,7 +284,7 @@ const getDesignTokens = (mode: 'light' | 'dark'): ThemeOptions => ({
                     },
                 },
                 text: {
-                    padding: '7px 12px',
+                    padding: '6px 10px',
                     '&:hover': {
                         backgroundColor: alpha(md3Colors[mode].primary, 0.08),
                     },
@@ -301,7 +301,7 @@ const getDesignTokens = (mode: 'light' | 'dark'): ThemeOptions => ({
                     padding: 8,
                     transition: `all ${duration.short4}ms ${m3Ease.standard}`,
                     '&:hover': {
-                        transform: 'scale(1.04)',
+                        transform: 'scale(1.02)',
                         backgroundColor: alpha(md3Colors[mode].onSurface, 0.08),
                     },
                     '&:active': {
@@ -313,7 +313,7 @@ const getDesignTokens = (mode: 'light' | 'dark'): ThemeOptions => ({
         MuiFab: {
             styleOverrides: {
                 root: {
-                    borderRadius: '28px',
+                    borderRadius: '14px',
                     boxShadow: '0px 4px 12px rgba(0, 0, 0, 0.15)',
                     transition: `all ${duration.medium2}ms ${m3Ease.spring}`,
                     '&:hover': {
@@ -331,13 +331,13 @@ const getDesignTokens = (mode: 'light' | 'dark'): ThemeOptions => ({
             styleOverrides: {
                 root: {
                     backgroundImage: 'none',
-                    borderRadius: '18px',
+                    borderRadius: '12px',
                     transition: `all ${duration.medium4}ms ${m3Ease.emphasized}`,
                     backgroundColor: md3Colors[mode].surfaceContainerLow,
                     border: `1px solid ${md3Colors[mode].outlineVariant}`,
                     boxShadow: 'none',
                     '&:hover': {
-                        boxShadow: '0px 6px 18px rgba(0, 0, 0, 0.06)',
+                        boxShadow: '0px 4px 12px rgba(0, 0, 0, 0.05)',
                         transform: 'translateY(-1px)',
                         backgroundColor: md3Colors[mode].surfaceContainer,
                         borderColor: md3Colors[mode].outlineVariant,
@@ -349,7 +349,7 @@ const getDesignTokens = (mode: 'light' | 'dark'): ThemeOptions => ({
             styleOverrides: {
                 root: {
                     backgroundImage: 'none',
-                    borderRadius: '14px',
+                    borderRadius: '10px',
                 },
             },
         },
@@ -357,7 +357,7 @@ const getDesignTokens = (mode: 'light' | 'dark'): ThemeOptions => ({
         MuiDialog: {
             styleOverrides: {
                 paper: {
-                    borderRadius: '20px',
+                    borderRadius: '14px',
                     backgroundImage: 'none',
                     backgroundColor: md3Colors[mode].surfaceContainerHigh,
                     boxShadow: '0px 16px 42px rgba(0, 0, 0, 0.14)',
@@ -393,7 +393,7 @@ const getDesignTokens = (mode: 'light' | 'dark'): ThemeOptions => ({
             styleOverrides: {
                 paper: {
                     borderRight: 'none',
-                    borderRadius: '0 22px 22px 0',
+                    borderRadius: '0 14px 14px 0',
                     backgroundColor: md3Colors[mode].surfaceContainerLow,
                 },
             },
@@ -412,11 +412,11 @@ const getDesignTokens = (mode: 'light' | 'dark'): ThemeOptions => ({
         MuiListItemButton: {
             styleOverrides: {
                 root: {
-                    borderRadius: '22px',
+                    borderRadius: '12px',
                     minHeight: 42,
                     transition: `all ${duration.short4}ms ${m3Ease.standard}`,
                     '&:hover': {
-                        transform: 'scale(1.01)',
+                        transform: 'none',
                     },
                 },
             },
@@ -436,8 +436,8 @@ const getDesignTokens = (mode: 'light' | 'dark'): ThemeOptions => ({
                     textTransform: 'none',
                     fontWeight: 500,
                     fontSize: '13px',
-                    minHeight: 40,
-                    padding: '8px 12px',
+                    minHeight: 36,
+                    padding: '6px 10px',
                     transition: `all ${duration.short4}ms ${m3Ease.standard}`,
                     '&.Mui-selected': {
                         fontWeight: 700,
@@ -451,7 +451,7 @@ const getDesignTokens = (mode: 'light' | 'dark'): ThemeOptions => ({
                 root: {
                     '& .MuiOutlinedInput-root': {
                         minHeight: 40,
-                        borderRadius: '10px',
+                        borderRadius: '8px',
                         transition: `all ${duration.short4}ms ${m3Ease.standard}`,
                         '&.Mui-focused': {
                             backgroundColor: alpha(md3Colors[mode].primary, 0.04),
@@ -463,7 +463,7 @@ const getDesignTokens = (mode: 'light' | 'dark'): ThemeOptions => ({
         MuiSelect: {
             styleOverrides: {
                 root: {
-                    borderRadius: '10px',
+                    borderRadius: '8px',
                 },
             },
         },
@@ -494,12 +494,12 @@ const getDesignTokens = (mode: 'light' | 'dark'): ThemeOptions => ({
         MuiChip: {
             styleOverrides: {
                 root: {
-                    borderRadius: '7px',
+                    borderRadius: '6px',
                     fontWeight: 500,
-                    height: 24,
+                    height: 22,
                     transition: `all ${duration.short3}ms ${m3Ease.standard}`,
                     '&:hover': {
-                        transform: 'scale(1.01)',
+                        transform: 'none',
                     },
                 },
             },
@@ -507,7 +507,7 @@ const getDesignTokens = (mode: 'light' | 'dark'): ThemeOptions => ({
         MuiTooltip: {
             styleOverrides: {
                 tooltip: {
-                    borderRadius: '8px',
+                    borderRadius: '6px',
                     fontSize: '12px',
                     fontWeight: 500,
                     padding: '6px 12px',
@@ -523,7 +523,7 @@ const getDesignTokens = (mode: 'light' | 'dark'): ThemeOptions => ({
             styleOverrides: {
                 root: {
                     '& .MuiSnackbarContent-root': {
-                        borderRadius: '12px',
+                        borderRadius: '10px',
                         backgroundColor: md3Colors[mode].inverseSurface,
                         color: md3Colors[mode].inverseOnSurface,
                     },
@@ -533,7 +533,7 @@ const getDesignTokens = (mode: 'light' | 'dark'): ThemeOptions => ({
         MuiAlert: {
             styleOverrides: {
                 root: {
-                    borderRadius: '16px',
+                    borderRadius: '12px',
                 },
             },
         },
@@ -541,12 +541,12 @@ const getDesignTokens = (mode: 'light' | 'dark'): ThemeOptions => ({
         MuiLinearProgress: {
             styleOverrides: {
                 root: {
-                    borderRadius: '8px',
+                    borderRadius: '6px',
                     height: 6,
                     backgroundColor: alpha(md3Colors[mode].primary, 0.12),
                 },
                 bar: {
-                    borderRadius: '8px',
+                    borderRadius: '6px',
                     transition: `transform ${duration.medium4}ms ${m3Ease.decelerate}`,
                 },
             },
@@ -562,7 +562,7 @@ const getDesignTokens = (mode: 'light' | 'dark'): ThemeOptions => ({
         MuiMenu: {
             styleOverrides: {
                 paper: {
-                    borderRadius: '16px',
+                    borderRadius: '10px',
                     boxShadow: '0px 8px 32px rgba(0, 0, 0, 0.12)',
                     border: `1px solid ${md3Colors[mode].outlineVariant}`,
                     backgroundColor: md3Colors[mode].surfaceContainer,
@@ -572,7 +572,7 @@ const getDesignTokens = (mode: 'light' | 'dark'): ThemeOptions => ({
         MuiMenuItem: {
             styleOverrides: {
                 root: {
-                    borderRadius: '8px',
+                    borderRadius: '6px',
                     margin: '2px 8px',
                     transition: `all ${duration.short3}ms ${m3Ease.standard}`,
                 },
@@ -581,7 +581,7 @@ const getDesignTokens = (mode: 'light' | 'dark'): ThemeOptions => ({
         MuiPopover: {
             styleOverrides: {
                 paper: {
-                    borderRadius: '16px',
+                    borderRadius: '10px',
                     boxShadow: '0px 8px 32px rgba(0, 0, 0, 0.12)',
                 },
             },
@@ -598,7 +598,7 @@ const getDesignTokens = (mode: 'light' | 'dark'): ThemeOptions => ({
         MuiSkeleton: {
             styleOverrides: {
                 root: {
-                    borderRadius: '8px',
+                    borderRadius: '6px',
                     backgroundColor: alpha(md3Colors[mode].onSurface, 0.08),
                 },
             },

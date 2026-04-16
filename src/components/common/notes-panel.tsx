@@ -141,7 +141,7 @@ export function NotesPanel({ entityType, entityId, currentUserId }: NotesPanelPr
     };
 
     return (
-        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
             {/* Header */}
             <Stack direction="row" spacing={1} alignItems="center">
                 <NoteIcon sx={{ fontSize: 20, color: 'primary.main' }} />
@@ -151,7 +151,7 @@ export function NotesPanel({ entityType, entityId, currentUserId }: NotesPanelPr
                 <Chip
                     label={notes.length}
                     size="small"
-                    sx={{ height: 20, fontSize: '0.7rem', bgcolor: 'action.selected' }}
+                    sx={{ height: 18, fontSize: '0.7rem', bgcolor: 'action.selected', borderRadius: '6px' }}
                 />
             </Stack>
 
@@ -162,7 +162,7 @@ export function NotesPanel({ entityType, entityId, currentUserId }: NotesPanelPr
                 sx={{
                     border: '1px solid',
                     borderColor: 'divider',
-                    borderRadius: 3,
+                    borderRadius: '10px',
                     overflow: 'hidden',
                     '&:focus-within': {
                         borderColor: 'primary.main',
@@ -174,7 +174,7 @@ export function NotesPanel({ entityType, entityId, currentUserId }: NotesPanelPr
                 <TextField
                     inputRef={textRef}
                     multiline
-                    minRows={2}
+                    minRows={3}
                     maxRows={6}
                     fullWidth
                     placeholder="Add a note…"
@@ -188,14 +188,14 @@ export function NotesPanel({ entityType, entityId, currentUserId }: NotesPanelPr
                         },
                     }}
                 />
-                <Box sx={{ display: 'flex', justifyContent: 'flex-end', p: 1, bgcolor: alpha(theme.palette.action.hover, 0.5) }}>
-                    <IconButton
-                        type="submit"
-                        disabled={!content.trim() || submitting}
-                        size="small"
-                        color="primary"
-                        sx={{ bgcolor: 'primary.main', color: 'white', '&:hover': { bgcolor: 'primary.dark' }, '&:disabled': { bgcolor: 'action.disabled' } }}
-                    >
+                    <Box sx={{ display: 'flex', justifyContent: 'flex-end', px: 1, py: 0.75, bgcolor: alpha(theme.palette.action.hover, 0.35), borderTop: '1px solid', borderColor: 'divider' }}>
+                        <IconButton
+                            type="submit"
+                            disabled={!content.trim() || submitting}
+                            size="small"
+                            color="primary"
+                            sx={{ bgcolor: 'primary.main', color: 'white', borderRadius: '8px', '&:hover': { bgcolor: 'primary.dark' }, '&:disabled': { bgcolor: 'action.disabled' } }}
+                        >
                         {submitting ? <CircularProgress size={16} color="inherit" /> : <SendIcon fontSize="small" />}
                     </IconButton>
                 </Box>
@@ -207,7 +207,7 @@ export function NotesPanel({ entityType, entityId, currentUserId }: NotesPanelPr
                     <CircularProgress size={24} />
                 </Box>
             ) : notes.length === 0 ? (
-                <Box sx={{ textAlign: 'center', py: 4, color: 'text.disabled' }}>
+                <Box sx={{ textAlign: 'center', py: 3, color: 'text.disabled' }}>
                     <NoteIcon sx={{ fontSize: 32, mb: 1 }} />
                     <Typography variant="body2">No notes yet. Add one above!</Typography>
                 </Box>
@@ -217,8 +217,8 @@ export function NotesPanel({ entityType, entityId, currentUserId }: NotesPanelPr
                         <Box
                             key={note.id}
                             sx={{
-                                p: 2,
-                                borderRadius: 3,
+                                p: 1.5,
+                                borderRadius: '10px',
                                 border: '1px solid',
                                 borderColor: note.isPinned ? 'warning.main' : 'divider',
                                 bgcolor: note.isPinned
@@ -228,7 +228,7 @@ export function NotesPanel({ entityType, entityId, currentUserId }: NotesPanelPr
                             }}
                         >
                             <Stack direction="row" spacing={1.5} alignItems="flex-start">
-                                <Avatar sx={{ width: 30, height: 30, fontSize: '0.75rem', bgcolor: 'primary.main' }}>
+                                <Avatar sx={{ width: 28, height: 28, fontSize: '0.72rem', bgcolor: 'primary.main' }}>
                                     {note.author.name[0].toUpperCase()}
                                 </Avatar>
                                 <Box sx={{ flex: 1, minWidth: 0 }}>
@@ -242,7 +242,7 @@ export function NotesPanel({ entityType, entityId, currentUserId }: NotesPanelPr
                                                     label="Pinned"
                                                     size="small"
                                                     icon={<PinIcon sx={{ fontSize: '10px !important' }} />}
-                                                    sx={{ height: 16, fontSize: '0.6rem', bgcolor: 'warning.main', color: 'warning.contrastText' }}
+                                                    sx={{ height: 16, fontSize: '0.6rem', bgcolor: 'warning.main', color: 'warning.contrastText', borderRadius: '5px' }}
                                                 />
                                             )}
                                         </Stack>

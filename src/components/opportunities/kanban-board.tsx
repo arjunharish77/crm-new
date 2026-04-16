@@ -98,11 +98,11 @@ export function KanbanBoard({ opportunityType, opportunities, onDragEnd, onEdit 
             <Box sx={{
                 display: 'flex',
                 gap: 2.5,
-                px: 2.5,
-                pb: 2.5,
+                px: 0.5,
+                pb: 1.5,
                 overflowX: 'auto',
                 height: '100%',
-                bgcolor: alpha(theme.palette.background.default, 0.5)
+                bgcolor: 'transparent'
             }}>
                 {columns.map((col) => (
                     <KanbanColumn key={col.id} stage={col} items={col.items} onEdit={onEdit} />
@@ -112,7 +112,7 @@ export function KanbanBoard({ opportunityType, opportunities, onDragEnd, onEdit 
             {typeof window !== 'undefined' && createPortal(
                 <DragOverlay dropAnimation={dropAnimation}>
                     {activeOpportunity ? (
-                        <Box sx={{ width: 300 }}>
+                        <Box sx={{ width: 292 }}>
                             <KanbanCard opportunity={activeOpportunity} isDragging onEdit={onEdit} />
                         </Box>
                     ) : null}
@@ -143,17 +143,17 @@ function KanbanColumn({ stage, items, onEdit }: { stage: StageDefinition; items:
             sx={{
                 display: 'flex',
                 flexDirection: 'column',
-                width: 300,
-                minWidth: 300,
+                width: 292,
+                minWidth: 292,
                 maxHeight: '100%',
-                bgcolor: 'action.hover',
-                borderRadius: 4,
+                bgcolor: 'surfaceContainerLow',
+                borderRadius: '12px',
                 border: '1px solid',
                 borderColor: 'divider',
                 overflow: 'hidden'
             }}
         >
-            <Box sx={{ p: 2, bgcolor: 'background.paper', borderBottom: '1px solid', borderColor: 'divider' }}>
+            <Box sx={{ px: 1.5, py: 1.25, bgcolor: 'background.paper', borderBottom: '1px solid', borderColor: 'divider' }}>
                 <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 0.5 }}>
                     <Stack direction="row" spacing={1} alignItems="center">
                         <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: stage.color || 'primary.main' }} />
@@ -177,12 +177,12 @@ function KanbanColumn({ stage, items, onEdit }: { stage: StageDefinition; items:
                 </Typography>
             </Box>
 
-            <Box sx={{ flexGrow: 1, p: 1.5, overflowY: 'auto' }}>
+            <Box sx={{ flexGrow: 1, p: 1.25, overflowY: 'auto' }}>
                 <SortableContext
                     items={items.map(i => i.id)}
                     strategy={verticalListSortingStrategy}
                 >
-                    <Stack spacing={1.5}>
+                    <Stack spacing={1}>
                         {items.map((opp) => (
                             <KanbanCard key={opp.id} opportunity={opp} onEdit={onEdit} />
                         ))}
