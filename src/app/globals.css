@@ -1,0 +1,40 @@
+/* M3 Expressive Global Styles */
+/* Note: Most styles are handled by MUI theme.ts and CssBaseline */
+
+:root {
+  --background: #f7fbf2;
+  --foreground: #181d18;
+}
+
+.dark {
+  --background: #101410;
+  --foreground: #e0e4de;
+}
+
+body {
+  background-color: var(--background);
+  color: var(--foreground);
+  /* Scrollbar styling for Webkit */
+  scrollbar-width: thin;
+  scrollbar-color: #727970 transparent;
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background-color: #727970;
+  border-radius: 4px;
+}
+
+/* Leaflet Map Logic (if needed) */
+.leaflet-container {
+  z-index: 0;
+}
