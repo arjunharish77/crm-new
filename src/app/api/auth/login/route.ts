@@ -4,6 +4,20 @@ import { createSupabaseAdminClient } from "@/lib/supabase/server";
 import { signAuthToken } from "@/lib/server/auth";
 import { badRequest, unauthorized } from "@/lib/server/http";
 
+function shouldExposeAuthDebug() {
+  return process.env.NODE_ENV !== "production" || process.env.AUTH_DEBUG === "true";
+}
+
+function authDebugResponse(details: Record<string, unknown>) {
+  return NextResponse.json(
+    {
+      message: "Invalid credentials",
+      debug: details,
+    },
+    { status: 401 }
+  );
+}
+
 export async function POST(request: Request) {
   const body = await request.json().catch(() => null);
   const email = body?.email?.trim()?.toLowerCase();
@@ -21,37 +35,38 @@ export async function POST(request: Request) {
     .maybeSingle();
 
   if (error || !user) {
-    if (process.env.NODE_ENV !== "production") {
-      return NextResponse.json(
-        {
-          message: "Invalid credentials",
-          debug: {
-            stage: "user_lookup",
-            error: error?.message ?? null,
-            foundUser: !!user,
-            email,
-          },
-        },
-        { status: 401 }
-      );
+    console.error("AUTH_LOGIN_FAILED", {
+      stage: "user_lookup",
+      error: error?.message ?? null,
+      foundUser: !!user,
+      email,
+    });
+
+    if (shouldExposeAuthDebug()) {
+      return authDebugResponse({
+        stage: "user_lookup",
+        error: error?.message ?? null,
+        foundUser: !!user,
+        email,
+      });
     }
 
     return unauthorized("Invalid credentials");
   }
 
   if (!user.password) {
-    if (process.env.NODE_ENV !== "production") {
-      return NextResponse.json(
-        {
-          message: "Invalid credentials",
-          debug: {
-            stage: "missing_password",
-            userId: user.id,
-            email: user.email,
-          },
-        },
-        { status: 401 }
-      );
+    console.error("AUTH_LOGIN_FAILED", {
+      stage: "missing_password",
+      userId: user.id,
+      email: user.email,
+    });
+
+    if (shouldExposeAuthDebug()) {
+      return authDebugResponse({
+        stage: "missing_password",
+        userId: user.id,
+        email: user.email,
+      });
     }
 
     return unauthorized("Invalid credentials");
@@ -59,18 +74,18 @@ export async function POST(request: Request) {
 
   const isPasswordValid = await bcrypt.compare(password, user.password);
   if (!isPasswordValid) {
-    if (process.env.NODE_ENV !== "production") {
-      return NextResponse.json(
-        {
-          message: "Invalid credentials",
-          debug: {
-            stage: "password_compare",
-            userId: user.id,
-            email: user.email,
-          },
-        },
-        { status: 401 }
-      );
+    console.error("AUTH_LOGIN_FAILED", {
+      stage: "password_compare",
+      userId: user.id,
+      email: user.email,
+    });
+
+    if (shouldExposeAuthDebug()) {
+      return authDebugResponse({
+        stage: "password_compare",
+        userId: user.id,
+        email: user.email,
+      });
     }
 
     return unauthorized("Invalid credentials");
