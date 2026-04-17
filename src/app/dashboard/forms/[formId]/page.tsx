@@ -4,21 +4,24 @@ import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import {
+    Avatar,
     Box,
     Button,
     Card,
     CircularProgress,
-    Divider,
+    Chip,
+    Grid,
     Stack,
     Tab,
     Tabs,
     Typography,
-    alpha,
-    useTheme,
 } from '@mui/material';
 import {
     ArrowBack as ArrowBackIcon,
     OpenInNew as OpenInNewIcon,
+    AutoGraph as AutoGraphIcon,
+    Code as CodeIcon,
+    ViewKanban as ViewKanbanIcon,
 } from '@mui/icons-material';
 import { apiFetch } from '@/lib/api';
 import { FormEditor } from '@/components/forms/form-editor';
@@ -28,7 +31,6 @@ import { AnalyticsDashboard } from '@/components/forms/form-analytics';
 type BuilderTab = 'editor' | 'submissions' | 'analytics';
 
 export default function FormBuilderPage() {
-    const theme = useTheme();
     const params = useParams();
     const router = useRouter();
     const formId = params.formId as string;
@@ -113,8 +115,67 @@ export default function FormBuilderPage() {
                                 </Typography>
                             </Stack>
                         </Box>
+                        <Chip
+                            label={form.isActive ? 'Live Form' : 'Draft Form'}
+                            color={form.isActive ? 'success' : 'default'}
+                            sx={{ borderRadius: '8px', fontWeight: 700 }}
+                        />
                     </Stack>
                 </Box>
+
+                <Grid container spacing={1.5}>
+                    <Grid size={{ xs: 12, md: 4 }}>
+                        <Card sx={{ p: 2, borderRadius: '14px', border: '1px solid', borderColor: 'divider', boxShadow: 'none' }}>
+                            <Stack direction="row" spacing={1.25} alignItems="center">
+                                <Avatar sx={{ width: 38, height: 38, bgcolor: 'primaryContainer', color: 'onPrimaryContainer' }}>
+                                    <ViewKanbanIcon fontSize="small" />
+                                </Avatar>
+                                <Box>
+                                    <Typography variant="subtitle2" sx={{ fontWeight: 800 }}>
+                                        Builder Workspace
+                                    </Typography>
+                                    <Typography variant="body2" color="text.secondary">
+                                        Structure fields, layout, and embed behaviour in one compact studio.
+                                    </Typography>
+                                </Box>
+                            </Stack>
+                        </Card>
+                    </Grid>
+                    <Grid size={{ xs: 12, md: 4 }}>
+                        <Card sx={{ p: 2, borderRadius: '14px', border: '1px solid', borderColor: 'divider', boxShadow: 'none' }}>
+                            <Stack direction="row" spacing={1.25} alignItems="center">
+                                <Avatar sx={{ width: 38, height: 38, bgcolor: 'secondaryContainer', color: 'onSecondaryContainer' }}>
+                                    <CodeIcon fontSize="small" />
+                                </Avatar>
+                                <Box>
+                                    <Typography variant="subtitle2" sx={{ fontWeight: 800 }}>
+                                        Embed Ready
+                                    </Typography>
+                                    <Typography variant="body2" color="text.secondary">
+                                        Publish the public page or export the embed snippet when the layout is ready.
+                                    </Typography>
+                                </Box>
+                            </Stack>
+                        </Card>
+                    </Grid>
+                    <Grid size={{ xs: 12, md: 4 }}>
+                        <Card sx={{ p: 2, borderRadius: '14px', border: '1px solid', borderColor: 'divider', boxShadow: 'none' }}>
+                            <Stack direction="row" spacing={1.25} alignItems="center">
+                                <Avatar sx={{ width: 38, height: 38, bgcolor: 'tertiaryContainer', color: 'onTertiaryContainer' }}>
+                                    <AutoGraphIcon fontSize="small" />
+                                </Avatar>
+                                <Box>
+                                    <Typography variant="subtitle2" sx={{ fontWeight: 800 }}>
+                                        Funnel Visibility
+                                    </Typography>
+                                    <Typography variant="body2" color="text.secondary">
+                                        Review submissions and analytics in the same workspace without leaving the form.
+                                    </Typography>
+                                </Box>
+                            </Stack>
+                        </Card>
+                    </Grid>
+                </Grid>
 
                 <Card sx={{ borderRadius: '14px', border: '1px solid', borderColor: 'divider', overflow: 'hidden' }}>
                     <Box sx={{ px: 1, py: 1, borderBottom: '1px solid', borderColor: 'divider', bgcolor: 'surfaceContainerLowest' }}>

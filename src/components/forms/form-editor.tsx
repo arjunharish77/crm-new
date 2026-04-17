@@ -206,12 +206,12 @@ export function FormEditor({ initialForm }: EditorProps) {
 
     return (
         <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd} collisionDetection={closestCenter}>
-            <Box sx={{ display: 'flex', height: 'calc(100vh - 64px)', overflow: 'hidden', bgcolor: 'background.default' }}>
+            <Box sx={{ display: 'flex', height: 'calc(100vh - 240px)', minHeight: 720, overflow: 'hidden', bgcolor: 'background.default' }}>
                 {/* Left Sidebar: Tools */}
                 <Paper
                     elevation={0}
                     sx={{
-                        width: 260,
+                        width: 240,
                         borderRight: `1px solid ${theme.palette.divider}`,
                         display: 'flex',
                         flexDirection: 'column',
@@ -221,12 +221,12 @@ export function FormEditor({ initialForm }: EditorProps) {
                         backdropFilter: 'blur(8px)'
                     }}
                 >
-                    <Box sx={{ p: 2, borderBottom: `1px solid ${theme.palette.divider}` }}>
+                    <Box sx={{ p: 1.75, borderBottom: `1px solid ${theme.palette.divider}` }}>
                         <Typography variant="subtitle2" fontWeight={700} sx={{ letterSpacing: 0.5, textTransform: 'uppercase', fontSize: '0.75rem', color: 'text.secondary' }}>
-                            Form Components
+                            Field Library
                         </Typography>
                         <Typography variant="caption" color="text.secondary">
-                            Drag fields to the canvas
+                            Drag blocks into the form canvas
                         </Typography>
                     </Box>
                     <List sx={{ flex: 1, overflowY: 'auto', p: 1.5 }}>
@@ -241,13 +241,13 @@ export function FormEditor({ initialForm }: EditorProps) {
                     sx={{
                         flex: 1,
                         bgcolor: alpha(theme.palette.primary.main, 0.02),
-                        p: 3,
+                        p: 2,
                         overflowY: 'auto',
                         display: 'flex',
                         flexDirection: 'column',
                         alignItems: 'center',
                         position: 'relative',
-                        gap: 2.5
+                        gap: 2
                     }}
                 >
                     {/* Toolbar */}
@@ -256,7 +256,7 @@ export function FormEditor({ initialForm }: EditorProps) {
                         sx={{
                             width: '100%',
                             maxWidth: 800,
-                            p: 2,
+                            p: 1.5,
                             borderRadius: '12px',
                             display: 'flex',
                             justifyContent: 'space-between',
@@ -267,7 +267,10 @@ export function FormEditor({ initialForm }: EditorProps) {
                         }}
                     >
                         <Box>
-                            <Typography variant="h6" fontWeight={700}>{initialForm.name}</Typography>
+                            <Typography variant="caption" sx={{ color: 'text.secondary', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+                                Canvas Preview
+                            </Typography>
+                            <Typography variant="h6" fontWeight={700} sx={{ fontSize: '1.1rem' }}>{initialForm.name}</Typography>
                             {initialForm.description && <Typography variant="caption" color="text.secondary">{initialForm.description}</Typography>}
                         </Box>
                         <Stack direction="row" spacing={1}>
@@ -301,7 +304,7 @@ export function FormEditor({ initialForm }: EditorProps) {
                 <Paper
                     elevation={0}
                     sx={{
-                        width: 350,
+                        width: 320,
                         borderLeft: `1px solid ${theme.palette.divider}`,
                         display: 'flex',
                         flexDirection: 'column',
@@ -310,6 +313,11 @@ export function FormEditor({ initialForm }: EditorProps) {
                     }}
                 >
                     <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>
+                        <Box sx={{ px: 2, pt: 1.5 }}>
+                            <Typography variant="caption" sx={{ color: 'text.secondary', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+                                Inspector
+                            </Typography>
+                        </Box>
                         <Tabs
                             value={activeTab}
                             onChange={(e, val) => setActiveTab(val)}

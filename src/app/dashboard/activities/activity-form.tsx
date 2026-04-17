@@ -34,31 +34,78 @@ export function ActivityForm({ initialData, onSuccess, onCancel }: ActivityFormP
     const [activityTypes, setActivityTypes] = useState<ActivityType[]>([]);
     const [typeSpecificFields, setTypeSpecificFields] = useState<any[]>([]);
     const [selectedTypeId, setSelectedTypeId] = useState<string>(initialData?.typeId || '');
+    const [bootstrapError, setBootstrapError] = useState<string | null>(null);
+
+    const fallbackMetadata = useMemo(() => ({
+        name: 'activity',
+        groups: [{ id: 'default', name: 'General Information' }],
+        fields: [
+            { id: 'activity_type_id', key: 'typeId', label: 'Activity Type', type: 'TEXT', isRequired: true, isCustom: false },
+            { id: 'activity_lead_id', key: 'leadId', label: 'Lead', type: 'TEXT', isRequired: false, isCustom: false },
+            { id: 'activity_opportunity_id', key: 'opportunityId', label: 'Opportunity', type: 'TEXT', isRequired: false, isCustom: false },
+            { id: 'activity_outcome', key: 'outcome', label: 'Outcome', type: 'TEXT', isRequired: false, isCustom: false },
+            { id: 'activity_notes', key: 'notes', label: 'Notes', type: 'TEXTAREA', isRequired: false, isCustom: false },
+            { id: 'activity_due_at', key: 'dueAt', label: 'Due At', type: 'DATE', isRequired: false, isCustom: false },
+        ],
+    }), []);
 
     useEffect(() => {
-        Promise.all([
-            apiFetch<PaginatedResponse<Lead> | Lead[]>("/leads?limit=100"),
-            apiFetch<PaginatedResponse<Opportunity> | Opportunity[]>("/opportunities?limit=100"),
-            apiFetch<ActivityType[]>("/activity-types"),
-        ]).then(([leadsResponse, opportunitiesResponse, typesData]) => {
-            let leadsData: Lead[] = [];
-            if ('data' in leadsResponse && Array.isArray(leadsResponse.data)) {
-                leadsData = leadsResponse.data;
-            } else if (Array.isArray(leadsResponse)) {
-                leadsData = leadsResponse;
+        let cancelled = false;
+
+        async function loadBootstrapData() {
+            setBootstrapError(null);
+
+            const [leadsResult, opportunitiesResult, typesResult] = await Promise.allSettled([
+                apiFetch<PaginatedResponse<Lead> | Lead[]>("/leads?limit=100"),
+                apiFetch<PaginatedResponse<Opportunity> | Opportunity[]>("/opportunities?limit=100"),
+                apiFetch<ActivityType[]>("/activity-types"),
+            ]);
+
+            if (cancelled) return;
+
+            if (leadsResult.status === 'fulfilled') {
+                const leadsResponse = leadsResult.value;
+                const leadsData =
+                    'data' in leadsResponse && Array.isArray(leadsResponse.data)
+                        ? leadsResponse.data
+                        : Array.isArray(leadsResponse)
+                            ? leadsResponse
+                            : [];
+                setLeads(leadsData);
+            } else {
+                setLeads([]);
             }
 
-            let opportunitiesData: Opportunity[] = [];
-            if ('data' in opportunitiesResponse && Array.isArray(opportunitiesResponse.data)) {
-                opportunitiesData = opportunitiesResponse.data;
-            } else if (Array.isArray(opportunitiesResponse)) {
-                opportunitiesData = opportunitiesResponse;
+            if (opportunitiesResult.status === 'fulfilled') {
+                const opportunitiesResponse = opportunitiesResult.value;
+                const opportunitiesData =
+                    'data' in opportunitiesResponse && Array.isArray(opportunitiesResponse.data)
+                        ? opportunitiesResponse.data
+                        : Array.isArray(opportunitiesResponse)
+                            ? opportunitiesResponse
+                            : [];
+                setOpportunities(opportunitiesData);
+            } else {
+                setOpportunities([]);
             }
 
-            setLeads(leadsData);
-            setOpportunities(opportunitiesData);
-            setActivityTypes(Array.isArray(typesData) ? typesData : []);
+            if (typesResult.status === 'fulfilled') {
+                setActivityTypes(Array.isArray(typesResult.value) ? typesResult.value : []);
+            } else {
+                setActivityTypes([]);
+                setBootstrapError("Some activity setup data could not be loaded. You can still log a basic activity.");
+            }
+        }
+
+        loadBootstrapData().catch(() => {
+            if (!cancelled) {
+                setBootstrapError("Some activity setup data could not be loaded. You can still log a basic activity.");
+            }
         });
+
+        return () => {
+            cancelled = true;
+        };
     }, []);
 
     useEffect(() => {
@@ -83,13 +130,14 @@ export function ActivityForm({ initialData, onSuccess, onCancel }: ActivityFormP
     }, [selectedTypeId]);
 
     const mergedMetadata = useMemo(() => {
-        if (!coreMetadata) return null;
+        const baseMetadata = coreMetadata || fallbackMetadata;
+        if (!baseMetadata) return null;
 
         return {
-            ...coreMetadata,
-            fields: [...coreMetadata.fields, ...typeSpecificFields]
+            ...baseMetadata,
+            fields: [...baseMetadata.fields, ...typeSpecificFields]
         };
-    }, [coreMetadata, typeSpecificFields]);
+    }, [coreMetadata, fallbackMetadata, typeSpecificFields]);
 
     const selectedType = activityTypes.find(t => t.id === selectedTypeId);
 
@@ -206,17 +254,24 @@ export function ActivityForm({ initialData, onSuccess, onCancel }: ActivityFormP
         )
     };
 
-    if (coreLoading || !mergedMetadata) {
+    if (coreLoading && !mergedMetadata) {
         return <Typography>Loading activity form...</Typography>;
     }
 
     return (
-        <DynamicFormRenderer
-            metadata={mergedMetadata}
-            initialData={initialData}
-            fieldOverrides={fieldOverrides as any}
-            onSuccess={onSuccess}
-            onCancel={onCancel}
-        />
+        <Box>
+            {bootstrapError && (
+                <Alert severity="warning" sx={{ mb: 2, py: 0.5 }}>
+                    {bootstrapError}
+                </Alert>
+            )}
+            <DynamicFormRenderer
+                metadata={mergedMetadata}
+                initialData={initialData}
+                fieldOverrides={fieldOverrides as any}
+                onSuccess={onSuccess}
+                onCancel={onCancel}
+            />
+        </Box>
     );
 }

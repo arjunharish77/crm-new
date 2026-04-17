@@ -266,7 +266,7 @@ export default function UsersPage() {
         <Box sx={{ p: { xs: 2, md: 3 }, maxWidth: 1600, mx: 'auto' }}>
             <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 4 }}>
                 <Box>
-                    <Typography variant="h4" sx={{ fontWeight: 700, letterSpacing: -0.5 }}>Users</Typography>
+                    <Typography variant="h4" sx={{ fontWeight: 800, letterSpacing: -0.7 }}>Users</Typography>
                     <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
                         Manage access, roles, and team assignments.
                     </Typography>
@@ -280,7 +280,18 @@ export default function UsersPage() {
                 </M3Button>
             </Stack>
 
-            <Card sx={{ height: 'calc(100vh - 200px)', width: '100%', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+            <Card
+                sx={{
+                    width: '100%',
+                    overflow: 'hidden',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    borderRadius: '14px',
+                    border: '1px solid',
+                    borderColor: 'divider',
+                    boxShadow: 'none',
+                }}
+            >
                 <StaggerContainer>
                     {loading ? (
                         <TableSkeleton rows={10} columns={5} />
@@ -311,6 +322,21 @@ export default function UsersPage() {
                                 onSelectAllFiltered={handleSelectAllFiltered}
                                 onClearSelection={clearSelection}
                                 currentCount={users.length}
+                                sx={{
+                                    minHeight: 0,
+                                    '& .MuiDataGrid-columnHeaders': {
+                                        bgcolor: 'surfaceContainerLowest',
+                                    },
+                                    '& .MuiDataGrid-row': {
+                                        minHeight: '60px !important',
+                                    },
+                                    '& .MuiDataGrid-cell': {
+                                        py: 1,
+                                    },
+                                    '& .MuiDataGrid-footerContainer': {
+                                        bgcolor: 'surfaceContainerLowest',
+                                    },
+                                }}
                             />
                         </StaggerItem>
                     )}
@@ -373,4 +399,3 @@ export default function UsersPage() {
         </Box>
     );
 }
-

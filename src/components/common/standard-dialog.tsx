@@ -50,6 +50,15 @@ export function StandardDialog({
             onClose={onClose}
             maxWidth={maxWidth}
             fullWidth={fullWidth}
+            PaperProps={{
+                sx: {
+                    borderRadius: '14px',
+                    border: '1px solid',
+                    borderColor: 'divider',
+                    overflow: 'hidden',
+                    boxShadow: '0 20px 50px rgba(15, 23, 42, 0.12)',
+                },
+            }}
             TransitionProps={{
                 timeout: { enter: 350, exit: 200 },
             }}
@@ -95,6 +104,7 @@ export function StandardDialog({
                     size="small"
                     sx={{
                         color: "text.secondary",
+                        borderRadius: '10px',
                         "&:hover": { bgcolor: alpha(theme.palette.onSurface, 0.08) },
                     }}
                 >

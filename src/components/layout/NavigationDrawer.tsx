@@ -267,7 +267,9 @@ export function NavigationDrawer({ open, toggleDrawer }: { open: boolean; toggle
                         {isOpen ? <ExpandLess fontSize="small" /> : <ExpandMore fontSize="small" />}
                     </ListItemButton>
                 ) : (
-                    <Divider sx={{ mx: 2, my: 1 }} />
+                    <List sx={{ px: 0.75, pt: 0 }}>
+                        {filtered.map(renderNavItem)}
+                    </List>
                 )}
                 <Collapse in={(open || isMobile) && isOpen} timeout="auto" unmountOnExit>
                     <List sx={{ px: (open || isMobile) ? 1.25 : 0.75, pt: 0 }}>
@@ -327,12 +329,12 @@ export function NavigationDrawer({ open, toggleDrawer }: { open: boolean; toggle
                     {navigation.filter(item => item.enabled !== false).map(renderNavItem)}
                 </List>
 
-                <Divider sx={{ my: 0.75, mx: 1.25 }} />
+                {(open || isMobile) && <Divider sx={{ my: 0.75, mx: 1.25 }} />}
 
                 {/* Administration section */}
                 {renderSection('Administration', adminNavigation, adminOpen, () => setAdminOpen(!adminOpen))}
 
-                <Divider sx={{ my: 0.75, mx: 1.25 }} />
+                {(open || isMobile) && <Divider sx={{ my: 0.75, mx: 1.25 }} />}
 
                 {/* Custom Objects section */}
                 {customObjects.length > 0 && renderSection('Custom Objects', customObjects.map(obj => ({
@@ -344,7 +346,7 @@ export function NavigationDrawer({ open, toggleDrawer }: { open: boolean; toggle
                 {/* Platform section (only for platform admins) */}
                 {user?.isPlatformAdmin && (
                     <>
-                        <Divider sx={{ my: 0.75, mx: 1.25 }} />
+                        {(open || isMobile) && <Divider sx={{ my: 0.75, mx: 1.25 }} />}
                         {renderSection('Platform', platformNavigation, platformOpen, () => setPlatformOpen(!platformOpen))}
                     </>
                 )}
