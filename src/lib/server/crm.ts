@@ -1933,6 +1933,90 @@ export async function getAutomationForTenant(user: TenantUser, id: string) {
   return data;
 }
 
+export async function createActivityTypeForTenant(user: TenantUser, payload: Record<string, unknown>) {
+  const supabase = createSupabaseAdminClient();
+  const objectId = await getObjectId(user, "activity");
+  const now = new Date().toISOString();
+
+  const { data, error } = await supabase
+    .from("ActivityType")
+    .insert({
+      id: randomUUID(),
+      tenantId: user.tenantId,
+      objectId,
+      name: String(payload.name ?? "").trim(),
+      icon: payload.icon ? String(payload.icon) : null,
+      color: payload.color ? String(payload.color) : null,
+      defaultOutcome: payload.defaultOutcome ? String(payload.defaultOutcome) : null,
+      defaultSLA: payload.defaultSLA ? Number(payload.defaultSLA) : null,
+      order: Number(payload.order ?? Date.now()),
+      isActive: payload.isActive !== false,
+      createdAt: now,
+      updatedAt: now,
+    })
+    .select("id,name,icon,color,defaultOutcome,defaultSLA,order,isActive,createdAt,updatedAt")
+    .single();
+
+  if (error) {
+    throw error;
+  }
+
+  return data;
+}
+
+export async function updateActivityTypeForTenant(user: TenantUser, id: string, payload: Record<string, unknown>) {
+  const supabase = createSupabaseAdminClient();
+  const updatePayload: Record<string, unknown> = {
+    updatedAt: new Date().toISOString(),
+  };
+
+  for (const key of ["name", "icon", "color", "defaultOutcome"]) {
+    if (key in payload) {
+      updatePayload[key] = payload[key] === "" ? null : payload[key];
+    }
+  }
+
+  if ("defaultSLA" in payload) {
+    updatePayload.defaultSLA = payload.defaultSLA ? Number(payload.defaultSLA) : null;
+  }
+
+  if ("order" in payload) {
+    updatePayload.order = Number(payload.order ?? 0);
+  }
+
+  if ("isActive" in payload) {
+    updatePayload.isActive = payload.isActive !== false;
+  }
+
+  let query = supabase
+    .from("ActivityType")
+    .update(updatePayload)
+    .eq("id", id);
+
+  query = user.tenantId ? query.eq("tenantId", user.tenantId) : query.is("tenantId", null);
+
+  const { data, error } = await query
+    .select("id,name,icon,color,defaultOutcome,defaultSLA,order,isActive,createdAt,updatedAt")
+    .single();
+
+  if (error) {
+    throw error;
+  }
+
+  return data;
+}
+
+export async function deleteActivityTypeForTenant(user: TenantUser, id: string) {
+  const supabase = createSupabaseAdminClient();
+  let query = supabase.from("ActivityType").delete().eq("id", id);
+  query = user.tenantId ? query.eq("tenantId", user.tenantId) : query.is("tenantId", null);
+  const { error } = await query;
+
+  if (error) {
+    throw error;
+  }
+}
+
 export async function createAutomationForTenant(user: TenantUser, payload: Record<string, unknown>) {
   const supabase = createSupabaseAdminClient();
   const now = new Date().toISOString();

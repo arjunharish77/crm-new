@@ -133,7 +133,16 @@ export default function UsersPage() {
             flex: 1.5,
             minWidth: 240,
             renderCell: (params: GridRenderCellParams<User>) => (
-                <Stack direction="row" spacing={1.5} alignItems="center">
+                <Stack
+                    direction="row"
+                    spacing={1.5}
+                    alignItems="center"
+                    sx={{
+                        width: '100%',
+                        minHeight: 56,
+                        py: 0.75,
+                    }}
+                >
                     <Avatar
                         sx={{
                             width: 34,
@@ -146,11 +155,32 @@ export default function UsersPage() {
                     >
                         {params.row.name.charAt(0)}
                     </Avatar>
-                    <Box>
-                        <Typography variant="body2" sx={{ fontWeight: 700, color: 'text.primary', mb: -0.5 }}>
+                    <Box sx={{ minWidth: 0, overflow: 'hidden' }}>
+                        <Typography
+                            variant="body2"
+                            sx={{
+                                fontWeight: 700,
+                                color: 'text.primary',
+                                lineHeight: 1.2,
+                                whiteSpace: 'nowrap',
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis',
+                            }}
+                        >
                             {params.row.name}
                         </Typography>
-                        <Typography variant="caption" sx={{ color: 'text.secondary', opacity: 0.8 }}>
+                        <Typography
+                            variant="caption"
+                            sx={{
+                                color: 'text.secondary',
+                                opacity: 0.8,
+                                display: 'block',
+                                mt: 0.35,
+                                whiteSpace: 'nowrap',
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis',
+                            }}
+                        >
                             {params.row.email}
                         </Typography>
                     </Box>
@@ -312,6 +342,7 @@ export default function UsersPage() {
                             <StandardDataGrid
                                 rows={users}
                                 columns={columns}
+                                getRowHeight={() => 72}
                                 checkboxSelection
                                 disableRowSelectionOnClick
                                 rowSelectionModel={selectedRows}
@@ -328,10 +359,11 @@ export default function UsersPage() {
                                         bgcolor: 'surfaceContainerLowest',
                                     },
                                     '& .MuiDataGrid-row': {
-                                        minHeight: '60px !important',
+                                        minHeight: '72px !important',
                                     },
                                     '& .MuiDataGrid-cell': {
-                                        py: 1,
+                                        py: 0.5,
+                                        alignItems: 'center',
                                     },
                                     '& .MuiDataGrid-footerContainer': {
                                         bgcolor: 'surfaceContainerLowest',
