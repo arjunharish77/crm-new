@@ -28,7 +28,7 @@ function getDayLabel(date: Date) {
     return format(date, "dd MMM yyyy");
 }
 
-function formatActivityValue(value: unknown) {
+function formatActivityValue(value: unknown): string {
     if (value === null || value === undefined || value === "") {
         return "Not set";
     }
