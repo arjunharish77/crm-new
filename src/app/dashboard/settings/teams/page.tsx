@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import {
     Box,
     Typography,
@@ -30,33 +30,63 @@ import { toast } from "sonner";
 import { Team } from "@/types/user";
 import { EmptyState } from "@/components/common/empty-state";
 import { TableSkeleton } from "@/components/common/skeletons";
-
-const MOCK_TEAMS: Team[] = [
-    { id: '1', name: 'North America Sales', memberCount: 12, createdAt: new Date().toISOString(), description: 'Sales team for NA region' },
-    { id: '2', name: 'EMEA Sales', memberCount: 8, createdAt: new Date().toISOString(), description: 'Sales team for Europe, Middle East and Africa' },
-    { id: '3', name: 'Enterprise Accounts', memberCount: 5, createdAt: new Date().toISOString(), description: 'Strategic accounts management' },
-];
+import { apiFetch } from "@/lib/api";
 
 import { CreateTeamDialog } from "./create-team-dialog";
 
 export default function TeamsPage() {
     const theme = useTheme();
-    const [teams, setTeams] = useState<Team[]>(MOCK_TEAMS);
+    const [teams, setTeams] = useState<Team[]>([]);
     const [loading, setLoading] = useState(false);
     const [selectedRows, setSelectedRows] = useState<GridRowId[]>([]);
     const [createDialogOpen, setCreateDialogOpen] = useState(false);
+    const [selectedTeam, setSelectedTeam] = useState<Team | null>(null);
+
+    const fetchTeams = useCallback(async () => {
+        setLoading(true);
+        try {
+            const data = await apiFetch("/sales-groups");
+            setTeams(
+                (Array.isArray(data) ? data : []).map((group: any) => ({
+                    id: group.id,
+                    name: group.name,
+                    description: group.description,
+                    memberCount: group._count?.members ?? group.members?.length ?? 0,
+                    createdAt: group.createdAt,
+                }))
+            );
+        } catch (error: any) {
+            toast.error(error.message || "Failed to fetch teams");
+        } finally {
+            setLoading(false);
+        }
+    }, []);
+
+    useEffect(() => {
+        fetchTeams();
+    }, [fetchTeams]);
 
     const handleCreateSuccess = () => {
-        // Mock add team
-        const newTeam: Team = {
-            id: String(teams.length + 1),
-            name: "New Team " + (teams.length + 1),
-            memberCount: 0,
-            createdAt: new Date().toISOString(),
-            description: "Newly created team",
-        };
-        setTeams([...teams, newTeam]);
         setCreateDialogOpen(false);
+        setSelectedTeam(null);
+        fetchTeams();
+    };
+
+    const handleEdit = (team: Team) => {
+        setSelectedTeam(team);
+        setCreateDialogOpen(true);
+    };
+
+    const handleDelete = async (team: Team) => {
+        if (!confirm(`Delete team "${team.name}"?`)) return;
+
+        try {
+            await apiFetch(`/sales-groups/${team.id}`, { method: "DELETE" });
+            toast.success("Team deleted");
+            fetchTeams();
+        } catch (error: any) {
+            toast.error(error.message || "Failed to delete team");
+        }
     };
 
     const columns: GridColDef[] = [
@@ -110,12 +140,12 @@ export default function TeamsPage() {
             renderCell: (params: GridRenderCellParams<Team>) => (
                 <Stack direction="row" spacing={0.5}>
                     <Tooltip title="Edit">
-                        <IconButton size="small">
+                        <IconButton size="small" onClick={() => handleEdit(params.row)}>
                             <EditIcon sx={{ fontSize: 18 }} />
                         </IconButton>
                     </Tooltip>
                     <Tooltip title="Delete">
-                        <IconButton size="small" color="error">
+                        <IconButton size="small" color="error" onClick={() => handleDelete(params.row)}>
                             <DeleteIcon sx={{ fontSize: 18 }} />
                         </IconButton>
                     </Tooltip>
@@ -136,7 +166,10 @@ export default function TeamsPage() {
                 <Button
                     variant="contained"
                     startIcon={<AddIcon />}
-                    onClick={() => setCreateDialogOpen(true)}
+                    onClick={() => {
+                        setSelectedTeam(null);
+                        setCreateDialogOpen(true);
+                    }}
                     sx={{ borderRadius: 28, px: 3 }}
                 >
                     Create Team
@@ -171,6 +204,7 @@ export default function TeamsPage() {
             <CreateTeamDialog
                 open={createDialogOpen}
                 onOpenChange={setCreateDialogOpen}
+                team={selectedTeam}
                 onSuccess={handleCreateSuccess}
             />
         </Box>

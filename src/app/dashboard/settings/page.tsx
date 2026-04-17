@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
     Box,
     Typography,
@@ -17,10 +17,12 @@ import {
 import { Save as SaveIcon, Settings as GeneralIcon } from "@mui/icons-material";
 import { toast } from "sonner";
 import { useTheme, alpha, Grid } from "@mui/material";
+import { apiFetch } from "@/lib/api";
 
 export default function GeneralSettingsPage() {
     const theme = useTheme();
     const [saving, setSaving] = useState(false);
+    const [loading, setLoading] = useState(true);
     const [settings, setSettings] = useState({
         companyName: "",
         timezone: "America/New_York",
@@ -29,11 +31,41 @@ export default function GeneralSettingsPage() {
         dateFormat: "MM/dd/yyyy",
     });
 
+    useEffect(() => {
+        let mounted = true;
+
+        const fetchSettings = async () => {
+            try {
+                const data = await apiFetch("/settings/general");
+                if (!mounted || !data) return;
+                setSettings((current) => ({
+                    ...current,
+                    companyName: data.companyName ?? "",
+                    timezone: data.timezone ?? current.timezone,
+                    currency: data.currency ?? current.currency,
+                    language: data.language ?? current.language,
+                    dateFormat: data.dateFormat ?? current.dateFormat,
+                }));
+            } catch {
+                toast.error("Failed to load settings");
+            } finally {
+                if (mounted) setLoading(false);
+            }
+        };
+
+        fetchSettings();
+        return () => {
+            mounted = false;
+        };
+    }, []);
+
     const handleSave = async () => {
         setSaving(true);
         try {
-            // Stub — backend integration deferred
-            await new Promise((r) => setTimeout(r, 800));
+            await apiFetch("/settings/general", {
+                method: "PATCH",
+                body: JSON.stringify(settings),
+            });
             toast.success("Settings saved successfully");
         } catch {
             toast.error("Failed to save settings");
@@ -66,6 +98,7 @@ export default function GeneralSettingsPage() {
                         placeholder="Acme Corp"
                         value={settings.companyName}
                         onChange={(e) => setSettings((s) => ({ ...s, companyName: e.target.value }))}
+                        disabled={loading}
                         fullWidth
                         variant="outlined"
                         sx={{ '& .MuiOutlinedInput-root': { borderRadius: '12px' } }}
@@ -84,6 +117,7 @@ export default function GeneralSettingsPage() {
                                     value={settings.timezone}
                                     label="Timezone"
                                     onChange={(e) => setSettings((s) => ({ ...s, timezone: e.target.value }))}
+                                    disabled={loading}
                                     sx={{ borderRadius: '12px' }}
                                 >
                                     <MenuItem value="America/New_York">Eastern (US & Canada)</MenuItem>
@@ -104,6 +138,7 @@ export default function GeneralSettingsPage() {
                                     value={settings.currency}
                                     label="Currency"
                                     onChange={(e) => setSettings((s) => ({ ...s, currency: e.target.value }))}
+                                    disabled={loading}
                                     sx={{ borderRadius: '12px' }}
                                 >
                                     <MenuItem value="USD">USD — US Dollar</MenuItem>
@@ -114,6 +149,21 @@ export default function GeneralSettingsPage() {
                                 </Select>
                             </FormControl>
                         </Grid>
+                        <Grid size={{ xs: 12, md: 6 }}>
+                            <FormControl fullWidth>
+                                <InputLabel>Language</InputLabel>
+                                <Select
+                                    value={settings.language}
+                                    label="Language"
+                                    onChange={(e) => setSettings((s) => ({ ...s, language: e.target.value }))}
+                                    disabled={loading}
+                                    sx={{ borderRadius: '12px' }}
+                                >
+                                    <MenuItem value="en">English</MenuItem>
+                                    <MenuItem value="hi">Hindi</MenuItem>
+                                </Select>
+                            </FormControl>
+                        </Grid>
                         <Grid size={{ xs: 12 }}>
                             <FormControl fullWidth>
                                 <InputLabel>Date Format</InputLabel>
@@ -121,6 +171,7 @@ export default function GeneralSettingsPage() {
                                     value={settings.dateFormat}
                                     label="Date Format"
                                     onChange={(e) => setSettings((s) => ({ ...s, dateFormat: e.target.value }))}
+                                    disabled={loading}
                                     sx={{ borderRadius: '12px' }}
                                 >
                                     <MenuItem value="MM/dd/yyyy">MM/dd/yyyy</MenuItem>
@@ -139,7 +190,7 @@ export default function GeneralSettingsPage() {
                     size="large"
                     startIcon={<SaveIcon />}
                     onClick={handleSave}
-                    disabled={saving}
+                    disabled={saving || loading}
                     sx={{
                         borderRadius: '12px',
                         px: 4,
@@ -150,7 +201,7 @@ export default function GeneralSettingsPage() {
                         }
                     }}
                 >
-                    {saving ? "Saving Changes..." : "Save Settings"}
+                    {saving ? "Saving Changes..." : loading ? "Loading..." : "Save Settings"}
                 </Button>
             </Box>
         </Box>

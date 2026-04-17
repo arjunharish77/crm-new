@@ -44,12 +44,18 @@ export default function SalesGroupsPage() {
         try {
             const data = await apiFetch("/sales-groups");
             setGroups(data);
+            if (selectedGroup?.id) {
+                const refreshed = (Array.isArray(data) ? data : []).find((group: any) => group.id === selectedGroup.id);
+                if (refreshed) {
+                    setSelectedGroup(refreshed);
+                }
+            }
         } catch (error) {
             toast.error("Failed to load sales groups");
         } finally {
             setLoading(false);
         }
-    }, []);
+    }, [selectedGroup?.id]);
 
     useEffect(() => {
         fetchGroups();

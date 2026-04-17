@@ -17,12 +17,10 @@ import {
     Groups as TeamsIcon,
     Security as PermissionsIcon,
     Tune as IntegrationsIcon,
-    CreditCard as BillingIcon,
     BackupTable as FieldsIcon,
     FormatListBulleted as PipelinesIcon,
     Rule as RulesIcon,
     GroupWork as GroupsSettingsIcon,
-    AutoFixHigh as AutomationIcon,
 } from "@mui/icons-material";
 
 const sidebarNavItems = [
@@ -65,11 +63,6 @@ const sidebarNavItems = [
         title: "Integrations",
         href: "/dashboard/settings/integrations",
         icon: IntegrationsIcon,
-    },
-    {
-        title: "Billing",
-        href: "/dashboard/settings/billing",
-        icon: BillingIcon,
     },
 ];
 
