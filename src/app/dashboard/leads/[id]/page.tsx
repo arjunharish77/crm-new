@@ -189,12 +189,6 @@ export default function LeadDetailPage() {
                     >
                         Back
                     </Button>
-                    <Typography variant="h4" sx={{ fontWeight: 800, letterSpacing: -0.8 }}>
-                        Lead Workspace
-                    </Typography>
-                    <Typography variant="body2" color="text.secondary">
-                        Compact lead profile, live activity history, and deal context in one place.
-                    </Typography>
                 </Box>
 
                 <Stack direction="row" spacing={1} flexWrap="wrap">

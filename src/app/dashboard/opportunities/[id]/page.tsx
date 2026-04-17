@@ -191,12 +191,6 @@ export default function OpportunityDetailPage() {
                     >
                         Back
                     </Button>
-                    <Typography variant="h4" sx={{ fontWeight: 800, letterSpacing: -0.8 }}>
-                        Opportunity Workspace
-                    </Typography>
-                    <Typography variant="body2" color="text.secondary">
-                        Compact deal summary, stage progression, and activity history in one surface.
-                    </Typography>
                 </Box>
 
                 <Stack direction="row" spacing={1} flexWrap="wrap">

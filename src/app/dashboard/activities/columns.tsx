@@ -81,19 +81,19 @@ export const columns: GridColDef[] = [
     {
         field: 'date',
         headerName: 'Time',
-        width: 180,
+        width: 170,
         valueGetter: (params, row: Activity) => {
             return row.completedAt || row.dueAt || row.createdAt;
         },
         renderCell: (params) => {
             const date = new Date(params.value as string);
             return (
-                <Box>
-                    <Typography variant="body2" sx={{ fontWeight: 600 }}>
-                        {formatDistanceToNow(date, { addSuffix: true })}
-                    </Typography>
-                    <Typography variant="caption" color="text.secondary">
+                <Box sx={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', minHeight: 44 }}>
+                    <Typography variant="body2" sx={{ fontWeight: 600, whiteSpace: 'nowrap' }}>
                         {format(date, 'MMM d, h:mm a')}
+                    </Typography>
+                    <Typography variant="caption" color="text.secondary" sx={{ whiteSpace: 'nowrap' }}>
+                        {formatDistanceToNow(date, { addSuffix: true })}
                     </Typography>
                 </Box>
             );

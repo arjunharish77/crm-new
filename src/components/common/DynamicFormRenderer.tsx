@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -52,6 +52,7 @@ export function DynamicFormRenderer({
 }: DynamicFormRendererProps) {
     const { metadata: fetchedMetadata, loading: metadataLoading } = useObjectMetadata(objectName || '');
     const metadata = externalMetadata || fetchedMetadata;
+    const isMetadataLoading = externalMetadata ? false : metadataLoading;
     const [isSaving, setIsSaving] = useState(false);
     const fields = Array.isArray(metadata?.fields) ? metadata.fields : [];
 
@@ -102,6 +103,10 @@ export function DynamicFormRenderer({
         defaultValues,
     });
 
+    useEffect(() => {
+        reset(defaultValues);
+    }, [defaultValues, reset]);
+
     const onSubmit = async (values: any) => {
         setIsSaving(true);
         try {
@@ -141,7 +146,7 @@ export function DynamicFormRenderer({
         }
     };
 
-    if (metadataLoading) {
+    if (isMetadataLoading) {
         return (
             <Box display="flex" justifyContent="center" p={8}>
                 <CircularProgress />

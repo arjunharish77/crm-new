@@ -11,6 +11,12 @@ export function useObjectMetadata(objectName: string) {
     useEffect(() => {
         let isMounted = true;
 
+        if (!objectName) {
+            setMetadata(null);
+            setLoading(false);
+            return () => { isMounted = false; };
+        }
+
         async function fetchMetadata() {
             setLoading(true);
             try {
@@ -28,10 +34,7 @@ export function useObjectMetadata(objectName: string) {
                 }
             }
         }
-
-        if (objectName) {
-            fetchMetadata();
-        }
+        fetchMetadata();
         return () => { isMounted = false; };
     }, [objectName]);
 
