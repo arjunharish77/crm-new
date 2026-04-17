@@ -1,14 +1,17 @@
 "use client";
 
+import { useState } from "react";
 import { Activity } from "@/types/activities";
 import { format, formatDistanceToNow, isToday, isYesterday } from "date-fns";
 import * as LucideIcons from "lucide-react";
-import { FileText } from "lucide-react";
+import { ChevronDown, FileText } from "lucide-react";
 import {
     alpha,
     Avatar,
     Box,
+    Collapse,
     Chip,
+    Divider,
     Paper,
     Stack,
     Typography,
@@ -25,8 +28,41 @@ function getDayLabel(date: Date) {
     return format(date, "dd MMM yyyy");
 }
 
+function formatActivityValue(value: unknown) {
+    if (value === null || value === undefined || value === "") {
+        return "Not set";
+    }
+
+    if (typeof value === "boolean") {
+        return value ? "Yes" : "No";
+    }
+
+    if (typeof value === "number") {
+        return String(value);
+    }
+
+    if (typeof value === "string") {
+        return value;
+    }
+
+    if (Array.isArray(value)) {
+        return value.length ? value.map((item) => formatActivityValue(item)).join(", ") : "Not set";
+    }
+
+    return JSON.stringify(value);
+}
+
 export function Timeline({ activities }: TimelineProps) {
     const theme = useTheme();
+    const [expandedActivityIds, setExpandedActivityIds] = useState<string[]>([]);
+
+    const toggleExpanded = (activityId: string) => {
+        setExpandedActivityIds((current) =>
+            current.includes(activityId)
+                ? current.filter((id) => id !== activityId)
+                : [...current, activityId]
+        );
+    };
 
     if (activities.length === 0) {
         return (
@@ -88,17 +124,51 @@ export function Timeline({ activities }: TimelineProps) {
                             const Icon = IconComponent || LucideIcons.FileText;
                             const accent = type?.color || theme.palette.primary.main;
                             const activityDate = new Date(activity.createdAt);
+                            const isExpanded = expandedActivityIds.includes(activity.id);
+                            const customFieldEntries = Object.entries(activity.customFields ?? {}).filter(
+                                ([, value]) => value !== null && value !== undefined && value !== ""
+                            );
+                            const activityFields = [
+                                { label: "Type", value: activity.type?.name ?? "Activity" },
+                                { label: "Outcome", value: activity.outcome },
+                                { label: "Notes", value: activity.notes },
+                                { label: "Due At", value: activity.dueAt ? format(new Date(activity.dueAt), "dd MMM yyyy, hh:mm a") : null },
+                                { label: "Completed At", value: activity.completedAt ? format(new Date(activity.completedAt), "dd MMM yyyy, hh:mm a") : null },
+                                { label: "SLA Status", value: activity.slaStatus },
+                                { label: "SLA Target", value: activity.slaTarget ? format(new Date(activity.slaTarget), "dd MMM yyyy, hh:mm a") : null },
+                                { label: "Lead", value: activity.lead?.name },
+                                { label: "Opportunity", value: activity.opportunity?.title },
+                                { label: "Logged By", value: activity.user ? activity.user.name || activity.user.email : null },
+                                { label: "Created", value: format(activityDate, "dd MMM yyyy, hh:mm a") },
+                                { label: "Updated", value: format(new Date(activity.updatedAt), "dd MMM yyyy, hh:mm a") },
+                                { label: "Recurring", value: activity.isRecurring ? "Yes" : "No" },
+                                { label: "Recurrence Rule", value: activity.recurrenceRule },
+                            ].filter((field) => field.value !== null && field.value !== undefined && field.value !== "");
+                            const expandedFields = [
+                                ...activityFields,
+                                ...customFieldEntries.map(([key, value]) => ({
+                                    label: key,
+                                    value,
+                                })),
+                            ];
 
                             return (
                                 <Paper
                                     key={activity.id}
                                     elevation={0}
+                                    onClick={() => toggleExpanded(activity.id)}
                                     sx={{
                                         p: 1.5,
                                         borderRadius: 3,
                                         border: "1px solid",
                                         borderColor: alpha(accent, 0.18),
                                         bgcolor: "background.paper",
+                                        cursor: "pointer",
+                                        transition: "border-color 160ms ease, box-shadow 160ms ease, background-color 160ms ease",
+                                        "&:hover": {
+                                            borderColor: alpha(accent, 0.28),
+                                            boxShadow: `0 10px 28px ${alpha(accent, 0.08)}`,
+                                        },
                                     }}
                                 >
                                     <Stack direction="row" spacing={1.5} alignItems="flex-start">
@@ -170,9 +240,27 @@ export function Timeline({ activities }: TimelineProps) {
                                                     )}
                                                 </Stack>
 
-                                                <Typography variant="caption" color="text.secondary">
-                                                    {formatDistanceToNow(activityDate, { addSuffix: true })}
-                                                </Typography>
+                                                <Stack direction="row" spacing={1} alignItems="center">
+                                                    <Typography variant="caption" color="text.secondary">
+                                                        {formatDistanceToNow(activityDate, { addSuffix: true })}
+                                                    </Typography>
+                                                    <Box
+                                                        sx={{
+                                                            width: 24,
+                                                            height: 24,
+                                                            display: "inline-flex",
+                                                            alignItems: "center",
+                                                            justifyContent: "center",
+                                                            borderRadius: 1.5,
+                                                            bgcolor: alpha(accent, 0.08),
+                                                            color: accent,
+                                                            transform: isExpanded ? "rotate(180deg)" : "rotate(0deg)",
+                                                            transition: "transform 160ms ease",
+                                                        }}
+                                                    >
+                                                        <ChevronDown size={14} />
+                                                    </Box>
+                                                </Stack>
                                             </Stack>
 
                                             {activity.notes ? (
@@ -210,6 +298,78 @@ export function Timeline({ activities }: TimelineProps) {
                                                     </Typography>
                                                 )}
                                             </Stack>
+
+                                            <Collapse in={isExpanded} timeout="auto" unmountOnExit>
+                                                <Divider sx={{ my: 1.25 }} />
+                                                <Stack
+                                                    spacing={1}
+                                                    sx={{
+                                                        display: "grid",
+                                                        gridTemplateColumns: {
+                                                            xs: "1fr",
+                                                            sm: "repeat(2, minmax(0, 1fr))",
+                                                        },
+                                                        gap: 1,
+                                                    }}
+                                                >
+                                                    {expandedFields.length > 0 ? (
+                                                        expandedFields.map((field) => (
+                                                            <Box
+                                                                key={`${activity.id}-${field.label}`}
+                                                                sx={{
+                                                                    px: 1.25,
+                                                                    py: 1,
+                                                                    borderRadius: 2,
+                                                                    bgcolor: "surfaceContainerLowest",
+                                                                    border: "1px solid",
+                                                                    borderColor: "divider",
+                                                                }}
+                                                            >
+                                                                <Typography
+                                                                    variant="caption"
+                                                                    sx={{
+                                                                        display: "block",
+                                                                        mb: 0.25,
+                                                                        color: "text.secondary",
+                                                                        fontWeight: 700,
+                                                                        letterSpacing: "0.02em",
+                                                                        textTransform: "uppercase",
+                                                                    }}
+                                                                >
+                                                                    {field.label}
+                                                                </Typography>
+                                                                <Typography
+                                                                    variant="body2"
+                                                                    sx={{
+                                                                        color: "text.primary",
+                                                                        fontWeight: 600,
+                                                                        wordBreak: "break-word",
+                                                                        whiteSpace: "pre-wrap",
+                                                                    }}
+                                                                >
+                                                                    {formatActivityValue(field.value)}
+                                                                </Typography>
+                                                            </Box>
+                                                        ))
+                                                    ) : (
+                                                        <Box
+                                                            sx={{
+                                                                gridColumn: "1 / -1",
+                                                                px: 1.25,
+                                                                py: 1,
+                                                                borderRadius: 2,
+                                                                bgcolor: "surfaceContainerLowest",
+                                                                border: "1px dashed",
+                                                                borderColor: "divider",
+                                                            }}
+                                                        >
+                                                            <Typography variant="body2" color="text.secondary">
+                                                                No additional fields were stored for this activity.
+                                                            </Typography>
+                                                        </Box>
+                                                    )}
+                                                </Stack>
+                                            </Collapse>
                                         </Box>
                                     </Stack>
                                 </Paper>
