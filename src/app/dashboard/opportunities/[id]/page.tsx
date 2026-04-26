@@ -44,6 +44,7 @@ import { EditOpportunityDialog } from "../edit-opportunity-dialog";
 import { CreateActivityDialog } from "../../activities/create-activity-dialog";
 import { OpportunityStageHistoryList } from "@/components/opportunities/opportunity-stage-history";
 import { NotesPanel } from "@/components/common/notes-panel";
+import { ContextualFormsPanel } from "@/components/forms/contextual-forms-panel";
 import { formatCurrency } from "@/lib/utils";
 import { fadeInUp } from "@/lib/motion";
 import { useAuth } from "@/providers/auth-provider";
@@ -214,6 +215,12 @@ export default function OpportunityDetailPage() {
                             </Button>
                         }
                     />
+                    <ContextualFormsPanel
+                        placement="OPPORTUNITY_DETAIL"
+                        context={{ leadId: opportunity.leadId, opportunityId: opportunity.id }}
+                        entityData={opportunity}
+                        onSaved={loadData}
+                    />
                     <Button
                         variant="contained"
                         startIcon={<EditIcon />}
@@ -293,8 +300,8 @@ export default function OpportunityDetailPage() {
                                             height: 22,
                                         }}
                                     />
-                                </Stack>
-                            </Box>
+                </Stack>
+            </Box>
 
                             <Grid container>
                                 <MetricCell label="Value" value={formatCurrency(opportunity.amount || 0)} />
@@ -420,6 +427,7 @@ export default function OpportunityDetailPage() {
                                     <WorkspaceTab label={`Activity History (${filteredActivities.length})`} active={tabValue === "activity"} onClick={() => setTabValue("activity")} />
                                     <WorkspaceTab label="Deal Details" active={tabValue === "details"} onClick={() => setTabValue("details")} />
                                     <WorkspaceTab label={`Stage History (${history.length})`} active={tabValue === "stage"} onClick={() => setTabValue("stage")} />
+
                                     <WorkspaceTab label="Notes" active={tabValue === "notes"} onClick={() => setTabValue("notes")} />
                                     <WorkspaceTab label="Audit" active={tabValue === "audit"} onClick={() => setTabValue("audit")} />
                                 </Stack>
@@ -502,6 +510,8 @@ export default function OpportunityDetailPage() {
 
                             {tabValue === "stage" && <OpportunityStageHistoryList history={history} />}
 
+
+
                             {tabValue === "notes" && (
                                 <Paper sx={{ p: 1.25, borderRadius: "10px", bgcolor: "surfaceContainerLowest" }}>
                                     <NotesPanel entityType="opportunity" entityId={opportunity.id} currentUserId={user?.id} />
@@ -566,9 +576,9 @@ function PropertyRow({ label, children }: { label: string; children: React.React
             <Typography variant="body2" color="text.secondary">
                 {label}
             </Typography>
-            <Typography variant="body2" sx={{ fontWeight: 700, textAlign: "right" }}>
+            <Box sx={{ fontWeight: 700, textAlign: "right", fontSize: '0.875rem' }}>
                 {children}
-            </Typography>
+            </Box>
         </Stack>
     );
 }

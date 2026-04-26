@@ -64,7 +64,7 @@ export function SalesGroupDialog({ onSuccess }: SalesGroupDialogProps) {
                         Create a group to pool leads and manage assignments.
                     </DialogContentText>
                     <form id="create-group-form" onSubmit={handleSubmit}>
-                        <Stack spacing={3}>
+                        <Stack spacing={2}>
                             <TextField
                                 label="Group Name"
                                 placeholder="e.g. Enterprise Sales East"

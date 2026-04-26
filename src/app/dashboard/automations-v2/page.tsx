@@ -197,11 +197,11 @@ export default function AutomationsV2Page() {
     ];
 
     return (
-        <Box sx={{ p: { xs: 2, md: 3 }, maxWidth: 1600, mx: 'auto' }}>
+        <Box sx={{ p: { xs: 1.5, md: 2 }, maxWidth: 1600, mx: 'auto' }}>
             {/* Header */}
-            <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 4 }}>
+            <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 2 }}>
                 <Box>
-                    <Typography variant="h4" sx={{ fontWeight: 700, letterSpacing: -0.5 }}>Workflow Automations</Typography>
+                    <Typography variant="h6" sx={{ fontWeight: 700, letterSpacing: -0.5 }}>Workflow Automations</Typography>
                     <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
                         Build and manage visual workflows to automate your sales processes
                     </Typography>

@@ -55,10 +55,10 @@ export default function UsagePage() {
         setLoading(true);
         try {
             const [usageRes, automationRes] = await Promise.all([
-                fetch(`${process.env.NEXT_PUBLIC_API_URL}/platform-admin/usage/overview`, {
+                fetch(`/api/platform-admin/usage/overview`, {
                     headers: { Authorization: `Bearer ${token}` },
                 }),
-                fetch(`${process.env.NEXT_PUBLIC_API_URL}/platform-admin/automation/stats`, {
+                fetch(`/api/platform-admin/automation/stats`, {
                     headers: { Authorization: `Bearer ${token}` },
                 }),
             ]);

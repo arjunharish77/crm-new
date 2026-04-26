@@ -16,6 +16,10 @@ type GeneralSettings = {
   dateFormat: string;
 };
 
+function isSchemaMissing(error: any) {
+  return /does not exist|schema cache|Could not find|PGRST/i.test(error?.message ?? "");
+}
+
 function requireTenantId(user: TenantUser) {
   if (!user.tenantId) {
     throw new Error("TENANT_CONTEXT_REQUIRED");
@@ -174,38 +178,186 @@ export async function listSalesGroupsForTenant(user: TenantUser) {
   });
 }
 
-export async function createSalesGroupForTenant(user: TenantUser, input: Record<string, unknown>) {
+export async function listTeamsForTenant(user: TenantUser) {
+  const tenantId = requireTenantId(user);
+  const supabase = createSupabaseAdminClient();
+
+  const { data: teams, error: teamError } = await supabase
+    .from("Team")
+    .select("id,name,description,leadId,department,workingHours,timezone,isActive,createdAt,updatedAt")
+    .eq("tenantId", tenantId)
+    .order("createdAt", { ascending: false });
+
+  if (teamError) {
+    if (isSchemaMissing(teamError)) return [];
+    throw teamError;
+  }
+
+  const teamIds = (teams ?? []).map((team) => team.id);
+  const memberResult = teamIds.length > 0
+    ? await supabase
+        .from("TeamMember")
+        .select("id,teamId,userId,role,joinedAt")
+        .eq("tenantId", tenantId)
+        .in("teamId", teamIds)
+    : { data: [], error: null };
+
+  if (memberResult.error && !isSchemaMissing(memberResult.error)) throw memberResult.error;
+
+  const members = memberResult.error ? [] : memberResult.data ?? [];
+  const userIds = [...new Set(members.map((member: any) => member.userId).filter(Boolean))];
+  const usersResult = userIds.length
+    ? await supabase.from("User").select("id,name,email").eq("tenantId", tenantId).in("id", userIds)
+    : { data: [], error: null };
+  if (usersResult.error) throw usersResult.error;
+  const userMap = new Map((usersResult.data ?? []).map((record: any) => [record.id, record]));
+
+  return (teams ?? []).map((team: any) => {
+    const teamMembers = members
+      .filter((member: any) => member.teamId === team.id)
+      .map((member: any) => ({ ...member, user: userMap.get(member.userId) ?? null }))
+      .filter((member: any) => member.user);
+    return {
+      ...team,
+      members: teamMembers,
+      memberCount: teamMembers.length,
+      _count: { members: teamMembers.length },
+    };
+  });
+}
+
+export async function createTeamForTenant(user: TenantUser, input: Record<string, unknown>) {
   const tenantId = requireTenantId(user);
   const supabase = createSupabaseAdminClient();
   const now = new Date().toISOString();
-
   const { data, error } = await supabase
-    .from("SalesGroup")
+    .from("Team")
     .insert({
       id: randomUUID(),
       tenantId,
       name: String(input.name ?? "").trim(),
       description: input.description ? String(input.description) : null,
-      managerId: input.managerId ? String(input.managerId) : null,
-      territories: input.territories ?? null,
-      zipCodes: input.zipCodes ?? null,
-      states: input.states ?? null,
-      countries: input.countries ?? null,
-      skills: input.skills ?? null,
-      languages: input.languages ?? null,
-      productLines: input.productLines ?? null,
-      maxLeadsPerMember: Number(input.maxLeadsPerMember ?? 50),
+      leadId: input.leadId ? String(input.leadId) : null,
+      department: input.department ? String(input.department) : null,
       workingHours: input.workingHours ?? null,
       timezone: input.timezone ? String(input.timezone) : "UTC",
       isActive: input.isActive !== false,
       createdAt: now,
       updatedAt: now,
     })
+    .select("id,name,description,leadId,department,workingHours,timezone,isActive,createdAt,updatedAt")
+    .single();
+  if (error) throw error;
+  return { ...data, memberCount: 0, _count: { members: 0 }, members: [] };
+}
+
+export async function updateTeamForTenant(user: TenantUser, id: string, input: Record<string, unknown>) {
+  const tenantId = requireTenantId(user);
+  const supabase = createSupabaseAdminClient();
+  const payload: Record<string, unknown> = { updatedAt: new Date().toISOString() };
+  for (const key of ["name", "description", "leadId", "department", "workingHours", "timezone", "isActive"]) {
+    if (key in input) payload[key] = input[key] || null;
+  }
+  const { data, error } = await supabase
+    .from("Team")
+    .update(payload)
+    .eq("tenantId", tenantId)
+    .eq("id", id)
+    .select("id,name,description,leadId,department,workingHours,timezone,isActive,createdAt,updatedAt")
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+export async function deleteTeamForTenant(user: TenantUser, id: string) {
+  const tenantId = requireTenantId(user);
+  const supabase = createSupabaseAdminClient();
+  await supabase.from("TeamMember").delete().eq("tenantId", tenantId).eq("teamId", id);
+  const { error } = await supabase.from("Team").delete().eq("tenantId", tenantId).eq("id", id);
+  if (error) throw error;
+}
+
+export async function addTeamMemberForTenant(user: TenantUser, teamId: string, memberInput: { userId: string; role?: string }) {
+  const tenantId = requireTenantId(user);
+  const supabase = createSupabaseAdminClient();
+  const { data, error } = await supabase
+    .from("TeamMember")
+    .upsert({
+      id: randomUUID(),
+      tenantId,
+      teamId,
+      userId: memberInput.userId,
+      role: memberInput.role ?? "MEMBER",
+      joinedAt: new Date().toISOString(),
+    }, { onConflict: "tenantId,teamId,userId" })
+    .select("id,teamId,userId,role,joinedAt")
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+export async function removeTeamMemberForTenant(user: TenantUser, teamId: string, userId: string) {
+  const tenantId = requireTenantId(user);
+  const supabase = createSupabaseAdminClient();
+  const { error } = await supabase
+    .from("TeamMember")
+    .delete()
+    .eq("tenantId", tenantId)
+    .eq("teamId", teamId)
+    .eq("userId", userId);
+  if (error) throw error;
+}
+
+export async function createSalesGroupForTenant(user: TenantUser, input: Record<string, unknown>) {
+  const tenantId = requireTenantId(user);
+  const supabase = createSupabaseAdminClient();
+  const now = new Date().toISOString();
+
+  const fullPayload = {
+    id: randomUUID(),
+    tenantId,
+    name: String(input.name ?? "").trim(),
+    description: input.description ? String(input.description) : null,
+    managerId: input.managerId ? String(input.managerId) : null,
+    territories: input.territories ?? null,
+    zipCodes: input.zipCodes ?? null,
+    states: input.states ?? null,
+    countries: input.countries ?? null,
+    skills: input.skills ?? null,
+    languages: input.languages ?? null,
+    productLines: input.productLines ?? null,
+    maxLeadsPerMember: Number(input.maxLeadsPerMember ?? 50),
+    workingHours: input.workingHours ?? null,
+    timezone: input.timezone ? String(input.timezone) : "UTC",
+    isActive: input.isActive !== false,
+    createdAt: now,
+    updatedAt: now,
+  };
+
+  let result = await supabase
+    .from("SalesGroup")
+    .insert(fullPayload)
     .select("id,name,description,managerId,isActive,createdAt,updatedAt")
     .single();
 
-  if (error) throw error;
-  return data;
+  if (result.error && /column .* does not exist|schema cache/i.test(result.error.message ?? "")) {
+    result = await supabase
+      .from("SalesGroup")
+      .insert({
+        id: fullPayload.id,
+        tenantId,
+        name: fullPayload.name,
+        description: fullPayload.description,
+        isActive: fullPayload.isActive,
+        createdAt: now,
+        updatedAt: now,
+      })
+      .select("id,name,description,isActive,createdAt,updatedAt")
+      .single();
+  }
+
+  if (result.error) throw result.error;
+  return result.data;
 }
 
 export async function updateSalesGroupForTenant(user: TenantUser, id: string, input: Record<string, unknown>) {
@@ -240,7 +392,7 @@ export async function updateSalesGroupForTenant(user: TenantUser, id: string, in
     payload.maxLeadsPerMember = Number(input.maxLeadsPerMember ?? 50);
   }
 
-  const { data, error } = await supabase
+  let result = await supabase
     .from("SalesGroup")
     .update(payload)
     .eq("tenantId", tenantId)
@@ -248,8 +400,21 @@ export async function updateSalesGroupForTenant(user: TenantUser, id: string, in
     .select("id,name,description,managerId,isActive,createdAt,updatedAt")
     .single();
 
-  if (error) throw error;
-  return data;
+  if (result.error && /column .* does not exist|schema cache/i.test(result.error.message ?? "")) {
+    const leanPayload = Object.fromEntries(
+      Object.entries(payload).filter(([key]) => ["name", "description", "isActive", "updatedAt"].includes(key))
+    );
+    result = await supabase
+      .from("SalesGroup")
+      .update(leanPayload)
+      .eq("tenantId", tenantId)
+      .eq("id", id)
+      .select("id,name,description,isActive,createdAt,updatedAt")
+      .single();
+  }
+
+  if (result.error) throw result.error;
+  return result.data;
 }
 
 export async function deleteSalesGroupForTenant(user: TenantUser, id: string) {
@@ -316,8 +481,14 @@ export async function listAssignmentRulesForTenant(user: TenantUser) {
       userPool: rule.targetUserIds ?? [],
       matchingKeys:
         rule.conditions && typeof rule.conditions === "object" && !Array.isArray(rule.conditions)
-          ? (rule.conditions as Record<string, unknown>)
+          ? Object.fromEntries(
+              Object.entries(rule.conditions as Record<string, unknown>).filter(([key]) => !key.startsWith("__"))
+            )
           : {},
+      fallbackUserId:
+        rule.conditions && typeof rule.conditions === "object" && !Array.isArray(rule.conditions)
+          ? (rule.conditions as Record<string, unknown>).__fallbackUserId
+          : undefined,
     },
   }));
 }
@@ -326,6 +497,10 @@ export async function createAssignmentRuleForTenant(user: TenantUser, input: Rec
   const tenantId = requireTenantId(user);
   const supabase = createSupabaseAdminClient();
   const config = (input.config as Record<string, unknown>) ?? {};
+  const conditions = {
+    ...((config.matchingKeys as Record<string, unknown>) ?? {}),
+    ...(config.fallbackUserId ? { __fallbackUserId: String(config.fallbackUserId) } : {}),
+  };
   const now = new Date().toISOString();
 
   const { data, error } = await supabase
@@ -338,7 +513,7 @@ export async function createAssignmentRuleForTenant(user: TenantUser, input: Rec
       entityType: input.entityType ? String(input.entityType) : "LEAD",
       priority: Number(input.priority ?? 0),
       isActive: input.isActive !== false,
-      conditions: (config.matchingKeys as Record<string, unknown>) ?? {},
+      conditions,
       strategy: input.type ? String(input.type) : "ROUND_ROBIN",
       targetGroupId: config.salesGroupId ? String(config.salesGroupId) : null,
       targetUserIds: Array.isArray(config.userPool) ? config.userPool.map(String) : [],
@@ -368,7 +543,10 @@ export async function updateAssignmentRuleForTenant(user: TenantUser, id: string
   if ("isActive" in input) payload.isActive = input.isActive !== false;
   if ("type" in input) payload.strategy = String(input.type ?? "ROUND_ROBIN");
   if ("config" in input) {
-    payload.conditions = (config.matchingKeys as Record<string, unknown>) ?? {};
+    payload.conditions = {
+      ...((config.matchingKeys as Record<string, unknown>) ?? {}),
+      ...(config.fallbackUserId ? { __fallbackUserId: String(config.fallbackUserId) } : {}),
+    };
     payload.targetGroupId = config.salesGroupId ? String(config.salesGroupId) : null;
     payload.targetUserIds = Array.isArray(config.userPool) ? config.userPool.map(String) : [];
   }
@@ -507,7 +685,7 @@ export async function listCustomFieldsForTenant(user: TenantUser, objectType?: s
   const objectIds = objectType ? [await getObjectDefinitionId(tenantId, objectType)] : [];
   let query = supabase
     .from("FieldDefinition")
-    .select("id,objectId,key,label,type,isRequired,isUnique,isImmutable,defaultValue,options,order,isActive,createdAt,updatedAt,isCustom")
+    .select("id,objectId,key,label,type,isRequired,isUnique,isImmutable,defaultValue,options,order,isActive,createdAt,updatedAt,isCustom,entityType,entityTypeId")
     .eq("tenantId", tenantId)
     .eq("isCustom", true)
     .is("deletedAt", null)
@@ -543,6 +721,8 @@ export async function listCustomFieldsForTenant(user: TenantUser, objectType?: s
       options: getFieldOptions(field.type, field.options),
     },
     options: getFieldOptions(field.type, field.options),
+    entityType: field.entityType ?? null,
+    entityTypeId: field.entityTypeId ?? null,
     order: field.order ?? 0,
     isActive: field.isActive ?? true,
   }));
@@ -590,12 +770,14 @@ export async function createCustomFieldForTenant(user: TenantUser, input: Record
       isImmutable: false,
       defaultValue: null,
       options: Array.isArray(input.options) ? input.options : null,
+      entityType: input.entityType ? String(input.entityType) : null,
+      entityTypeId: input.entityTypeId ? String(input.entityTypeId) : null,
       order: Number(input.order ?? 0),
       isActive: input.isActive !== false,
       createdAt: now,
       updatedAt: now,
     })
-    .select("id,objectId,key,label,type,isRequired,options,order,isActive,isCustom")
+    .select("id,objectId,key,label,type,isRequired,options,order,isActive,isCustom,entityType,entityTypeId")
     .single();
 
   if (error) throw error;
@@ -618,6 +800,8 @@ export async function updateCustomFieldForTenant(user: TenantUser, id: string, i
   if ("options" in input) {
     payload.options = Array.isArray(input.options) ? input.options : null;
   }
+  if ("entityType" in input) payload.entityType = input.entityType ? String(input.entityType) : null;
+  if ("entityTypeId" in input) payload.entityTypeId = input.entityTypeId ? String(input.entityTypeId) : null;
   if ("order" in input) payload.order = Number(input.order ?? 0);
   if ("isActive" in input) payload.isActive = input.isActive !== false;
 
@@ -626,7 +810,7 @@ export async function updateCustomFieldForTenant(user: TenantUser, id: string, i
     .update(payload)
     .eq("tenantId", tenantId)
     .eq("id", id)
-    .select("id,objectId,key,label,type,isRequired,options,order,isActive,isCustom")
+    .select("id,objectId,key,label,type,isRequired,options,order,isActive,isCustom,entityType,entityTypeId")
     .single();
 
   if (error) throw error;
@@ -691,6 +875,22 @@ export async function createPipelineForTenant(user: TenantUser, input: Record<st
   const supabase = createSupabaseAdminClient();
   const objectId = await getObjectDefinitionId(tenantId, "OPPORTUNITY");
   const now = new Date().toISOString();
+  const order =
+    typeof input.order === "number"
+      ? Number(input.order)
+      : await (async () => {
+          const { data, error } = await supabase
+            .from("OpportunityType")
+            .select("order")
+            .eq("tenantId", tenantId)
+            .eq("objectId", objectId)
+            .order("order", { ascending: false })
+            .limit(1)
+            .maybeSingle();
+
+          if (error) throw error;
+          return Number(data?.order ?? 0) + 1;
+        })();
 
   const { data: type, error: typeError } = await supabase
     .from("OpportunityType")
@@ -700,7 +900,7 @@ export async function createPipelineForTenant(user: TenantUser, input: Record<st
       objectId,
       name: String(input.name ?? "").trim(),
       description: null,
-      order: Number(input.order ?? Date.now()),
+      order,
       isActive: true,
       createdAt: now,
       updatedAt: now,
@@ -871,7 +1071,19 @@ export async function createOpportunityTypeConfigForTenant(user: TenantUser, inp
   const order =
     typeof input.order === "number"
       ? Number(input.order)
-      : Date.now();
+      : await (async () => {
+          const { data, error } = await supabase
+            .from("OpportunityType")
+            .select("order")
+            .eq("tenantId", tenantId)
+            .eq("objectId", objectId)
+            .order("order", { ascending: false })
+            .limit(1)
+            .maybeSingle();
+
+          if (error) throw error;
+          return Number(data?.order ?? 0) + 1;
+        })();
 
   const { data, error } = await supabase
     .from("OpportunityType")

@@ -2,7 +2,7 @@
 import Cookies from 'js-cookie';
 import { getUserFriendlyError } from './error-utils';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || '/api';
+const API_URL = '/api';
 
 export async function apiFetch<T = any>(endpoint: string, options: RequestInit = {}): Promise<T> {
     const token = Cookies.get('token');

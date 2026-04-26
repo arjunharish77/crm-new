@@ -112,10 +112,10 @@ export default function RolesPage() {
     };
 
     return (
-        <Box sx={{ maxWidth: 1400, mx: 'auto', p: { xs: 2, md: 3 } }}>
-            <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 4 }}>
+        <Box sx={{ maxWidth: 1400, mx: 'auto', p: { xs: 1.5, md: 2 } }}>
+            <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 2 }}>
                 <Box>
-                    <Typography variant="h4" sx={{ fontWeight: 700, letterSpacing: -0.5 }}>Roles & Permissions</Typography>
+                    <Typography variant="h6" sx={{ fontWeight: 700, letterSpacing: -0.5 }}>Roles & Permissions</Typography>
                     <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
                         Define and manage access policies for team members and modules
                     </Typography>
@@ -135,7 +135,7 @@ export default function RolesPage() {
                     <CircularProgress />
                 </Box>
             ) : (
-                <Grid container spacing={3}>
+                <Grid container spacing={2}>
                     {roles.length === 0 ? (
                         <Grid size={{ xs: 12 }}>
                             <Paper variant="outlined" sx={{ p: 8, textAlign: 'center', borderRadius: '24px', borderStyle: 'dashed' }}>

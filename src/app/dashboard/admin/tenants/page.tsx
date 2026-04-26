@@ -63,7 +63,7 @@ export default function TenantsPage() {
         if (!token) return;
         setLoading(true);
         try {
-            const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/platform-admin/tenants`, {
+            const res = await fetch(`/api/platform-admin/tenants`, {
                 headers: { Authorization: `Bearer ${token}` },
             });
             if (res.ok) {
@@ -258,11 +258,11 @@ export default function TenantsPage() {
     }
 
     return (
-        <Box sx={{ p: { xs: 2, md: 3 }, maxWidth: 1600, mx: 'auto' }}>
+        <Box sx={{ p: { xs: 1.5, md: 2 }, maxWidth: 1600, mx: 'auto' }}>
             {/* Header */}
-            <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 4 }}>
+            <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 2 }}>
                 <Box>
-                    <Typography variant="h4" sx={{ fontWeight: 700, letterSpacing: -0.5 }}>Tenants</Typography>
+                    <Typography variant="h6" sx={{ fontWeight: 700, letterSpacing: -0.5 }}>Tenants</Typography>
                     <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
                         Platform administration and multi-tenant management
                     </Typography>

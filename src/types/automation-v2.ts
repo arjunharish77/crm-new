@@ -8,6 +8,9 @@ export interface AutomationWorkflow {
 
 export interface AutomationTrigger {
     type: string;
+    opportunityTypeId?: string;
+    activityTypeId?: string;
+    conditions?: Array<Record<string, any>>;
     config?: Record<string, any>;
 }
 

@@ -105,7 +105,7 @@ export function ManageMembersDialog({ open, onOpenChange, group, onSuccess }: Ma
                     Add or remove users from this sales group.
                 </DialogContentText>
 
-                <Stack direction="row" spacing={2} alignItems="flex-end" sx={{ mb: 4 }}>
+                <Stack direction="row" spacing={2} alignItems="flex-end" sx={{ mb: 2 }}>
                     <FormControl fullWidth size="small">
                         <InputLabel>Add User</InputLabel>
                         <Select

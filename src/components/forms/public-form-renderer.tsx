@@ -17,6 +17,11 @@ interface FormConfig {
     theme?: string;
     customCss?: string;
     submitButtonText?: string;
+    layoutColumns?: number;
+    tabs?: Array<{ id: string; label: string }>;
+    sections?: Array<{ id: string; tabId: string; label: string }>;
+    useMultiStep?: boolean;
+    showSectionNames?: boolean;
 }
 
 interface RendererProps {
@@ -29,7 +34,11 @@ export function PublicFormRenderer({ slug, config }: RendererProps) {
     const [formData, setFormData] = useState<Record<string, any>>({});
     const [submitting, setSubmitting] = useState(false);
     const [submitted, setSubmitted] = useState(false);
+    const [activeTabId, setActiveTabId] = useState(config.tabs?.[0]?.id || "tab_1");
     const fields = Array.isArray(config.fields) ? config.fields : [];
+    const tabs = config.tabs?.length ? config.tabs : [{ id: "tab_1", label: "Tab 1" }];
+    const sections = config.sections?.length ? config.sections : [{ id: "section_1", tabId: tabs[0].id, label: "Section 1" }];
+    const draftKey = `crm-form-draft:${slug}`;
 
     // Initialize pre-fill from URL params
     useEffect(() => {
@@ -48,8 +57,15 @@ export function PublicFormRenderer({ slug, config }: RendererProps) {
             }
         });
 
-        setFormData(prev => ({ ...prev, ...initialData }));
+        const savedDraft = typeof window !== "undefined" ? window.localStorage.getItem(draftKey) : null;
+        const draftData = parseDraft(savedDraft);
+        setFormData(prev => ({ ...prev, ...initialData, ...draftData }));
     }, [fields, searchParams]);
+
+    useEffect(() => {
+        if (submitted || Object.keys(formData).length === 0) return;
+        window.localStorage.setItem(draftKey, JSON.stringify(formData));
+    }, [draftKey, formData, submitted]);
 
     // Conditional Logic Evaluation
     const visibleFields = useMemo(() => {
@@ -114,12 +130,18 @@ export function PublicFormRenderer({ slug, config }: RendererProps) {
                 referrer: document.referrer,
                 timestamp: new Date().toISOString()
             };
+            payload._context = {
+                leadId: searchParams.get("leadId"),
+                opportunityId: searchParams.get("opportunityId"),
+                activityId: searchParams.get("activityId"),
+            };
 
             await apiFetch(`/public/forms/${slug}/submit`, {
                 method: 'POST',
                 body: JSON.stringify(payload)
             });
 
+            window.localStorage.removeItem(draftKey);
             setSubmitted(true);
             if (config.redirectUrl) {
                 setTimeout(() => {
@@ -148,16 +170,49 @@ export function PublicFormRenderer({ slug, config }: RendererProps) {
         setFormData(prev => ({ ...prev, [id]: value }));
     };
 
+    const clearDraft = () => {
+        window.localStorage.removeItem(draftKey);
+        setFormData({});
+        toast.success("Draft cleared");
+    };
+
     return (
         <>
             {config.customCss && <style dangerouslySetInnerHTML={{ __html: config.customCss }} />}
-            <form onSubmit={handleSubmit} className={`space-y-6 form-theme-${config.theme || 'default'}`}>
+            <form onSubmit={handleSubmit} className={`space-y-4 form-theme-${config.theme || 'default'}`}>
+                {Object.keys(formData).length > 0 && (
+                    <div className="flex items-center justify-between rounded-md border border-gray-200 bg-gray-50 px-3 py-2 text-xs text-gray-600">
+                        <span>Draft is saved automatically on this device.</span>
+                        <button type="button" className="font-semibold text-primary" onClick={clearDraft}>Clear draft</button>
+                    </div>
+                )}
                 {fields.length === 0 && (
                     <div className="rounded-lg border border-dashed border-gray-300 bg-gray-50 p-6 text-center text-sm text-gray-500">
                         This form does not have any fields yet.
                     </div>
                 )}
-                {visibleFields.map((field) => (
+                {tabs.length > 1 && (
+                    <div className="flex gap-2 border-b border-gray-200 overflow-x-auto">
+                        {tabs.map((tab) => (
+                            <button
+                                key={tab.id}
+                                type="button"
+                                onClick={() => setActiveTabId(tab.id)}
+                                className={`px-3 py-2 text-sm font-semibold border-b-2 ${activeTabId === tab.id ? "border-primary text-primary" : "border-transparent text-gray-500"}`}
+                            >
+                                {tab.label}
+                            </button>
+                        ))}
+                    </div>
+                )}
+                {sections.filter((section) => section.tabId === activeTabId).map((section) => {
+                    const sectionFields = visibleFields.filter((field) => (field.tabId || tabs[0].id) === activeTabId && (field.sectionId || sections.find((item) => item.tabId === activeTabId)?.id) === section.id);
+                    if (sectionFields.length === 0) return null;
+                    return (
+                        <div key={section.id} className="space-y-3">
+                            {config.showSectionNames !== false && <h3 className="text-sm font-bold text-gray-800">{section.label}</h3>}
+                            <div className={config.layoutColumns === 1 ? "grid grid-cols-1 gap-4" : "grid grid-cols-1 md:grid-cols-2 gap-4"}>
+                {sectionFields.map((field) => (
                     <div key={field.id} className="space-y-2 animate-in fade-in slide-in-from-top-2 duration-200">
                         {field.type !== 'HIDDEN' && (
                             <Label htmlFor={field.id} className="text-sm font-semibold text-gray-700">
@@ -268,8 +323,23 @@ export function PublicFormRenderer({ slug, config }: RendererProps) {
                         {field.type !== 'HIDDEN' && field.helpText && <p className="text-xs text-muted-foreground mt-1">{field.helpText}</p>}
                     </div>
                 ))}
+                            </div>
+                        </div>
+                    );
+                })}
 
-                <Button type="submit" className="w-full py-6 text-lg font-bold shadow-lg transition-transform hover:scale-[1.01] active:scale-[0.99]" disabled={submitting}>
+                <div className="flex gap-2">
+                    {tabs.findIndex((tab) => tab.id === activeTabId) > 0 && (
+                        <Button type="button" variant="outline" className="w-full py-4 text-base font-bold" onClick={() => setActiveTabId(tabs[tabs.findIndex((tab) => tab.id === activeTabId) - 1].id)}>
+                            Previous
+                        </Button>
+                    )}
+                    {config.useMultiStep && tabs.findIndex((tab) => tab.id === activeTabId) < tabs.length - 1 ? (
+                        <Button type="button" className="w-full py-4 text-base font-bold" onClick={() => setActiveTabId(tabs[tabs.findIndex((tab) => tab.id === activeTabId) + 1].id)}>
+                            Next
+                        </Button>
+                    ) : (
+                <Button type="submit" className="w-full py-4 text-base font-bold shadow-sm transition-transform hover:scale-[1.01] active:scale-[0.99]" disabled={submitting}>
                     {submitting ? (
                         <div className="flex items-center gap-2">
                             <span className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
@@ -277,7 +347,18 @@ export function PublicFormRenderer({ slug, config }: RendererProps) {
                         </div>
                     ) : (config.submitButtonText || "Submit")}
                 </Button>
+                    )}
+                </div>
             </form>
         </>
     );
+}
+
+function parseDraft(value: string | null) {
+    if (!value) return {};
+    try {
+        return JSON.parse(value);
+    } catch {
+        return {};
+    }
 }

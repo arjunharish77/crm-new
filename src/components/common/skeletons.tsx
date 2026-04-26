@@ -9,6 +9,10 @@ interface TableSkeletonProps {
     hasToolbar?: boolean;
 }
 
+// Deterministic widths to avoid hydration mismatch from Math.random()
+const HEADER_WIDTHS = [75, 85, 65, 90, 70, 80, 60, 95];
+const ROW_WIDTHS = [68, 82, 55, 90, 72, 60, 88, 77, 65, 93, 58, 85, 70, 95, 63, 80];
+
 export function TableSkeleton({ rows = 8, columns = 5, hasToolbar = true }: TableSkeletonProps) {
     return (
         <Card sx={{ overflow: "hidden" }}>
@@ -44,7 +48,7 @@ export function TableSkeleton({ rows = 8, columns = 5, hasToolbar = true }: Tabl
                 }}
             >
                 {Array.from({ length: columns }).map((_, i) => (
-                    <Skeleton key={`h-${i}`} variant="text" width={`${60 + Math.random() * 40}%`} height={20} />
+                    <Skeleton key={`h-${i}`} variant="text" width={`${HEADER_WIDTHS[i % HEADER_WIDTHS.length]}%`} height={20} />
                 ))}
             </Box>
 
@@ -66,7 +70,7 @@ export function TableSkeleton({ rows = 8, columns = 5, hasToolbar = true }: Tabl
                         <Skeleton
                             key={`c-${rowIdx}-${colIdx}`}
                             variant="text"
-                            width={`${50 + Math.random() * 50}%`}
+                            width={`${ROW_WIDTHS[(rowIdx * columns + colIdx) % ROW_WIDTHS.length]}%`}
                             height={18}
                         />
                     ))}
@@ -90,7 +94,7 @@ export function PageSkeleton({ hasHeader = true, cardCount = 3 }: PageSkeletonPr
                     <Skeleton variant="text" width={320} height={20} sx={{ mt: 0.5 }} />
                 </Box>
             )}
-            <Stack spacing={3}>
+            <Stack spacing={2}>
                 {Array.from({ length: cardCount }).map((_, i) => (
                     <Card key={i} sx={{ p: 3 }}>
                         <Skeleton variant="text" width="30%" height={24} />
@@ -115,8 +119,8 @@ export function DashboardSkeleton({ statCount = 4 }: DashboardSkeletonProps) {
                 sx={{
                     display: "grid",
                     gridTemplateColumns: { xs: "1fr", sm: "repeat(2, 1fr)", md: `repeat(${statCount}, 1fr)` },
-                    gap: 3,
-                    mb: 4,
+                    gap: 2,
+                    mb: 2,
                 }}
             >
                 {Array.from({ length: statCount }).map((_, i) => (
@@ -129,7 +133,7 @@ export function DashboardSkeleton({ statCount = 4 }: DashboardSkeletonProps) {
             </Box>
 
             {/* Chart area */}
-            <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "1fr 1fr" }, gap: 3 }}>
+            <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "1fr 1fr" }, gap: 2 }}>
                 <Card sx={{ p: 3 }}>
                     <Skeleton variant="text" width="30%" height={24} />
                     <Skeleton variant="rounded" width="100%" height={240} sx={{ mt: 2 }} />

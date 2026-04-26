@@ -133,10 +133,10 @@ export default function SecurityPolicyPage() {
     }
 
     return (
-        <Box sx={{ maxWidth: 1200, mx: 'auto', p: { xs: 2, md: 3 } }}>
-            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 4 }}>
+        <Box sx={{ maxWidth: 1200, mx: 'auto', p: { xs: 1.5, md: 2 } }}>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
                 <Box>
-                    <Typography variant="h4" sx={{ fontWeight: 700, mb: 1 }}>Security Policies</Typography>
+                    <Typography variant="h6" sx={{ fontWeight: 700, mb: 1 }}>Security Policies</Typography>
                     <Typography variant="body1" color="text.secondary">
                         Configure security settings for tenants.
                     </Typography>
@@ -172,10 +172,10 @@ export default function SecurityPolicyPage() {
                     </Button>
                 )}
             </Box>
-            <Divider sx={{ mb: 4 }} />
+            <Divider sx={{ mb: 2 }} />
 
             {selectedPolicy && (
-                <Grid container spacing={3}>
+                <Grid container spacing={2}>
                     {/* Password Policy */}
                     <Grid size={{ xs: 12, md: 6 }}>
                         <Card variant="outlined" sx={{ height: '100%', borderRadius: 2 }}>
@@ -190,7 +190,7 @@ export default function SecurityPolicyPage() {
                             />
                             <Divider />
                             <CardContent>
-                                <Stack spacing={3}>
+                                <Stack spacing={2}>
                                     <Grid container spacing={2}>
                                         <Grid size={{ xs: 12 }}>
                                             <TextField
@@ -262,7 +262,7 @@ export default function SecurityPolicyPage() {
                             />
                             <Divider />
                             <CardContent>
-                                <Stack spacing={3}>
+                                <Stack spacing={2}>
                                     <Grid container spacing={2}>
                                         <Grid size={{ xs: 6 }}>
                                             <TextField

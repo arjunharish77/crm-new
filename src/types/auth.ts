@@ -1,5 +1,5 @@
 export interface User {
-    id?: string;          // from /v1/auth/me response
+    id?: string;          // from /api/auth/me response
     sub?: string;         // from decoded JWT (id = sub)
     email: string;
     name?: string;

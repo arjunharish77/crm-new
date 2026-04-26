@@ -66,10 +66,10 @@ export default function CustomFieldsSettingsPage() {
     }
 
     return (
-        <Box sx={{ maxWidth: 1200, mx: 'auto', p: { xs: 2, md: 3 } }}>
-            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 4 }}>
+        <Box sx={{ maxWidth: 1200, mx: 'auto', p: { xs: 1.5, md: 2 } }}>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
                 <Box>
-                    <Typography variant="h4" sx={{ fontWeight: 700, mb: 1 }}>Custom Fields</Typography>
+                    <Typography variant="h6" sx={{ fontWeight: 700, mb: 1 }}>Custom Fields</Typography>
                     <Typography variant="body1" color="text.secondary">
                         Manage custom fields for your CRM objects.
                     </Typography>
@@ -79,7 +79,7 @@ export default function CustomFieldsSettingsPage() {
                     onSuccess={() => fetchFields(activeTab)}
                 />
             </Box>
-            <Divider sx={{ mb: 4 }} />
+            <Divider sx={{ mb: 2 }} />
 
             <Tabs
                 value={activeTab}

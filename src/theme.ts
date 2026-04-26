@@ -214,14 +214,14 @@ const getDesignTokens = (mode: 'light' | 'dark'): ThemeOptions => ({
         h2: { fontSize: '40px', lineHeight: '46px', letterSpacing: '-0.2px', fontWeight: 500 },
         h3: { fontSize: '31px', lineHeight: '38px', letterSpacing: '-0.1px', fontWeight: 600 },
         h4: { fontSize: '27px', lineHeight: '34px', letterSpacing: '0px', fontWeight: 600 },
-        h5: { fontSize: '22px', lineHeight: '28px', letterSpacing: '0px', fontWeight: 700 },
-        h6: { fontSize: '18px', lineHeight: '24px', letterSpacing: '0px', fontWeight: 700 },
-        subtitle1: { fontSize: '15px', lineHeight: '22px', letterSpacing: '0.1px', fontWeight: 600 },
-        subtitle2: { fontSize: '13px', lineHeight: '18px', letterSpacing: '0.08px', fontWeight: 600 },
-        body1: { fontSize: '14px', lineHeight: '21px', letterSpacing: '0.25px', fontWeight: 400 },
-        body2: { fontSize: '13px', lineHeight: '18px', letterSpacing: '0.2px', fontWeight: 400 },
-        button: { fontSize: '14px', lineHeight: '20px', letterSpacing: '0.1px', fontWeight: 500, textTransform: 'none' },
-        caption: { fontSize: '12px', lineHeight: '16px', letterSpacing: '0.4px', fontWeight: 400 },
+        h5: { fontSize: '20px', lineHeight: '26px', letterSpacing: '0px', fontWeight: 700 },
+        h6: { fontSize: '16px', lineHeight: '22px', letterSpacing: '0px', fontWeight: 700 },
+        subtitle1: { fontSize: '14px', lineHeight: '20px', letterSpacing: '0px', fontWeight: 600 },
+        subtitle2: { fontSize: '12px', lineHeight: '17px', letterSpacing: '0px', fontWeight: 600 },
+        body1: { fontSize: '13px', lineHeight: '19px', letterSpacing: '0px', fontWeight: 400 },
+        body2: { fontSize: '12px', lineHeight: '17px', letterSpacing: '0px', fontWeight: 400 },
+        button: { fontSize: '12px', lineHeight: '18px', letterSpacing: '0px', fontWeight: 600, textTransform: 'none' },
+        caption: { fontSize: '11px', lineHeight: '15px', letterSpacing: '0px', fontWeight: 400 },
         overline: { fontSize: '12px', lineHeight: '16px', letterSpacing: '0.5px', fontWeight: 500, textTransform: 'uppercase' },
         labelLarge: { fontSize: '13px', lineHeight: '18px', letterSpacing: '0.08px', fontWeight: 600 },
         labelMedium: { fontSize: '11px', lineHeight: '14px', letterSpacing: '0.45px', fontWeight: 600 },
@@ -237,8 +237,8 @@ const getDesignTokens = (mode: 'light' | 'dark'): ThemeOptions => ({
         MuiButton: {
             styleOverrides: {
                 root: {
-                    borderRadius: '12px',
-                    padding: '8px 18px',
+                    borderRadius: '8px',
+                    padding: '6px 14px',
                     boxShadow: 'none',
                     textTransform: 'none',
                     fontWeight: 600,
@@ -298,7 +298,7 @@ const getDesignTokens = (mode: 'light' | 'dark'): ThemeOptions => ({
         MuiIconButton: {
             styleOverrides: {
                 root: {
-                    padding: 8,
+                    padding: 6,
                     transition: `all ${duration.short4}ms ${m3Ease.standard}`,
                     '&:hover': {
                         transform: 'scale(1.02)',
@@ -331,7 +331,7 @@ const getDesignTokens = (mode: 'light' | 'dark'): ThemeOptions => ({
             styleOverrides: {
                 root: {
                     backgroundImage: 'none',
-                    borderRadius: '12px',
+                    borderRadius: '8px',
                     transition: `all ${duration.medium4}ms ${m3Ease.emphasized}`,
                     backgroundColor: md3Colors[mode].surfaceContainerLow,
                     border: `1px solid ${md3Colors[mode].outlineVariant}`,
@@ -412,8 +412,8 @@ const getDesignTokens = (mode: 'light' | 'dark'): ThemeOptions => ({
         MuiListItemButton: {
             styleOverrides: {
                 root: {
-                    borderRadius: '12px',
-                    minHeight: 42,
+                    borderRadius: '8px',
+                    minHeight: 34,
                     transition: `all ${duration.short4}ms ${m3Ease.standard}`,
                     '&:hover': {
                         transform: 'none',
@@ -450,7 +450,7 @@ const getDesignTokens = (mode: 'light' | 'dark'): ThemeOptions => ({
             styleOverrides: {
                 root: {
                     '& .MuiOutlinedInput-root': {
-                        minHeight: 40,
+                        minHeight: 34,
                         borderRadius: '8px',
                         transition: `all ${duration.short4}ms ${m3Ease.standard}`,
                         '&.Mui-focused': {
@@ -533,7 +533,7 @@ const getDesignTokens = (mode: 'light' | 'dark'): ThemeOptions => ({
         MuiAlert: {
             styleOverrides: {
                 root: {
-                    borderRadius: '12px',
+                    borderRadius: '8px',
                 },
             },
         },

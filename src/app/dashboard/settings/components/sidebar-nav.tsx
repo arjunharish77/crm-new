@@ -21,6 +21,10 @@ import {
     FormatListBulleted as PipelinesIcon,
     Rule as RulesIcon,
     GroupWork as GroupsSettingsIcon,
+    People as UsersIcon,
+    Work as OpportunityTypesIcon,
+    AssignmentTurnedIn as ActivityTypesIcon,
+    AutoFixHigh as ScoringIcon,
 } from "@mui/icons-material";
 
 const sidebarNavItems = [
@@ -35,29 +39,59 @@ const sidebarNavItems = [
         icon: TeamsIcon,
     },
     {
-        title: "Permission Templates",
-        href: "/dashboard/settings/permission-templates",
+        title: "Users",
+        href: "/dashboard/settings/users",
+        icon: UsersIcon,
+    },
+    {
+        title: "Roles & Permissions",
+        href: "/dashboard/settings/roles",
         icon: PermissionsIcon,
     },
     {
         title: "Pipelines",
-        href: "/dashboard/admin/pipelines",
+        href: "/dashboard/settings/pipelines",
         icon: PipelinesIcon,
     },
     {
+        title: "Opportunity Types",
+        href: "/dashboard/settings/opportunity-types",
+        icon: OpportunityTypesIcon,
+    },
+    {
+        title: "Activity Types",
+        href: "/dashboard/settings/activity-types",
+        icon: ActivityTypesIcon,
+    },
+    {
         title: "Custom Fields",
-        href: "/dashboard/admin/custom-fields",
+        href: "/dashboard/settings/custom-fields",
         icon: FieldsIcon,
     },
     {
         title: "Sales Groups",
-        href: "/dashboard/admin/sales-groups",
+        href: "/dashboard/settings/sales-groups",
         icon: GroupsSettingsIcon,
     },
     {
         title: "Assignment Rules",
-        href: "/dashboard/admin/assignment-rules",
+        href: "/dashboard/settings/assignment-rules",
         icon: RulesIcon,
+    },
+    {
+        title: "Lead Scoring",
+        href: "/dashboard/settings/lead-scoring",
+        icon: ScoringIcon,
+    },
+    {
+        title: "Security",
+        href: "/dashboard/settings/security",
+        icon: PermissionsIcon,
+    },
+    {
+        title: "Permission Templates",
+        href: "/dashboard/settings/permission-templates",
+        icon: PermissionsIcon,
     },
     {
         title: "Integrations",

@@ -60,7 +60,7 @@ export default function RetentionPage() {
         setLoading(true);
         try {
             const res = await fetch(
-                `${process.env.NEXT_PUBLIC_API_URL}/platform-admin/retention/policies`,
+                `/api/platform-admin/retention/policies`,
                 {
                     headers: { Authorization: `Bearer ${token}` },
                 }
@@ -82,7 +82,7 @@ export default function RetentionPage() {
     const updatePolicy = async (tenantId: string | null, values: Partial<RetentionPolicy>) => {
         try {
             const res = await fetch(
-                `${process.env.NEXT_PUBLIC_API_URL}/platform-admin/retention/policy/${tenantId || 'global'}`,
+                `/api/platform-admin/retention/policy/${tenantId || 'global'}`,
                 {
                     method: "PATCH",
                     headers: {
@@ -109,7 +109,7 @@ export default function RetentionPage() {
         setEnforcing(true);
         try {
             const res = await fetch(
-                `${process.env.NEXT_PUBLIC_API_URL}/platform-admin/retention/enforce`,
+                `/api/platform-admin/retention/enforce`,
                 {
                     method: "POST",
                     headers: { Authorization: `Bearer ${token}` },
@@ -149,10 +149,10 @@ export default function RetentionPage() {
     }
 
     return (
-        <Box sx={{ maxWidth: 1200, mx: 'auto', p: { xs: 2, md: 3 } }}>
-            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 4 }}>
+        <Box sx={{ maxWidth: 1200, mx: 'auto', p: { xs: 1.5, md: 2 } }}>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
                 <Box>
-                    <Typography variant="h4" sx={{ fontWeight: 700, mb: 1 }}>Data Retention Policies</Typography>
+                    <Typography variant="h6" sx={{ fontWeight: 700, mb: 1 }}>Data Retention Policies</Typography>
                     <Typography variant="body1" color="text.secondary">
                         Configure automatic deletion rules for data compliance.
                     </Typography>
@@ -168,7 +168,7 @@ export default function RetentionPage() {
                     {enforcing ? "Enforcing..." : "Enforce Now"}
                 </Button>
             </Box>
-            <Divider sx={{ mb: 4 }} />
+            <Divider sx={{ mb: 2 }} />
 
             <Card variant="outlined" sx={{ borderRadius: 2 }}>
                 <CardHeader
@@ -214,7 +214,7 @@ export default function RetentionPage() {
 
                                     {editingPolicy?.id === policy.id ? (
                                         <Box component="form">
-                                            <Grid container spacing={3}>
+                                            <Grid container spacing={2}>
                                                 <Grid size={{ xs: 12, sm: 6, md: 3 }}>
                                                     <TextField
                                                         label="Leads (days)"

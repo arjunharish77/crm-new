@@ -130,7 +130,7 @@ export function CreatePermissionTemplateDialog({
             }
         >
             <form id="create-template-form" onSubmit={handleSubmit(onSubmit)}>
-                <Stack spacing={3}>
+                <Stack spacing={2}>
                     <Controller
                         name="name"
                         control={control}

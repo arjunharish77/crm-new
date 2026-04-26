@@ -23,6 +23,7 @@ type CreateUserInput = {
   email: string;
   password: string;
   roleId: string;
+  teamId?: string;
   managerId?: string;
   skills?: Record<string, string[] | string>;
 };
@@ -30,6 +31,7 @@ type CreateUserInput = {
 type UpdateUserInput = {
   name?: string;
   roleId?: string;
+  teamId?: string;
   managerId?: string;
   skills?: Record<string, string[] | string>;
   status?: string;
@@ -42,6 +44,13 @@ type RoleInput = {
     modules: Record<string, string>;
     recordAccess: string;
   };
+};
+
+type PermissionTemplateInput = {
+  name: string;
+  description?: string;
+  permissions: Record<string, unknown>;
+  isActive?: boolean;
 };
 
 export async function getBootstrapStatus() {
@@ -171,14 +180,26 @@ export async function listTenantUsers(tenantId: string | null) {
   const supabase = createSupabaseAdminClient();
   const usersQuery = supabase
     .from("User")
-    .select("id,name,email,status,roleId,managerId,skills,createdAt")
+    .select("id,name,email,status,roleId,managerId,teamId,skills,createdAt")
     .order("createdAt", { ascending: false });
 
   const scopedUsersQuery = tenantId
     ? usersQuery.eq("tenantId", tenantId)
     : usersQuery.is("tenantId", null);
 
-  const { data: users, error } = await scopedUsersQuery;
+  let { data: users, error }: { data: any[] | null; error: any } = await scopedUsersQuery;
+  if (error && /teamId|schema cache|does not exist/i.test(error.message ?? "")) {
+    const fallbackUsersQuery = supabase
+      .from("User")
+      .select("id,name,email,status,roleId,managerId,skills,createdAt")
+      .order("createdAt", { ascending: false });
+    const scopedFallbackQuery = tenantId
+      ? fallbackUsersQuery.eq("tenantId", tenantId)
+      : fallbackUsersQuery.is("tenantId", null);
+    const fallback = await scopedFallbackQuery;
+    users = fallback.data;
+    error = fallback.error;
+  }
   if (error) throw error;
 
   const rolesQuery = supabase
@@ -192,6 +213,12 @@ export async function listTenantUsers(tenantId: string | null) {
 
   const roleMap = new Map((roles ?? []).map((role) => [role.id, role]));
   const userMap = new Map((users ?? []).map((user) => [user.id, user]));
+  const teamIds = [...new Set((users ?? []).map((user: any) => user.teamId).filter(Boolean))];
+  const teamResult = teamIds.length && tenantId
+    ? await supabase.from("Team").select("id,name").eq("tenantId", tenantId).in("id", teamIds)
+    : { data: [], error: null };
+  if (teamResult.error && !/does not exist|schema cache/i.test(teamResult.error.message ?? "")) throw teamResult.error;
+  const teamMap = new Map((teamResult.data ?? []).map((team: any) => [team.id, team]));
 
   return (users ?? []).map((user) => ({
     ...user,
@@ -202,8 +229,8 @@ export async function listTenantUsers(tenantId: string | null) {
           return manager ? { id: manager.id, name: manager.name } : undefined;
         })()
       : undefined,
-    team: undefined,
-    teamId: "",
+    team: (user as any).teamId ? teamMap.get((user as any).teamId) ?? undefined : undefined,
+    teamId: (user as any).teamId ?? "",
     lastLoginAt: null,
   }));
 }
@@ -223,14 +250,36 @@ export async function createTenantScopedUser(tenantId: string, input: CreateUser
       password: passwordHash,
       status: "ACTIVE",
       roleId: input.roleId,
+      teamId: input.teamId || null,
       managerId: input.managerId || null,
       skills: input.skills ?? null,
       createdAt: now,
       updatedAt: now,
     })
-    .select("id,name,email,status,roleId,managerId,skills,createdAt")
+    .select("id,name,email,status,roleId,managerId,teamId,skills,createdAt")
     .single();
 
+  if (error && /teamId|schema cache|does not exist/i.test(error.message ?? "")) {
+    const fallback = await supabase
+      .from("User")
+      .insert({
+        id: randomUUID(),
+        tenantId,
+        email: input.email.toLowerCase(),
+        name: input.name,
+        password: passwordHash,
+        status: "ACTIVE",
+        roleId: input.roleId,
+        managerId: input.managerId || null,
+        skills: input.skills ?? null,
+        createdAt: now,
+        updatedAt: now,
+      })
+      .select("id,name,email,status,roleId,managerId,skills,createdAt")
+      .single();
+    if (fallback.error) throw fallback.error;
+    return { ...fallback.data, teamId: "" };
+  }
   if (error) throw error;
   return data;
 }
@@ -241,22 +290,39 @@ export async function updateTenantScopedUser(
   input: UpdateUserInput
 ) {
   const supabase = createSupabaseAdminClient();
-  const { data, error } = await supabase
+  let result = await supabase
     .from("User")
     .update({
       name: input.name,
       roleId: input.roleId,
+      teamId: input.teamId || null,
       managerId: input.managerId || null,
       skills: input.skills ?? null,
       status: input.status,
     })
     .eq("tenantId", tenantId)
     .eq("id", userId)
-    .select("id,name,email,status,roleId,managerId,skills,createdAt")
+    .select("id,name,email,status,roleId,managerId,teamId,skills,createdAt")
     .single();
 
-  if (error) throw error;
-  return data;
+  if (result.error && /teamId|schema cache|does not exist/i.test(result.error.message ?? "")) {
+    result = await supabase
+      .from("User")
+      .update({
+        name: input.name,
+        roleId: input.roleId,
+        managerId: input.managerId || null,
+        skills: input.skills ?? null,
+        status: input.status,
+      })
+      .eq("tenantId", tenantId)
+      .eq("id", userId)
+      .select("id,name,email,status,roleId,managerId,skills,createdAt")
+      .single();
+  }
+
+  if (result.error) throw result.error;
+  return { ...result.data, teamId: (result.data as any).teamId ?? input.teamId ?? "" };
 }
 
 export async function listTenantRoles(tenantId: string | null) {
@@ -335,6 +401,75 @@ export async function deleteTenantRole(tenantId: string, roleId: string) {
     .delete()
     .eq("tenantId", tenantId)
     .eq("id", roleId);
+
+  if (error) throw error;
+}
+
+export async function listPermissionTemplatesForTenant(tenantId: string) {
+  const supabase = createSupabaseAdminClient();
+  const { data, error } = await supabase
+    .from("PermissionTemplate")
+    .select("id,name,description,permissions,isActive,createdAt,updatedAt")
+    .eq("tenantId", tenantId)
+    .order("name", { ascending: true });
+
+  if (error) {
+    if (/does not exist|schema cache/i.test(error.message ?? "")) return [];
+    throw error;
+  }
+
+  return data ?? [];
+}
+
+export async function createPermissionTemplateForTenant(tenantId: string, input: PermissionTemplateInput) {
+  const supabase = createSupabaseAdminClient();
+  const now = new Date().toISOString();
+  const { data, error } = await supabase
+    .from("PermissionTemplate")
+    .insert({
+      id: randomUUID(),
+      tenantId,
+      name: input.name,
+      description: input.description ?? null,
+      permissions: input.permissions ?? {},
+      isActive: input.isActive ?? true,
+      createdAt: now,
+      updatedAt: now,
+    })
+    .select("id,name,description,permissions,isActive,createdAt,updatedAt")
+    .single();
+
+  if (error) throw error;
+  return data;
+}
+
+export async function updatePermissionTemplateForTenant(tenantId: string, templateId: string, input: PermissionTemplateInput) {
+  const supabase = createSupabaseAdminClient();
+  const { data, error } = await supabase
+    .from("PermissionTemplate")
+    .update({
+      name: input.name,
+      description: input.description ?? null,
+      permissions: input.permissions ?? {},
+      isActive: input.isActive ?? true,
+      updatedAt: new Date().toISOString(),
+    })
+    .eq("tenantId", tenantId)
+    .eq("id", templateId)
+    .select("id,name,description,permissions,isActive,createdAt,updatedAt")
+    .single();
+
+  if (error) throw error;
+  return data;
+}
+
+export async function deletePermissionTemplateForTenant(tenantId: string, templateId: string) {
+  const supabase = createSupabaseAdminClient();
+  const { error } = await supabase
+    .from("PermissionTemplate")
+    .delete()
+    .eq("tenantId", tenantId)
+    .eq("id", templateId);
 
   if (error) throw error;
 }

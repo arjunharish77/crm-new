@@ -15,14 +15,13 @@ import {
     useTheme,
     alpha,
 } from "@mui/material";
-import { M3Button, StaggerContainer, StaggerItem } from "@/components/ui-mui/m3-components";
+import { M3Button } from "@/components/ui-mui/m3-components";
 import {
     Add as AddIcon,
     Edit as EditIcon,
     PersonOff as PersonOffIcon,
     Delete as DeleteIcon,
     Security as SecurityIcon,
-    Link as LinkIcon,
 } from "@mui/icons-material";
 import {
     GridColDef,
@@ -32,7 +31,6 @@ import {
 import { StandardDataGrid } from "@/components/common/standard-data-grid";
 import { toast } from "sonner";
 import { format } from "date-fns";
-import Link from "next/link";
 import { User } from "@/types/user";
 import { InviteUserDialog } from "./invite-user-dialog";
 import { EditUserDialog } from "./edit-user-dialog";
@@ -140,7 +138,7 @@ export default function UsersPage() {
                     sx={{
                         width: '100%',
                         minHeight: 56,
-                        py: 0.75,
+                        py: 0.5,
                     }}
                 >
                     <Avatar
@@ -153,7 +151,7 @@ export default function UsersPage() {
                             fontWeight: 700
                         }}
                     >
-                        {params.row.name.charAt(0)}
+                        {(params.row.name || params.row.email || "?").charAt(0).toUpperCase()}
                     </Avatar>
                     <Box sx={{ minWidth: 0, overflow: 'hidden' }}>
                         <Typography
@@ -167,7 +165,7 @@ export default function UsersPage() {
                                 textOverflow: 'ellipsis',
                             }}
                         >
-                            {params.row.name}
+                            {params.row.name || "Unnamed user"}
                         </Typography>
                         <Typography
                             variant="caption"
@@ -218,7 +216,11 @@ export default function UsersPage() {
             headerName: 'Team',
             flex: 1,
             minWidth: 140,
-            valueGetter: (params: any) => params?.name || 'Unassigned',
+            renderCell: (params: GridRenderCellParams<User>) => (
+                <Typography variant="body2" color="text.secondary">
+                    {params.row.team?.name || "Unassigned"}
+                </Typography>
+            ),
         },
         {
             field: 'status',
@@ -267,11 +269,6 @@ export default function UsersPage() {
                             <EditIcon sx={{ fontSize: 18 }} />
                         </IconButton>
                     </Tooltip>
-                    <Tooltip title="View History">
-                        <IconButton size="small" component={Link} href={`/dashboard/admin/users/${params.row.id}`}>
-                            <LinkIcon sx={{ fontSize: 18 }} />
-                        </IconButton>
-                    </Tooltip>
                     {params.row.status === 'ACTIVE' && (
                         <Tooltip title="Deactivate">
                             <IconButton
@@ -293,11 +290,11 @@ export default function UsersPage() {
     // ... existing code ...
 
     return (
-        <Box sx={{ p: { xs: 2, md: 3 }, maxWidth: 1600, mx: 'auto' }}>
-            <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 4 }}>
+        <Box sx={{ p: { xs: 1.5, md: 2 }, maxWidth: 1600, mx: 'auto' }}>
+            <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 2 }}>
                 <Box>
-                    <Typography variant="h4" sx={{ fontWeight: 800, letterSpacing: -0.7 }}>Users</Typography>
-                    <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+                    <Typography variant="h6" sx={{ fontWeight: 800, letterSpacing: -0.7 }}>Users</Typography>
+                    <Typography variant="caption" color="text.secondary" sx={{ mt: 0.25 }}>
                         Manage access, roles, and team assignments.
                     </Typography>
                 </Box>
@@ -322,57 +319,50 @@ export default function UsersPage() {
                     boxShadow: 'none',
                 }}
             >
-                <StaggerContainer>
                     {loading ? (
                         <TableSkeleton rows={10} columns={5} />
                     ) : users.length === 0 ? (
-                        <StaggerItem>
-                            <EmptyState
-                                title="No users found"
-                                description="Get started by inviting your first team member."
-                                action={
-                                    <M3Button variant="outlined" startIcon={<AddIcon />} onClick={() => setDialogOpen(true)}>
-                                        Invite User
-                                    </M3Button>
-                                }
-                            />
-                        </StaggerItem>
+                        <EmptyState
+                            title="No users found"
+                            description="Get started by inviting your first team member."
+                            action={
+                                <M3Button variant="outlined" startIcon={<AddIcon />} onClick={() => setDialogOpen(true)}>
+                                    Invite User
+                                </M3Button>
+                            }
+                        />
                     ) : (
-                        <StaggerItem>
-                            <StandardDataGrid
-                                rows={users}
-                                columns={columns}
-                                getRowHeight={() => 72}
-                                checkboxSelection
-                                disableRowSelectionOnClick
-                                rowSelectionModel={selectedRows}
-                                onRowSelectionModelChange={setSelectedRows}
-                                totalItems={totalItems}
-                                selectedCount={selectedRows.length}
-                                isAllSelected={isAllSelected}
-                                onSelectAllFiltered={handleSelectAllFiltered}
-                                onClearSelection={clearSelection}
-                                currentCount={users.length}
-                                sx={{
-                                    minHeight: 0,
-                                    '& .MuiDataGrid-columnHeaders': {
-                                        bgcolor: 'surfaceContainerLowest',
-                                    },
-                                    '& .MuiDataGrid-row': {
-                                        minHeight: '72px !important',
-                                    },
-                                    '& .MuiDataGrid-cell': {
-                                        py: 0.5,
-                                        alignItems: 'center',
-                                    },
-                                    '& .MuiDataGrid-footerContainer': {
-                                        bgcolor: 'surfaceContainerLowest',
-                                    },
-                                }}
-                            />
-                        </StaggerItem>
+                        <StandardDataGrid
+                            rows={users}
+                            columns={columns}
+                            getRowHeight={() => 56}
+                            checkboxSelection
+                            disableRowSelectionOnClick
+                            rowSelectionModel={selectedRows}
+                            onRowSelectionModelChange={setSelectedRows}
+                            totalItems={totalItems}
+                            selectedCount={selectedRows.length}
+                            isAllSelected={isAllSelected}
+                            onSelectAllFiltered={handleSelectAllFiltered}
+                            onClearSelection={clearSelection}
+                            currentCount={users.length}
+                            sx={{
+                                '& .MuiDataGrid-columnHeaders': {
+                                    bgcolor: 'surfaceContainerLowest',
+                                },
+                                '& .MuiDataGrid-row': {
+                                    minHeight: '56px !important',
+                                },
+                                '& .MuiDataGrid-cell': {
+                                    py: 0.5,
+                                    alignItems: 'center',
+                                },
+                                '& .MuiDataGrid-footerContainer': {
+                                    bgcolor: 'surfaceContainerLowest',
+                                },
+                            }}
+                        />
                     )}
-                </StaggerContainer>
             </Card>
 
             <BulkActionsToolbar

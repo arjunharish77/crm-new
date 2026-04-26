@@ -129,6 +129,7 @@ export function NavigationDrawer({ open, toggleDrawer }: { open: boolean; toggle
     const navigation: NavItem[] = [
         { name: 'Dashboard', href: '/dashboard', icon: <DashboardIcon /> },
         { name: 'Leads', href: '/dashboard/leads', icon: <PeopleIcon />, enabled: true },
+        { name: 'Lists', href: '/dashboard/lists', icon: <PipelineIcon />, enabled: true },
         { name: 'Opportunities', href: '/dashboard/opportunities', icon: <WorkIcon />, enabled: user?.features?.opportunityEnabled !== false },
         { name: 'Activities', href: '/dashboard/activities', icon: <TaskIcon /> },
         { name: 'Forms', href: '/dashboard/forms', icon: <FormIcon />, enabled: user?.features?.formBuilderEnabled !== false },
@@ -137,14 +138,6 @@ export function NavigationDrawer({ open, toggleDrawer }: { open: boolean; toggle
     ];
 
     const adminNavigation: NavItem[] = [
-        // { name: 'Pipelines', href: '/dashboard/admin/pipelines', icon: <PipelineIcon /> }, // Removed per user request
-        { name: 'Users', href: '/dashboard/admin/users', icon: <PeopleIcon /> },
-        { name: 'Roles', href: '/dashboard/admin/roles', icon: <SettingsIcon /> },
-        { name: 'Activity Types', href: '/dashboard/admin/activity-types', icon: <TaskIcon /> },
-        { name: 'Opportunity Types', href: '/dashboard/admin/opportunity-types', icon: <WorkIcon /> },
-        { name: 'Custom Fields', href: '/dashboard/admin/custom-fields', icon: <ExtensionIcon /> },
-        { name: 'Sales Groups', href: '/dashboard/admin/sales-groups', icon: <GroupsIcon />, enabled: user?.features?.salesGroupsEnabled !== false },
-        { name: 'Assignment Rules', href: '/dashboard/admin/assignment-rules', icon: <RuleIcon /> },
         { name: 'Settings', href: '/dashboard/settings', icon: <TuneIcon /> },
     ];
 

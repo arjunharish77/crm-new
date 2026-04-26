@@ -84,7 +84,7 @@ export default function GeneralSettingsPage() {
                     General Settings
                 </Typography>
             </Stack>
-            <Typography variant="body1" color="text.secondary" sx={{ mb: 4, opacity: 0.8 }}>
+            <Typography variant="body1" color="text.secondary" sx={{ mb: 2, opacity: 0.8 }}>
                 Configure your organization's core profile, localization, and display preferences.
             </Typography>
 

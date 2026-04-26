@@ -41,5 +41,22 @@ export interface Activity {
         name: string;
         email: string;
     };
+    auditEvents?: Array<{
+        id: string;
+        action: string;
+        diff?: Record<string, { before: any; after: any }> | null;
+        before?: Record<string, any> | null;
+        after?: Record<string, any> | null;
+        createdAt: string;
+        user?: {
+            id?: string;
+            name?: string;
+            email?: string;
+        };
+        valueLabels?: {
+            activityTypes?: Record<string, string>;
+            stages?: Record<string, string>;
+            opportunityTypes?: Record<string, string>;
+        };
+    }>;
 }
-

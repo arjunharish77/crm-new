@@ -102,14 +102,14 @@ export default function ReportsPage() {
     if (loading) {
         return (
             <Box sx={{ p: { xs: 2, md: 4 }, spaceY: 4 }}>
-                <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 4 }}>
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 2 }}>
                     <Box>
                         <Skeleton width={300} height={40} />
                         <Skeleton width={200} height={20} />
                     </Box>
                     <Skeleton width={150} height={48} variant="rounded" sx={{ borderRadius: 10 }} />
                 </Box>
-                <Grid container spacing={3}>
+                <Grid container spacing={2}>
                     {[1, 2, 3].map((i) => (
                         <Grid size={{ xs: 12, md: 4 }} key={i}>
                             <Skeleton variant="rounded" height={160} sx={{ borderRadius: 4 }} />
@@ -130,7 +130,7 @@ export default function ReportsPage() {
 
     return (
         <Box sx={{ p: { xs: 0, sm: 2 }, pb: 8 }}>
-            <Box sx={{ display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, alignItems: { xs: 'flex-start', sm: 'center' }, justifyContent: 'space-between', mb: 4, gap: 2 }}>
+            <Box sx={{ display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, alignItems: { xs: 'flex-start', sm: 'center' }, justifyContent: 'space-between', mb: 2, gap: 2 }}>
                 <Box>
                     <Typography variant="h3" sx={{ fontWeight: 800, letterSpacing: -1, color: 'text.primary' }}>
                         Reports & Analytics
@@ -151,7 +151,7 @@ export default function ReportsPage() {
             </Box>
 
             {/* Top Metrics */}
-            <Grid container spacing={3} sx={{ mb: 4 }}>
+            <Grid container spacing={2} sx={{ mb: 2 }}>
                 <Grid size={{ xs: 12, sm: 6, md: 4 }}>
                     <MetricCard
                         title="Total Leads"
@@ -185,12 +185,12 @@ export default function ReportsPage() {
             <CustomReportsSection />
 
             {/* Charts Area */}
-            <Grid container spacing={3} sx={{ mt: 1 }}>
+            <Grid container spacing={2} sx={{ mt: 1 }}>
                 <Grid size={{ xs: 12, lg: 7 }}>
                     <Card sx={{ borderRadius: 4, border: '1px solid', borderColor: 'divider', height: '100%' }}>
                         <CardContent sx={{ p: 3 }}>
                             <Typography variant="h6" sx={{ fontWeight: 700, mb: 1 }}>Pipeline by Stage</Typography>
-                            <Typography variant="body2" color="text.secondary" sx={{ mb: 4 }}>Value breakdown per opportunity stage</Typography>
+                            <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>Value breakdown per opportunity stage</Typography>
 
                             <Stack spacing={4}>
                                 {oppsData?.byStage?.map((item: any) => (
@@ -294,7 +294,7 @@ function MetricCard({ title, value, subtitle, icon, color }: MetricCardProps) {
                     </Box>
                 </Box>
                 <Box>
-                    <Typography variant="h4" sx={{ fontWeight: 800, letterSpacing: -1 }}>
+                    <Typography variant="h6" sx={{ fontWeight: 800, letterSpacing: -1 }}>
                         {value}
                     </Typography>
                     <Typography variant="subtitle2" sx={{ fontWeight: 700, color: 'text.primary', mt: 1 }}>
@@ -345,10 +345,10 @@ function CustomReportsSection() {
         }
     };
 
-    if (loading) return <Skeleton variant="rectangular" height={100} sx={{ borderRadius: 4, mb: 4 }} />;
+    if (loading) return <Skeleton variant="rectangular" height={100} sx={{ borderRadius: 4, mb: 2 }} />;
 
     return (
-        <Card sx={{ borderRadius: 4, mb: 4, border: '1px solid', borderColor: 'divider' }}>
+        <Card sx={{ borderRadius: 4, mb: 2, border: '1px solid', borderColor: 'divider' }}>
             <CardContent sx={{ p: 3 }}>
                 <Typography variant="h6" sx={{ fontWeight: 700, mb: 2 }}>Custom Reports</Typography>
                 {reports.length === 0 ? (

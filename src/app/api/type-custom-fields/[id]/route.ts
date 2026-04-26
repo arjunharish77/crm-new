@@ -18,6 +18,8 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       fieldType: body?.fieldType,
       isRequired: body?.isRequired,
       options: body?.fieldConfig?.options,
+      entityType: body?.entityType,
+      entityTypeId: body?.entityTypeId,
       isActive: body?.isActive,
     });
 
@@ -33,6 +35,8 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       },
       order: updated.order ?? 0,
       isActive: updated.isActive ?? true,
+      entityType: updated.entityType ?? body?.entityType,
+      entityTypeId: updated.entityTypeId ?? body?.entityTypeId,
     });
   } catch (error) {
     if (error instanceof Error && error.message === "UNAUTHORIZED") return unauthorized();

@@ -22,8 +22,9 @@ import { apiFetch } from '@/lib/api';
 import { FormEditor } from '@/components/forms/form-editor';
 import { SubmissionsTable } from '@/components/forms/submissions-table';
 import { AnalyticsDashboard } from '@/components/forms/form-analytics';
+import { CrmPlacementEditor } from '@/components/forms/crm-placement-editor';
 
-type BuilderTab = 'editor' | 'submissions' | 'analytics';
+type BuilderTab = 'editor' | 'submissions' | 'analytics' | 'placement';
 
 export default function FormBuilderPage() {
     const params = useParams();
@@ -64,7 +65,7 @@ export default function FormBuilderPage() {
     }
 
     return (
-        <Box sx={{ px: { xs: 2, md: 3 }, py: { xs: 2, md: 2.5 }, maxWidth: 1700, mx: 'auto' }}>
+        <Box sx={{ px: { xs: 1.5, md: 2 }, py: { xs: 1.5, md: 2 }, maxWidth: 1700, mx: 'auto' }}>
             <Stack spacing={2}>
                 <Box>
                     <Button
@@ -81,7 +82,7 @@ export default function FormBuilderPage() {
                         spacing={1.5}
                     >
                         <Box>
-                            <Typography variant="h4" sx={{ fontWeight: 800, letterSpacing: -0.6 }}>
+                            <Typography variant="h6" sx={{ fontWeight: 800, letterSpacing: -0.6 }}>
                                 {form.name}
                             </Typography>
                             <Stack direction="row" spacing={1} alignItems="center" sx={{ mt: 0.5, flexWrap: 'wrap' }}>
@@ -131,6 +132,7 @@ export default function FormBuilderPage() {
                             <Tab value="editor" label="Builder" sx={{ minHeight: 36, borderRadius: '8px' }} />
                             <Tab value="submissions" label="Submissions" sx={{ minHeight: 36, borderRadius: '8px' }} />
                             <Tab value="analytics" label="Analytics" sx={{ minHeight: 36, borderRadius: '8px' }} />
+                            <Tab value="placement" label="CRM Placement" sx={{ minHeight: 36, borderRadius: '8px' }} />
                         </Tabs>
                     </Box>
 
@@ -151,6 +153,10 @@ export default function FormBuilderPage() {
                             <Box sx={{ p: { xs: 1.5, md: 2 } }}>
                                 <AnalyticsDashboard formId={formId} />
                             </Box>
+                        )}
+
+                        {activeTab === 'placement' && (
+                            <CrmPlacementEditor initialForm={form} onSaved={setForm} />
                         )}
                     </Box>
                 </Card>

@@ -145,11 +145,11 @@ export default function FormsPage() {
     };
 
     return (
-        <Container maxWidth="xl" sx={{ py: 3 }}>
+        <Container maxWidth="xl" sx={{ py: 2 }}>
             {/* Header Section */}
             <Box sx={{ mb: 3, display: 'flex', flexDirection: { xs: 'column', md: 'row' }, justifyContent: 'space-between', alignItems: { xs: 'start', md: 'center' }, gap: 2 }}>
                 <Box>
-                    <Typography variant="h4" fontWeight={700} gutterBottom>
+                    <Typography variant="h6" fontWeight={700} gutterBottom>
                         Forms
                     </Typography>
                     <Typography variant="body1" color="text.secondary">
@@ -227,7 +227,7 @@ export default function FormsPage() {
                     )}
                 </Paper>
             ) : (
-                <Grid container spacing={3}>
+                <Grid container spacing={2}>
                     {filteredForms.map((form) => (
                         <Grid size={{ xs: 12, md: 6, lg: 4 }} key={form.id}>
                             <Card

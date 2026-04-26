@@ -178,7 +178,7 @@ export function RoleDialog({
                 </DialogContentText>
 
                 <form id="role-form" onSubmit={handleSubmit(onSubmit)}>
-                    <Stack spacing={3}>
+                    <Stack spacing={2}>
                         <Controller
                             name="name"
                             control={control}
@@ -215,7 +215,7 @@ export function RoleDialog({
                             <Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 1 }}>Module Permissions</Typography>
                             <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>Set access levels for each module</Typography>
 
-                            <Grid container spacing={3}>
+                            <Grid container spacing={2}>
                                 {modules.map((module) => (
                                     <Grid size={{ xs: 12, sm: 6 }} key={module.key}>
                                         <Controller
@@ -246,8 +246,6 @@ export function RoleDialog({
                                 ))}
                             </Grid>
                         </Box>
-
-                        <Divider />
 
                         <Controller
                             name="recordAccess"

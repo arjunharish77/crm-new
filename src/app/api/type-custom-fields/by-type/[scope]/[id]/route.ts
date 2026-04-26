@@ -12,7 +12,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ scop
   try {
     const user = await requireCurrentUser(request);
     if (!user.tenantId) return forbidden("Tenant context required");
-    const { scope } = await params;
+    const { scope, id } = await params;
     const objectType = SCOPE_TO_OBJECT_TYPE[scope];
 
     if (!objectType) {
@@ -21,7 +21,9 @@ export async function GET(request: Request, { params }: { params: Promise<{ scop
 
     const fields = await listCustomFieldsForTenant(user, objectType);
     return NextResponse.json(
-      fields.map((field) => ({
+      fields
+        .filter((field) => !field.entityTypeId || field.entityTypeId === id)
+        .map((field) => ({
         id: field.id,
         fieldKey: field.key,
         fieldLabel: field.label,

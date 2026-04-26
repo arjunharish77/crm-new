@@ -129,7 +129,7 @@ export function BulkAssignManagerDialog({
             }
         >
             <form id="bulk-assign-manager-form" onSubmit={handleSubmit(onSubmit)}>
-                <Stack spacing={3}>
+                <Stack spacing={2}>
                     <Controller
                         name="managerId"
                         control={control}

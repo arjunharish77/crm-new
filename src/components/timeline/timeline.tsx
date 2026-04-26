@@ -52,6 +52,48 @@ function formatActivityValue(value: unknown): string {
     return JSON.stringify(value);
 }
 
+const ACTIVITY_AUDIT_SKIP_FIELDS = new Set(["tenantId", "objectId", "createdAt", "updatedAt", "deletedAt", "deletedBy", "hash"]);
+
+function activityFieldLabel(field: string) {
+    return field
+        .replace(/Id$/, "")
+        .replace(/([A-Z])/g, " $1")
+        .replace(/_/g, " ")
+        .replace(/^./, (value) => value.toUpperCase());
+}
+
+function humanizeActivityToken(value: string) {
+    return value
+        .replace(/^stage_/, "")
+        .replace(/_/g, " ")
+        .replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+function formatAuditActivityValue(value: unknown, field: string, event: any) {
+    if (value === null || value === undefined || value === "") return "Not set";
+    const stringValue = String(value);
+    if (field === "typeId") return event.valueLabels?.activityTypes?.[stringValue] || humanizeActivityToken(stringValue);
+    if (field === "stageId") return event.valueLabels?.stages?.[stringValue] || humanizeActivityToken(stringValue);
+    if (field === "opportunityTypeId") return event.valueLabels?.opportunityTypes?.[stringValue] || humanizeActivityToken(stringValue);
+    if (["outcome", "slaStatus", "priority", "status"].includes(field)) return humanizeActivityToken(stringValue);
+    return formatActivityValue(value);
+}
+
+function activityChangedFields(event: any) {
+    if (event.diff && typeof event.diff === "object") {
+        return Object.entries(event.diff)
+            .filter(([key]) => !ACTIVITY_AUDIT_SKIP_FIELDS.has(key))
+            .map(([field, value]: any) => ({ field, before: value?.before, after: value?.after }));
+    }
+
+    const before = event.before ?? {};
+    const after = event.after ?? {};
+    const keys = new Set([...Object.keys(before), ...Object.keys(after)]);
+    return [...keys]
+        .filter((key) => !ACTIVITY_AUDIT_SKIP_FIELDS.has(key) && JSON.stringify(before[key] ?? null) !== JSON.stringify(after[key] ?? null))
+        .map((field) => ({ field, before: before[field], after: after[field] }));
+}
+
 export function Timeline({ activities }: TimelineProps) {
     const theme = useTheme();
     const [expandedActivityIds, setExpandedActivityIds] = useState<string[]>([]);
@@ -151,6 +193,7 @@ export function Timeline({ activities }: TimelineProps) {
                                     value,
                                 })),
                             ];
+                            const auditEvents = (activity.auditEvents ?? []).filter((event) => event.action === "UPDATE" && activityChangedFields(event).length > 0);
 
                             return (
                                 <Paper
@@ -297,10 +340,37 @@ export function Timeline({ activities }: TimelineProps) {
                                                         by {activity.user.name || activity.user.email}
                                                     </Typography>
                                                 )}
+                                                {auditEvents.length > 0 && (
+                                                    <Typography variant="caption" color="text.secondary">
+                                                        {auditEvents.length} modification{auditEvents.length === 1 ? "" : "s"} tracked
+                                                    </Typography>
+                                                )}
                                             </Stack>
 
                                             <Collapse in={isExpanded} timeout="auto" unmountOnExit>
                                                 <Divider sx={{ my: 1.25 }} />
+                                                {auditEvents.length > 0 && (
+                                                    <Stack spacing={1} sx={{ mb: 1.25 }}>
+                                                        {auditEvents.map((event) => {
+                                                            const changes = activityChangedFields(event);
+                                                            const actor = event.user?.name || event.user?.email || "Unknown User";
+                                                            return (
+                                                                <Box key={event.id} sx={{ p: 1.25, borderRadius: 2, bgcolor: alpha(theme.palette.info.main, 0.06), border: "1px solid", borderColor: alpha(theme.palette.info.main, 0.18) }}>
+                                                                    <Typography variant="caption" sx={{ display: "block", fontWeight: 800, color: "info.main", mb: 0.75 }}>
+                                                                        Activity modified by {actor} / {formatDistanceToNow(new Date(event.createdAt), { addSuffix: true })}
+                                                                    </Typography>
+                                                                    <Stack spacing={0.5}>
+                                                                        {changes.map((change) => (
+                                                                            <Typography key={`${event.id}-${change.field}`} variant="caption" color="text.secondary">
+                                                                                <strong>{activityFieldLabel(change.field)}</strong>: {formatAuditActivityValue(change.before, change.field, event)} -&gt; {formatAuditActivityValue(change.after, change.field, event)}
+                                                                            </Typography>
+                                                                        ))}
+                                                                    </Stack>
+                                                                </Box>
+                                                            );
+                                                        })}
+                                                    </Stack>
+                                                )}
                                                 <Stack
                                                     spacing={1}
                                                     sx={{

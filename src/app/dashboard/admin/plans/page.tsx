@@ -171,10 +171,10 @@ export default function PlansPage() {
     }
 
     return (
-        <Box sx={{ maxWidth: 1200, mx: 'auto', p: { xs: 2, md: 3 } }}>
-            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 4 }}>
+        <Box sx={{ maxWidth: 1200, mx: 'auto', p: { xs: 1.5, md: 2 } }}>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
                 <Box>
-                    <Typography variant="h4" sx={{ fontWeight: 700, mb: 1 }}>Subscription Plans</Typography>
+                    <Typography variant="h6" sx={{ fontWeight: 700, mb: 1 }}>Subscription Plans</Typography>
                     <Typography variant="body1" color="text.secondary">
                         Manage pricing tiers and feature limits.
                     </Typography>
@@ -188,14 +188,14 @@ export default function PlansPage() {
                     Create Plan
                 </Button>
             </Box>
-            <Divider sx={{ mb: 4 }} />
+            <Divider sx={{ mb: 2 }} />
 
             {loading ? (
                 <Box sx={{ display: 'flex', justifyContent: 'center', py: 8 }}>
                     <CircularProgress />
                 </Box>
             ) : (
-                <Grid container spacing={3}>
+                <Grid container spacing={2}>
                     {plans.map((plan) => (
                         <Grid size={{ xs: 12, md: 4 }} key={plan.id}>
                             <Card variant="outlined" sx={{ height: '100%', borderRadius: 3, display: 'flex', flexDirection: 'column' }}>
@@ -261,7 +261,7 @@ export default function PlansPage() {
                 <DialogTitle>{editingPlan ? "Edit Plan" : "Create Plan"}</DialogTitle>
                 <DialogContent>
                     <form id="plan-form" onSubmit={handleSubmit(handleSave)}>
-                        <Stack spacing={3} sx={{ mt: 1 }}>
+                        <Stack spacing={2} sx={{ mt: 1 }}>
                             <Controller
                                 name="name"
                                 control={control}

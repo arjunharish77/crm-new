@@ -21,7 +21,7 @@ interface NotificationContextType {
 
 const NotificationContext = createContext<NotificationContextType | undefined>(undefined);
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
+const API_URL = '/api';
 
 export function NotificationProvider({ children }: { children: React.ReactNode }) {
     const { token, isAuthenticated } = useAuth();
@@ -31,8 +31,7 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
     useEffect(() => {
         if (!isAuthenticated || !token) return;
 
-        // Use versioned API path (/v1/) to match NestJS versioning
-        const eventSource = new EventSource(`${API_URL}/v1/notifications/sse?token=${token}`);
+        const eventSource = new EventSource(`${API_URL}/notifications/sse?token=${token}`);
 
         eventSource.onmessage = (event) => {
             let payload: any;
@@ -67,6 +66,67 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
         return () => {
             eventSource.close();
         };
+    }, [isAuthenticated, token]);
+
+    useEffect(() => {
+        if (!isAuthenticated || !token) return;
+
+        const fetchUnread = async () => {
+            try {
+                const response = await fetch(`${API_URL}/notifications`, {
+                    headers: { Authorization: `Bearer ${token}` },
+                });
+                if (!response.ok) return;
+                const items = await response.json();
+                if (!Array.isArray(items) || items.length === 0) return;
+
+                const normalized = items.map((item) => ({
+                    type: "automation",
+                    title: item.title,
+                    message: item.message,
+                    data: item.data,
+                    timestamp: item.createdAt || new Date().toISOString(),
+                }));
+
+                setNotifications(prev => [...normalized, ...prev]);
+                setUnreadCount(prev => prev + normalized.length);
+                normalized.forEach((item) => {
+                    toast(item.title, { description: item.message });
+                });
+
+                await fetch(`${API_URL}/notifications`, {
+                    method: "PATCH",
+                    headers: {
+                        "Content-Type": "application/json",
+                        Authorization: `Bearer ${token}`,
+                    },
+                    body: JSON.stringify({ ids: items.map((item) => item.id) }),
+                });
+            } catch {
+                // notification polling should never interrupt the app shell
+            }
+        };
+
+        fetchUnread();
+        const interval = window.setInterval(fetchUnread, 30_000);
+        return () => window.clearInterval(interval);
+    }, [isAuthenticated, token]);
+
+    useEffect(() => {
+        if (!isAuthenticated || !token) return;
+
+        const processDueJobs = () => {
+            fetch(`${API_URL}/automation-v2/process-due`, {
+                method: "POST",
+                headers: {
+                    Authorization: `Bearer ${token}`,
+                },
+            }).catch(() => undefined);
+        };
+
+        processDueJobs();
+        const interval = window.setInterval(processDueJobs, 60_000);
+        return () => window.clearInterval(interval);
     }, [isAuthenticated, token]);
 
     const clearNotifications = () => {

@@ -25,6 +25,7 @@ import {
 } from '@mui/icons-material';
 import { toast } from 'sonner';
 import { fadeInUp } from '@/lib/motion';
+import { apiFetch } from '@/lib/api';
 
 interface LeadContactCardProps {
     lead: {
@@ -157,13 +158,27 @@ export function LeadContactCard({ lead, onCreateActivity, onCreateOpportunity }:
                                         <PhoneIcon sx={{ fontSize: 15 }} />
                                     </Box>
                                     <Typography
-                                        component="a"
-                                        href={`tel:${lead.phone}`}
+                                        component="button"
+                                        onClick={async () => {
+                                            try {
+                                                await apiFetch("/integrations/telephony/click-to-call", {
+                                                    method: "POST",
+                                                    body: JSON.stringify({ phoneNumber: lead.phone, leadId: lead.id, execute: true }),
+                                                });
+                                                toast.success("Call request sent");
+                                            } catch (error: any) {
+                                                toast.error(error.message || "Failed to start click-to-call");
+                                            }
+                                        }}
                                         variant="body2"
                                         sx={{
                                             fontWeight: 700,
                                             color: 'text.primary',
                                             textDecoration: 'none',
+                                            border: 0,
+                                            p: 0,
+                                            bgcolor: 'transparent',
+                                            cursor: 'pointer',
                                             '&:hover': { color: 'primary.main' }
                                         }}
                                     >

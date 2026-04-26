@@ -35,7 +35,7 @@ export default function RateLimitsPage() {
         setLoading(true);
         try {
             const res = await fetch(
-                `${process.env.NEXT_PUBLIC_API_URL}/platform-admin/rate-limits/stats`,
+                `/api/platform-admin/rate-limits/stats`,
                 {
                     headers: { Authorization: `Bearer ${token}` },
                 }

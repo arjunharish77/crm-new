@@ -61,13 +61,13 @@ export function CreateTeamDialog({
     setLoading(true);
     try {
       if (team?.id) {
-        await apiFetch(`/sales-groups/${team.id}`, {
+        await apiFetch(`/teams/${team.id}`, {
           method: "PATCH",
           body: JSON.stringify(values),
         });
         toast.success("Team updated successfully");
       } else {
-        await apiFetch("/sales-groups", {
+        await apiFetch("/teams", {
           method: "POST",
           body: JSON.stringify(values),
         });
@@ -107,7 +107,7 @@ export function CreateTeamDialog({
       }
     >
       <form id="create-team-form" onSubmit={handleSubmit(onSubmit)}>
-        <Stack spacing={3}>
+        <Stack spacing={2}>
           <Controller
             name="name"
             control={control}

@@ -8,6 +8,7 @@ import {
 import { Add as AddIcon } from "@mui/icons-material";
 import { StandardDialog } from "@/components/common/standard-dialog";
 import { OpportunityForm } from "./opportunity-form";
+import { ContextualFormsPanel } from "@/components/forms/contextual-forms-panel";
 
 interface CreateOpportunityDialogProps {
     onSuccess: () => void;
@@ -51,6 +52,16 @@ export function CreateOpportunityDialog({ onSuccess, defaultLeadId, trigger, ope
                 icon={<AddIcon />}
             >
                 <div style={{ padding: '8px 0' }}>
+                    <Box sx={{ display: "flex", justifyContent: "flex-end", mb: 1 }}>
+                        <ContextualFormsPanel
+                            placement="OPPORTUNITY_CREATE"
+                            context={{ leadId: defaultLeadId ?? null }}
+                            onSaved={() => {
+                                handleClose();
+                                onSuccess();
+                            }}
+                        />
+                    </Box>
                     <OpportunityForm
                         initialData={defaultLeadId ? { leadId: defaultLeadId } : {}}
                         onSuccess={() => {

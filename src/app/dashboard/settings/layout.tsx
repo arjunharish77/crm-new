@@ -20,7 +20,7 @@ export default function SettingsLayout({
                 animate="animate"
                 sx={{ py: { xs: 2, md: 4 }, maxWidth: 1400, mx: 'auto' }}
             >
-                <Box sx={{ mb: 4 }}>
+                <Box sx={{ mb: 2 }}>
                     <Typography variant="h3" sx={{ fontWeight: 800, letterSpacing: -2, mb: 1 }}>
                         Settings
                     </Typography>

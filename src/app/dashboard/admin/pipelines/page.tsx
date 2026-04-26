@@ -85,10 +85,10 @@ export default function PipelinesAdminPage() {
     };
 
     return (
-        <Box sx={{ maxWidth: 1200, mx: "auto", p: { xs: 2, md: 3 } }}>
-            <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 4 }}>
+        <Box sx={{ maxWidth: 1200, mx: "auto", p: { xs: 1.5, md: 2 } }}>
+            <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 2 }}>
                 <Box>
-                    <Typography variant="h4" sx={{ fontWeight: 800, letterSpacing: -1 }}>
+                    <Typography variant="h6" sx={{ fontWeight: 800, letterSpacing: -1 }}>
                         Pipelines
                     </Typography>
                     <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
@@ -115,7 +115,7 @@ export default function PipelinesAdminPage() {
                     }
                 />
             ) : (
-                <Grid container spacing={3}>
+                <Grid container spacing={2}>
                     {pipelines.map((pipeline) => (
                         <Grid size={{ xs: 12, md: 6 }} key={pipeline.id}>
                             <Card sx={{ height: "100%" }}>

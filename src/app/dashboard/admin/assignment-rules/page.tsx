@@ -176,11 +176,11 @@ export default function AssignmentSettingsPage() {
             variants={fadeInUp}
             initial="initial"
             animate="animate"
-            sx={{ maxWidth: 1200, mx: 'auto', p: { xs: 2, md: 3 } }}
+            sx={{ maxWidth: 1200, mx: 'auto', p: { xs: 1.5, md: 2 } }}
         >
-            <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 4 }}>
+            <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 2 }}>
                 <Box>
-                    <Typography variant="h4" sx={{ fontWeight: 800, letterSpacing: -1 }}>Assignment Rules</Typography>
+                    <Typography variant="h6" sx={{ fontWeight: 800, letterSpacing: -1 }}>Assignment Rules</Typography>
                     <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
                         Configure dynamic logic for routing leads and opportunities based on criteria
                     </Typography>

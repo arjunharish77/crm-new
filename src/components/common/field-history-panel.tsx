@@ -131,13 +131,18 @@ export function FieldHistoryPanel({ entityType, entityId }: FieldHistoryPanelPro
     useEffect(() => {
         if (!entityId) return;
         apiFetch<any>(
-            `/audit-logs?entityType=${entityType.toUpperCase()}&entityId=${entityId}&limit=30`
+            `/governance/audit-logs?entityType=${entityType.toUpperCase()}&entityId=${entityId}`
         )
             .then(data => {
                 // Filter entries for this specific entity
-                const entries: AuditEntry[] = (data?.data || []).filter(
-                    (e: AuditEntry) => e.entityId === entityId
-                );
+                const entries: AuditEntry[] = (Array.isArray(data) ? data : data?.data || [])
+                    .filter((e: any) => e.entityId === entityId)
+                    .map((entry: any) => ({
+                        ...entry,
+                        before: entry.before ?? entry.changes?.before ?? null,
+                        after: entry.after ?? entry.changes?.after ?? null,
+                        diff: entry.diff ?? entry.changes?.diff ?? null,
+                    }));
                 setHistory(entries);
             })
             .catch(() => toast.error('Failed to load field history'))

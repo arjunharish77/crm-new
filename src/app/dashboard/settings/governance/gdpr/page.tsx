@@ -91,10 +91,10 @@ export default function GDPRPage() {
 
     return (
         <Box sx={{ p: 4 }}>
-            <Typography variant="h4" fontWeight="bold" gutterBottom>
+            <Typography variant="h6" fontWeight="bold" gutterBottom>
                 GDPR & Data Privacy
             </Typography>
-            <Typography color="text.secondary" sx={{ mb: 4 }}>
+            <Typography color="text.secondary" sx={{ mb: 2 }}>
                 Manage Subject Access Requests (SARs) and "Right to be Forgotten" mandates.
             </Typography>
 
@@ -162,7 +162,7 @@ export default function GDPRPage() {
             <Dialog open={isAdding} onClose={() => setIsAdding(false)} maxWidth="sm" fullWidth>
                 <DialogTitle>New Privacy Request</DialogTitle>
                 <DialogContent>
-                    <Stack spacing={3} sx={{ mt: 1 }}>
+                    <Stack spacing={2} sx={{ mt: 1 }}>
                         <Typography variant="body2" color="text.secondary">
                             Enter the email of the person making the request. We will search all modules for matching records.
                         </Typography>

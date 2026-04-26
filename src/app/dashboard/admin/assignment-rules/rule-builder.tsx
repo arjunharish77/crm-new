@@ -43,13 +43,16 @@ export function RuleBuilder({ open, setOpen, rule, onSave }: RuleBuilderProps) {
     const theme = useTheme();
     const [form, setForm] = useState<any>({
         name: "",
+        description: "",
         entityType: "LEAD",
         type: "ROUND_ROBIN",
+        priority: 100,
         isActive: true,
     });
     const [config, setConfig] = useState<any>({
         userPool: [],
         salesGroupId: undefined,
+        fallbackUserId: undefined,
         matchingKeys: {},
     });
     const [targetType, setTargetType] = useState<"USER_POOL" | "SALES_GROUP">("USER_POOL");
@@ -69,8 +72,10 @@ export function RuleBuilder({ open, setOpen, rule, onSave }: RuleBuilderProps) {
         if (rule) {
             setForm({
                 name: rule.name,
+                description: rule.description || "",
                 entityType: rule.entityType,
                 type: rule.type,
+                priority: rule.priority ?? 100,
                 isActive: rule.isActive,
             });
 
@@ -86,13 +91,16 @@ export function RuleBuilder({ open, setOpen, rule, onSave }: RuleBuilderProps) {
             // Reset for new rule
             setForm({
                 name: "",
+                description: "",
                 entityType: "LEAD",
                 type: "ROUND_ROBIN",
+                priority: 100,
                 isActive: true,
             });
             setConfig({
                 userPool: [],
                 salesGroupId: undefined,
+                fallbackUserId: undefined,
                 matchingKeys: {},
             });
             setTargetType("USER_POOL");
@@ -163,7 +171,7 @@ export function RuleBuilder({ open, setOpen, rule, onSave }: RuleBuilderProps) {
                 <Divider sx={{ mb: 3 }} />
 
                 <Box sx={{ flexGrow: 1, overflowY: 'auto', pr: 1 }}>
-                    <Stack spacing={3}>
+                    <Stack spacing={2}>
                         <TextField
                             label="Rule Name"
                             placeholder="e.g. Inbound Leads - North America"
@@ -171,9 +179,18 @@ export function RuleBuilder({ open, setOpen, rule, onSave }: RuleBuilderProps) {
                             value={form.name}
                             onChange={(e) => setForm({ ...form, name: e.target.value })}
                         />
+                        <TextField
+                            label="Description"
+                            placeholder="When this rule should run and who should receive the record"
+                            fullWidth
+                            multiline
+                            minRows={2}
+                            value={form.description}
+                            onChange={(e) => setForm({ ...form, description: e.target.value })}
+                        />
 
                         <Grid container spacing={2}>
-                            <Grid size={{ xs: 12, md: 6 }}>
+                            <Grid size={{ xs: 12, md: 4 }}>
                                 <FormControl fullWidth>
                                     <InputLabel>Entity Type</InputLabel>
                                     <Select
@@ -186,7 +203,7 @@ export function RuleBuilder({ open, setOpen, rule, onSave }: RuleBuilderProps) {
                                     </Select>
                                 </FormControl>
                             </Grid>
-                            <Grid size={{ xs: 12, md: 6 }}>
+                            <Grid size={{ xs: 12, md: 4 }}>
                                 <FormControl fullWidth>
                                     <InputLabel>Assignment Strategy</InputLabel>
                                     <Select
@@ -197,8 +214,19 @@ export function RuleBuilder({ open, setOpen, rule, onSave }: RuleBuilderProps) {
                                         <MenuItem value="ROUND_ROBIN">Round Robin</MenuItem>
                                         <MenuItem value="LOAD_BASED">Load Based</MenuItem>
                                         <MenuItem value="SKILL_BASED">Skill Based</MenuItem>
+                                        <MenuItem value="WEIGHTED">Weighted Round Robin</MenuItem>
                                     </Select>
                                 </FormControl>
+                            </Grid>
+                            <Grid size={{ xs: 12, md: 4 }}>
+                                <TextField
+                                    label="Priority"
+                                    type="number"
+                                    fullWidth
+                                    value={form.priority}
+                                    onChange={(e) => setForm({ ...form, priority: Number(e.target.value) || 0 })}
+                                    helperText="Higher priority runs first"
+                                />
                             </Grid>
                         </Grid>
 
@@ -270,7 +298,80 @@ export function RuleBuilder({ open, setOpen, rule, onSave }: RuleBuilderProps) {
                             )}
                         </Paper>
 
-                        {form.type === "SKILL_BASED" && (
+                        <Paper variant="outlined" sx={{ p: 3, borderRadius: 2 }}>
+                            <Typography variant="subtitle2" sx={{ mb: 2, fontWeight: 600 }}>Fallback Owner</Typography>
+                            <FormControl fullWidth size="small">
+                                <InputLabel>Fallback User</InputLabel>
+                                <Select
+                                    value={config.fallbackUserId || ""}
+                                    label="Fallback User"
+                                    onChange={(e) => setConfig({ ...config, fallbackUserId: e.target.value || undefined })}
+                                >
+                                    <MenuItem value=""><em>No fallback</em></MenuItem>
+                                    {users.map((u) => (
+                                        <MenuItem key={u.id} value={u.id}>{u.name || u.email}</MenuItem>
+                                    ))}
+                                </Select>
+                                <FormHelperText>Used when the rule matches but no target user is eligible.</FormHelperText>
+                            </FormControl>
+                        </Paper>
+
+                        <Paper variant="outlined" sx={{ p: 3, borderRadius: 2, bgcolor: alpha(theme.palette.action.hover, 0.04) }}>
+                            <Typography variant="subtitle2" sx={{ mb: 2, fontWeight: 600 }}>Rule Criteria</Typography>
+                            <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                                Add field/value conditions. All conditions must match before distribution runs.
+                            </Typography>
+
+                            <Grid container spacing={2} sx={{ mb: 1 }}>
+                                <Grid size={{ xs: 5 }}><Typography variant="caption" fontWeight={600} color="text.secondary">Record Field</Typography></Grid>
+                                <Grid size={{ xs: 5 }}><Typography variant="caption" fontWeight={600} color="text.secondary">Expected Value</Typography></Grid>
+                                <Grid size={{ xs: 2 }}></Grid>
+                            </Grid>
+
+                            {Object.entries(config.matchingKeys || {}).map(([entityField, userSkillKey], index) => (
+                                <Grid container spacing={2} key={index} alignItems="center" sx={{ mb: 1 }}>
+                                    <Grid size={{ xs: 5 }}>
+                                        <TextField size="small" value={entityField} disabled fullWidth sx={{ bgcolor: 'background.paper' }} />
+                                    </Grid>
+                                    <Grid size={{ xs: 5 }}>
+                                        <TextField size="small" value={userSkillKey as string} disabled fullWidth sx={{ bgcolor: 'background.paper' }} />
+                                    </Grid>
+                                    <Grid size={{ xs: 2 }}>
+                                        <IconButton size="small" color="error" onClick={() => removeMatchingKey(entityField)}>
+                                            <TrashIcon fontSize="small" />
+                                        </IconButton>
+                                    </Grid>
+                                </Grid>
+                            ))}
+
+                            <Grid container spacing={2} alignItems="center">
+                                <Grid size={{ xs: 5 }}>
+                                    <TextField
+                                        size="small"
+                                        placeholder={form.entityType === "LEAD" ? "source" : "priority"}
+                                        fullWidth
+                                        value={newEntityField}
+                                        onChange={(e) => setNewEntityField(e.target.value)}
+                                    />
+                                </Grid>
+                                <Grid size={{ xs: 5 }}>
+                                    <TextField
+                                        size="small"
+                                        placeholder={form.entityType === "LEAD" ? "Website" : "HIGH"}
+                                        fullWidth
+                                        value={newSkillKey}
+                                        onChange={(e) => setNewSkillKey(e.target.value)}
+                                    />
+                                </Grid>
+                                <Grid size={{ xs: 2 }}>
+                                    <Button variant="contained" size="small" onClick={addMatchingKey} sx={{ minWidth: 'auto', borderRadius: 8 }}>
+                                        <AddIcon fontSize="small" />
+                                    </Button>
+                                </Grid>
+                            </Grid>
+                        </Paper>
+
+                        {false && form.type === "SKILL_BASED" && (
                             <Paper variant="outlined" sx={{ p: 3, borderRadius: 2, bgcolor: alpha(theme.palette.action.hover, 0.05) }}>
                                 <Typography variant="subtitle2" sx={{ mb: 2, fontWeight: 600 }}>Skill Matching Configuration</Typography>
 

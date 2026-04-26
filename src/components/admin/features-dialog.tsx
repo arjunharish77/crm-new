@@ -69,7 +69,7 @@ export function FeaturesDialog({
     const fetchFeatures = async () => {
         setLoading(true);
         try {
-            const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/platform-admin/tenants/${tenantId}/feature-flags`, {
+            const res = await fetch(`/api/platform-admin/tenants/${tenantId}/feature-flags`, {
                 headers: { Authorization: `Bearer ${token}` },
             });
             if (res.ok) {
@@ -89,7 +89,7 @@ export function FeaturesDialog({
     const handleSave = async () => {
         setSaving(true);
         try {
-            const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/platform-admin/tenants/${tenantId}/feature-flags`, {
+            const res = await fetch(`/api/platform-admin/tenants/${tenantId}/feature-flags`, {
                 method: "PATCH",
                 headers: {
                     "Content-Type": "application/json",

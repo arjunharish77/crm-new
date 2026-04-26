@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import {
   createOpportunityForTenant,
-  listOpportunitiesForTenant,
+  listOpportunitiesForTenantByType,
 } from "@/lib/server/crm";
 import { requireCurrentUser } from "@/lib/server/auth";
 import { badRequest, serverError, unauthorized } from "@/lib/server/http";
@@ -11,8 +11,9 @@ export async function GET(request: Request) {
     const user = await requireCurrentUser(request);
     const { searchParams } = new URL(request.url);
     const limit = Number(searchParams.get("limit") ?? "100");
+    const opportunityTypeId = searchParams.get("opportunityTypeId");
 
-    const response = await listOpportunitiesForTenant(user, limit);
+    const response = await listOpportunitiesForTenantByType(user, limit, opportunityTypeId);
     return NextResponse.json(response);
   } catch (error) {
     if (error instanceof Error && error.message === "UNAUTHORIZED") {

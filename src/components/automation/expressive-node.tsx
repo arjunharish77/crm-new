@@ -10,9 +10,16 @@ import {
     Email as MailIcon,
     Webhook as WebhookIcon,
     AccessTime as ClockIcon,
-    MoreHoriz as MoreHorizIcon
+    MoreHoriz as MoreHorizIcon,
+    Add as AddIcon,
+    DeleteOutline as DeleteIcon,
+    ContentCopy as CopyIcon,
+    Person as PersonIcon,
+    RemoveCircleOutline as RemoveIcon,
+    StopCircle as StopIcon,
+    Notifications as NotificationIcon
 } from "@mui/icons-material";
-import { Box, Paper, Typography, useTheme, alpha } from "@mui/material";
+import { Box, IconButton, Paper, Tooltip, Typography, useTheme, alpha } from "@mui/material";
 // import { motion } from "framer-motion"; // Optional: could use MUI transitions or keep framer if desired. Let's use simple CSS/MUI for now to be safe.
 
 const ICONS: Record<string, any> = {
@@ -23,6 +30,21 @@ const ICONS: Record<string, any> = {
     send_email: MailIcon,
     webhook: WebhookIcon,
     delay: ClockIcon,
+    wait: ClockIcon,
+    if_else: GitBranchIcon,
+    update_lead: DatabaseIcon,
+    update_opportunity: DatabaseIcon,
+    add_activity: PlayIcon,
+    distribute_lead: GitBranchIcon,
+    distribute_opportunity: GitBranchIcon,
+    assign_owner: PersonIcon,
+    change_stage: DatabaseIcon,
+    notify_user: NotificationIcon,
+    remove_tag: RemoveIcon,
+    increment_score: DatabaseIcon,
+    clear_field: RemoveIcon,
+    stop: StopIcon,
+    branch: GitBranchIcon,
 };
 
 // Start copying colors from page.tsx for consistency
@@ -34,6 +56,21 @@ const COLORS: Record<string, string> = {
     send_email: '#ff5722',   // Deep Orange
     webhook: '#e91e63',      // Pink
     delay: '#607d8b',        // Blue Grey
+    wait: '#607d8b',
+    if_else: '#ff9800',
+    update_lead: '#4caf50',
+    update_opportunity: '#4caf50',
+    add_activity: '#9c27b0',
+    distribute_lead: '#0288d1',
+    distribute_opportunity: '#0288d1',
+    assign_owner: '#5c6bc0',
+    change_stage: '#43a047',
+    notify_user: '#ff7043',
+    remove_tag: '#00897b',
+    increment_score: '#7cb342',
+    clear_field: '#78909c',
+    stop: '#d32f2f',
+    branch: '#78909c',
 };
 
 export const ExpressiveNode = memo(({ data, selected }: NodeProps) => {
@@ -110,9 +147,32 @@ export const ExpressiveNode = memo(({ data, selected }: NodeProps) => {
                 </Typography>
             </Box>
 
-            {/* More Options (Visual only for now) */}
-            <Box sx={{ ml: 'auto', opacity: 0, transition: 'opacity 0.2s', '.MuiPaper-root:hover &': { opacity: 1 } }}>
-                <MoreHorizIcon fontSize="small" color="disabled" />
+            <Box sx={{ ml: 'auto', display: 'flex', gap: 0.25, opacity: selected ? 1 : 0, transition: 'opacity 0.2s', '.MuiPaper-root:hover &': { opacity: 1 } }}>
+                <Tooltip title="Clone node">
+                    <IconButton
+                        size="small"
+                        onClick={(event) => {
+                            event.stopPropagation();
+                            data.onCloneNode?.(data.nodeId);
+                        }}
+                        sx={{ width: 24, height: 24 }}
+                    >
+                        <CopyIcon sx={{ fontSize: 15 }} />
+                    </IconButton>
+                </Tooltip>
+                <Tooltip title="Delete node">
+                    <IconButton
+                        size="small"
+                        onClick={(event) => {
+                            event.stopPropagation();
+                            data.onDeleteNode?.(data.nodeId);
+                        }}
+                        sx={{ width: 24, height: 24 }}
+                    >
+                        <DeleteIcon sx={{ fontSize: 15 }} />
+                    </IconButton>
+                </Tooltip>
+                <MoreHorizIcon fontSize="small" color="disabled" sx={{ alignSelf: 'center' }} />
             </Box>
 
             {/* Output Handle */}
@@ -126,6 +186,29 @@ export const ExpressiveNode = memo(({ data, selected }: NodeProps) => {
                     border: `2px solid ${theme.palette.background.paper}`,
                 }}
             />
+            <Tooltip title="Add next step">
+                <IconButton
+                    size="small"
+                    onClick={(event) => {
+                        event.stopPropagation();
+                        data.onAddChild?.(data.nodeId);
+                    }}
+                    sx={{
+                        position: 'absolute',
+                        left: '50%',
+                        bottom: -18,
+                        transform: 'translateX(-50%)',
+                        width: 28,
+                        height: 28,
+                        bgcolor: 'primary.main',
+                        color: 'primary.contrastText',
+                        boxShadow: 2,
+                        '&:hover': { bgcolor: 'primary.dark' },
+                    }}
+                >
+                    <AddIcon sx={{ fontSize: 17 }} />
+                </IconButton>
+            </Tooltip>
         </Paper>
     );
 });

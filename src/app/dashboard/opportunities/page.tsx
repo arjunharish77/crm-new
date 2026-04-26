@@ -23,7 +23,6 @@ import {
     alpha,
     useTheme
 } from "@mui/material";
-import { M3Button, StaggerContainer, StaggerItem } from "@/components/ui-mui/m3-components";
 import {
     List as ListIcon,
     ViewKanban as KanbanIcon,
@@ -56,9 +55,9 @@ export default function OpportunitiesPage() {
     const theme = useTheme();
     const [data, setData] = useState<Opportunity[]>([]);
     const [loading, setLoading] = useState(true);
-    const [viewMode, setViewMode] = useState<'LIST' | 'KANBAN' | 'ANALYTICS'>('KANBAN');
+    const [viewMode, setViewMode] = useState<'LIST' | 'KANBAN' | 'ANALYTICS'>('LIST');
     const [opportunityTypes, setOpportunityTypes] = useState<OpportunityType[]>([]);
-    const [selectedType, setSelectedType] = useState<OpportunityType | null>(null);
+    const [selectedTypeId, setSelectedTypeId] = useState<string>("ALL");
 
     const [selectedRows, setSelectedRows] = useState<any>([]);
     const [isAllSelected, setIsAllSelected] = useState(false);
@@ -70,7 +69,9 @@ export default function OpportunitiesPage() {
     const fetchData = useCallback(async () => {
         setLoading(true);
         try {
-            const response = await apiFetch<PaginatedResponse<Opportunity> | Opportunity[]>('/opportunities?limit=100');
+            const params = new URLSearchParams({ limit: "100" });
+            if (selectedTypeId !== "ALL") params.set("opportunityTypeId", selectedTypeId);
+            const response = await apiFetch<PaginatedResponse<Opportunity> | Opportunity[]>(`/opportunities?${params.toString()}`);
 
             if ('meta' in response && response.data) {
                 setData(response.data);
@@ -84,20 +85,22 @@ export default function OpportunitiesPage() {
         } finally {
             setLoading(false);
         }
-    }, []);
+    }, [selectedTypeId]);
 
     const fetchTypes = useCallback(async () => {
         try {
             const data = await apiFetch<OpportunityType[]>("/opportunity-types");
             const types = Array.isArray(data) ? data : [];
             setOpportunityTypes(types);
-            if (types.length > 0 && !selectedType) {
-                setSelectedType(types[0]);
+            // Auto-select the first type so kanban works immediately
+            if (types.length > 0 && selectedTypeId === "ALL") {
+                setSelectedTypeId(types[0].id);
             }
         } catch (error) {
-            toast.error("Failed to load opportunity types");
+            // Silently handle - the list view still works without types
+            console.warn("Failed to load opportunity types:", error);
         }
-    }, [selectedType]);
+    }, []);
 
     useEffect(() => {
         fetchTypes();
@@ -268,13 +271,18 @@ export default function OpportunitiesPage() {
     ];
 
     const kanbanOpportunities = useMemo(() =>
-        selectedType ? data.filter(opp => opp.opportunityTypeId === selectedType.id) : data,
-        [data, selectedType]
+        selectedTypeId !== "ALL" ? data.filter(opp => opp.opportunityTypeId === selectedTypeId) : data,
+        [data, selectedTypeId]
+    );
+
+    const selectedType = useMemo(
+        () => opportunityTypes.find((type) => type.id === selectedTypeId) ?? null,
+        [opportunityTypes, selectedTypeId]
     );
 
     useEffect(() => {
         clearSelection();
-    }, [selectedType?.id, viewMode]);
+    }, [selectedTypeId, viewMode]);
 
     return (
         <FeatureGate
@@ -286,20 +294,20 @@ export default function OpportunitiesPage() {
             }
         >
             <Box sx={{ flexGrow: 1, display: 'flex', flexDirection: 'column', height: '100%' }}>
-                <Box sx={{ px: 2, py: 1.5, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <Box sx={{ px: 1.5, py: 1, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <Stack direction="row" spacing={2} alignItems="center">
-                        <Typography variant="h5" fontWeight={700}>Opportunities</Typography>
+                        <Typography variant="h6" fontWeight={700}>Opportunities</Typography>
                         {/* Opportunity Type selector — switch between types to see their kanban */}
-                        {opportunityTypes.length > 1 && (
+                        {opportunityTypes.length > 0 && (
                             <Select
                                 size="small"
-                                value={selectedType?.id || ''}
+                                value={selectedTypeId}
                                 onChange={(e) => {
-                                    const t = opportunityTypes.find(x => x.id === e.target.value);
-                                    setSelectedType(t || null);
+                                    setSelectedTypeId(String(e.target.value));
                                 }}
                                 sx={{ minWidth: 180 }}
                             >
+                                <MenuItem value="ALL">All opportunity types</MenuItem>
                                 {opportunityTypes.map(t => (
                                     <MenuItem key={t.id} value={t.id}>{t.name}</MenuItem>
                                 ))}
@@ -355,75 +363,61 @@ export default function OpportunitiesPage() {
 
                 <Divider />
 
-                <Box sx={{ flexGrow: 1, overflow: 'hidden', px: 2, py: 1.5, bgcolor: 'background.default' }}>
-                    <StaggerContainer>
+                <Box sx={{ flexGrow: 1, overflow: 'hidden', px: 1.5, py: 1, bgcolor: 'background.default' }}>
                         {loading ? (
                             <TableSkeleton rows={10} columns={4} />
                         ) : viewMode === 'KANBAN' ? (
                             !selectedType ? (
-                                <StaggerItem>
-                                    <EmptyState
-                                        icon={<KanbanIcon sx={{ fontSize: 48, color: 'text.secondary', opacity: 0.5 }} />}
-                                        title="No pipeline selected"
-                                        description="Create or enable an opportunity type to view the kanban board."
-                                        action={<CreateOpportunityDialog onSuccess={fetchData} />}
-                                    />
-                                </StaggerItem>
+                                <EmptyState
+                                    icon={<KanbanIcon sx={{ fontSize: 48, color: 'text.secondary', opacity: 0.5 }} />}
+                                    title="Select an opportunity type"
+                                    description="Kanban boards are type-specific because each type has its own stages."
+                                    action={<CreateOpportunityDialog onSuccess={fetchData} />}
+                                />
                             ) : kanbanOpportunities.length === 0 ? (
-                                <StaggerItem>
-                                    <EmptyState
-                                        icon={<KanbanIcon sx={{ fontSize: 48, color: 'text.secondary', opacity: 0.5 }} />}
-                                        title="No opportunities found"
-                                        description="Create an opportunity to get started."
-                                        action={<CreateOpportunityDialog onSuccess={fetchData} />}
-                                    />
-                                </StaggerItem>
+                                <EmptyState
+                                    icon={<KanbanIcon sx={{ fontSize: 48, color: 'text.secondary', opacity: 0.5 }} />}
+                                    title="No opportunities found"
+                                    description="Create an opportunity to get started."
+                                    action={<CreateOpportunityDialog onSuccess={fetchData} />}
+                                />
                             ) : (
-                                <StaggerItem>
-                                    <KanbanBoard
-                                        opportunities={kanbanOpportunities}
-                                        opportunityType={selectedType!}
-                                        onDragEnd={updateOpportunityStage}
-                                        onEdit={handleEdit}
-                                    />
-                                </StaggerItem>
+                                <KanbanBoard
+                                    opportunities={kanbanOpportunities}
+                                    opportunityType={selectedType!}
+                                    onDragEnd={updateOpportunityStage}
+                                    onEdit={handleEdit}
+                                />
                             )
                         ) : viewMode === 'ANALYTICS' ? (
-                            <StaggerItem>
-                                <PipelineAnalytics />
-                            </StaggerItem>
+                            <PipelineAnalytics />
                         ) : (
                             data.length === 0 ? (
-                                <StaggerItem>
-                                    <EmptyState
-                                        icon={<FilterIcon sx={{ fontSize: 48, color: 'text.secondary', opacity: 0.5 }} />}
-                                        title="No opportunities found"
-                                        description="Get started by adding your first opportunity."
-                                        action={<CreateOpportunityDialog onSuccess={fetchData} />}
-                                    />
-                                </StaggerItem>
+                                <EmptyState
+                                    icon={<FilterIcon sx={{ fontSize: 48, color: 'text.secondary', opacity: 0.5 }} />}
+                                    title="No opportunities found"
+                                    description="Get started by adding your first opportunity."
+                                    action={<CreateOpportunityDialog onSuccess={fetchData} />}
+                                />
                             ) : (
-                                <StaggerItem>
-                                    <Card sx={{ height: '100%', borderRadius: '12px', overflow: 'hidden' }}>
-                                        <StandardDataGrid
-                                            rows={kanbanOpportunities}
-                                            columns={columns}
-                                            checkboxSelection
-                                            disableRowSelectionOnClick
-                                            rowSelectionModel={selectedRows}
-                                            onRowSelectionModelChange={setSelectedRows}
-                                            totalItems={kanbanOpportunities.length}
-                                            selectedCount={selectedRows.length}
-                                            isAllSelected={isAllSelected}
-                                            onSelectAllFiltered={handleSelectAllFiltered}
-                                            onClearSelection={clearSelection}
-                                            currentCount={kanbanOpportunities.length}
-                                        />
-                                    </Card>
-                                </StaggerItem>
+                                <Card sx={{ borderRadius: '12px', overflow: 'hidden' }}>
+                                    <StandardDataGrid
+                                        rows={kanbanOpportunities}
+                                        columns={columns}
+                                        checkboxSelection
+                                        disableRowSelectionOnClick
+                                        rowSelectionModel={selectedRows}
+                                        onRowSelectionModelChange={setSelectedRows}
+                                        totalItems={kanbanOpportunities.length}
+                                        selectedCount={selectedRows.length}
+                                        isAllSelected={isAllSelected}
+                                        onSelectAllFiltered={handleSelectAllFiltered}
+                                        onClearSelection={clearSelection}
+                                        currentCount={kanbanOpportunities.length}
+                                    />
+                                </Card>
                             )
                         )}
-                    </StaggerContainer>
                 </Box>
 
                 <BulkActionsToolbar

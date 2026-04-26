@@ -59,16 +59,9 @@ export function StandardDataGrid({
         }
     }, [props.onRowSelectionModelChange]);
 
-    const [mounted, setMounted] = React.useState(false);
-
-    React.useEffect(() => {
-        setMounted(true);
-    }, []);
-
-    if (!mounted) return <div style={{ height: 400, width: '100%' }} />;
-
     return (
         <DataGrid
+            autoHeight
             {...props}
             rowSelectionModel={normalizedSelection}
             onRowSelectionModelChange={handleSelectionChange}
@@ -90,14 +83,12 @@ export function StandardDataGrid({
             sx={{
                 border: 'none',
                 cursor: 'pointer',
-                '--DataGrid-containerBackground': 'transparent',
                 '& .MuiDataGrid-toolbarContainer': {
                     minHeight: 44,
                 },
                 '& .MuiDataGrid-columnHeaders': {
                     borderBottom: '1px solid',
                     borderColor: 'divider',
-                    bgcolor: 'transparent',
                     minHeight: '42px !important',
                 },
                 '& .MuiDataGrid-columnHeader': {
@@ -142,10 +133,8 @@ export function StandardDataGrid({
                     borderColor: 'divider',
                     minHeight: 44,
                 },
-                minHeight: 400,
                 ...sx,
             }}
-            autoHeight
         />
     );
 }
@@ -173,13 +162,13 @@ function CustomToolbar({
                 <Box sx={{
                     px: 1.25,
                     py: 0.875,
-                    bgcolor: alpha('#1b6c31', 0.08), // Using a soft primary container tint
+                    bgcolor: alpha('#1b6c31', 0.08),
                     display: 'flex',
                     justifyContent: 'center',
                     borderTop: '1px solid',
                     borderColor: 'divider'
                 }}>
-                    <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                    <Typography variant="body2" component="div" sx={{ fontWeight: 500 }}>
                         All {currentCount} items on this page are selected.
                         <Button
                             size="small"
@@ -205,7 +194,7 @@ function CustomToolbar({
                     borderTop: '1px solid',
                     borderColor: 'divider'
                 }}>
-                    <Typography variant="body2" fontWeight={700} color="primary.main">
+                    <Typography variant="body2" component="div" fontWeight={700} color="primary.main">
                         All {totalItems} items are selected.
                         <Button
                             size="small"

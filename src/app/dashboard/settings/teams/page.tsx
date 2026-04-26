@@ -45,14 +45,15 @@ export default function TeamsPage() {
     const fetchTeams = useCallback(async () => {
         setLoading(true);
         try {
-            const data = await apiFetch("/sales-groups");
+            const data = await apiFetch("/teams");
             setTeams(
-                (Array.isArray(data) ? data : []).map((group: any) => ({
-                    id: group.id,
-                    name: group.name,
-                    description: group.description,
-                    memberCount: group._count?.members ?? group.members?.length ?? 0,
-                    createdAt: group.createdAt,
+                (Array.isArray(data) ? data : []).map((team: any) => ({
+                    id: team.id,
+                    name: team.name,
+                    description: team.description,
+                    leadId: team.leadId,
+                    memberCount: team._count?.members ?? team.memberCount ?? team.members?.length ?? 0,
+                    createdAt: team.createdAt,
                 }))
             );
         } catch (error: any) {
@@ -81,7 +82,7 @@ export default function TeamsPage() {
         if (!confirm(`Delete team "${team.name}"?`)) return;
 
         try {
-            await apiFetch(`/sales-groups/${team.id}`, { method: "DELETE" });
+            await apiFetch(`/teams/${team.id}`, { method: "DELETE" });
             toast.success("Team deleted");
             fetchTeams();
         } catch (error: any) {
@@ -155,10 +156,10 @@ export default function TeamsPage() {
     ];
 
     return (
-        <Box sx={{ p: { xs: 2, md: 3 }, maxWidth: 1600, mx: 'auto' }}>
-            <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 4 }}>
+        <Box sx={{ p: { xs: 1.5, md: 2 }, maxWidth: 1600, mx: 'auto' }}>
+            <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 2 }}>
                 <Box>
-                    <Typography variant="h4" sx={{ fontWeight: 700, letterSpacing: -0.5 }}>Teams</Typography>
+                    <Typography variant="h6" sx={{ fontWeight: 700, letterSpacing: -0.5 }}>Teams</Typography>
                     <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
                         Organize users into functional groups for assignment and reporting.
                     </Typography>

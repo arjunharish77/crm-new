@@ -193,7 +193,7 @@ export function ActivityTypeDialog({
                 </DialogContentText>
 
                 <form id="activity-type-form" onSubmit={handleSubmit(onSubmit)}>
-                    <Stack spacing={3}>
+                    <Stack spacing={2}>
                         <Controller
                             name="name"
                             control={control}

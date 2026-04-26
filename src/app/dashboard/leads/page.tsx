@@ -19,7 +19,7 @@ import {
     useTheme,
     alpha,
 } from "@mui/material";
-import { M3Button, StaggerContainer, StaggerItem } from "@/components/ui-mui/m3-components";
+import { M3Button } from "@/components/ui-mui/m3-components";
 import {
     GridColDef,
     GridPaginationModel,
@@ -252,10 +252,10 @@ export default function LeadsPage() {
 
     return (
         <Box sx={{ height: '100%', width: '100%', display: 'flex', flexDirection: 'column' }}>
-            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 4 }}>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
                 <Box>
-                    <Typography variant="h4" sx={{ fontWeight: 700, letterSpacing: -0.5 }}>Leads</Typography>
-                    <Typography variant="body2" color="text.secondary">Manage and track your sales prospects</Typography>
+                    <Typography variant="h6" sx={{ fontWeight: 700, letterSpacing: -0.5 }}>Leads</Typography>
+                    <Typography variant="caption" color="text.secondary">Manage and track your sales prospects</Typography>
                 </Box>
                 <Box sx={{ display: 'flex', gap: 1 }}>
                     <M3Button
@@ -310,7 +310,7 @@ export default function LeadsPage() {
                 flexGrow: 1,
                 display: 'flex',
                 flexDirection: 'column',
-                borderRadius: '24px',
+                borderRadius: '14px',
                 border: '1px solid',
                 borderColor: 'divider',
                 bgcolor: 'surfaceContainerLow',
@@ -325,7 +325,7 @@ export default function LeadsPage() {
                     />
                 ) : (
                     <Box sx={{ width: '100%', overflowX: 'auto' }}>
-                        <Box sx={{ minWidth: 800, height: '100%' }}>
+                        <Box sx={{ minWidth: 800 }}>
                             <StandardDataGrid
                                 rows={data}
                                 columns={columns}

@@ -50,13 +50,6 @@ const formSchema = z.object({
     })),
 });
 
-// Mock data for teams and managers
-const MOCK_TEAMS = [
-    { id: '1', name: 'North America Sales' },
-    { id: '2', name: 'EMEA Sales' },
-    { id: '3', name: 'Enterprise Accounts' },
-];
-
 export function EditUserDialog({
     user,
     open,
@@ -65,6 +58,7 @@ export function EditUserDialog({
 }: EditUserDialogProps) {
     const [loading, setLoading] = useState(false);
     const [roles, setRoles] = useState<Role[]>([]);
+    const [teams, setTeams] = useState<any[]>([]);
     const [managers, setManagers] = useState<any[]>([]);
     const [searchingManagers, setSearchingManagers] = useState(false);
 
@@ -97,11 +91,13 @@ export function EditUserDialog({
         if (open) {
             const loadData = async () => {
                 try {
-                    const [rolesData, usersData] = await Promise.all([
+                    const [rolesData, usersData, teamsData] = await Promise.all([
                         apiFetch("/roles"),
-                        apiFetch("/users")
+                        apiFetch("/users"),
+                        apiFetch("/teams")
                     ]);
                     setRoles(rolesData);
+                    setTeams(Array.isArray(teamsData) ? teamsData : []);
 
                     // Filter out the current user from potential managers to avoid cycles
                     const potentialManagers = (Array.isArray(usersData) ? usersData : [])
@@ -234,7 +230,7 @@ export function EditUserDialog({
             }
         >
             <form id="edit-user-form" onSubmit={handleSubmit(onSubmit)}>
-                <Stack spacing={3}>
+                <Stack spacing={2}>
                     <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
                         <Controller
                             name="name"
@@ -293,7 +289,7 @@ export function EditUserDialog({
                                     <InputLabel>Team</InputLabel>
                                     <Select {...field} label="Team">
                                         <MenuItem value=""><em>None</em></MenuItem>
-                                        {MOCK_TEAMS.map((team) => (
+                                        {teams.map((team) => (
                                             <MenuItem key={team.id} value={team.id}>
                                                 {team.name}
                                             </MenuItem>

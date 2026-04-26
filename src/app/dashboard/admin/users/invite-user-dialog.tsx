@@ -39,15 +39,6 @@ const formSchema = z.object({
     password: z.string().min(6, "Password must be at least 6 characters"),
 });
 
-// Mock data for teams and managers
-const MOCK_TEAMS = [
-    { id: '1', name: 'North America Sales' },
-    { id: '2', name: 'EMEA Sales' },
-    { id: '3', name: 'Enterprise Accounts' },
-];
-
-
-
 export function InviteUserDialog({
     open,
     onOpenChange,
@@ -55,6 +46,7 @@ export function InviteUserDialog({
 }: InviteUserDialogProps) {
     const [loading, setLoading] = useState(false);
     const [roles, setRoles] = useState<Role[]>([]);
+    const [teams, setTeams] = useState<any[]>([]);
     const [managers, setManagers] = useState<any[]>([]);
 
     const { control, handleSubmit, reset, formState: { errors } } = useForm({
@@ -73,11 +65,13 @@ export function InviteUserDialog({
         if (open) {
             const loadData = async () => {
                 try {
-                    const [rolesData, usersData] = await Promise.all([
+                    const [rolesData, usersData, teamsData] = await Promise.all([
                         apiFetch("/roles"),
-                        apiFetch("/users")
+                        apiFetch("/users"),
+                        apiFetch("/teams")
                     ]);
                     setRoles(rolesData);
+                    setTeams(Array.isArray(teamsData) ? teamsData : []);
                     setManagers(Array.isArray(usersData) ? usersData : []);
                 } catch (error) {
                     toast.error("Failed to load form data");
@@ -137,7 +131,7 @@ export function InviteUserDialog({
             }
         >
             <form id="invite-user-form" onSubmit={handleSubmit(onSubmit)}>
-                <Stack spacing={3}>
+                <Stack spacing={2}>
                     <Controller
                         name="name"
                         control={control}
@@ -215,7 +209,7 @@ export function InviteUserDialog({
                                     <InputLabel>Team</InputLabel>
                                     <Select {...field} label="Team">
                                         <MenuItem value=""><em>None</em></MenuItem>
-                                        {MOCK_TEAMS.map((team) => (
+                                        {teams.map((team) => (
                                             <MenuItem key={team.id} value={team.id}>
                                                 {team.name}
                                             </MenuItem>

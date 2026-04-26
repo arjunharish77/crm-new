@@ -25,6 +25,8 @@ export async function POST(request: Request) {
       type: body.fieldType,
       required: body.isRequired,
       options: body.fieldConfig?.options,
+      entityType: body.entityType,
+      entityTypeId: body.entityTypeId,
       order: body.order,
       isActive: true,
     });
@@ -41,6 +43,8 @@ export async function POST(request: Request) {
       },
       order: created.order ?? 0,
       isActive: created.isActive ?? true,
+      entityType: created.entityType ?? body.entityType,
+      entityTypeId: created.entityTypeId ?? body.entityTypeId,
     });
   } catch (error) {
     if (error instanceof Error && error.message === "UNAUTHORIZED") return unauthorized();

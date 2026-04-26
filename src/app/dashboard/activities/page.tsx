@@ -13,7 +13,9 @@ import {
     alpha,
     Paper,
     IconButton,
-    Tooltip
+    Tooltip,
+    Select,
+    MenuItem
 } from "@mui/material";
 import {
     FilterAlt as FilterIcon,
@@ -29,6 +31,7 @@ import { FilterBuilder } from "@/components/filters/filter-builder";
 import { FilterConfig, FilterField } from "@/types/filters";
 import { ViewSwitcher } from "@/components/views/view-switcher";
 import { EmptyState } from "@/components/common/empty-state";
+import { ContextualFormsPanel } from "@/components/forms/contextual-forms-panel";
 
 const INITIAL_FILTER_FIELDS: FilterField[] = [
     { key: 'notes', label: 'Description', type: 'text' },
@@ -58,6 +61,8 @@ export default function ActivitiesPage() {
     const [loading, setLoading] = useState(true);
     const [filterOpen, setFilterOpen] = useState(false);
     const [filterFields, setFilterFields] = useState<FilterField[]>(INITIAL_FILTER_FIELDS);
+    const [activityTypeOptions, setActivityTypeOptions] = useState<Array<{ label: string; value: string }>>([]);
+    const [selectedActivityTypeId, setSelectedActivityTypeId] = useState("ALL");
     const [filters, setFilters] = useState<FilterConfig>({
         conditions: [],
         logic: 'AND',
@@ -69,6 +74,7 @@ export default function ActivitiesPage() {
                 const typeOptions = res
                     .filter((t: any) => t.isActive)
                     .map((t: any) => ({ label: t.name, value: t.id }));
+                setActivityTypeOptions(typeOptions);
 
                 setFilterFields(prev => prev.map(field => {
                     if (field.key === 'typeId') {
@@ -82,11 +88,15 @@ export default function ActivitiesPage() {
 
     const buildQueryParams = useCallback(() => {
         const params = new URLSearchParams();
-        if (filters.conditions.length > 0) {
-            params.set('filters', JSON.stringify(filters));
+        const conditions = [...filters.conditions];
+        if (selectedActivityTypeId !== "ALL") {
+            conditions.push({ id: "quick-activity-type", field: "typeId", operator: "equals", value: selectedActivityTypeId });
+        }
+        if (conditions.length > 0) {
+            params.set('filters', JSON.stringify({ ...filters, conditions }));
         }
         return params.toString();
-    }, [filters]);
+    }, [filters, selectedActivityTypeId]);
 
     const fetchData = useCallback(async () => {
         setLoading(true);
@@ -111,19 +121,45 @@ export default function ActivitiesPage() {
         fetchData();
     }, [fetchData]);
 
+    const activityColumns = useMemo(() => [
+        ...columns,
+        {
+            field: "forms",
+            headerName: "Forms",
+            width: 120,
+            sortable: false,
+            filterable: false,
+            renderCell: (params: any) => {
+                const row = params.row as Activity;
+                return (
+                    <ContextualFormsPanel
+                        placement="ACTIVITY_DETAIL"
+                        context={{
+                            activityId: row.id,
+                            leadId: row.leadId,
+                            opportunityId: row.opportunityId,
+                        }}
+                        entityData={row}
+                        onSaved={fetchData}
+                    />
+                );
+            },
+        },
+    ], [fetchData]);
+
     return (
-        <Box sx={{ px: { xs: 2, md: 3 }, py: { xs: 2, md: 2.5 }, maxWidth: 1520, mx: 'auto' }}>
+        <Box sx={{ px: { xs: 1.5, md: 2 }, py: { xs: 1.5, md: 2 }, maxWidth: 1520, mx: 'auto' }}>
             {/* Header */}
             <Stack
                 direction={{ xs: 'column', sm: 'row' }}
                 justifyContent="space-between"
                 alignItems={{ xs: 'flex-start', sm: 'center' }}
                 spacing={2}
-                sx={{ mb: 2.5 }}
+                sx={{ mb: 1.5 }}
             >
                 <Box>
                     <Stack direction="row" spacing={2} alignItems="center">
-                        <Typography variant="h4" sx={{ fontWeight: 700, letterSpacing: -0.5 }}>
+                        <Typography variant="h6" sx={{ fontWeight: 700, letterSpacing: -0.5 }}>
                             Activities
                         </Typography>
                         <Box sx={{ ml: 1.5 }}>
@@ -134,7 +170,7 @@ export default function ActivitiesPage() {
                             />
                         </Box>
                     </Stack>
-                    <Typography variant="body2" color="text.secondary" sx={{ mt: 0.25 }}>
+                    <Typography variant="caption" color="text.secondary" sx={{ mt: 0.25 }}>
                         Track and manage your sales interactions
                     </Typography>
                 </Box>
@@ -145,6 +181,17 @@ export default function ActivitiesPage() {
                             <RefreshIcon />
                         </IconButton>
                     </Tooltip>
+                    <Select
+                        size="small"
+                        value={selectedActivityTypeId}
+                        onChange={(event) => setSelectedActivityTypeId(String(event.target.value))}
+                        sx={{ minWidth: 190 }}
+                    >
+                        <MenuItem value="ALL">All activity types</MenuItem>
+                        {activityTypeOptions.map((option) => (
+                            <MenuItem key={option.value} value={option.value}>{option.label}</MenuItem>
+                        ))}
+                    </Select>
                     <Button
                         variant="outlined"
                         startIcon={<FilterIcon />}
@@ -209,10 +256,10 @@ export default function ActivitiesPage() {
                 />
             ) : (
                 <>
-                    <Box sx={{ display: { xs: 'none', md: 'block' }, height: 'calc(100vh - 230px)', minHeight: 540 }}>
+                    <Box sx={{ display: { xs: 'none', md: 'block' } }}>
                         <StandardDataGrid
                             rows={data}
-                            columns={columns}
+                            columns={activityColumns}
                             loading={loading}
                             rowHeight={72}
                             checkboxSelection

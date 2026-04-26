@@ -78,10 +78,10 @@ export default function AuditLogPage() {
 
     return (
         <Box sx={{ p: 4 }}>
-            <Typography variant="h4" fontWeight="bold" gutterBottom>
+            <Typography variant="h6" fontWeight="bold" gutterBottom>
                 Audit logs
             </Typography>
-            <Typography color="text.secondary" sx={{ mb: 4 }}>
+            <Typography color="text.secondary" sx={{ mb: 2 }}>
                 Trace every action across your tenant for security and compliance.
             </Typography>
 
@@ -147,7 +147,7 @@ export default function AuditLogPage() {
                 </DialogTitle>
                 <DialogContent>
                     {selectedLog && (
-                        <Stack spacing={3} sx={{ mt: 1 }}>
+                        <Stack spacing={2} sx={{ mt: 1 }}>
                             <Box>
                                 <Typography variant="overline" color="text.secondary">Changes (Diff)</Typography>
                                 <Paper variant="outlined" sx={{ p: 2, bgcolor: (theme) => alpha(theme.palette.common.black, 0.02), fontFamily: 'monospace', fontSize: '0.75rem' }}>

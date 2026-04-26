@@ -83,7 +83,7 @@ export interface OpportunityStageHistory {
     changedBy: { name: string; email: string };
 }
 
-/** Stats grouped by stage — returned by GET /v1/opportunities/stats */
+/** Stats grouped by stage — returned by GET /api/opportunities/stats */
 export interface OpportunityStageStats {
     stageId: string;
     stage: string;

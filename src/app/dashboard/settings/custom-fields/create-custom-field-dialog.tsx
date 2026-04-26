@@ -124,7 +124,7 @@ export function CreateCustomFieldDialog({ objectType, onSuccess }: CreateCustomF
                     </DialogContentText>
 
                     <form id="create-field-form" onSubmit={handleSubmit(onSubmit)}>
-                        <Stack spacing={3}>
+                        <Stack spacing={2}>
                             <Controller
                                 name="label"
                                 control={control}

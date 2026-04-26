@@ -19,6 +19,7 @@ import {
     Paper,
     Select,
     Stack,
+    Tooltip,
     Typography,
     useTheme,
 } from "@mui/material";
@@ -46,6 +47,7 @@ import { CreateOpportunityDialog } from "@/app/dashboard/opportunities/create-op
 import { EditLeadDialog } from "../edit-lead-dialog";
 import { Timeline } from "@/components/timeline/timeline";
 import { NotesPanel } from "@/components/common/notes-panel";
+import { ContextualFormsPanel } from "@/components/forms/contextual-forms-panel";
 import { RecordHistory } from "@/components/governance/record-history";
 import { formatCurrency } from "@/lib/utils";
 import { fadeInUp } from "@/lib/motion";
@@ -143,6 +145,19 @@ export default function LeadDetailPage() {
         });
     }, [activities, activityTimeFilter, activityTypeFilter]);
 
+    const handleClickToCall = useCallback(async () => {
+        if (!lead?.phone) return;
+        try {
+            const result = await apiFetch("/integrations/telephony/click-to-call", {
+                method: "POST",
+                body: JSON.stringify({ phoneNumber: lead.phone, leadId: lead.id, execute: true }),
+            });
+            toast.success(result?.success ? "Call request sent" : "Click-to-call request created");
+        } catch (error: any) {
+            toast.error(error.message || "Failed to start click-to-call");
+        }
+    }, [lead]);
+
     const lastActivity = activities[0];
     const openOpportunityValue = opportunities.reduce((sum, item) => sum + Number(item.amount || 0), 0);
     const statusTone = getStatusTone(theme, lead?.status || "NEW");
@@ -220,6 +235,12 @@ export default function LeadDetailPage() {
                             </Button>
                         }
                     />
+                    <ContextualFormsPanel
+                        placement="LEAD_DETAIL"
+                        context={{ leadId }}
+                        entityData={lead}
+                        onSaved={loadData}
+                    />
                     <Button
                         variant="contained"
                         startIcon={<EditIcon />}
@@ -279,11 +300,11 @@ export default function LeadDetailPage() {
 
                                 <Stack spacing={0.875}>
                                     <CompactContactRow icon={<EmailIcon sx={{ fontSize: 15 }} />} value={lead.email || "No email"} />
-                                    <CompactContactRow icon={<PhoneIcon sx={{ fontSize: 15 }} />} value={lead.phone || "No phone"} />
+                                    <CompactContactRow icon={<PhoneIcon sx={{ fontSize: 15 }} />} value={lead.phone || "No phone"} onClick={lead.phone ? handleClickToCall : undefined} tooltip="Click to call" />
                                     <CompactContactRow icon={<BusinessIcon sx={{ fontSize: 15 }} />} value={lead.company || "No company"} />
                                     <CompactContactRow icon={<SourceIcon sx={{ fontSize: 15 }} />} value={lead.source || "Unknown source"} />
-                                </Stack>
-                            </Box>
+                </Stack>
+            </Box>
 
                             <Grid container>
                                 <MetricCell label="Lead Score" value={String(lead.score ?? 0)} />
@@ -362,6 +383,7 @@ export default function LeadDetailPage() {
                                     <WorkspaceTab label={`Activity History (${filteredActivities.length})`} active={tabValue === "activity"} onClick={() => setTabValue("activity")} />
                                     <WorkspaceTab label="Lead Details" active={tabValue === "details"} onClick={() => setTabValue("details")} />
                                     <WorkspaceTab label={`Opportunities (${opportunities.length})`} active={tabValue === "opportunities"} onClick={() => setTabValue("opportunities")} />
+
                                     <WorkspaceTab label="Notes" active={tabValue === "notes"} onClick={() => setTabValue("notes")} />
                                     <WorkspaceTab label="Audit" active={tabValue === "audit"} onClick={() => setTabValue("audit")} />
                                 </Stack>
@@ -440,6 +462,8 @@ export default function LeadDetailPage() {
                                 </Grid>
                             )}
 
+
+
                             {tabValue === "opportunities" && (
                                 <Stack spacing={1.25}>
                                     <Stack direction="row" justifyContent="space-between" alignItems="center">
@@ -515,15 +539,22 @@ export default function LeadDetailPage() {
     );
 }
 
-function CompactContactRow({ icon, value }: { icon: React.ReactNode; value: string }) {
-    return (
-        <Stack direction="row" spacing={1} alignItems="center">
+function CompactContactRow({ icon, value, onClick, tooltip }: { icon: React.ReactNode; value: string; onClick?: () => void; tooltip?: string }) {
+    const row = (
+        <Stack
+            direction="row"
+            spacing={1}
+            alignItems="center"
+            onClick={onClick}
+            sx={{ cursor: onClick ? "pointer" : "default", "&:hover .contact-value": onClick ? { textDecoration: "underline" } : undefined }}
+        >
             <Box sx={{ opacity: 0.9, display: "flex", alignItems: "center" }}>{icon}</Box>
-            <Typography variant="body2" sx={{ fontWeight: 500, lineHeight: 1.35 }}>
+            <Typography className="contact-value" variant="body2" sx={{ fontWeight: 500, lineHeight: 1.35 }}>
                 {value}
             </Typography>
         </Stack>
     );
+    return tooltip && onClick ? <Tooltip title={tooltip}>{row}</Tooltip> : row;
 }
 
 function MetricCell({ label, value }: { label: string; value: string }) {
@@ -585,9 +616,9 @@ function PropertyRow({ label, children }: { label: string; children: React.React
             <Typography variant="body2" color="text.secondary">
                 {label}
             </Typography>
-            <Typography variant="body2" sx={{ fontWeight: 700, textAlign: "right" }}>
+            <Box sx={{ fontWeight: 700, textAlign: "right", fontSize: '0.875rem' }}>
                 {children}
-            </Typography>
+            </Box>
         </Stack>
     );
 }

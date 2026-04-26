@@ -375,7 +375,7 @@ export function PipelineDialog({
 
             <DialogContent sx={{ p: 3 }}>
                 <form id="pipeline-form" onSubmit={handleSubmit(onSubmit)}>
-                    <Stack spacing={3}>
+                    <Stack spacing={2}>
                         <Controller
                             name="name"
                             control={control}

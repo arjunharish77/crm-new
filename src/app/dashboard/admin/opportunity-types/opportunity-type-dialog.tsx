@@ -167,7 +167,7 @@ export function OpportunityTypeDialog({
             }
         >
             <Box component="form" onSubmit={handleSubmit} sx={{ mt: 1 }}>
-                <Grid container spacing={3}>
+                <Grid container spacing={2}>
                     {/* Name */}
                     <Grid size={{ xs: 12 }}>
                         <TextField

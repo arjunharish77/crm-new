@@ -240,7 +240,7 @@ export default function OpportunityTypesPage() {
                                 </Box>
                             )}
 
-                            <Stack direction="row" spacing={3}>
+                            <Stack direction="row" spacing={2}>
                                 <Box>
                                     <Typography variant="caption" sx={{ fontWeight: 800, color: 'text.disabled' }}>OPPORTUNITIES</Typography>
                                     <Typography variant="body2" sx={{ fontWeight: 700 }}>{type._count?.opportunities || 0}</Typography>
@@ -282,11 +282,11 @@ export default function OpportunityTypesPage() {
             variants={fadeInUp}
             initial="initial"
             animate="animate"
-            sx={{ maxWidth: 1200, mx: 'auto', p: { xs: 2, md: 3 } }}
+            sx={{ maxWidth: 1200, mx: 'auto', p: { xs: 1.5, md: 2 } }}
         >
-            <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 4 }}>
+            <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 2 }}>
                 <Box>
-                    <Typography variant="h4" sx={{ fontWeight: 800, letterSpacing: -1 }}>Opportunity Types</Typography>
+                    <Typography variant="h6" sx={{ fontWeight: 800, letterSpacing: -1 }}>Opportunity Types</Typography>
                     <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
                         Categorize deals and configure unique picklists and stages for each
                     </Typography>
@@ -316,7 +316,7 @@ export default function OpportunityTypesPage() {
                         items={types.map(t => t.id)}
                         strategy={rectSortingStrategy}
                     >
-                        <Grid container spacing={3}>
+                        <Grid container spacing={2}>
                             {types.map((type) => (
                                 <Grid size={{ xs: 12, md: 6, lg: 4 }} key={type.id}>
                                     <SortableTypeCard type={type} />
