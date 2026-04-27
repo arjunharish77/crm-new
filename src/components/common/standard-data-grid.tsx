@@ -49,14 +49,15 @@ export function StandardDataGrid({
         return () => window.cancelAnimationFrame(frame);
     }, []);
 
-    const normalizedSelection = React.useMemo(() => {
+    const normalizedSelection = React.useMemo((): GridRowSelectionModel => {
         if (Array.isArray(props.rowSelectionModel)) {
-            return {
-                type: 'include',
-                ids: new Set(props.rowSelectionModel)
-            } as any;
+            return { type: 'include', ids: new Set(props.rowSelectionModel) };
         }
-        return props.rowSelectionModel;
+        if (props.rowSelectionModel && typeof props.rowSelectionModel === 'object') {
+            const model = props.rowSelectionModel as GridRowSelectionModel;
+            if (model.ids instanceof Set) return model;
+        }
+        return { type: 'include', ids: new Set() };
     }, [props.rowSelectionModel]);
 
     const handleSelectionChange = React.useCallback((selection: any, details: any) => {
