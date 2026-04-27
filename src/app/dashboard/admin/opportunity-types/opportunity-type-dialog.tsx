@@ -6,23 +6,19 @@ import {
     TextField,
     Button,
     Grid,
-    FormControl,
-    InputLabel,
-    Select,
-    MenuItem,
-    FormHelperText,
     Typography,
-    Divider,
+    Popover,
     Stack,
-    Paper,
-    Chip
+    IconButton,
+    alpha,
+    useTheme,
 } from '@mui/material';
+import { Check as CheckIcon, Search as SearchIcon } from '@mui/icons-material';
 import { apiFetch } from '@/lib/api';
 import { toast } from 'sonner';
 import { OpportunityType, CreateOpportunityTypeDto } from '@/types/opportunity-types';
-import { IconPicker } from '@/components/ui/icon-picker';
-import { ColorPicker } from '@/components/ui/color-picker';
 import { StandardDialog } from '@/components/common/standard-dialog';
+import * as Icons from 'lucide-react';
 
 interface OpportunityTypeDialogProps {
     open: boolean;
@@ -31,17 +27,23 @@ interface OpportunityTypeDialogProps {
     onSuccess: () => void;
 }
 
-interface Pipeline {
-    id: string;
-    name: string;
-    stages: Stage[];
-}
+const COMMON_ICONS = [
+    'GraduationCap', 'Building2', 'Briefcase', 'Users', 'Target', 'Trophy',
+    'DollarSign', 'Star', 'Zap', 'Rocket', 'TrendingUp', 'Award',
+    'BookOpen', 'Calendar', 'CheckCircle', 'Clock', 'Compass', 'CreditCard',
+    'Database', 'FileText', 'Flag', 'Folder', 'Globe', 'Grid',
+    'Headphones', 'Home', 'Inbox', 'Layers', 'Layout', 'Lightbulb',
+    'Mail', 'MapPin', 'MessageCircle', 'Phone', 'School', 'Sparkles',
+];
 
-interface Stage {
-    id: string;
-    name: string;
-    pipelineId: string;
-}
+const COLOR_PALETTE = [
+    '#3b82f6', '#2563eb', '#0ea5e9', '#06b6d4',
+    '#10b981', '#059669', '#22c55e', '#84cc16',
+    '#f97316', '#ea580c', '#f59e0b', '#eab308',
+    '#ef4444', '#dc2626', '#ec4899', '#db2777',
+    '#a855f7', '#9333ea', '#6366f1', '#4f46e5',
+    '#14b8a6', '#0d9488', '#64748b', '#334155',
+];
 
 export function OpportunityTypeDialog({
     open,
@@ -49,29 +51,26 @@ export function OpportunityTypeDialog({
     opportunityType,
     onSuccess,
 }: OpportunityTypeDialogProps) {
+    const theme = useTheme();
     const [formData, setFormData] = useState<CreateOpportunityTypeDto>({
         name: '',
         description: '',
         icon: '',
         color: '#3b82f6',
-        defaultPipelineId: '',
-        defaultStageId: '',
     });
-    const [pipelines, setPipelines] = useState<Pipeline[]>([]);
-    const [filteredStages, setFilteredStages] = useState<Stage[]>([]);
     const [loading, setLoading] = useState(false);
+    const [iconAnchor, setIconAnchor] = useState<HTMLElement | null>(null);
+    const [colorAnchor, setColorAnchor] = useState<HTMLElement | null>(null);
+    const [iconSearch, setIconSearch] = useState('');
 
     useEffect(() => {
         if (open) {
-            fetchPipelines();
             if (opportunityType) {
                 setFormData({
                     name: opportunityType.name,
                     description: opportunityType.description || '',
                     icon: opportunityType.icon || '',
                     color: opportunityType.color || '#3b82f6',
-                    defaultPipelineId: opportunityType.defaultPipelineId || '',
-                    defaultStageId: opportunityType.defaultStageId || '',
                 });
             } else {
                 setFormData({
@@ -79,37 +78,10 @@ export function OpportunityTypeDialog({
                     description: '',
                     icon: '',
                     color: '#3b82f6',
-                    defaultPipelineId: '',
-                    defaultStageId: '',
                 });
             }
         }
     }, [open, opportunityType]);
-
-    useEffect(() => {
-        if (formData.defaultPipelineId) {
-            const pipeline = pipelines.find(p => p.id === formData.defaultPipelineId);
-            setFilteredStages(pipeline?.stages || []);
-            // Reset stage if it doesn't belong to selected pipeline
-            if (formData.defaultStageId) {
-                const stageExists = pipeline?.stages.some(s => s.id === formData.defaultStageId);
-                if (!stageExists) {
-                    setFormData(prev => ({ ...prev, defaultStageId: '' }));
-                }
-            }
-        } else {
-            setFilteredStages([]);
-        }
-    }, [formData.defaultPipelineId, pipelines]);
-
-    const fetchPipelines = async () => {
-        try {
-            const data = await apiFetch('/pipelines');
-            setPipelines(data);
-        } catch (error) {
-            toast.error('Failed to fetch pipelines');
-        }
-    };
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -144,6 +116,9 @@ export function OpportunityTypeDialog({
             setLoading(false);
         }
     };
+
+    const SelectedIcon = formData.icon ? (Icons as any)[formData.icon] : null;
+    const filteredIcons = COMMON_ICONS.filter((icon) => icon.toLowerCase().includes(iconSearch.toLowerCase()));
 
     return (
         <StandardDialog
@@ -199,155 +174,172 @@ export function OpportunityTypeDialog({
                     <Grid size={{ xs: 12, sm: 6 }}>
                         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
                             <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600 }}>Icon</Typography>
-                            <IconPicker
-                                value={formData.icon || ''}
-                                onChange={(icon) => setFormData({ ...formData, icon })}
-                            />
+                            <Button
+                                variant="outlined"
+                                onClick={(event) => setIconAnchor(event.currentTarget)}
+                                sx={{
+                                    height: 44,
+                                    justifyContent: 'flex-start',
+                                    borderRadius: '10px',
+                                    borderColor: 'divider',
+                                    px: 1.25,
+                                    gap: 1,
+                                    color: 'text.primary',
+                                    textTransform: 'none',
+                                }}
+                            >
+                                <Box
+                                    sx={{
+                                        width: 28,
+                                        height: 28,
+                                        borderRadius: '8px',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        bgcolor: alpha(formData.color || theme.palette.primary.main, 0.1),
+                                        color: formData.color || theme.palette.primary.main,
+                                        border: '1px solid',
+                                        borderColor: alpha(formData.color || theme.palette.primary.main, 0.24),
+                                        flexShrink: 0,
+                                    }}
+                                >
+                                    {SelectedIcon ? <SelectedIcon size={16} /> : <SearchIcon sx={{ fontSize: 16 }} />}
+                                </Box>
+                                <Typography variant="body2" sx={{ fontWeight: 800, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                    {formData.icon || 'Select icon'}
+                                </Typography>
+                            </Button>
                         </Box>
                     </Grid>
                     <Grid size={{ xs: 12, sm: 6 }}>
                         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
                             <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600 }}>Color</Typography>
-                            <ColorPicker
-                                value={formData.color || '#3b82f6'}
-                                onChange={(color) => setFormData({ ...formData, color })}
-                            />
+                            <Button
+                                variant="outlined"
+                                onClick={(event) => setColorAnchor(event.currentTarget)}
+                                sx={{
+                                    height: 44,
+                                    justifyContent: 'flex-start',
+                                    borderRadius: '10px',
+                                    borderColor: 'divider',
+                                    px: 1.25,
+                                    gap: 1,
+                                    color: 'text.primary',
+                                    textTransform: 'none',
+                                }}
+                            >
+                                <Box
+                                    sx={{
+                                        width: 28,
+                                        height: 28,
+                                        borderRadius: '8px',
+                                        bgcolor: formData.color || '#3b82f6',
+                                        border: '1px solid',
+                                        borderColor: alpha(theme.palette.common.black, 0.12),
+                                        boxShadow: `inset 0 0 0 1px ${alpha(theme.palette.common.white, 0.36)}`,
+                                        flexShrink: 0,
+                                    }}
+                                />
+                                <Typography variant="body2" sx={{ fontWeight: 800, fontFamily: 'monospace' }}>
+                                    {formData.color || '#3b82f6'}
+                                </Typography>
+                            </Button>
                         </Box>
                     </Grid>
-
-                    <Grid size={{ xs: 12 }}>
-                        <Divider />
-                    </Grid>
-
-                    {/* Pipeline */}
-                    <Grid size={{ xs: 12, sm: 6 }}>
-                        <FormControl fullWidth>
-                            <InputLabel id="pipeline-label">Default Pipeline</InputLabel>
-                            <Select
-                                labelId="pipeline-label"
-                                label="Default Pipeline"
-                                value={formData.defaultPipelineId}
-                                onChange={(e) => setFormData({ ...formData, defaultPipelineId: e.target.value as string })}
-                            >
-                                <MenuItem value=""><em>None</em></MenuItem>
-                                {pipelines.map((pipeline) => (
-                                    <MenuItem key={pipeline.id} value={pipeline.id}>
-                                        {pipeline.name}
-                                    </MenuItem>
-                                ))}
-                            </Select>
-                        </FormControl>
-                    </Grid>
-
-                    {/* Stage */}
-                    <Grid size={{ xs: 12, sm: 6 }}>
-                        <FormControl fullWidth disabled={!formData.defaultPipelineId}>
-                            <InputLabel id="stage-label">Default Stage</InputLabel>
-                            <Select
-                                labelId="stage-label"
-                                label="Default Stage"
-                                value={formData.defaultStageId}
-                                onChange={(e) => setFormData({ ...formData, defaultStageId: e.target.value as string })}
-                            >
-                                <MenuItem value=""><em>None</em></MenuItem>
-                                {filteredStages.map((stage) => (
-                                    <MenuItem key={stage.id} value={stage.id}>
-                                        {stage.name}
-                                    </MenuItem>
-                                ))}
-                            </Select>
-                            {!formData.defaultPipelineId && (
-                                <FormHelperText>Select a pipeline first</FormHelperText>
-                            )}
-                        </FormControl>
-                    </Grid>
-                    <Grid size={{ xs: 12 }}>
-                        <Divider sx={{ my: 1 }}>
-                            <Typography variant="overline" color="text.secondary" sx={{ fontWeight: 800 }}>
-                                Stage Engine Rules
-                            </Typography>
-                        </Divider>
-                    </Grid>
-
-                    {!formData.defaultPipelineId ? (
-                        <Grid size={{ xs: 12 }}>
-                            <Box sx={{ p: 2, textAlign: 'center', bgcolor: 'surfaceContainerLowest', borderRadius: 2, border: '1px dashed', borderColor: 'divider' }}>
-                                <Typography variant="body2" color="text.secondary">
-                                    Select a default pipeline to configure stage-specific rules.
-                                </Typography>
-                            </Box>
-                        </Grid>
-                    ) : (
-                        <Grid size={{ xs: 12 }}>
-                            <Stack spacing={2}>
-                                {filteredStages.map((stage) => (
-                                    <Paper key={stage.id} elevation={0} sx={{ p: 2, borderRadius: 3, border: '1px solid', borderColor: 'divider', bgcolor: 'surfaceContainerLowest' }}>
-                                        <Typography variant="subtitle2" sx={{ fontWeight: 800, mb: 2, display: 'flex', alignItems: 'center', gap: 1 }}>
-                                            <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: (stage as any).color || 'primary.main' }} />
-                                            {stage.name}
-                                        </Typography>
-
-                                        <Grid container spacing={2}>
-                                            <Grid size={{ xs: 12, sm: 4 }}>
-                                                <TextField
-                                                    label="Prob. (%)"
-                                                    type="number"
-                                                    fullWidth
-                                                    size="small"
-                                                    value={formData.stageConfig?.[stage.id]?.probability ?? ''}
-                                                    onChange={(e) => {
-                                                        const val = e.target.value === '' ? undefined : parseInt(e.target.value);
-                                                        setFormData(prev => ({
-                                                            ...prev,
-                                                            stageConfig: {
-                                                                ...prev.stageConfig,
-                                                                [stage.id]: { ...prev.stageConfig?.[stage.id], probability: val }
-                                                            }
-                                                        }));
-                                                    }}
-                                                />
-                                            </Grid>
-                                            <Grid size={{ xs: 12, sm: 8 }}>
-                                                <FormControl fullWidth size="small">
-                                                    <InputLabel>Allowed Transitions To</InputLabel>
-                                                    <Select
-                                                        multiple
-                                                        label="Allowed Transitions To"
-                                                        value={formData.stageConfig?.[stage.id]?.allowedTransitions || []}
-                                                        onChange={(e) => {
-                                                            const val = typeof e.target.value === 'string' ? e.target.value.split(',') : e.target.value;
-                                                            setFormData(prev => ({
-                                                                ...prev,
-                                                                stageConfig: {
-                                                                    ...prev.stageConfig,
-                                                                    [stage.id]: { ...prev.stageConfig?.[stage.id], allowedTransitions: val }
-                                                                }
-                                                            }));
-                                                        }}
-                                                        renderValue={(selected) => (
-                                                            <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
-                                                                {(selected as string[]).map((id) => (
-                                                                    <Chip key={id} label={filteredStages.find((s: any) => s.id === id)?.name || id} size="small" />
-                                                                ))}
-                                                            </Box>
-                                                        )}
-                                                    >
-                                                        {filteredStages.filter((s: any) => s.id !== stage.id).map((s: any) => (
-                                                            <MenuItem key={s.id} value={s.id}>
-                                                                {s.name}
-                                                            </MenuItem>
-                                                        ))}
-                                                    </Select>
-                                                </FormControl>
-                                            </Grid>
-                                        </Grid>
-                                    </Paper>
-                                ))}
-                            </Stack>
-                        </Grid>
-                    )}
                 </Grid>
             </Box>
+
+            <Popover
+                open={Boolean(iconAnchor)}
+                anchorEl={iconAnchor}
+                onClose={() => setIconAnchor(null)}
+                anchorOrigin={{ vertical: 'bottom', horizontal: 'left' }}
+                transformOrigin={{ vertical: 'top', horizontal: 'left' }}
+                PaperProps={{ sx: { zIndex: (theme) => theme.zIndex.modal + 2, p: 1.25, width: 330, borderRadius: 2 } }}
+            >
+                <Stack spacing={1}>
+                    <TextField
+                        size="small"
+                        placeholder="Search icons"
+                        value={iconSearch}
+                        onChange={(event) => setIconSearch(event.target.value)}
+                    />
+                    <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 0.75, maxHeight: 220, overflowY: 'auto', pr: 0.25 }}>
+                        {filteredIcons.map((iconName) => {
+                            const Icon = (Icons as any)[iconName];
+                            const isSelected = formData.icon === iconName;
+                            return (
+                                <IconButton
+                                    key={iconName}
+                                    title={iconName}
+                                    onClick={() => {
+                                        setFormData({ ...formData, icon: iconName });
+                                        setIconAnchor(null);
+                                    }}
+                                    sx={{
+                                        width: 40,
+                                        height: 40,
+                                        borderRadius: '10px',
+                                        border: '1px solid',
+                                        borderColor: isSelected ? 'primary.main' : 'divider',
+                                        bgcolor: isSelected ? alpha(theme.palette.primary.main, 0.1) : 'transparent',
+                                        color: isSelected ? 'primary.main' : 'text.secondary',
+                                    }}
+                                >
+                                    <Icon size={18} />
+                                </IconButton>
+                            );
+                        })}
+                    </Box>
+                </Stack>
+            </Popover>
+
+            <Popover
+                open={Boolean(colorAnchor)}
+                anchorEl={colorAnchor}
+                onClose={() => setColorAnchor(null)}
+                anchorOrigin={{ vertical: 'bottom', horizontal: 'left' }}
+                transformOrigin={{ vertical: 'top', horizontal: 'left' }}
+                PaperProps={{ sx: { zIndex: (theme) => theme.zIndex.modal + 2, p: 1.25, width: 260, borderRadius: 2 } }}
+            >
+                <Stack spacing={1}>
+                    <Typography variant="caption" sx={{ fontWeight: 800, color: 'text.secondary' }}>Select color</Typography>
+                    <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 0.75 }}>
+                        {COLOR_PALETTE.map((color) => {
+                            const isSelected = (formData.color || '#3b82f6').toLowerCase() === color.toLowerCase();
+                            return (
+                                <IconButton
+                                    key={color}
+                                    title={color}
+                                    onClick={() => {
+                                        setFormData({ ...formData, color });
+                                        setColorAnchor(null);
+                                    }}
+                                    sx={{
+                                        width: 32,
+                                        height: 32,
+                                        borderRadius: '9px',
+                                        bgcolor: color,
+                                        border: '2px solid',
+                                        borderColor: isSelected ? 'text.primary' : 'transparent',
+                                        color: '#fff',
+                                        '&:hover': { bgcolor: color, transform: 'translateY(-1px)' },
+                                    }}
+                                >
+                                    {isSelected ? <CheckIcon sx={{ fontSize: 16, filter: 'drop-shadow(0 1px 1px rgba(0,0,0,0.45))' }} /> : null}
+                                </IconButton>
+                            );
+                        })}
+                    </Box>
+                    <TextField
+                        size="small"
+                        label="Hex"
+                        value={formData.color || '#3b82f6'}
+                        onChange={(event) => setFormData({ ...formData, color: event.target.value })}
+                        inputProps={{ maxLength: 7 }}
+                    />
+                </Stack>
+            </Popover>
         </StandardDialog>
     );
 }

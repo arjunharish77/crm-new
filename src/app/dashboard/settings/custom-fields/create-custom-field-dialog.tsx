@@ -78,7 +78,7 @@ export function CreateCustomFieldDialog({ objectType, onSuccess }: CreateCustomF
                 ...values,
                 objectType,
                 options: (values.type === 'DROPDOWN' || values.type === 'MULTI_SELECT') && values.options
-                    ? values.options.split(',').map((s: string) => s.trim()).filter(Boolean)
+                    ? values.options.split(',').map((s: string) => s.trim()).filter((option: string) => option.length > 0)
                     : undefined
             };
 

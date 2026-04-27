@@ -167,7 +167,7 @@ function FieldEditor({
         try {
             const fieldKey = label.toLowerCase().replace(/[^a-z0-9]/g, '_');
             const parsedOptions = (type === 'DROPDOWN' || type === 'MULTI_SELECT')
-                ? options.split('\n').map(o => o.trim()).filter(Boolean)
+                ? options.split('\n').map(o => o.trim()).filter((option) => option.length > 0)
                 : undefined;
 
             const payload = {

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
     Button,
     Dialog,
@@ -9,6 +9,10 @@ import {
     DialogActions,
     DialogTitle,
     TextField,
+    FormControl,
+    InputLabel,
+    Select,
+    MenuItem,
     Stack,
     CircularProgress
 } from "@mui/material";
@@ -23,7 +27,16 @@ interface SalesGroupDialogProps {
 export function SalesGroupDialog({ onSuccess }: SalesGroupDialogProps) {
     const [open, setOpen] = useState(false);
     const [loading, setLoading] = useState(false);
-    const [form, setForm] = useState({ name: "", description: "" });
+    const [templates, setTemplates] = useState<any[]>([]);
+    const [form, setForm] = useState({ name: "", description: "", permissionTemplateId: "" });
+
+    useEffect(() => {
+        if (open) {
+            apiFetch("/permission-templates")
+                .then((data) => setTemplates(Array.isArray(data) ? data : []))
+                .catch(() => setTemplates([]));
+        }
+    }, [open]);
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -36,7 +49,7 @@ export function SalesGroupDialog({ onSuccess }: SalesGroupDialogProps) {
             });
             toast.success("Group created");
             setOpen(false);
-            setForm({ name: "", description: "" });
+            setForm({ name: "", description: "", permissionTemplateId: "" });
             onSuccess();
         } catch (error: any) {
             console.error("Failed to create sales group:", error);
@@ -82,6 +95,19 @@ export function SalesGroupDialog({ onSuccess }: SalesGroupDialogProps) {
                                 value={form.description}
                                 onChange={(e) => setForm({ ...form, description: e.target.value })}
                             />
+                            <FormControl fullWidth>
+                                <InputLabel>Permission Template</InputLabel>
+                                <Select
+                                    label="Permission Template"
+                                    value={form.permissionTemplateId}
+                                    onChange={(e) => setForm({ ...form, permissionTemplateId: e.target.value })}
+                                >
+                                    <MenuItem value=""><em>No template</em></MenuItem>
+                                    {templates.map((template) => (
+                                        <MenuItem key={template.id} value={template.id}>{template.name}</MenuItem>
+                                    ))}
+                                </Select>
+                            </FormControl>
                         </Stack>
                     </form>
                 </DialogContent>

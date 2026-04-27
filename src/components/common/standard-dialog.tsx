@@ -52,10 +52,13 @@ export function StandardDialog({
             fullWidth={fullWidth}
             PaperProps={{
                 sx: {
+                    position: 'relative',
+                    zIndex: (theme) => theme.zIndex.modal + 1,
                     borderRadius: '14px',
                     border: '1px solid',
                     borderColor: 'divider',
                     overflow: 'hidden',
+                    bgcolor: 'background.paper',
                     boxShadow: '0 20px 50px rgba(15, 23, 42, 0.12)',
                 },
             }}
@@ -117,7 +120,7 @@ export function StandardDialog({
             </DialogContent>
 
             {actions && (
-                <DialogActions sx={{ px: 2.25, pb: 2.25, gap: 0.75 }}>
+            <DialogActions sx={{ px: 2.25, pb: 2.25, gap: 0.75, bgcolor: 'background.paper' }}>
                     {actions}
                 </DialogActions>
             )}

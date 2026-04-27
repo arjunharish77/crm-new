@@ -32,7 +32,7 @@ import {
     FilterList as FilterIcon
 } from '@mui/icons-material';
 import { apiFetch } from '@/lib/api';
-import { format } from 'date-fns';
+import { formatWorkspaceDateTime } from '@/lib/date-format';
 
 interface AuditLog {
     id: string;
@@ -119,7 +119,7 @@ export default function AuditLogPage() {
                             <TableRow><TableCell colSpan={5} align="center">No audit logs found.</TableCell></TableRow>
                         ) : logs.map((log) => (
                             <TableRow key={log.id} hover onClick={() => setSelectedLog(log)} sx={{ cursor: 'pointer' }}>
-                                <TableCell>{format(new Date(log.createdAt), 'MMM d, HH:mm:ss')}</TableCell>
+                                <TableCell>{formatWorkspaceDateTime(log.createdAt, { seconds: true })}</TableCell>
                                 <TableCell>
                                     <Typography variant="body2">{log.user.name}</Typography>
                                     <Typography variant="caption" color="text.secondary">{log.user.email}</Typography>

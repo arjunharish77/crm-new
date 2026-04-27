@@ -751,7 +751,7 @@ export function FormEditor({ initialForm }: EditorProps) {
                                                 rows={3}
                                                 value={selectedField.options?.join(', ') || ''}
                                                 onChange={e => updateField(selectedField.id, {
-                                                    options: e.target.value.split(',').map(s => s.trim()).filter(Boolean)
+                                                    options: e.target.value.split(',').map(s => s.trim()).filter((option) => option.length > 0)
                                                 })}
                                             />
                                         </Box>

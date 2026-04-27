@@ -296,10 +296,10 @@ export function NavigationDrawer({ open, toggleDrawer }: { open: boolean; toggle
                                     fontSize: '1rem',
                                 }}
                             >
-                                E
+                                U
                             </Box>
                             <Typography variant="body2" sx={{ fontWeight: 800, fontSize: '0.92rem' }}>
-                                Enterprise CRM
+                                Unnatify
                             </Typography>
                         </Box>
                         {/* Always-visible expand/collapse toggle */}

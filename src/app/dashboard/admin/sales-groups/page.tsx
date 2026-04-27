@@ -15,7 +15,10 @@ import {
     Stack,
     Avatar,
     AvatarGroup,
-    Tooltip
+    Tooltip,
+    FormControl,
+    Select,
+    MenuItem
 } from "@mui/material";
 import {
     People as UsersIcon,
@@ -37,6 +40,7 @@ export default function SalesGroupsPage() {
     const [groups, setGroups] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [selectedGroup, setSelectedGroup] = useState<any>(null);
+    const [templates, setTemplates] = useState<any[]>([]);
     const [manageMembersOpen, setManageMembersOpen] = useState(false);
 
     const fetchGroups = useCallback(async () => {
@@ -59,7 +63,21 @@ export default function SalesGroupsPage() {
 
     useEffect(() => {
         fetchGroups();
+        apiFetch("/permission-templates").then((data) => setTemplates(Array.isArray(data) ? data : [])).catch(() => setTemplates([]));
     }, [fetchGroups]);
+
+    const updateGroupTemplate = async (group: any, permissionTemplateId: string) => {
+        try {
+            await apiFetch(`/sales-groups/${group.id}`, {
+                method: "PATCH",
+                body: JSON.stringify({ permissionTemplateId: permissionTemplateId || null }),
+            });
+            toast.success("Permission template updated");
+            fetchGroups();
+        } catch (error: any) {
+            toast.error(error.message || "Failed to update permission template");
+        }
+    };
 
     const handleDelete = async (id: string) => {
         if (!confirm("Are you sure? This will remove all members from the group.")) return;
@@ -120,6 +138,27 @@ export default function SalesGroupsPage() {
                     </Stack>
                 )
             }
+        },
+        {
+            field: 'permissionTemplateId',
+            headerName: 'Permission Template',
+            minWidth: 220,
+            flex: 1,
+            renderCell: (params) => (
+                <FormControl size="small" fullWidth>
+                    <Select
+                        value={params.row.permissionTemplateId ?? ""}
+                        displayEmpty
+                        onClick={(event) => event.stopPropagation()}
+                        onChange={(event) => updateGroupTemplate(params.row, String(event.target.value))}
+                    >
+                        <MenuItem value=""><em>No template</em></MenuItem>
+                        {templates.map((template) => (
+                            <MenuItem key={template.id} value={template.id}>{template.name}</MenuItem>
+                        ))}
+                    </Select>
+                </FormControl>
+            )
         },
         {
             field: 'createdAt',

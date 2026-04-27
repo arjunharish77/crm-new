@@ -129,6 +129,11 @@ function auditValuesEqual(before: unknown, after: unknown) {
   return JSON.stringify(before ?? null) === JSON.stringify(after ?? null);
 }
 
+function asUuidOrNull(value: unknown) {
+  const text = typeof value === "string" ? value : "";
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(text) ? text : null;
+}
+
 function buildFieldDiff(before: Record<string, any> | null, after: Record<string, any> | null) {
   const diff: Record<string, { before: unknown; after: unknown }> = {};
   const keys = new Set([...Object.keys(before ?? {}), ...Object.keys(after ?? {})]);
@@ -143,14 +148,26 @@ function buildFieldDiff(before: Record<string, any> | null, after: Record<string
   return diff;
 }
 
-function fieldPermissionMap(user: TenantUser, module: "leads" | "opportunities" | "activities") {
+function fieldPermissionMap(user: TenantUser, module: "leads" | "opportunities" | "activities", typeId?: string | null) {
   const role = user.role && typeof user.role === "object" ? user.role : null;
-  const permissions = role?.permissions?.fieldPermissions?.[module];
-  return permissions && typeof permissions === "object" ? permissions as Record<string, string> : {};
+  const legacy = role?.permissions?.fieldPermissions?.[module];
+  const next: Record<string, string> = legacy && typeof legacy === "object" ? { ...(legacy as Record<string, string>) } : {};
+  const baseScope = module === "leads" ? "lead" : module === "opportunities" ? "opportunity" : "activity";
+  const typeScope = typeId && module !== "leads" ? `${baseScope}:${typeId}` : null;
+  const templates = Array.isArray((user as any).permissionTemplates) ? (user as any).permissionTemplates : [];
+  for (const template of templates) {
+    const fieldPermissions = template?.permissions?.fieldPermissions;
+    if (!fieldPermissions || typeof fieldPermissions !== "object") continue;
+    const base = fieldPermissions[baseScope];
+    const typed = typeScope ? fieldPermissions[typeScope] : null;
+    if (base && typeof base === "object") Object.assign(next, base);
+    if (typed && typeof typed === "object") Object.assign(next, typed);
+  }
+  return next;
 }
 
 function maskFieldsForUser<T extends Record<string, any>>(user: TenantUser, module: "leads" | "opportunities" | "activities", record: T): T {
-  const permissions = fieldPermissionMap(user, module);
+  const permissions = fieldPermissionMap(user, module, record.opportunityTypeId ?? record.typeId ?? null);
   const masked: Record<string, any> = { ...record };
   for (const [field, access] of Object.entries(permissions)) {
     if (access === "hidden" && field in masked) {
@@ -162,7 +179,7 @@ function maskFieldsForUser<T extends Record<string, any>>(user: TenantUser, modu
 }
 
 function editablePayloadForUser(user: TenantUser, module: "leads" | "opportunities" | "activities", payload: Record<string, unknown>) {
-  const permissions = fieldPermissionMap(user, module);
+  const permissions = fieldPermissionMap(user, module, String(payload.opportunityTypeId ?? payload.typeId ?? ""));
   const next = { ...payload };
   for (const [field, access] of Object.entries(permissions)) {
     if ((access === "hidden" || access === "readonly") && field in next) {
@@ -512,6 +529,23 @@ export async function listLeadsForTenant(
       limit,
     },
   };
+}
+
+async function countLeadsForTenant(user: TenantUser, filters: LeadFilterInput[] | null = null) {
+  const supabase = createSupabaseAdminClient();
+  const query = supabase
+    .from("Lead")
+    .select("id", { count: "exact", head: true });
+
+  const tenantScopedQuery = user.tenantId ? query.eq("tenantId", user.tenantId) : query.is("tenantId", null);
+  const filteredQuery = applyLeadFilters(tenantScopedQuery, filters);
+  const { count, error } = await filteredQuery;
+
+  if (error) {
+    throw error;
+  }
+
+  return count ?? 0;
 }
 
 export async function createLeadForTenant(user: TenantUser, payload: Record<string, unknown>) {
@@ -2533,9 +2567,9 @@ export async function listLeadListsForTenant(user: TenantUser) {
   if (error) throw error;
 
   const staticListIds = (data ?? []).filter((list: any) => list.type === "STATIC").map((list: any) => list.id);
-  const memberResult = staticListIds.length > 0
-    ? await supabase.from("LeadListMember").select("listId,leadId").in("listId", staticListIds)
-    : { data: [], error: null };
+  const memberQuery = supabase.from("LeadListMember").select("listId,leadId").in("listId", staticListIds);
+  const scopedMemberQuery = user.tenantId ? memberQuery.eq("tenantId", user.tenantId) : memberQuery.is("tenantId", null);
+  const memberResult = staticListIds.length > 0 ? await scopedMemberQuery : { data: [], error: null };
   if (memberResult.error) throw memberResult.error;
 
   const memberCounts = new Map<string, number>();
@@ -2543,12 +2577,11 @@ export async function listLeadListsForTenant(user: TenantUser) {
     memberCounts.set(member.listId, (memberCounts.get(member.listId) ?? 0) + 1);
   }
 
-  const smartCounts = new Map<string, number>();
-  for (const list of data ?? []) {
-    if (list.type !== "SMART") continue;
-    const result = await listLeadsForTenant(user, 1, 1, normalizeLeadListFilters(list.filters));
-    smartCounts.set(list.id, result.meta.total);
-  }
+  const smartLists = (data ?? []).filter((list: any) => list.type === "SMART");
+  const smartCountPairs = await Promise.all(
+    smartLists.map(async (list: any) => [list.id, await countLeadsForTenant(user, normalizeLeadListFilters(list.filters))] as const)
+  );
+  const smartCounts = new Map<string, number>(smartCountPairs);
 
   return (data ?? []).map((list: any) => ({
     ...list,
@@ -2629,11 +2662,15 @@ export async function getLeadListForTenant(user: TenantUser, id: string) {
   if (memberError) throw memberError;
 
   const leadIds = (members ?? []).map((member: any) => member.leadId);
-  const leads = leadIds.length > 0
-    ? await supabase.from("Lead").select("id,name,email,phone,company,source,status,score,tags,createdAt,updatedAt,ownerId").in("id", leadIds)
-    : { data: [], error: null };
+  const leadQuery = supabase
+    .from("Lead")
+    .select("id,name,email,phone,company,source,status,score,tags,createdAt,updatedAt,ownerId")
+    .in("id", leadIds);
+  const scopedLeadQuery = user.tenantId ? leadQuery.eq("tenantId", user.tenantId) : leadQuery.is("tenantId", null);
+  const leads = leadIds.length > 0 ? await scopedLeadQuery : { data: [], error: null };
   if (leads.error) throw leads.error;
-  return { ...list, leads: leads.data ?? [], count: leadIds.length };
+  const leadsById = new Map((leads.data ?? []).map((lead: any) => [lead.id, lead]));
+  return { ...list, leads: leadIds.map((leadId: string) => leadsById.get(leadId)).filter(Boolean), count: leadIds.length };
 }
 
 export async function addLeadsToLeadListForTenant(user: TenantUser, id: string, leadIds: string[]) {
@@ -2811,7 +2848,7 @@ export async function listImportJobsForTenant(user: TenantUser) {
   const supabase = createSupabaseAdminClient();
   const query = supabase
     .from("ImportJob")
-    .select("id,module,fileName,status,stats,errors,createdAt,createdBy")
+    .select("id,module,filePath,status,stats,errors,createdAt,userId")
     .order("createdAt", { ascending: false })
     .limit(50);
   const scopedQuery = user.tenantId ? query.eq("tenantId", user.tenantId) : query.is("tenantId", null);
@@ -2822,7 +2859,7 @@ export async function listImportJobsForTenant(user: TenantUser) {
 
 export async function runImportForTenant(user: TenantUser, input: ImportInput) {
   const supabase = createSupabaseAdminClient();
-  const module = normalizeImportModule(input.module);
+  const importModule = normalizeImportModule(input.module);
   const rows = Array.isArray(input.rows) ? input.rows : [];
   const duplicateMode = input.duplicateMode === "UPDATE" || input.duplicateMode === "CREATE" ? input.duplicateMode : "SKIP";
   const now = new Date().toISOString();
@@ -2835,14 +2872,13 @@ export async function runImportForTenant(user: TenantUser, input: ImportInput) {
   const { error: jobError } = await supabase.from("ImportJob").insert({
     id: jobId,
     tenantId: user.tenantId,
-    module,
-    fileName: null,
+    userId: user.id,
+    module: importModule,
+    filePath: null,
     status: "PROCESSING",
-    mappings: input.mappings ?? [],
-    duplicateMode,
+    mapping: { fields: input.mappings ?? [], duplicateMode },
     stats: { total: rows.length, processed: 0, created: 0, updated: 0, skipped: 0, failed: 0 },
     errors: [],
-    createdBy: user.id,
     createdAt: now,
     updatedAt: now,
   });
@@ -2851,17 +2887,17 @@ export async function runImportForTenant(user: TenantUser, input: ImportInput) {
   for (const [index, row] of rows.entries()) {
     try {
       const payload = mapImportRow(row, input.mappings);
-      const duplicateId = await findDuplicateForImport(user, module, payload);
+      const duplicateId = await findDuplicateForImport(user, importModule, payload);
       if (duplicateId && duplicateMode === "SKIP") {
         skipped += 1;
         continue;
       }
       if (duplicateId && duplicateMode === "UPDATE") {
-        await updateImportedRecord(user, module, duplicateId, payload);
+        await updateImportedRecord(user, importModule, duplicateId, payload);
         updated += 1;
         continue;
       }
-      await createImportedRecord(user, module, payload);
+      await createImportedRecord(user, importModule, payload);
       created += 1;
     } catch (error) {
       rowErrors.push({
@@ -2889,7 +2925,7 @@ export async function runImportForTenant(user: TenantUser, input: ImportInput) {
       updatedAt: new Date().toISOString(),
     })
     .eq("id", jobId)
-    .select("id,module,fileName,status,stats,errors,createdAt,createdBy")
+    .select("id,module,filePath,status,stats,errors,createdAt,userId")
     .single();
   if (error) throw error;
   await createAuditLog(user, "CREATE", "IMPORT_JOB", jobId, null, data, stats);
@@ -2963,7 +2999,7 @@ export async function saveTelephonySettingsForTenant(user: TenantUser, config: R
     type: "TELEPHONY",
     config,
     isActive: Boolean(config.isActive),
-    updatedBy: user.id,
+    updatedBy: asUuidOrNull(user.id),
     createdAt: existing.id ? undefined : now,
     updatedAt: now,
   };
@@ -3027,9 +3063,9 @@ export async function createTelephonyCallLogForTenant(user: TenantUser, input: R
       duration: input.duration == null ? null : Number(input.duration),
       recordingUrl: input.recordingUrl ? String(input.recordingUrl) : null,
       agentId: input.agentId ? String(input.agentId) : user.id,
-      leadId: input.leadId ? String(input.leadId) : null,
-      opportunityId: input.opportunityId ? String(input.opportunityId) : null,
-      activityId,
+      leadId: asUuidOrNull(input.leadId),
+      opportunityId: asUuidOrNull(input.opportunityId),
+      activityId: asUuidOrNull(activityId),
       metadata: input.metadata ?? {},
       startedAt: input.startedAt ? String(input.startedAt) : now,
       endedAt: input.endedAt ? String(input.endedAt) : null,
@@ -3774,7 +3810,9 @@ async function executeAutomationAction(
       updatePayload[field.replace(/^(lead|opportunity)\./, "")] = update.value ?? null;
     }
     if (Object.keys(updatePayload).length <= 1) return;
-    await supabase.from(table).update(updatePayload).eq("id", targetId);
+    const query = supabase.from(table).update(updatePayload).eq("id", targetId);
+    const scopedQuery = user.tenantId ? query.eq("tenantId", user.tenantId) : query.is("tenantId", null);
+    await scopedQuery;
     return;
   }
 
@@ -3791,7 +3829,9 @@ async function executeAutomationAction(
       updatePayload[field.replace(/^activity\./, "")] = update.value ?? null;
     }
     if (Object.keys(updatePayload).length <= 1) return;
-    await supabase.from("Activity").update(updatePayload).eq("id", entityId);
+    const query = supabase.from("Activity").update(updatePayload).eq("id", entityId);
+    const scopedQuery = user.tenantId ? query.eq("tenantId", user.tenantId) : query.is("tenantId", null);
+    await scopedQuery;
     return;
   }
 
@@ -3805,7 +3845,12 @@ async function executeAutomationAction(
         ? entityType === "ACTIVITY" ? entityId : String(record.activityId ?? "")
         : entityType === "LEAD" ? entityId : String(record.leadId ?? "");
     if (!targetId) return;
-    await supabase.from(table).update({ [field.replace(/^(lead|opportunity|activity)\./, "")]: null, updatedAt: new Date().toISOString() }).eq("id", targetId);
+    const query = supabase
+      .from(table)
+      .update({ [field.replace(/^(lead|opportunity|activity)\./, "")]: null, updatedAt: new Date().toISOString() })
+      .eq("id", targetId);
+    const scopedQuery = user.tenantId ? query.eq("tenantId", user.tenantId) : query.is("tenantId", null);
+    await scopedQuery;
     return;
   }
 
@@ -3850,7 +3895,9 @@ async function executeAutomationAction(
       ? entityType === "OPPORTUNITY" ? entityId : String(record.opportunityId ?? "")
       : entityType === "LEAD" ? entityId : String(record.leadId ?? "");
     if (!targetId) return;
-    await supabase.from(table).update({ ownerId, updatedAt: new Date().toISOString() }).eq("id", targetId);
+    const query = supabase.from(table).update({ ownerId, updatedAt: new Date().toISOString() }).eq("id", targetId);
+    const scopedQuery = user.tenantId ? query.eq("tenantId", user.tenantId) : query.is("tenantId", null);
+    await scopedQuery;
     return;
   }
 
@@ -3858,7 +3905,9 @@ async function executeAutomationAction(
     const stageId = String(nodeData.stageId ?? "");
     const targetId = entityType === "OPPORTUNITY" ? entityId : String(record.opportunityId ?? "");
     if (!stageId || !targetId) return;
-    await supabase.from("Opportunity").update({ stageId, updatedAt: new Date().toISOString() }).eq("id", targetId);
+    const query = supabase.from("Opportunity").update({ stageId, updatedAt: new Date().toISOString() }).eq("id", targetId);
+    const scopedQuery = user.tenantId ? query.eq("tenantId", user.tenantId) : query.is("tenantId", null);
+    await scopedQuery;
     return;
   }
 
@@ -3903,10 +3952,14 @@ async function executeAutomationAction(
     if (!targetId) return;
     const tagValue = type === "star_lead" ? "STARRED" : String(nodeData.value ?? "").trim();
     if (!tagValue) return;
-    const { data } = await supabase.from("Lead").select("tags").eq("id", targetId).maybeSingle();
+    const query = supabase.from("Lead").select("tags").eq("id", targetId);
+    const scopedQuery = user.tenantId ? query.eq("tenantId", user.tenantId) : query.is("tenantId", null);
+    const { data } = await scopedQuery.maybeSingle();
     const tags = Array.isArray(data?.tags) ? data.tags : [];
     const nextTags = type === "remove_tag" ? tags.filter((tag) => String(tag) !== tagValue) : [...new Set([...tags, tagValue])];
-    await supabase.from("Lead").update({ tags: nextTags, updatedAt: new Date().toISOString() }).eq("id", targetId);
+    const updateQuery = supabase.from("Lead").update({ tags: nextTags, updatedAt: new Date().toISOString() }).eq("id", targetId);
+    const scopedUpdateQuery = user.tenantId ? updateQuery.eq("tenantId", user.tenantId) : updateQuery.is("tenantId", null);
+    await scopedUpdateQuery;
     return;
   }
 
@@ -3914,8 +3967,12 @@ async function executeAutomationAction(
     const targetId = entityType === "LEAD" ? entityId : String(record.leadId ?? "");
     if (!targetId) return;
     const delta = Number(nodeData.value ?? 0);
-    const { data } = await supabase.from("Lead").select("score").eq("id", targetId).maybeSingle();
-    await supabase.from("Lead").update({ score: Number(data?.score ?? 0) + delta, updatedAt: new Date().toISOString() }).eq("id", targetId);
+    const query = supabase.from("Lead").select("score").eq("id", targetId);
+    const scopedQuery = user.tenantId ? query.eq("tenantId", user.tenantId) : query.is("tenantId", null);
+    const { data } = await scopedQuery.maybeSingle();
+    const updateQuery = supabase.from("Lead").update({ score: Number(data?.score ?? 0) + delta, updatedAt: new Date().toISOString() }).eq("id", targetId);
+    const scopedUpdateQuery = user.tenantId ? updateQuery.eq("tenantId", user.tenantId) : updateQuery.is("tenantId", null);
+    await scopedUpdateQuery;
     return;
   }
 

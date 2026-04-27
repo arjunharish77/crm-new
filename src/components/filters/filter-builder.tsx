@@ -1,26 +1,28 @@
 "use client";
 
-import { useState } from "react";
-import { Button } from "@/components/ui/button";
 import {
+    Box,
+    Button,
+    Chip,
+    FormControl,
+    IconButton,
+    InputLabel,
+    MenuItem,
     Select,
-    SelectContent,
-    SelectItem,
-    SelectTrigger,
-    SelectValue,
-} from "@/components/ui/select";
-import { Input } from "@/components/ui/input";
-import { Chip } from "@mui/material";
-import { DatePicker } from '@mui/x-date-pickers/DatePicker';
-import { X, Plus, Filter } from "lucide-react";
+    Stack,
+    TextField,
+    Typography,
+} from "@mui/material";
+import { DatePicker } from "@mui/x-date-pickers/DatePicker";
+import { Filter, Plus, X } from "lucide-react";
+import { nanoid } from "nanoid";
 import {
     FilterCondition,
     FilterConfig,
     FilterField,
-    OPERATORS_BY_TYPE,
     FilterOperator,
+    OPERATORS_BY_TYPE,
 } from "@/types/filters";
-import { nanoid } from "nanoid";
 
 interface FilterBuilderProps {
     fields: FilterField[];
@@ -30,11 +32,13 @@ interface FilterBuilderProps {
 
 export function FilterBuilder({ fields, value, onChange }: FilterBuilderProps) {
     const addCondition = () => {
+        const firstField = fields[0];
+        const operators = OPERATORS_BY_TYPE[firstField?.type as keyof typeof OPERATORS_BY_TYPE] || OPERATORS_BY_TYPE.text;
         const newCondition: FilterCondition = {
             id: nanoid(),
-            field: fields[0]?.key || '',
-            operator: 'equals',
-            value: '',
+            field: firstField?.key || "",
+            operator: operators[0]?.value || "equals",
+            value: "",
         };
         onChange({
             ...value,
@@ -45,15 +49,15 @@ export function FilterBuilder({ fields, value, onChange }: FilterBuilderProps) {
     const removeCondition = (id: string) => {
         onChange({
             ...value,
-            conditions: value.conditions.filter((c) => c.id !== id),
+            conditions: value.conditions.filter((condition) => condition.id !== id),
         });
     };
 
     const updateCondition = (id: string, updates: Partial<FilterCondition>) => {
         onChange({
             ...value,
-            conditions: value.conditions.map((c) =>
-                c.id === id ? { ...c, ...updates } : c
+            conditions: value.conditions.map((condition) =>
+                condition.id === id ? { ...condition, ...updates } : condition
             ),
         });
     };
@@ -61,257 +65,206 @@ export function FilterBuilder({ fields, value, onChange }: FilterBuilderProps) {
     const toggleLogic = () => {
         onChange({
             ...value,
-            logic: value.logic === 'AND' ? 'OR' : 'AND',
+            logic: value.logic === "AND" ? "OR" : "AND",
         });
     };
 
     const clearAll = () => {
         onChange({
             conditions: [],
-            logic: 'AND',
+            logic: "AND",
         });
     };
 
-    const getFieldType = (fieldKey: string) => {
-        return fields.find((f) => f.key === fieldKey)?.type || 'text';
-    };
-
-    const getFieldOptions = (fieldKey: string) => {
-        return fields.find((f) => f.key === fieldKey)?.options || [];
-    };
-
-    const getOperators = (fieldType: string) => {
-        return OPERATORS_BY_TYPE[fieldType as keyof typeof OPERATORS_BY_TYPE] || OPERATORS_BY_TYPE.text;
-    };
+    const getField = (fieldKey: string) => fields.find((field) => field.key === fieldKey);
+    const getFieldType = (fieldKey: string) => getField(fieldKey)?.type || "text";
+    const getFieldOptions = (fieldKey: string) => getField(fieldKey)?.options || [];
+    const getOperators = (fieldType: string) =>
+        OPERATORS_BY_TYPE[fieldType as keyof typeof OPERATORS_BY_TYPE] || OPERATORS_BY_TYPE.text;
 
     const renderValueInput = (condition: FilterCondition) => {
         const fieldType = getFieldType(condition.field);
         const fieldOptions = getFieldOptions(condition.field);
 
-        // No input needed for is_empty/is_not_empty
-        if (condition.operator === 'is_empty' || condition.operator === 'is_not_empty') {
-            return null;
+        if (condition.operator === "is_empty" || condition.operator === "is_not_empty") {
+            return <Box sx={{ width: { xs: "100%", sm: 190 } }} />;
         }
 
-        // Select field
-        if (fieldType === 'select' && fieldOptions.length > 0) {
-            if (condition.operator === 'in' || condition.operator === 'not_in') {
-                // Multi-select for 'in' and 'not_in'
-                return (
-                    <Input
-                        placeholder="Comma-separated values"
-                        value={Array.isArray(condition.value) ? condition.value.join(', ') : condition.value}
-                        onChange={(e) => {
-                            const values = e.target.value.split(',').map((v) => v.trim()).filter(Boolean);
-                            updateCondition(condition.id, { value: values });
-                        }}
-                        className="flex-1"
-                    />
-                );
-            }
+        if (fieldType === "select" && fieldOptions.length > 0 && condition.operator !== "in" && condition.operator !== "not_in") {
             return (
-                <Select
-                    value={condition.value?.toString() || ''}
-                    onValueChange={(val) => updateCondition(condition.id, { value: val })}
-                >
-                    <SelectTrigger className="flex-1">
-                        <SelectValue placeholder="Select value" />
-                    </SelectTrigger>
-                    <SelectContent>
-                        {fieldOptions.map((opt) => (
-                            <SelectItem key={opt.value} value={opt.value}>
-                                {opt.label}
-                            </SelectItem>
+                <FormControl size="small" sx={{ minWidth: { xs: "100%", sm: 190 }, flex: { xs: "1 1 100%", sm: "0 0 190px" } }}>
+                    <InputLabel>Value</InputLabel>
+                    <Select
+                        label="Value"
+                        value={condition.value?.toString() || ""}
+                        onChange={(event) => updateCondition(condition.id, { value: event.target.value })}
+                    >
+                        {fieldOptions.map((option) => (
+                            <MenuItem key={option.value} value={option.value}>
+                                {option.label}
+                            </MenuItem>
                         ))}
-                    </SelectContent>
-                </Select>
+                    </Select>
+                </FormControl>
             );
         }
 
-        // Tags field
-        if (fieldType === 'tags') {
+        if (fieldType === "boolean") {
             return (
-                <Input
-                    placeholder="Enter tags (comma-separated)"
-                    value={Array.isArray(condition.value) ? condition.value.join(', ') : condition.value}
-                    onChange={(e) => {
-                        const values = e.target.value.split(',').map((v) => v.trim()).filter(Boolean);
-                        updateCondition(condition.id, { value: values });
-                    }}
-                    className="flex-1"
-                />
+                <FormControl size="small" sx={{ minWidth: { xs: "100%", sm: 150 }, flex: { xs: "1 1 100%", sm: "0 0 150px" } }}>
+                    <InputLabel>Value</InputLabel>
+                    <Select
+                        label="Value"
+                        value={condition.value === true ? "true" : condition.value === false ? "false" : ""}
+                        onChange={(event) => updateCondition(condition.id, { value: event.target.value === "true" })}
+                    >
+                        <MenuItem value="true">True</MenuItem>
+                        <MenuItem value="false">False</MenuItem>
+                    </Select>
+                </FormControl>
             );
         }
 
-        // Date field
-        if (fieldType === 'date') {
+        if (fieldType === "date") {
             return (
                 <DatePicker
                     value={condition.value ? new Date(condition.value as string) : null}
-                    onChange={(date: Date | null) => updateCondition(condition.id, { value: date ? date.toISOString() : '' })}
-                    slotProps={{ textField: { size: 'small', className: "flex-1" } }}
+                    onChange={(date: Date | null) => updateCondition(condition.id, { value: date ? date.toISOString() : "" })}
+                    slotProps={{
+                        textField: {
+                            size: "small",
+                            label: "Value",
+                            sx: { minWidth: { xs: "100%", sm: 190 }, flex: { xs: "1 1 100%", sm: "0 0 190px" } },
+                        },
+                    }}
                 />
             );
         }
 
-        // Number field
-        if (fieldType === 'number') {
-            return (
-                <Input
-                    type="number"
-                    placeholder="Enter number"
-                    value={condition.value || ''}
-                    onChange={(e) => updateCondition(condition.id, { value: e.target.value })}
-                    className="flex-1"
-                />
-            );
-        }
+        const placeholder = fieldType === "number"
+            ? "Enter number"
+            : fieldType === "tags" || condition.operator === "in" || condition.operator === "not_in"
+                ? "Comma-separated values"
+                : "Enter value";
 
-        // Boolean field
-        if (fieldType === 'boolean') {
-            return (
-                <Select
-                    value={condition.value?.toString() || ''}
-                    onValueChange={(val) => updateCondition(condition.id, { value: val === 'true' })}
-                >
-                    <SelectTrigger className="flex-1">
-                        <SelectValue placeholder="Select value" />
-                    </SelectTrigger>
-                    <SelectContent>
-                        <SelectItem value="true">True</SelectItem>
-                        <SelectItem value="false">False</SelectItem>
-                    </SelectContent>
-                </Select>
-            );
-        }
-
-        // Default: text input
         return (
-            <Input
-                placeholder="Enter value"
-                value={condition.value || ''}
-                onChange={(e) => updateCondition(condition.id, { value: e.target.value })}
-                className="flex-1"
+            <TextField
+                size="small"
+                label="Value"
+                type={fieldType === "number" ? "number" : "text"}
+                placeholder={placeholder}
+                value={Array.isArray(condition.value) ? condition.value.join(", ") : condition.value || ""}
+                onChange={(event) => {
+                    if (fieldType === "tags" || condition.operator === "in" || condition.operator === "not_in") {
+                        const values = event.target.value.split(",").map((item) => item.trim()).filter(Boolean);
+                        updateCondition(condition.id, { value: values });
+                    } else {
+                        updateCondition(condition.id, { value: event.target.value });
+                    }
+                }}
+                sx={{ minWidth: { xs: "100%", sm: 220 }, flex: { xs: "1 1 100%", sm: "1 1 220px" } }}
             />
         );
     };
 
     return (
-        <div className="space-y-3">
-            {/* Header */}
-            <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                    <Filter className="h-4 w-4" />
-                    <span className="text-sm font-medium">Filters</span>
-                    {value.conditions.length > 0 && (
-                        <Chip label={value.conditions.length} size="small" color="default" />
-                    )}
-                </div>
-                <div className="flex items-center gap-2">
-                    {value.conditions.length > 1 && (
-                        <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={toggleLogic}
-                            className="h-7 text-xs"
-                        >
+        <Stack spacing={1.1}>
+            <Stack direction={{ xs: "column", sm: "row" }} justifyContent="space-between" alignItems={{ xs: "flex-start", sm: "center" }} spacing={1}>
+                <Stack direction="row" spacing={0.75} alignItems="center">
+                    <Filter size={18} />
+                    <Typography variant="body2" sx={{ fontWeight: 800 }}>Filters</Typography>
+                    {value.conditions.length > 0 ? (
+                        <Chip label={value.conditions.length} size="small" sx={{ height: 22, fontWeight: 800 }} />
+                    ) : null}
+                </Stack>
+                <Stack direction="row" spacing={0.75} alignItems="center">
+                    {value.conditions.length > 1 ? (
+                        <Button variant="outlined" size="small" onClick={toggleLogic} sx={{ minHeight: 30, borderRadius: 1.5 }}>
                             {value.logic}
                         </Button>
-                    )}
-                    {value.conditions.length > 0 && (
-                        <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={clearAll}
-                            className="h-7 text-xs"
-                        >
+                    ) : null}
+                    {value.conditions.length > 0 ? (
+                        <Button variant="text" size="small" onClick={clearAll} sx={{ minHeight: 30, fontWeight: 800 }}>
                             Clear All
                         </Button>
-                    )}
-                </div>
-            </div>
+                    ) : null}
+                </Stack>
+            </Stack>
 
-            {/* Filter Conditions */}
-            <div className="space-y-2">
-                {value.conditions.map((condition, index) => (
-                    <div key={condition.id} className="flex items-center gap-2">
-                        {index > 0 && (
-                            <span className="text-xs text-muted-foreground w-10 text-center">
-                                {value.logic}
-                            </span>
-                        )}
-                        {index === 0 && <span className="w-10" />}
-
-                        {/* Field Selector */}
-                        <Select
-                            value={condition.field}
-                            onValueChange={(val) => {
-                                const newFieldType = getFieldType(val);
-                                const operators = getOperators(newFieldType);
-                                updateCondition(condition.id, {
-                                    field: val,
-                                    operator: operators[0].value,
-                                    value: '',
-                                });
-                            }}
+            <Stack spacing={0.75}>
+                {value.conditions.map((condition, index) => {
+                    const fieldType = getFieldType(condition.field);
+                    return (
+                        <Stack
+                            key={condition.id}
+                            direction={{ xs: "column", md: "row" }}
+                            spacing={0.75}
+                            alignItems={{ xs: "stretch", md: "center" }}
+                            sx={{ width: "100%" }}
                         >
-                            <SelectTrigger className="w-[180px]">
-                                <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                                {fields.map((field) => (
-                                    <SelectItem key={field.key} value={field.key}>
-                                        {field.label}
-                                    </SelectItem>
-                                ))}
-                            </SelectContent>
-                        </Select>
+                            <Box sx={{ width: { xs: "100%", md: 44 }, textAlign: { md: "center" }, flexShrink: 0 }}>
+                                {index > 0 ? (
+                                    <Chip label={value.logic} size="small" variant="outlined" sx={{ height: 24, fontWeight: 800 }} />
+                                ) : null}
+                            </Box>
 
-                        {/* Operator Selector */}
-                        <Select
-                            value={condition.operator}
-                            onValueChange={(val) =>
-                                updateCondition(condition.id, { operator: val as FilterOperator })
-                            }
-                        >
-                            <SelectTrigger className="w-[180px]">
-                                <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                                {getOperators(getFieldType(condition.field)).map((op) => (
-                                    <SelectItem key={op.value} value={op.value}>
-                                        {op.label}
-                                    </SelectItem>
-                                ))}
-                            </SelectContent>
-                        </Select>
+                            <FormControl size="small" sx={{ minWidth: { xs: "100%", md: 190 }, flex: { md: "0 0 190px" } }}>
+                                <InputLabel>Field</InputLabel>
+                                <Select
+                                    label="Field"
+                                    value={condition.field}
+                                    onChange={(event) => {
+                                        const newFieldType = getFieldType(event.target.value);
+                                        const operators = getOperators(newFieldType);
+                                        updateCondition(condition.id, {
+                                            field: event.target.value,
+                                            operator: operators[0].value,
+                                            value: "",
+                                        });
+                                    }}
+                                >
+                                    {fields.map((field) => (
+                                        <MenuItem key={field.key} value={field.key}>
+                                            {field.label}
+                                        </MenuItem>
+                                    ))}
+                                </Select>
+                            </FormControl>
 
-                        {/* Value Input */}
-                        {renderValueInput(condition)}
+                            <FormControl size="small" sx={{ minWidth: { xs: "100%", md: 170 }, flex: { md: "0 0 170px" } }}>
+                                <InputLabel>Operator</InputLabel>
+                                <Select
+                                    label="Operator"
+                                    value={condition.operator}
+                                    onChange={(event) => updateCondition(condition.id, { operator: event.target.value as FilterOperator })}
+                                >
+                                    {getOperators(fieldType).map((operator) => (
+                                        <MenuItem key={operator.value} value={operator.value}>
+                                            {operator.label}
+                                        </MenuItem>
+                                    ))}
+                                </Select>
+                            </FormControl>
 
-                        {/* Remove Button */}
-                        <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => removeCondition(condition.id)}
-                            className="h-9 w-9 flex-shrink-0"
-                        >
-                            <X className="h-4 w-4" />
-                        </Button>
-                    </div>
-                ))}
-            </div>
+                            {renderValueInput(condition)}
 
-            {/* Add Filter Button */}
-            <Button
-                variant="outline"
-                size="sm"
-                onClick={addCondition}
-                className="w-full"
-            >
-                <Plus className="h-4 w-4 mr-2" />
-                Add Filter
-            </Button>
-        </div>
+                            <IconButton
+                                size="small"
+                                onClick={() => removeCondition(condition.id)}
+                                sx={{ alignSelf: { xs: "flex-end", md: "center" }, width: 34, height: 34 }}
+                            >
+                                <X size={18} />
+                            </IconButton>
+                        </Stack>
+                    );
+                })}
+            </Stack>
+
+            <Box>
+                <Button variant="outlined" size="small" onClick={addCondition} startIcon={<Plus size={16} />} sx={{ borderRadius: 1.5, fontWeight: 800 }}>
+                    Add Filter
+                </Button>
+            </Box>
+        </Stack>
     );
 }

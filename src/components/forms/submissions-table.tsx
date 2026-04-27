@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { format } from "date-fns";
+import { formatWorkspaceDateTime } from "@/lib/date-format";
 import {
     Alert,
     Box,
@@ -259,7 +260,7 @@ export function SubmissionsTable({ formId }: SubmissionsTableProps) {
                                         }}
                                     >
                                         <TableCell sx={{ whiteSpace: "nowrap", fontWeight: 600 }}>
-                                            {format(new Date(submission.createdAt), "MMM d, h:mm a")}
+                                            {formatWorkspaceDateTime(submission.createdAt)}
                                         </TableCell>
                                         <TableCell>
                                             <Chip

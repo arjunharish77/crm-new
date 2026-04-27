@@ -18,7 +18,7 @@ export default function SettingsLayout({
                 variants={fadeInUp}
                 initial="initial"
                 animate="animate"
-                sx={{ py: { xs: 2, md: 4 }, maxWidth: 1400, mx: 'auto' }}
+                sx={{ py: { xs: 1.5, md: 2.5 }, px: { xs: 1.5, md: 2 }, maxWidth: 1680, mx: 'auto' }}
             >
                 <Box sx={{ mb: 2 }}>
                     <Typography variant="h3" sx={{ fontWeight: 800, letterSpacing: -2, mb: 1 }}>
@@ -33,12 +33,12 @@ export default function SettingsLayout({
                     sx={{
                         display: 'flex',
                         flexDirection: { xs: 'column', lg: 'row' },
-                        gap: 5,
+                        gap: { xs: 2, lg: 2.5 },
                     }}
                 >
                     <Box
                         sx={{
-                            width: { xs: '100%', lg: 280 },
+                            width: { xs: '100%', lg: 260 },
                             flexShrink: 0,
                         }}
                     >
@@ -48,8 +48,8 @@ export default function SettingsLayout({
                         <Paper
                             elevation={0}
                             sx={{
-                                p: { xs: 3, md: 4 },
-                                borderRadius: '28px',
+                                p: { xs: 2, md: 2.5 },
+                                borderRadius: '22px',
                                 border: '1px solid',
                                 borderColor: 'divider',
                                 bgcolor: 'background.paper',

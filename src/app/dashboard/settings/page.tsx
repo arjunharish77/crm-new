@@ -18,6 +18,7 @@ import { Save as SaveIcon, Settings as GeneralIcon } from "@mui/icons-material";
 import { toast } from "sonner";
 import { useTheme, alpha, Grid } from "@mui/material";
 import { apiFetch } from "@/lib/api";
+import { saveDisplaySettings } from "@/lib/date-format";
 
 export default function GeneralSettingsPage() {
     const theme = useTheme();
@@ -66,6 +67,7 @@ export default function GeneralSettingsPage() {
                 method: "PATCH",
                 body: JSON.stringify(settings),
             });
+            saveDisplaySettings(settings);
             toast.success("Settings saved successfully");
         } catch {
             toast.error("Failed to save settings");

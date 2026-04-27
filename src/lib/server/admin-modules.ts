@@ -28,6 +28,11 @@ function requireTenantId(user: TenantUser) {
   return user.tenantId;
 }
 
+function asUuidOrNull(value: unknown) {
+  const text = typeof value === "string" ? value : "";
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(text) ? text : null;
+}
+
 async function getObjectDefinitionId(tenantId: string, objectType: string) {
   const supabase = createSupabaseAdminClient();
   const objectNameMap: Record<string, string> = {
@@ -134,7 +139,7 @@ export async function listSalesGroupsForTenant(user: TenantUser) {
   const [{ data: groups, error: groupError }, { data: members, error: memberError }] = await Promise.all([
     supabase
       .from("SalesGroup")
-      .select("id,name,description,managerId,isActive,createdAt,updatedAt")
+      .select("id,name,description,managerId,permissionTemplateId,isActive,createdAt,updatedAt")
       .eq("tenantId", tenantId)
       .order("createdAt", { ascending: false }),
     supabase
@@ -143,6 +148,15 @@ export async function listSalesGroupsForTenant(user: TenantUser) {
       .eq("tenantId", tenantId),
   ]);
 
+  if (groupError && /permissionTemplateId|schema cache|does not exist/i.test(groupError.message ?? "")) {
+    const fallback = await supabase
+      .from("SalesGroup")
+      .select("id,name,description,managerId,isActive,createdAt,updatedAt")
+      .eq("tenantId", tenantId)
+      .order("createdAt", { ascending: false });
+    if (fallback.error) throw fallback.error;
+    return (fallback.data ?? []).map((group) => ({ ...group, permissionTemplateId: "", members: [], _count: { members: 0 } }));
+  }
   if (groupError) throw groupError;
   if (memberError) throw memberError;
 
@@ -237,7 +251,7 @@ export async function createTeamForTenant(user: TenantUser, input: Record<string
       tenantId,
       name: String(input.name ?? "").trim(),
       description: input.description ? String(input.description) : null,
-      leadId: input.leadId ? String(input.leadId) : null,
+      leadId: asUuidOrNull(input.leadId),
       department: input.department ? String(input.department) : null,
       workingHours: input.workingHours ?? null,
       timezone: input.timezone ? String(input.timezone) : "UTC",
@@ -319,6 +333,7 @@ export async function createSalesGroupForTenant(user: TenantUser, input: Record<
     name: String(input.name ?? "").trim(),
     description: input.description ? String(input.description) : null,
     managerId: input.managerId ? String(input.managerId) : null,
+    permissionTemplateId: asUuidOrNull(input.permissionTemplateId),
     territories: input.territories ?? null,
     zipCodes: input.zipCodes ?? null,
     states: input.states ?? null,
@@ -337,7 +352,7 @@ export async function createSalesGroupForTenant(user: TenantUser, input: Record<
   let result = await supabase
     .from("SalesGroup")
     .insert(fullPayload)
-    .select("id,name,description,managerId,isActive,createdAt,updatedAt")
+    .select("id,name,description,managerId,permissionTemplateId,isActive,createdAt,updatedAt")
     .single();
 
   if (result.error && /column .* does not exist|schema cache/i.test(result.error.message ?? "")) {
@@ -372,6 +387,7 @@ export async function updateSalesGroupForTenant(user: TenantUser, id: string, in
     "name",
     "description",
     "managerId",
+    "permissionTemplateId",
     "territories",
     "zipCodes",
     "states",
@@ -397,7 +413,7 @@ export async function updateSalesGroupForTenant(user: TenantUser, id: string, in
     .update(payload)
     .eq("tenantId", tenantId)
     .eq("id", id)
-    .select("id,name,description,managerId,isActive,createdAt,updatedAt")
+    .select("id,name,description,managerId,permissionTemplateId,isActive,createdAt,updatedAt")
     .single();
 
   if (result.error && /column .* does not exist|schema cache/i.test(result.error.message ?? "")) {

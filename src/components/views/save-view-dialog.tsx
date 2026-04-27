@@ -1,37 +1,22 @@
 "use client";
 
-import { useState } from "react";
-import { useForm } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
-import * as z from "zod";
+import { useEffect, useState } from "react";
 import {
+    Box,
+    Button,
     Dialog,
+    DialogActions,
     DialogContent,
-    DialogDescription,
-    DialogFooter,
-    DialogHeader,
     DialogTitle,
-} from "@/components/ui/dialog";
-import {
-    Form,
-    FormControl,
-    FormField,
-    FormItem,
-    FormLabel,
-    FormDescription,
-} from "@/components/ui/form";
-import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
-import { Switch } from "@/components/ui/switch";
+    FormControlLabel,
+    Stack,
+    Switch,
+    TextField,
+    Typography,
+} from "@mui/material";
 import { FilterConfig } from "@/types/filters";
 import { apiFetch } from "@/lib/api";
 import { toast } from "sonner";
-
-const formSchema = z.object({
-    name: z.string().min(2, "Name is required"),
-    isDefault: z.boolean().default(false),
-    isShared: z.boolean().default(false),
-});
 
 interface SaveViewDialogProps {
     open: boolean;
@@ -49,23 +34,32 @@ export function SaveViewDialog({
     onSuccess,
 }: SaveViewDialogProps) {
     const [loading, setLoading] = useState(false);
+    const [name, setName] = useState("");
+    const [isDefault, setIsDefault] = useState(false);
+    const [isShared, setIsShared] = useState(false);
 
-    const form = useForm({
-        resolver: zodResolver(formSchema),
-        defaultValues: {
-            name: "",
-            isDefault: false,
-            isShared: false,
-        },
-    });
+    useEffect(() => {
+        if (!open) {
+            setName("");
+            setIsDefault(false);
+            setIsShared(false);
+        }
+    }, [open]);
 
-    async function onSubmit(values: any) {
+    const onSubmit = async () => {
+        if (name.trim().length < 2) {
+            toast.error("View name is required");
+            return;
+        }
+
         setLoading(true);
         try {
             const savedView = await apiFetch("/saved-views", {
                 method: "POST",
                 body: JSON.stringify({
-                    ...values,
+                    name: name.trim(),
+                    isDefault,
+                    isShared,
                     module,
                     filters,
                 }),
@@ -73,96 +67,64 @@ export function SaveViewDialog({
             toast.success("View saved successfully");
             onSuccess(savedView);
             onOpenChange(false);
-            form.reset();
-        } catch (error) {
+        } catch {
             toast.error("Failed to save view");
         } finally {
             setLoading(false);
         }
-    }
+    };
 
     return (
-        <Dialog open={open} onOpenChange={onOpenChange}>
+        <Dialog open={open} onClose={() => onOpenChange(false)} maxWidth="xs" fullWidth>
+            <DialogTitle sx={{ pb: 1 }}>
+                <Typography variant="h6" sx={{ fontWeight: 900 }}>Save View</Typography>
+                <Typography variant="body2" color="text.secondary">
+                    Save the current filters as a named view.
+                </Typography>
+            </DialogTitle>
             <DialogContent>
-                <DialogHeader>
-                    <DialogTitle>Save View</DialogTitle>
-                    <DialogDescription>
-                        Save current filters as a named view for quick access.
-                    </DialogDescription>
-                </DialogHeader>
-
-                <Form {...form}>
-                    <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-                        <FormField
-                            control={form.control}
-                            name="name"
-                            render={({ field }) => (
-                                <FormItem>
-                                    <FormLabel>View Name</FormLabel>
-                                    <FormControl>
-                                        <Input placeholder="e.g. Hot Leads in NY" {...field} />
-                                    </FormControl>
-                                </FormItem>
-                            )}
+                <Stack spacing={1.5} sx={{ mt: 1 }}>
+                    <TextField
+                        label="View Name"
+                        placeholder="Hot leads in NY"
+                        value={name}
+                        onChange={(event) => setName(event.target.value)}
+                        size="small"
+                        fullWidth
+                        autoFocus
+                    />
+                    <Box sx={{ border: "1px solid", borderColor: "divider", borderRadius: 2, px: 1.25 }}>
+                        <FormControlLabel
+                            control={<Switch checked={isDefault} onChange={(event) => setIsDefault(event.target.checked)} />}
+                            label={
+                                <Box>
+                                    <Typography variant="body2" sx={{ fontWeight: 800 }}>Set as default</Typography>
+                                    <Typography variant="caption" color="text.secondary">Load this view automatically for this module.</Typography>
+                                </Box>
+                            }
+                            sx={{ py: 0.5, alignItems: "center", width: "100%", m: 0 }}
                         />
-
-                        <FormField
-                            control={form.control}
-                            name="isDefault"
-                            render={({ field }) => (
-                                <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3">
-                                    <div className="space-y-0.5">
-                                        <FormLabel>Set as Default</FormLabel>
-                                        <FormDescription>
-                                            Load this view automatically when opening the leads page
-                                        </FormDescription>
-                                    </div>
-                                    <FormControl>
-                                        <Switch
-                                            checked={field.value}
-                                            onCheckedChange={field.onChange}
-                                        />
-                                    </FormControl>
-                                </FormItem>
-                            )}
+                    </Box>
+                    <Box sx={{ border: "1px solid", borderColor: "divider", borderRadius: 2, px: 1.25 }}>
+                        <FormControlLabel
+                            control={<Switch checked={isShared} onChange={(event) => setIsShared(event.target.checked)} />}
+                            label={
+                                <Box>
+                                    <Typography variant="body2" sx={{ fontWeight: 800 }}>Share with team</Typography>
+                                    <Typography variant="caption" color="text.secondary">Allow other users to see this view.</Typography>
+                                </Box>
+                            }
+                            sx={{ py: 0.5, alignItems: "center", width: "100%", m: 0 }}
                         />
-
-                        <FormField
-                            control={form.control}
-                            name="isShared"
-                            render={({ field }) => (
-                                <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3">
-                                    <div className="space-y-0.5">
-                                        <FormLabel>Share with Team</FormLabel>
-                                        <FormDescription>
-                                            Allow other team members to see this view
-                                        </FormDescription>
-                                    </div>
-                                    <FormControl>
-                                        <Switch
-                                            checked={field.value}
-                                            onCheckedChange={field.onChange}
-                                        />
-                                    </FormControl>
-                                </FormItem>
-                            )}
-                        />
-
-                        <DialogFooter>
-                            <Button
-                                type="button"
-                                variant="outline"
-                                onClick={() => onOpenChange(false)}
-                            >
-                                Cancel
-                            </Button>
-                            <Button type="submit" disabled={loading}>
-                                {loading ? "Saving..." : "Save View"}
-                            </Button>
-                        </DialogFooter>
-                    </form>
-                </Form>
+                    </Box>
+                </Stack>
             </DialogContent>
+            <DialogActions sx={{ px: 3, pb: 2.25 }}>
+                <Button onClick={() => onOpenChange(false)} disabled={loading}>Cancel</Button>
+                <Button variant="contained" onClick={onSubmit} disabled={loading}>
+                    {loading ? "Saving..." : "Save View"}
+                </Button>
+            </DialogActions>
         </Dialog>
     );
 }

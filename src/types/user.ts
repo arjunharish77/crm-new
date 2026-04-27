@@ -17,6 +17,7 @@ export interface Role {
     id: string;
     name: string;
     description?: string;
+    permissionTemplateId?: string | null;
     permissions: {
         modules: ModulePermissions;
         recordAccess: RecordAccess;
@@ -44,6 +45,7 @@ export interface User {
     createdAt: string;
     skills?: Record<string, string[] | string>;
     roleId?: string;
+    permissionTemplateId?: string;
     teamId?: string;
     managerId?: string;
 }

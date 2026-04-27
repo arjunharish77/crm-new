@@ -58,8 +58,8 @@ import {
     Tabs,
     Chip,
 } from '@mui/material';
-import { format } from 'date-fns';
 import { ExecutionLogViewer } from '@/components/automation/execution-log-viewer';
+import { formatWorkspaceDateTime } from '@/lib/date-format';
 import {
     ArrowBack as ArrowLeftIcon,
     Save as SaveIcon,
@@ -1333,7 +1333,7 @@ function AutomationBuilderContent() {
                                                         sx={{ height: 20, fontSize: '0.625rem', fontWeight: 700 }}
                                                     />
                                                     <Typography variant="caption" color="text.secondary">
-                                                        {format(new Date(exe.startedAt), 'MMM d, HH:mm')}
+                                                        {formatWorkspaceDateTime(exe.startedAt)}
                                                     </Typography>
                                                 </Stack>
                                                 <Typography variant="caption" sx={{ display: 'block', fontWeight: 600 }}>

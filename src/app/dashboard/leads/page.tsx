@@ -14,8 +14,16 @@ import {
     IconButton,
     Tooltip,
     Chip,
+    Dialog,
+    DialogActions,
+    DialogContent,
+    DialogTitle,
+    FormControl,
+    InputLabel,
+    MenuItem,
     Avatar,
     Paper,
+    Select,
     useTheme,
     alpha,
 } from "@mui/material";
@@ -32,10 +40,11 @@ import {
     Delete as DeleteIcon,
     Edit as EditIcon,
     Link as LinkIcon,
+    PlaylistAdd as AddToListIcon,
 } from "@mui/icons-material";
-import { format } from "date-fns";
 import { toast } from "sonner";
 import Link from "next/link";
+import { formatWorkspaceDate } from "@/lib/date-format";
 import { CreateLeadDialog } from "./create-lead-dialog";
 import { RecordPreview } from "@/components/common/record-preview";
 import { BulkActionsToolbar } from "@/components/bulk-actions/bulk-toolbar";
@@ -58,6 +67,9 @@ export default function LeadsPage() {
     const [editLeadOpen, setEditLeadOpen] = useState(false);
     const [leadToEdit, setLeadToEdit] = useState<Lead | null>(null);
     const [filterOpen, setFilterOpen] = useState(false);
+    const [addToListOpen, setAddToListOpen] = useState(false);
+    const [staticLists, setStaticLists] = useState<any[]>([]);
+    const [targetListId, setTargetListId] = useState("");
 
     const fetchData = useCallback(async () => {
         setLoading(true);
@@ -87,6 +99,23 @@ export default function LeadsPage() {
     useEffect(() => {
         fetchData();
     }, [fetchData]);
+
+    const fetchStaticLists = useCallback(async () => {
+        try {
+            const lists = await apiFetch<any[]>("/lead-lists");
+            const staticOnly = Array.isArray(lists) ? lists.filter((list) => list.type === "STATIC") : [];
+            setStaticLists(staticOnly);
+            if (!targetListId && staticOnly[0]?.id) {
+                setTargetListId(staticOnly[0].id);
+            }
+        } catch {
+            toast.error("Failed to load static lists");
+        }
+    }, [targetListId]);
+
+    useEffect(() => {
+        fetchStaticLists();
+    }, [fetchStaticLists]);
 
     const handleEdit = (lead: Lead) => {
         setLeadToEdit(lead);
@@ -185,7 +214,7 @@ export default function LeadsPage() {
             width: 140,
             renderCell: (params) => (
                 <Typography variant="caption" color="text.secondary">
-                    {format(new Date(params.value as string), 'MMM d, yyyy')}
+                    {formatWorkspaceDate(params.value as string)}
                 </Typography>
             )
         },
@@ -220,8 +249,8 @@ export default function LeadsPage() {
     const handleSelectAllFiltered = () => {
         const visibleLeadIds = data.map((lead) => lead.id);
         setSelectedRows(visibleLeadIds);
-        setIsAllSelected(false);
-        toast.success(`${visibleLeadIds.length} leads on this page selected`);
+        setIsAllSelected(true);
+        toast.success(`${totalItems} leads selected`);
     };
 
     const clearSelection = () => {
@@ -247,6 +276,37 @@ export default function LeadsPage() {
             clearSelection();
         } catch (e) {
             toast.error('Failed to delete leads');
+        }
+    };
+
+    const getSelectedLeadIdsForAction = async () => {
+        if (!isAllSelected) return selectedRows.map(String);
+        const response = await apiFetch<PaginatedResponse<Lead> | Lead[]>("/leads?page=1&limit=5000");
+        const leads = Array.isArray(response) ? response : response.data ?? [];
+        return leads.map((lead) => lead.id);
+    };
+
+    const handleAddToList = async () => {
+        if (!targetListId) {
+            toast.error("Select a static list");
+            return;
+        }
+        try {
+            const leadIds = await getSelectedLeadIdsForAction();
+            if (leadIds.length === 0) {
+                toast.error("Select at least one lead");
+                return;
+            }
+            await apiFetch(`/lead-lists/${targetListId}/members`, {
+                method: "POST",
+                body: JSON.stringify({ leadIds }),
+            });
+            toast.success(`${leadIds.length} lead${leadIds.length === 1 ? "" : "s"} added to list`);
+            setAddToListOpen(false);
+            clearSelection();
+            fetchStaticLists();
+        } catch {
+            toast.error("Failed to add leads to list");
         }
     };
 
@@ -361,8 +421,41 @@ export default function LeadsPage() {
                 selectedCount={isAllSelected ? totalItems : selectedRows.length}
                 onClearSelection={clearSelection}
                 module="leads"
+                onAddToList={() => setAddToListOpen(true)}
                 onDelete={handleDelete}
             />
+
+            <Dialog open={addToListOpen} onClose={() => setAddToListOpen(false)} maxWidth="xs" fullWidth>
+                <DialogTitle>Add selected leads to list</DialogTitle>
+                <DialogContent>
+                    <Stack spacing={1.5} sx={{ mt: 1 }}>
+                        <Typography variant="body2" color="text.secondary">
+                            Add {isAllSelected ? totalItems : selectedRows.length} selected lead{(isAllSelected ? totalItems : selectedRows.length) === 1 ? "" : "s"} to a static list.
+                        </Typography>
+                        <FormControl size="small" fullWidth>
+                            <InputLabel>Static List</InputLabel>
+                            <Select value={targetListId} label="Static List" onChange={(event) => setTargetListId(event.target.value)}>
+                                {staticLists.map((list) => (
+                                    <MenuItem key={list.id} value={list.id}>
+                                        {list.name}
+                                    </MenuItem>
+                                ))}
+                            </Select>
+                        </FormControl>
+                        {staticLists.length === 0 ? (
+                            <Typography variant="caption" color="error">
+                                Create a static list first from Lists.
+                            </Typography>
+                        ) : null}
+                    </Stack>
+                </DialogContent>
+                <DialogActions>
+                    <Button onClick={() => setAddToListOpen(false)}>Cancel</Button>
+                    <Button variant="contained" startIcon={<AddToListIcon />} onClick={handleAddToList} disabled={!targetListId}>
+                        Add To List
+                    </Button>
+                </DialogActions>
+            </Dialog>
 
             <RecordPreview
                 entityType="lead"

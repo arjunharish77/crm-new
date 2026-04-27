@@ -4,8 +4,9 @@ import React from "react";
 import { GridColDef } from "@mui/x-data-grid";
 import { Activity } from "@/types/activities";
 import { Box, Chip, Typography, alpha, Stack, Avatar } from "@mui/material";
-import { formatDistanceToNow, format } from "date-fns";
+import { formatDistanceToNow } from "date-fns";
 import Link from "next/link";
+import { formatWorkspaceDateTime } from "@/lib/date-format";
 
 export const columns: GridColDef[] = [
     {
@@ -90,7 +91,7 @@ export const columns: GridColDef[] = [
             return (
                 <Box sx={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', minHeight: 44 }}>
                     <Typography variant="body2" sx={{ fontWeight: 600, whiteSpace: 'nowrap' }}>
-                        {format(date, 'MMM d, h:mm a')}
+                        {formatWorkspaceDateTime(date)}
                     </Typography>
                     <Typography variant="caption" color="text.secondary" sx={{ whiteSpace: 'nowrap' }}>
                         {formatDistanceToNow(date, { addSuffix: true })}

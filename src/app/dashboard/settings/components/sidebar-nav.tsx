@@ -105,20 +105,20 @@ export function SettingsSidebar() {
     const theme = useTheme();
 
     return (
-        <List component="nav" sx={{ p: 0 }}>
+        <List component="nav" sx={{ p: 0, maxHeight: { lg: 'calc(100vh - 210px)' }, overflowY: 'auto', pr: 0.5, pb: 8 }}>
             {sidebarNavItems.map((item) => {
                 const Icon = item.icon;
                 const active = pathname === item.href;
 
                 return (
-                    <ListItem key={item.href} disablePadding sx={{ mb: 1 }}>
+                    <ListItem key={item.href} disablePadding sx={{ mb: 0.35 }}>
                         <ListItemButton
                             component={Link}
                             href={item.href}
                             selected={active}
                             sx={{
-                                borderRadius: '16px',
-                                p: '10px 16px',
+                                borderRadius: '12px',
+                                p: '8px 12px',
                                 color: active ? 'primary.main' : 'text.secondary',
                                 bgcolor: active ? alpha(theme.palette.primary.main, 0.08) : 'transparent',
                                 transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
@@ -135,11 +135,11 @@ export function SettingsSidebar() {
                             }}
                         >
                             <ListItemIcon sx={{
-                                minWidth: 36,
+                                minWidth: 34,
                                 color: 'inherit',
                                 opacity: active ? 1 : 0.7
                             }}>
-                                <Icon sx={{ fontSize: 20 }} />
+                                <Icon sx={{ fontSize: 19 }} />
                             </ListItemIcon>
                             <ListItemText
                                 primary={item.title}

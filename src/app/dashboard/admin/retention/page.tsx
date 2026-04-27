@@ -26,6 +26,7 @@ import {
 } from "@mui/icons-material";
 import { useAuth } from "@/providers/auth-provider";
 import { toast } from "sonner";
+import { formatWorkspaceDateTime } from "@/lib/date-format";
 
 interface RetentionPolicy {
     id: string;
@@ -196,7 +197,7 @@ export default function RetentionPage() {
                                                 <HistoryIcon fontSize="small" color="action" />
                                                 <Typography variant="caption" color="text.secondary">
                                                     {policy.lastEnforcedAt
-                                                        ? `Last enforced: ${new Date(policy.lastEnforcedAt).toLocaleString()}`
+                                                        ? `Last enforced: ${formatWorkspaceDateTime(policy.lastEnforcedAt)}`
                                                         : "Never enforced"}
                                                 </Typography>
                                             </Stack>

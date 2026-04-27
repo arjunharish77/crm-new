@@ -230,8 +230,8 @@ export default function ActivitiesPage() {
                 <Paper
                     elevation={0}
                     sx={{
-                        p: 2,
-                        mb: 2,
+                        p: 1.25,
+                        mb: 1.5,
                         borderRadius: '12px',
                         border: '1px solid',
                         borderColor: 'divider',

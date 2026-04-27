@@ -23,6 +23,7 @@ type CreateUserInput = {
   email: string;
   password: string;
   roleId: string;
+  permissionTemplateId?: string;
   teamId?: string;
   managerId?: string;
   skills?: Record<string, string[] | string>;
@@ -31,6 +32,7 @@ type CreateUserInput = {
 type UpdateUserInput = {
   name?: string;
   roleId?: string;
+  permissionTemplateId?: string;
   teamId?: string;
   managerId?: string;
   skills?: Record<string, string[] | string>;
@@ -40,6 +42,7 @@ type UpdateUserInput = {
 type RoleInput = {
   name: string;
   description?: string;
+  permissionTemplateId?: string | null;
   permissions: {
     modules: Record<string, string>;
     recordAccess: string;
@@ -52,6 +55,11 @@ type PermissionTemplateInput = {
   permissions: Record<string, unknown>;
   isActive?: boolean;
 };
+
+function asUuidOrNull(value: unknown) {
+  const text = typeof value === "string" ? value : "";
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(text) ? text : null;
+}
 
 export async function getBootstrapStatus() {
   const supabase = createSupabaseAdminClient();
@@ -180,7 +188,7 @@ export async function listTenantUsers(tenantId: string | null) {
   const supabase = createSupabaseAdminClient();
   const usersQuery = supabase
     .from("User")
-    .select("id,name,email,status,roleId,managerId,teamId,skills,createdAt")
+    .select("id,name,email,status,roleId,permissionTemplateId,managerId,teamId,skills,createdAt")
     .order("createdAt", { ascending: false });
 
   const scopedUsersQuery = tenantId
@@ -188,7 +196,7 @@ export async function listTenantUsers(tenantId: string | null) {
     : usersQuery.is("tenantId", null);
 
   let { data: users, error }: { data: any[] | null; error: any } = await scopedUsersQuery;
-  if (error && /teamId|schema cache|does not exist/i.test(error.message ?? "")) {
+  if (error && /teamId|permissionTemplateId|schema cache|does not exist/i.test(error.message ?? "")) {
     const fallbackUsersQuery = supabase
       .from("User")
       .select("id,name,email,status,roleId,managerId,skills,createdAt")
@@ -204,7 +212,7 @@ export async function listTenantUsers(tenantId: string | null) {
 
   const rolesQuery = supabase
     .from("Role")
-    .select("id,name,description,permissions,createdAt,updatedAt");
+    .select("id,name,description,permissionTemplateId,permissions,createdAt,updatedAt");
   const scopedRolesQuery = tenantId
     ? rolesQuery.eq("tenantId", tenantId)
     : rolesQuery.is("tenantId", null);
@@ -222,7 +230,7 @@ export async function listTenantUsers(tenantId: string | null) {
 
   return (users ?? []).map((user) => ({
     ...user,
-    role: user.roleId ? roleMap.get(user.roleId) ?? undefined : undefined,
+      role: user.roleId ? roleMap.get(user.roleId) ?? undefined : undefined,
     manager: user.managerId
       ? (() => {
           const manager = userMap.get(user.managerId);
@@ -231,6 +239,7 @@ export async function listTenantUsers(tenantId: string | null) {
       : undefined,
     team: (user as any).teamId ? teamMap.get((user as any).teamId) ?? undefined : undefined,
     teamId: (user as any).teamId ?? "",
+    permissionTemplateId: (user as any).permissionTemplateId ?? "",
     lastLoginAt: null,
   }));
 }
@@ -250,16 +259,17 @@ export async function createTenantScopedUser(tenantId: string, input: CreateUser
       password: passwordHash,
       status: "ACTIVE",
       roleId: input.roleId,
+      permissionTemplateId: asUuidOrNull(input.permissionTemplateId),
       teamId: input.teamId || null,
       managerId: input.managerId || null,
       skills: input.skills ?? null,
       createdAt: now,
       updatedAt: now,
     })
-    .select("id,name,email,status,roleId,managerId,teamId,skills,createdAt")
+    .select("id,name,email,status,roleId,permissionTemplateId,managerId,teamId,skills,createdAt")
     .single();
 
-  if (error && /teamId|schema cache|does not exist/i.test(error.message ?? "")) {
+  if (error && /teamId|permissionTemplateId|schema cache|does not exist/i.test(error.message ?? "")) {
     const fallback = await supabase
       .from("User")
       .insert({
@@ -295,6 +305,7 @@ export async function updateTenantScopedUser(
     .update({
       name: input.name,
       roleId: input.roleId,
+      permissionTemplateId: asUuidOrNull(input.permissionTemplateId),
       teamId: input.teamId || null,
       managerId: input.managerId || null,
       skills: input.skills ?? null,
@@ -302,10 +313,10 @@ export async function updateTenantScopedUser(
     })
     .eq("tenantId", tenantId)
     .eq("id", userId)
-    .select("id,name,email,status,roleId,managerId,teamId,skills,createdAt")
+    .select("id,name,email,status,roleId,permissionTemplateId,managerId,teamId,skills,createdAt")
     .single();
 
-  if (result.error && /teamId|schema cache|does not exist/i.test(result.error.message ?? "")) {
+  if (result.error && /teamId|permissionTemplateId|schema cache|does not exist/i.test(result.error.message ?? "")) {
     result = await supabase
       .from("User")
       .update({
@@ -322,14 +333,14 @@ export async function updateTenantScopedUser(
   }
 
   if (result.error) throw result.error;
-  return { ...result.data, teamId: (result.data as any).teamId ?? input.teamId ?? "" };
+  return { ...result.data, teamId: (result.data as any).teamId ?? input.teamId ?? "", permissionTemplateId: (result.data as any).permissionTemplateId ?? input.permissionTemplateId ?? "" };
 }
 
 export async function listTenantRoles(tenantId: string | null) {
   const supabase = createSupabaseAdminClient();
   const rolesQuery = supabase
     .from("Role")
-    .select("id,name,description,permissions,createdAt,updatedAt")
+    .select("id,name,description,permissionTemplateId,permissions,createdAt,updatedAt")
     .order("name", { ascending: true });
 
   const scopedRolesQuery = tenantId
@@ -337,6 +348,21 @@ export async function listTenantRoles(tenantId: string | null) {
     : rolesQuery.is("tenantId", null);
 
   const { data: roles, error } = await scopedRolesQuery;
+  if (error && /permissionTemplateId|schema cache|does not exist/i.test(error.message ?? "")) {
+    const fallbackQuery = supabase
+      .from("Role")
+      .select("id,name,description,permissions,createdAt,updatedAt")
+      .order("name", { ascending: true });
+    const scopedFallbackQuery = tenantId ? fallbackQuery.eq("tenantId", tenantId) : fallbackQuery.is("tenantId", null);
+    const fallback = await scopedFallbackQuery;
+    if (fallback.error) throw fallback.error;
+    const users = await listTenantUsers(tenantId);
+    const roleUsage = new Map<string, number>();
+    users.forEach((user) => {
+      if (user.roleId) roleUsage.set(user.roleId, (roleUsage.get(user.roleId) ?? 0) + 1);
+    });
+    return (fallback.data ?? []).map((role) => ({ ...role, permissionTemplateId: "", _count: { users: roleUsage.get(role.id) ?? 0 } }));
+  }
   if (error) throw error;
 
   const users = await listTenantUsers(tenantId);
@@ -365,13 +391,31 @@ export async function createTenantRole(tenantId: string, input: RoleInput) {
       tenantId,
       name: input.name,
       description: input.description ?? null,
+      permissionTemplateId: asUuidOrNull(input.permissionTemplateId),
       permissions: input.permissions,
       createdAt: now,
       updatedAt: now,
     })
-    .select("id,name,description,permissions,createdAt,updatedAt")
+    .select("id,name,description,permissionTemplateId,permissions,createdAt,updatedAt")
     .single();
 
+  if (error && /permissionTemplateId|schema cache|does not exist/i.test(error.message ?? "")) {
+    const fallback = await supabase
+      .from("Role")
+      .insert({
+        id: randomUUID(),
+        tenantId,
+        name: input.name,
+        description: input.description ?? null,
+        permissions: input.permissions,
+        createdAt: now,
+        updatedAt: now,
+      })
+      .select("id,name,description,permissions,createdAt,updatedAt")
+      .single();
+    if (fallback.error) throw fallback.error;
+    return { ...fallback.data, permissionTemplateId: "" };
+  }
   if (error) throw error;
   return data;
 }
@@ -383,13 +427,29 @@ export async function updateTenantRole(tenantId: string, roleId: string, input: 
     .update({
       name: input.name,
       description: input.description ?? null,
+      permissionTemplateId: asUuidOrNull(input.permissionTemplateId),
       permissions: input.permissions,
     })
     .eq("tenantId", tenantId)
     .eq("id", roleId)
-    .select("id,name,description,permissions,createdAt,updatedAt")
+    .select("id,name,description,permissionTemplateId,permissions,createdAt,updatedAt")
     .single();
 
+  if (error && /permissionTemplateId|schema cache|does not exist/i.test(error.message ?? "")) {
+    const fallback = await supabase
+      .from("Role")
+      .update({
+        name: input.name,
+        description: input.description ?? null,
+        permissions: input.permissions,
+      })
+      .eq("tenantId", tenantId)
+      .eq("id", roleId)
+      .select("id,name,description,permissions,createdAt,updatedAt")
+      .single();
+    if (fallback.error) throw fallback.error;
+    return { ...fallback.data, permissionTemplateId: input.permissionTemplateId ?? "" };
+  }
   if (error) throw error;
   return data;
 }

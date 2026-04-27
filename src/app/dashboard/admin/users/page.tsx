@@ -30,7 +30,7 @@ import {
 } from "@mui/x-data-grid";
 import { StandardDataGrid } from "@/components/common/standard-data-grid";
 import { toast } from "sonner";
-import { format } from "date-fns";
+import { formatWorkspaceDateTime } from "@/lib/date-format";
 import { User } from "@/types/user";
 import { InviteUserDialog } from "./invite-user-dialog";
 import { EditUserDialog } from "./edit-user-dialog";
@@ -253,7 +253,7 @@ export default function UsersPage() {
             width: 160,
             renderCell: (params: GridRenderCellParams<User>) => (
                 <Typography variant="caption" color="text.secondary">
-                    {params.row.lastLoginAt ? format(new Date(params.row.lastLoginAt), 'MMM d, h:mm a') : 'Never'}
+                    {params.row.lastLoginAt ? formatWorkspaceDateTime(params.row.lastLoginAt) : 'Never'}
                 </Typography>
             ),
         },

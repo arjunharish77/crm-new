@@ -37,6 +37,7 @@ import {
     Today as TodayIcon,
 } from "@mui/icons-material";
 import { toast } from "sonner";
+import { formatWorkspaceDateTime } from "@/lib/date-format";
 import { apiFetch } from "@/lib/api";
 import { Lead } from "@/types/leads";
 import { Activity } from "@/types/activities";
@@ -455,8 +456,8 @@ export default function LeadDetailPage() {
                                         <DetailPanel title="Contact">
                                             <PropertyRow label="Email">{lead.email || "—"}</PropertyRow>
                                             <PropertyRow label="Phone">{lead.phone || "—"}</PropertyRow>
-                                            <PropertyRow label="Created">{new Date(lead.createdAt).toLocaleString()}</PropertyRow>
-                                            <PropertyRow label="Updated">{new Date(lead.updatedAt).toLocaleString()}</PropertyRow>
+                                            <PropertyRow label="Created">{formatWorkspaceDateTime(lead.createdAt)}</PropertyRow>
+                                            <PropertyRow label="Updated">{formatWorkspaceDateTime(lead.updatedAt)}</PropertyRow>
                                         </DetailPanel>
                                     </Grid>
                                 </Grid>

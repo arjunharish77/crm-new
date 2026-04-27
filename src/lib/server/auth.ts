@@ -83,24 +83,35 @@ export async function getCurrentUser(request?: Request) {
 
   const supabase = createSupabaseAdminClient();
 
-  const { data: userRecord, error: userError } = await supabase
+  let { data: userRecord, error: userError }: { data: any; error: any } = await supabase
     .from("User")
-    .select("id,email,name,tenantId,roleId")
+    .select("id,email,name,tenantId,roleId,permissionTemplateId")
     .eq("id", payload.sub)
     .maybeSingle();
+
+  if (userError && /permissionTemplateId|schema cache|does not exist/i.test(userError.message ?? "")) {
+    const fallback = await supabase
+      .from("User")
+      .select("id,email,name,tenantId,roleId")
+      .eq("id", payload.sub)
+      .maybeSingle();
+    userRecord = fallback.data;
+    userError = fallback.error;
+  }
 
   if (userError || !userRecord) {
     return null;
   }
 
-  const [{ data: roleRecord }, { data: platformAdminRecord }, tenantFeatureResult] = await Promise.all([
-    userRecord.roleId
+  let roleResultPromise = userRecord.roleId
       ? supabase
           .from("Role")
-          .select("id,name,permissions")
+          .select("id,name,permissionTemplateId,permissions")
           .eq("id", userRecord.roleId)
           .maybeSingle()
-      : Promise.resolve({ data: null }),
+      : Promise.resolve({ data: null, error: null });
+  let [{ data: roleRecord, error: roleError }, { data: platformAdminRecord }, tenantFeatureResult] = await Promise.all([
+    roleResultPromise,
     supabase
       .from("PlatformAdmin")
       .select("id,isActive")
@@ -116,13 +127,65 @@ export async function getCurrentUser(request?: Request) {
       : Promise.resolve({ data: null, error: null }),
   ]);
 
+  if (roleError && /permissionTemplateId|schema cache|does not exist/i.test(roleError.message ?? "")) {
+    const fallback = await (userRecord.roleId
+      ? supabase
+          .from("Role")
+          .select("id,name,permissions")
+          .eq("id", userRecord.roleId)
+          .maybeSingle()
+      : Promise.resolve({ data: null, error: null }));
+    roleRecord = fallback.data ? { ...fallback.data, permissionTemplateId: null } : null;
+  }
+
+  let salesGroupTemplateIds: string[] = [];
+  if (userRecord.tenantId) {
+    const memberResult = await supabase
+      .from("SalesGroupMember")
+      .select("groupId")
+      .eq("tenantId", userRecord.tenantId)
+      .eq("userId", userRecord.id);
+    const groupIds = (memberResult.data ?? []).map((member: any) => member.groupId).filter((id: unknown) => typeof id === "string" && id.length > 0);
+    if (groupIds.length > 0) {
+      const groupResult = await supabase
+        .from("SalesGroup")
+        .select("permissionTemplateId")
+        .eq("tenantId", userRecord.tenantId)
+        .in("id", groupIds);
+      if (!groupResult.error || !/permissionTemplateId|schema cache|does not exist/i.test(groupResult.error.message ?? "")) {
+        salesGroupTemplateIds = (groupResult.data ?? [])
+          .map((group: any) => group.permissionTemplateId)
+          .filter((id: unknown) => typeof id === "string" && id.length > 0);
+      }
+    }
+  }
+
+  const templateIds = [
+    ...salesGroupTemplateIds,
+    roleRecord?.permissionTemplateId,
+    userRecord.permissionTemplateId,
+  ].filter((id) => typeof id === "string" && id.length > 0);
+  const templateResult = templateIds.length && userRecord.tenantId
+    ? await supabase
+        .from("PermissionTemplate")
+        .select("id,name,permissions,isActive")
+        .eq("tenantId", userRecord.tenantId)
+        .eq("isActive", true)
+        .in("id", templateIds)
+    : { data: [], error: null };
+  const permissionTemplates = templateResult.error && /does not exist|schema cache/i.test(templateResult.error.message ?? "")
+    ? []
+    : (templateResult.data ?? []).sort((a: any, b: any) => templateIds.indexOf(a.id) - templateIds.indexOf(b.id));
+
   return {
     id: userRecord.id,
     email: userRecord.email,
     name: userRecord.name,
     tenantId: userRecord.tenantId,
     roleId: userRecord.roleId,
+    permissionTemplateId: userRecord.permissionTemplateId ?? null,
     role: roleRecord,
+    permissionTemplates,
     isPlatformAdmin: !!platformAdminRecord,
     platformAdminId: platformAdminRecord?.id ?? null,
     isImpersonating: !!payload.isImpersonating,

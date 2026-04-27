@@ -71,7 +71,7 @@ export function Header() {
             <Toolbar sx={{ justifyContent: 'space-between', px: { xs: 2, md: 4 } }}>
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, flexGrow: 1 }}>
                     <Typography variant="h6" sx={{ display: { md: 'none' }, fontWeight: 700, color: 'primary.main' }}>
-                        CRM
+                        Unnatify
                     </Typography>
 
                     {/* Global Search */}

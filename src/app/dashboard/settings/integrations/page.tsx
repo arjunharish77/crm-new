@@ -56,6 +56,7 @@ import {
     Phone as PhoneIcon
 } from '@mui/icons-material';
 import { apiFetch } from '@/lib/api';
+import { formatWorkspaceDateTime } from '@/lib/date-format';
 import { toast } from 'sonner';
 
 interface Webhook {
@@ -314,7 +315,7 @@ export default function IntegrationsSettingsPage() {
     };
 
     const handleRunImport = async () => {
-        const mappedTargets = Object.values(mappings).filter(Boolean);
+        const mappedTargets = Object.values(mappings).filter((value) => typeof value === "string" && value.length > 0);
         const missingRequired = IMPORT_FIELDS[importModule].filter((field) => field.required && !mappedTargets.includes(field.key));
         if (missingRequired.length > 0) {
             toast.error(`Map required fields: ${missingRequired.map((field) => field.label).join(', ')}`);
@@ -711,7 +712,7 @@ export default function IntegrationsSettingsPage() {
                                                 <TableCell>{call.toNumber || '-'}</TableCell>
                                                 <TableCell><Chip size="small" label={call.status} /></TableCell>
                                                 <TableCell>{call.duration ? `${call.duration}s` : '-'}</TableCell>
-                                                <TableCell>{call.startedAt ? new Date(call.startedAt).toLocaleString() : '-'}</TableCell>
+                                                <TableCell>{formatWorkspaceDateTime(call.startedAt)}</TableCell>
                                             </TableRow>
                                         ))}
                                     </TableBody>

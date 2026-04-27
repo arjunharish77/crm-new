@@ -23,7 +23,7 @@ import {
     XCircle,
     Info
 } from "lucide-react";
-import { format } from "date-fns";
+import { formatWorkspaceTime } from "@/lib/date-format";
 
 const ICONS: Record<string, any> = {
     trigger: Zap,
@@ -120,7 +120,7 @@ export function ExecutionLogViewer({ steps }: ExecutionLogViewerProps) {
                                             {step.type.replace('_', ' ')}
                                         </Typography>
                                         <Typography variant="caption" color="text.secondary">
-                                            {step.timestamp ? format(new Date(step.timestamp), 'HH:mm:ss') : ''}
+                                            {step.timestamp ? formatWorkspaceTime(step.timestamp, { seconds: true }) : ''}
                                         </Typography>
                                     </Stack>
 

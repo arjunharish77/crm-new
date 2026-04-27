@@ -25,6 +25,7 @@ import {
     Groups as TeamIcon,
     SupervisedUserCircle as ManagerIcon,
     Settings as FeaturesIcon,
+    PlaylistAdd as AddToListIcon,
 } from "@mui/icons-material";
 import { spring } from "@/lib/motion";
 
@@ -45,6 +46,7 @@ export interface BulkActionsToolbarProps {
     // Leads actions
     onAssignOwner?: () => void;
     onAddTags?: () => void;
+    onAddToList?: () => void;
     onUpdateStatus?: () => void;
     onExport?: () => void;
     onDelete?: () => void;
@@ -66,6 +68,7 @@ export function BulkActionsToolbar({
     module = "leads",
     onAssignOwner,
     onAddTags,
+    onAddToList,
     onUpdateStatus,
     onExport,
     onDelete,
@@ -85,6 +88,7 @@ export function BulkActionsToolbar({
     if (module === "leads") {
         if (onAssignOwner) actions.push({ label: "Assign", icon: <AssignIcon fontSize="small" />, onClick: onAssignOwner });
         if (onAddTags) actions.push({ label: "Tags", icon: <TagIcon fontSize="small" />, onClick: onAddTags });
+        if (onAddToList) actions.push({ label: "Add To List", icon: <AddToListIcon fontSize="small" />, onClick: onAddToList });
         if (onUpdateStatus) actions.push({ label: "Status", icon: <StatusIcon fontSize="small" />, onClick: onUpdateStatus });
         if (onExport) actions.push({ label: "Export", icon: <ExportIcon fontSize="small" />, onClick: onExport });
         if (onArchive) actions.push({ label: "Archive", icon: <ArchiveIcon fontSize="small" />, onClick: onArchive });

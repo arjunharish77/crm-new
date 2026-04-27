@@ -34,6 +34,7 @@ const formSchema = z.object({
     name: z.string().min(2, "Name is required"),
     email: z.string().email("Valid email is required"),
     roleId: z.string().min(1, "Role is required"),
+    permissionTemplateId: z.string().optional(),
     teamId: z.string().optional(),
     managerId: z.string().optional(),
     password: z.string().min(6, "Password must be at least 6 characters"),
@@ -46,6 +47,7 @@ export function InviteUserDialog({
 }: InviteUserDialogProps) {
     const [loading, setLoading] = useState(false);
     const [roles, setRoles] = useState<Role[]>([]);
+    const [permissionTemplates, setPermissionTemplates] = useState<any[]>([]);
     const [teams, setTeams] = useState<any[]>([]);
     const [managers, setManagers] = useState<any[]>([]);
 
@@ -55,6 +57,7 @@ export function InviteUserDialog({
             name: "",
             email: "",
             roleId: "",
+            permissionTemplateId: "",
             teamId: "",
             managerId: "",
             password: "",
@@ -65,12 +68,14 @@ export function InviteUserDialog({
         if (open) {
             const loadData = async () => {
                 try {
-                    const [rolesData, usersData, teamsData] = await Promise.all([
+                    const [rolesData, usersData, teamsData, templateData] = await Promise.all([
                         apiFetch("/roles"),
                         apiFetch("/users"),
-                        apiFetch("/teams")
+                        apiFetch("/teams"),
+                        apiFetch("/permission-templates")
                     ]);
                     setRoles(rolesData);
+                    setPermissionTemplates(Array.isArray(templateData) ? templateData : []);
                     setTeams(Array.isArray(teamsData) ? teamsData : []);
                     setManagers(Array.isArray(usersData) ? usersData : []);
                 } catch (error) {
@@ -196,6 +201,24 @@ export function InviteUserDialog({
                                     ))}
                                 </Select>
                                 <FormHelperText>{errors.roleId?.message as string}</FormHelperText>
+                            </FormControl>
+                        )}
+                    />
+
+                    <Controller
+                        name="permissionTemplateId"
+                        control={control}
+                        render={({ field }) => (
+                            <FormControl fullWidth>
+                                <InputLabel>Permission Template Override</InputLabel>
+                                <Select {...field} label="Permission Template Override">
+                                    <MenuItem value=""><em>Use role template</em></MenuItem>
+                                    {permissionTemplates.map((template) => (
+                                        <MenuItem key={template.id} value={template.id}>
+                                            {template.name}
+                                        </MenuItem>
+                                    ))}
+                                </Select>
                             </FormControl>
                         )}
                     />

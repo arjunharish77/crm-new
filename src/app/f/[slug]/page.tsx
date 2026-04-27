@@ -66,7 +66,7 @@ export default function PublicFormPage() {
                 <PublicFormRenderer slug={slug} config={form.config} />
 
                 <div className="mt-8 pt-6 border-t text-center">
-                    <p className="text-xs text-muted-foreground">Powered by Enterprise CRM</p>
+                    <p className="text-xs text-muted-foreground">Powered by Unnatify</p>
                 </div>
             </Card>
         </div>

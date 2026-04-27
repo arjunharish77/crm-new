@@ -30,6 +30,7 @@ interface Role {
     id: string;
     name: string;
     description?: string;
+    permissionTemplateId?: string | null;
     permissions: {
         modules: Record<string, string>;
         recordAccess: string;
@@ -51,6 +52,7 @@ const formSchema = z.object({
     opportunitiesPermission: z.enum(["none", "read", "write", "full"]),
     activitiesPermission: z.enum(["none", "read", "write", "full"]),
     adminPermission: z.enum(["none", "read", "write", "full"]),
+    permissionTemplateId: z.string().optional(),
 });
 
 const modules = [
@@ -80,6 +82,7 @@ export function RoleDialog({
     onSuccess,
 }: RoleDialogProps) {
     const [loading, setLoading] = useState(false);
+    const [templates, setTemplates] = useState<any[]>([]);
 
     const { control, handleSubmit, reset, formState: { errors } } = useForm({
         resolver: zodResolver(formSchema),
@@ -91,10 +94,14 @@ export function RoleDialog({
             opportunitiesPermission: "none" as const,
             activitiesPermission: "none" as const,
             adminPermission: "none" as const,
+            permissionTemplateId: "",
         },
     });
 
     useEffect(() => {
+        if (open) {
+            apiFetch("/permission-templates").then((data) => setTemplates(Array.isArray(data) ? data : [])).catch(() => setTemplates([]));
+        }
         if (role) {
             reset({
                 name: role.name,
@@ -104,6 +111,7 @@ export function RoleDialog({
                 opportunitiesPermission: role.permissions.modules.opportunities as any || "none",
                 activitiesPermission: role.permissions.modules.activities as any || "none",
                 adminPermission: role.permissions.modules.admin as any || "none",
+                permissionTemplateId: role.permissionTemplateId ?? "",
             });
         } else {
             reset({
@@ -114,6 +122,7 @@ export function RoleDialog({
                 opportunitiesPermission: "none",
                 activitiesPermission: "none",
                 adminPermission: "none",
+                permissionTemplateId: "",
             });
         }
     }, [role, open, reset]);
@@ -128,6 +137,7 @@ export function RoleDialog({
             const payload = {
                 name: values.name,
                 description: values.description || undefined,
+                permissionTemplateId: values.permissionTemplateId || null,
                 permissions: {
                     modules: {
                         leads: values.leadsPermission,
@@ -206,6 +216,22 @@ export function RoleDialog({
                                     multiline
                                     rows={2}
                                 />
+                            )}
+                        />
+
+                        <Controller
+                            name="permissionTemplateId"
+                            control={control}
+                            render={({ field }) => (
+                                <FormControl fullWidth>
+                                    <InputLabel>Permission Template</InputLabel>
+                                    <Select {...field} label="Permission Template">
+                                        <MenuItem value="">No template</MenuItem>
+                                        {templates.map((template) => (
+                                            <MenuItem key={template.id} value={template.id}>{template.name}</MenuItem>
+                                        ))}
+                                    </Select>
+                                </FormControl>
                             )}
                         />
 

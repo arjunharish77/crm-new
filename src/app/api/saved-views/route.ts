@@ -7,8 +7,8 @@ export async function GET(request: Request) {
   try {
     const user = await requireCurrentUser(request);
     const { searchParams } = new URL(request.url);
-    const module = searchParams.get("module") ?? "LEADS";
-    const views = await listSavedViewsForTenant(user, module);
+    const viewModule = searchParams.get("module") ?? "LEADS";
+    const views = await listSavedViewsForTenant(user, viewModule);
     return NextResponse.json(views);
   } catch (error) {
     if (error instanceof Error && error.message === "UNAUTHORIZED") return unauthorized();

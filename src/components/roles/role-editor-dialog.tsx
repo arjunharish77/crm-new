@@ -11,6 +11,10 @@ import {
     Stack,
     Box,
     Divider,
+    FormControl,
+    InputLabel,
+    Select,
+    MenuItem,
 } from "@mui/material";
 import { PermissionMatrix } from "./permission-matrix";
 import { Role, ModulePermissions, RecordAccess } from "@/types/user";
@@ -36,19 +40,28 @@ export function RoleEditorDialog({ open, onClose, onSuccess, role }: RoleEditorD
     const [description, setDescription] = useState("");
     const [permissions, setPermissions] = useState<ModulePermissions>(DEFAULT_PERMISSIONS);
     const [recordAccess, setRecordAccess] = useState<RecordAccess>("OWN");
+    const [permissionTemplateId, setPermissionTemplateId] = useState("");
+    const [templates, setTemplates] = useState<any[]>([]);
     const [saving, setSaving] = useState(false);
 
     useEffect(() => {
+        if (open) {
+            apiFetch("/permission-templates")
+                .then((data) => setTemplates(Array.isArray(data) ? data : []))
+                .catch(() => setTemplates([]));
+        }
         if (role) {
             setName(role.name);
             setDescription(role.description || "");
             setPermissions(role.permissions.modules || DEFAULT_PERMISSIONS);
             setRecordAccess(role.permissions.recordAccess || "OWN");
+            setPermissionTemplateId(role.permissionTemplateId ?? "");
         } else {
             setName("");
             setDescription("");
             setPermissions(DEFAULT_PERMISSIONS);
             setRecordAccess("OWN");
+            setPermissionTemplateId("");
         }
     }, [role, open]);
 
@@ -63,6 +76,7 @@ export function RoleEditorDialog({ open, onClose, onSuccess, role }: RoleEditorD
             const data = {
                 name,
                 description,
+                permissionTemplateId: permissionTemplateId || null,
                 permissions: {
                     modules: permissions,
                     recordAccess,
@@ -118,6 +132,19 @@ export function RoleEditorDialog({ open, onClose, onSuccess, role }: RoleEditorD
                             size="small"
                             placeholder="Briefly describe what this role can do"
                         />
+                        <FormControl fullWidth size="small" sx={{ mt: 2 }}>
+                            <InputLabel>Permission Template</InputLabel>
+                            <Select
+                                label="Permission Template"
+                                value={permissionTemplateId}
+                                onChange={(event) => setPermissionTemplateId(event.target.value)}
+                            >
+                                <MenuItem value="">No template</MenuItem>
+                                {templates.map((template) => (
+                                    <MenuItem key={template.id} value={template.id}>{template.name}</MenuItem>
+                                ))}
+                            </Select>
+                        </FormControl>
                     </Box>
 
                     <Divider />

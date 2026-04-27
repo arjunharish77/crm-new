@@ -34,6 +34,7 @@ export function StandardDataGrid({
     isAllSelected,
     totalItems,
     currentCount,
+    selectedCount,
     onClearSelection,
     sx,
     slots,
@@ -41,6 +42,12 @@ export function StandardDataGrid({
     ...props
 }: StandardDataGridProps) {
     const theme = useTheme();
+    const [isMounted, setIsMounted] = React.useState(false);
+
+    React.useEffect(() => {
+        const frame = window.requestAnimationFrame(() => setIsMounted(true));
+        return () => window.cancelAnimationFrame(frame);
+    }, []);
 
     const normalizedSelection = React.useMemo(() => {
         if (Array.isArray(props.rowSelectionModel)) {
@@ -52,19 +59,30 @@ export function StandardDataGrid({
         return props.rowSelectionModel;
     }, [props.rowSelectionModel]);
 
-    const handleSelectionChange = React.useCallback((selection: any) => {
+    const handleSelectionChange = React.useCallback((selection: any, details: any) => {
         if (props.onRowSelectionModelChange) {
-            const ids = selection?.ids ? Array.from(selection.ids) : [];
-            props.onRowSelectionModelChange(ids as any, {} as any);
+            let ids: GridRowId[] = [];
+            if (Array.isArray(selection)) {
+                ids = selection;
+            } else if (selection?.ids instanceof Set) {
+                ids = Array.from(selection.ids);
+            } else if (selection?.ids && typeof selection.ids[Symbol.iterator] === "function") {
+                ids = Array.from(selection.ids);
+            }
+            props.onRowSelectionModelChange(ids as any, details ?? ({} as any));
         }
     }, [props.onRowSelectionModelChange]);
 
+    if (!isMounted) {
+        return <Box sx={{ minHeight: (sx as any)?.minHeight ?? 360 }} />;
+    }
+
     return (
         <DataGrid
-            autoHeight
             {...props}
             rowSelectionModel={normalizedSelection}
             onRowSelectionModelChange={handleSelectionChange}
+            disableRowSelectionExcludeModel
             slots={{
                 toolbar: slots?.toolbar || CustomToolbar,
                 ...slots,
@@ -75,12 +93,15 @@ export function StandardDataGrid({
                     isAllSelected,
                     totalItems,
                     currentCount,
+                    selectedCount,
                     onClear: onClearSelection,
                     ...slotProps?.toolbar,
                 } as any,
                 ...slotProps,
             }}
             sx={{
+                minHeight: 360,
+                height: (sx as any)?.height ?? (sx as any)?.minHeight ?? 520,
                 border: 'none',
                 cursor: 'pointer',
                 '& .MuiDataGrid-toolbarContainer': {
@@ -144,9 +165,10 @@ function CustomToolbar({
     isAllSelected,
     totalItems,
     currentCount,
+    selectedCount,
     onClear
 }: any) {
-    const showSelectAllOption = !isAllSelected && currentCount > 0 && totalItems > currentCount;
+    const showSelectAllOption = !isAllSelected && selectedCount >= currentCount && currentCount > 0 && totalItems > currentCount;
 
     return (
         <GridToolbarContainer sx={{ p: 0, flexDirection: 'column', alignItems: 'stretch' }}>

@@ -269,7 +269,7 @@ export default function PermissionTemplatesPage() {
                             <Button variant="outlined" startIcon={<AddIcon />} onClick={openCreate}>Create First Template</Button>
                         </Box>
                     ) : templates.map((template) => {
-                        const actionCount = Object.values(template.permissions.actions ?? {}).reduce((count, actions) => count + Object.values(actions).filter(Boolean).length, 0);
+                        const actionCount = Object.values(template.permissions.actions ?? {}).reduce((count, actions) => count + Object.values(actions).filter((enabled) => enabled === true).length, 0);
                         const fieldCount = Object.values(template.permissions.fieldPermissions ?? {}).reduce((count, fields) => count + Object.values(fields).filter((value) => value !== "editable").length, 0);
                         return (
                             <Stack key={template.id} direction="row" alignItems="center" justifyContent="space-between" sx={{ p: 1.5 }}>

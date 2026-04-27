@@ -38,7 +38,7 @@ import {
     Info as InfoIcon
 } from '@mui/icons-material';
 import { apiFetch } from '@/lib/api';
-import { format } from 'date-fns';
+import { formatWorkspaceDate } from '@/lib/date-format';
 import { toast } from 'sonner';
 
 interface GDPRRequest {
@@ -130,7 +130,7 @@ export default function GDPRPage() {
                                 <TableRow><TableCell colSpan={5} align="center" sx={{ py: 4 }}>No privacy requests found.</TableCell></TableRow>
                             ) : requests.map((req) => (
                                 <TableRow key={req.id}>
-                                    <TableCell>{format(new Date(req.createdAt), 'MMM d, yyyy')}</TableCell>
+                                    <TableCell>{formatWorkspaceDate(req.createdAt)}</TableCell>
                                     <TableCell>{req.contactEmail}</TableCell>
                                     <TableCell>
                                         <Chip

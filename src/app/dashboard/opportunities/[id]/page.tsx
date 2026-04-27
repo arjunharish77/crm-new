@@ -34,6 +34,7 @@ import {
     TrendingUp as ProbabilityIcon,
 } from "@mui/icons-material";
 import { toast } from "sonner";
+import { formatWorkspaceDateTime } from "@/lib/date-format";
 import { apiFetch } from "@/lib/api";
 import { Opportunity, OpportunityStageHistory, StageDefinition } from "@/types/opportunities";
 import { Activity } from "@/types/activities";
@@ -500,9 +501,9 @@ export default function OpportunityDetailPage() {
                                             <PropertyRow label="Priority">{opportunity.priority || "—"}</PropertyRow>
                                             <PropertyRow label="Probability">{`${currentStage?.probability ?? 0}%`}</PropertyRow>
                                             <PropertyRow label="Expected Close">
-                                                {opportunity.expectedCloseDate ? new Date(opportunity.expectedCloseDate).toLocaleString() : "—"}
+                                                {opportunity.expectedCloseDate ? formatWorkspaceDateTime(opportunity.expectedCloseDate) : "—"}
                                             </PropertyRow>
-                                            <PropertyRow label="Created">{new Date(opportunity.createdAt).toLocaleString()}</PropertyRow>
+                                            <PropertyRow label="Created">{formatWorkspaceDateTime(opportunity.createdAt)}</PropertyRow>
                                         </DetailPanel>
                                     </Grid>
                                 </Grid>

@@ -32,7 +32,7 @@ import { toast } from "sonner";
 import { FeaturesDialog } from "@/components/admin/features-dialog";
 import { CreateTenantDialog } from "@/components/admin/create-tenant-dialog";
 import { apiFetch } from "@/lib/api";
-import { format } from "date-fns";
+import { formatWorkspaceDate } from "@/lib/date-format";
 
 interface Tenant {
     id: string;
@@ -215,7 +215,7 @@ export default function TenantsPage() {
             width: 140,
             renderCell: (params) => (
                 <Typography variant="caption" color="text.secondary">
-                    {format(new Date(params.value as string), 'MMM d, yyyy')}
+                    {formatWorkspaceDate(params.value as string)}
                 </Typography>
             )
         },

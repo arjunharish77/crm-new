@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { Activity } from "@/types/activities";
-import { format, formatDistanceToNow, isToday, isYesterday } from "date-fns";
+import { formatDistanceToNow } from "date-fns";
 import * as LucideIcons from "lucide-react";
 import { ChevronDown, FileText } from "lucide-react";
 import {
@@ -17,15 +17,20 @@ import {
     Typography,
     useTheme,
 } from "@mui/material";
+import { formatWorkspaceDate, formatWorkspaceDateTime, formatWorkspaceTime } from "@/lib/date-format";
 
 interface TimelineProps {
     activities: Activity[];
 }
 
 function getDayLabel(date: Date) {
-    if (isToday(date)) return "Today";
-    if (isYesterday(date)) return "Yesterday";
-    return format(date, "dd MMM yyyy");
+    const today = formatWorkspaceDate(new Date());
+    const yesterday = new Date();
+    yesterday.setDate(yesterday.getDate() - 1);
+    const dateLabel = formatWorkspaceDate(date);
+    if (dateLabel === today) return "Today";
+    if (dateLabel === formatWorkspaceDate(yesterday)) return "Yesterday";
+    return dateLabel;
 }
 
 function formatActivityValue(value: unknown): string {
@@ -174,15 +179,15 @@ export function Timeline({ activities }: TimelineProps) {
                                 { label: "Type", value: activity.type?.name ?? "Activity" },
                                 { label: "Outcome", value: activity.outcome },
                                 { label: "Notes", value: activity.notes },
-                                { label: "Due At", value: activity.dueAt ? format(new Date(activity.dueAt), "dd MMM yyyy, hh:mm a") : null },
-                                { label: "Completed At", value: activity.completedAt ? format(new Date(activity.completedAt), "dd MMM yyyy, hh:mm a") : null },
+                                { label: "Due At", value: activity.dueAt ? formatWorkspaceDateTime(activity.dueAt) : null },
+                                { label: "Completed At", value: activity.completedAt ? formatWorkspaceDateTime(activity.completedAt) : null },
                                 { label: "SLA Status", value: activity.slaStatus },
-                                { label: "SLA Target", value: activity.slaTarget ? format(new Date(activity.slaTarget), "dd MMM yyyy, hh:mm a") : null },
+                                { label: "SLA Target", value: activity.slaTarget ? formatWorkspaceDateTime(activity.slaTarget) : null },
                                 { label: "Lead", value: activity.lead?.name },
                                 { label: "Opportunity", value: activity.opportunity?.title },
                                 { label: "Logged By", value: activity.user ? activity.user.name || activity.user.email : null },
-                                { label: "Created", value: format(activityDate, "dd MMM yyyy, hh:mm a") },
-                                { label: "Updated", value: format(new Date(activity.updatedAt), "dd MMM yyyy, hh:mm a") },
+                                { label: "Created", value: formatWorkspaceDateTime(activityDate) },
+                                { label: "Updated", value: formatWorkspaceDateTime(activity.updatedAt) },
                                 { label: "Recurring", value: activity.isRecurring ? "Yes" : "No" },
                                 { label: "Recurrence Rule", value: activity.recurrenceRule },
                             ].filter((field) => field.value !== null && field.value !== undefined && field.value !== "");
@@ -238,7 +243,7 @@ export function Timeline({ activities }: TimelineProps) {
                                                 <Icon size={14} />
                                             </Avatar>
                                             <Typography variant="caption" sx={{ display: "block", fontWeight: 700 }}>
-                                                {format(activityDate, "hh:mm a")}
+                                                {formatWorkspaceTime(activityDate)}
                                             </Typography>
                                         </Box>
 
