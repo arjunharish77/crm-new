@@ -26,7 +26,7 @@ import {
 } from '@mui/icons-material';
 import { apiFetch } from '@/lib/api';
 import { toast } from 'sonner';
-import { formatDistanceToNow } from 'date-fns';
+import { formatWorkspaceRelativeTime, parseWorkspaceDate } from '@/lib/date-format';
 
 interface NoteAuthor {
     id: string;
@@ -128,7 +128,7 @@ export function NotesPanel({ entityType, entityId, currentUserId }: NotesPanelPr
             ].sort((a, b) => {
                 if (a.isPinned && !b.isPinned) return -1;
                 if (!a.isPinned && b.isPinned) return 1;
-                return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+                return (parseWorkspaceDate(b.createdAt)?.getTime() ?? 0) - (parseWorkspaceDate(a.createdAt)?.getTime() ?? 0);
             }));
         } catch {
             toast.error('Failed to toggle pin');
@@ -248,7 +248,7 @@ export function NotesPanel({ entityType, entityId, currentUserId }: NotesPanelPr
                                         </Stack>
                                         <Stack direction="row" spacing={0.5} alignItems="center">
                                             <Typography variant="caption" color="text.disabled">
-                                                {formatDistanceToNow(new Date(note.createdAt), { addSuffix: true })}
+                                                {formatWorkspaceRelativeTime(note.createdAt)}
                                             </Typography>
                                             <Tooltip title={note.isPinned ? 'Unpin' : 'Pin'}>
                                                 <IconButton size="small" onClick={() => handlePin(note.id)}>

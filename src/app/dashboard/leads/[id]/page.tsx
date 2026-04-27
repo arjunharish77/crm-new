@@ -37,7 +37,7 @@ import {
     Today as TodayIcon,
 } from "@mui/icons-material";
 import { toast } from "sonner";
-import { formatWorkspaceDateTime } from "@/lib/date-format";
+import { formatWorkspaceDate, formatWorkspaceDateTime, parseWorkspaceDate } from "@/lib/date-format";
 import { apiFetch } from "@/lib/api";
 import { Lead } from "@/types/leads";
 import { Activity } from "@/types/activities";
@@ -132,9 +132,10 @@ export default function LeadDetailPage() {
                 return true;
             }
 
-            const createdAt = new Date(activity.createdAt).getTime();
+            const createdAtDate = parseWorkspaceDate(activity.createdAt);
+            const createdAt = createdAtDate?.getTime() ?? 0;
             if (activityTimeFilter === "TODAY") {
-                return new Date(activity.createdAt).toDateString() === new Date().toDateString();
+                return formatWorkspaceDate(createdAtDate) === formatWorkspaceDate(new Date());
             }
             if (activityTimeFilter === "7D") {
                 return createdAt >= now - 7 * 24 * 60 * 60 * 1000;
@@ -339,8 +340,8 @@ export default function LeadDetailPage() {
                                 <PropertyRow label="Phone">{lead.phone || "—"}</PropertyRow>
                                 <PropertyRow label="Company">{lead.company || "—"}</PropertyRow>
                                 <PropertyRow label="Source">{lead.source || "—"}</PropertyRow>
-                                <PropertyRow label="Created">{new Date(lead.createdAt).toLocaleDateString()}</PropertyRow>
-                                <PropertyRow label="Updated">{new Date(lead.updatedAt).toLocaleDateString()}</PropertyRow>
+                                <PropertyRow label="Created">{formatWorkspaceDate(lead.createdAt)}</PropertyRow>
+                                <PropertyRow label="Updated">{formatWorkspaceDate(lead.updatedAt)}</PropertyRow>
                             </Stack>
                         </Card>
 

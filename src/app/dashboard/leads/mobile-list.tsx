@@ -3,6 +3,7 @@ import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Chip } from "@mui/material";
 import Link from "next/link";
 import { Phone, Mail } from "lucide-react";
+import { formatWorkspaceDate } from "@/lib/date-format";
 
 interface LeadsMobileListProps {
     data: Lead[];
@@ -73,7 +74,7 @@ export function LeadsMobileList({ data }: LeadsMobileListProps) {
                         )}
 
                         <div className="text-xs text-muted-foreground pt-2 border-t mt-2">
-                            Added {new Date(lead.createdAt).toLocaleDateString()}
+                            Added {formatWorkspaceDate(lead.createdAt)}
                         </div>
                     </CardContent>
                 </Card>

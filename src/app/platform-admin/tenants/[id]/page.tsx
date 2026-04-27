@@ -14,7 +14,7 @@ import {
     TableRow
 } from "@/components/ui/table";
 import { Chip } from "@mui/material";
-import { formatDistanceToNow } from "date-fns";
+import { formatWorkspaceRelativeTime } from "@/lib/date-format";
 import { ArrowLeft, UserCog, Activity, Users } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/providers/auth-provider";
@@ -144,7 +144,7 @@ export default function TenantDetailPage() {
                                     <TableCell className="font-medium">{u.name}</TableCell>
                                     <TableCell>{u.email}</TableCell>
                                     <TableCell>{u.role?.name || 'User'}</TableCell>
-                                    <TableCell>{formatDistanceToNow(new Date(u.createdAt), { addSuffix: true })}</TableCell>
+                                    <TableCell>{formatWorkspaceRelativeTime(u.createdAt)}</TableCell>
                                     <TableCell className="text-right">
                                         <Button
                                             variant="outline"

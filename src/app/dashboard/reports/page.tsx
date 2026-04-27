@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { apiFetch } from "@/lib/api";
+import { formatWorkspaceDate } from "@/lib/date-format";
 import {
     Box,
     Typography,
@@ -359,7 +360,7 @@ function CustomReportsSection() {
                             <Box key={report.id} sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', p: 2, bgcolor: 'action.hover', borderRadius: 2 }}>
                                 <Box>
                                     <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>{report.name}</Typography>
-                                    <Typography variant="caption" color="text.secondary">{report.module} • Created {new Date(report.createdAt).toLocaleDateString()}</Typography>
+                                    <Typography variant="caption" color="text.secondary">{report.module} • Created {formatWorkspaceDate(report.createdAt)}</Typography>
                                 </Box>
                                 <Button size="small" startIcon={<DownloadIcon />} onClick={() => handleExport(report.id, report.name)}>
                                     Export CSV

@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import { Activity } from "@/types/activities";
-import { formatDistanceToNow } from "date-fns";
 import * as LucideIcons from "lucide-react";
 import { ChevronDown, FileText } from "lucide-react";
 import {
@@ -17,7 +16,7 @@ import {
     Typography,
     useTheme,
 } from "@mui/material";
-import { formatWorkspaceDate, formatWorkspaceDateTime, formatWorkspaceTime } from "@/lib/date-format";
+import { formatWorkspaceDate, formatWorkspaceDateTime, formatWorkspaceRelativeTime, formatWorkspaceTime, parseWorkspaceDate } from "@/lib/date-format";
 
 interface TimelineProps {
     activities: Activity[];
@@ -134,7 +133,7 @@ export function Timeline({ activities }: TimelineProps) {
     }
 
     const grouped = activities.reduce<Record<string, Activity[]>>((acc, activity) => {
-        const key = getDayLabel(new Date(activity.createdAt));
+        const key = getDayLabel(parseWorkspaceDate(activity.createdAt) ?? new Date(activity.createdAt));
         acc[key] = acc[key] || [];
         acc[key].push(activity);
         return acc;
@@ -170,7 +169,7 @@ export function Timeline({ activities }: TimelineProps) {
                                 : LucideIcons.FileText;
                             const Icon = IconComponent || LucideIcons.FileText;
                             const accent = type?.color || theme.palette.primary.main;
-                            const activityDate = new Date(activity.createdAt);
+                            const activityDate = parseWorkspaceDate(activity.createdAt) ?? new Date(activity.createdAt);
                             const isExpanded = expandedActivityIds.includes(activity.id);
                             const customFieldEntries = Object.entries(activity.customFields ?? {}).filter(
                                 ([, value]) => value !== null && value !== undefined && value !== ""
@@ -290,7 +289,7 @@ export function Timeline({ activities }: TimelineProps) {
 
                                                 <Stack direction="row" spacing={1} alignItems="center">
                                                     <Typography variant="caption" color="text.secondary">
-                                                        {formatDistanceToNow(activityDate, { addSuffix: true })}
+                                                        {formatWorkspaceRelativeTime(activity.createdAt)}
                                                     </Typography>
                                                     <Box
                                                         sx={{
@@ -362,7 +361,7 @@ export function Timeline({ activities }: TimelineProps) {
                                                             return (
                                                                 <Box key={event.id} sx={{ p: 1.25, borderRadius: 2, bgcolor: alpha(theme.palette.info.main, 0.06), border: "1px solid", borderColor: alpha(theme.palette.info.main, 0.18) }}>
                                                                     <Typography variant="caption" sx={{ display: "block", fontWeight: 800, color: "info.main", mb: 0.75 }}>
-                                                                        Activity modified by {actor} / {formatDistanceToNow(new Date(event.createdAt), { addSuffix: true })}
+                                                                        Activity modified by {actor} / {formatWorkspaceRelativeTime(event.createdAt)}
                                                                     </Typography>
                                                                     <Stack spacing={0.5}>
                                                                         {changes.map((change) => (

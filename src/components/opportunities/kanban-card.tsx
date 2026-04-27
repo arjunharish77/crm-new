@@ -19,6 +19,7 @@ import {
 import { Edit as EditIcon } from "@mui/icons-material";
 import { formatCurrency } from "@/lib/utils";
 import Link from "next/link";
+import { formatWorkspaceDate } from "@/lib/date-format";
 
 interface KanbanCardProps {
     opportunity: Opportunity;
@@ -153,7 +154,7 @@ export function KanbanCard({ opportunity, isDragging: isOverlay, onEdit }: Kanba
                             </Typography>
                             {opportunity.expectedCloseDate && (
                                 <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 500 }}>
-                                    {new Date(opportunity.expectedCloseDate).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+                                    {formatWorkspaceDate(opportunity.expectedCloseDate)}
                                 </Typography>
                             )}
                         </Stack>

@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { apiFetch } from "@/lib/api";
-import { formatDistanceToNow } from "date-fns";
+import { formatWorkspaceRelativeTime } from "@/lib/date-format";
 import {
     Box,
     Button,
@@ -166,7 +166,7 @@ export default function SalesGroupsPage() {
             width: 150,
             renderCell: (params) => (
                 <Typography variant="body2" color="text.secondary">
-                    {formatDistanceToNow(new Date(params.value), { addSuffix: true })}
+                    {formatWorkspaceRelativeTime(params.value as string)}
                 </Typography>
             )
         },

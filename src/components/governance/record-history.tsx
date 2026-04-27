@@ -19,7 +19,7 @@ import {
     ArrowForward as ArrowIcon
 } from '@mui/icons-material';
 import { apiFetch } from '@/lib/api';
-import { formatDistanceToNow } from 'date-fns';
+import { formatWorkspaceRelativeTime } from '@/lib/date-format';
 
 interface HistoryItem {
     id: string;
@@ -234,7 +234,7 @@ export function RecordHistory({ entityType, entityId }: RecordHistoryProps) {
                                 {actionLabel}
                             </Typography>
                             <Typography variant="caption" color="text.secondary">
-                                {formatDistanceToNow(new Date(item.createdAt), { addSuffix: true })}
+                                {formatWorkspaceRelativeTime(item.createdAt)}
                             </Typography>
                         </Box>
 

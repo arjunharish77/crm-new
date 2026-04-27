@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { formatDistanceToNow } from "date-fns";
+import { formatWorkspaceRelativeTime } from "@/lib/date-format";
 import {
     Sheet,
     SheetContent,
@@ -117,7 +117,7 @@ export function LeadQuickView({ leadId, open, onOpenChange }: LeadQuickViewProps
                                         </div>
                                         <div>
                                             <span className="text-muted-foreground block mb-1">Created</span>
-                                            <span className="font-medium">{formatDistanceToNow(new Date(lead.createdAt), { addSuffix: true })}</span>
+                                            <span className="font-medium">{formatWorkspaceRelativeTime(lead.createdAt)}</span>
                                         </div>
                                     </div>
                                 </div>

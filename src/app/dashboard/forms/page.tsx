@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { apiFetch } from "@/lib/api";
 import { useRouter } from "next/navigation";
-import { formatDistanceToNow } from "date-fns";
+import { formatWorkspaceRelativeTime } from "@/lib/date-format";
 import {
     Box,
     Button,
@@ -259,7 +259,7 @@ export default function FormsPage() {
                                                     sx={{ height: 20, fontSize: '0.7rem' }}
                                                 />
                                                 <Typography variant="caption" color="text.secondary">
-                                                    • {formatDistanceToNow(new Date(form.createdAt), { addSuffix: true })}
+                                                    • {formatWorkspaceRelativeTime(form.createdAt)}
                                                 </Typography>
                                             </Box>
                                         </Box>

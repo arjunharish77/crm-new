@@ -34,7 +34,7 @@ import {
     TrendingUp as ProbabilityIcon,
 } from "@mui/icons-material";
 import { toast } from "sonner";
-import { formatWorkspaceDateTime } from "@/lib/date-format";
+import { formatWorkspaceDate, formatWorkspaceDateTime, parseWorkspaceDate } from "@/lib/date-format";
 import { apiFetch } from "@/lib/api";
 import { Opportunity, OpportunityStageHistory, StageDefinition } from "@/types/opportunities";
 import { Activity } from "@/types/activities";
@@ -124,9 +124,10 @@ export default function OpportunityDetailPage() {
             }
 
             if (activityTimeFilter === "ALL") return true;
-            const createdAt = new Date(activity.createdAt).getTime();
+            const createdAtDate = parseWorkspaceDate(activity.createdAt);
+            const createdAt = createdAtDate?.getTime() ?? 0;
             if (activityTimeFilter === "TODAY") {
-                return new Date(activity.createdAt).toDateString() === new Date().toDateString();
+                return formatWorkspaceDate(createdAtDate) === formatWorkspaceDate(new Date());
             }
             if (activityTimeFilter === "7D") {
                 return createdAt >= now - 7 * 24 * 60 * 60 * 1000;
@@ -323,9 +324,9 @@ export default function OpportunityDetailPage() {
                                 <PropertyRow label="Value">{formatCurrency(opportunity.amount || 0)}</PropertyRow>
                                 <PropertyRow label="Priority">{opportunity.priority || "—"}</PropertyRow>
                                 <PropertyRow label="Expected Close">
-                                    {opportunity.expectedCloseDate ? new Date(opportunity.expectedCloseDate).toLocaleDateString() : "—"}
+                                    {opportunity.expectedCloseDate ? formatWorkspaceDate(opportunity.expectedCloseDate) : "—"}
                                 </PropertyRow>
-                                <PropertyRow label="Created">{new Date(opportunity.createdAt).toLocaleDateString()}</PropertyRow>
+                                <PropertyRow label="Created">{formatWorkspaceDate(opportunity.createdAt)}</PropertyRow>
                             </Stack>
                         </Card>
 

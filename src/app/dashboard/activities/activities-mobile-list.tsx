@@ -3,7 +3,7 @@
 import { Activity } from "@/types/activities";
 import { Box, Chip, Typography, alpha, Paper, Stack } from "@mui/material";
 import Link from "next/link";
-import { formatDistanceToNow } from "date-fns";
+import { formatWorkspaceRelativeTime } from "@/lib/date-format";
 
 interface ActivitiesMobileListProps {
     data: Activity[];
@@ -87,11 +87,11 @@ export function ActivitiesMobileList({ data }: ActivitiesMobileListProps) {
                         <Box>
                             <Typography variant="caption" sx={{ fontWeight: 600, color: activity.completedAt ? 'success.main' : activity.dueAt ? 'warning.main' : 'text.secondary' }}>
                                 {activity.completedAt ? (
-                                    `✓ Completed ${formatDistanceToNow(new Date(activity.completedAt), { addSuffix: true })}`
+                                    `✓ Completed ${formatWorkspaceRelativeTime(activity.completedAt)}`
                                 ) : activity.dueAt ? (
-                                    `Due ${formatDistanceToNow(new Date(activity.dueAt), { addSuffix: true })}`
+                                    `Due ${formatWorkspaceRelativeTime(activity.dueAt)}`
                                 ) : (
-                                    `Logged ${formatDistanceToNow(new Date(activity.createdAt), { addSuffix: true })}`
+                                    `Logged ${formatWorkspaceRelativeTime(activity.createdAt)}`
                                 )}
                             </Typography>
                         </Box>

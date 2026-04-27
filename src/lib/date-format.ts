@@ -1,5 +1,7 @@
 "use client";
 
+import { formatDistanceToNow } from "date-fns";
+
 type GeneralDisplaySettings = {
     timezone: string;
     dateFormat: string;
@@ -35,9 +37,16 @@ export function getDisplaySettings(): GeneralDisplaySettings {
     }
 }
 
-function parseDate(value: string | number | Date | null | undefined) {
+function normalizeTimestamp(value: string) {
+    const trimmed = value.trim();
+    const hasTimezone = /(?:z|[+-]\d{2}:?\d{2})$/i.test(trimmed);
+    const isDateTime = /^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}/.test(trimmed);
+    return isDateTime && !hasTimezone ? `${trimmed.replace(" ", "T")}Z` : trimmed;
+}
+
+export function parseWorkspaceDate(value: string | number | Date | null | undefined) {
     if (!value) return null;
-    const date = value instanceof Date ? value : new Date(value);
+    const date = value instanceof Date ? value : new Date(typeof value === "string" ? normalizeTimestamp(value) : value);
     return Number.isNaN(date.getTime()) ? null : date;
 }
 
@@ -52,7 +61,7 @@ function dateSeparator(format: string) {
 }
 
 export function formatWorkspaceDate(value: string | number | Date | null | undefined) {
-    const date = parseDate(value);
+    const date = parseWorkspaceDate(value);
     if (!date) return "-";
     const { timezone, dateFormat, language } = getDisplaySettings();
     const parts = new Intl.DateTimeFormat(language || "en", {
@@ -66,7 +75,7 @@ export function formatWorkspaceDate(value: string | number | Date | null | undef
 }
 
 export function formatWorkspaceDateTime(value: string | number | Date | null | undefined, options?: { seconds?: boolean }) {
-    const date = parseDate(value);
+    const date = parseWorkspaceDate(value);
     if (!date) return "-";
     const { timezone, language } = getDisplaySettings();
     return new Intl.DateTimeFormat(language || "en", {
@@ -82,7 +91,7 @@ export function formatWorkspaceDateTime(value: string | number | Date | null | u
 }
 
 export function formatWorkspaceTime(value: string | number | Date | null | undefined, options?: { seconds?: boolean }) {
-    const date = parseDate(value);
+    const date = parseWorkspaceDate(value);
     if (!date) return "-";
     const { timezone, language } = getDisplaySettings();
     return new Intl.DateTimeFormat(language || "en", {
@@ -92,4 +101,9 @@ export function formatWorkspaceTime(value: string | number | Date | null | undef
         second: options?.seconds ? "2-digit" : undefined,
         hour12: false,
     }).format(date);
+}
+
+export function formatWorkspaceRelativeTime(value: string | number | Date | null | undefined) {
+    const date = parseWorkspaceDate(value);
+    return date ? formatDistanceToNow(date, { addSuffix: true }) : "-";
 }

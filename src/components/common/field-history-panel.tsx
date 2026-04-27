@@ -18,7 +18,7 @@ import {
 } from '@mui/icons-material';
 import { apiFetch } from '@/lib/api';
 import { toast } from 'sonner';
-import { formatDistanceToNow } from 'date-fns';
+import { formatWorkspaceRelativeTime } from '@/lib/date-format';
 
 interface AuditEntry {
     id: string;
@@ -222,7 +222,7 @@ export function FieldHistoryPanel({ entityType, entityId }: FieldHistoryPanelPro
                                                 {entry.user.name}
                                             </Typography>
                                             <Typography variant="caption" color="text.disabled">
-                                                {formatDistanceToNow(new Date(entry.createdAt), { addSuffix: true })}
+                                                {formatWorkspaceRelativeTime(entry.createdAt)}
                                             </Typography>
                                         </Stack>
 

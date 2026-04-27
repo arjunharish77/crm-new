@@ -16,7 +16,7 @@ import {
 } from '@mui/material';
 import { Notifications as NotificationsIcon } from '@mui/icons-material';
 import { useNotifications } from '@/providers/notification-provider';
-import { formatDistanceToNow } from 'date-fns';
+import { formatWorkspaceRelativeTime } from '@/lib/date-format';
 
 export function NotificationBell() {
     const { notifications, unreadCount, clearNotifications } = useNotifications();
@@ -85,7 +85,7 @@ export function NotificationBell() {
                                                     {notif.title}
                                                 </Typography>
                                                 <Typography variant="caption" color="text.secondary">
-                                                    {formatDistanceToNow(new Date(notif.timestamp), { addSuffix: true })}
+                                                    {formatWorkspaceRelativeTime(notif.timestamp)}
                                                 </Typography>
                                             </Box>
                                         }

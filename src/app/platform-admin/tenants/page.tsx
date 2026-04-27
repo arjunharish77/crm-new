@@ -27,7 +27,7 @@ import {
     CheckCircle as CheckCircleIcon,
     Delete as DeleteIcon
 } from "@mui/icons-material";
-import { formatDistanceToNow } from "date-fns";
+import { formatWorkspaceRelativeTime } from "@/lib/date-format";
 import { toast } from "sonner";
 import { CreateTenantDialog } from "./create-tenant-dialog";
 import { BulkActionsToolbar } from "@/components/bulk-actions/bulk-toolbar";
@@ -170,7 +170,7 @@ export default function TenantsPage() {
             width: 150,
             renderCell: (params) => (
                 <Typography variant="caption" color="text.secondary">
-                    {formatDistanceToNow(new Date(params.value), { addSuffix: true })}
+                    {formatWorkspaceRelativeTime(params.value as string)}
                 </Typography>
             ),
         },

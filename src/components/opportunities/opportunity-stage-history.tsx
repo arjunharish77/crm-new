@@ -15,7 +15,7 @@ import {
     ArrowForward as ArrowIcon,
     Person as PersonIcon
 } from '@mui/icons-material';
-import { formatDistanceToNow } from 'date-fns';
+import { formatWorkspaceRelativeTime } from '@/lib/date-format';
 import { OpportunityStageHistory } from '@/types/opportunities';
 
 interface OpportunityStageHistoryProps {
@@ -98,7 +98,7 @@ export function OpportunityStageHistoryList({ history }: OpportunityStageHistory
                                 </Box>
                                 <Typography variant="caption" color="text.disabled">•</Typography>
                                 <Typography variant="caption" color="text.secondary">
-                                    {formatDistanceToNow(new Date(item.changedAt), { addSuffix: true })}
+                                    {formatWorkspaceRelativeTime(item.changedAt)}
                                 </Typography>
                             </Box>
                         </Box>

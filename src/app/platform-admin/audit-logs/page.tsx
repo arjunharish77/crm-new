@@ -22,7 +22,7 @@ import {
 import { Chip } from "@mui/material";
 import { apiFetch } from '@/lib/api';
 import { FileText, Search, ChevronLeft, ChevronRight } from 'lucide-react';
-import { format } from 'date-fns';
+import { formatWorkspaceDateTime } from '@/lib/date-format';
 
 interface AuditLog {
     id: string;
@@ -198,7 +198,7 @@ export default function AuditLogsPage() {
                                         {logs.map((log) => (
                                             <TableRow key={log.id}>
                                                 <TableCell className="whitespace-nowrap">
-                                                    {format(new Date(log.createdAt), 'MMM dd, yyyy HH:mm:ss')}
+                                                    {formatWorkspaceDateTime(log.createdAt, { seconds: true })}
                                                 </TableCell>
                                                 <TableCell>
                                                     <div>
