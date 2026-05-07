@@ -207,6 +207,9 @@ function AutomationBuilderContent() {
     const [leadLists, setLeadLists] = useState<any[]>([]);
     const [triggerOpportunityTypeId, setTriggerOpportunityTypeId] = useState("");
     const [triggerActivityTypeId, setTriggerActivityTypeId] = useState("");
+    const [leadCustomFields, setLeadCustomFields] = useState<any[]>([]);
+    const [opportunityCustomFields, setOpportunityCustomFields] = useState<any[]>([]);
+    const [activityCustomFields, setActivityCustomFields] = useState<any[]>([]);
     const [triggerOpportunityCustomFields, setTriggerOpportunityCustomFields] = useState<any[]>([]);
     const [triggerActivityCustomFields, setTriggerActivityCustomFields] = useState<any[]>([]);
 
@@ -227,6 +230,9 @@ function AutomationBuilderContent() {
         }).catch(() => undefined);
         apiFetch("/users").then((data) => setUsers(Array.isArray(data) ? data : [])).catch(() => undefined);
         apiFetch("/lead-lists").then((data) => setLeadLists(Array.isArray(data) ? data : [])).catch(() => undefined);
+        apiFetch("/custom-fields?objectType=LEAD").then((data) => setLeadCustomFields(Array.isArray(data) ? data : [])).catch(() => setLeadCustomFields([]));
+        apiFetch("/custom-fields?objectType=OPPORTUNITY").then((data) => setOpportunityCustomFields(Array.isArray(data) ? data : [])).catch(() => setOpportunityCustomFields([]));
+        apiFetch("/custom-fields?objectType=ACTIVITY").then((data) => setActivityCustomFields(Array.isArray(data) ? data : [])).catch(() => setActivityCustomFields([]));
         if (!isNew) {
             fetchAutomation();
             fetchExecutions();
@@ -616,32 +622,68 @@ function AutomationBuilderContent() {
     const opportunityStageOptions = (selectedOpportunityType?.stages ?? []).map((stage: any) => stage.name);
     const selectedActivityType = activityTypes.find((type) => type.id === triggerActivityTypeId);
 
-    const customFieldToOption = (field: any, prefix: string) => ({
-        key: `${prefix}.${field.fieldKey}`,
-        label: `${prefix === "opportunity" ? "Opportunity" : "Activity"}: ${field.fieldLabel}`,
-        type: field.fieldType || "TEXT",
-        options: field.fieldConfig?.options,
-    });
+    const customFieldOptions = (field: any) => {
+        const options =
+            field.fieldConfig?.options ??
+            field.metadata?.options ??
+            field.options ??
+            [];
+        return Array.isArray(options) ? options.map(String) : [];
+    };
 
-    const leadConditionFields = LEAD_FIELDS.map((field) => ({ ...field, key: `lead.${field.key}`, label: `Lead: ${field.label}` }));
-    const opportunityConditionFields = [
-        ...OPPORTUNITY_FIELDS.map((field) => ({
+    const normalizeCustomFieldType = (field: any) => {
+        const type = String(field.fieldType ?? field.type ?? "TEXT").toUpperCase();
+        if (type === "DROPDOWN") return "SELECT";
+        if (type === "MULTI_SELECT") return "MULTI_SELECT";
+        return type;
+    };
+
+    const customFieldToOption = (field: any, prefix: "lead" | "opportunity" | "activity") => {
+        const key = String(field.fieldKey ?? field.key ?? "");
+        const label = String(field.fieldLabel ?? field.label ?? key);
+        const moduleLabel = prefix === "lead" ? "Lead" : prefix === "opportunity" ? "Opportunity" : "Activity";
+        return {
+            key: `${prefix}.${key}`,
+            label: `${moduleLabel}: ${label}`,
+            type: normalizeCustomFieldType(field),
+            options: customFieldOptions(field),
+            custom: true,
+        };
+    };
+
+    const mergeFieldOptions = (...groups: Array<any[]>) => {
+        const seen = new Set<string>();
+        return groups.flat().filter((field) => {
+            if (!field?.key || seen.has(field.key)) return false;
+            seen.add(field.key);
+            return true;
+        });
+    };
+
+    const leadConditionFields = mergeFieldOptions(
+        LEAD_FIELDS.map((field) => ({ ...field, key: `lead.${field.key}`, label: `Lead: ${field.label}` })),
+        leadCustomFields.filter((field) => field.isActive !== false).map((field) => customFieldToOption(field, "lead"))
+    );
+    const opportunityConditionFields = mergeFieldOptions(
+        OPPORTUNITY_FIELDS.map((field) => ({
             ...field,
             key: `opportunity.${field.key}`,
             label: `Opportunity: ${field.label}`,
             options: field.key === "stageId" ? opportunityStageOptions : field.options,
         })),
-        ...triggerOpportunityCustomFields.filter((field) => field.isActive !== false).map((field) => customFieldToOption(field, "opportunity")),
-    ];
-    const activityConditionFields = [
-        ...ACTIVITY_FIELDS.map((field) => ({
+        opportunityCustomFields.filter((field) => field.isActive !== false).map((field) => customFieldToOption(field, "opportunity")),
+        triggerOpportunityCustomFields.filter((field) => field.isActive !== false).map((field) => customFieldToOption(field, "opportunity"))
+    );
+    const activityConditionFields = mergeFieldOptions(
+        ACTIVITY_FIELDS.map((field) => ({
             ...field,
             key: `activity.${field.key}`,
             label: `Activity: ${field.label}`,
             options: field.key === "typeId" ? activityTypes.map((type) => type.name) : field.options,
         })),
-        ...triggerActivityCustomFields.filter((field) => field.isActive !== false).map((field) => customFieldToOption(field, "activity")),
-    ];
+        activityCustomFields.filter((field) => field.isActive !== false).map((field) => customFieldToOption(field, "activity")),
+        triggerActivityCustomFields.filter((field) => field.isActive !== false).map((field) => customFieldToOption(field, "activity"))
+    );
 
     const isOpportunityScopedTrigger = triggerScope === "opportunity" || triggerScope === "activity_opportunity" || triggerScope === "task_opportunity";
     const isActivityScopedTrigger = triggerScope === "activity_lead" || triggerScope === "activity_opportunity" || triggerScope === "activity_activity";
@@ -657,12 +699,12 @@ function AutomationBuilderContent() {
     const fieldOptionsForValue = (fieldKey: string, source = allConditionFields) => fieldMetaForValue(fieldKey, source)?.options ?? [];
 
     const fieldOptionsForNode = selectedNode?.data?.type === "update_opportunity"
-        ? opportunityConditionFields.map((field) => ({ ...field, key: field.key.replace(/^opportunity\./, "") }))
+            ? opportunityConditionFields.map((field) => ({ ...field, key: field.key.replace(/^opportunity\./, "") }))
         : selectedNode?.data?.type === "update_activity"
             ? activityConditionFields.map((field) => ({ ...field, key: field.key.replace(/^activity\./, "") }))
-            : selectedNode?.data?.type === "condition" || selectedNode?.data?.type === "compare" || selectedNode?.data?.type === "multi_if_else"
-                ? allConditionFields
-                : LEAD_FIELDS;
+        : selectedNode?.data?.type === "condition" || selectedNode?.data?.type === "compare" || selectedNode?.data?.type === "multi_if_else"
+            ? allConditionFields
+                : leadConditionFields.map((field) => ({ ...field, key: field.key.replace(/^lead\./, "") }));
 
     if (loading) {
         return (

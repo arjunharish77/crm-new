@@ -165,7 +165,9 @@ export function FormEditor({ initialForm }: EditorProps) {
     const [selectedOpportunityTypeId, setSelectedOpportunityTypeId] = useState<string>("");
     const [selectedActivityTypeId, setSelectedActivityTypeId] = useState<string>("");
     const [activeCanvasTabId, setActiveCanvasTabId] = useState<string>(initialForm.config?.tabs?.[0]?.id || "tab_1");
-    const [typeCustomFields, setTypeCustomFields] = useState<any[]>([]);
+    const [moduleCustomFields, setModuleCustomFields] = useState<Record<SourceModule, any[]>>({ lead: [], opportunity: [], activity: [] });
+    const [opportunityTypeCustomFields, setOpportunityTypeCustomFields] = useState<any[]>([]);
+    const [activityTypeCustomFields, setActivityTypeCustomFields] = useState<any[]>([]);
     const [users, setUsers] = useState<any[]>([]);
     const [salesGroups, setSalesGroups] = useState<any[]>([]);
     const [saving, setSaving] = useState(false);
@@ -203,45 +205,77 @@ export function FormEditor({ initialForm }: EditorProps) {
             apiFetch("/activity-types").catch(() => []),
             apiFetch("/users").catch(() => []),
             apiFetch("/sales-groups").catch(() => []),
-        ]).then(([oppTypes, actTypes, userList, groupList]) => {
+            apiFetch("/custom-fields?objectType=LEAD").catch(() => []),
+            apiFetch("/custom-fields?objectType=OPPORTUNITY").catch(() => []),
+            apiFetch("/custom-fields?objectType=ACTIVITY").catch(() => []),
+        ]).then(([oppTypes, actTypes, userList, groupList, leadFields, oppFields, actFields]) => {
             const opportunities = Array.isArray(oppTypes) ? oppTypes : [];
             const activities = Array.isArray(actTypes) ? actTypes : [];
             setOpportunityTypes(opportunities);
             setActivityTypes(activities);
             setUsers(Array.isArray(userList) ? userList : []);
             setSalesGroups(Array.isArray(groupList) ? groupList : []);
+            setModuleCustomFields({
+                lead: Array.isArray(leadFields) ? leadFields : [],
+                opportunity: Array.isArray(oppFields) ? oppFields : [],
+                activity: Array.isArray(actFields) ? actFields : [],
+            });
             setSelectedOpportunityTypeId((current) => current || opportunities[0]?.id || "");
             setSelectedActivityTypeId((current) => current || activities[0]?.id || "");
         });
     }, []);
 
     useEffect(() => {
-        const scope = fieldLibraryModule === "opportunity" ? "OPPORTUNITY_TYPE" : fieldLibraryModule === "activity" ? "ACTIVITY_TYPE" : "";
-        const typeId = fieldLibraryModule === "opportunity" ? selectedOpportunityTypeId : fieldLibraryModule === "activity" ? selectedActivityTypeId : "";
-
-        if (!scope || !typeId) {
-            setTypeCustomFields([]);
+        if (!selectedOpportunityTypeId) {
+            setOpportunityTypeCustomFields([]);
             return;
         }
 
-        apiFetch(`/type-custom-fields/by-type/${scope}/${typeId}`)
-            .then((fields) => setTypeCustomFields(Array.isArray(fields) ? fields : []))
-            .catch(() => setTypeCustomFields([]));
-    }, [fieldLibraryModule, selectedOpportunityTypeId, selectedActivityTypeId]);
+        apiFetch(`/type-custom-fields/by-type/OPPORTUNITY_TYPE/${selectedOpportunityTypeId}`)
+            .then((fields) => setOpportunityTypeCustomFields(Array.isArray(fields) ? fields : []))
+            .catch(() => setOpportunityTypeCustomFields([]));
+    }, [selectedOpportunityTypeId]);
+
+    useEffect(() => {
+        if (!selectedActivityTypeId) {
+            setActivityTypeCustomFields([]);
+            return;
+        }
+
+        apiFetch(`/type-custom-fields/by-type/ACTIVITY_TYPE/${selectedActivityTypeId}`)
+            .then((fields) => setActivityTypeCustomFields(Array.isArray(fields) ? fields : []))
+            .catch(() => setActivityTypeCustomFields([]));
+    }, [selectedActivityTypeId]);
+
+    const customFieldOptions = (field: any) => {
+        const options = field.fieldConfig?.options ?? field.metadata?.options ?? field.options ?? [];
+        return Array.isArray(options) ? options.map(String) : [];
+    };
+
+    const customFieldToModuleField = (field: any) => ({
+        key: String(field.fieldKey ?? field.key ?? ""),
+        label: String(field.fieldLabel ?? field.label ?? field.fieldKey ?? field.key ?? "Custom Field"),
+        type: String(field.fieldType ?? field.type ?? "TEXT"),
+        options: customFieldOptions(field),
+    });
+
+    const fieldsForModule = (module: SourceModule) => {
+        const typeFields = module === "opportunity" ? opportunityTypeCustomFields : module === "activity" ? activityTypeCustomFields : [];
+        const seen = new Set<string>();
+        return [
+            ...MODULE_FIELDS[module],
+            ...moduleCustomFields[module].filter((field) => field.isActive !== false).map(customFieldToModuleField),
+            ...typeFields.filter((field) => field.isActive !== false).map(customFieldToModuleField),
+        ].filter((field) => {
+            if (!field.key || seen.has(field.key)) return false;
+            seen.add(field.key);
+            return true;
+        });
+    };
 
     const moduleFields = useMemo(() => {
-        const baseFields = [...MODULE_FIELDS[fieldLibraryModule]];
-        const customFields = typeCustomFields
-            .filter((field) => field.isActive !== false)
-            .map((field) => ({
-                key: field.fieldKey,
-                label: field.fieldLabel,
-                type: field.fieldType || "TEXT",
-                options: field.fieldConfig?.options,
-            }));
-
-        return [...baseFields, ...customFields];
-    }, [fieldLibraryModule, typeCustomFields]);
+        return fieldsForModule(fieldLibraryModule);
+    }, [fieldLibraryModule, moduleCustomFields, opportunityTypeCustomFields, activityTypeCustomFields]);
 
     const usedFieldKeys = useMemo(() => {
         return new Set(
@@ -790,7 +824,7 @@ export function FormEditor({ initialForm }: EditorProps) {
                                                 onChange={e => updateField(selectedField.id, { mapping: e.target.value })}
                                             >
                                                 <MenuItem value=""><em>None (store submission only)</em></MenuItem>
-                                                {[...MODULE_FIELDS[(selectedField.sourceModule || "lead") as SourceModule], ...typeCustomFields.map((field) => ({ key: field.fieldKey, label: field.fieldLabel }))].map((field) => (
+                                                {fieldsForModule((selectedField.sourceModule || "lead") as SourceModule).map((field) => (
                                                     <MenuItem
                                                         key={field.key}
                                                         value={`${selectedField.sourceModule || "lead"}.${field.key}`}
