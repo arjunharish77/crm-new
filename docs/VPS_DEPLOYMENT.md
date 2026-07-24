@@ -241,7 +241,7 @@ apt install -y curl git ufw fail2ban unattended-upgrades ca-certificates
 ```bash
 ufw default deny incoming
 ufw default allow outgoing
-ufw allow OpenSSH        # or: ufw allow 22/tcp
+ufw allow OpenSSH       
 ufw allow 80/tcp
 ufw allow 443/tcp
 ufw enable
@@ -319,26 +319,25 @@ As the `deploy` user:
 sudo mkdir -p /opt/unnatify-crm
 sudo chown deploy:deploy /opt/unnatify-crm
 cd /opt/unnatify-crm
-git clone <your-repo-url> .      # clones directly into /opt/unnatify-crm; use a deploy key or a scoped PAT, not your personal password
+git clone https://github.com/arjunharish77/crm-new.git .      # clones directly into /opt/unnatify-crm; use a deploy key or a scoped PAT, not your personal password
 ```
 
-If your repo has the Next.js app in a child `crm/` folder (as it does in this working
-copy — `deploy/vps/docker-compose.yml`, the `Dockerfile`, `.env.example`, etc. all live
-under that child folder, not the repo root), you'll end up with the app at
-`/opt/unnatify-crm/crm`. All paths in the rest of this doc assume that layout — adjust if
-your repo puts the Next.js app at the repository root instead (in that case, drop the
-trailing `/crm` from every path below). The one hard requirement either way:
-`deploy/vps/docker-compose.yml`'s `web`/`worker` services build with `context: ../..`, so
-that file's directory must sit exactly two levels below the folder containing the
-`Dockerfile` — i.e. always run `docker compose` commands from inside the Next.js app's
-own root (`/opt/unnatify-crm/crm`), never from `/opt/unnatify-crm` itself.
+The pushed GitHub repo (`crm-new`) is the Next.js app root itself — `package.json`,
+`Dockerfile`, `deploy/vps/docker-compose.yml`, etc. all live directly at the repo root,
+**not** under a nested `crm/` subfolder (that nested layout only exists in the local
+working copy this app was developed in, one level up in a separate parent monorepo that
+was never pushed). So cloning lands the app directly at `/opt/unnatify-crm` — all paths
+in the rest of this doc are relative to that directory, with no `/crm` suffix. Always run
+`docker compose` commands from `/opt/unnatify-crm` itself, since that's where
+`deploy/vps/docker-compose.yml`'s `context: ../..` resolves back to (two levels above
+`deploy/vps/`).
 
 ---
 
 ## Part 5 — Configure secrets
 
 ```bash
-cd /opt/unnatify-crm/crm        # or wherever the Next.js app root ended up per Part 4
+cd /opt/unnatify-crm
 cp deploy/vps/.env.example deploy/vps/.env
 chmod 600 deploy/vps/.env
 nano deploy/vps/.env
@@ -403,7 +402,7 @@ correctly and ports 80/443 are reachable from the internet.
 ## Part 7 — First build and start
 
 ```bash
-cd /opt/unnatify-crm/crm
+cd /opt/unnatify-crm
 docker compose -f deploy/vps/docker-compose.yml --env-file deploy/vps/.env up -d --build
 docker compose -f deploy/vps/docker-compose.yml --env-file deploy/vps/.env ps
 ```
@@ -486,7 +485,7 @@ rollups/schedules, communications outbox) without errors.
 ### Deploying an update
 
 ```bash
-cd /opt/unnatify-crm/crm
+cd /opt/unnatify-crm
 git pull
 docker compose -f deploy/vps/docker-compose.yml --env-file deploy/vps/.env up -d --build
 deploy/vps/scripts/migrate-postgres.sh   # safe/no-op if there are no new migration files
@@ -528,7 +527,7 @@ Automate it daily via the `deploy` user's crontab:
 crontab -e
 ```
 ```
-0 3 * * * /opt/unnatify-crm/crm/deploy/vps/scripts/backup-postgres.sh >> /opt/unnatify-crm/crm/deploy/vps/backups/backup.log 2>&1
+0 3 * * * /opt/unnatify-crm/deploy/vps/scripts/backup-postgres.sh >> /opt/unnatify-crm/deploy/vps/backups/backup.log 2>&1
 ```
 Back up the `deploy/vps/backups/` directory itself off-VPS periodically (e.g. synced to
 S3/Backblaze/another host) — a backup that only lives on the same machine as the
@@ -536,7 +535,7 @@ database doesn't protect you from disk failure or the VPS being lost entirely.
 
 **Rehearse a restore quarterly**, on a scratch environment, not production:
 ```bash
-deploy/vps/scripts/restore-postgres.sh /opt/unnatify-crm/crm/deploy/vps/backups/<latest>.dump
+deploy/vps/scripts/restore-postgres.sh /opt/unnatify-crm/deploy/vps/backups/<latest>.dump
 deploy/vps/scripts/healthcheck.sh
 ```
 
@@ -553,7 +552,7 @@ visibility beyond grepping container logs.
 
 If a deploy breaks something:
 ```bash
-cd /opt/unnatify-crm/crm
+cd /opt/unnatify-crm
 git log --oneline -10          # find the last known-good commit
 git checkout <good-commit-sha>
 docker compose -f deploy/vps/docker-compose.yml --env-file deploy/vps/.env up -d --build
