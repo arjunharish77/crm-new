@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireCurrentUser } from "@/lib/server/auth";
 import { forbidden, serverError, unauthorized } from "@/lib/server/http";
-import { recomputeSelfLearningScoresForTenant } from "@/lib/server/self-learning-scoring";
+import { enqueueSelfLearningScoringRecompute } from "@/lib/server/job-queue";
 
 export async function POST(request: Request) {
   try {
@@ -11,13 +11,15 @@ export async function POST(request: Request) {
     const targetModules = Array.isArray(body?.targetModules)
       ? body.targetModules.filter((module: unknown) => module === "LEAD" || module === "OPPORTUNITY")
       : undefined;
-    const result = await recomputeSelfLearningScoresForTenant(user, {
+    const { alreadyQueued } = await enqueueSelfLearningScoringRecompute({
+      tenantId: user.tenantId,
+      userId: user.id,
       targetModules,
       force: body?.force === true,
     });
-    return NextResponse.json(result);
+    return NextResponse.json({ queued: true, alreadyRunning: alreadyQueued }, { status: 202 });
   } catch (error) {
     if (error instanceof Error && error.message === "UNAUTHORIZED") return unauthorized();
-    return serverError("Failed to recompute predictive scores", error);
+    return serverError("Failed to queue predictive score recompute", error);
   }
 }

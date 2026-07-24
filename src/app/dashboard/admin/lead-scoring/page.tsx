@@ -119,7 +119,6 @@ export default function LeadScoringAdminPage() {
     const [loadingSelfLearning, setLoadingSelfLearning] = useState(true);
     const [savingSelfLearning, setSavingSelfLearning] = useState(false);
     const [recomputingSelfLearning, setRecomputingSelfLearning] = useState(false);
-    const [lastSelfLearningRun, setLastSelfLearningRun] = useState<{ processed: number; skipped: number } | null>(null);
 
     const fetchRules = async () => {
         try {
@@ -224,13 +223,17 @@ export default function LeadScoringAdminPage() {
     };
 
     const handleRecomputeAll = async () => {
-        if (!confirm('Recompute scores for ALL leads? This may take a moment.')) return;
+        if (!confirm('Recompute scores for ALL leads? This runs in the background and may take a moment for large teams.')) return;
         setRecomputing(true);
         try {
-            const result = await apiFetch<{ count: number }>('/lead-scoring/recompute-all', { method: 'POST' });
-            toast.success(`Recomputed scores for ${result.count} leads`);
+            const result = await apiFetch<{ queued: boolean; alreadyRunning: boolean }>('/lead-scoring/recompute-all', { method: 'POST' });
+            toast.success(
+                result.alreadyRunning
+                    ? 'A recompute is already running — you\'ll be notified when it finishes.'
+                    : 'Recompute queued. You can keep working — you\'ll get a notification when it\'s done.'
+            );
         } catch {
-            toast.error('Recompute failed');
+            toast.error('Failed to queue recompute');
         } finally {
             setRecomputing(false);
         }
@@ -253,18 +256,20 @@ export default function LeadScoringAdminPage() {
     };
 
     const handleSelfLearningRecompute = async () => {
-        if (!confirm('Recompute predictive scores for selected modules? This will store score snapshots and update Lead.score when enabled.')) return;
+        if (!confirm('Recompute predictive scores for selected modules? This runs in the background and will store score snapshots and update Lead.score when enabled.')) return;
         setRecomputingSelfLearning(true);
         try {
-            const result = await apiFetch<{ processed: number; skipped: number }>('/lead-scoring/self-learning/recompute', {
+            const result = await apiFetch<{ queued: boolean; alreadyRunning: boolean }>('/lead-scoring/self-learning/recompute', {
                 method: 'POST',
                 body: JSON.stringify({ targetModules: selfLearningSettings.targetModules }),
             });
-            setLastSelfLearningRun({ processed: result.processed, skipped: result.skipped });
-            setSelfLearningSettings((current) => ({ ...current, lastRecomputedAt: new Date().toISOString() }));
-            toast.success(`Predictive scores recomputed for ${result.processed} records`);
+            toast.success(
+                result.alreadyRunning
+                    ? 'A predictive recompute is already running — you\'ll be notified when it finishes.'
+                    : 'Predictive score recompute queued. You can keep working — you\'ll get a notification when it\'s done.'
+            );
         } catch {
-            toast.error('Predictive scoring recompute failed');
+            toast.error('Failed to queue predictive score recompute');
         } finally {
             setRecomputingSelfLearning(false);
         }
@@ -460,11 +465,9 @@ export default function LeadScoringAdminPage() {
                                         <span className="text-muted-foreground">Last recomputed</span>
                                         <span className="text-right font-semibold">{selfLearningSettings.lastRecomputedAt ? formatWorkspaceDateTime(selfLearningSettings.lastRecomputedAt) : 'Never'}</span>
                                     </div>
-                                    {lastSelfLearningRun ? (
-                                        <div className="rounded-lg bg-muted p-3 text-xs">
-                                            Last run processed <strong>{lastSelfLearningRun.processed}</strong> records and skipped <strong>{lastSelfLearningRun.skipped}</strong>.
-                                        </div>
-                                    ) : null}
+                                    <div className="rounded-lg bg-muted p-3 text-xs text-muted-foreground">
+                                        Recompute runs in the background — you don&apos;t need to stay on this page. You&apos;ll get a notification when it finishes.
+                                    </div>
                                 </div>
                             </div>
                         </div>

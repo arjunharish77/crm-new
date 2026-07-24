@@ -8,7 +8,9 @@ export type CrmJobName =
   | "reports.processRollups"
   | "reports.processSchedules"
   | "communications.processDue"
-  | "exports.process";
+  | "exports.process"
+  | "scoring.recomputeRules"
+  | "scoring.recomputeSelfLearning";
 
 let queue: Queue | null = null;
 
@@ -48,4 +50,39 @@ export async function enqueueExportJob(exportRequestId: string) {
     { exportRequestId },
     { jobId: `export-${exportRequestId}` },
   );
+}
+
+async function enqueueDeduped(jobName: CrmJobName, jobId: string, data: Record<string, unknown>) {
+  const queue = getCrmQueue();
+  const existing = await queue.getJob(jobId);
+  if (existing) {
+    const state = await existing.getState();
+    if (state === "active" || state === "waiting" || state === "delayed" || state === "waiting-children") {
+      return { alreadyQueued: true as const, jobId };
+    }
+    await existing.remove().catch(() => undefined);
+  }
+  await queue.add(jobName, data, { jobId });
+  return { alreadyQueued: false as const, jobId };
+}
+
+export async function enqueueRuleScoringRecompute(input: { tenantId: string; userId: string }) {
+  return enqueueDeduped("scoring.recomputeRules", `scoring-rules-${input.tenantId}`, {
+    tenantId: input.tenantId,
+    userId: input.userId,
+  });
+}
+
+export async function enqueueSelfLearningScoringRecompute(input: {
+  tenantId: string;
+  userId: string;
+  targetModules?: string[];
+  force?: boolean;
+}) {
+  return enqueueDeduped("scoring.recomputeSelfLearning", `scoring-self-learning-${input.tenantId}`, {
+    tenantId: input.tenantId,
+    userId: input.userId,
+    targetModules: input.targetModules,
+    force: input.force,
+  });
 }

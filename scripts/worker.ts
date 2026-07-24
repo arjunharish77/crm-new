@@ -8,6 +8,9 @@ import { processPendingReportRefreshJobs } from "@/lib/server/report-rollups";
 import { processDueReportSchedules } from "@/lib/server/report-schedules";
 import { processCommunicationOutbox } from "@/lib/server/communications";
 import { processExportRequest } from "@/lib/server/exports";
+import { recomputeLeadScoresForTenant } from "@/lib/server/admin-modules";
+import { recomputeSelfLearningScoresForTenant } from "@/lib/server/self-learning-scoring";
+import { createUserNotification } from "@/lib/server/notifications";
 
 const QUEUE_NAME = "crm-jobs";
 const DEFAULT_REPEAT_MS = 60_000;
@@ -82,6 +85,37 @@ async function main() {
         if (!exportRequestId) throw new Error("Missing exportRequestId");
         return processExportRequest(exportRequestId);
       }
+      if (job.name === "scoring.recomputeRules") {
+        const { tenantId, userId } = job.data as { tenantId: string; userId: string };
+        const user = { id: userId, tenantId };
+        const result = await recomputeLeadScoresForTenant(user);
+        await createUserNotification({
+          tenantId,
+          userId,
+          title: "Lead score recompute complete",
+          message: `Rule-based scores recomputed for ${result.count} lead${result.count === 1 ? "" : "s"}.`,
+          data: { type: "scoring.recomputeRules", ...result },
+        }).catch(() => undefined);
+        return result;
+      }
+      if (job.name === "scoring.recomputeSelfLearning") {
+        const { tenantId, userId, targetModules, force } = job.data as {
+          tenantId: string;
+          userId: string;
+          targetModules?: string[];
+          force?: boolean;
+        };
+        const user = { id: userId, tenantId };
+        const result = await recomputeSelfLearningScoresForTenant(user, { targetModules: targetModules as any, force });
+        await createUserNotification({
+          tenantId,
+          userId,
+          title: "Predictive score recompute complete",
+          message: `Predictive scores recomputed for ${result.processed} record${result.processed === 1 ? "" : "s"}${result.skipped ? ` (${result.skipped} skipped)` : ""}.`,
+          data: { type: "scoring.recomputeSelfLearning", processed: result.processed, skipped: result.skipped },
+        }).catch(() => undefined);
+        return result;
+      }
       throw new Error(`Unknown job: ${job.name}`);
     },
     { connection, concurrency: Number(process.env.WORKER_CONCURRENCY || 5) },
@@ -92,6 +126,20 @@ async function main() {
   });
   worker.on("failed", (job, error) => {
     console.error(`[worker] ${job?.name || "unknown"}#${job?.id || "unknown"}: failed`, error);
+    if (!job) return;
+    const isScoringJob = job.name === "scoring.recomputeRules" || job.name === "scoring.recomputeSelfLearning";
+    const attemptsLimit = job.opts?.attempts ?? 1;
+    if (isScoringJob && job.attemptsMade >= attemptsLimit) {
+      const { tenantId, userId } = job.data as { tenantId: string; userId: string };
+      const label = job.name === "scoring.recomputeRules" ? "Lead score recompute" : "Predictive score recompute";
+      createUserNotification({
+        tenantId,
+        userId,
+        title: `${label} failed`,
+        message: `${label} failed after ${job.attemptsMade} attempt${job.attemptsMade === 1 ? "" : "s"}: ${error.message || "Unknown error"}.`,
+        data: { type: job.name, error: error.message },
+      }).catch(() => undefined);
+    }
   });
   worker.on("error", (error) => {
     console.error("[worker] redis error", error);
