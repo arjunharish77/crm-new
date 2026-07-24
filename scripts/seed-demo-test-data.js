@@ -227,26 +227,31 @@ function permissions(recordAccess = "ALL", modules = {}) {
 async function seedOrgAccess(admin) {
   const now = iso(0);
   const passwordHash = await bcrypt.hash(PASSWORD, 10);
-  const roleRows = [
+  const roleDefs = [
     { id: "demo-role-super-admin", name: "Demo CRM Administrator", permissions: permissions("ALL", { admin: "full", partners: "write", payouts: "write", reports: "write", views: "write" }) },
     { id: "demo-role-manager", name: "Admissions Manager", permissions: permissions("TEAM", { reports: "write", views: "write" }) },
     { id: "demo-role-counselor", name: "Admissions Counselor", permissions: permissions("OWN") },
     { id: "demo-role-finance", name: "Finance & Payout Admin", permissions: permissions("ALL", { partners: "write", payouts: "write", reports: "read" }) },
     { id: "demo-role-partner", name: "External Partner", permissions: { isPartnerRole: true, recordAccess: "OWN", modules: { leads: "read", opportunities: "read", activities: "read", payouts: "read", admin: "none" } } },
-  ].map((role, index) => ({
-    id: role.id,
-    tenantId: TENANT,
-    name: role.name,
-    description: `${role.name} demo role`,
-    permissions: role.permissions,
-    createdAt: iso(-80 + index),
-    updatedAt: now,
-  }));
-  await safeUpsert("Role", roleRows, { onConflict: "tenantId,name" });
+  ];
+  const roleIdMap = {};
+  for (const [index, role] of roleDefs.entries()) {
+    const id = await resolveNamedId("Role", role.name, role.id);
+    roleIdMap[role.id] = id;
+    await safeUpsert("Role", [{
+      id,
+      tenantId: TENANT,
+      name: role.name,
+      description: `${role.name} demo role`,
+      permissions: role.permissions,
+      createdAt: iso(-80 + index),
+      updatedAt: now,
+    }]);
+  }
 
   await safeUpdate("User", ADMIN_USER_ID, {
     password: passwordHash,
-    roleId: "demo-role-super-admin",
+    roleId: roleIdMap["demo-role-super-admin"],
     status: "ACTIVE",
     updatedAt: now,
   });
@@ -287,7 +292,7 @@ async function seedOrgAccess(admin) {
     email,
     password: passwordHash,
     status: "ACTIVE",
-    roleId,
+    roleId: roleIdMap[roleId] || roleId,
     permissionTemplateId,
     managerId,
     skills: { languages: ["English", index % 2 ? "Hindi" : "Tamil"], courses: [pick(COURSES, index), pick(COURSES, index + 3)] },
@@ -364,8 +369,20 @@ async function seedOrgAccess(admin) {
   };
 }
 
+async function resolveNamedId(table, name, demoId) {
+  const existing = await getOne(table, "id", (q) => q.eq("tenantId", TENANT).eq("name", name).limit(1));
+  return existing?.id || demoId;
+}
+
+async function resolveIdByMatch(table, matchers, demoId) {
+  const existing = await getOne(table, "id", (q) =>
+    matchers.reduce((qq, [column, value]) => (value === null ? qq.is(column, null) : qq.eq(column, value)), q).limit(1)
+  );
+  return existing?.id || demoId;
+}
+
 async function seedUniversityPipelines(opportunityObjectId) {
-  const typeDefs = [
+  const typeDefsInput = [
     ["demo-opp-type-university-1", "University 1", "Domestic undergraduate and postgraduate admissions", 1, ["B.Tech Computer Science", "B.Tech Artificial Intelligence", "BBA Digital Business", "B.Com Professional"]],
     ["demo-opp-type-university-2", "University 2", "Management, design, law, and healthcare programs", 2, ["MBA Marketing", "MBA Finance", "B.Des UX Design", "LLB Integrated", "B.Sc Nursing"]],
     ["demo-opp-type-university-3", "University 3", "International and advanced technology programs", 3, ["MCA Cloud Computing", "M.Sc Data Science", "BA Psychology", "B.Tech Artificial Intelligence"]],
@@ -379,59 +396,78 @@ async function seedUniversityPipelines(opportunityObjectId) {
     ["Rejected / Dropped", 6, 0, "#ef4444", true, false],
   ];
 
-  await safeUpsert("OpportunityType", typeDefs.map(([id, name, description, order]) => ({
-    id,
-    tenantId: TENANT,
-    objectId: opportunityObjectId,
-    name,
-    description,
-    order,
-    isActive: true,
-    createdAt: iso(-60),
-    updatedAt: iso(0),
-  })));
+  const typeDefs = [];
+  for (const [demoId, name, description, order, courses] of typeDefsInput) {
+    const id = await resolveNamedId("OpportunityType", name, demoId);
+    await safeUpsert("OpportunityType", [{
+      id,
+      tenantId: TENANT,
+      objectId: opportunityObjectId,
+      name,
+      description,
+      order,
+      isActive: true,
+      createdAt: iso(-60),
+      updatedAt: iso(0),
+    }]);
+    typeDefs.push([id, name, description, order, courses]);
+  }
 
-  const stageRows = typeDefs.flatMap(([typeId]) => stages.map(([name, order, probability, color, isClosed, isWon]) => ({
-    id: `${typeId}-stage-${slug(name)}`,
-    tenantId: TENANT,
-    opportunityTypeId: typeId,
-    name,
-    order,
-    probability,
-    color,
-    isClosed,
-    isWon,
-    createdAt: iso(-60),
-    updatedAt: iso(0),
-  })));
-  await safeUpsert("StageDefinition", stageRows);
+  const stageRows = [];
+  for (const [typeId] of typeDefs) {
+    for (const [name, order, probability, color, isClosed, isWon] of stages) {
+      const demoStageId = `${typeId}-stage-${slug(name)}`;
+      const id = await resolveIdByMatch("StageDefinition", [["opportunityTypeId", typeId], ["name", name]], demoStageId);
+      const row = {
+        id,
+        tenantId: TENANT,
+        opportunityTypeId: typeId,
+        name,
+        order,
+        probability,
+        color,
+        isClosed,
+        isWon,
+        createdAt: iso(-60),
+        updatedAt: iso(0),
+      };
+      await safeUpsert("StageDefinition", [row]);
+      stageRows.push(row);
+    }
+  }
   return { typeDefs, stageRows };
 }
 
 async function seedActivityTypes(activityObjectId) {
-  const rows = [
+  const defs = [
     ["demo-activity-call", "Call", "Phone", "#2563eb"],
     ["demo-activity-whatsapp", "WhatsApp", "MessageCircle", "#16a34a"],
     ["demo-activity-email", "Email", "Mail", "#9333ea"],
     ["demo-activity-campus-visit", "Campus Visit", "MapPin", "#f59e0b"],
     ["demo-activity-counselling", "Counselling Session", "Users", "#0f766e"],
     ["demo-activity-document-review", "Document Review", "FileCheck", "#dc2626"],
-  ].map(([id, name, icon, color], index) => ({
-    id,
-    tenantId: TENANT,
-    objectId: activityObjectId,
-    name,
-    icon,
-    color,
+  ];
+  const resolvedIds = [];
+  for (const [demoId, name, icon, color] of defs) {
+    const index = resolvedIds.length;
+    const id = await resolveNamedId("ActivityType", name, demoId);
+    await safeUpsert("ActivityType", [{
+      id,
+      tenantId: TENANT,
+      objectId: activityObjectId,
+      name,
+      icon,
+      color,
       defaultOutcome: index === 2 ? "FOLLOW_UP_NEEDED" : "SUCCESS",
       defaultSLA: index === 0 ? 240 : index === 3 ? 1440 : 720,
-    isActive: true,
-    order: index + 1,
-    createdAt: iso(-58),
-    updatedAt: iso(0),
-  }));
-  await safeUpsert("ActivityType", rows);
-  return rows;
+      isActive: true,
+      order: index + 1,
+      createdAt: iso(-58),
+      updatedAt: iso(0),
+    }]);
+    resolvedIds.push(id);
+  }
+  return resolvedIds;
 }
 
 async function seedCustomFields(leadObjectId, opportunityObjectId, typeDefs) {
@@ -488,7 +524,7 @@ async function seedCrmRecords(refs) {
   const stageHistory = [];
   const assignments = [];
   const customValues = [];
-  const activityTypes = ["demo-activity-call", "demo-activity-whatsapp", "demo-activity-email", "demo-activity-campus-visit", "demo-activity-counselling", "demo-activity-document-review"];
+  const activityTypes = refs.activityTypeIds;
 
   for (let i = 1; i <= LEAD_COUNT; i += 1) {
     const padded = String(i).padStart(4, "0");
@@ -710,7 +746,7 @@ async function seedPartnersAndPayouts(records) {
     updatedBy: ADMIN_USER_ID,
     createdAt: iso(-40),
     updatedAt: iso(0),
-  }]);
+  }], { onConflict: "tenantId" });
 
   const partnerOpps = records.opportunities.filter((opp) => ["demo-partner-alpha-primary", "demo-partner-alpha-counselor", "demo-partner-beta-primary", "demo-partner-gamma-primary"].includes(opp.ownerId)).slice(0, 24);
   const ledgers = partnerOpps.map((opp, index) => ({
@@ -762,7 +798,7 @@ async function seedGamification(records) {
     updatedBy: ADMIN_USER_ID,
     createdAt: iso(-30),
     updatedAt: iso(0),
-  }]);
+  }], { onConflict: "tenantId" });
   await safeUpsert("GamificationRule", [
     { id: "demo-gamify-call", tenantId: TENANT, name: "Meaningful student conversation", triggerEventType: "ACTIVITY_CREATED", audienceScope: "INTERNAL", conditions: { activityType: "Call" }, pointsAwarded: 10, priority: 10, isActive: true, createdBy: ADMIN_USER_ID, createdAt: iso(-30), updatedAt: iso(0) },
     { id: "demo-gamify-application", tenantId: TENANT, name: "Application moved to docs submitted", triggerEventType: "STAGE_CHANGED", audienceScope: "ALL", conditions: { toStage: "Docs Submitted" }, pointsAwarded: 30, priority: 20, isActive: true, createdBy: ADMIN_USER_ID, createdAt: iso(-30), updatedAt: iso(0) },
@@ -800,7 +836,7 @@ async function seedGamification(records) {
     earnedAt: iso(-10 + index),
     sourcePeriodStart: iso(-30),
     sourcePeriodEnd: iso(0),
-  })));
+  })), { onConflict: "tenantId,userId,badgeId,sourcePeriodStart" });
   await safeUpsert("GamificationRedemption", [
     { id: "demo-redemption-1", tenantId: TENANT, userId: "demo-user-counselor-1", pointsRedeemed: 500, redemptionType: "THIRD_PARTY_REWARD", monetaryAmount: null, thirdPartyProvider: "Amazon", thirdPartyReference: "AMZ-DEMO-500", catalogItemKey: "amazon-500", rewardName: "Amazon Voucher 500", status: "FULFILLED", notes: "Demo fulfilled redemption", reviewedBy: ADMIN_USER_ID, reviewedAt: iso(-2), createdAt: iso(-3), updatedAt: iso(-2) },
     { id: "demo-redemption-2", tenantId: TENANT, userId: "demo-partner-alpha-primary", pointsRedeemed: 100, redemptionType: "INTERNAL_PERK", monetaryAmount: null, thirdPartyProvider: null, thirdPartyReference: null, catalogItemKey: "coffee-voucher", rewardName: "Coffee Voucher", status: "REQUESTED", notes: "Demo pending redemption", createdAt: iso(-1), updatedAt: iso(-1) },
@@ -829,7 +865,7 @@ async function seedScoringAndViews(records) {
     updatedBy: ADMIN_USER_ID,
     createdAt: iso(-10),
     updatedAt: iso(0),
-  }]);
+  }], { onConflict: "tenantId" });
 
   const scoreRows = [];
   const historyRows = [];
@@ -1017,30 +1053,34 @@ async function seedReports(records) {
     createdBy: ADMIN_USER_ID,
     createdAt: iso(-8),
     updatedAt: iso(0),
-  })));
+  })), { onConflict: "tenantId,reportKey" });
   await safeUpsert("ReportRollup", [
     { id: "demo-rollup-funnel-fee-paid", tenantId: TENANT, reportKey: "funnel_conversion_by_stage", scopeType: "ORG", scopeId: null, periodStart: "2026-07-01T00:00:00.000Z", periodEnd: "2026-08-01T00:00:00.000Z", grain: "MONTHLY", dimensions: { stage: "Fee Paid" }, metrics: { count: records.opportunities.filter((_, i) => i % 11 === 0).length, value: 4800000, conversionFromFirst: 0.18 }, sourceWatermark: iso(0), lastComputedAt: iso(0), createdAt: iso(-1), updatedAt: iso(0) },
     { id: "demo-rollup-source-partner", tenantId: TENANT, reportKey: "lead_source_roi", scopeType: "ORG", scopeId: null, periodStart: "2026-07-01T00:00:00.000Z", periodEnd: "2026-08-01T00:00:00.000Z", grain: "MONTHLY", dimensions: { source: "Partner" }, metrics: { leads: records.leads.filter((lead) => lead.source === "Partner").length, opportunities: 65, wonOpportunities: 14, wonValue: 2800000, spend: 420000, roi: 5.6 }, sourceWatermark: iso(0), lastComputedAt: iso(0), createdAt: iso(-1), updatedAt: iso(0) },
     { id: "demo-rollup-data-quality", tenantId: TENANT, reportKey: "data_quality", scopeType: "ORG", scopeId: null, periodStart: null, periodEnd: null, grain: "CURRENT", dimensions: {}, metrics: { duplicateLeads: 8, staleLeads: 21, missingOwner: 0, missingEmail: 0 }, sourceWatermark: iso(0), lastComputedAt: iso(0), createdAt: iso(-1), updatedAt: iso(0) },
   ]);
-  await safeUpsert("ReportRefreshState", reportKeys.map(([key]) => ({
-    id: `demo-refresh-state-${key}`,
-    tenantId: TENANT,
-    reportKey: key,
-    scopeType: "ORG",
-    scopeId: null,
-    lastStartedAt: iso(0),
-    lastCompletedAt: iso(0),
-    lastSuccessfulAt: iso(0),
-    lastSourceWatermark: iso(0),
-    status: "FRESH",
-    error: null,
-    refreshIntervalMinutes: 30,
-    manualRefreshRequestedAt: null,
-    manualRefreshRequestedBy: null,
-    createdAt: iso(-1),
-    updatedAt: iso(0),
-  })));
+  for (const [key] of reportKeys) {
+    const demoId = `demo-refresh-state-${key}`;
+    const id = await resolveIdByMatch("ReportRefreshState", [["tenantId", TENANT], ["reportKey", key], ["scopeType", "ORG"], ["scopeId", null]], demoId);
+    await safeUpsert("ReportRefreshState", [{
+      id,
+      tenantId: TENANT,
+      reportKey: key,
+      scopeType: "ORG",
+      scopeId: null,
+      lastStartedAt: iso(0),
+      lastCompletedAt: iso(0),
+      lastSuccessfulAt: iso(0),
+      lastSourceWatermark: iso(0),
+      status: "FRESH",
+      error: null,
+      refreshIntervalMinutes: 30,
+      manualRefreshRequestedAt: null,
+      manualRefreshRequestedBy: null,
+      createdAt: iso(-1),
+      updatedAt: iso(0),
+    }]);
+  }
   await safeUpsert("ReportSchedule", [
     { id: "demo-report-schedule-weekly-funnel", tenantId: TENANT, userId: ADMIN_USER_ID, reportKey: "funnel_conversion_by_stage", queryDefinition: null, recipients: ["admissions@demouniversity.edu"], format: "LINK", frequency: "WEEKLY", dayOfWeek: 1, dayOfMonth: null, nextRunAt: iso(5), lastRunAt: iso(-2), lastStatus: "SUCCESS", isActive: true, createdAt: iso(-6), updatedAt: iso(0) },
     { id: "demo-report-schedule-payout", tenantId: TENANT, userId: "demo-user-finance", reportKey: "commission_payout_summary", queryDefinition: null, recipients: ["finance@demouniversity.edu"], format: "CSV", frequency: "MONTHLY", dayOfWeek: null, dayOfMonth: 1, nextRunAt: "2026-08-01T09:00:00.000Z", lastRunAt: null, lastStatus: null, isActive: true, createdAt: iso(-6), updatedAt: iso(0) },
@@ -1321,9 +1361,9 @@ async function main() {
   const activityObjectId = await ensureObject("activity", "Activity");
   const access = await seedOrgAccess(admin);
   const typeRefs = await seedUniversityPipelines(opportunityObjectId);
-  await seedActivityTypes(activityObjectId);
+  const activityTypeIds = await seedActivityTypes(activityObjectId);
   const fields = await seedCustomFields(leadObjectId, opportunityObjectId, typeRefs.typeDefs);
-  const records = await seedCrmRecords({ leadObjectId, opportunityObjectId, activityObjectId, ...typeRefs, ...fields });
+  const records = await seedCrmRecords({ leadObjectId, opportunityObjectId, activityObjectId, activityTypeIds, ...typeRefs, ...fields });
   await seedPartnersAndPayouts(records);
   await seedGamification(records);
   await seedScoringAndViews(records);
