@@ -2,6 +2,7 @@ import { randomUUID } from "crypto";
 import { execute, query, queryOne } from "@/lib/db/query";
 import { withTransaction } from "@/lib/db/transaction";
 import { listLeadsForTenant } from "@/lib/repositories/leads-postgres";
+import { runAutomationsForEvent } from "@/lib/repositories/automations-postgres";
 
 type TenantUser = {
   id: string;
@@ -353,6 +354,7 @@ export async function createOpportunityForTenant(user: TenantUser, payload: Reco
   });
 
   await createAuditLog(user, "CREATE", created.id, null, created, null);
+  await runAutomationsForEvent(user, "OPPORTUNITY_CREATED", "OPPORTUNITY", created.id, created).catch(() => undefined);
   return { ...(await decorateOpportunities(user, [created]))[0], distribution: null };
 }
 
@@ -399,6 +401,21 @@ export async function updateOpportunityForTenant(user: TenantUser, id: string, p
   if (!updated) return null;
   const diff = fieldDiff(existing, updated);
   await createAuditLog(user, "UPDATE", updated.id, existing, updated, Object.keys(diff).length ? diff : null);
+  await runAutomationsForEvent(user, "OPPORTUNITY_UPDATED", "OPPORTUNITY", updated.id, updated).catch(() => undefined);
+  if (updated.stageId && existing.stageId !== updated.stageId) {
+    const stageNames = await query<{ id: string; name: string }>(
+      'select id, name from "StageDefinition" where id = any($1::text[])',
+      [[existing.stageId, updated.stageId]],
+    );
+    const stageNameById = new Map(stageNames.map((stage) => [stage.id, stage.name]));
+    await runAutomationsForEvent(user, "STAGE_CHANGED", "OPPORTUNITY", updated.id, {
+      ...updated,
+      fromStageId: existing.stageId,
+      toStageId: updated.stageId,
+      fromStageName: stageNameById.get(existing.stageId) ?? null,
+      toStageName: stageNameById.get(updated.stageId) ?? null,
+    }).catch(() => undefined);
+  }
   return (await decorateOpportunities(user, [updated]))[0] ?? updated;
 }
 

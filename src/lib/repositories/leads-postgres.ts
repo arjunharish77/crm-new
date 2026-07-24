@@ -1,5 +1,6 @@
 import { randomUUID } from "crypto";
 import { execute, query, queryOne } from "@/lib/db/query";
+import { runAutomationsForEvent } from "@/lib/repositories/automations-postgres";
 
 type TenantUser = {
   id: string;
@@ -321,6 +322,7 @@ export async function createLeadForTenant(user: TenantUser, payload: Record<stri
   if (!lead) throw new Error("LEAD_INSERT_FAILED");
   const formatted = formatLead(lead);
   await createAuditLog(user, "CREATE", "LEAD", formatted.id, null, formatted, null);
+  await runAutomationsForEvent(user, "LEAD_CREATED", "LEAD", formatted.id, formatted).catch(() => undefined);
   return formatted;
 }
 
@@ -365,6 +367,7 @@ export async function updateLeadForTenant(user: TenantUser, id: string, payload:
   const formatted = formatLead(lead);
   const diff = fieldDiff(existing, formatted);
   await createAuditLog(user, "UPDATE", "LEAD", formatted.id, existing, formatted, Object.keys(diff).length ? diff : null);
+  await runAutomationsForEvent(user, "LEAD_UPDATED", "LEAD", formatted.id, formatted).catch(() => undefined);
   return formatted;
 }
 

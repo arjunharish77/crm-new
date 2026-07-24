@@ -1,6 +1,7 @@
 import { randomUUID } from "crypto";
 import { execute, query, queryOne } from "@/lib/db/query";
 import { listOpportunityTypesForTenant } from "@/lib/repositories/opportunities-postgres";
+import { runAutomationsForEvent } from "@/lib/repositories/automations-postgres";
 import { formatTenantDate, getTenantTimeZone } from "@/lib/server/date-format";
 
 type TenantUser = {
@@ -264,6 +265,12 @@ export async function createActivityForTenant(user: TenantUser, payload: Record<
   if (!activity) throw new Error("ACTIVITY_INSERT_FAILED");
   const [hydrated] = await hydrateActivities(user, [activity]);
   await createAuditLog(user, "CREATE", activity.id, null, hydrated, null);
+  if (hydrated.leadId) {
+    await runAutomationsForEvent(user, "ACTIVITY_CREATED", "ACTIVITY", hydrated.id, hydrated).catch(() => undefined);
+  }
+  if (hydrated.opportunityId) {
+    await runAutomationsForEvent(user, "ACTIVITY_CREATED_ON_OPPORTUNITY", "ACTIVITY", hydrated.id, hydrated).catch(() => undefined);
+  }
   return hydrated;
 }
 
@@ -308,6 +315,12 @@ export async function updateActivityForTenant(user: TenantUser, id: string, payl
   if (!activity) throw new Error("ACTIVITY_NOT_FOUND");
   const [hydrated] = await hydrateActivities(user, [activity]);
   await createAuditLog(user, "UPDATE", activity.id, existing, activity, diff(existing, activity));
+  if (hydrated.leadId) {
+    await runAutomationsForEvent(user, "ACTIVITY_UPDATED", "ACTIVITY", hydrated.id, hydrated).catch(() => undefined);
+  }
+  if (hydrated.opportunityId) {
+    await runAutomationsForEvent(user, "ACTIVITY_UPDATED_ON_OPPORTUNITY", "ACTIVITY", hydrated.id, hydrated).catch(() => undefined);
+  }
   return hydrated;
 }
 
