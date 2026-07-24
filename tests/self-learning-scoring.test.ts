@@ -27,14 +27,15 @@ function assignDynamicUpdate(sql: string, target: Record<string, any>, params: a
 vi.mock("@/lib/db/query", () => ({
   query: async (sql: string, params: any[] = []) => {
     if (sql.includes('insert into "ScoringTrainingRun"')) {
+      const targetModule = sql.includes("'LEAD'") ? "LEAD" : sql.includes("'OPPORTUNITY'") ? "OPPORTUNITY" : "BOTH";
       rows("ScoringTrainingRun").push({
         id: params[0],
         tenantId: params[1],
-        targetModule: params[2],
+        targetModule,
         status: "RUNNING",
-        startedAt: params[3],
-        createdBy: params[4],
-        createdAt: params[3],
+        startedAt: params[2],
+        createdBy: params[3],
+        createdAt: params[2],
       });
       return [];
     }
@@ -59,14 +60,16 @@ vi.mock("@/lib/db/query", () => ({
       return [];
     }
     if (sql.includes('update "ScoringTrainingRun"') && sql.includes("COMPLETED")) {
-      const row = rows("ScoringTrainingRun").find((run) => run.tenantId === params[4] && run.id === params[5]);
+      const row = rows("ScoringTrainingRun").find((run) => run.tenantId === params[5] && run.id === params[6]);
       if (row) {
         Object.assign(row, {
           status: "COMPLETED",
           completedAt: params[0],
           recordsProcessed: params[1],
-          recordsSkipped: params[2],
-          metrics: params[3],
+          recordsSkipped: 0,
+          metrics: params[2],
+          modelId: params[3],
+          modelVersionId: params[4],
         });
       }
       return [];
@@ -81,8 +84,36 @@ vi.mock("@/lib/db/query", () => ({
       if (row) Object.assign(row, { lastRecomputedAt: params[0], updatedAt: params[0] });
       return [];
     }
+    if (sql.includes('insert into "ScoringModel"')) {
+      rows("ScoringModel").push({
+        id: params[0],
+        tenantId: params[1],
+        name: params[2],
+        targetModule: params[3],
+        objective: params[4],
+        status: "ACTIVE",
+        createdBy: params[5],
+        createdAt: params[6],
+        updatedAt: params[6],
+      });
+      return [];
+    }
+    if (sql.includes('insert into "ScoringModelVersion"')) {
+      rows("ScoringModelVersion").push({
+        id: params[0],
+        tenantId: params[1],
+        modelId: params[2],
+        versionNumber: params[3],
+        algorithm: "MVP_WEIGHTED_BUCKET_CALIBRATION",
+        status: "DRAFT",
+        featureConfig: params[4],
+        metrics: params[5],
+        createdAt: params[6],
+      });
+      return [];
+    }
     if (sql.includes('update "RecordScore"')) {
-      const row = rows("RecordScore").find((score) => score.tenantId === params[12] && score.id === params[13]);
+      const row = rows("RecordScore").find((score) => score.tenantId === params[13] && score.id === params[14]);
       if (row) {
         Object.assign(row, {
           fitScore: params[0],
@@ -95,8 +126,9 @@ vi.mock("@/lib/db/query", () => ({
           reasons: params[7],
           source: params[8],
           featureSnapshotId: params[9],
-          calculatedAt: params[10],
-          updatedAt: params[11],
+          modelVersionId: params[10],
+          calculatedAt: params[11],
+          updatedAt: params[12],
         });
       }
       return [];
@@ -105,21 +137,22 @@ vi.mock("@/lib/db/query", () => ({
       rows("RecordScore").push({
         id: params[0],
         tenantId: params[1],
-        recordType: params[2],
-        recordId: params[3],
-        fitScore: params[4],
-        engagementScore: params[5],
-        conversionProbability: params[6],
-        winProbability: params[7],
-        stallRisk: params[8],
-        scoreBand: params[9],
-        confidence: params[10],
-        reasons: params[11],
-        source: params[12],
-        featureSnapshotId: params[13],
-        calculatedAt: params[14],
-        updatedAt: params[14],
-        createdAt: params[14],
+        modelVersionId: params[2],
+        recordType: params[3],
+        recordId: params[4],
+        fitScore: params[5],
+        engagementScore: params[6],
+        conversionProbability: params[7],
+        winProbability: params[8],
+        stallRisk: params[9],
+        scoreBand: params[10],
+        confidence: params[11],
+        reasons: params[12],
+        source: params[13],
+        featureSnapshotId: params[14],
+        calculatedAt: params[15],
+        updatedAt: params[15],
+        createdAt: params[15],
       });
       return [];
     }
@@ -175,17 +208,29 @@ vi.mock("@/lib/db/query", () => ({
       const row = {
         id: params[0],
         tenantId: params[1],
-        recordType: params[2],
-        recordId: params[3],
-        features: params[4],
-        sourceDataUpdatedAt: params[5],
-        createdAt: params[6],
+        modelVersionId: params[2],
+        recordType: params[3],
+        recordId: params[4],
+        features: params[5],
+        sourceDataUpdatedAt: params[6],
+        createdAt: params[7],
       };
       rows("ScoringFeatureSnapshot").push(row);
       return { id: row.id };
     }
     if (sql.includes('from "RecordScore"')) {
       return rows("RecordScore").find((row) => row.tenantId === params[0] && row.recordType === params[1] && row.recordId === params[2]) ?? null;
+    }
+    if (sql.includes('select id from "ScoringModel"')) {
+      const row = rows("ScoringModel").find(
+        (model) => model.tenantId === params[0] && model.targetModule === params[1] && model.objective === params[2] && model.status !== "ARCHIVED",
+      );
+      return row ? { id: row.id } : null;
+    }
+    if (sql.includes('select "versionNumber" from "ScoringModelVersion"')) {
+      const matches = rows("ScoringModelVersion").filter((version) => version.tenantId === params[0] && version.modelId === params[1]);
+      if (!matches.length) return null;
+      return { versionNumber: Math.max(...matches.map((version) => version.versionNumber)) };
     }
     return null;
   },

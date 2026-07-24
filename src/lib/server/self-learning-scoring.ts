@@ -113,11 +113,15 @@ function bucketRates<T>(records: T[], keyFor: (record: T) => unknown, outcomeFor
 }
 
 function isWonStage(stage: any) {
+  if (stage && typeof stage.isWon === "boolean") return stage.isWon;
   const name = String(stage?.name ?? stage?.label ?? stage?.stage ?? "").toLowerCase();
   return name.includes("won") || name.includes("closed won") || name === "success";
 }
 
 function isLostStage(stage: any) {
+  if (stage && typeof stage.isWon === "boolean" && typeof stage.isClosed === "boolean") {
+    return stage.isClosed && !stage.isWon;
+  }
   const name = String(stage?.name ?? stage?.label ?? stage?.stage ?? "").toLowerCase();
   return name.includes("lost") || name.includes("closed lost") || name.includes("dropped");
 }
@@ -150,6 +154,106 @@ export function calculateCalibration(input: {
     opportunityStageWinRates: bucketRates(input.opportunities, (opportunity) => opportunity.stageId, opportunityWon),
     opportunityPriorityWinRates: bucketRates(input.opportunities, (opportunity) => opportunity.priority, opportunityWon),
   };
+}
+
+function hashUnitInterval(id: string) {
+  let hash = 0;
+  for (let index = 0; index < id.length; index += 1) {
+    hash = (hash * 31 + id.charCodeAt(index)) >>> 0;
+  }
+  return hash / 4294967296;
+}
+
+function splitTrainHoldout<T extends Record<string, any>>(records: T[], idKey: string, holdoutRatio = 0.2) {
+  const train: T[] = [];
+  const holdout: T[] = [];
+  for (const record of records) {
+    const bucket = hashUnitInterval(String(record[idKey]));
+    if (bucket < holdoutRatio) holdout.push(record);
+    else train.push(record);
+  }
+  return { train, holdout };
+}
+
+function binaryClassificationMetrics(samples: Array<{ predicted: number; actual: boolean }>) {
+  if (!samples.length) {
+    return { sampleSize: 0, brierScore: null, accuracy: null, precision: null, recall: null, hotBandActualRate: null, coldBandActualRate: null, lift: null };
+  }
+  let truePositive = 0;
+  let falsePositive = 0;
+  let trueNegative = 0;
+  let falseNegative = 0;
+  let squaredError = 0;
+  for (const sample of samples) {
+    const probability = sample.predicted / 100;
+    squaredError += (probability - (sample.actual ? 1 : 0)) ** 2;
+    const predictedPositive = sample.predicted >= 50;
+    if (predictedPositive && sample.actual) truePositive += 1;
+    else if (predictedPositive && !sample.actual) falsePositive += 1;
+    else if (!predictedPositive && sample.actual) falseNegative += 1;
+    else trueNegative += 1;
+  }
+  const accuracy = (truePositive + trueNegative) / samples.length;
+  const precision = truePositive + falsePositive > 0 ? truePositive / (truePositive + falsePositive) : null;
+  const recall = truePositive + falseNegative > 0 ? truePositive / (truePositive + falseNegative) : null;
+  const brierScore = squaredError / samples.length;
+
+  const hotSamples = samples.filter((sample) => sample.predicted >= 75);
+  const coldSamples = samples.filter((sample) => sample.predicted < 45);
+  const hotBandActualRate = hotSamples.length ? hotSamples.filter((sample) => sample.actual).length / hotSamples.length : null;
+  const coldBandActualRate = coldSamples.length ? coldSamples.filter((sample) => sample.actual).length / coldSamples.length : null;
+  const lift = hotBandActualRate !== null && coldBandActualRate !== null && coldBandActualRate > 0 ? hotBandActualRate / coldBandActualRate : null;
+
+  return {
+    sampleSize: samples.length,
+    brierScore: Math.round(brierScore * 1000) / 1000,
+    accuracy: Math.round(accuracy * 1000) / 1000,
+    precision: precision === null ? null : Math.round(precision * 1000) / 1000,
+    recall: recall === null ? null : Math.round(recall * 1000) / 1000,
+    hotBandActualRate: hotBandActualRate === null ? null : Math.round(hotBandActualRate * 1000) / 1000,
+    coldBandActualRate: coldBandActualRate === null ? null : Math.round(coldBandActualRate * 1000) / 1000,
+    lift: lift === null ? null : Math.round(lift * 1000) / 1000,
+  };
+}
+
+async function getOrCreateScoringModel(input: { tenantId: string; targetModule: RecordType; objective: ScoringSettings["objective"]; createdBy: string }) {
+  const existing = await pgQueryOne<any>(
+    `select id from "ScoringModel" where "tenantId" = $1 and "targetModule" = $2 and objective = $3 and status != 'ARCHIVED' order by "createdAt" desc limit 1`,
+    [input.tenantId, input.targetModule, input.objective],
+  );
+  if (existing?.id) return existing.id as string;
+
+  const id = randomUUID();
+  const now = new Date().toISOString();
+  const name = `${input.targetModule === "LEAD" ? "Lead" : "Opportunity"} ${input.objective.replace(/_/g, " ").toLowerCase()} model`;
+  await pgQuery(
+    `insert into "ScoringModel" (id, "tenantId", name, "targetModule", objective, status, "createdBy", "createdAt", "updatedAt")
+     values ($1, $2, $3, $4, $5, 'ACTIVE', $6, $7, $7)`,
+    [id, input.tenantId, name, input.targetModule, input.objective, input.createdBy, now],
+  );
+  return id;
+}
+
+async function createScoringModelVersion(input: {
+  tenantId: string;
+  modelId: string;
+  featureConfig: Record<string, unknown>;
+  metrics: Record<string, unknown>;
+}) {
+  const latest = await pgQueryOne<{ versionNumber: number }>(
+    `select "versionNumber" from "ScoringModelVersion" where "tenantId" = $1 and "modelId" = $2 order by "versionNumber" desc limit 1`,
+    [input.tenantId, input.modelId],
+  );
+  const versionNumber = (latest?.versionNumber ?? 0) + 1;
+  const id = randomUUID();
+  const now = new Date().toISOString();
+  await pgQuery(
+    `insert into "ScoringModelVersion"
+      (id, "tenantId", "modelId", "versionNumber", algorithm, status, "featureConfig", metrics, "createdAt")
+     values ($1, $2, $3, $4, 'MVP_WEIGHTED_BUCKET_CALIBRATION', 'DRAFT', $5, $6, $7)`,
+    [id, input.tenantId, input.modelId, versionNumber, jsonb(input.featureConfig), jsonb(input.metrics), now],
+  );
+  return { id, versionNumber };
 }
 
 function groupByNullableId(records: any[], key: string) {
@@ -504,7 +608,7 @@ async function listStageDefinitionsForScoring(tenantId: string) {
         : "id::text";
 
   return pgQuery<any>(
-    `select id, ${nameExpression} as name, "order"
+    `select id, ${nameExpression} as name, "order", "isWon", "isClosed"
      from "StageDefinition"
      where "tenantId" = $1
      limit 1000`,
@@ -516,66 +620,91 @@ export async function recomputeSelfLearningScoresForTenant(user: TenantUser, inp
   const tenantId = requireTenantId(user);
   const settings = await getScoringSettingsForTenant(user);
   const targetModules = (input.targetModules?.length ? input.targetModules : settings.targetModules).filter((module): module is RecordType => module === "LEAD" || module === "OPPORTUNITY");
-  const now = new Date().toISOString();
-  const runId = randomUUID();
-  await pgQuery(
-    `insert into "ScoringTrainingRun"
-      (id, "tenantId", "targetModule", status, "startedAt", "createdBy", "createdAt")
-     values ($1, $2, $3, 'RUNNING', $4, $5, $4)`,
-    [runId, tenantId, targetModules.length === 2 ? "BOTH" : targetModules[0] ?? "LEAD", now, user.id],
-  );
 
-  try {
-    const since = new Date();
-    since.setDate(since.getDate() - settings.lookbackDays);
-    const [leads, opportunities, stages, activities, tasks] = await Promise.all([
-      pgQuery<any>(
-        `select id, name, email, phone, company, status, source, score, "ownerId", "createdAt", "updatedAt"
-         from "Lead"
-         where "tenantId" = $1 and "createdAt" >= $2
-         order by "createdAt" desc
-         limit 2000`,
-        [tenantId, since.toISOString()],
-      ),
-      pgQuery<any>(
-        `select id, "leadId", "stageId", title, amount, priority, "ownerId", "createdAt", "updatedAt"
-         from "Opportunity"
-         where "tenantId" = $1 and "createdAt" >= $2
-         order by "createdAt" desc
-         limit 2000`,
-        [tenantId, since.toISOString()],
-      ),
-      listStageDefinitionsForScoring(tenantId),
-      pgQuery<any>(
-        `select id, "leadId", "opportunityId", "createdAt", "updatedAt", "completedAt", "slaStatus"
-         from "Activity"
-         where "tenantId" = $1 and "createdAt" >= $2
-         order by "createdAt" desc
-         limit 5000`,
-        [tenantId, since.toISOString()],
-      ),
-      pgQuery<any>(
-        `select id, "leadId", "opportunityId", status, "dueAt", "createdAt", "updatedAt", "completedAt"
-         from "Task"
-         where "tenantId" = $1 and "createdAt" >= $2
-         order by "createdAt" desc
-         limit 5000`,
-        [tenantId, since.toISOString()],
-      ),
-    ]);
+  const since = new Date();
+  since.setDate(since.getDate() - settings.lookbackDays);
+  const [leads, opportunities, stages, activities, tasks] = await Promise.all([
+    pgQuery<any>(
+      `select id, name, email, phone, company, status, source, score, "ownerId", "createdAt", "updatedAt"
+       from "Lead"
+       where "tenantId" = $1 and "createdAt" >= $2
+       order by "createdAt" desc
+       limit 2000`,
+      [tenantId, since.toISOString()],
+    ),
+    pgQuery<any>(
+      `select id, "leadId", "stageId", title, amount, priority, "ownerId", "createdAt", "updatedAt"
+       from "Opportunity"
+       where "tenantId" = $1 and "createdAt" >= $2
+       order by "createdAt" desc
+       limit 2000`,
+      [tenantId, since.toISOString()],
+    ),
+    listStageDefinitionsForScoring(tenantId),
+    pgQuery<any>(
+      `select id, "leadId", "opportunityId", "createdAt", "updatedAt", "completedAt", "slaStatus"
+       from "Activity"
+       where "tenantId" = $1 and "createdAt" >= $2
+       order by "createdAt" desc
+       limit 5000`,
+      [tenantId, since.toISOString()],
+    ),
+    pgQuery<any>(
+      `select id, "leadId", "opportunityId", status, "dueAt", "createdAt", "updatedAt", "completedAt"
+       from "Task"
+       where "tenantId" = $1 and "createdAt" >= $2
+       order by "createdAt" desc
+       limit 5000`,
+      [tenantId, since.toISOString()],
+    ),
+  ]);
 
-    const calibration = calculateCalibration({ leads, opportunities, stages });
-    const opportunitiesByLeadId = groupByNullableId(opportunities, "leadId");
-    const activitiesByLeadId = groupByNullableId(activities, "leadId");
-    const tasksByLeadId = groupByNullableId(tasks, "leadId");
-    const activitiesByOpportunityId = groupByNullableId(activities, "opportunityId");
-    const tasksByOpportunityId = groupByNullableId(tasks, "opportunityId");
-    const stageById = new Map(stages.map((stage) => [stage.id, stage]));
+  const opportunitiesByLeadId = groupByNullableId(opportunities, "leadId");
+  const activitiesByLeadId = groupByNullableId(activities, "leadId");
+  const tasksByLeadId = groupByNullableId(tasks, "leadId");
+  const activitiesByOpportunityId = groupByNullableId(activities, "opportunityId");
+  const tasksByOpportunityId = groupByNullableId(tasks, "opportunityId");
+  const stageById = new Map(stages.map((stage) => [stage.id, stage]));
+  const opportunityWon = (opportunity: any) => isWonStage(stageById.get(opportunity.stageId));
 
-    let processed = 0;
-    let skipped = 0;
+  const runs: Array<Record<string, unknown>> = [];
+  let processed = 0;
+  let skipped = 0;
 
-    if (targetModules.includes("LEAD")) {
+  if (targetModules.includes("LEAD")) {
+    const runId = randomUUID();
+    const startedAt = new Date().toISOString();
+    await pgQuery(
+      `insert into "ScoringTrainingRun" (id, "tenantId", "targetModule", status, "startedAt", "createdBy", "createdAt")
+       values ($1, $2, 'LEAD', 'RUNNING', $3, $4, $3)`,
+      [runId, tenantId, startedAt, user.id],
+    );
+    try {
+      const { train, holdout } = splitTrainHoldout(leads, "id");
+      const leadConverted = (lead: any) => (opportunitiesByLeadId.get(lead.id)?.length ?? 0) > 0;
+      const trainCalibration = calculateCalibration({ leads: train.length ? train : leads, opportunities, stages });
+
+      const holdoutSamples = holdout.map((lead) => {
+        const snapshot = buildLeadFeatureSnapshot({
+          lead,
+          opportunities: opportunitiesByLeadId.get(lead.id) ?? [],
+          activities: activitiesByLeadId.get(lead.id) ?? [],
+          tasks: tasksByLeadId.get(lead.id) ?? [],
+        });
+        const score = leadScoreFromFeatures(snapshot, lead, trainCalibration, { ...settings, isEnabled: true });
+        return { predicted: score.conversionProbability ?? 0, actual: leadConverted(lead) };
+      });
+      const holdoutMetrics = binaryClassificationMetrics(holdoutSamples);
+
+      const modelId = await getOrCreateScoringModel({ tenantId, targetModule: "LEAD", objective: settings.objective, createdBy: user.id });
+      const { id: modelVersionId, versionNumber } = await createScoringModelVersion({
+        tenantId,
+        modelId,
+        featureConfig: { lookbackDays: settings.lookbackDays, minimumHistoricalRecords: settings.minimumHistoricalRecords, objective: settings.objective },
+        metrics: { trainCount: train.length, holdoutCount: holdout.length, holdout: holdoutMetrics, leadOverallConversionRate: trainCalibration.leadOverallConversionRate },
+      });
+
+      let leadProcessed = 0;
       for (const lead of leads) {
         const snapshot = buildLeadFeatureSnapshot({
           lead,
@@ -583,8 +712,8 @@ export async function recomputeSelfLearningScoresForTenant(user: TenantUser, inp
           activities: activitiesByLeadId.get(lead.id) ?? [],
           tasks: tasksByLeadId.get(lead.id) ?? [],
         });
-        const score = leadScoreFromFeatures(snapshot, lead, calibration, settings);
-        await persistScore(user, snapshot, score);
+        const score = leadScoreFromFeatures(snapshot, lead, trainCalibration, settings);
+        await persistScore(user, snapshot, score, modelVersionId);
         if (settings.isEnabled || input.force) {
           await pgQuery('update "Lead" set score = $1, "updatedAt" = $2 where "tenantId" = $3 and id = $4', [
             score.conversionProbability ?? 0,
@@ -593,13 +722,64 @@ export async function recomputeSelfLearningScoresForTenant(user: TenantUser, inp
             lead.id,
           ]);
         }
-        processed += 1;
+        leadProcessed += 1;
       }
-    } else {
-      skipped += leads.length;
-    }
+      processed += leadProcessed;
 
-    if (targetModules.includes("OPPORTUNITY")) {
+      const completedAt = new Date().toISOString();
+      const runMetrics = { trainCount: train.length, holdoutCount: holdout.length, holdout: holdoutMetrics, versionNumber, modelVersionId };
+      await pgQuery(
+        `update "ScoringTrainingRun"
+         set status = 'COMPLETED', "completedAt" = $1, "recordsProcessed" = $2, "recordsSkipped" = 0,
+             metrics = $3, "modelId" = $4, "modelVersionId" = $5
+         where "tenantId" = $6 and id = $7`,
+        [completedAt, leadProcessed, jsonb(runMetrics), modelId, modelVersionId, tenantId, runId],
+      );
+      runs.push({ runId, targetModule: "LEAD", modelId, modelVersionId, versionNumber, metrics: runMetrics });
+    } catch (error: any) {
+      await pgQuery(
+        `update "ScoringTrainingRun" set status = 'FAILED', "completedAt" = $1, error = $2 where "tenantId" = $3 and id = $4`,
+        [new Date().toISOString(), error?.message ?? "Unknown scoring recompute error", tenantId, runId],
+      );
+      throw error;
+    }
+  } else {
+    skipped += leads.length;
+  }
+
+  if (targetModules.includes("OPPORTUNITY")) {
+    const runId = randomUUID();
+    const startedAt = new Date().toISOString();
+    await pgQuery(
+      `insert into "ScoringTrainingRun" (id, "tenantId", "targetModule", status, "startedAt", "createdBy", "createdAt")
+       values ($1, $2, 'OPPORTUNITY', 'RUNNING', $3, $4, $3)`,
+      [runId, tenantId, startedAt, user.id],
+    );
+    try {
+      const { train, holdout } = splitTrainHoldout(opportunities, "id");
+      const trainCalibration = calculateCalibration({ leads, opportunities: train.length ? train : opportunities, stages });
+
+      const holdoutSamples = holdout.map((opportunity) => {
+        const snapshot = buildOpportunityFeatureSnapshot({
+          opportunity,
+          stage: stageById.get(opportunity.stageId),
+          activities: activitiesByOpportunityId.get(opportunity.id) ?? [],
+          tasks: tasksByOpportunityId.get(opportunity.id) ?? [],
+        });
+        const score = opportunityScoreFromFeatures(snapshot, opportunity, trainCalibration, { ...settings, isEnabled: true });
+        return { predicted: score.winProbability ?? 0, actual: opportunityWon(opportunity) };
+      });
+      const holdoutMetrics = binaryClassificationMetrics(holdoutSamples);
+
+      const modelId = await getOrCreateScoringModel({ tenantId, targetModule: "OPPORTUNITY", objective: settings.objective, createdBy: user.id });
+      const { id: modelVersionId, versionNumber } = await createScoringModelVersion({
+        tenantId,
+        modelId,
+        featureConfig: { lookbackDays: settings.lookbackDays, minimumHistoricalRecords: settings.minimumHistoricalRecords, objective: settings.objective },
+        metrics: { trainCount: train.length, holdoutCount: holdout.length, holdout: holdoutMetrics, opportunityOverallWinRate: trainCalibration.opportunityOverallWinRate },
+      });
+
+      let oppProcessed = 0;
       for (const opportunity of opportunities) {
         const snapshot = buildOpportunityFeatureSnapshot({
           opportunity,
@@ -607,55 +787,51 @@ export async function recomputeSelfLearningScoresForTenant(user: TenantUser, inp
           activities: activitiesByOpportunityId.get(opportunity.id) ?? [],
           tasks: tasksByOpportunityId.get(opportunity.id) ?? [],
         });
-        const score = opportunityScoreFromFeatures(snapshot, opportunity, calibration, settings);
-        await persistScore(user, snapshot, score);
-        processed += 1;
+        const score = opportunityScoreFromFeatures(snapshot, opportunity, trainCalibration, settings);
+        await persistScore(user, snapshot, score, modelVersionId);
+        oppProcessed += 1;
       }
-    } else {
-      skipped += opportunities.length;
-    }
+      processed += oppProcessed;
 
-    const completedAt = new Date().toISOString();
-    const metrics = {
-      leadRecords: leads.length,
-      opportunityRecords: opportunities.length,
-      leadOverallConversionRate: calibration.leadOverallConversionRate,
-      opportunityOverallWinRate: calibration.opportunityOverallWinRate,
-      targetModules,
-    };
-    await pgQuery(
-      `update "ScoringTrainingRun"
-       set status = 'COMPLETED', "completedAt" = $1, "recordsProcessed" = $2,
-           "recordsSkipped" = $3, metrics = $4
-       where "tenantId" = $5 and id = $6`,
-      [completedAt, processed, skipped, jsonb(metrics), tenantId, runId],
-    );
-    await pgQuery('update "ScoringSettings" set "lastRecomputedAt" = $1, "updatedAt" = $1 where "tenantId" = $2', [
-      completedAt,
-      tenantId,
-    ]);
-    await createAuditLog(user, "RECOMPUTE", "SCORING", runId, null, { processed, skipped, metrics }, null).catch(() => undefined);
-    return { runId, processed, skipped, metrics };
-  } catch (error: any) {
-    await pgQuery(
-      `update "ScoringTrainingRun"
-       set status = 'FAILED', "completedAt" = $1, error = $2
-       where "tenantId" = $3 and id = $4`,
-      [new Date().toISOString(), error?.message ?? "Unknown scoring recompute error", tenantId, runId],
-    );
-    throw error;
+      const completedAt = new Date().toISOString();
+      const runMetrics = { trainCount: train.length, holdoutCount: holdout.length, holdout: holdoutMetrics, versionNumber, modelVersionId };
+      await pgQuery(
+        `update "ScoringTrainingRun"
+         set status = 'COMPLETED', "completedAt" = $1, "recordsProcessed" = $2, "recordsSkipped" = 0,
+             metrics = $3, "modelId" = $4, "modelVersionId" = $5
+         where "tenantId" = $6 and id = $7`,
+        [completedAt, oppProcessed, jsonb(runMetrics), modelId, modelVersionId, tenantId, runId],
+      );
+      runs.push({ runId, targetModule: "OPPORTUNITY", modelId, modelVersionId, versionNumber, metrics: runMetrics });
+    } catch (error: any) {
+      await pgQuery(
+        `update "ScoringTrainingRun" set status = 'FAILED', "completedAt" = $1, error = $2 where "tenantId" = $3 and id = $4`,
+        [new Date().toISOString(), error?.message ?? "Unknown scoring recompute error", tenantId, runId],
+      );
+      throw error;
+    }
+  } else {
+    skipped += opportunities.length;
   }
+
+  const completedAt = new Date().toISOString();
+  await pgQuery('update "ScoringSettings" set "lastRecomputedAt" = $1, "updatedAt" = $1 where "tenantId" = $2', [
+    completedAt,
+    tenantId,
+  ]);
+  await createAuditLog(user, "RECOMPUTE", "SCORING", tenantId, null, { processed, skipped, runs }, null).catch(() => undefined);
+  return { runs, processed, skipped };
 }
 
-async function persistScore(user: TenantUser, snapshot: FeatureSnapshot, score: ScoreResult) {
+async function persistScore(user: TenantUser, snapshot: FeatureSnapshot, score: ScoreResult, modelVersionId: string | null = null) {
   const tenantId = requireTenantId(user);
   const now = new Date().toISOString();
   const featureSnapshot = await pgQueryOne<any>(
     `insert into "ScoringFeatureSnapshot"
-      (id, "tenantId", "recordType", "recordId", features, "sourceDataUpdatedAt", "createdAt")
-     values ($1, $2, $3, $4, $5, $6, $7)
+      (id, "tenantId", "modelVersionId", "recordType", "recordId", features, "sourceDataUpdatedAt", "createdAt")
+     values ($1, $2, $3, $4, $5, $6, $7, $8)
      returning id`,
-    [randomUUID(), tenantId, snapshot.recordType, snapshot.recordId, jsonb(snapshot.features), snapshot.sourceDataUpdatedAt, now],
+    [randomUUID(), tenantId, modelVersionId, snapshot.recordType, snapshot.recordId, jsonb(snapshot.features), snapshot.sourceDataUpdatedAt, now],
   );
   if (!featureSnapshot) throw new Error("SCORING_FEATURE_SNAPSHOT_INSERT_FAILED");
 
@@ -689,8 +865,8 @@ async function persistScore(user: TenantUser, snapshot: FeatureSnapshot, score: 
       `update "RecordScore"
        set "fitScore" = $1, "engagementScore" = $2, "conversionProbability" = $3, "winProbability" = $4,
            "stallRisk" = $5, "scoreBand" = $6, confidence = $7, reasons = $8, source = $9,
-           "featureSnapshotId" = $10, "calculatedAt" = $11, "updatedAt" = $12
-       where "tenantId" = $13 and id = $14`,
+           "featureSnapshotId" = $10, "modelVersionId" = $11, "calculatedAt" = $12, "updatedAt" = $13
+       where "tenantId" = $14 and id = $15`,
       [
         payload.fitScore,
         payload.engagementScore,
@@ -702,6 +878,7 @@ async function persistScore(user: TenantUser, snapshot: FeatureSnapshot, score: 
         jsonb(payload.reasons),
         payload.source,
         payload.featureSnapshotId,
+        modelVersionId,
         payload.calculatedAt,
         payload.updatedAt,
         tenantId,
@@ -712,13 +889,14 @@ async function persistScore(user: TenantUser, snapshot: FeatureSnapshot, score: 
     scoreId = randomUUID();
     await pgQuery(
       `insert into "RecordScore"
-        (id, "tenantId", "recordType", "recordId", "fitScore", "engagementScore", "conversionProbability",
+        (id, "tenantId", "modelVersionId", "recordType", "recordId", "fitScore", "engagementScore", "conversionProbability",
          "winProbability", "stallRisk", "scoreBand", confidence, reasons, source, "featureSnapshotId",
          "calculatedAt", "updatedAt", "createdAt")
-       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $15, $15)`,
+       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $16, $16)`,
       [
         scoreId,
         tenantId,
+        modelVersionId,
         score.recordType,
         score.recordId,
         payload.fitScore,
