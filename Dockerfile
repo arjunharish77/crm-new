@@ -34,6 +34,7 @@ COPY --from=builder --chown=nextjs:nodejs /app/tsconfig.json ./tsconfig.json
 COPY --from=builder --chown=nextjs:nodejs /app/src ./src
 COPY --from=builder --chown=nextjs:nodejs /app/migrations ./migrations
 COPY --from=builder --chown=nextjs:nodejs /app/scripts ./scripts
+COPY --from=builder --chown=nextjs:nodejs /app/db-bootstrap ./db-bootstrap
 
 USER nextjs
 EXPOSE 3000

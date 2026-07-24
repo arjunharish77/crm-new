@@ -434,11 +434,17 @@ container:
 deploy/vps/scripts/migrate-postgres.sh
 ```
 
-If you're starting completely fresh (no existing data to import), you'll also need the
-**base CRM schema** applied once, since the checked-in migrations assume it already
-exists. Set `BASE_SCHEMA_SQL_PATH` in `deploy/vps/.env` to an executable schema dump
-before running the migration script — see the note in `deploy/vps/README.md` and
-`.env.example` for how this is wired.
+Since you're starting completely fresh (no existing data to import), the checked-in
+numbered migrations alone aren't enough — they assume the pre-migration-system base
+schema (`Tenant`, `User`, `Lead`, and everything else that predates the migration
+tooling) already exists. This is already handled: `deploy/vps/.env.example` sets
+`BASE_SCHEMA_SQL_PATH=db-bootstrap/base-schema.sql`, a schema-only dump baked directly
+into the Docker image (see the `db-bootstrap` `COPY` line in the `Dockerfile`) that's
+been regenerated from a database with all current migrations applied and validated
+end-to-end against a throwaway empty database — it correctly baselines every migration
+file so none of them re-run redundantly, and it uses the current schema (`timestamptz`
+columns, all tables through migration 0019). As long as you copied `.env.example`
+as-is in Part 5, this variable is already set correctly — nothing extra to do here.
 
 ### 7.2 Import existing data (not applicable here — you chose to start fresh)
 
