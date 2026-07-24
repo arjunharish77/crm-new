@@ -156,6 +156,32 @@ export function calculateCalibration(input: {
   };
 }
 
+function serializeCalibration(calibration: Calibration): Record<string, unknown> {
+  return {
+    totalLeadRecords: calibration.totalLeadRecords,
+    totalOpportunityRecords: calibration.totalOpportunityRecords,
+    leadOverallConversionRate: calibration.leadOverallConversionRate,
+    leadSourceConversionRates: Object.fromEntries(calibration.leadSourceConversionRates),
+    leadStatusConversionRates: Object.fromEntries(calibration.leadStatusConversionRates),
+    opportunityOverallWinRate: calibration.opportunityOverallWinRate,
+    opportunityStageWinRates: Object.fromEntries(calibration.opportunityStageWinRates),
+    opportunityPriorityWinRates: Object.fromEntries(calibration.opportunityPriorityWinRates),
+  };
+}
+
+function deserializeCalibration(data: any): Calibration {
+  return {
+    totalLeadRecords: Number(data?.totalLeadRecords ?? 0),
+    totalOpportunityRecords: Number(data?.totalOpportunityRecords ?? 0),
+    leadOverallConversionRate: Number(data?.leadOverallConversionRate ?? 0),
+    leadSourceConversionRates: new Map(Object.entries(data?.leadSourceConversionRates ?? {})) as Map<string, number>,
+    leadStatusConversionRates: new Map(Object.entries(data?.leadStatusConversionRates ?? {})) as Map<string, number>,
+    opportunityOverallWinRate: Number(data?.opportunityOverallWinRate ?? 0),
+    opportunityStageWinRates: new Map(Object.entries(data?.opportunityStageWinRates ?? {})) as Map<string, number>,
+    opportunityPriorityWinRates: new Map(Object.entries(data?.opportunityPriorityWinRates ?? {})) as Map<string, number>,
+  };
+}
+
 function hashUnitInterval(id: string) {
   let hash = 0;
   for (let index = 0; index < id.length; index += 1) {
@@ -232,6 +258,16 @@ async function getOrCreateScoringModel(input: { tenantId: string; targetModule: 
     [id, input.tenantId, name, input.targetModule, input.objective, input.createdBy, now],
   );
   return id;
+}
+
+async function loadPromotedCalibration(tenantId: string, promotedVersionId: string | null | undefined): Promise<Calibration | null> {
+  if (!promotedVersionId) return null;
+  const version = await pgQueryOne<any>(
+    `select "featureConfig" from "ScoringModelVersion" where "tenantId" = $1 and id = $2 and status = 'PROMOTED' limit 1`,
+    [tenantId, promotedVersionId],
+  );
+  if (!version?.featureConfig?.calibration) return null;
+  return deserializeCalibration(version.featureConfig.calibration);
 }
 
 async function createScoringModelVersion(input: {
@@ -591,6 +627,83 @@ export async function listScoreHistoryForTenant(user: TenantUser, input: { recor
   );
 }
 
+export async function listScoringModelVersionsForTenant(user: TenantUser, targetModule?: RecordType) {
+  const tenantId = requireTenantId(user);
+  const models = await pgQuery<any>(
+    `select id, name, "targetModule", objective, status, "createdAt"
+     from "ScoringModel"
+     where "tenantId" = $1 ${targetModule ? `and "targetModule" = $2` : ""}
+     order by "createdAt" desc`,
+    targetModule ? [tenantId, targetModule] : [tenantId],
+  );
+  if (!models.length) return [];
+
+  const modelIds = models.map((model) => model.id);
+  const versions = await pgQuery<any>(
+    `select id, "modelId", "versionNumber", algorithm, status, "featureConfig", metrics, "promotedBy", "promotedAt", "createdAt"
+     from "ScoringModelVersion"
+     where "tenantId" = $1 and "modelId" = any($2::text[])
+     order by "versionNumber" desc`,
+    [tenantId, modelIds],
+  );
+
+  const versionsByModel = new Map<string, any[]>();
+  for (const version of versions) {
+    // Calibration rates are only needed internally for scoring -- don't ship them to the client.
+    const { calibration, ...featureConfig } = (version.featureConfig ?? {}) as Record<string, unknown>;
+    const list = versionsByModel.get(version.modelId) ?? [];
+    list.push({ ...version, featureConfig, hasCalibration: !!calibration });
+    versionsByModel.set(version.modelId, list);
+  }
+
+  return models.map((model) => ({ ...model, versions: versionsByModel.get(model.id) ?? [] }));
+}
+
+export async function promoteScoringModelVersion(user: TenantUser, modelVersionId: string) {
+  const tenantId = requireTenantId(user);
+  const version = await pgQueryOne<any>(
+    `select id, "modelId", status from "ScoringModelVersion" where "tenantId" = $1 and id = $2 limit 1`,
+    [tenantId, modelVersionId],
+  );
+  if (!version) throw new Error("SCORING_MODEL_VERSION_NOT_FOUND");
+  const model = await pgQueryOne<any>(
+    `select id, "targetModule" from "ScoringModel" where "tenantId" = $1 and id = $2 limit 1`,
+    [tenantId, version.modelId],
+  );
+  if (!model) throw new Error("SCORING_MODEL_NOT_FOUND");
+
+  const now = new Date().toISOString();
+
+  // Retire whatever was previously promoted for this model (rollback works by promoting an older
+  // version again, which naturally retires whatever had been active).
+  await pgQuery(
+    `update "ScoringModelVersion" set status = 'RETIRED' where "tenantId" = $1 and "modelId" = $2 and status = 'PROMOTED' and id != $3`,
+    [tenantId, version.modelId, modelVersionId],
+  );
+  await pgQuery(
+    `update "ScoringModelVersion" set status = 'PROMOTED', "promotedBy" = $1, "promotedAt" = $2 where "tenantId" = $3 and id = $4`,
+    [user.id, now, tenantId, modelVersionId],
+  );
+
+  const settingsColumn = model.targetModule === "LEAD" ? "promotedLeadModelVersionId" : "promotedOpportunityModelVersionId";
+  await pgQuery(
+    `update "ScoringSettings" set "${settingsColumn}" = $1, "updatedAt" = $2 where "tenantId" = $3`,
+    [modelVersionId, now, tenantId],
+  );
+
+  await createAuditLog(
+    user,
+    "PROMOTE",
+    "SCORING_MODEL_VERSION",
+    modelVersionId,
+    { previousStatus: version.status },
+    { status: "PROMOTED", targetModule: model.targetModule },
+    null,
+  ).catch(() => undefined);
+
+  return { modelId: version.modelId, modelVersionId, targetModule: model.targetModule as RecordType };
+}
+
 async function listStageDefinitionsForScoring(tenantId: string) {
   const columns = await pgQuery<{ column_name: string }>(
     `select column_name
@@ -700,9 +813,20 @@ export async function recomputeSelfLearningScoresForTenant(user: TenantUser, inp
       const { id: modelVersionId, versionNumber } = await createScoringModelVersion({
         tenantId,
         modelId,
-        featureConfig: { lookbackDays: settings.lookbackDays, minimumHistoricalRecords: settings.minimumHistoricalRecords, objective: settings.objective },
+        featureConfig: {
+          lookbackDays: settings.lookbackDays,
+          minimumHistoricalRecords: settings.minimumHistoricalRecords,
+          objective: settings.objective,
+          calibration: serializeCalibration(trainCalibration),
+        },
         metrics: { trainCount: train.length, holdoutCount: holdout.length, holdout: holdoutMetrics, leadOverallConversionRate: trainCalibration.leadOverallConversionRate },
       });
+
+      // Live scores use whichever version is explicitly PROMOTED, if any -- so retraining doesn't
+      // silently move live scores until an admin reviews and promotes the new candidate. Falls back
+      // to this run's own fresh calibration when nothing has been promoted yet (first-time setup).
+      const promotedCalibration = await loadPromotedCalibration(tenantId, settings.promotedLeadModelVersionId);
+      const scoringCalibration = promotedCalibration ?? trainCalibration;
 
       let leadProcessed = 0;
       for (const lead of leads) {
@@ -712,7 +836,7 @@ export async function recomputeSelfLearningScoresForTenant(user: TenantUser, inp
           activities: activitiesByLeadId.get(lead.id) ?? [],
           tasks: tasksByLeadId.get(lead.id) ?? [],
         });
-        const score = leadScoreFromFeatures(snapshot, lead, trainCalibration, settings);
+        const score = leadScoreFromFeatures(snapshot, lead, scoringCalibration, settings);
         await persistScore(user, snapshot, score, modelVersionId);
         if (settings.isEnabled || input.force) {
           await pgQuery('update "Lead" set score = $1, "updatedAt" = $2 where "tenantId" = $3 and id = $4', [
@@ -775,9 +899,17 @@ export async function recomputeSelfLearningScoresForTenant(user: TenantUser, inp
       const { id: modelVersionId, versionNumber } = await createScoringModelVersion({
         tenantId,
         modelId,
-        featureConfig: { lookbackDays: settings.lookbackDays, minimumHistoricalRecords: settings.minimumHistoricalRecords, objective: settings.objective },
+        featureConfig: {
+          lookbackDays: settings.lookbackDays,
+          minimumHistoricalRecords: settings.minimumHistoricalRecords,
+          objective: settings.objective,
+          calibration: serializeCalibration(trainCalibration),
+        },
         metrics: { trainCount: train.length, holdoutCount: holdout.length, holdout: holdoutMetrics, opportunityOverallWinRate: trainCalibration.opportunityOverallWinRate },
       });
+
+      const promotedCalibration = await loadPromotedCalibration(tenantId, settings.promotedOpportunityModelVersionId);
+      const scoringCalibration = promotedCalibration ?? trainCalibration;
 
       let oppProcessed = 0;
       for (const opportunity of opportunities) {
@@ -787,7 +919,7 @@ export async function recomputeSelfLearningScoresForTenant(user: TenantUser, inp
           activities: activitiesByOpportunityId.get(opportunity.id) ?? [],
           tasks: tasksByOpportunityId.get(opportunity.id) ?? [],
         });
-        const score = opportunityScoreFromFeatures(snapshot, opportunity, trainCalibration, settings);
+        const score = opportunityScoreFromFeatures(snapshot, opportunity, scoringCalibration, settings);
         await persistScore(user, snapshot, score, modelVersionId);
         oppProcessed += 1;
       }

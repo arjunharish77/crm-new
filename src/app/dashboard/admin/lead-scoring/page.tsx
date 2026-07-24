@@ -66,6 +66,37 @@ interface SelfLearningSettings {
     lastRecomputedAt?: string | null;
 }
 
+interface ScoringModelVersionSummary {
+    id: string;
+    versionNumber: number;
+    algorithm: string;
+    status: 'DRAFT' | 'PROMOTED' | 'RETIRED';
+    metrics?: {
+        trainCount?: number;
+        holdoutCount?: number;
+        holdout?: {
+            sampleSize?: number;
+            brierScore?: number | null;
+            accuracy?: number | null;
+            precision?: number | null;
+            recall?: number | null;
+            lift?: number | null;
+        };
+    } | null;
+    promotedBy?: string | null;
+    promotedAt?: string | null;
+    createdAt: string;
+}
+
+interface ScoringModelSummary {
+    id: string;
+    name: string;
+    targetModule: 'LEAD' | 'OPPORTUNITY';
+    objective: string;
+    status: string;
+    versions: ScoringModelVersionSummary[];
+}
+
 const FIELD_OPTIONS = [
     { value: 'source', label: 'Lead Source' },
     { value: 'company', label: 'Company' },
@@ -119,6 +150,34 @@ export default function LeadScoringAdminPage() {
     const [loadingSelfLearning, setLoadingSelfLearning] = useState(true);
     const [savingSelfLearning, setSavingSelfLearning] = useState(false);
     const [recomputingSelfLearning, setRecomputingSelfLearning] = useState(false);
+    const [modelSummaries, setModelSummaries] = useState<ScoringModelSummary[]>([]);
+    const [loadingModels, setLoadingModels] = useState(true);
+    const [promotingVersionId, setPromotingVersionId] = useState<string | null>(null);
+
+    const fetchModelVersions = async () => {
+        try {
+            const data = await apiFetch<ScoringModelSummary[]>('/lead-scoring/self-learning/models');
+            setModelSummaries(Array.isArray(data) ? data : []);
+        } catch {
+            toast.error('Failed to load scoring model versions');
+        } finally {
+            setLoadingModels(false);
+        }
+    };
+
+    const handlePromoteVersion = async (versionId: string) => {
+        if (!confirm('Promote this version? It will immediately become the calibration used for live predictive scores, and the currently promoted version (if any) will be retired.')) return;
+        setPromotingVersionId(versionId);
+        try {
+            await apiFetch(`/lead-scoring/self-learning/models/${versionId}/promote`, { method: 'POST' });
+            toast.success('Model version promoted. Live scores will use it from the next recompute onward.');
+            await fetchModelVersions();
+        } catch {
+            toast.error('Failed to promote model version');
+        } finally {
+            setPromotingVersionId(null);
+        }
+    };
 
     const fetchRules = async () => {
         try {
@@ -145,6 +204,7 @@ export default function LeadScoringAdminPage() {
     useEffect(() => {
         fetchRules();
         fetchSelfLearningSettings();
+        fetchModelVersions();
     }, []);
 
     const handleAdd = () => {
@@ -472,6 +532,88 @@ export default function LeadScoringAdminPage() {
                             </div>
                         </div>
                     )}
+
+                    <div className="rounded-xl border bg-card p-4">
+                        <div className="mb-4 flex items-center gap-2">
+                            <BrainCircuit className="size-4 text-primary" />
+                            <h2 className="text-sm font-bold">Model Versions</h2>
+                        </div>
+                        <p className="mb-4 text-xs text-muted-foreground">
+                            Every recompute trains a new candidate version and evaluates it on held-out data it never saw during training. Nothing changes live scores until you promote a version — promoting retires whichever version was previously active. Promoting an older version is how you roll back.
+                        </p>
+                        {loadingModels ? (
+                            <div className="flex justify-center py-8">
+                                <Loader2 className="size-5 animate-spin text-muted-foreground" />
+                            </div>
+                        ) : modelSummaries.length === 0 ? (
+                            <p className="py-6 text-center text-sm text-muted-foreground">No model versions yet — run a predictive score recompute to train the first one.</p>
+                        ) : (
+                            <div className="space-y-6">
+                                {modelSummaries.map((model) => (
+                                    <div key={model.id}>
+                                        <div className="mb-2 flex items-center gap-2">
+                                            <Badge variant="outline">{model.targetModule}</Badge>
+                                            <span className="text-sm font-semibold">{model.name}</span>
+                                        </div>
+                                        <div className="overflow-x-auto">
+                                            <Table>
+                                                <TableHeader>
+                                                    <TableRow>
+                                                        <TableHead>Version</TableHead>
+                                                        <TableHead>Status</TableHead>
+                                                        <TableHead>Holdout accuracy</TableHead>
+                                                        <TableHead>Lift</TableHead>
+                                                        <TableHead>Train / Holdout</TableHead>
+                                                        <TableHead>Created</TableHead>
+                                                        <TableHead className="text-right">Action</TableHead>
+                                                    </TableRow>
+                                                </TableHeader>
+                                                <TableBody>
+                                                    {model.versions.map((version) => (
+                                                        <TableRow key={version.id}>
+                                                            <TableCell className="font-medium">v{version.versionNumber}</TableCell>
+                                                            <TableCell>
+                                                                <Badge variant={version.status === 'PROMOTED' ? 'default' : version.status === 'RETIRED' ? 'outline' : 'secondary'}>
+                                                                    {version.status}
+                                                                </Badge>
+                                                            </TableCell>
+                                                            <TableCell>
+                                                                {version.metrics?.holdout?.accuracy != null
+                                                                    ? `${Math.round(version.metrics.holdout.accuracy * 100)}%`
+                                                                    : '—'}
+                                                            </TableCell>
+                                                            <TableCell>
+                                                                {version.metrics?.holdout?.lift != null ? `${version.metrics.holdout.lift.toFixed(2)}x` : '—'}
+                                                            </TableCell>
+                                                            <TableCell className="text-xs text-muted-foreground">
+                                                                {version.metrics?.trainCount ?? 0} / {version.metrics?.holdoutCount ?? 0}
+                                                            </TableCell>
+                                                            <TableCell className="text-xs text-muted-foreground">{formatWorkspaceDateTime(version.createdAt)}</TableCell>
+                                                            <TableCell className="text-right">
+                                                                {version.status === 'PROMOTED' ? (
+                                                                    <span className="text-xs text-muted-foreground">Active</span>
+                                                                ) : (
+                                                                    <Button
+                                                                        size="sm"
+                                                                        variant="outline"
+                                                                        disabled={promotingVersionId === version.id}
+                                                                        onClick={() => handlePromoteVersion(version.id)}
+                                                                    >
+                                                                        {promotingVersionId === version.id ? <Loader2 className="size-3 animate-spin" /> : null}
+                                                                        {version.status === 'RETIRED' ? 'Roll back to this' : 'Promote'}
+                                                                    </Button>
+                                                                )}
+                                                            </TableCell>
+                                                        </TableRow>
+                                                    ))}
+                                                </TableBody>
+                                            </Table>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
                 </TabsContent>
 
                 <TabsContent value="rules" className="space-y-4">
