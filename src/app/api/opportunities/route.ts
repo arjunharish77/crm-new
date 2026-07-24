@@ -11,9 +11,12 @@ export async function GET(request: Request) {
     const user = await requireCurrentUser(request);
     const { searchParams } = new URL(request.url);
     const limit = Number(searchParams.get("limit") ?? "100");
+    const page = Number(searchParams.get("page") ?? "1");
     const opportunityTypeId = searchParams.get("opportunityTypeId");
+    const filters = searchParams.get("filters");
+    const parsedFilters = filters ? JSON.parse(filters) : null;
 
-    const response = await listOpportunitiesForTenantByType(user, limit, opportunityTypeId);
+    const response = await listOpportunitiesForTenantByType(user, limit, opportunityTypeId, parsedFilters, page);
     return NextResponse.json(response);
   } catch (error) {
     if (error instanceof Error && error.message === "UNAUTHORIZED") {

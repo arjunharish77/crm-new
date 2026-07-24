@@ -3,36 +3,22 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import {
-    Autocomplete,
-    Box,
-    Button,
-    Card,
-    Chip,
-    Dialog,
-    DialogActions,
-    DialogContent,
-    DialogTitle,
-    IconButton,
-    Stack,
-    TextField,
-    Tooltip,
-    Typography,
-} from "@mui/material";
-import {
-    Add as AddIcon,
-    ArrowBack as ArrowBackIcon,
-    DeleteOutline as RemoveIcon,
-    Refresh as RefreshIcon,
-    Search as SearchIcon,
-    Visibility as ViewIcon,
-} from "@mui/icons-material";
-import { GridColDef, GridRowId } from "@mui/x-data-grid";
+import { ColumnDef } from "@tanstack/react-table";
+import { Plus, ArrowLeft, RefreshCw, Search, ExternalLink, SearchX, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 import { apiFetch } from "@/lib/api";
-import { StandardDataGrid } from "@/components/common/standard-data-grid";
+import { DataTable } from "@/components/ui/data-table";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Card } from "@/components/ui/card";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
+import { StandardDialog } from "@/components/common/standard-dialog";
 import { BulkActionsToolbar } from "@/components/bulk-actions/bulk-toolbar";
 import { formatWorkspaceDate } from "@/lib/date-format";
+import { cn } from "@/lib/utils";
 
 type LeadRecord = {
     id: string;
@@ -67,7 +53,8 @@ export default function LeadListDetailPage() {
     const [addOpen, setAddOpen] = useState(false);
     const [selectedToAdd, setSelectedToAdd] = useState<LeadRecord[]>([]);
     const [search, setSearch] = useState("");
-    const [selectedRows, setSelectedRows] = useState<GridRowId[]>([]);
+    const [selectedRows, setSelectedRows] = useState<string[]>([]);
+    const [pagination, setPagination] = useState({ pageIndex: 0, pageSize: 25 });
 
     const fetchList = useCallback(async () => {
         setLoading(true);
@@ -106,6 +93,15 @@ export default function LeadListDetailPage() {
                 .includes(term)
         );
     }, [list?.leads, search]);
+
+    useEffect(() => {
+        setPagination((current) => ({ ...current, pageIndex: 0 }));
+    }, [search, listId]);
+
+    const paginatedLeads = useMemo(() => {
+        const start = pagination.pageIndex * pagination.pageSize;
+        return visibleLeads.slice(start, start + pagination.pageSize);
+    }, [visibleLeads, pagination]);
 
     const addLeads = async () => {
         const leadIds = selectedToAdd.map((lead) => lead.id);
@@ -152,122 +148,174 @@ export default function LeadListDetailPage() {
         }
     };
 
-    const columns: GridColDef[] = [
+    const columns = useMemo<ColumnDef<LeadRecord, any>[]>(() => [
         {
-            field: "name",
-            headerName: "Lead Name",
-            flex: 1,
-            minWidth: 220,
-            renderCell: (params) => (
-                <Box component={Link} href={`/dashboard/leads/${params.row.id}`} sx={{ color: "primary.main", textDecoration: "none", fontWeight: 800 }}>
-                    {params.value || "Untitled Lead"}
-                </Box>
-            ),
-        },
-        { field: "email", headerName: "Email", flex: 1, minWidth: 190 },
-        { field: "phone", headerName: "Phone", width: 150 },
-        { field: "company", headerName: "Company", width: 160 },
-        {
-            field: "status",
-            headerName: "Stage",
-            width: 130,
-            renderCell: (params) => (
-                <Chip size="small" label={params.value || "-"} sx={{ fontWeight: 800 }} />
-            ),
-        },
-        { field: "source", headerName: "Source", width: 130 },
-        {
-            field: "createdAt",
-            headerName: "Created On",
-            width: 160,
-            renderCell: (params) => (
-                <Typography variant="body2" color="text.secondary">
-                    {formatWorkspaceDate(params.value as string)}
-                </Typography>
+            accessorKey: "name",
+            header: "Lead Name",
+            size: 240,
+            cell: ({ row }) => (
+                <Link
+                    href={`/dashboard/leads/${row.original.id}`}
+                    className="font-extrabold text-primary hover:underline"
+                    onClick={(event) => event.stopPropagation()}
+                >
+                    {row.original.name || "Untitled Lead"}
+                </Link>
             ),
         },
         {
-            field: "actions",
-            headerName: "",
-            width: 120,
-            sortable: false,
-            filterable: false,
-            renderCell: (params) => (
-                <Stack direction="row" spacing={0.5}>
-                    <Tooltip title="Open lead">
-                        <IconButton size="small" component={Link} href={`/dashboard/leads/${params.row.id}`} onClick={(event) => event.stopPropagation()}>
-                            <ViewIcon fontSize="small" />
-                        </IconButton>
+            accessorKey: "email",
+            header: "Email",
+            size: 210,
+            cell: ({ row }) => <span className="text-sm text-muted-foreground">{row.original.email || "-"}</span>,
+        },
+        {
+            accessorKey: "phone",
+            header: "Phone",
+            size: 150,
+            cell: ({ row }) => <span className="text-sm text-muted-foreground">{row.original.phone || "-"}</span>,
+        },
+        {
+            accessorKey: "company",
+            header: "Company",
+            size: 160,
+            cell: ({ row }) => <span className="text-sm text-muted-foreground">{row.original.company || "-"}</span>,
+        },
+        {
+            accessorKey: "status",
+            header: "Stage",
+            size: 130,
+            cell: ({ row }) => (
+                <Badge variant="outline" className="border-border bg-muted font-extrabold text-muted-foreground">
+                    {row.original.status || "-"}
+                </Badge>
+            ),
+        },
+        {
+            accessorKey: "source",
+            header: "Source",
+            size: 130,
+            cell: ({ row }) => <span className="text-sm text-muted-foreground">{row.original.source || "-"}</span>,
+        },
+        {
+            accessorKey: "createdAt",
+            header: "Created On",
+            size: 160,
+            cell: ({ row }) => (
+                <span className="text-sm text-muted-foreground">
+                    {row.original.createdAt ? formatWorkspaceDate(row.original.createdAt) : "-"}
+                </span>
+            ),
+        },
+        {
+            id: "actions",
+            header: "",
+            size: 120,
+            cell: ({ row }) => (
+                <div className="flex gap-1">
+                    <Tooltip>
+                        <TooltipTrigger asChild>
+                            <Button variant="ghost" size="icon-sm" asChild onClick={(event) => event.stopPropagation()}>
+                                <Link href={`/dashboard/leads/${row.original.id}`}>
+                                    <ExternalLink className="size-4" />
+                                </Link>
+                            </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>Open lead</TooltipContent>
                     </Tooltip>
                     {list?.type === "STATIC" ? (
-                        <Tooltip title="Remove from list">
-                            <IconButton size="small" color="error" onClick={(event) => { event.stopPropagation(); removeLead(params.row.id); }}>
-                                <RemoveIcon fontSize="small" />
-                            </IconButton>
+                        <Tooltip>
+                            <TooltipTrigger asChild>
+                                <Button
+                                    variant="ghost"
+                                    size="icon-sm"
+                                    className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+                                    onClick={(event) => {
+                                        event.stopPropagation();
+                                        removeLead(row.original.id);
+                                    }}
+                                >
+                                    <Trash2 className="size-4" />
+                                </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>Remove from list</TooltipContent>
                         </Tooltip>
                     ) : null}
-                </Stack>
+                </div>
             ),
         },
-    ];
+    ], [list?.type, removeLead]);
 
     return (
-        <Box sx={{ p: { xs: 1.5, md: 2 }, maxWidth: 1500, mx: "auto" }}>
-            <Stack spacing={1.5}>
-                <Stack direction={{ xs: "column", md: "row" }} spacing={1.25} justifyContent="space-between" alignItems={{ md: "center" }}>
-                    <Stack direction="row" spacing={1} alignItems="center">
-                        <IconButton onClick={() => router.push("/dashboard/lists")} size="small">
-                            <ArrowBackIcon />
-                        </IconButton>
-                        <Box>
-                            <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap">
-                                <Typography variant="h6" sx={{ fontWeight: 900 }}>{list?.name ?? "Lead List"}</Typography>
-                                <Chip size="small" label={list?.type === "SMART" ? "Smart list" : "Static list"} color={list?.type === "SMART" ? "primary" : "default"} sx={{ fontWeight: 800 }} />
-                                <Chip size="small" label={`${list?.count ?? 0} leads`} variant="outlined" sx={{ fontWeight: 800 }} />
-                            </Stack>
-                            <Typography variant="body2" color="text.secondary">
+        <div className="mx-auto max-w-[1500px] px-3 py-3 md:px-4 md:py-4">
+            <div className="space-y-3">
+                <div className="flex flex-col justify-between gap-3 md:flex-row md:items-center">
+                    <div className="flex items-center gap-2">
+                        <Button variant="ghost" size="icon-sm" onClick={() => router.push("/dashboard/lists")}>
+                            <ArrowLeft className="size-4" />
+                        </Button>
+                        <div>
+                            <div className="flex flex-wrap items-center gap-2">
+                                <h1 className="text-lg font-black">{list?.name ?? "Lead List"}</h1>
+                                <Badge className={list?.type === "SMART" ? "font-extrabold" : "font-extrabold"} variant={list?.type === "SMART" ? "default" : "secondary"}>
+                                    {list?.type === "SMART" ? "Smart list" : "Static list"}
+                                </Badge>
+                                <Badge variant="outline" className="font-extrabold">{`${list?.count ?? 0} leads`}</Badge>
+                            </div>
+                            <p className="text-sm text-muted-foreground">
                                 {list?.description || "Search, review, and manage leads in this list."}
-                            </Typography>
-                        </Box>
-                    </Stack>
-                    <Stack direction="row" spacing={1} justifyContent="flex-end">
-                        <Button variant="outlined" startIcon={<RefreshIcon />} onClick={fetchList}>Refresh</Button>
+                            </p>
+                        </div>
+                    </div>
+                    <div className="flex justify-end gap-2">
+                        <Button variant="outline" onClick={fetchList}>
+                            <RefreshCw className="size-4" />
+                            Refresh
+                        </Button>
                         {list?.type === "STATIC" ? (
-                            <Button variant="contained" startIcon={<AddIcon />} onClick={() => setAddOpen(true)}>
+                            <Button onClick={() => setAddOpen(true)}>
+                                <Plus className="size-4" />
                                 Add Leads
                             </Button>
                         ) : null}
-                    </Stack>
-                </Stack>
+                    </div>
+                </div>
 
-                <Card sx={{ p: 1.25, border: "1px solid", borderColor: "divider", borderRadius: 2 }}>
-                    <TextField
-                        size="small"
-                        fullWidth
-                        placeholder="Search leads in this list"
-                        value={search}
-                        onChange={(event) => setSearch(event.target.value)}
-                        InputProps={{ startAdornment: <SearchIcon fontSize="small" sx={{ mr: 1, color: "text.secondary" }} /> }}
-                    />
+                <Card className="rounded-xl p-2.5">
+                    <div className="relative">
+                        <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+                        <Input
+                            placeholder="Search leads in this list"
+                            value={search}
+                            onChange={(event) => setSearch(event.target.value)}
+                            className="pl-9"
+                        />
+                    </div>
                 </Card>
 
-                <Card sx={{ borderRadius: 2, border: "1px solid", borderColor: "divider", overflow: "hidden" }}>
-                    <StandardDataGrid
-                        rows={visibleLeads}
+                <Card className="overflow-hidden rounded-xl">
+                    <DataTable
+                        storageKey="lead-list-detail-table"
+                        data={paginatedLeads}
                         columns={columns}
                         loading={loading}
                         getRowId={(row) => row.id}
-                        checkboxSelection
-                        disableRowSelectionOnClick
-                        rowSelectionModel={selectedRows}
-                        onRowSelectionModelChange={(rows) => setSelectedRows(rows)}
-                        hideFooterSelectedRowCount
-                        initialState={{ pagination: { paginationModel: { page: 0, pageSize: 25 } } }}
+                        enableRowSelection
+                        rowSelectionIds={selectedRows}
+                        onRowSelectionIdsChange={setSelectedRows}
+                        totalItems={visibleLeads.length}
+                        pageIndex={pagination.pageIndex}
+                        pageSize={pagination.pageSize}
                         pageSizeOptions={[25, 50, 100]}
-                        sx={{ minHeight: 520 }}
+                        onPaginationChange={setPagination}
+                        emptyState={{
+                            icon: <SearchX className="size-10 text-muted-foreground opacity-50" />,
+                            title: "No leads found",
+                            description: "Add leads to this list or adjust your search.",
+                        }}
                     />
                 </Card>
-            </Stack>
+            </div>
 
             <BulkActionsToolbar
                 selectedCount={selectedRows.length}
@@ -276,27 +324,82 @@ export default function LeadListDetailPage() {
                 onDelete={list?.type === "STATIC" ? removeSelected : undefined}
             />
 
-            <Dialog open={addOpen} onClose={() => setAddOpen(false)} maxWidth="md" fullWidth>
-                <DialogTitle>Add leads to {list?.name}</DialogTitle>
-                <DialogContent>
-                    <Autocomplete
-                        multiple
-                        options={addableLeads}
-                        value={selectedToAdd}
-                        onChange={(_, value) => setSelectedToAdd(value)}
-                        getOptionLabel={(option) => `${option.name || "Untitled Lead"}${option.email ? ` (${option.email})` : ""}`}
-                        isOptionEqualToValue={(option, value) => option.id === value.id}
-                        renderInput={(params) => <TextField {...params} label="Leads" placeholder="Search leads to add" sx={{ mt: 1 }} />}
-                    />
-                    <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 1 }}>
+            <StandardDialog
+                open={addOpen}
+                onClose={() => setAddOpen(false)}
+                title={`Add leads to ${list?.name ?? ""}`}
+                maxWidth="md"
+                actions={
+                    <>
+                        <Button variant="ghost" onClick={() => setAddOpen(false)}>Cancel</Button>
+                        <Button onClick={addLeads} disabled={selectedToAdd.length === 0}>Add To List</Button>
+                    </>
+                }
+            >
+                <div className="space-y-2">
+                    <Popover>
+                        <PopoverTrigger asChild>
+                            <button
+                                type="button"
+                                className="flex min-h-9 w-full flex-wrap items-center gap-1.5 rounded-md border border-input bg-transparent px-3 py-1.5 text-left text-sm shadow-xs transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                            >
+                                {selectedToAdd.length === 0 ? (
+                                    <span className="text-muted-foreground">Search leads to add</span>
+                                ) : (
+                                    selectedToAdd.map((lead) => (
+                                        <Badge
+                                            key={lead.id}
+                                            variant="secondary"
+                                            className="gap-1"
+                                            onClick={(event) => {
+                                                event.stopPropagation();
+                                                setSelectedToAdd((current) => current.filter((item) => item.id !== lead.id));
+                                            }}
+                                        >
+                                            {lead.name || "Untitled Lead"}
+                                            <X className="size-3" />
+                                        </Badge>
+                                    ))
+                                )}
+                            </button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
+                            <Command>
+                                <CommandInput placeholder="Search leads..." />
+                                <CommandList>
+                                    <CommandEmpty>No leads found.</CommandEmpty>
+                                    <CommandGroup>
+                                        {addableLeads.map((lead) => {
+                                            const isSelected = selectedToAdd.some((item) => item.id === lead.id);
+                                            return (
+                                                <CommandItem
+                                                    key={lead.id}
+                                                    value={`${lead.name || "Untitled Lead"} ${lead.email ?? ""}`}
+                                                    onSelect={() => {
+                                                        setSelectedToAdd((current) =>
+                                                            isSelected
+                                                                ? current.filter((item) => item.id !== lead.id)
+                                                                : [...current, lead]
+                                                        );
+                                                    }}
+                                                >
+                                                    <div className={cn("flex size-4 items-center justify-center rounded-sm border", isSelected ? "border-primary bg-primary text-primary-foreground" : "border-input")}>
+                                                        {isSelected ? <X className="size-3" /> : null}
+                                                    </div>
+                                                    {lead.name || "Untitled Lead"}{lead.email ? ` (${lead.email})` : ""}
+                                                </CommandItem>
+                                            );
+                                        })}
+                                    </CommandGroup>
+                                </CommandList>
+                            </Command>
+                        </PopoverContent>
+                    </Popover>
+                    <p className="block text-xs text-muted-foreground">
                         Smart lists are filter-based; manual additions are available for static lists only.
-                    </Typography>
-                </DialogContent>
-                <DialogActions>
-                    <Button onClick={() => setAddOpen(false)}>Cancel</Button>
-                    <Button variant="contained" onClick={addLeads} disabled={selectedToAdd.length === 0}>Add To List</Button>
-                </DialogActions>
-            </Dialog>
-        </Box>
+                    </p>
+                </div>
+            </StandardDialog>
+        </div>
     );
 }

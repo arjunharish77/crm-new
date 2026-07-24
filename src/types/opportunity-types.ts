@@ -4,7 +4,6 @@ export interface OpportunityType {
     description?: string | null;
     icon?: string | null;
     color?: string | null;
-    defaultPipelineId?: string | null;
     defaultStageId?: string | null;
     order: number;
     isActive: boolean;
@@ -12,10 +11,6 @@ export interface OpportunityType {
     updatedAt: string;
 
     // Relations
-    defaultPipeline?: {
-        id: string;
-        name: string;
-    };
     defaultStage?: {
         id: string;
         name: string;
@@ -31,7 +26,6 @@ export interface CreateOpportunityTypeDto {
     description?: string;
     icon?: string;
     color?: string;
-    defaultPipelineId?: string;
     defaultStageId?: string;
     stageConfig?: any;
     order?: number;

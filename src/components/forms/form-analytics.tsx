@@ -2,25 +2,17 @@
 
 import { useEffect, useMemo, useState } from "react";
 import {
-    Alert,
-    Box,
-    CircularProgress,
-    Grid,
-    LinearProgress,
-    Paper,
-    Stack,
-    Typography,
-    alpha,
-    useTheme,
-} from "@mui/material";
-import {
-    DescriptionOutlined as DescriptionOutlinedIcon,
-    GroupOutlined as GroupOutlinedIcon,
-    ReportGmailerrorredOutlined as ReportGmailerrorredOutlinedIcon,
-    CopyAllOutlined as CopyAllOutlinedIcon,
-    TrendingUpOutlined as TrendingUpOutlinedIcon,
-} from "@mui/icons-material";
+    FileText as DescriptionOutlinedIcon,
+    Users as GroupOutlinedIcon,
+    AlertTriangle as ReportGmailerrorredOutlinedIcon,
+    Copy as CopyAllOutlinedIcon,
+    TrendingUp as TrendingUpOutlinedIcon,
+    Loader2,
+} from "lucide-react";
 import { apiFetch } from "@/lib/api";
+import { Card } from "@/components/ui/card";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { cn } from "@/lib/utils";
 
 interface FormStats {
     total: number;
@@ -43,57 +35,53 @@ function MetricCard({
     value,
     subtitle,
     icon,
-    tint,
+    tintClassName,
 }: {
     title: string;
     value: string | number;
     subtitle: string;
     icon: React.ReactNode;
-    tint: string;
+    tintClassName: string;
 }) {
     return (
-        <Paper
-            variant="outlined"
-            sx={{
-                p: 2,
-                borderRadius: "14px",
-                height: "100%",
-            }}
-        >
-            <Stack direction="row" justifyContent="space-between" alignItems="flex-start" spacing={1.5}>
-                <Box>
-                    <Typography variant="caption" sx={{ textTransform: "uppercase", letterSpacing: "0.08em", color: "text.secondary" }}>
+        <Card className="h-full rounded-2xl p-4">
+            <div className="flex items-start justify-between gap-3">
+                <div>
+                    <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                         {title}
-                    </Typography>
-                    <Typography variant="h4" sx={{ fontWeight: 800, letterSpacing: -0.7, mt: 0.75 }}>
+                    </p>
+                    <p className="mt-1.5 text-3xl font-extrabold tracking-tight">
                         {value}
-                    </Typography>
-                    <Typography variant="body2" color="text.secondary" sx={{ mt: 0.75 }}>
+                    </p>
+                    <p className="mt-1.5 text-sm text-muted-foreground">
                         {subtitle}
-                    </Typography>
-                </Box>
-                <Box
-                    sx={{
-                        width: 40,
-                        height: 40,
-                        borderRadius: "12px",
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        bgcolor: tint,
-                        color: "primary.main",
-                        flexShrink: 0,
-                    }}
+                    </p>
+                </div>
+                <div
+                    className={cn(
+                        "flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-primary",
+                        tintClassName
+                    )}
                 >
                     {icon}
-                </Box>
-            </Stack>
-        </Paper>
+                </div>
+            </div>
+        </Card>
+    );
+}
+
+function ProgressBar({ value, className }: { value: number; className?: string }) {
+    return (
+        <div className="h-2 w-full overflow-hidden rounded-full bg-primary/8">
+            <div
+                className={cn("h-full rounded-full bg-primary transition-all", className)}
+                style={{ width: `${Math.min(100, Math.max(0, value))}%` }}
+            />
+        </div>
     );
 }
 
 export function AnalyticsDashboard({ formId }: AnalyticsDashboardProps) {
-    const theme = useTheme();
     const [stats, setStats] = useState<FormStats | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -122,176 +110,121 @@ export function AnalyticsDashboard({ formId }: AnalyticsDashboardProps) {
 
     if (loading) {
         return (
-            <Box sx={{ minHeight: 280, display: "flex", alignItems: "center", justifyContent: "center" }}>
-                <Stack alignItems="center" spacing={1}>
-                    <CircularProgress size={24} />
-                    <Typography variant="body2" color="text.secondary">
-                        Loading analytics...
-                    </Typography>
-                </Stack>
-            </Box>
+            <div className="flex min-h-[280px] flex-col items-center justify-center gap-1">
+                <Loader2 className="size-6 animate-spin text-primary" />
+                <p className="text-sm text-muted-foreground">
+                    Loading analytics...
+                </p>
+            </div>
         );
     }
 
     if (error || !stats) {
-        return <Alert severity="error">{error ?? "No analytics available"}</Alert>;
+        return (
+            <Alert variant="destructive">
+                <AlertDescription>{error ?? "No analytics available"}</AlertDescription>
+            </Alert>
+        );
     }
 
     return (
-        <Stack spacing={2.5}>
-            <Box>
-                <Typography variant="h6" sx={{ fontWeight: 800, letterSpacing: -0.3 }}>
+        <div className="flex flex-col gap-4">
+            <div>
+                <h2 className="text-lg font-extrabold tracking-tight">
                     Performance Snapshot
-                </Typography>
-                <Typography variant="body2" color="text.secondary">
+                </h2>
+                <p className="text-sm text-muted-foreground">
                     Form capture health, lead conversion quality, and recent submission momentum.
-                </Typography>
-            </Box>
+                </p>
+            </div>
 
-            <Grid container spacing={1.5}>
-                <Grid size={{ xs: 12, md: 6, xl: 3 }}>
-                    <MetricCard
-                        title="Total Submissions"
-                        value={stats.total}
-                        subtitle="All-time responses collected"
-                        icon={<DescriptionOutlinedIcon fontSize="small" />}
-                        tint={alpha(theme.palette.primary.main, 0.08)}
-                    />
-                </Grid>
-                <Grid size={{ xs: 12, md: 6, xl: 3 }}>
-                    <MetricCard
-                        title="Processed Leads"
-                        value={stats.processed}
-                        subtitle={`${conversionPercent}% converted successfully`}
-                        icon={<GroupOutlinedIcon fontSize="small" />}
-                        tint={alpha(theme.palette.success.main, 0.08)}
-                    />
-                </Grid>
-                <Grid size={{ xs: 12, md: 6, xl: 3 }}>
-                    <MetricCard
-                        title="Spam Detected"
-                        value={stats.spam}
-                        subtitle={`${spamPercent}% blocked or flagged`}
-                        icon={<ReportGmailerrorredOutlinedIcon fontSize="small" />}
-                        tint={alpha(theme.palette.error.main, 0.08)}
-                    />
-                </Grid>
-                <Grid size={{ xs: 12, md: 6, xl: 3 }}>
-                    <MetricCard
-                        title="Duplicates"
-                        value={stats.duplicate}
-                        subtitle={`${duplicatePercent}% merged or skipped`}
-                        icon={<CopyAllOutlinedIcon fontSize="small" />}
-                        tint={alpha(theme.palette.warning.main, 0.08)}
-                    />
-                </Grid>
-            </Grid>
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
+                <MetricCard
+                    title="Total Submissions"
+                    value={stats.total}
+                    subtitle="All-time responses collected"
+                    icon={<DescriptionOutlinedIcon className="size-4" />}
+                    tintClassName="bg-primary/8"
+                />
+                <MetricCard
+                    title="Processed Leads"
+                    value={stats.processed}
+                    subtitle={`${conversionPercent}% converted successfully`}
+                    icon={<GroupOutlinedIcon className="size-4" />}
+                    tintClassName="bg-primary/8"
+                />
+                <MetricCard
+                    title="Spam Detected"
+                    value={stats.spam}
+                    subtitle={`${spamPercent}% blocked or flagged`}
+                    icon={<ReportGmailerrorredOutlinedIcon className="size-4 text-destructive" />}
+                    tintClassName="bg-destructive/8"
+                />
+                <MetricCard
+                    title="Duplicates"
+                    value={stats.duplicate}
+                    subtitle={`${duplicatePercent}% merged or skipped`}
+                    icon={<CopyAllOutlinedIcon className="size-4 text-tertiary" />}
+                    tintClassName="bg-tertiary/12"
+                />
+            </div>
 
-            <Grid container spacing={1.5}>
-                <Grid size={{ xs: 12, lg: 7 }}>
-                    <Paper variant="outlined" sx={{ p: 2, borderRadius: "14px", height: "100%" }}>
-                        <Typography variant="subtitle1" sx={{ fontWeight: 800, mb: 1.5 }}>
-                            Conversion Health
-                        </Typography>
-                        <Stack spacing={2}>
-                            <Box>
-                                <Stack direction="row" justifyContent="space-between" sx={{ mb: 0.75 }}>
-                                    <Typography variant="body2" sx={{ fontWeight: 600 }}>Lead Conversion</Typography>
-                                    <Typography variant="body2" color="text.secondary">{conversionPercent}%</Typography>
-                                </Stack>
-                                <LinearProgress
-                                    variant="determinate"
-                                    value={conversionPercent}
-                                    sx={{
-                                        height: 8,
-                                        borderRadius: "999px",
-                                        bgcolor: alpha(theme.palette.primary.main, 0.08),
-                                    }}
-                                />
-                            </Box>
-                            <Box>
-                                <Stack direction="row" justifyContent="space-between" sx={{ mb: 0.75 }}>
-                                    <Typography variant="body2" sx={{ fontWeight: 600 }}>Spam Rate</Typography>
-                                    <Typography variant="body2" color="text.secondary">{spamPercent}%</Typography>
-                                </Stack>
-                                <LinearProgress
-                                    variant="determinate"
-                                    color="error"
-                                    value={spamPercent}
-                                    sx={{
-                                        height: 8,
-                                        borderRadius: "999px",
-                                        bgcolor: alpha(theme.palette.error.main, 0.08),
-                                    }}
-                                />
-                            </Box>
-                            <Box>
-                                <Stack direction="row" justifyContent="space-between" sx={{ mb: 0.75 }}>
-                                    <Typography variant="body2" sx={{ fontWeight: 600 }}>Duplicate Rate</Typography>
-                                    <Typography variant="body2" color="text.secondary">{duplicatePercent}%</Typography>
-                                </Stack>
-                                <LinearProgress
-                                    variant="determinate"
-                                    color="warning"
-                                    value={duplicatePercent}
-                                    sx={{
-                                        height: 8,
-                                        borderRadius: "999px",
-                                        bgcolor: alpha(theme.palette.warning.main, 0.08),
-                                    }}
-                                />
-                            </Box>
-                        </Stack>
-                    </Paper>
-                </Grid>
-                <Grid size={{ xs: 12, lg: 5 }}>
-                    <Paper variant="outlined" sx={{ p: 2, borderRadius: "14px", height: "100%" }}>
-                        <Stack direction="row" spacing={1.25} alignItems="center" sx={{ mb: 1.25 }}>
-                            <Box
-                                sx={{
-                                    width: 40,
-                                    height: 40,
-                                    borderRadius: "12px",
-                                    display: "flex",
-                                    alignItems: "center",
-                                    justifyContent: "center",
-                                    bgcolor: alpha(theme.palette.primary.main, 0.08),
-                                    color: "primary.main",
-                                }}
-                            >
-                                <TrendingUpOutlinedIcon fontSize="small" />
-                            </Box>
-                            <Box>
-                                <Typography variant="subtitle1" sx={{ fontWeight: 800 }}>
-                                    Recent Activity
-                                </Typography>
-                                <Typography variant="body2" color="text.secondary">
-                                    Last 30 days of submissions
-                                </Typography>
-                            </Box>
-                        </Stack>
-                        <Box
-                            sx={{
-                                p: 2,
-                                borderRadius: "12px",
-                                bgcolor: alpha(theme.palette.primary.main, 0.03),
-                                border: "1px dashed",
-                                borderColor: alpha(theme.palette.primary.main, 0.16),
-                            }}
-                        >
-                            <Typography variant="h3" sx={{ fontWeight: 900, letterSpacing: -1 }}>
-                                {stats.recentTrend}
-                            </Typography>
-                            <Typography variant="body2" color="text.secondary" sx={{ mt: 0.75 }}>
-                                submissions captured in the last 30 days
-                            </Typography>
-                            <Typography variant="caption" sx={{ display: "block", mt: 1.5, color: "text.secondary" }}>
-                                Errors: {stats.errors} submissions need manual review
-                            </Typography>
-                        </Box>
-                    </Paper>
-                </Grid>
-            </Grid>
-        </Stack>
+            <div className="grid grid-cols-1 gap-3 lg:grid-cols-12">
+                <Card className="rounded-2xl p-4 lg:col-span-7">
+                    <p className="mb-3 text-base font-extrabold">
+                        Conversion Health
+                    </p>
+                    <div className="flex flex-col gap-4">
+                        <div>
+                            <div className="mb-1.5 flex items-center justify-between">
+                                <span className="text-sm font-semibold">Lead Conversion</span>
+                                <span className="text-sm text-muted-foreground">{conversionPercent}%</span>
+                            </div>
+                            <ProgressBar value={conversionPercent} />
+                        </div>
+                        <div>
+                            <div className="mb-1.5 flex items-center justify-between">
+                                <span className="text-sm font-semibold">Spam Rate</span>
+                                <span className="text-sm text-muted-foreground">{spamPercent}%</span>
+                            </div>
+                            <ProgressBar value={spamPercent} className="bg-destructive" />
+                        </div>
+                        <div>
+                            <div className="mb-1.5 flex items-center justify-between">
+                                <span className="text-sm font-semibold">Duplicate Rate</span>
+                                <span className="text-sm text-muted-foreground">{duplicatePercent}%</span>
+                            </div>
+                            <ProgressBar value={duplicatePercent} className="bg-tertiary" />
+                        </div>
+                    </div>
+                </Card>
+                <Card className="rounded-2xl p-4 lg:col-span-5">
+                    <div className="mb-3 flex items-center gap-3">
+                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/8 text-primary">
+                            <TrendingUpOutlinedIcon className="size-4" />
+                        </div>
+                        <div>
+                            <p className="text-base font-extrabold">
+                                Recent Activity
+                            </p>
+                            <p className="text-sm text-muted-foreground">
+                                Last 30 days of submissions
+                            </p>
+                        </div>
+                    </div>
+                    <div className="rounded-xl border border-dashed border-primary/16 bg-primary/[0.03] p-4">
+                        <p className="text-4xl font-black tracking-tight">
+                            {stats.recentTrend}
+                        </p>
+                        <p className="mt-1.5 text-sm text-muted-foreground">
+                            submissions captured in the last 30 days
+                        </p>
+                        <p className="mt-3 block text-xs text-muted-foreground">
+                            Errors: {stats.errors} submissions need manual review
+                        </p>
+                    </div>
+                </Card>
+            </div>
+        </div>
     );
 }

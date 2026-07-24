@@ -4,34 +4,20 @@ import { useEffect, useState, useCallback, useMemo } from "react";
 import { Activity } from "@/types/activities";
 import { PaginatedResponse } from "@/types/common";
 import { apiFetch } from "@/lib/api";
-import {
-    Box,
-    Typography,
-    Stack,
-    Button,
-    useTheme,
-    alpha,
-    Paper,
-    IconButton,
-    Tooltip,
-    Select,
-    MenuItem
-} from "@mui/material";
-import {
-    FilterAlt as FilterIcon,
-    CalendarMonth as CalendarIcon,
-    Refresh as RefreshIcon
-} from "@mui/icons-material";
+import { Button } from "@/components/ui/button";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { CalendarDays, ListFilter, RefreshCw } from "lucide-react";
+import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { ActivitiesMobileList } from "./activities-mobile-list";
 import { CreateActivityDialog } from "./create-activity-dialog";
-import { StandardDataGrid } from "@/components/common/standard-data-grid";
-import { columns } from "./columns";
+import { DataTable } from "@/components/ui/data-table";
+import { buildActivityColumns } from "./columns";
 import { FilterBuilder } from "@/components/filters/filter-builder";
 import { FilterConfig, FilterField } from "@/types/filters";
-import { ViewSwitcher } from "@/components/views/view-switcher";
 import { EmptyState } from "@/components/common/empty-state";
-import { ContextualFormsPanel } from "@/components/forms/contextual-forms-panel";
+import { QueueExportButton } from "@/components/exports/queue-export-button";
 
 const INITIAL_FILTER_FIELDS: FilterField[] = [
     { key: 'notes', label: 'Description', type: 'text' },
@@ -56,13 +42,17 @@ const INITIAL_FILTER_FIELDS: FilterField[] = [
 ];
 
 export default function ActivitiesPage() {
-    const theme = useTheme();
+    const [urlFilters, setUrlFilters] = useState("");
     const [data, setData] = useState<Activity[]>([]);
     const [loading, setLoading] = useState(true);
     const [filterOpen, setFilterOpen] = useState(false);
     const [filterFields, setFilterFields] = useState<FilterField[]>(INITIAL_FILTER_FIELDS);
     const [activityTypeOptions, setActivityTypeOptions] = useState<Array<{ label: string; value: string }>>([]);
     const [selectedActivityTypeId, setSelectedActivityTypeId] = useState("ALL");
+    const [paginationModel, setPaginationModel] = useState({ page: 0, pageSize: 25 });
+    const [totalItems, setTotalItems] = useState(0);
+    const [selectedRows, setSelectedRows] = useState<string[]>([]);
+    const [isAllSelected, setIsAllSelected] = useState(false);
     const [filters, setFilters] = useState<FilterConfig>({
         conditions: [],
         logic: 'AND',
@@ -88,6 +78,10 @@ export default function ActivitiesPage() {
 
     const buildQueryParams = useCallback(() => {
         const params = new URLSearchParams();
+        if (urlFilters && filters.conditions.length === 0 && selectedActivityTypeId === "ALL") {
+            params.set("filters", urlFilters);
+            return params.toString();
+        }
         const conditions = [...filters.conditions];
         if (selectedActivityTypeId !== "ALL") {
             conditions.push({ id: "quick-activity-type", field: "typeId", operator: "equals", value: selectedActivityTypeId });
@@ -96,182 +90,179 @@ export default function ActivitiesPage() {
             params.set('filters', JSON.stringify({ ...filters, conditions }));
         }
         return params.toString();
-    }, [filters, selectedActivityTypeId]);
+    }, [filters, selectedActivityTypeId, urlFilters]);
 
     const fetchData = useCallback(async () => {
         setLoading(true);
         try {
             const queryString = buildQueryParams();
-            const url = queryString ? `/activities?${queryString}` : '/activities';
+            const params = new URLSearchParams(queryString);
+            params.set("page", String(paginationModel.page + 1));
+            params.set("limit", String(paginationModel.pageSize));
+            const url = `/activities?${params.toString()}`;
             const response = await apiFetch<PaginatedResponse<Activity> | Activity[]>(url);
 
             if ('meta' in response && response.data) {
                 setData(response.data);
+                setTotalItems(response.meta.total);
             } else if (Array.isArray(response)) {
                 setData(response);
+                setTotalItems(response.length);
             }
         } catch (error) {
             toast.error("Failed to fetch activities");
         } finally {
             setLoading(false);
         }
-    }, [buildQueryParams]);
+    }, [buildQueryParams, paginationModel.page, paginationModel.pageSize]);
+
+    useEffect(() => {
+        setUrlFilters(new URLSearchParams(window.location.search).get("filters") ?? "");
+    }, []);
 
     useEffect(() => {
         fetchData();
     }, [fetchData]);
 
-    const activityColumns = useMemo(() => [
-        ...columns,
-        {
-            field: "forms",
-            headerName: "Forms",
-            width: 120,
-            sortable: false,
-            filterable: false,
-            renderCell: (params: any) => {
-                const row = params.row as Activity;
-                return (
-                    <ContextualFormsPanel
-                        placement="ACTIVITY_DETAIL"
-                        context={{
-                            activityId: row.id,
-                            leadId: row.leadId,
-                            opportunityId: row.opportunityId,
-                        }}
-                        entityData={row}
-                        onSaved={fetchData}
-                    />
-                );
-            },
-        },
-    ], [fetchData]);
+    useEffect(() => {
+        setPaginationModel((current) => ({ ...current, page: 0 }));
+        setSelectedRows([]);
+        setIsAllSelected(false);
+    }, [filters, selectedActivityTypeId, urlFilters]);
+
+    const handleSelectAllFiltered = () => {
+        setSelectedRows(data.map((activity) => activity.id));
+        setIsAllSelected(true);
+        toast.success(`All ${totalItems.toLocaleString()} activities selected`);
+    };
+
+    const clearSelection = () => {
+        setSelectedRows([]);
+        setIsAllSelected(false);
+    };
+
+    const activityColumns = useMemo(() => buildActivityColumns({ onFormsSaved: fetchData }), [fetchData]);
 
     return (
-        <Box sx={{ px: { xs: 1.5, md: 2 }, py: { xs: 1.5, md: 2 }, maxWidth: 1520, mx: 'auto' }}>
+        <div className="mx-auto max-w-[1520px] px-3 py-3 md:px-4 md:py-4">
             {/* Header */}
-            <Stack
-                direction={{ xs: 'column', sm: 'row' }}
-                justifyContent="space-between"
-                alignItems={{ xs: 'flex-start', sm: 'center' }}
-                spacing={2}
-                sx={{ mb: 1.5 }}
-            >
-                <Box>
-                    <Stack direction="row" spacing={2} alignItems="center">
-                        <Typography variant="h6" sx={{ fontWeight: 700, letterSpacing: -0.5 }}>
-                            Activities
-                        </Typography>
-                        <Box sx={{ ml: 1.5 }}>
-                            <ViewSwitcher
-                                module="ACTIVITIES"
-                                currentFilters={filters}
-                                onConfigChange={setFilters}
-                            />
-                        </Box>
-                    </Stack>
-                    <Typography variant="caption" color="text.secondary" sx={{ mt: 0.25 }}>
+            <div className="mb-3 flex flex-col items-start justify-between gap-4 sm:flex-row sm:items-center">
+                <div>
+                    <div className="flex items-center gap-3">
+                        <h1 className="text-lg font-bold tracking-[-0.5px]">Activities</h1>
+                    </div>
+                    <p className="mt-0.5 text-xs text-muted-foreground">
                         Track and manage your sales interactions
-                    </Typography>
-                </Box>
+                    </p>
+                </div>
 
-                <Stack direction="row" spacing={1}>
-                    <Tooltip title="Refresh">
-                        <IconButton onClick={fetchData} sx={{ bgcolor: 'action.hover', borderRadius: '10px' }}>
-                            <RefreshIcon />
-                        </IconButton>
+                <div className="flex items-center gap-2">
+                    <QueueExportButton
+                        moduleName="ACTIVITIES"
+                        filters={{
+                            ...filters,
+                            selectedActivityTypeId: selectedActivityTypeId !== "ALL" ? selectedActivityTypeId : null,
+                            urlFilters,
+                        }}
+                        selectedIds={isAllSelected ? [] : selectedRows}
+                        currentPageIds={data.map((activity) => activity.id)}
+                        totalItems={totalItems}
+                    />
+                    <Tooltip>
+                        <TooltipTrigger asChild>
+                            <Button variant="ghost" size="icon" className="rounded-[10px] bg-accent" onClick={fetchData}>
+                                <RefreshCw className="size-4" />
+                            </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>Refresh</TooltipContent>
                     </Tooltip>
-                    <Select
-                        size="small"
-                        value={selectedActivityTypeId}
-                        onChange={(event) => setSelectedActivityTypeId(String(event.target.value))}
-                        sx={{ minWidth: 190 }}
-                    >
-                        <MenuItem value="ALL">All activity types</MenuItem>
-                        {activityTypeOptions.map((option) => (
-                            <MenuItem key={option.value} value={option.value}>{option.label}</MenuItem>
-                        ))}
+                    <Select value={selectedActivityTypeId} onValueChange={setSelectedActivityTypeId}>
+                        <SelectTrigger className="min-w-[190px] rounded-[10px]">
+                            <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="ALL">All activity types</SelectItem>
+                            {activityTypeOptions.map((option) => (
+                                <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
+                            ))}
+                        </SelectContent>
                     </Select>
                     <Button
-                        variant="outlined"
-                        startIcon={<FilterIcon />}
+                        variant="outline"
+                        className={cn(
+                            "rounded-[10px]",
+                            filters.conditions.length > 0 && "border-primary bg-primary/5"
+                        )}
                         onClick={() => setFilterOpen(!filterOpen)}
-                        sx={{
-                            borderRadius: '10px',
-                            borderColor: filters.conditions.length > 0 ? 'primary.main' : 'divider',
-                            bgcolor: filters.conditions.length > 0 ? alpha(theme.palette.primary.main, 0.05) : 'transparent'
-                        }}
                     >
+                        <ListFilter className="size-4" />
                         Filters
                         {filters.conditions.length > 0 && (
-                            <Box sx={{
-                                ml: 1,
-                                bgcolor: 'primary.main',
-                                color: 'primary.contrastText',
-                                borderRadius: '999px',
-                                width: 20,
-                                height: 20,
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                fontSize: '0.75rem',
-                                fontWeight: 700
-                            }}>
+                            <span className="flex size-5 items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-foreground">
                                 {filters.conditions.length}
-                            </Box>
+                            </span>
                         )}
                     </Button>
                     <CreateActivityDialog onSuccess={fetchData} />
-                </Stack>
-            </Stack>
+                </div>
+            </div>
 
             {/* Filter Builder */}
             {filterOpen && (
-                <Paper
-                    elevation={0}
-                    sx={{
-                        p: 1.25,
-                        mb: 1.5,
-                        borderRadius: '12px',
-                        border: '1px solid',
-                        borderColor: 'divider',
-                        bgcolor: alpha(theme.palette.primary.main, 0.02)
-                    }}
-                >
+                <div className="mb-3 rounded-xl border bg-primary/[0.02] p-3">
                     <FilterBuilder
                         fields={filterFields}
                         value={filters}
                         onChange={setFilters}
                     />
-                </Paper>
+                </div>
             )}
 
             {/* Content */}
             {data.length === 0 && !loading ? (
                 <EmptyState
-                    icon={<CalendarIcon sx={{ fontSize: 48, color: 'text.secondary', opacity: 0.5 }} />}
+                    icon={<CalendarDays className="size-12 text-muted-foreground opacity-50" />}
                     title="No activities found"
                     description="Log an activity or adjust your filters to see results."
                     action={<CreateActivityDialog onSuccess={fetchData} />}
                 />
             ) : (
                 <>
-                    <Box sx={{ display: { xs: 'none', md: 'block' } }}>
-                        <StandardDataGrid
-                            rows={data}
+                    <div className="hidden md:block">
+                        <DataTable
+                            storageKey="activities-table"
+                            data={data}
                             columns={activityColumns}
                             loading={loading}
-                            rowHeight={72}
-                            checkboxSelection
-                            disableRowSelectionOnClick
+                            getRowId={(row) => row.id}
+                            defaultDensity="comfortable"
+                            enableRowSelection
+                            rowSelectionIds={selectedRows}
+                            onRowSelectionIdsChange={(ids) => {
+                                setSelectedRows(ids);
+                                if (isAllSelected) setIsAllSelected(false);
+                            }}
+                            totalItems={totalItems}
+                            isAllSelected={isAllSelected}
+                            onSelectAllFiltered={handleSelectAllFiltered}
+                            onClearSelection={clearSelection}
+                            pageIndex={paginationModel.page}
+                            pageSize={paginationModel.pageSize}
+                            onPaginationChange={({ pageIndex, pageSize }) => setPaginationModel({ page: pageIndex, pageSize })}
+                            emptyState={{
+                                icon: <CalendarDays className="size-10 text-muted-foreground opacity-50" />,
+                                title: "No activities found",
+                                description: "Log an activity or adjust your filters to see results.",
+                                action: <CreateActivityDialog onSuccess={fetchData} />,
+                            }}
                         />
-                    </Box>
+                    </div>
 
-                    <Box sx={{ display: { xs: 'block', md: 'none' }, mt: 2 }}>
+                    <div className="mt-4 md:hidden">
                         <ActivitiesMobileList data={data} />
-                    </Box>
+                    </div>
                 </>
             )}
-        </Box>
+        </div>
     );
 }

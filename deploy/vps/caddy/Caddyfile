@@ -1,0 +1,34 @@
+{
+	email {$ACME_EMAIL}
+}
+
+# Both domains are reverse-proxied to the SAME Next.js process (same-origin
+# architecture): the app's own frontend keeps calling relative /api/... paths
+# served via app.unnatify.com, and api.unnatify.com is an additional public
+# entry point into those same /api routes (e.g. for external integrations).
+# No CORS or cross-domain cookie config is required because of this.
+{$APP_DOMAIN}, {$API_DOMAIN} {
+	encode zstd gzip
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=(), usb=(), interest-cohort=()"
+	}
+
+	# The public form-embed feature intentionally lets a form be iframed on
+	# arbitrary third-party sites (src/components/forms/EmbedCodeDialog.tsx),
+	# so those specific paths get a permissive frame-ancestors instead of the
+	# app-wide clickjacking lockdown below.
+	@embeddable path /f/* /public-form/* /api/public/forms/*
+	header @embeddable Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; connect-src 'self'; base-uri 'self'; form-action 'self'; object-src 'none'; frame-ancestors *"
+
+	@appPages not path /f/* /public-form/* /api/public/forms/*
+	header @appPages {
+		X-Frame-Options "DENY"
+		Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; connect-src 'self'; base-uri 'self'; form-action 'self'; object-src 'none'; frame-ancestors 'none'"
+	}
+
+	reverse_proxy web:3000
+}

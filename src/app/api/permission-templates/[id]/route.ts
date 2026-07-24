@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { requireCurrentUser } from "@/lib/server/auth";
+import { requireInternalUser } from "@/lib/server/auth";
 import {
   deletePermissionTemplateForTenant,
   updatePermissionTemplateForTenant,
@@ -12,7 +12,7 @@ type RouteContext = {
 
 export async function PATCH(request: Request, context: RouteContext) {
   try {
-    const user = await requireCurrentUser(request);
+    const user = await requireInternalUser(request);
     if (!user.tenantId) return forbidden("Tenant context required");
     const { id } = await context.params;
     const body = await request.json().catch(() => null);
@@ -21,19 +21,21 @@ export async function PATCH(request: Request, context: RouteContext) {
     return NextResponse.json(template);
   } catch (error) {
     if (error instanceof Error && error.message === "UNAUTHORIZED") return unauthorized();
+    if (error instanceof Error && error.message === "FORBIDDEN") return forbidden();
     return serverError("Failed to update permission template", error);
   }
 }
 
 export async function DELETE(request: Request, context: RouteContext) {
   try {
-    const user = await requireCurrentUser(request);
+    const user = await requireInternalUser(request);
     if (!user.tenantId) return forbidden("Tenant context required");
     const { id } = await context.params;
     await deletePermissionTemplateForTenant(user.tenantId, id);
     return NextResponse.json({ ok: true });
   } catch (error) {
     if (error instanceof Error && error.message === "UNAUTHORIZED") return unauthorized();
+    if (error instanceof Error && error.message === "FORBIDDEN") return forbidden();
     return serverError("Failed to delete permission template", error);
   }
 }

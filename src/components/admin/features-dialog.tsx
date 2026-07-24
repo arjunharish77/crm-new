@@ -1,30 +1,37 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import {
-    Button,
-    Dialog,
-    DialogActions,
-    DialogContent,
-    DialogContentText,
-    DialogTitle,
-    Switch,
-    FormControlLabel,
-    Stack,
-    Typography,
-    Box,
-    CircularProgress
-} from "@mui/material";
+import { ReactNode, useEffect, useState } from "react";
+import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
+import { Button } from "@/components/ui/button";
+import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle,
+} from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import { useAuth } from "@/providers/auth-provider";
 
 interface FeaturesDialogProps {
     tenantId: string;
     tenantName: string;
-    trigger?: React.ReactNode;
+    trigger?: ReactNode;
     open?: boolean;
     onOpenChange?: (open: boolean) => void;
 }
+
+const FEATURE_LABELS = [
+    ["opportunityEnabled", "Opportunities"],
+    ["automationEnabled", "Automations"],
+    ["salesGroupsEnabled", "Sales Groups"],
+    ["formBuilderEnabled", "Form Builder"],
+    ["advancedReporting", "Advanced Reporting"],
+    ["apiAccessEnabled", "API Access"],
+] as const;
 
 export function FeaturesDialog({
     tenantId,
@@ -36,18 +43,16 @@ export function FeaturesDialog({
     const [open, setOpen] = useState(false);
     const [loading, setLoading] = useState(false);
     const [saving, setSaving] = useState(false);
-    // Features state
     const [features, setFeatures] = useState({
         opportunityEnabled: true,
         automationEnabled: true,
         salesGroupsEnabled: true,
         formBuilderEnabled: true,
-        advancedReporting: false,
+        advancedReporting: true,
         apiAccessEnabled: false,
     });
     const { token } = useAuth();
 
-    // Handle controlled/uncontrolled state
     const isOpen = controlledOpen ?? open;
     const setIsOpen = (newOpen: boolean) => {
         if (onOpenChange) {
@@ -56,9 +61,6 @@ export function FeaturesDialog({
             setOpen(newOpen);
         }
     };
-
-    const handleOpen = () => setIsOpen(true);
-    const handleClose = () => setIsOpen(false);
 
     useEffect(() => {
         if (isOpen && tenantId && token) {
@@ -74,7 +76,6 @@ export function FeaturesDialog({
             });
             if (res.ok) {
                 const data = await res.json();
-                // Merge with defaults to ensure all keys exist
                 setFeatures((prev) => ({ ...prev, ...data }));
             } else {
                 toast.error("Failed to fetch features");
@@ -117,74 +118,47 @@ export function FeaturesDialog({
 
     return (
         <>
-            {trigger && <Box component="span" onClick={handleOpen}>{trigger}</Box>}
-            <Dialog
-                open={isOpen}
-                onClose={handleClose}
-                maxWidth="xs"
-                fullWidth
-                PaperProps={{
-                    sx: { borderRadius: 3 }
-                }}
-            >
-                <DialogTitle>Manage Features</DialogTitle>
-                <DialogContent>
-                    <DialogContentText sx={{ mb: 2 }}>
-                        Toggle features for <strong>{tenantName}</strong>.
-                    </DialogContentText>
+            {trigger ? (
+                <span className="inline-flex" onClick={() => setIsOpen(true)}>
+                    {trigger}
+                </span>
+            ) : null}
+            <Dialog open={isOpen} onOpenChange={setIsOpen}>
+                <DialogContent className="sm:max-w-[420px]">
+                    <DialogHeader>
+                        <DialogTitle>Manage Features</DialogTitle>
+                        <DialogDescription>
+                            Toggle features for <strong>{tenantName}</strong>.
+                        </DialogDescription>
+                    </DialogHeader>
 
                     {loading ? (
-                        <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
-                            <CircularProgress size={24} />
-                        </Box>
+                        <div className="flex justify-center py-8">
+                            <Loader2 className="h-5 w-5 animate-spin text-primary" />
+                        </div>
                     ) : (
-                        <Stack spacing={2}>
-                            <FeatureSwitch
-                                label="Opportunities"
-                                checked={features.opportunityEnabled}
-                                onChange={() => toggleFeature("opportunityEnabled")}
-                            />
-                            <FeatureSwitch
-                                label="Automations"
-                                checked={features.automationEnabled}
-                                onChange={() => toggleFeature("automationEnabled")}
-                            />
-                            <FeatureSwitch
-                                label="Sales Groups"
-                                checked={features.salesGroupsEnabled}
-                                onChange={() => toggleFeature("salesGroupsEnabled")}
-                            />
-                            <FeatureSwitch
-                                label="Form Builder"
-                                checked={features.formBuilderEnabled}
-                                onChange={() => toggleFeature("formBuilderEnabled")}
-                            />
-                            <FeatureSwitch
-                                label="Advanced Reporting"
-                                checked={features.advancedReporting}
-                                onChange={() => toggleFeature("advancedReporting")}
-                            />
-                            <FeatureSwitch
-                                label="API Access"
-                                checked={features.apiAccessEnabled}
-                                onChange={() => toggleFeature("apiAccessEnabled")}
-                            />
-                        </Stack>
+                        <div className="space-y-2">
+                            {FEATURE_LABELS.map(([key, label]) => (
+                                <FeatureSwitch
+                                    key={key}
+                                    label={label}
+                                    checked={features[key]}
+                                    onChange={() => toggleFeature(key)}
+                                />
+                            ))}
+                        </div>
                     )}
+
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => setIsOpen(false)} disabled={saving}>
+                            Cancel
+                        </Button>
+                        <Button onClick={handleSave} disabled={saving || loading}>
+                            {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                            {saving ? "Saving..." : "Save Changes"}
+                        </Button>
+                    </DialogFooter>
                 </DialogContent>
-                <DialogActions sx={{ px: 3, pb: 3 }}>
-                    <Button onClick={handleClose} sx={{ borderRadius: 20, color: 'text.secondary' }} disabled={saving}>
-                        Cancel
-                    </Button>
-                    <Button
-                        onClick={handleSave}
-                        variant="contained"
-                        disabled={saving || loading}
-                        sx={{ borderRadius: 20 }}
-                    >
-                        {saving ? "Saving..." : "Save Changes"}
-                    </Button>
-                </DialogActions>
             </Dialog>
         </>
     );
@@ -192,9 +166,9 @@ export function FeaturesDialog({
 
 function FeatureSwitch({ label, checked, onChange }: { label: string; checked: boolean; onChange: () => void }) {
     return (
-        <Stack direction="row" justifyContent="space-between" alignItems="center">
-            <Typography variant="body2">{label}</Typography>
-            <Switch checked={checked} onChange={onChange} color="primary" />
-        </Stack>
+        <div className="flex items-center justify-between gap-4 rounded-md border border-border px-3 py-2">
+            <Label className="text-sm font-medium">{label}</Label>
+            <Switch checked={checked} onCheckedChange={onChange} />
+        </div>
     );
 }

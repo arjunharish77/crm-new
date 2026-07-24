@@ -1,13 +1,17 @@
 import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/server/auth";
-import { unauthorized } from "@/lib/server/http";
+import { serverError, unauthorized } from "@/lib/server/http";
 
 export async function GET(request: Request) {
-  const user = await getCurrentUser(request);
+  try {
+    const user = await getCurrentUser(request);
 
-  if (!user) {
-    return unauthorized();
+    if (!user) {
+      return unauthorized();
+    }
+
+    return NextResponse.json(user);
+  } catch (error) {
+    return serverError("Failed to fetch current user", error);
   }
-
-  return NextResponse.json(user);
 }

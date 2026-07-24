@@ -6,6 +6,7 @@ import { Search, Loader2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { apiFetch } from "@/lib/api";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
+import { formatCurrency } from "@/lib/utils";
 
 interface SearchResult {
     id: string;
@@ -106,7 +107,7 @@ export function GlobalSearch({
                                         <div className="flex flex-col">
                                             <span className="font-medium">{opp.title}</span>
                                             <span className="text-xs text-muted-foreground">
-                                                {opp.amount ? `$${opp.amount}` : ''}
+                                                {opp.amount ? formatCurrency(opp.amount) : ''}
                                             </span>
                                         </div>
                                     </Command.Item>

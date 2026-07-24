@@ -74,7 +74,7 @@ export function IconPicker({ value, onChange }: IconPickerProps) {
                                         setOpen(false);
                                     }}
                                     className={cn(
-                                        'p-2 rounded hover:bg-accent relative group',
+                                        'p-2 rounded hover:bg-accent relative group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
                                         isSelected && 'bg-accent'
                                     )}
                                     title={iconName}

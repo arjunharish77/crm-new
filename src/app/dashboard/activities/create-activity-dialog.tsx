@@ -1,11 +1,8 @@
 'use client';
 
 import React, { useState } from "react";
-import {
-    Button as MuiButton,
-    Box,
-} from "@mui/material";
-import { History as HistoryIcon } from "@mui/icons-material";
+import { History } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { StandardDialog } from "@/components/common/standard-dialog";
 import { ActivityForm } from "./activity-form";
 
@@ -39,16 +36,12 @@ export function CreateActivityDialog({
     return (
         <>
             {trigger ? (
-                <Box onClick={handleOpen}>{trigger}</Box>
+                <div onClick={handleOpen}>{trigger}</div>
             ) : (
-                <MuiButton
-                    variant="contained"
-                    color="primary"
-                    startIcon={<HistoryIcon />}
-                    onClick={handleOpen}
-                >
+                <Button onClick={handleOpen}>
+                    <History className="size-4" />
                     Log Activity
-                </MuiButton>
+                </Button>
             )}
 
             <StandardDialog
@@ -56,9 +49,9 @@ export function CreateActivityDialog({
                 onClose={handleClose}
                 title="Log Activity"
                 subtitle="Record an interaction with a lead or opportunity"
-                icon={<HistoryIcon />}
+                icon={<History className="size-4" />}
             >
-                <div style={{ padding: '8px 0' }}>
+                <div className="py-2">
                     <ActivityForm
                         initialData={{
                             leadId: defaultLeadId || "",

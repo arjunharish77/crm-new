@@ -1,31 +1,21 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
+import { ExternalLink, Pencil } from 'lucide-react';
+import Link from 'next/link';
 import {
-    Drawer,
-    Box,
-    Typography,
-    IconButton,
-    Tabs,
-    Tab,
-    Divider,
-    Stack,
-    Button as MuiButton,
-    alpha,
-    useTheme
-} from "@mui/material";
-import {
-    Close as CloseIcon,
-    OpenInNew as OpenInNewIcon,
-    Edit as EditIcon
-} from "@mui/icons-material";
-import Link from "next/link";
-import { apiFetch } from "@/lib/api";
-import { toast } from "sonner";
-import { Lead } from "@/types/leads";
-import { Activity } from "@/types/activities";
-import { LeadContactCard } from "@/components/leads/lead-contact-card";
-import { Timeline } from "@/components/timeline/timeline";
+    Sheet,
+    SheetContent,
+    SheetHeader,
+    SheetTitle,
+} from '@/components/ui/sheet';
+import { Button } from '@/components/ui/button';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { apiFetch } from '@/lib/api';
+import { toast } from 'sonner';
+import { Activity } from '@/types/activities';
+import { LeadContactCard } from '@/components/leads/lead-contact-card';
+import { Timeline } from '@/components/timeline/timeline';
 
 interface RecordPreviewProps {
     isOpen: boolean;
@@ -41,11 +31,9 @@ const RESOURCE_PATHS: Record<RecordPreviewProps["entityType"], string> = {
 };
 
 export function RecordPreview({ isOpen, onClose, entityType, entityId }: RecordPreviewProps) {
-    const theme = useTheme();
     const [data, setData] = useState<any>(null);
     const [loading, setLoading] = useState(false);
     const [activities, setActivities] = useState<Activity[]>([]);
-    const [tabValue, setTabValue] = useState(0);
 
     useEffect(() => {
         if (isOpen && entityId) {
@@ -53,7 +41,6 @@ export function RecordPreview({ isOpen, onClose, entityType, entityId }: RecordP
         } else {
             setData(null);
             setActivities([]);
-            setTabValue(0);
         }
     }, [isOpen, entityId]);
 
@@ -75,128 +62,75 @@ export function RecordPreview({ isOpen, onClose, entityType, entityId }: RecordP
         }
     };
 
-    const handleTabChange = (event: React.SyntheticEvent, newValue: number) => {
-        setTabValue(newValue);
-    };
-
     return (
-        <Drawer
-            anchor="right"
-            open={isOpen}
-            onClose={onClose}
-            PaperProps={{
-                sx: { width: { xs: '100%', sm: 500, md: 600 }, border: 'none' }
-            }}
-        >
-            <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column', bgcolor: 'background.paper' }}>
-                {/* Header */}
-                <Box sx={{ px: 3, py: 2, display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid', borderColor: 'divider' }}>
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                        <Typography variant="h6" sx={{ fontWeight: 700 }}>
-                            {loading ? 'Loading...' : data?.name || 'Record Preview'}
-                        </Typography>
-                    </Box>
-                    <Stack direction="row" spacing={1}>
-                        {data && (
-                            <IconButton
-                                size="small"
-                                component={Link}
-                                href={`${RESOURCE_PATHS[entityType]}/${data.id}`}
-                                title="Open Full View"
-                            >
-                                <OpenInNewIcon fontSize="small" />
-                            </IconButton>
-                        )}
-                        <IconButton onClick={onClose} size="small">
-                            <CloseIcon fontSize="small" />
-                        </IconButton>
-                    </Stack>
-                </Box>
-
-                {/* Content */}
-                <Box sx={{ flexGrow: 1, overflowY: 'auto' }}>
-                    {loading ? (
-                        <Box p={4} textAlign="center">
-                            <Typography color="text.secondary">Loading record details...</Typography>
-                        </Box>
-                    ) : data ? (
-                        <Box>
-                            <Tabs
-                                value={tabValue}
-                                onChange={handleTabChange}
-                                sx={{
-                                    borderBottom: '1px solid',
-                                    borderColor: 'divider',
-                                    px: 2,
-                                    '& .MuiTab-root': {
-                                        fontWeight: 600,
-                                        fontSize: '0.875rem',
-                                        minHeight: 48,
-                                        textTransform: 'none'
-                                    }
-                                }}
-                            >
-                                <Tab label="Details" />
-                                <Tab label="Timeline" />
-                            </Tabs>
-
-                            <Box p={3}>
-                                {tabValue === 0 && (
-                                    <Stack spacing={3}>
-                                        <Box>
-                                            <Typography variant="overline" color="text.secondary" sx={{ fontWeight: 700, letterSpacing: '0.1em' }}>
-                                                Primary Contact
-                                            </Typography>
-                                            <LeadContactCard lead={data} />
-                                        </Box>
-
-                                        {data.company && (
-                                            <Box sx={{
-                                                p: 2,
-                                                borderRadius: 4,
-                                                bgcolor: 'surfaceContainerLow', // M3 Surface
-                                                border: '1px solid',
-                                                borderColor: 'divider'
-                                            }}>
-                                                <Typography variant="overline" color="text.secondary" sx={{ fontWeight: 700 }}>Company</Typography>
-                                                <Typography variant="body1" sx={{ fontWeight: 600, mt: 0.5 }}>{data.company}</Typography>
-                                            </Box>
-                                        )}
-
-                                        <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 2, pt: 2, borderTop: '1px solid', borderColor: 'divider' }}>
-                                            <MuiButton
-                                                variant="outlined"
-                                                startIcon={<EditIcon />}
-                                                sx={{ borderRadius: 10 }}
-                                            >
-                                                Edit
-                                            </MuiButton>
-                                            <Link href={`${RESOURCE_PATHS[entityType]}/${data.id}`} passHref legacyBehavior>
-                                                <MuiButton
-                                                    component="a"
-                                                    variant="contained"
-                                                    color="primary"
-                                                    startIcon={<OpenInNewIcon />}
-                                                    sx={{ borderRadius: 10 }}
-                                                >
-                                                    Full Details
-                                                </MuiButton>
-                                            </Link>
-                                        </Box>
-                                    </Stack>
-                                )}
-                                {tabValue === 1 && (
-                                    <Timeline activities={activities} />
-                                )}
-                            </Box>
-                        </Box>
-                    ) : (
-                        <Box p={4} textAlign="center">
-                            <Typography color="text.secondary">No data found</Typography>
-                        </Box>
+        <Sheet open={isOpen} onOpenChange={(next) => !next && onClose()}>
+            <SheetContent className="w-full gap-0 overflow-y-auto p-0 sm:max-w-[500px] md:max-w-[600px]">
+                <SheetHeader className="flex-row items-center justify-between gap-3 border-b p-4">
+                    <SheetTitle className="text-base">
+                        {loading ? 'Loading...' : data?.name || 'Record Preview'}
+                    </SheetTitle>
+                    {data && (
+                        <Button variant="ghost" size="icon-sm" asChild>
+                            <Link href={`${RESOURCE_PATHS[entityType]}/${data.id}`} title="Open Full View">
+                                <ExternalLink className="size-4" />
+                            </Link>
+                        </Button>
                     )}
-                </Box>
-            </Box>
-        </Drawer>
+                </SheetHeader>
+
+                <div className="flex-1 overflow-y-auto">
+                    {loading ? (
+                        <div className="p-8 text-center">
+                            <p className="text-sm text-muted-foreground">Loading record details...</p>
+                        </div>
+                    ) : data ? (
+                        <Tabs defaultValue="details">
+                            <div className="px-4 pt-2">
+                                <TabsList className="grid w-full grid-cols-2">
+                                    <TabsTrigger value="details">Details</TabsTrigger>
+                                    <TabsTrigger value="timeline">Timeline</TabsTrigger>
+                                </TabsList>
+                            </div>
+
+                            <TabsContent value="details" className="flex flex-col gap-6 p-4">
+                                <div>
+                                    <p className="mb-2 text-xs font-bold uppercase tracking-[0.1em] text-muted-foreground">
+                                        Primary Contact
+                                    </p>
+                                    <LeadContactCard lead={data} />
+                                </div>
+
+                                {data.company && (
+                                    <div className="rounded-2xl border p-4">
+                                        <p className="text-xs font-bold uppercase tracking-[0.1em] text-muted-foreground">Company</p>
+                                        <p className="mt-1 text-base font-semibold">{data.company}</p>
+                                    </div>
+                                )}
+
+                                <div className="flex justify-end gap-2 border-t pt-4">
+                                    <Button variant="outline">
+                                        <Pencil className="size-4" />
+                                        Edit
+                                    </Button>
+                                    <Button asChild>
+                                        <Link href={`${RESOURCE_PATHS[entityType]}/${data.id}`}>
+                                            <ExternalLink className="size-4" />
+                                            Full Details
+                                        </Link>
+                                    </Button>
+                                </div>
+                            </TabsContent>
+                            <TabsContent value="timeline" className="p-4">
+                                <Timeline activities={activities} />
+                            </TabsContent>
+                        </Tabs>
+                    ) : (
+                        <div className="p-8 text-center">
+                            <p className="text-sm text-muted-foreground">No data found</p>
+                        </div>
+                    )}
+                </div>
+            </SheetContent>
+        </Sheet>
     );
 }

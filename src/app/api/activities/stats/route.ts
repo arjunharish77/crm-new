@@ -13,6 +13,6 @@ export async function GET(request: Request) {
       return unauthorized();
     }
 
-    return serverError("Failed to fetch activity stats");
+    return serverError("Failed to fetch activity stats", error);
   }
 }

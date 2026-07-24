@@ -1,38 +1,24 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import { History, Search, Eye } from 'lucide-react';
+import { apiFetch } from '@/lib/api';
+import { formatWorkspaceDateTime } from '@/lib/date-format';
+import { Input } from '@/components/ui/input';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 import {
-    Box,
-    Typography,
-    Card,
     Table,
     TableBody,
     TableCell,
-    TableContainer,
     TableHead,
+    TableHeader,
     TableRow,
-    Paper,
-    Chip,
-    IconButton,
-    TextField,
-    Stack,
-    Button,
-    CircularProgress,
-    Dialog,
-    DialogTitle,
-    DialogContent,
-    DialogActions,
-    Pagination,
-    alpha
-} from '@mui/material';
-import {
-    History as HistoryIcon,
-    Search as SearchIcon,
-    Visibility as ViewIcon,
-    FilterList as FilterIcon
-} from '@mui/icons-material';
-import { apiFetch } from '@/lib/api';
-import { formatWorkspaceDateTime } from '@/lib/date-format';
+} from '@/components/ui/table';
+import { StandardDialog } from '@/components/common/standard-dialog';
+import { TableSkeleton } from '@/components/common/skeletons';
+import { EmptyState } from '@/components/common/empty-state';
+import { cn } from '@/lib/utils';
 
 interface AuditLog {
     id: string;
@@ -45,6 +31,12 @@ interface AuditLog {
     metadata: any;
 }
 
+const ACTION_CLASSNAMES: Record<string, string> = {
+    CREATE: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400',
+    UPDATE: 'border-blue-500/30 bg-blue-500/10 text-blue-700 dark:text-blue-400',
+    DELETE: 'border-destructive/30 bg-destructive/10 text-destructive',
+};
+
 export default function AuditLogPage() {
     const [logs, setLogs] = useState<AuditLog[]>([]);
     const [loading, setLoading] = useState(true);
@@ -53,6 +45,7 @@ export default function AuditLogPage() {
 
     useEffect(() => {
         fetchLogs();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [filters]);
 
     const fetchLogs = async () => {
@@ -67,106 +60,125 @@ export default function AuditLogPage() {
         }
     };
 
-    const getActionColor = (action: string) => {
-        switch (action) {
-            case 'CREATE': return 'success';
-            case 'UPDATE': return 'info';
-            case 'DELETE': return 'error';
-            default: return 'default';
-        }
-    };
-
     return (
-        <Box sx={{ p: 4 }}>
-            <Typography variant="h6" fontWeight="bold" gutterBottom>
-                Audit logs
-            </Typography>
-            <Typography color="text.secondary" sx={{ mb: 2 }}>
+        <div className="p-8">
+            <h1 className="text-lg font-bold">Audit logs</h1>
+            <p className="mb-4 text-muted-foreground">
                 Trace every action across your tenant for security and compliance.
-            </Typography>
+            </p>
 
-            <Stack direction="row" spacing={2} sx={{ mb: 3 }}>
-                <TextField
-                    size="small"
+            <div className="mb-6 flex flex-wrap gap-2">
+                <Input
+                    className="w-64"
                     placeholder="Filter by Entity (e.g. LEAD)"
                     value={filters.entityType}
                     onChange={(e) => setFilters({ ...filters, entityType: e.target.value })}
                 />
-                <TextField
-                    size="small"
+                <Input
+                    className="w-64"
                     placeholder="Filter by Action (e.g. UPDATE)"
                     value={filters.action}
                     onChange={(e) => setFilters({ ...filters, action: e.target.value })}
                 />
-                <Button startIcon={<SearchIcon />} variant="outlined">Search</Button>
-            </Stack>
+                <Button variant="outline" onClick={fetchLogs}>
+                    <Search className="size-4" />
+                    Search
+                </Button>
+            </div>
 
-            <TableContainer component={Paper} variant="outlined">
-                <Table>
-                    <TableHead sx={{ bgcolor: (theme) => alpha(theme.palette.primary.main, 0.05) }}>
-                        <TableRow>
-                            <TableCell>Timestamp</TableCell>
-                            <TableCell>User</TableCell>
-                            <TableCell>Action</TableCell>
-                            <TableCell>Entity</TableCell>
-                            <TableCell>Details</TableCell>
-                        </TableRow>
-                    </TableHead>
-                    <TableBody>
-                        {loading ? (
-                            <TableRow><TableCell colSpan={5} align="center"><CircularProgress sx={{ my: 4 }} /></TableCell></TableRow>
-                        ) : logs.length === 0 ? (
-                            <TableRow><TableCell colSpan={5} align="center">No audit logs found.</TableCell></TableRow>
-                        ) : logs.map((log) => (
-                            <TableRow key={log.id} hover onClick={() => setSelectedLog(log)} sx={{ cursor: 'pointer' }}>
-                                <TableCell>{formatWorkspaceDateTime(log.createdAt, { seconds: true })}</TableCell>
-                                <TableCell>
-                                    <Typography variant="body2">{log.user.name}</Typography>
-                                    <Typography variant="caption" color="text.secondary">{log.user.email}</Typography>
-                                </TableCell>
-                                <TableCell>
-                                    <Chip label={log.action} size="small" color={getActionColor(log.action) as any} variant="outlined" />
-                                </TableCell>
-                                <TableCell>
-                                    <Typography variant="body2">{log.entityType}</Typography>
-                                    <Typography variant="caption" color="text.secondary">{log.entityId}</Typography>
-                                </TableCell>
-                                <TableCell>
-                                    <IconButton size="small"><ViewIcon fontSize="small" /></IconButton>
-                                </TableCell>
+            {loading ? (
+                <TableSkeleton rows={8} columns={5} hasToolbar={false} />
+            ) : logs.length === 0 ? (
+                <div className="rounded-xl border">
+                    <EmptyState
+                        icon={<History className="size-10 text-muted-foreground opacity-50" />}
+                        title="No audit logs found"
+                    />
+                </div>
+            ) : (
+                <div className="overflow-hidden rounded-xl border">
+                    <Table>
+                        <TableHeader>
+                            <TableRow className="bg-primary/5">
+                                <TableHead>Timestamp</TableHead>
+                                <TableHead>User</TableHead>
+                                <TableHead>Action</TableHead>
+                                <TableHead>Entity</TableHead>
+                                <TableHead>Details</TableHead>
                             </TableRow>
-                        ))}
-                    </TableBody>
-                </Table>
-            </TableContainer>
+                        </TableHeader>
+                        <TableBody>
+                            {logs.map((log) => (
+                                <TableRow
+                                    key={log.id}
+                                    className="cursor-pointer"
+                                    onClick={() => setSelectedLog(log)}
+                                >
+                                    <TableCell>{formatWorkspaceDateTime(log.createdAt, { seconds: true })}</TableCell>
+                                    <TableCell>
+                                        <div className="text-sm">{log.user.name}</div>
+                                        <div className="text-xs text-muted-foreground">{log.user.email}</div>
+                                    </TableCell>
+                                    <TableCell>
+                                        <Badge variant="outline" className={cn(ACTION_CLASSNAMES[log.action])}>
+                                            {log.action}
+                                        </Badge>
+                                    </TableCell>
+                                    <TableCell>
+                                        <div className="text-sm">{log.entityType}</div>
+                                        <div className="text-xs text-muted-foreground">Record change</div>
+                                    </TableCell>
+                                    <TableCell>
+                                        <Button
+                                            variant="ghost"
+                                            size="icon-sm"
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                setSelectedLog(log);
+                                            }}
+                                        >
+                                            <Eye className="size-4" />
+                                        </Button>
+                                    </TableCell>
+                                </TableRow>
+                            ))}
+                        </TableBody>
+                    </Table>
+                </div>
+            )}
 
-            {/* Detail Dialog */}
-            <Dialog open={!!selectedLog} onClose={() => setSelectedLog(null)} maxWidth="md" fullWidth>
-                <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                    <HistoryIcon /> Audit Detail: {selectedLog?.action} {selectedLog?.entityType}
-                </DialogTitle>
-                <DialogContent>
-                    {selectedLog && (
-                        <Stack spacing={2} sx={{ mt: 1 }}>
-                            <Box>
-                                <Typography variant="overline" color="text.secondary">Changes (Diff)</Typography>
-                                <Paper variant="outlined" sx={{ p: 2, bgcolor: (theme) => alpha(theme.palette.common.black, 0.02), fontFamily: 'monospace', fontSize: '0.75rem' }}>
-                                    <pre>{JSON.stringify(selectedLog.changes, null, 2)}</pre>
-                                </Paper>
-                            </Box>
-                            <Box>
-                                <Typography variant="overline" color="text.secondary">Metadata (IP/User Agent)</Typography>
-                                <Paper variant="outlined" sx={{ p: 2, bgcolor: (theme) => alpha(theme.palette.common.black, 0.02), fontFamily: 'monospace', fontSize: '0.75rem' }}>
-                                    <pre>{JSON.stringify(selectedLog.metadata, null, 2)}</pre>
-                                </Paper>
-                            </Box>
-                        </Stack>
-                    )}
-                </DialogContent>
-                <DialogActions>
-                    <Button onClick={() => setSelectedLog(null)}>Close</Button>
-                </DialogActions>
-            </Dialog>
-        </Box>
+            <StandardDialog
+                open={!!selectedLog}
+                onClose={() => setSelectedLog(null)}
+                title={selectedLog ? `${selectedLog.action} ${selectedLog.entityType}` : "Audit Detail"}
+                subtitle="Full change record"
+                icon={<History className="size-4" />}
+                maxWidth="md"
+                actions={
+                    <Button variant="outline" onClick={() => setSelectedLog(null)}>Close</Button>
+                }
+            >
+                {selectedLog && (
+                    <div className="flex flex-col gap-4 pb-1">
+                        <div>
+                            <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                                Changes (Diff)
+                            </p>
+                            <pre className="overflow-auto rounded-lg border bg-muted/40 p-3 font-mono text-xs">
+                                {JSON.stringify(selectedLog.changes, null, 2)}
+                            </pre>
+                        </div>
+                        <div>
+                            <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                                Metadata (IP/User Agent)
+                            </p>
+                            <pre className="overflow-auto rounded-lg border bg-muted/40 p-3 font-mono text-xs">
+                                {JSON.stringify(selectedLog.metadata, null, 2)}
+                            </pre>
+                        </div>
+                    </div>
+                )}
+            </StandardDialog>
+        </div>
     );
 }

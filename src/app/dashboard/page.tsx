@@ -1,15 +1,13 @@
 'use client';
 
-import React from "react";
-import { Box, Container } from "@mui/material";
 import { DashboardManager } from "@/components/dashboard/dashboard-manager";
 
 export default function DashboardPage() {
     return (
-        <Container maxWidth="xl" sx={{ py: 4 }}>
-            <Box sx={{ flexGrow: 1 }}>
+        <div className="mx-auto max-w-[1536px] px-4 py-8">
+            <div className="flex-grow">
                 <DashboardManager />
-            </Box>
-        </Container>
+            </div>
+        </div>
     );
 }

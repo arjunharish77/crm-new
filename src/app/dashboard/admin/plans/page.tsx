@@ -1,51 +1,37 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { Controller, useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { Database, Edit, Loader2, Plus, TrendingUp, Users } from "lucide-react";
+import { toast } from "sonner";
+import * as z from "zod";
 import { apiFetch } from "@/lib/api";
+import { Button } from "@/components/ui/button";
 import {
-    Box,
-    Button,
     Card,
     CardContent,
+    CardFooter,
     CardHeader,
-    Typography,
-    Divider,
-    IconButton,
-    Chip,
-    Grid,
-    Stack,
-    CircularProgress,
-    TextField,
-    Switch,
-    Dialog,
-    DialogTitle,
-    DialogContent,
-    DialogActions,
-    Table,
-    TableBody,
-    TableCell,
-    TableHead,
-
-    TableRow,
-    TableContainer,
-    Paper,
-    useTheme,
-    alpha
-} from "@mui/material";
+    CardTitle,
+} from "@/components/ui/card";
 import {
-    Add as AddIcon,
-    Edit as EditIcon,
-    Delete as DeleteIcon,
-    TrendingUp as TrendingUpIcon,
-    People as UsersIcon,
-    Storage as DatabaseIcon,
-    Check as CheckIcon,
-    Close as CloseIcon
-} from "@mui/icons-material";
-import { toast } from "sonner";
-import { useForm, Controller } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
-import * as z from "zod";
+    Dialog,
+    DialogContent,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
 
 interface Plan {
     id: string;
@@ -56,8 +42,8 @@ interface Plan {
     features: string[];
     limits: {
         users: number;
-        storage: number; // GB
-        apiCalls: number; // per day
+        storage: number;
+        apiCalls: number;
     };
     isActive: boolean;
 }
@@ -74,26 +60,58 @@ const planSchema = z.object({
     }),
 });
 
+type PlanFormValues = z.infer<typeof planSchema>;
+
+const DEFAULT_VALUES: PlanFormValues = {
+    name: "",
+    description: "",
+    price: 0,
+    billingCycle: "MONTHLY",
+    limits: {
+        users: 5,
+        storage: 10,
+        apiCalls: 1000,
+    },
+};
+
+interface FormFieldProps {
+    label: string;
+    error?: string;
+    children: React.ReactNode;
+}
+
+function FormField({ label, error, children }: FormFieldProps) {
+    return (
+        <div className="space-y-2">
+            <Label>{label}</Label>
+            {children}
+            {error ? <p className="text-xs text-destructive">{error}</p> : null}
+        </div>
+    );
+}
+
+function parseInteger(value: string) {
+    return Number.parseInt(value, 10) || 0;
+}
+
+function parseDecimal(value: string) {
+    return Number.parseFloat(value) || 0;
+}
+
 export default function PlansPage() {
-    const theme = useTheme();
     const [plans, setPlans] = useState<Plan[]>([]);
     const [loading, setLoading] = useState(true);
     const [dialogOpen, setDialogOpen] = useState(false);
     const [editingPlan, setEditingPlan] = useState<Plan | null>(null);
 
-    const { control, handleSubmit, reset, formState: { errors } } = useForm({
+    const {
+        control,
+        handleSubmit,
+        reset,
+        formState: { errors },
+    } = useForm<PlanFormValues>({
         resolver: zodResolver(planSchema),
-        defaultValues: {
-            name: "",
-            description: "",
-            price: 0,
-            billingCycle: "MONTHLY" as const,
-            limits: {
-                users: 5,
-                storage: 10,
-                apiCalls: 1000
-            }
-        }
+        defaultValues: DEFAULT_VALUES,
     });
 
     const fetchPlans = async () => {
@@ -114,13 +132,7 @@ export default function PlansPage() {
 
     const handleCreate = () => {
         setEditingPlan(null);
-        reset({
-            name: "",
-            description: "",
-            price: 0,
-            billingCycle: "MONTHLY",
-            limits: { users: 5, storage: 10, apiCalls: 1000 }
-        });
+        reset(DEFAULT_VALUES);
         setDialogOpen(true);
     };
 
@@ -131,23 +143,23 @@ export default function PlansPage() {
             description: plan.description || "",
             price: plan.price,
             billingCycle: plan.billingCycle,
-            limits: plan.limits
+            limits: plan.limits,
         });
         setDialogOpen(true);
     };
 
-    const handleSave = async (values: any) => {
+    const handleSave = async (values: PlanFormValues) => {
         try {
             if (editingPlan) {
                 await apiFetch(`/plans/${editingPlan.id}`, {
                     method: "PATCH",
-                    body: JSON.stringify(values)
+                    body: JSON.stringify(values),
                 });
                 toast.success("Plan updated");
             } else {
                 await apiFetch("/plans", {
                     method: "POST",
-                    body: JSON.stringify(values)
+                    body: JSON.stringify(values),
                 });
                 toast.success("Plan created");
             }
@@ -162,208 +174,198 @@ export default function PlansPage() {
         try {
             await apiFetch(`/plans/${plan.id}`, {
                 method: "PATCH",
-                body: JSON.stringify({ isActive: !plan.isActive })
+                body: JSON.stringify({ isActive: !plan.isActive }),
             });
             fetchPlans();
         } catch (error) {
             toast.error("Failed to update status");
         }
-    }
+    };
 
     return (
-        <Box sx={{ maxWidth: 1200, mx: 'auto', p: { xs: 1.5, md: 2 } }}>
-            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-                <Box>
-                    <Typography variant="h6" sx={{ fontWeight: 700, mb: 1 }}>Subscription Plans</Typography>
-                    <Typography variant="body1" color="text.secondary">
-                        Manage pricing tiers and feature limits.
-                    </Typography>
-                </Box>
-                <Button
-                    variant="contained"
-                    startIcon={<AddIcon />}
-                    onClick={handleCreate}
-                    sx={{ borderRadius: 20 }}
-                >
+        <div className="mx-auto max-w-[1200px] px-4 py-4 md:px-6">
+            <div className="flex flex-col gap-4 border-b border-border pb-4 md:flex-row md:items-center md:justify-between">
+                <div>
+                    <h1 className="text-xl font-semibold tracking-normal text-foreground">Subscription Plans</h1>
+                    <p className="mt-1 text-sm text-muted-foreground">Manage pricing tiers and feature limits.</p>
+                </div>
+                <Button onClick={handleCreate}>
+                    <Plus className="h-4 w-4" />
                     Create Plan
                 </Button>
-            </Box>
-            <Divider sx={{ mb: 2 }} />
+            </div>
 
             {loading ? (
-                <Box sx={{ display: 'flex', justifyContent: 'center', py: 8 }}>
-                    <CircularProgress />
-                </Box>
+                <div className="flex justify-center py-16">
+                    <Loader2 className="h-6 w-6 animate-spin text-primary" />
+                </div>
             ) : (
-                <Grid container spacing={2}>
+                <div className="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
                     {plans.map((plan) => (
-                        <Grid size={{ xs: 12, md: 4 }} key={plan.id}>
-                            <Card variant="outlined" sx={{ height: '100%', borderRadius: 3, display: 'flex', flexDirection: 'column' }}>
-                                <CardHeader
-                                    title={
-                                        <Stack direction="row" justifyContent="space-between" alignItems="center">
-                                            <Typography variant="h6" sx={{ fontWeight: 600 }}>{plan.name}</Typography>
-                                            <Switch
-                                                size="small"
-                                                checked={plan.isActive}
-                                                onChange={() => handleToggleActive(plan)}
-                                            />
-                                        </Stack>
-                                    }
-                                    subheader={
-                                        <Typography variant="h4" color="primary" sx={{ fontWeight: 700, mt: 2 }}>
-                                            ${plan.price}<Typography component="span" variant="body2" color="text.secondary">/{plan.billingCycle === 'MONTHLY' ? 'mo' : 'yr'}</Typography>
-                                        </Typography>
-                                    }
-                                />
-                                <Divider />
-                                <CardContent sx={{ flexGrow: 1 }}>
-                                    <Stack spacing={2}>
-                                        <Box>
-                                            <Typography variant="subtitle2" sx={{ mb: 1, display: 'flex', alignItems: 'center', gap: 1 }}>
-                                                <UsersIcon fontSize="small" color="action" /> Users Limit
-                                            </Typography>
-                                            <Typography variant="body2">{plan.limits.users} users</Typography>
-                                        </Box>
-                                        <Box>
-                                            <Typography variant="subtitle2" sx={{ mb: 1, display: 'flex', alignItems: 'center', gap: 1 }}>
-                                                <DatabaseIcon fontSize="small" color="action" /> Storage Limit
-                                            </Typography>
-                                            <Typography variant="body2">{plan.limits.storage} GB</Typography>
-                                        </Box>
-                                        <Box>
-                                            <Typography variant="subtitle2" sx={{ mb: 1, display: 'flex', alignItems: 'center', gap: 1 }}>
-                                                <TrendingUpIcon fontSize="small" color="action" /> API Limit
-                                            </Typography>
-                                            <Typography variant="body2">{plan.limits.apiCalls.toLocaleString()} calls/day</Typography>
-                                        </Box>
-                                    </Stack>
-                                </CardContent>
-                                <Divider />
-                                <Box sx={{ p: 2 }}>
-                                    <Button
-                                        fullWidth
-                                        variant="outlined"
-                                        startIcon={<EditIcon />}
-                                        onClick={() => handleEdit(plan)}
-                                        sx={{ borderRadius: 20 }}
-                                    >
-                                        Edit Plan
-                                    </Button>
-                                </Box>
-                            </Card>
-                        </Grid>
+                        <Card key={plan.id} className="h-full gap-4 rounded-lg py-5">
+                            <CardHeader className="gap-4 px-5">
+                                <div className="flex items-start justify-between gap-4">
+                                    <CardTitle className="text-base">{plan.name}</CardTitle>
+                                    <Switch
+                                        size="sm"
+                                        checked={plan.isActive}
+                                        onCheckedChange={() => handleToggleActive(plan)}
+                                        aria-label={`Toggle ${plan.name} active status`}
+                                    />
+                                </div>
+                                <div className="text-3xl font-semibold text-primary">
+                                    ${plan.price}
+                                    <span className="text-sm font-normal text-muted-foreground">
+                                        /{plan.billingCycle === "MONTHLY" ? "mo" : "yr"}
+                                    </span>
+                                </div>
+                            </CardHeader>
+                            <CardContent className="flex-1 space-y-4 px-5">
+                                <div>
+                                    <div className="mb-1 flex items-center gap-2 text-sm font-medium">
+                                        <Users className="h-4 w-4 text-muted-foreground" />
+                                        Users Limit
+                                    </div>
+                                    <p className="text-sm text-muted-foreground">{plan.limits.users} users</p>
+                                </div>
+                                <div>
+                                    <div className="mb-1 flex items-center gap-2 text-sm font-medium">
+                                        <Database className="h-4 w-4 text-muted-foreground" />
+                                        Storage Limit
+                                    </div>
+                                    <p className="text-sm text-muted-foreground">{plan.limits.storage} GB</p>
+                                </div>
+                                <div>
+                                    <div className="mb-1 flex items-center gap-2 text-sm font-medium">
+                                        <TrendingUp className="h-4 w-4 text-muted-foreground" />
+                                        API Limit
+                                    </div>
+                                    <p className="text-sm text-muted-foreground">
+                                        {plan.limits.apiCalls.toLocaleString()} calls/day
+                                    </p>
+                                </div>
+                            </CardContent>
+                            <CardFooter className="border-t border-border px-5 pt-4">
+                                <Button variant="outline" className="w-full" onClick={() => handleEdit(plan)}>
+                                    <Edit className="h-4 w-4" />
+                                    Edit Plan
+                                </Button>
+                            </CardFooter>
+                        </Card>
                     ))}
-                </Grid>
+                </div>
             )}
 
-            <Dialog open={dialogOpen} onClose={() => setDialogOpen(false)} maxWidth="sm" fullWidth>
-                <DialogTitle>{editingPlan ? "Edit Plan" : "Create Plan"}</DialogTitle>
-                <DialogContent>
-                    <form id="plan-form" onSubmit={handleSubmit(handleSave)}>
-                        <Stack spacing={2} sx={{ mt: 1 }}>
+            <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+                <DialogContent className="sm:max-w-[600px]">
+                    <DialogHeader>
+                        <DialogTitle>{editingPlan ? "Edit Plan" : "Create Plan"}</DialogTitle>
+                    </DialogHeader>
+                    <form id="plan-form" className="space-y-4" onSubmit={handleSubmit(handleSave)}>
+                        <Controller
+                            name="name"
+                            control={control}
+                            render={({ field }) => (
+                                <FormField label="Plan Name" error={errors.name?.message}>
+                                    <Input {...field} />
+                                </FormField>
+                            )}
+                        />
+
+                        <div className="grid gap-4 sm:grid-cols-2">
                             <Controller
-                                name="name"
+                                name="price"
                                 control={control}
                                 render={({ field }) => (
-                                    <TextField
-                                        {...field}
-                                        label="Plan Name"
-                                        fullWidth
-                                        error={!!errors.name}
-                                        helperText={errors.name?.message as string}
-                                    />
+                                    <FormField label="Price" error={errors.price?.message}>
+                                        <div className="relative">
+                                            <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">
+                                                $
+                                            </span>
+                                            <Input
+                                                type="number"
+                                                className="pl-7"
+                                                value={field.value}
+                                                onChange={(event) => field.onChange(parseDecimal(event.target.value))}
+                                            />
+                                        </div>
+                                    </FormField>
                                 )}
                             />
-                            <Stack direction="row" spacing={2}>
-                                <Controller
-                                    name="price"
-                                    control={control}
-                                    render={({ field }) => (
-                                        <TextField
-                                            {...field}
-                                            type="number"
-                                            label="Price"
-                                            fullWidth
-                                            onChange={(e) => field.onChange(parseFloat(e.target.value))}
-                                            InputProps={{ startAdornment: '$' }}
-                                        />
-                                    )}
-                                />
-                                <Controller
-                                    name="billingCycle"
-                                    control={control}
-                                    render={({ field }) => (
-                                        <TextField
-                                            {...field}
-                                            select
-                                            label="Billing Cycle"
-                                            fullWidth
-                                            SelectProps={{ native: true }}
-                                        >
-                                            <option value="MONTHLY">Monthly</option>
-                                            <option value="YEARLY">Yearly</option>
-                                        </TextField>
-                                    )}
-                                />
-                            </Stack>
+                            <Controller
+                                name="billingCycle"
+                                control={control}
+                                render={({ field }) => (
+                                    <FormField label="Billing Cycle" error={errors.billingCycle?.message}>
+                                        <Select value={field.value} onValueChange={field.onChange}>
+                                            <SelectTrigger>
+                                                <SelectValue />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                <SelectItem value="MONTHLY">Monthly</SelectItem>
+                                                <SelectItem value="YEARLY">Yearly</SelectItem>
+                                            </SelectContent>
+                                        </Select>
+                                    </FormField>
+                                )}
+                            />
+                        </div>
 
-                            <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>Limits</Typography>
-                            <Grid container spacing={2}>
-                                <Grid size={{ xs: 4 }}>
-                                    <Controller
-                                        name="limits.users"
-                                        control={control}
-                                        render={({ field }) => (
-                                            <TextField
-                                                {...field}
+                        <div className="space-y-3">
+                            <h2 className="text-sm font-semibold">Limits</h2>
+                            <div className="grid gap-4 sm:grid-cols-3">
+                                <Controller
+                                    name="limits.users"
+                                    control={control}
+                                    render={({ field }) => (
+                                        <FormField label="Users" error={errors.limits?.users?.message}>
+                                            <Input
                                                 type="number"
-                                                label="Users"
-                                                fullWidth
-                                                onChange={(e) => field.onChange(parseInt(e.target.value))}
+                                                value={field.value}
+                                                onChange={(event) => field.onChange(parseInteger(event.target.value))}
                                             />
-                                        )}
-                                    />
-                                </Grid>
-                                <Grid size={{ xs: 4 }}>
-                                    <Controller
-                                        name="limits.storage"
-                                        control={control}
-                                        render={({ field }) => (
-                                            <TextField
-                                                {...field}
+                                        </FormField>
+                                    )}
+                                />
+                                <Controller
+                                    name="limits.storage"
+                                    control={control}
+                                    render={({ field }) => (
+                                        <FormField label="Storage (GB)" error={errors.limits?.storage?.message}>
+                                            <Input
                                                 type="number"
-                                                label="Storage (GB)"
-                                                fullWidth
-                                                onChange={(e) => field.onChange(parseInt(e.target.value))}
+                                                value={field.value}
+                                                onChange={(event) => field.onChange(parseInteger(event.target.value))}
                                             />
-                                        )}
-                                    />
-                                </Grid>
-                                <Grid size={{ xs: 4 }}>
-                                    <Controller
-                                        name="limits.apiCalls"
-                                        control={control}
-                                        render={({ field }) => (
-                                            <TextField
-                                                {...field}
+                                        </FormField>
+                                    )}
+                                />
+                                <Controller
+                                    name="limits.apiCalls"
+                                    control={control}
+                                    render={({ field }) => (
+                                        <FormField label="API Calls" error={errors.limits?.apiCalls?.message}>
+                                            <Input
                                                 type="number"
-                                                label="API Calls"
-                                                fullWidth
-                                                onChange={(e) => field.onChange(parseInt(e.target.value))}
+                                                value={field.value}
+                                                onChange={(event) => field.onChange(parseInteger(event.target.value))}
                                             />
-                                        )}
-                                    />
-                                </Grid>
-                            </Grid>
-                        </Stack>
+                                        </FormField>
+                                    )}
+                                />
+                            </div>
+                        </div>
                     </form>
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => setDialogOpen(false)}>
+                            Cancel
+                        </Button>
+                        <Button type="submit" form="plan-form">
+                            Save Plan
+                        </Button>
+                    </DialogFooter>
                 </DialogContent>
-                <DialogActions sx={{ px: 3, pb: 3 }}>
-                    <Button onClick={() => setDialogOpen(false)} color="inherit" sx={{ borderRadius: 20 }}>Cancel</Button>
-                    <Button type="submit" form="plan-form" variant="contained" sx={{ borderRadius: 20 }}>Save Plan</Button>
-                </DialogActions>
             </Dialog>
-        </Box>
+        </div>
     );
 }

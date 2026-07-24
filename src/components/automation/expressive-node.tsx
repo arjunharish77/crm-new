@@ -1,53 +1,52 @@
 "use client";
 
-import React, { memo } from "react";
+import { memo } from "react";
 import { Handle, Position, NodeProps } from "reactflow";
 import {
-    FlashOn as ZapIcon,
-    CallSplit as GitBranchIcon,
-    Storage as DatabaseIcon,
-    PlayArrow as PlayIcon,
-    Email as MailIcon,
-    Webhook as WebhookIcon,
-    AccessTime as ClockIcon,
-    MoreHoriz as MoreHorizIcon,
-    Add as AddIcon,
-    DeleteOutline as DeleteIcon,
-    ContentCopy as CopyIcon,
-    Person as PersonIcon,
-    RemoveCircleOutline as RemoveIcon,
-    StopCircle as StopIcon,
-    Notifications as NotificationIcon
-} from "@mui/icons-material";
-import { Box, IconButton, Paper, Tooltip, Typography, useTheme, alpha } from "@mui/material";
-// import { motion } from "framer-motion"; // Optional: could use MUI transitions or keep framer if desired. Let's use simple CSS/MUI for now to be safe.
+    Zap,
+    GitBranch,
+    Database,
+    Play,
+    Mail,
+    Webhook,
+    Clock,
+    MoreHorizontal,
+    Plus,
+    Trash2,
+    Copy,
+    User,
+    MinusCircle,
+    Square,
+    Bell,
+} from "lucide-react";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { cn } from "@/lib/utils";
 
 const ICONS: Record<string, any> = {
-    trigger: ZapIcon,
-    condition: GitBranchIcon,
-    update_field: DatabaseIcon,
-    create_activity: PlayIcon,
-    send_email: MailIcon,
-    webhook: WebhookIcon,
-    delay: ClockIcon,
-    wait: ClockIcon,
-    if_else: GitBranchIcon,
-    update_lead: DatabaseIcon,
-    update_opportunity: DatabaseIcon,
-    add_activity: PlayIcon,
-    distribute_lead: GitBranchIcon,
-    distribute_opportunity: GitBranchIcon,
-    assign_owner: PersonIcon,
-    change_stage: DatabaseIcon,
-    notify_user: NotificationIcon,
-    remove_tag: RemoveIcon,
-    increment_score: DatabaseIcon,
-    clear_field: RemoveIcon,
-    stop: StopIcon,
-    branch: GitBranchIcon,
+    trigger: Zap,
+    condition: GitBranch,
+    update_field: Database,
+    create_activity: Play,
+    send_email: Mail,
+    webhook: Webhook,
+    delay: Clock,
+    wait: Clock,
+    if_else: GitBranch,
+    update_lead: Database,
+    update_opportunity: Database,
+    add_activity: Play,
+    distribute_lead: GitBranch,
+    distribute_opportunity: GitBranch,
+    assign_owner: User,
+    change_stage: Database,
+    notify_user: Bell,
+    remove_tag: MinusCircle,
+    increment_score: Database,
+    clear_field: MinusCircle,
+    stop: Square,
+    branch: GitBranch,
 };
 
-// Start copying colors from page.tsx for consistency
 const COLORS: Record<string, string> = {
     trigger: '#2196f3',      // Blue
     condition: '#ff9800',    // Orange
@@ -73,143 +72,158 @@ const COLORS: Record<string, string> = {
     branch: '#78909c',
 };
 
+function fieldText(value: unknown) {
+    return String(value || "")
+        .replace(/^(lead|opportunity|activity)\./, "")
+        .replace(/([A-Z])/g, " $1")
+        .replace(/_/g, " ")
+        .replace(/^./, (letter) => letter.toUpperCase());
+}
+
+function operatorText(value: unknown) {
+    return String(value || "equals")
+        .replace(/_/g, " ")
+        .replace(/^./, (letter) => letter.toUpperCase());
+}
+
+function valueText(value: unknown) {
+    if (value === null || value === undefined || value === "") return "set value";
+    if (Array.isArray(value)) return value.join(", ");
+    if (typeof value === "object") return "configured value";
+    return String(value);
+}
+
+function summarizeNode(data: Record<string, any>) {
+    const conditions = Array.isArray(data.conditions) ? data.conditions : data.field ? [data] : [];
+    if (["condition", "compare", "multi_if_else"].includes(data.type) && conditions.length > 0) {
+        const first = conditions[0];
+        const suffix = conditions.length > 1 ? ` +${conditions.length - 1} more` : "";
+        return `${fieldText(first.field)} ${operatorText(first.operator).toLowerCase()} ${valueText(first.value)}${suffix}`;
+    }
+
+    const updates = Array.isArray(data.updates) ? data.updates : data.field ? [data] : [];
+    if (["update_field", "update_lead", "update_opportunity", "update_activity"].includes(data.type) && updates.length > 0) {
+        const first = updates[0];
+        const suffix = updates.length > 1 ? ` +${updates.length - 1} more` : "";
+        return `Set ${fieldText(first.field)} to ${valueText(first.value)}${suffix}`;
+    }
+
+    if (data.type === "assign_owner") return data.ownerName ? `Assign to ${data.ownerName}` : "Select owner";
+    if (data.type === "change_stage") return data.stageName ? `Move to ${data.stageName}` : "Select stage";
+    if (data.type === "wait") return data.duration ? `Wait ${data.duration} ${data.unit || "minutes"}` : "Configure wait time";
+    if (data.type === "notify_user") return data.title || "Configure notification";
+    if (data.type === "webhook") return data.url || "Configure webhook";
+    if (data.type === "stop") return data.reason || "Stop this automation";
+    return "";
+}
+
 export const ExpressiveNode = memo(({ data, selected }: NodeProps) => {
-    const theme = useTheme();
-    const Icon = ICONS[data.type] || ZapIcon;
-    const color = COLORS[data.type] || theme.palette.primary.main;
+    const Icon = ICONS[data.type] || Zap;
+    const color = COLORS[data.type] || 'var(--primary)';
+    const summary = summarizeNode(data);
 
     return (
-        <Paper
-            elevation={selected ? 4 : 1}
-            sx={{
-                position: 'relative',
-                display: 'flex',
-                alignItems: 'center',
-                gap: 1.5,
-                p: 1.5,
-                minWidth: 180,
-                borderRadius: '24px',
-                border: '2px solid',
-                borderColor: selected ? 'primary.main' : 'divider',
-                bgcolor: 'background.paper',
-                transition: 'all 0.3s ease',
-                '&:hover': {
-                    borderColor: selected ? 'primary.main' : alpha(theme.palette.primary.main, 0.5),
-                    boxShadow: selected ? 6 : 2,
-                }
-            }}
+        <div
+            className={cn(
+                "group relative flex min-w-[180px] items-center gap-3 rounded-[24px] border-2 bg-card p-3 transition-all",
+                selected ? "border-primary shadow-lg" : "border-border shadow-sm hover:border-primary/50 hover:shadow-md"
+            )}
         >
-            {/* Input Handle */}
             <Handle
                 type="target"
                 position={Position.Top}
                 style={{
-                    background: theme.palette.primary.main,
+                    background: 'var(--primary)',
                     width: 10,
                     height: 10,
-                    border: `2px solid ${theme.palette.background.paper}`,
+                    border: '2px solid var(--card)',
                 }}
             />
 
-            {/* Icon Box */}
-            <Box
-                sx={{
-                    p: 1,
-                    borderRadius: '50%',
-                    bgcolor: color,
-                    color: '#fff',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    boxShadow: `0 4px 12px ${alpha(color, 0.3)}`
-                }}
+            <div
+                className="flex size-8 shrink-0 items-center justify-center rounded-full text-white"
+                style={{ backgroundColor: color, boxShadow: `0 4px 12px ${color}4d` }}
             >
-                <Icon sx={{ fontSize: 20 }} />
-            </Box>
+                <Icon className="size-5" />
+            </div>
 
-            {/* Content */}
-            <Box sx={{ display: 'flex', flexDirection: 'column' }}>
-                <Typography
-                    variant="caption"
-                    sx={{
-                        fontSize: '0.65rem',
-                        fontWeight: 700,
-                        textTransform: 'uppercase',
-                        letterSpacing: 0.5,
-                        color: 'text.secondary',
-                        mb: 0.25
-                    }}
-                >
-                    {data.type !== 'trigger' ? data.type.replace(/_/g, ' ') : 'Trigger'}
-                </Typography>
-                <Typography variant="body2" sx={{ fontWeight: 600, lineHeight: 1.2 }}>
-                    {data.label}
-                </Typography>
-            </Box>
+            <div className="flex flex-col">
+                <span className="mb-0.5 text-[0.65rem] font-bold uppercase tracking-wide text-muted-foreground">
+                    {data.type !== 'trigger' ? String(data.type).replace(/_/g, ' ') : 'Trigger'}
+                </span>
+                <span className="text-sm font-semibold leading-tight">{data.label}</span>
+                {summary ? (
+                    <span className="mt-1 max-w-[220px] truncate text-xs font-medium text-muted-foreground">
+                        {summary}
+                    </span>
+                ) : null}
+            </div>
 
-            <Box sx={{ ml: 'auto', display: 'flex', gap: 0.25, opacity: selected ? 1 : 0, transition: 'opacity 0.2s', '.MuiPaper-root:hover &': { opacity: 1 } }}>
-                <Tooltip title="Clone node">
-                    <IconButton
-                        size="small"
-                        onClick={(event) => {
-                            event.stopPropagation();
-                            data.onCloneNode?.(data.nodeId);
-                        }}
-                        sx={{ width: 24, height: 24 }}
-                    >
-                        <CopyIcon sx={{ fontSize: 15 }} />
-                    </IconButton>
+            <div
+                className={cn(
+                    "ml-auto flex gap-0.5 opacity-0 transition-opacity group-hover:opacity-100",
+                    selected && "opacity-100"
+                )}
+            >
+                <Tooltip>
+                    <TooltipTrigger asChild>
+                        <button
+                            type="button"
+                            className="flex size-6 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                            onClick={(event) => {
+                                event.stopPropagation();
+                                data.onCloneNode?.(data.nodeId);
+                            }}
+                        >
+                            <Copy className="size-3.5" />
+                        </button>
+                    </TooltipTrigger>
+                    <TooltipContent>Clone node</TooltipContent>
                 </Tooltip>
-                <Tooltip title="Delete node">
-                    <IconButton
-                        size="small"
-                        onClick={(event) => {
-                            event.stopPropagation();
-                            data.onDeleteNode?.(data.nodeId);
-                        }}
-                        sx={{ width: 24, height: 24 }}
-                    >
-                        <DeleteIcon sx={{ fontSize: 15 }} />
-                    </IconButton>
+                <Tooltip>
+                    <TooltipTrigger asChild>
+                        <button
+                            type="button"
+                            className="flex size-6 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                            onClick={(event) => {
+                                event.stopPropagation();
+                                data.onDeleteNode?.(data.nodeId);
+                            }}
+                        >
+                            <Trash2 className="size-3.5" />
+                        </button>
+                    </TooltipTrigger>
+                    <TooltipContent>Delete node</TooltipContent>
                 </Tooltip>
-                <MoreHorizIcon fontSize="small" color="disabled" sx={{ alignSelf: 'center' }} />
-            </Box>
+                <MoreHorizontal className="size-3.5 self-center text-muted-foreground/50" />
+            </div>
 
-            {/* Output Handle */}
             <Handle
                 type="source"
                 position={Position.Bottom}
                 style={{
-                    background: theme.palette.primary.main,
+                    background: 'var(--primary)',
                     width: 10,
                     height: 10,
-                    border: `2px solid ${theme.palette.background.paper}`,
+                    border: '2px solid var(--card)',
                 }}
             />
-            <Tooltip title="Add next step">
-                <IconButton
-                    size="small"
-                    onClick={(event) => {
-                        event.stopPropagation();
-                        data.onAddChild?.(data.nodeId);
-                    }}
-                    sx={{
-                        position: 'absolute',
-                        left: '50%',
-                        bottom: -18,
-                        transform: 'translateX(-50%)',
-                        width: 28,
-                        height: 28,
-                        bgcolor: 'primary.main',
-                        color: 'primary.contrastText',
-                        boxShadow: 2,
-                        '&:hover': { bgcolor: 'primary.dark' },
-                    }}
-                >
-                    <AddIcon sx={{ fontSize: 17 }} />
-                </IconButton>
+            <Tooltip>
+                <TooltipTrigger asChild>
+                    <button
+                        type="button"
+                        className="absolute -bottom-[18px] left-1/2 flex size-7 -translate-x-1/2 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-md hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                        onClick={(event) => {
+                            event.stopPropagation();
+                            data.onAddChild?.(data.nodeId);
+                        }}
+                    >
+                        <Plus className="size-4" />
+                    </button>
+                </TooltipTrigger>
+                <TooltipContent>Add next step</TooltipContent>
             </Tooltip>
-        </Paper>
+        </div>
     );
 });
 

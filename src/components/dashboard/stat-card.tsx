@@ -1,7 +1,8 @@
 'use client';
 
 import * as React from 'react';
-import { Card, CardContent, Typography, Box, Avatar, useTheme, alpha } from '@mui/material';
+import { Card, CardContent } from '@/components/ui/card';
+import { cn } from '@/lib/utils';
 
 interface StatCardProps {
     title: string;
@@ -15,70 +16,55 @@ interface StatCardProps {
     color?: string;
 }
 
-export function StatCard({ title, value, icon, trend, color = 'primary.main' }: StatCardProps) {
-    const theme = useTheme();
+export function StatCard({ title, value, icon, trend }: StatCardProps) {
+    const toneClassName = trend
+        ? trend.isPositive
+            ? "bg-primary/8 text-primary border-primary/20"
+            : "bg-destructive/8 text-destructive border-destructive/20"
+        : "bg-primary/8 text-primary border-primary/20";
 
     return (
-        <Card sx={{ height: '100%', position: 'relative', overflow: 'hidden' }}>
+        <Card className="relative h-full overflow-hidden">
             <CardContent>
-                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
-                    <Typography variant="overline" color="text.secondary" sx={{ fontWeight: 700, letterSpacing: 1 }}>
+                <div className="mb-4 flex items-center justify-between">
+                    <span className="text-xs font-bold tracking-wide text-muted-foreground uppercase">
                         {title}
-                    </Typography>
-                    <Avatar
-                        sx={{
-                            bgcolor: trend?.isPositive ? alpha(theme.palette.success.main, 0.08) : (trend ? alpha(theme.palette.error.main, 0.08) : alpha(theme.palette.primary.main, 0.08)),
-                            color: trend?.isPositive ? 'success.main' : (trend ? 'error.main' : 'primary.main'),
-                            width: 44,
-                            height: 44,
-                            borderRadius: '12px',
-                            border: '1px solid',
-                            borderColor: trend?.isPositive ? alpha(theme.palette.success.main, 0.2) : (trend ? alpha(theme.palette.error.main, 0.2) : alpha(theme.palette.primary.main, 0.2)),
-                        }}
+                    </span>
+                    <div
+                        className={cn(
+                            "flex size-11 items-center justify-center rounded-xl border text-[22px]",
+                            toneClassName
+                        )}
                     >
-                        <Box sx={{ fontSize: 22, display: 'flex' }}>
-                            {icon}
-                        </Box>
-                    </Avatar>
-                </Box>
+                        {icon}
+                    </div>
+                </div>
 
-                <Typography variant="h3" sx={{ fontWeight: 800, mb: 1, letterSpacing: -1 }}>
+                <div className="mb-1 text-3xl font-extrabold tracking-tight">
                     {value}
-                </Typography>
+                </div>
 
                 {trend && (
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                        <Typography
-                            variant="body2"
-                            sx={{
-                                fontWeight: 600,
-                                color: trend.isPositive ? 'success.main' : 'error.main',
-                                display: 'flex',
-                                alignItems: 'center'
-                            }}
+                    <div className="flex items-center gap-1">
+                        <span
+                            className={cn(
+                                "flex items-center text-sm font-semibold",
+                                trend.isPositive ? "text-primary" : "text-destructive"
+                            )}
                         >
                             {trend.isPositive ? '+' : '-'}{Math.abs(trend.value)}%
-                        </Typography>
-                        <Typography variant="caption" color="text.secondary">
-                            {trend.label}
-                        </Typography>
-                    </Box>
+                        </span>
+                        <span className="text-xs text-muted-foreground">{trend.label}</span>
+                    </div>
                 )}
             </CardContent>
 
             {/* Subtle background decoration */}
-            <Box
-                sx={{
-                    position: 'absolute',
-                    right: -10,
-                    bottom: -10,
-                    opacity: 0.05,
-                    transform: 'rotate(-15deg)',
-                    zIndex: 0
-                }}
-            >
-                {React.cloneElement(icon as any, { sx: { fontSize: 100 } })}
-            </Box>
+            <div className="pointer-events-none absolute -right-2.5 -bottom-2.5 z-0 rotate-[-15deg] opacity-5">
+                {React.isValidElement(icon)
+                    ? React.cloneElement(icon as React.ReactElement<any>, { size: 100 })
+                    : icon}
+            </div>
         </Card>
     );
 }

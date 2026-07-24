@@ -1,38 +1,24 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import {
-    Box,
-    Button,
-    Card,
-    Chip,
-    Dialog,
-    DialogActions,
-    DialogContent,
-    DialogTitle,
-    Divider,
-    FormControlLabel,
-    IconButton,
-    List,
-    ListItemButton,
-    ListItemText,
-    Paper,
-    Stack,
-    Switch,
-    TextField,
-    ToggleButton,
-    ToggleButtonGroup,
-    Tooltip,
-    Typography,
-} from "@mui/material";
-import {
-    Add as AddIcon,
-    Delete as DeleteIcon,
-    Edit as EditIcon,
-    Security as SecurityIcon,
-} from "@mui/icons-material";
+import { Plus, Pencil, Trash2, ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
 import { apiFetch } from "@/lib/api";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import {
+    Dialog,
+    DialogContent,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle,
+} from "@/components/ui/dialog";
+import { cn } from "@/lib/utils";
 
 type FieldAccess = "editable" | "readonly" | "hidden";
 type ActionKey = "view" | "create" | "edit" | "delete" | "import" | "export";
@@ -244,154 +230,203 @@ export default function PermissionTemplatesPage() {
     };
 
     return (
-        <Box sx={{ p: { xs: 1.5, md: 2 }, maxWidth: 1600, mx: "auto" }}>
-            <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 2 }}>
-                <Box>
-                    <Typography variant="h6" sx={{ fontWeight: 800 }}>Permission Templates</Typography>
-                    <Typography variant="body2" color="text.secondary">
+        <div className="mx-auto max-w-[1600px] p-3 md:p-4">
+            <div className="mb-4 flex items-center justify-between">
+                <div>
+                    <h1 className="text-lg font-extrabold">Permission Templates</h1>
+                    <p className="text-sm text-muted-foreground">
                         Configure action access, field visibility, and type-specific opportunity or activity permissions.
-                    </Typography>
-                </Box>
-                <Button variant="contained" startIcon={<AddIcon />} onClick={openCreate} sx={{ borderRadius: 28, px: 2.5 }}>
+                    </p>
+                </div>
+                <Button onClick={openCreate}>
+                    <Plus className="size-4" />
                     Create Template
                 </Button>
-            </Stack>
+            </div>
 
-            <Card sx={{ overflow: "hidden" }}>
-                <Stack divider={<Divider />}>
+            <div className="overflow-hidden rounded-xl border bg-card">
+                <div className="divide-y">
                     {templates.length === 0 && !loading ? (
-                        <Box sx={{ p: 5, textAlign: "center" }}>
-                            <SecurityIcon color="disabled" sx={{ fontSize: 42, mb: 1 }} />
-                            <Typography sx={{ fontWeight: 800 }}>No permission templates yet</Typography>
-                            <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                        <div className="p-10 text-center">
+                            <ShieldCheck className="mx-auto mb-2 size-10 text-muted-foreground opacity-40" />
+                            <p className="font-extrabold">No permission templates yet</p>
+                            <p className="mb-4 text-sm text-muted-foreground">
                                 Create a template to control module actions and field masking outside role setup.
-                            </Typography>
-                            <Button variant="outlined" startIcon={<AddIcon />} onClick={openCreate}>Create First Template</Button>
-                        </Box>
+                            </p>
+                            <Button variant="outline" onClick={openCreate}>
+                                <Plus className="size-4" />
+                                Create First Template
+                            </Button>
+                        </div>
                     ) : templates.map((template) => {
                         const actionCount = Object.values(template.permissions.actions ?? {}).reduce((count, actions) => count + Object.values(actions).filter((enabled) => enabled === true).length, 0);
                         const fieldCount = Object.values(template.permissions.fieldPermissions ?? {}).reduce((count, fields) => count + Object.values(fields).filter((value) => value !== "editable").length, 0);
                         return (
-                            <Stack key={template.id} direction="row" alignItems="center" justifyContent="space-between" sx={{ p: 1.5 }}>
-                                <Box sx={{ minWidth: 0 }}>
-                                    <Stack direction="row" spacing={1} alignItems="center">
-                                        <Typography sx={{ fontWeight: 800 }}>{template.name}</Typography>
-                                        <Chip size="small" label={template.isActive ? "Active" : "Inactive"} color={template.isActive ? "success" : "default"} variant="outlined" />
-                                    </Stack>
-                                    {template.description && <Typography variant="body2" color="text.secondary">{template.description}</Typography>}
-                                </Box>
-                                <Stack direction="row" spacing={1} alignItems="center">
-                                    <Chip size="small" label={`${actionCount} actions`} />
-                                    <Chip size="small" label={`${fieldCount} field rules`} />
-                                    <Tooltip title="Edit">
-                                        <IconButton size="small" onClick={() => openEdit(template)}><EditIcon fontSize="small" /></IconButton>
+                            <div key={template.id} className="flex items-center justify-between gap-3 p-3">
+                                <div className="min-w-0">
+                                    <div className="flex items-center gap-2">
+                                        <p className="font-extrabold">{template.name}</p>
+                                        <Badge
+                                            variant="outline"
+                                            className={cn(
+                                                template.isActive && "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400"
+                                            )}
+                                        >
+                                            {template.isActive ? "Active" : "Inactive"}
+                                        </Badge>
+                                    </div>
+                                    {template.description && <p className="text-sm text-muted-foreground">{template.description}</p>}
+                                </div>
+                                <div className="flex items-center gap-1.5">
+                                    <Badge variant="outline">{actionCount} actions</Badge>
+                                    <Badge variant="outline">{fieldCount} field rules</Badge>
+                                    <Tooltip>
+                                        <TooltipTrigger asChild>
+                                            <Button variant="ghost" size="icon-sm" onClick={() => openEdit(template)}>
+                                                <Pencil className="size-4" />
+                                            </Button>
+                                        </TooltipTrigger>
+                                        <TooltipContent>Edit</TooltipContent>
                                     </Tooltip>
-                                    <Tooltip title="Delete">
-                                        <IconButton size="small" color="error" onClick={() => handleDelete(template)}><DeleteIcon fontSize="small" /></IconButton>
+                                    <Tooltip>
+                                        <TooltipTrigger asChild>
+                                            <Button
+                                                variant="ghost"
+                                                size="icon-sm"
+                                                className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+                                                onClick={() => handleDelete(template)}
+                                            >
+                                                <Trash2 className="size-4" />
+                                            </Button>
+                                        </TooltipTrigger>
+                                        <TooltipContent>Delete</TooltipContent>
                                     </Tooltip>
-                                </Stack>
-                            </Stack>
+                                </div>
+                            </div>
                         );
                     })}
-                    {loading && <Box sx={{ p: 3 }}><Typography color="text.secondary">Loading templates...</Typography></Box>}
-                </Stack>
-            </Card>
+                    {loading && <div className="p-6 text-sm text-muted-foreground">Loading templates...</div>}
+                </div>
+            </div>
 
-            <Dialog open={dialogOpen} onClose={() => setDialogOpen(false)} maxWidth="lg" fullWidth PaperProps={{ sx: { borderRadius: 2 } }}>
-                <DialogTitle>{editing ? "Edit Permission Template" : "Create Permission Template"}</DialogTitle>
-                <DialogContent dividers>
-                    <Stack spacing={2}>
-                        <Stack direction={{ xs: "column", md: "row" }} spacing={1.5}>
-                            <TextField size="small" label="Template Name" value={name} onChange={(event) => setName(event.target.value)} fullWidth />
-                            <FormControlLabel
-                                control={<Switch checked={isActive} onChange={(event) => setIsActive(event.target.checked)} />}
-                                label="Active"
-                                sx={{ minWidth: 130 }}
+            <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+                <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-4xl">
+                    <DialogHeader>
+                        <DialogTitle>{editing ? "Edit Permission Template" : "Create Permission Template"}</DialogTitle>
+                    </DialogHeader>
+
+                    <div className="flex flex-col gap-4">
+                        <div className="flex flex-col gap-3 md:flex-row md:items-end">
+                            <div className="flex-1 space-y-1.5">
+                                <Label htmlFor="pt-name">Template Name</Label>
+                                <Input id="pt-name" value={name} onChange={(e) => setName(e.target.value)} />
+                            </div>
+                            <label className="flex min-w-[130px] items-center gap-2 pb-2 text-sm font-medium">
+                                <Switch checked={isActive} onCheckedChange={setIsActive} />
+                                Active
+                            </label>
+                        </div>
+                        <div className="space-y-1.5">
+                            <Label htmlFor="pt-description">Description</Label>
+                            <Textarea
+                                id="pt-description"
+                                value={description}
+                                onChange={(e) => setDescription(e.target.value)}
+                                rows={2}
                             />
-                        </Stack>
-                        <TextField size="small" label="Description" value={description} onChange={(event) => setDescription(event.target.value)} multiline rows={2} />
+                        </div>
 
-                        <Paper variant="outlined" sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "280px 1fr" }, minHeight: 520, overflow: "hidden" }}>
-                            <Box sx={{ borderRight: { md: "1px solid" }, borderColor: "divider", bgcolor: "action.hover" }}>
-                                <Typography variant="caption" sx={{ display: "block", px: 1.5, pt: 1.5, pb: 0.5, fontWeight: 800, color: "text.secondary", textTransform: "uppercase" }}>
+                        <div className="grid overflow-hidden rounded-lg border md:min-h-[520px] md:grid-cols-[280px_1fr]">
+                            <div className="border-b bg-muted/40 md:border-b-0 md:border-r">
+                                <p className="px-3 pt-3 pb-1 text-xs font-extrabold uppercase text-muted-foreground">
                                     Modules & Types
-                                </Typography>
-                                <List dense disablePadding sx={{ maxHeight: 520, overflow: "auto" }}>
+                                </p>
+                                <ul className="max-h-[520px] overflow-auto p-1">
                                     {scopes.map((scope) => (
-                                        <ListItemButton key={scope.key} selected={selectedScope === scope.key} onClick={() => setSelectedScope(scope.key)}>
-                                            <ListItemText
-                                                primary={<Typography variant="body2" sx={{ fontWeight: 800 }}>{scope.label}</Typography>}
-                                                secondary={scope.subtitle}
-                                            />
-                                        </ListItemButton>
+                                        <li key={scope.key}>
+                                            <button
+                                                type="button"
+                                                onClick={() => setSelectedScope(scope.key)}
+                                                className={cn(
+                                                    "flex w-full flex-col rounded-md px-2 py-1.5 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                                                    selectedScope === scope.key ? "bg-primary/10 text-primary" : "hover:bg-accent"
+                                                )}
+                                            >
+                                                <span className="text-sm font-extrabold">{scope.label}</span>
+                                                <span className="text-xs text-muted-foreground">{scope.subtitle}</span>
+                                            </button>
+                                        </li>
                                     ))}
-                                </List>
-                            </Box>
+                                </ul>
+                            </div>
 
                             {activeScope && (
-                                <Box sx={{ p: 2, minWidth: 0 }}>
-                                    <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 1.5 }}>
-                                        <Box>
-                                            <Typography sx={{ fontWeight: 900 }}>{activeScope.label}</Typography>
-                                            <Typography variant="body2" color="text.secondary">{activeScope.subtitle}</Typography>
-                                        </Box>
-                                    </Stack>
+                                <div className="min-w-0 p-4">
+                                    <div className="mb-3">
+                                        <p className="font-black">{activeScope.label}</p>
+                                        <p className="text-sm text-muted-foreground">{activeScope.subtitle}</p>
+                                    </div>
 
-                                    <Typography variant="subtitle2" sx={{ fontWeight: 800, mb: 1 }}>Actions</Typography>
-                                    <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap sx={{ mb: 2 }}>
+                                    <p className="mb-2 text-sm font-extrabold">Actions</p>
+                                    <div className="mb-4 flex flex-wrap gap-3">
                                         {ACTIONS.map((action) => (
-                                            <FormControlLabel
-                                                key={action.key}
-                                                control={
-                                                    <Switch
-                                                        size="small"
-                                                        checked={Boolean(permissions.actions?.[activeScope.key]?.[action.key])}
-                                                        onChange={(event) => setAction(activeScope.key, action.key, event.target.checked)}
-                                                    />
-                                                }
-                                                label={<Typography variant="body2">{action.label}</Typography>}
-                                            />
+                                            <label key={action.key} className="flex items-center gap-2 text-sm">
+                                                <Switch
+                                                    size="sm"
+                                                    checked={Boolean(permissions.actions?.[activeScope.key]?.[action.key])}
+                                                    onCheckedChange={(checked) => setAction(activeScope.key, action.key, checked)}
+                                                />
+                                                {action.label}
+                                            </label>
                                         ))}
-                                    </Stack>
+                                    </div>
 
-                                    <Divider sx={{ mb: 2 }} />
-                                    <Typography variant="subtitle2" sx={{ fontWeight: 800, mb: 1 }}>Fields</Typography>
-                                    <Stack spacing={1}>
+                                    <div className="mb-4 h-px bg-border" />
+                                    <p className="mb-2 text-sm font-extrabold">Fields</p>
+                                    <div className="flex flex-col gap-2">
                                         {activeScope.fields.map((field) => {
                                             const value = permissions.fieldPermissions?.[activeScope.key]?.[field.key] ?? "editable";
                                             return (
-                                                <Stack key={field.key} direction={{ xs: "column", sm: "row" }} alignItems={{ sm: "center" }} justifyContent="space-between" sx={{ border: "1px solid", borderColor: "divider", borderRadius: 1, p: 1 }}>
-                                                    <Box>
-                                                        <Typography variant="body2" sx={{ fontWeight: 800 }}>{field.label}</Typography>
-                                                        <Typography variant="caption" color="text.secondary">{field.key} · {field.type}</Typography>
-                                                    </Box>
-                                                    <ToggleButtonGroup
-                                                        exclusive
-                                                        size="small"
-                                                        value={value}
-                                                        onChange={(_, next) => next && setFieldAccess(activeScope.key, field.key, next)}
-                                                        sx={{ alignSelf: { xs: "stretch", sm: "center" }, mt: { xs: 1, sm: 0 } }}
-                                                    >
+                                                <div
+                                                    key={field.key}
+                                                    className="flex flex-col justify-between gap-2 rounded-md border p-2 sm:flex-row sm:items-center"
+                                                >
+                                                    <div>
+                                                        <p className="text-sm font-extrabold">{field.label}</p>
+                                                        <p className="text-xs text-muted-foreground">{field.key} · {field.type}</p>
+                                                    </div>
+                                                    <div className="inline-flex self-stretch overflow-hidden rounded-md border sm:self-center">
                                                         {(["editable", "readonly", "hidden"] as FieldAccess[]).map((access) => (
-                                                            <ToggleButton key={access} value={access} sx={{ px: 1.25, textTransform: "none" }}>
+                                                            <button
+                                                                key={access}
+                                                                type="button"
+                                                                onClick={() => setFieldAccess(activeScope.key, field.key, access)}
+                                                                className={cn(
+                                                                    "px-2.5 py-1 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                                                                    value === access
+                                                                        ? "bg-primary text-primary-foreground"
+                                                                        : "bg-transparent hover:bg-accent"
+                                                                )}
+                                                            >
                                                                 {accessLabel(access)}
-                                                            </ToggleButton>
+                                                            </button>
                                                         ))}
-                                                    </ToggleButtonGroup>
-                                                </Stack>
+                                                    </div>
+                                                </div>
                                             );
                                         })}
-                                    </Stack>
-                                </Box>
+                                    </div>
+                                </div>
                             )}
-                        </Paper>
-                    </Stack>
+                        </div>
+                    </div>
+
+                    <DialogFooter>
+                        <Button variant="ghost" onClick={() => setDialogOpen(false)}>Cancel</Button>
+                        <Button onClick={handleSave}>Save Template</Button>
+                    </DialogFooter>
                 </DialogContent>
-                <DialogActions sx={{ p: 2 }}>
-                    <Button color="inherit" onClick={() => setDialogOpen(false)}>Cancel</Button>
-                    <Button variant="contained" onClick={handleSave}>Save Template</Button>
-                </DialogActions>
             </Dialog>
-        </Box>
+        </div>
     );
 }

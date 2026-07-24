@@ -26,7 +26,7 @@ export async function GET(
       return unauthorized();
     }
 
-    return serverError("Failed to fetch opportunity");
+    return serverError("Failed to fetch opportunity", error);
   }
 }
 
@@ -46,7 +46,7 @@ export async function PATCH(
       return unauthorized();
     }
 
-    return serverError("Failed to update opportunity");
+    return serverError("Failed to update opportunity", error);
   }
 }
 
@@ -64,6 +64,6 @@ export async function DELETE(
       return unauthorized();
     }
 
-    return serverError("Failed to delete opportunity");
+    return serverError("Failed to delete opportunity", error);
   }
 }

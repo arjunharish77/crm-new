@@ -13,7 +13,7 @@ import {
     TableHeader,
     TableRow
 } from "@/components/ui/table";
-import { Chip } from "@mui/material";
+import { Badge } from "@/components/ui/badge";
 import { formatWorkspaceRelativeTime } from "@/lib/date-format";
 import { ArrowLeft, UserCog, Activity, Users } from "lucide-react";
 import { toast } from "sonner";
@@ -82,15 +82,9 @@ export default function TenantDetailPage() {
                 <div>
                     <h2 className="text-2xl font-bold tracking-tight">{tenant.name}</h2>
                     <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                        <Chip
-                            label={tenant.status}
-                            color={tenant.status === 'ACTIVE' ? 'success' : 'error'}
-                            size="small"
-                            variant={tenant.status === 'ACTIVE' ? 'filled' : 'outlined'}
-                        />
-                        <span>•</span>
-                        <span>ID: {tenant.id}</span>
-                        <span>•</span>
+                        <Badge variant={tenant.status === 'ACTIVE' ? 'default' : 'destructive'}>
+                            {tenant.status}
+                        </Badge>
                         <span>Plan: {tenant.plan || 'Basic'}</span>
                     </div>
                 </div>

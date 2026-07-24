@@ -1,191 +1,148 @@
 "use client";
 
-import { ColumnDef } from "@tanstack/react-table";
 import Link from "next/link";
+import { ColumnDef } from "@tanstack/react-table";
+import { Eye, ExternalLink, Pencil } from "lucide-react";
 import { Lead } from "@/types/leads";
-import { Chip } from "@mui/material";
-import { MoreHorizontal } from "lucide-react";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import {
-    DropdownMenu,
-    DropdownMenuContent,
-    DropdownMenuItem,
-    DropdownMenuLabel,
-    DropdownMenuSeparator,
-    DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { useState } from "react";
-import { EditLeadDialog } from "./edit-lead-dialog";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { PredictiveScoreBadge } from "@/components/scoring/predictive-score";
+import { formatWorkspaceDate } from "@/lib/date-format";
+import { cn } from "@/lib/utils";
 
-const ActionsCell = ({ lead, onQuickView }: { lead: Lead, onQuickView?: (lead: Lead) => void }) => {
-    const [editOpen, setEditOpen] = useState(false);
+// Same status -> color mapping the MUI version used, ported to Tailwind classes
+// keyed off the M3 tokens rather than fixed hex values.
+const STATUS_CLASSNAMES: Record<string, string> = {
+    NEW: "bg-primary/8 text-primary border-primary/20",
+    QUALIFIED: "bg-secondary/15 text-secondary-foreground border-secondary/30",
+    LOST: "bg-destructive/8 text-destructive border-destructive/20",
+    CONVERTED: "bg-tertiary/12 text-tertiary border-tertiary/25",
+};
+const DEFAULT_STATUS_CLASSNAME = "bg-muted text-muted-foreground border-border";
 
-    return (
-        <>
-            <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                    <Button variant="ghost" className="h-8 w-8 p-0">
-                        <span className="sr-only">Open menu</span>
-                        <MoreHorizontal className="h-4 w-4" />
-                    </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                    <DropdownMenuLabel>Actions</DropdownMenuLabel>
-                    <DropdownMenuItem onClick={() => onQuickView?.(lead)}>
-                        Preview
-                    </DropdownMenuItem>
-                    <DropdownMenuItem
-                        onClick={() => navigator.clipboard.writeText(lead.id)}
-                    >
-                        Copy Lead ID
-                    </DropdownMenuItem>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem asChild>
-                        <Link href={`/dashboard/leads/${lead.id}`} className="cursor-pointer">
-                            View details
-                        </Link>
-                    </DropdownMenuItem>
-                    <DropdownMenuItem
-                        onSelect={(e) => {
-                            e.preventDefault();
-                            setEditOpen(true);
-                        }}
-                    >
-                        Edit lead
-                    </DropdownMenuItem>
-                </DropdownMenuContent>
-            </DropdownMenu>
-
-            {editOpen && (
-                <EditLeadDialog
-                    open={editOpen}
-                    onOpenChange={setEditOpen}
-                    lead={lead}
-                    onSuccess={() => {
-                        window.location.reload();
-                    }}
-                />
-            )}
-        </>
-    );
+export type LeadColumnActions = {
+    onQuickView: (leadId: string) => void;
+    onEdit: (lead: Lead) => void;
 };
 
-const statusVariants: Record<string, "default" | "secondary" | "destructive" | "outline"> = {
-    NEW: "default",
-    CONTACTED: "secondary",
-    QUALIFIED: "outline",
-    CONVERTED: "default",
-    LOST: "destructive",
-};
-
-export const columns: ColumnDef<Lead>[] = [
-    {
-        id: "select",
-        header: ({ table }) => (
-            <input
-                type="checkbox"
-                checked={table.getIsAllPageRowsSelected()}
-                onChange={(e) => table.toggleAllPageRowsSelected(!!e.target.checked)}
-                className="translate-y-[2px]"
-            />
-        ),
-        cell: ({ row }) => (
-            <input
-                type="checkbox"
-                checked={row.getIsSelected()}
-                onChange={(e) => row.toggleSelected(!!e.target.checked)}
-                className="translate-y-[2px]"
-            />
-        ),
-        enableSorting: false,
-        enableHiding: false,
-    },
-    {
-        accessorKey: "name",
-        header: "Name",
-        cell: ({ row, table }) => {
-            const meta = table.options.meta as any;
-            return (
-                <div
-                    className="font-medium hover:underline cursor-pointer text-primary"
-                    onClick={() => meta?.onQuickView?.(row.original)}
-                >
-                    {row.getValue("name")}
+export function buildLeadColumns(actions: LeadColumnActions): ColumnDef<Lead, any>[] {
+    return [
+        {
+            accessorKey: "name",
+            header: "Lead Name",
+            size: 260,
+            cell: ({ row }) => (
+                <div className="flex items-center gap-3">
+                    <Avatar className="size-8 text-sm font-bold">
+                        <AvatarFallback>{(row.original.name?.[0] ?? "L").toUpperCase()}</AvatarFallback>
+                    </Avatar>
+                    <Link
+                        href={`/dashboard/leads/${row.original.id}`}
+                        className="font-bold text-primary hover:underline"
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        {row.original.name}
+                    </Link>
                 </div>
-            )
+            ),
         },
-    },
-    {
-        accessorKey: "email",
-        header: "Email",
-    },
-    {
-        accessorKey: "phone",
-        header: "Phone",
-    },
-    {
-        accessorKey: "source",
-        header: "Source",
-    },
-    {
-        accessorKey: "status",
-        header: "Status",
-        cell: ({ row }) => {
-            const status = row.getValue("status") as string;
-            // Map status variants to Chip colors
-            const colorMap: Record<string, "default" | "primary" | "secondary" | "error" | "info" | "success" | "warning"> = {
-                NEW: "primary",
-                CONTACTED: "default",
-                QUALIFIED: "success",
-                CONVERTED: "success",
-                LOST: "error",
-            };
-
-            return (
-                <Chip
-                    label={status}
-                    color={colorMap[status] || "default"}
-                    size="small"
-                    variant={status === 'NEW' ? 'filled' : 'outlined'}
-                    sx={{ fontWeight: 500 }}
-                />
-            );
+        {
+            accessorKey: "email",
+            header: "Email",
+            size: 220,
+            cell: ({ row }) => <span className="text-muted-foreground">{row.original.email}</span>,
         },
-    },
-    {
-        accessorKey: "tags",
-        header: "Tags",
-        cell: ({ row }) => {
-            const tags = row.getValue("tags") as string[];
-            if (!tags || tags.length === 0) return <span className="text-gray-400">-</span>;
-            return (
-                <div className="flex gap-1 flex-wrap">
-                    {tags.slice(0, 2).map((tag) => (
-                        <Chip
-                            key={tag}
-                            label={tag}
-                            variant="outlined"
-                            size="small"
-                            sx={{ height: 24, fontSize: '0.75rem' }}
-                        />
-                    ))}
-                    {tags.length > 2 && (
-                        <Chip
-                            label={`+${tags.length - 2}`}
-                            variant="outlined"
-                            size="small"
-                            sx={{ height: 24, fontSize: '0.75rem' }}
-                        />
-                    )}
+        {
+            accessorKey: "status",
+            header: "Status",
+            size: 140,
+            cell: ({ row }) => {
+                const status = row.original.status;
+                return (
+                    <Badge
+                        variant="outline"
+                        className={cn("font-bold uppercase tracking-wide", STATUS_CLASSNAMES[status] ?? DEFAULT_STATUS_CLASSNAME)}
+                    >
+                        {status}
+                    </Badge>
+                );
+            },
+        },
+        {
+            accessorKey: "source",
+            header: "Source",
+            size: 130,
+            cell: ({ row }) => <span className="text-xs font-medium text-muted-foreground">{row.original.source}</span>,
+        },
+        {
+            accessorKey: "predictiveScore",
+            header: "Predictive Score",
+            size: 190,
+            sortingFn: (rowA, rowB) => {
+                const a = rowA.original.predictiveScore?.conversionProbability ?? rowA.original.score ?? 0;
+                const b = rowB.original.predictiveScore?.conversionProbability ?? rowB.original.score ?? 0;
+                return a - b;
+            },
+            cell: ({ row }) => <PredictiveScoreBadge score={row.original.predictiveScore} />,
+        },
+        {
+            accessorKey: "createdAt",
+            header: "Created",
+            size: 140,
+            cell: ({ row }) => (
+                <span className="text-xs text-muted-foreground">{formatWorkspaceDate(row.original.createdAt)}</span>
+            ),
+        },
+        {
+            id: "actions",
+            header: "",
+            size: 100,
+            cell: ({ row }) => (
+                <div className="flex items-center gap-0.5">
+                    <Tooltip>
+                        <TooltipTrigger asChild>
+                            <Button
+                                variant="ghost"
+                                size="icon-sm"
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    actions.onQuickView(row.original.id);
+                                }}
+                            >
+                                <Eye className="size-4" />
+                            </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>View Preview</TooltipContent>
+                    </Tooltip>
+                    <Tooltip>
+                        <TooltipTrigger asChild>
+                            <Button variant="ghost" size="icon-sm" asChild onClick={(e) => e.stopPropagation()}>
+                                <Link href={`/dashboard/leads/${row.original.id}`}>
+                                    <ExternalLink className="size-4" />
+                                </Link>
+                            </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>Open Detail</TooltipContent>
+                    </Tooltip>
+                    <Tooltip>
+                        <TooltipTrigger asChild>
+                            <Button
+                                variant="ghost"
+                                size="icon-sm"
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    actions.onEdit(row.original);
+                                }}
+                            >
+                                <Pencil className="size-4" />
+                            </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>Edit</TooltipContent>
+                    </Tooltip>
                 </div>
-            );
+            ),
         },
-    },
-    {
-        id: "actions",
-        cell: ({ row, table }) => {
-            const meta = table.options.meta as any;
-            return <ActionsCell lead={row.original} onQuickView={meta?.onQuickView} />
-        },
-    },
-];
+    ];
+}

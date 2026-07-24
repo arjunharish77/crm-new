@@ -183,7 +183,7 @@ export function PublicFormRenderer({ slug, config }: RendererProps) {
                 {Object.keys(formData).length > 0 && (
                     <div className="flex items-center justify-between rounded-md border border-gray-200 bg-gray-50 px-3 py-2 text-xs text-gray-600">
                         <span>Draft is saved automatically on this device.</span>
-                        <button type="button" className="font-semibold text-primary" onClick={clearDraft}>Clear draft</button>
+                        <button type="button" className="rounded-sm font-semibold text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" onClick={clearDraft}>Clear draft</button>
                     </div>
                 )}
                 {fields.length === 0 && (
@@ -198,7 +198,7 @@ export function PublicFormRenderer({ slug, config }: RendererProps) {
                                 key={tab.id}
                                 type="button"
                                 onClick={() => setActiveTabId(tab.id)}
-                                className={`px-3 py-2 text-sm font-semibold border-b-2 ${activeTabId === tab.id ? "border-primary text-primary" : "border-transparent text-gray-500"}`}
+                                className={`px-3 py-2 text-sm font-semibold border-b-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${activeTabId === tab.id ? "border-primary text-primary" : "border-transparent text-gray-500"}`}
                             >
                                 {tab.label}
                             </button>

@@ -21,12 +21,19 @@ function roleName(userRole: unknown) {
 
 function roleMatches(userRole: unknown, requiredRole: string, isPlatformAdmin?: boolean) {
     if (isPlatformAdmin) return true;
+    // A PARTNER-flagged role never satisfies any requiredRole check here, regardless
+    // of what an admin happens to name it — partner exclusion from admin/settings
+    // screens must not depend on name-string matching.
+    if (userRole && typeof userRole === "object" && (userRole as any).permissions?.isPartnerRole) {
+        return false;
+    }
     const current = roleName(userRole).toLowerCase();
     const required = requiredRole.toLowerCase();
+    const permissions = userRole && typeof userRole === "object" ? (userRole as any).permissions : null;
     if (current === required) return true;
 
-    const adminAliases = new Set(["tenant admin", "admin", "administrator", "demo admin"]);
-    if (required === "tenant admin" && adminAliases.has(current)) return true;
+    const adminAliases = new Set(["tenant admin", "admin", "administrator", "demo admin", "demo crm administrator"]);
+    if (required === "tenant admin" && (adminAliases.has(current) || current.includes("admin") || permissions?.modules?.admin === "full")) return true;
     return false;
 }
 

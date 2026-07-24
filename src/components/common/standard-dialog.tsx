@@ -1,21 +1,17 @@
 "use client";
 
 import React from "react";
+import { X as CloseIcon } from "lucide-react";
 import {
     Dialog,
-    DialogTitle,
     DialogContent,
-    DialogActions,
-    IconButton,
-    Typography,
-    Box,
-    useTheme,
-    alpha,
-    Breakpoint,
-} from "@mui/material";
-import { Close as CloseIcon } from "@mui/icons-material";
-import { motion, AnimatePresence } from "framer-motion";
-import { spring, easing } from "@/lib/motion";
+    DialogFooter,
+    DialogTitle,
+    DialogDescription,
+} from "@/components/ui/dialog";
+import { cn } from "@/lib/utils";
+
+type DialogMaxWidth = "xs" | "sm" | "md" | "lg" | "xl";
 
 interface StandardDialogProps {
     open: boolean;
@@ -25,11 +21,19 @@ interface StandardDialogProps {
     icon?: React.ReactNode;
     children: React.ReactNode;
     actions?: React.ReactNode;
-    maxWidth?: Breakpoint;
+    maxWidth?: DialogMaxWidth;
     fullWidth?: boolean;
 }
 
-const MotionPaper = motion.div;
+// Matches the MUI Dialog `maxWidth` breakpoint pixel values exactly, so existing
+// callers keep the same dialog width they had before this migration.
+const MAX_WIDTH_CLASS: Record<DialogMaxWidth, string> = {
+    xs: "sm:max-w-[444px]",
+    sm: "sm:max-w-[600px]",
+    md: "sm:max-w-[900px]",
+    lg: "sm:max-w-[1200px]",
+    xl: "sm:max-w-[1536px]",
+};
 
 export function StandardDialog({
     open,
@@ -42,88 +46,48 @@ export function StandardDialog({
     maxWidth = "sm",
     fullWidth = true,
 }: StandardDialogProps) {
-    const theme = useTheme();
-
     return (
-        <Dialog
-            open={open}
-            onClose={onClose}
-            maxWidth={maxWidth}
-            fullWidth={fullWidth}
-            PaperProps={{
-                sx: {
-                    position: 'relative',
-                    zIndex: (theme) => theme.zIndex.modal + 1,
-                    borderRadius: '14px',
-                    border: '1px solid',
-                    borderColor: 'divider',
-                    overflow: 'hidden',
-                    bgcolor: 'background.paper',
-                    boxShadow: '0 20px 50px rgba(15, 23, 42, 0.12)',
-                },
-            }}
-            TransitionProps={{
-                timeout: { enter: 350, exit: 200 },
-            }}
-        >
-            <DialogTitle
-                sx={{
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "space-between",
-                    p: '18px 18px 10px',
-                }}
+        <Dialog open={open} onOpenChange={(next) => !next && onClose()}>
+            <DialogContent
+                showCloseButton={false}
+                className={cn(MAX_WIDTH_CLASS[maxWidth], fullWidth ? "w-full" : "w-fit", "max-h-[calc(100vh-2rem)] grid-rows-[auto_minmax(0,1fr)_auto] p-0 gap-0 overflow-hidden rounded-[14px]")}
             >
-                <Box sx={{ display: "flex", alignItems: "center", gap: 1.5 }}>
-                    {icon && (
-                        <Box
-                            sx={{
-                                width: 34,
-                                height: 34,
-                                borderRadius: '10px',
-                                bgcolor: alpha(theme.palette.primary.main, 0.08),
-                                display: "flex",
-                                alignItems: "center",
-                                justifyContent: "center",
-                                color: theme.palette.primary.main,
-                            }}
-                        >
-                            {icon}
-                        </Box>
-                    )}
-                    <Box>
-                        <Typography variant="h6" sx={{ fontWeight: 800, fontSize: '18px', lineHeight: 1.2 }}>
-                            {title}
-                        </Typography>
-                        {subtitle && (
-                            <Typography variant="body2" color="text.secondary" sx={{ mt: 0.25 }}>
-                                {subtitle}
-                            </Typography>
+                <div className="flex items-center justify-between gap-3 p-[18px] pb-2.5">
+                    <div className="flex items-center gap-3 min-w-0">
+                        {icon && (
+                            <div className="flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-[10px] bg-primary/8 text-primary">
+                                {icon}
+                            </div>
                         )}
-                    </Box>
-                </Box>
-                <IconButton
-                    onClick={onClose}
-                    size="small"
-                    sx={{
-                        color: "text.secondary",
-                        borderRadius: '10px',
-                        "&:hover": { bgcolor: alpha(theme.palette.onSurface, 0.08) },
-                    }}
-                >
-                    <CloseIcon fontSize="small" />
-                </IconButton>
-            </DialogTitle>
+                        <div className="min-w-0">
+                            <DialogTitle className="text-[18px] font-extrabold leading-tight">
+                                {title}
+                            </DialogTitle>
+                            {subtitle && (
+                                <DialogDescription className="mt-0.5">{subtitle}</DialogDescription>
+                            )}
+                        </div>
+                    </div>
+                    <button
+                        type="button"
+                        onClick={onClose}
+                        aria-label="Close"
+                        className="shrink-0 rounded-[10px] p-1.5 text-muted-foreground transition-colors hover:bg-foreground/8 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    >
+                        <CloseIcon className="size-4" />
+                    </button>
+                </div>
 
-            <DialogContent sx={{ px: 2.25, pb: actions ? 0.75 : 2.25, pt: 0.75 }}>
-                {children}
+                <div className={cn("min-h-0 px-[18px] overflow-y-auto", actions ? "pb-3" : "pb-[18px]", "pt-0.5")}>
+                    {children}
+                </div>
+
+                {actions && (
+                    <DialogFooter className="gap-1.5 px-[18px] pb-[18px] sm:flex-row sm:justify-end">
+                        {actions}
+                    </DialogFooter>
+                )}
             </DialogContent>
-
-            {actions && (
-            <DialogActions sx={{ px: 2.25, pb: 2.25, gap: 0.75, bgcolor: 'background.paper' }}>
-                    {actions}
-                </DialogActions>
-            )}
         </Dialog>
     );
 }

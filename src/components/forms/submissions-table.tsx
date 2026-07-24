@@ -2,39 +2,31 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { format } from "date-fns";
+import { ColumnDef } from "@tanstack/react-table";
 import { formatWorkspaceDateTime } from "@/lib/date-format";
 import {
-    Alert,
-    Box,
-    Chip,
-    CircularProgress,
-    IconButton,
-    Menu,
-    MenuItem,
-    Paper,
-    Stack,
-    Table,
-    TableBody,
-    TableCell,
-    TableHead,
-    TablePagination,
-    TableRow,
-    Tooltip,
-    Typography,
-    alpha,
-    useTheme,
-} from "@mui/material";
-import {
-    Download as DownloadIcon,
-    MoreHoriz as MoreHorizIcon,
-    OpenInNew as OpenInNewIcon,
-    Refresh as RefreshIcon,
-    ContentCopy as ContentCopyIcon,
-} from "@mui/icons-material";
+    MoreHorizontal as MoreHorizIcon,
+    ExternalLink as OpenInNewIcon,
+    RefreshCw as RefreshIcon,
+    Copy as ContentCopyIcon,
+    Loader2,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { DataTable } from "@/components/ui/data-table";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { apiFetch } from "@/lib/api";
+import { QueueExportButton } from "@/components/exports/queue-export-button";
 import { toast } from "sonner";
+import { cn } from "@/lib/utils";
 
 interface Submission {
     id: string;
@@ -54,29 +46,26 @@ interface SubmissionsTableProps {
     formId: string;
 }
 
-const STATUS_STYLES: Record<Submission["status"], { bg: string; color: string }> = {
-    PROCESSED: { bg: "success.main", color: "success.main" },
-    SPAM: { bg: "error.main", color: "error.main" },
-    DUPLICATE: { bg: "warning.main", color: "warning.main" },
-    ERROR: { bg: "error.main", color: "error.main" },
+const STATUS_BADGE_CLASSNAMES: Record<Submission["status"], string> = {
+    PROCESSED: "border-primary/20 bg-primary/8 text-primary",
+    SPAM: "border-destructive/20 bg-destructive/8 text-destructive",
+    DUPLICATE: "border-tertiary/25 bg-tertiary/12 text-tertiary",
+    ERROR: "border-destructive/20 bg-destructive/8 text-destructive",
 };
 
 export function SubmissionsTable({ formId }: SubmissionsTableProps) {
-    const theme = useTheme();
     const [submissions, setSubmissions] = useState<Submission[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [total, setTotal] = useState(0);
-    const [page, setPage] = useState(0);
+    const [pageIndex, setPageIndex] = useState(0);
     const limit = 20;
-    const [menuAnchor, setMenuAnchor] = useState<null | HTMLElement>(null);
-    const [activeSubmission, setActiveSubmission] = useState<Submission | null>(null);
 
     const fetchSubmissions = async () => {
         setLoading(true);
         setError(null);
         try {
-            const data = await apiFetch(`/forms/${formId}/submissions?limit=${limit}&offset=${page * limit}`);
+            const data = await apiFetch(`/forms/${formId}/submissions?limit=${limit}&offset=${pageIndex * limit}`);
             setSubmissions(Array.isArray(data.submissions) ? data.submissions : []);
             setTotal(typeof data.total === "number" ? data.total : 0);
         } catch (fetchError) {
@@ -90,26 +79,8 @@ export function SubmissionsTable({ formId }: SubmissionsTableProps) {
 
     useEffect(() => {
         fetchSubmissions();
-    }, [formId, page]);
-
-    const handleExport = async () => {
-        try {
-            toast.success("Preparing export...");
-            const response = await apiFetch(`/forms/${formId}/export`, { method: "GET" });
-            const blob = new Blob([response], { type: "text/csv" });
-            const url = window.URL.createObjectURL(blob);
-            const a = document.createElement("a");
-            a.href = url;
-            a.download = `submissions-${formId}-${format(new Date(), "yyyy-MM-dd")}.csv`;
-            document.body.appendChild(a);
-            a.click();
-            window.URL.revokeObjectURL(url);
-            document.body.removeChild(a);
-        } catch (exportError) {
-            console.error(exportError);
-            toast.error("Export failed. Please try again.");
-        }
-    };
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [formId, pageIndex]);
 
     const summary = useMemo(() => {
         const processed = submissions.filter((submission) => submission.status === "PROCESSED").length;
@@ -117,272 +88,174 @@ export function SubmissionsTable({ formId }: SubmissionsTableProps) {
         return { processed, flagged };
     }, [submissions]);
 
-    return (
-        <Stack spacing={2}>
-            <Stack
-                direction={{ xs: "column", md: "row" }}
-                justifyContent="space-between"
-                alignItems={{ xs: "flex-start", md: "center" }}
-                spacing={1.5}
-            >
-                <Box>
-                    <Typography variant="h6" sx={{ fontWeight: 800, letterSpacing: -0.3 }}>
-                        Submissions ({total})
-                    </Typography>
-                    <Typography variant="body2" color="text.secondary">
-                        Review captured form submissions, lead matches, and spam signals.
-                    </Typography>
-                </Box>
-                <Stack direction="row" spacing={1} alignItems="center">
-                    <Tooltip title="Refresh">
-                        <IconButton
-                            onClick={fetchSubmissions}
-                            disabled={loading}
-                            sx={{
-                                borderRadius: "10px",
-                                border: "1px solid",
-                                borderColor: "divider",
-                            }}
-                        >
-                            {loading ? <CircularProgress size={18} /> : <RefreshIcon fontSize="small" />}
-                        </IconButton>
-                    </Tooltip>
-                    <Button variant="outline" size="sm" onClick={handleExport}>
-                        <DownloadIcon sx={{ fontSize: 16, mr: 1 }} />
-                        Export CSV
-                    </Button>
-                </Stack>
-            </Stack>
-
-            <Stack direction={{ xs: "column", sm: "row" }} spacing={1}>
-                <Paper
-                    variant="outlined"
-                    sx={{
-                        px: 1.5,
-                        py: 1.25,
-                        borderRadius: "12px",
-                        minWidth: 180,
-                        bgcolor: alpha(theme.palette.primary.main, 0.03),
-                    }}
-                >
-                    <Typography variant="caption" sx={{ color: "text.secondary", textTransform: "uppercase", letterSpacing: "0.08em" }}>
-                        Processed
-                    </Typography>
-                    <Typography variant="h6" sx={{ fontWeight: 800, mt: 0.25 }}>
-                        {summary.processed}
-                    </Typography>
-                </Paper>
-                <Paper
-                    variant="outlined"
-                    sx={{
-                        px: 1.5,
-                        py: 1.25,
-                        borderRadius: "12px",
-                        minWidth: 180,
-                    }}
-                >
-                    <Typography variant="caption" sx={{ color: "text.secondary", textTransform: "uppercase", letterSpacing: "0.08em" }}>
-                        Needs Review
-                    </Typography>
-                    <Typography variant="h6" sx={{ fontWeight: 800, mt: 0.25 }}>
-                        {summary.flagged}
-                    </Typography>
-                </Paper>
-            </Stack>
-
-            {error && <Alert severity="error">{error}</Alert>}
-
-            <Paper
-                variant="outlined"
-                sx={{
-                    borderRadius: "14px",
-                    overflow: "hidden",
-                }}
-            >
-                <Table size="small">
-                    <TableHead>
-                        <TableRow
-                            sx={{
-                                "& th": {
-                                    fontSize: "0.69rem",
-                                    textTransform: "uppercase",
-                                    letterSpacing: "0.08em",
-                                    fontWeight: 800,
-                                    color: "text.secondary",
-                                    py: 1.25,
-                                    bgcolor: "surfaceContainerLowest",
-                                },
-                            }}
-                        >
-                            <TableCell>Date</TableCell>
-                            <TableCell>Status</TableCell>
-                            <TableCell>Lead</TableCell>
-                            <TableCell>Email</TableCell>
-                            <TableCell>Spam Score</TableCell>
-                            <TableCell align="right">Actions</TableCell>
-                        </TableRow>
-                    </TableHead>
-                    <TableBody>
-                        {loading && submissions.length === 0 ? (
-                            <TableRow>
-                                <TableCell colSpan={6} align="center" sx={{ py: 5 }}>
-                                    <Stack alignItems="center" spacing={1}>
-                                        <CircularProgress size={24} />
-                                        <Typography variant="body2" color="text.secondary">
-                                            Loading submissions...
-                                        </Typography>
-                                    </Stack>
-                                </TableCell>
-                            </TableRow>
-                        ) : submissions.length === 0 ? (
-                            <TableRow>
-                                <TableCell colSpan={6} align="center" sx={{ py: 6 }}>
-                                    <Typography variant="body1" sx={{ fontWeight: 700, mb: 0.5 }}>
-                                        No submissions yet
-                                    </Typography>
-                                    <Typography variant="body2" color="text.secondary">
-                                        New captures will appear here once this form starts receiving responses.
-                                    </Typography>
-                                </TableCell>
-                            </TableRow>
-                        ) : (
-                            submissions.map((submission) => {
-                                const statusStyle = STATUS_STYLES[submission.status];
-                                return (
-                                    <TableRow
-                                        key={submission.id}
-                                        hover
-                                        sx={{
-                                            "& td": {
-                                                py: 1.25,
-                                                borderColor: alpha(theme.palette.divider, 0.55),
-                                            },
-                                        }}
-                                    >
-                                        <TableCell sx={{ whiteSpace: "nowrap", fontWeight: 600 }}>
-                                            {formatWorkspaceDateTime(submission.createdAt)}
-                                        </TableCell>
-                                        <TableCell>
-                                            <Chip
-                                                label={submission.status}
-                                                size="small"
-                                                sx={{
-                                                    borderRadius: "8px",
-                                                    fontWeight: 700,
-                                                    fontSize: "0.67rem",
-                                                    bgcolor: alpha(theme.palette[statusStyle.bg.split(".")[0] as "success" | "error" | "warning"].main, 0.08),
-                                                    color: statusStyle.color,
-                                                    border: "1px solid",
-                                                    borderColor: alpha(theme.palette[statusStyle.bg.split(".")[0] as "success" | "error" | "warning"].main, 0.18),
-                                                }}
-                                            />
-                                        </TableCell>
-                                        <TableCell>
-                                            {submission.lead ? (
-                                                <Stack direction="row" spacing={0.75} alignItems="center">
-                                                    <Typography
-                                                        component={Link}
-                                                        href={`/dashboard/leads/${submission.lead.id}`}
-                                                        sx={{
-                                                            color: "primary.main",
-                                                            fontWeight: 700,
-                                                            textDecoration: "none",
-                                                            "&:hover": { textDecoration: "underline" },
-                                                        }}
-                                                    >
-                                                        {submission.lead.name}
-                                                    </Typography>
-                                                    <OpenInNewIcon sx={{ fontSize: 14, color: "text.secondary" }} />
-                                                </Stack>
-                                            ) : (
-                                                <Typography variant="body2" color="text.secondary">-</Typography>
-                                            )}
-                                        </TableCell>
-                                        <TableCell>
-                                            <Typography variant="body2">
-                                                {submission.lead?.email || submission.data?.email || submission.data?.Email || "-"}
-                                            </Typography>
-                                        </TableCell>
-                                        <TableCell>
-                                            <Typography
-                                                variant="body2"
-                                                sx={{
-                                                    fontWeight: submission.spamScore > 0.5 ? 700 : 500,
-                                                    color: submission.spamScore > 0.5 ? "error.main" : "text.secondary",
-                                                }}
-                                            >
-                                                {(submission.spamScore * 100).toFixed(0)}%
-                                            </Typography>
-                                        </TableCell>
-                                        <TableCell align="right">
-                                            <IconButton
-                                                size="small"
-                                                onClick={(event) => {
-                                                    setMenuAnchor(event.currentTarget);
-                                                    setActiveSubmission(submission);
-                                                }}
-                                                sx={{ borderRadius: "10px" }}
-                                            >
-                                                <MoreHorizIcon fontSize="small" />
-                                            </IconButton>
-                                        </TableCell>
-                                    </TableRow>
-                                );
-                            })
-                        )}
-                    </TableBody>
-                </Table>
-
-                <TablePagination
-                    component="div"
-                    rowsPerPageOptions={[limit]}
-                    rowsPerPage={limit}
-                    page={page}
-                    count={total}
-                    onPageChange={(_, nextPage) => setPage(nextPage)}
-                    sx={{
-                        borderTop: "1px solid",
-                        borderColor: "divider",
-                        "& .MuiTablePagination-toolbar": {
-                            minHeight: 52,
-                            px: 1.5,
-                        },
-                    }}
-                />
-            </Paper>
-
-            <Menu
-                anchorEl={menuAnchor}
-                open={Boolean(menuAnchor)}
-                onClose={() => {
-                    setMenuAnchor(null);
-                    setActiveSubmission(null);
-                }}
-                PaperProps={{ sx: { borderRadius: "12px", minWidth: 180 } }}
-            >
-                <MenuItem
-                    onClick={() => {
-                        if (activeSubmission) {
-                            navigator.clipboard.writeText(JSON.stringify(activeSubmission.data, null, 2));
-                            toast.success("Submission JSON copied");
-                        }
-                        setMenuAnchor(null);
-                    }}
-                >
-                    <ContentCopyIcon sx={{ fontSize: 16, mr: 1.25 }} />
-                    Copy raw data
-                </MenuItem>
-                {activeSubmission?.lead && (
-                    <MenuItem
-                        component={Link}
-                        href={`/dashboard/leads/${activeSubmission.lead.id}`}
-                        onClick={() => setMenuAnchor(null)}
+    const columns = useMemo<ColumnDef<Submission, any>[]>(() => [
+        {
+            accessorKey: "createdAt",
+            header: "Date",
+            size: 170,
+            cell: ({ row }) => (
+                <span className="whitespace-nowrap font-semibold">
+                    {formatWorkspaceDateTime(row.original.createdAt)}
+                </span>
+            ),
+        },
+        {
+            accessorKey: "status",
+            header: "Status",
+            size: 120,
+            cell: ({ row }) => (
+                <Badge variant="outline" className={cn("font-bold text-[11px]", STATUS_BADGE_CLASSNAMES[row.original.status])}>
+                    {row.original.status}
+                </Badge>
+            ),
+        },
+        {
+            id: "lead",
+            header: "Lead",
+            size: 200,
+            cell: ({ row }) => {
+                const lead = row.original.lead;
+                if (!lead) return <span className="text-sm text-muted-foreground">-</span>;
+                return (
+                    <Link
+                        href={`/dashboard/leads/${lead.id}`}
+                        className="inline-flex items-center gap-1 font-bold text-primary no-underline hover:underline"
                     >
-                        <OpenInNewIcon sx={{ fontSize: 16, mr: 1.25 }} />
-                        Open lead
-                    </MenuItem>
-                )}
-            </Menu>
-        </Stack>
+                        {lead.name}
+                        <OpenInNewIcon className="size-3.5 text-muted-foreground" />
+                    </Link>
+                );
+            },
+        },
+        {
+            id: "email",
+            header: "Email",
+            size: 220,
+            cell: ({ row }) => (
+                <span className="text-sm">
+                    {row.original.lead?.email || row.original.data?.email || row.original.data?.Email || "-"}
+                </span>
+            ),
+        },
+        {
+            id: "spamScore",
+            header: "Spam Score",
+            size: 120,
+            cell: ({ row }) => (
+                <span className={cn("text-sm", row.original.spamScore > 0.5 ? "font-bold text-destructive" : "font-medium text-muted-foreground")}>
+                    {(row.original.spamScore * 100).toFixed(0)}%
+                </span>
+            ),
+        },
+        {
+            id: "actions",
+            header: "",
+            size: 60,
+            cell: ({ row }) => {
+                const submission = row.original;
+                return (
+                    <div className="flex justify-end">
+                        <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                                <Button variant="ghost" size="icon-sm" onClick={(e) => e.stopPropagation()}>
+                                    <MoreHorizIcon className="size-4" />
+                                </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end" className="w-44">
+                                <DropdownMenuItem
+                                    onClick={() => {
+                                        navigator.clipboard.writeText(JSON.stringify(submission.data, null, 2));
+                                        toast.success("Submission JSON copied");
+                                    }}
+                                >
+                                    <ContentCopyIcon className="size-4" />
+                                    Copy raw data
+                                </DropdownMenuItem>
+                                {submission.lead && (
+                                    <DropdownMenuItem asChild>
+                                        <Link href={`/dashboard/leads/${submission.lead.id}`}>
+                                            <OpenInNewIcon className="size-4" />
+                                            Open lead
+                                        </Link>
+                                    </DropdownMenuItem>
+                                )}
+                            </DropdownMenuContent>
+                        </DropdownMenu>
+                    </div>
+                );
+            },
+        },
+    ], []);
+
+    return (
+        <div className="flex flex-col gap-4">
+            <div className="flex flex-col justify-between gap-3 md:flex-row md:items-center">
+                <div>
+                    <h2 className="text-lg font-extrabold tracking-tight">
+                        Submissions ({total})
+                    </h2>
+                    <p className="text-sm text-muted-foreground">
+                        Review captured form submissions, lead matches, and spam signals.
+                    </p>
+                </div>
+                <div className="flex items-center gap-2">
+                    <Tooltip>
+                        <TooltipTrigger asChild>
+                            <Button variant="outline" size="icon-sm" onClick={fetchSubmissions} disabled={loading}>
+                                {loading ? <Loader2 className="size-4 animate-spin" /> : <RefreshIcon className="size-4" />}
+                            </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>Refresh</TooltipContent>
+                    </Tooltip>
+                    <QueueExportButton
+                        moduleName="FORMS"
+                        filters={{ exportScope: "SUBMISSIONS", formId }}
+                        label="Export CSV"
+                    />
+                </div>
+            </div>
+
+            <div className="flex flex-col gap-2 sm:flex-row">
+                <Card className="min-w-[180px] gap-0 rounded-xl bg-primary/[0.03] px-3.5 py-2.5">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                        Processed
+                    </p>
+                    <p className="mt-0.5 text-lg font-extrabold">
+                        {summary.processed}
+                    </p>
+                </Card>
+                <Card className="min-w-[180px] gap-0 rounded-xl px-3.5 py-2.5">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                        Needs Review
+                    </p>
+                    <p className="mt-0.5 text-lg font-extrabold">
+                        {summary.flagged}
+                    </p>
+                </Card>
+            </div>
+
+            {error && (
+                <Alert variant="destructive">
+                    <AlertDescription>{error}</AlertDescription>
+                </Alert>
+            )}
+
+            <DataTable
+                storageKey="form-submissions-table"
+                columns={columns}
+                data={submissions}
+                getRowId={(row) => row.id}
+                loading={loading}
+                emptyState={{
+                    title: "No submissions yet",
+                    description: "New captures will appear here once this form starts receiving responses.",
+                }}
+                totalItems={total}
+                pageIndex={pageIndex}
+                pageSize={limit}
+                pageSizeOptions={[limit]}
+                onPaginationChange={({ pageIndex: nextPageIndex }) => setPageIndex(nextPageIndex)}
+            />
+        </div>
     );
 }

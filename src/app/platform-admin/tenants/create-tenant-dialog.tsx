@@ -118,7 +118,7 @@ export function CreateTenantDialog({ onSuccess }: CreateTenantDialogProps) {
                                 Opportunities Module
                             </Label>
                             <p className="text-xs text-muted-foreground">
-                                Enable pipelines and lead conversion for this tenant.
+                                Enable opportunity types and lead conversion for this tenant.
                             </p>
                         </div>
                         <Switch

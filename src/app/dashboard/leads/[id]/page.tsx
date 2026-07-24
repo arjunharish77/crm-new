@@ -5,37 +5,18 @@ import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { motion } from "framer-motion";
 import {
-    alpha,
-    Avatar,
-    Box,
-    Button,
-    Card,
-    Chip,
-    CircularProgress,
-    Divider,
-    Grid,
-    IconButton,
-    MenuItem,
-    Paper,
-    Select,
-    Stack,
-    Tooltip,
-    Typography,
-    useTheme,
-} from "@mui/material";
-import {
-    Add as AddIcon,
-    ArrowBack as ArrowBackIcon,
-    Business as BusinessIcon,
-    Edit as EditIcon,
-    Email as EmailIcon,
-    FilterList as FilterListIcon,
-    Link as LinkIcon,
-    LocalFireDepartment as ScoreIcon,
-    Phone as PhoneIcon,
-    Source as SourceIcon,
-    Today as TodayIcon,
-} from "@mui/icons-material";
+    ArrowLeft,
+    Building2,
+    Calendar,
+    Flame,
+    Link2,
+    Loader2,
+    Mail,
+    Phone,
+    Plus,
+    Pencil,
+    Tag,
+} from "lucide-react";
 import { toast } from "sonner";
 import { formatWorkspaceDate, formatWorkspaceDateTime, parseWorkspaceDate } from "@/lib/date-format";
 import { apiFetch } from "@/lib/api";
@@ -50,14 +31,29 @@ import { Timeline } from "@/components/timeline/timeline";
 import { NotesPanel } from "@/components/common/notes-panel";
 import { ContextualFormsPanel } from "@/components/forms/contextual-forms-panel";
 import { RecordHistory } from "@/components/governance/record-history";
-import { formatCurrency } from "@/lib/utils";
+import { RelatedTasksPanel } from "@/components/tasks/related-tasks-panel";
+import { formatCurrency, cn } from "@/lib/utils";
 import { fadeInUp } from "@/lib/motion";
 import { useAuth } from "@/providers/auth-provider";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { PredictiveScorePanel } from "@/components/scoring/predictive-score";
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from "@/components/ui/select";
 
 type ActivityTimeFilter = "ALL" | "TODAY" | "7D" | "30D";
 
+const ALL_TYPES_VALUE = "ALL";
+
 export default function LeadDetailPage() {
-    const theme = useTheme();
     const params = useParams();
     const router = useRouter();
     const { user } = useAuth();
@@ -66,9 +62,10 @@ export default function LeadDetailPage() {
     const [lead, setLead] = useState<Lead | null>(null);
     const [activities, setActivities] = useState<Activity[]>([]);
     const [opportunities, setOpportunities] = useState<Opportunity[]>([]);
+    const [taskCount, setTaskCount] = useState(0);
     const [loading, setLoading] = useState(true);
     const [showEditDialog, setShowEditDialog] = useState(false);
-    const [tabValue, setTabValue] = useState<"activity" | "details" | "opportunities" | "notes" | "audit">("activity");
+    const [tabValue, setTabValue] = useState<"activity" | "details" | "scoring" | "opportunities" | "tasks" | "notes" | "audit">("activity");
     const [activityTypeFilter, setActivityTypeFilter] = useState<string>("ALL");
     const [activityTimeFilter, setActivityTimeFilter] = useState<ActivityTimeFilter>("ALL");
 
@@ -97,6 +94,9 @@ export default function LeadDetailPage() {
             } else if (Array.isArray(actResponse)) {
                 setActivities(actResponse);
             }
+
+            const taskData = await apiFetch<any[]>(`/tasks?leadId=${leadId}`);
+            setTaskCount(Array.isArray(taskData) ? taskData.length : 0);
         } catch {
             toast.error("Failed to fetch lead details");
         } finally {
@@ -162,68 +162,53 @@ export default function LeadDetailPage() {
 
     const lastActivity = activities[0];
     const openOpportunityValue = opportunities.reduce((sum, item) => sum + Number(item.amount || 0), 0);
-    const statusTone = getStatusTone(theme, lead?.status || "NEW");
+    const statusClassName = getStatusClassName(lead?.status || "NEW");
 
     if (loading) {
         return (
-            <Box sx={{ display: "flex", justifyContent: "center", alignItems: "center", minHeight: "60vh" }}>
-                <CircularProgress size={44} />
-            </Box>
+            <div className="flex min-h-[60vh] items-center justify-center">
+                <Loader2 className="size-11 animate-spin text-primary" />
+            </div>
         );
     }
 
     if (!lead) {
         return (
-            <Box sx={{ p: 4, textAlign: "center" }}>
-                <Typography variant="h5">Lead not found</Typography>
-                <Button onClick={() => router.push("/dashboard/leads")} sx={{ mt: 2 }}>
+            <div className="p-8 text-center">
+                <h1 className="text-2xl font-semibold">Lead not found</h1>
+                <Button onClick={() => router.push("/dashboard/leads")} className="mt-4">
                     Back to Leads
                 </Button>
-            </Box>
+            </div>
         );
     }
 
     return (
-        <Box
-            component={motion.div}
+        <motion.div
             variants={fadeInUp}
             initial="initial"
             animate="animate"
-            sx={{ maxWidth: 1440, mx: "auto", p: { xs: 1.25, md: 2 } }}
+            className="mx-auto max-w-[1440px] p-2.5 md:p-4"
         >
-            <Stack
-                direction={{ xs: "column", md: "row" }}
-                justifyContent="space-between"
-                alignItems={{ xs: "flex-start", md: "center" }}
-                spacing={2}
-                sx={{ mb: 2 }}
-            >
-                <Box>
+            <div className="mb-4 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+                <div>
                     <Button
-                        startIcon={<ArrowBackIcon />}
+                        variant="ghost"
                         onClick={() => router.back()}
-                        sx={{ mb: 0.75, borderRadius: "10px", color: "text.secondary", minHeight: 34 }}
+                        className="mb-1.5 h-[34px] rounded-[10px] px-3 text-muted-foreground"
                     >
+                        <ArrowLeft className="size-4" />
                         Back
                     </Button>
-                </Box>
+                </div>
 
-                <Stack direction="row" spacing={1} flexWrap="wrap">
+                <div className="flex flex-wrap items-center gap-2">
                     <CreateActivityDialog
                         defaultLeadId={lead.id}
                         onSuccess={loadData}
                         trigger={
-                            <Button
-                                color="secondary"
-                                startIcon={<AddIcon />}
-                                sx={{
-                                    borderRadius: "10px",
-                                    px: 1.75,
-                                    bgcolor: "secondaryContainer",
-                                    color: "onSecondaryContainer",
-                                    minHeight: 36,
-                                }}
-                            >
+                            <Button className="h-9 rounded-[10px] bg-secondary-container px-3.5 text-on-secondary-container shadow-none hover:bg-secondary-container/80">
+                                <Plus className="size-4" />
                                 Activity
                             </Button>
                         }
@@ -232,7 +217,8 @@ export default function LeadDetailPage() {
                         defaultLeadId={lead.id}
                         onSuccess={loadData}
                         trigger={
-                            <Button variant="outlined" startIcon={<AddIcon />} sx={{ borderRadius: "10px", px: 1.75, minHeight: 36 }}>
+                            <Button variant="outline" className="h-9 rounded-[10px] px-3.5">
+                                <Plus className="size-4" />
                                 Opportunity
                             </Button>
                         }
@@ -244,420 +230,317 @@ export default function LeadDetailPage() {
                         onSaved={loadData}
                     />
                     <Button
-                        variant="contained"
-                        startIcon={<EditIcon />}
                         onClick={() => setShowEditDialog(true)}
-                        sx={{ borderRadius: "10px", px: 2, minHeight: 36 }}
+                        className="h-9 rounded-[10px] px-4"
                     >
+                        <Pencil className="size-4" />
                         Edit
                     </Button>
-                </Stack>
-            </Stack>
+                </div>
+            </div>
 
-            <Grid container spacing={1.5}>
-                <Grid size={{ xs: 12, lg: 3.8 }}>
-                    <Stack spacing={1.5} sx={{ position: { lg: "sticky" }, top: { lg: 16 } }}>
-                        <Card
-                            sx={{
-                                borderRadius: "14px",
-                                overflow: "hidden",
-                                border: "1px solid",
-                                borderColor: alpha(theme.palette.primary.dark, 0.22),
-                                bgcolor: "transparent",
-                            }}
-                        >
-                            <Box
-                                sx={{
-                                    px: 2.5,
-                                    py: 2.25,
-                                    color: "common.white",
-                                    background: `linear-gradient(180deg, ${alpha(theme.palette.primary.dark, 0.96)} 0%, ${alpha(
-                                        theme.palette.primary.main,
-                                        0.92
-                                    )} 100%)`,
-                                }}
-                            >
-                                <Stack direction="row" spacing={1.25} alignItems="center" sx={{ mb: 1.25 }}>
-                                    <Avatar
-                                        sx={{
-                                            width: 48,
-                                            height: 48,
-                                            bgcolor: alpha("#ffffff", 0.14),
-                                            color: "common.white",
-                                            fontWeight: 800,
-                                            fontSize: "1.2rem",
-                                        }}
-                                    >
+            <div className="grid grid-cols-1 gap-3 lg:grid-cols-[3.8fr_8.2fr]">
+                <div className="flex flex-col gap-3 lg:sticky lg:top-4 lg:self-start">
+                    <Card className="gap-0 overflow-hidden rounded-[14px] border-primary/20 bg-transparent py-0">
+                        <div className="bg-gradient-to-b from-primary/95 to-primary/90 px-5 py-[18px] text-primary-foreground">
+                            <div className="mb-[10px] flex items-center gap-[10px]">
+                                <Avatar className="size-12">
+                                    <AvatarFallback className="bg-white/15 text-lg font-extrabold text-primary-foreground">
                                         {lead.name?.charAt(0) || "L"}
-                                    </Avatar>
-                                    <Box sx={{ minWidth: 0 }}>
-                                        <Typography variant="h6" sx={{ fontWeight: 800, lineHeight: 1.1 }}>
-                                            {lead.name}
-                                        </Typography>
-                                        <Typography variant="body2" sx={{ opacity: 0.82, fontStyle: "italic" }}>
-                                            {lead.status}
-                                        </Typography>
-                                    </Box>
-                                </Stack>
+                                    </AvatarFallback>
+                                </Avatar>
+                                <div className="min-w-0">
+                                    <h2 className="text-lg font-extrabold leading-tight">{lead.name}</h2>
+                                    <p className="text-sm italic opacity-80">{lead.status}</p>
+                                </div>
+                            </div>
 
-                                <Stack spacing={0.875}>
-                                    <CompactContactRow icon={<EmailIcon sx={{ fontSize: 15 }} />} value={lead.email || "No email"} />
-                                    <CompactContactRow icon={<PhoneIcon sx={{ fontSize: 15 }} />} value={lead.phone || "No phone"} onClick={lead.phone ? handleClickToCall : undefined} tooltip="Click to call" />
-                                    <CompactContactRow icon={<BusinessIcon sx={{ fontSize: 15 }} />} value={lead.company || "No company"} />
-                                    <CompactContactRow icon={<SourceIcon sx={{ fontSize: 15 }} />} value={lead.source || "Unknown source"} />
-                </Stack>
-            </Box>
+                            <div className="flex flex-col gap-[7px]">
+                                <CompactContactRow icon={<Mail className="size-[15px]" />} value={lead.email || "No email"} />
+                                <CompactContactRow icon={<Phone className="size-[15px]" />} value={lead.phone || "No phone"} onClick={lead.phone ? handleClickToCall : undefined} tooltip="Click to call" />
+                                <CompactContactRow icon={<Building2 className="size-[15px]" />} value={lead.company || "No company"} />
+                                <CompactContactRow icon={<Tag className="size-[15px]" />} value={lead.source || "Unknown source"} />
+                            </div>
+                        </div>
 
-                            <Grid container>
-                                <MetricCell label="Lead Score" value={String(lead.score ?? 0)} />
-                                <MetricCell label="Activities" value={String(activities.length)} />
-                                <MetricCell label="Deals" value={String(opportunities.length)} />
-                            </Grid>
-                        </Card>
+                        <div className="grid grid-cols-3">
+                            <MetricCell label="Lead Score" value={String(lead.score ?? 0)} />
+                            <MetricCell label="Activities" value={String(activities.length)} />
+                            <MetricCell label="Deals" value={String(opportunities.length)} />
+                        </div>
+                    </Card>
 
-                        <Card sx={{ borderRadius: "12px", border: "1px solid", borderColor: "divider" }}>
-                            <Box sx={{ px: 1.5, py: 1.125, borderBottom: "1px solid", borderColor: "divider" }}>
-                                <Typography variant="subtitle1" sx={{ fontWeight: 800 }}>
-                                    Lead Properties
-                                </Typography>
-                            </Box>
-                            <Stack divider={<Divider flexItem />}>
-                                <PropertyRow label="Status">
-                                    <Chip
-                                        label={lead.status}
-                                        size="small"
-                                        sx={{
-                                            height: 24,
-                                            fontWeight: 800,
-                                            fontSize: "0.68rem",
-                                            textTransform: "uppercase",
-                                            bgcolor: statusTone.bg,
-                                            color: statusTone.fg,
-                                        }}
-                                    />
-                                </PropertyRow>
-                                <PropertyRow label="Email">{lead.email || "—"}</PropertyRow>
-                                <PropertyRow label="Phone">{lead.phone || "—"}</PropertyRow>
-                                <PropertyRow label="Company">{lead.company || "—"}</PropertyRow>
-                                <PropertyRow label="Source">{lead.source || "—"}</PropertyRow>
-                                <PropertyRow label="Created">{formatWorkspaceDate(lead.createdAt)}</PropertyRow>
-                                <PropertyRow label="Updated">{formatWorkspaceDate(lead.updatedAt)}</PropertyRow>
-                            </Stack>
-                        </Card>
+                    <Card className="gap-0 rounded-xl py-0">
+                        <div className="border-b px-3 py-[9px]">
+                            <h3 className="text-base font-extrabold">Lead Properties</h3>
+                        </div>
+                        <div className="flex flex-col divide-y">
+                            <PropertyRow label="Status">
+                                <Badge
+                                    variant="outline"
+                                    className={cn("h-6 text-[0.68rem] font-extrabold uppercase tracking-wide", statusClassName)}
+                                >
+                                    {lead.status}
+                                </Badge>
+                            </PropertyRow>
+                            <PropertyRow label="Email">{lead.email || "—"}</PropertyRow>
+                            <PropertyRow label="Phone">{lead.phone || "—"}</PropertyRow>
+                            <PropertyRow label="Company">{lead.company || "—"}</PropertyRow>
+                            <PropertyRow label="Source">{lead.source || "—"}</PropertyRow>
+                            <PropertyRow label="Created">{formatWorkspaceDate(lead.createdAt)}</PropertyRow>
+                            <PropertyRow label="Updated">{formatWorkspaceDate(lead.updatedAt)}</PropertyRow>
+                        </div>
+                    </Card>
 
-                        <Card sx={{ borderRadius: "12px", border: "1px solid", borderColor: "divider", p: 1.5 }}>
-                            <Typography variant="subtitle1" sx={{ fontWeight: 800, mb: 1.125 }}>
-                                Quick Snapshot
-                            </Typography>
-                            <Grid container spacing={1}>
-                                <Grid size={{ xs: 4 }}>
-                                    <SnapshotCard icon={<ScoreIcon sx={{ fontSize: 16 }} />} label="Score" value={String(lead.score ?? 0)} />
-                                </Grid>
-                                <Grid size={{ xs: 4 }}>
-                                    <SnapshotCard icon={<TodayIcon sx={{ fontSize: 16 }} />} label="Last Touch" value={lastActivity ? relativeDay(lastActivity.createdAt) : "None"} />
-                                </Grid>
-                                <Grid size={{ xs: 4 }}>
-                                    <SnapshotCard icon={<LinkIcon sx={{ fontSize: 16 }} />} label="Pipeline" value={formatCurrency(openOpportunityValue)} />
-                                </Grid>
-                            </Grid>
-                        </Card>
-                    </Stack>
-                </Grid>
+                    <Card className="rounded-xl p-3">
+                        <h3 className="mb-[9px] text-base font-extrabold">Quick Snapshot</h3>
+                        <div className="grid grid-cols-3 gap-2">
+                            <SnapshotCard icon={<Flame className="size-4" />} label="Score" value={String(lead.score ?? 0)} />
+                            <SnapshotCard icon={<Calendar className="size-4" />} label="Last Touch" value={lastActivity ? relativeDay(lastActivity.createdAt) : "None"} />
+                            <SnapshotCard icon={<Link2 className="size-4" />} label="Open Opportunity Value" value={formatCurrency(openOpportunityValue)} />
+                        </div>
+                    </Card>
 
-                <Grid size={{ xs: 12, lg: 8.2 }}>
-                    <Card sx={{ borderRadius: "14px", border: "1px solid", borderColor: "divider", overflow: "hidden" }}>
-                        <Box
-                            sx={{
-                                px: 1,
-                                py: 1,
-                                borderBottom: "1px solid",
-                                borderColor: "divider",
-                                bgcolor: "surfaceContainerLowest",
-                            }}
-                        >
-                            <Stack
-                                direction={{ xs: "column", md: "row" }}
-                                justifyContent="space-between"
-                                alignItems={{ xs: "stretch", md: "center" }}
-                                spacing={1}
-                            >
-                                <Stack direction="row" spacing={0.75} sx={{ overflowX: "auto", pb: { xs: 0.25, md: 0 } }}>
+                    <PredictiveScorePanel recordType="LEAD" recordId={lead.id} score={lead.predictiveScore} />
+                </div>
+
+                <div>
+                    <Card className="gap-0 overflow-hidden rounded-[14px] py-0">
+                        <div className="border-b bg-surface-container-lowest px-2 py-2">
+                            <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                                <div className="flex gap-1.5 overflow-x-auto pb-0.5 md:pb-0">
                                     <WorkspaceTab label={`Activity History (${filteredActivities.length})`} active={tabValue === "activity"} onClick={() => setTabValue("activity")} />
                                     <WorkspaceTab label="Lead Details" active={tabValue === "details"} onClick={() => setTabValue("details")} />
+                                    <WorkspaceTab label="Scoring" active={tabValue === "scoring"} onClick={() => setTabValue("scoring")} />
                                     <WorkspaceTab label={`Opportunities (${opportunities.length})`} active={tabValue === "opportunities"} onClick={() => setTabValue("opportunities")} />
-
+                                    <WorkspaceTab label={`Tasks (${taskCount})`} active={tabValue === "tasks"} onClick={() => setTabValue("tasks")} />
                                     <WorkspaceTab label="Notes" active={tabValue === "notes"} onClick={() => setTabValue("notes")} />
                                     <WorkspaceTab label="Audit" active={tabValue === "audit"} onClick={() => setTabValue("audit")} />
-                                </Stack>
+                                </div>
+                            </div>
+                        </div>
 
-                            </Stack>
-                        </Box>
-
-                        <Box sx={{ p: { xs: 1.25, md: 1.5 } }}>
+                        <div className="p-2.5 md:p-3">
                             {tabValue === "activity" && (
-                                <Stack spacing={1.25}>
-                                    <Stack
-                                        direction={{ xs: "column", sm: "row" }}
-                                        spacing={0.75}
-                                        justifyContent="space-between"
-                                        alignItems={{ xs: "stretch", sm: "center" }}
-                                        sx={{
-                                            p: 1,
-                                            border: "1px solid",
-                                            borderColor: "divider",
-                                            borderRadius: "10px",
-                                            bgcolor: "surfaceContainerLowest",
-                                        }}
-                                    >
-                                        <Typography variant="caption" sx={{ fontWeight: 800, color: "text.secondary", textTransform: "uppercase", letterSpacing: "0.08em" }}>
+                                <div className="flex flex-col gap-[10px]">
+                                    <div className="flex flex-col gap-[6px] rounded-[10px] border bg-surface-container-lowest p-2 sm:flex-row sm:items-center sm:justify-between">
+                                        <span className="text-xs font-extrabold uppercase tracking-[0.08em] text-muted-foreground">
                                             Activity Filters
-                                        </Typography>
-                                        <Stack direction="row" spacing={0.75} flexWrap="wrap">
-                                            <Select
-                                                size="small"
-                                                value={activityTypeFilter}
-                                                onChange={(e) => setActivityTypeFilter(String(e.target.value))}
-                                                sx={{ minWidth: 148, borderRadius: "8px", bgcolor: "background.paper" }}
-                                            >
-                                                <MenuItem value="ALL">All Types</MenuItem>
-                                                {activityTypes.map((type) => (
-                                                    <MenuItem key={type.id} value={type.id}>
-                                                        {type.name}
-                                                    </MenuItem>
-                                                ))}
+                                        </span>
+                                        <div className="flex flex-wrap gap-[6px]">
+                                            <Select value={activityTypeFilter} onValueChange={setActivityTypeFilter}>
+                                                <SelectTrigger size="sm" className="min-w-[148px] rounded-lg bg-background">
+                                                    <SelectValue />
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                    <SelectItem value={ALL_TYPES_VALUE}>All Types</SelectItem>
+                                                    {activityTypes.map((type) => (
+                                                        <SelectItem key={type.id} value={type.id}>
+                                                            {type.name}
+                                                        </SelectItem>
+                                                    ))}
+                                                </SelectContent>
                                             </Select>
-                                            <Select
-                                                size="small"
-                                                value={activityTimeFilter}
-                                                onChange={(e) => setActivityTimeFilter(e.target.value as ActivityTimeFilter)}
-                                                sx={{ minWidth: 120, borderRadius: "8px", bgcolor: "background.paper" }}
-                                            >
-                                                <MenuItem value="ALL">All Time</MenuItem>
-                                                <MenuItem value="TODAY">Today</MenuItem>
-                                                <MenuItem value="7D">7 Days</MenuItem>
-                                                <MenuItem value="30D">30 Days</MenuItem>
+                                            <Select value={activityTimeFilter} onValueChange={(value) => setActivityTimeFilter(value as ActivityTimeFilter)}>
+                                                <SelectTrigger size="sm" className="min-w-[120px] rounded-lg bg-background">
+                                                    <SelectValue />
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                    <SelectItem value="ALL">All Time</SelectItem>
+                                                    <SelectItem value="TODAY">Today</SelectItem>
+                                                    <SelectItem value="7D">7 Days</SelectItem>
+                                                    <SelectItem value="30D">30 Days</SelectItem>
+                                                </SelectContent>
                                             </Select>
-                                        </Stack>
-                                    </Stack>
+                                        </div>
+                                    </div>
                                     <Timeline activities={filteredActivities} />
-                                </Stack>
+                                </div>
                             )}
 
                             {tabValue === "details" && (
-                                <Grid container spacing={1.25}>
-                                    <Grid size={{ xs: 12, md: 6 }}>
-                                        <DetailPanel title="Identity">
-                                            <PropertyRow label="Lead Name">{lead.name}</PropertyRow>
-                                            <PropertyRow label="Status">{lead.status}</PropertyRow>
-                                            <PropertyRow label="Company">{lead.company || "—"}</PropertyRow>
-                                            <PropertyRow label="Source">{lead.source || "—"}</PropertyRow>
-                                        </DetailPanel>
-                                    </Grid>
-                                    <Grid size={{ xs: 12, md: 6 }}>
-                                        <DetailPanel title="Contact">
-                                            <PropertyRow label="Email">{lead.email || "—"}</PropertyRow>
-                                            <PropertyRow label="Phone">{lead.phone || "—"}</PropertyRow>
-                                            <PropertyRow label="Created">{formatWorkspaceDateTime(lead.createdAt)}</PropertyRow>
-                                            <PropertyRow label="Updated">{formatWorkspaceDateTime(lead.updatedAt)}</PropertyRow>
-                                        </DetailPanel>
-                                    </Grid>
-                                </Grid>
+                                <div className="grid gap-[10px] md:grid-cols-2">
+                                    <DetailPanel title="Identity">
+                                        <PropertyRow label="Lead Name">{lead.name}</PropertyRow>
+                                        <PropertyRow label="Status">{lead.status}</PropertyRow>
+                                        <PropertyRow label="Company">{lead.company || "—"}</PropertyRow>
+                                        <PropertyRow label="Source">{lead.source || "—"}</PropertyRow>
+                                    </DetailPanel>
+                                    <DetailPanel title="Contact">
+                                        <PropertyRow label="Email">{lead.email || "—"}</PropertyRow>
+                                        <PropertyRow label="Phone">{lead.phone || "—"}</PropertyRow>
+                                        <PropertyRow label="Created">{formatWorkspaceDateTime(lead.createdAt)}</PropertyRow>
+                                        <PropertyRow label="Updated">{formatWorkspaceDateTime(lead.updatedAt)}</PropertyRow>
+                                    </DetailPanel>
+                                </div>
                             )}
 
-
+                            {tabValue === "scoring" && (
+                                <PredictiveScorePanel recordType="LEAD" recordId={lead.id} score={lead.predictiveScore} />
+                            )}
 
                             {tabValue === "opportunities" && (
-                                <Stack spacing={1.25}>
-                                    <Stack direction="row" justifyContent="space-between" alignItems="center">
-                                        <Typography variant="subtitle1" sx={{ fontWeight: 800 }}>
-                                            Linked Opportunities
-                                        </Typography>
+                                <div className="flex flex-col gap-[10px]">
+                                    <div className="flex items-center justify-between">
+                                        <h3 className="text-base font-extrabold">Linked Opportunities</h3>
                                         <CreateOpportunityDialog
                                             defaultLeadId={lead.id}
                                             onSuccess={loadData}
                                             trigger={
-                                                <Button variant="outlined" startIcon={<AddIcon />} sx={{ borderRadius: "10px", minHeight: 34 }}>
+                                                <Button variant="outline" className="h-[34px] rounded-[10px]">
+                                                    <Plus className="size-4" />
                                                     New Opportunity
                                                 </Button>
                                             }
                                         />
-                                    </Stack>
+                                    </div>
 
                                     {opportunities.length === 0 ? (
-                                        <Paper sx={{ p: 3.5, textAlign: "center", borderRadius: "10px", border: "1px dashed", borderColor: "divider" }}>
-                                            <Typography variant="body2" color="text.secondary">No opportunities associated with this lead yet.</Typography>
-                                        </Paper>
+                                        <div className="rounded-[10px] border border-dashed p-7 text-center">
+                                            <p className="text-sm text-muted-foreground">No opportunities associated with this lead yet.</p>
+                                        </div>
                                     ) : (
-                                        <Stack spacing={1}>
+                                        <div className="flex flex-col gap-2">
                                             {opportunities.map((opp) => (
-                                                <Paper
+                                                <div
                                                     key={opp.id}
-                                                    sx={{
-                                                        p: 1.25,
-                                                        borderRadius: "10px",
-                                                        border: "1px solid",
-                                                        borderColor: "divider",
-                                                        bgcolor: "surfaceContainerLowest",
-                                                    }}
+                                                    className="rounded-[10px] border bg-surface-container-lowest p-2.5"
                                                 >
-                                                    <Stack direction="row" justifyContent="space-between" alignItems="center" spacing={2}>
-                                                        <Box sx={{ minWidth: 0 }}>
-                                                            <Typography variant="body1" sx={{ fontWeight: 800 }}>
-                                                                {opp.title}
-                                                            </Typography>
-                                                            <Typography variant="body2" color="text.secondary">
+                                                    <div className="flex items-center justify-between gap-4">
+                                                        <div className="min-w-0">
+                                                            <p className="font-extrabold">{opp.title}</p>
+                                                            <p className="text-sm text-muted-foreground">
                                                                 {opp.stage?.name || "Unassigned"} • {formatCurrency(opp.amount || 0)}
-                                                            </Typography>
-                                                        </Box>
-                                                        <Button component={Link} href={`/dashboard/opportunities/${opp.id}`} variant="text" sx={{ whiteSpace: "nowrap", minHeight: 32 }}>
-                                                            Open
+                                                            </p>
+                                                        </div>
+                                                        <Button variant="ghost" asChild className="h-8 whitespace-nowrap">
+                                                            <Link href={`/dashboard/opportunities/${opp.id}`}>Open</Link>
                                                         </Button>
-                                                    </Stack>
-                                                </Paper>
+                                                    </div>
+                                                </div>
                                             ))}
-                                        </Stack>
+                                        </div>
                                     )}
-                                </Stack>
+                                </div>
                             )}
 
                             {tabValue === "notes" && (
-                                <Paper sx={{ p: 1.25, borderRadius: "10px", bgcolor: "surfaceContainerLowest" }}>
+                                <div className="rounded-[10px] bg-surface-container-lowest p-[10px]">
                                     <NotesPanel entityType="lead" entityId={lead.id} currentUserId={user?.id} />
-                                </Paper>
+                                </div>
+                            )}
+
+                            {tabValue === "tasks" && (
+                                <div className="rounded-[10px] bg-surface-container-lowest p-[10px]">
+                                    <RelatedTasksPanel leadId={lead.id} currentUserId={user?.id} />
+                                </div>
                             )}
 
                             {tabValue === "audit" && (
-                                <Paper sx={{ p: 1.125, borderRadius: "10px", bgcolor: "surfaceContainerLowest" }}>
+                                <div className="rounded-[10px] bg-surface-container-lowest p-[9px]">
                                     <RecordHistory entityType="LEAD" entityId={lead.id} />
-                                </Paper>
+                                </div>
                             )}
-                        </Box>
+                        </div>
                     </Card>
-                </Grid>
-            </Grid>
+                </div>
+            </div>
 
             <EditLeadDialog lead={lead} open={showEditDialog} onOpenChange={setShowEditDialog} onSuccess={loadData} />
-        </Box>
+        </motion.div>
     );
 }
 
 function CompactContactRow({ icon, value, onClick, tooltip }: { icon: React.ReactNode; value: string; onClick?: () => void; tooltip?: string }) {
     const row = (
-        <Stack
-            direction="row"
-            spacing={1}
-            alignItems="center"
+        <div
             onClick={onClick}
-            sx={{ cursor: onClick ? "pointer" : "default", "&:hover .contact-value": onClick ? { textDecoration: "underline" } : undefined }}
+            className={cn("group flex items-center gap-2", onClick && "cursor-pointer")}
         >
-            <Box sx={{ opacity: 0.9, display: "flex", alignItems: "center" }}>{icon}</Box>
-            <Typography className="contact-value" variant="body2" sx={{ fontWeight: 500, lineHeight: 1.35 }}>
+            <span className="flex items-center opacity-90">{icon}</span>
+            <span className={cn("text-sm font-medium leading-[1.35]", onClick && "group-hover:underline")}>
                 {value}
-            </Typography>
-        </Stack>
+            </span>
+        </div>
     );
-    return tooltip && onClick ? <Tooltip title={tooltip}>{row}</Tooltip> : row;
+    return tooltip && onClick ? (
+        <Tooltip>
+            <TooltipTrigger asChild>{row}</TooltipTrigger>
+            <TooltipContent>{tooltip}</TooltipContent>
+        </Tooltip>
+    ) : row;
 }
 
 function MetricCell({ label, value }: { label: string; value: string }) {
     return (
-        <Grid size={{ xs: 4 }}>
-            <Box
-                sx={{
-                    py: 1.125,
-                    px: 0.875,
-                    textAlign: "center",
-                    bgcolor: alpha("#000", 0.18),
-                    borderTop: "1px solid",
-                    borderColor: alpha("#fff", 0.08),
-                }}
-            >
-                <Typography variant="subtitle1" sx={{ color: "common.white", fontWeight: 800, lineHeight: 1.1 }}>
-                    {value}
-                </Typography>
-                <Typography variant="caption" sx={{ color: alpha("#fff", 0.8) }}>
-                    {label}
-                </Typography>
-            </Box>
-        </Grid>
+        <div className="border-t border-white/10 bg-black/20 px-[7px] py-[9px] text-center">
+            <p className="text-base font-extrabold leading-tight text-white">{value}</p>
+            <p className="text-xs text-white/80">{label}</p>
+        </div>
     );
 }
 
 function SnapshotCard({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) {
     return (
-        <Paper sx={{ p: 1, borderRadius: "10px", bgcolor: "surfaceContainerLowest", border: "1px solid", borderColor: "divider" }}>
-            <Stack spacing={0.375}>
-                <Box sx={{ color: "primary.main", display: "flex", alignItems: "center" }}>{icon}</Box>
-                <Typography variant="caption" color="text.secondary">
-                    {label}
-                </Typography>
-                <Typography variant="body2" sx={{ fontWeight: 800, lineHeight: 1.2 }}>
-                    {value}
-                </Typography>
-            </Stack>
-        </Paper>
+        <div className="rounded-[10px] border bg-surface-container-lowest p-2">
+            <div className="flex flex-col gap-[3px]">
+                <span className="flex items-center text-primary">{icon}</span>
+                <span className="text-xs text-muted-foreground">{label}</span>
+                <span className="text-sm font-extrabold leading-tight">{value}</span>
+            </div>
+        </div>
     );
 }
 
 function DetailPanel({ title, children }: { title: string; children: React.ReactNode }) {
     return (
-        <Card sx={{ borderRadius: "10px", border: "1px solid", borderColor: "divider" }}>
-            <Box sx={{ px: 1.5, py: 1.125, borderBottom: "1px solid", borderColor: "divider" }}>
-                <Typography variant="subtitle1" sx={{ fontWeight: 800 }}>
-                    {title}
-                </Typography>
-            </Box>
-            <Stack divider={<Divider flexItem />}>{children}</Stack>
+        <Card className="gap-0 rounded-[10px] py-0">
+            <div className="border-b px-3 py-[9px]">
+                <h3 className="text-base font-extrabold">{title}</h3>
+            </div>
+            <div className="flex flex-col divide-y">{children}</div>
         </Card>
     );
 }
 
 function PropertyRow({ label, children }: { label: string; children: React.ReactNode }) {
     return (
-        <Stack direction="row" justifyContent="space-between" spacing={2} sx={{ px: 1.5, py: 1.05 }}>
-            <Typography variant="body2" color="text.secondary">
-                {label}
-            </Typography>
-            <Box sx={{ fontWeight: 700, textAlign: "right", fontSize: '0.875rem' }}>
-                {children}
-            </Box>
-        </Stack>
+        <div className="flex items-center justify-between gap-4 px-3 py-[8.4px]">
+            <span className="text-sm text-muted-foreground">{label}</span>
+            <div className="text-right text-sm font-bold">{children}</div>
+        </div>
     );
 }
 
 function WorkspaceTab({ label, active, onClick }: { label: string; active: boolean; onClick: () => void }) {
     return (
-        <Button
+        <button
+            type="button"
             onClick={onClick}
-            sx={{
-                borderRadius: "8px",
-                px: 1.25,
-                py: 0.7,
-                minHeight: 34,
-                whiteSpace: "nowrap",
-                bgcolor: active ? "primary.main" : "transparent",
-                color: active ? "primary.contrastText" : "text.secondary",
-                fontWeight: active ? 800 : 600,
-                fontSize: "0.82rem",
-                "&:hover": {
-                    bgcolor: active ? "primary.main" : "action.hover",
-                },
-            }}
+            className={cn(
+                "h-[34px] shrink-0 whitespace-nowrap rounded-lg px-3 text-[0.82rem] font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                active
+                    ? "bg-primary font-extrabold text-primary-foreground"
+                    : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+            )}
         >
             {label}
-        </Button>
+        </button>
     );
 }
 
-function getStatusTone(theme: any, status: string) {
+// Same status -> tone convention used by leads/columns.tsx: no dedicated
+// "success" role in this M3 theme, so the qualified/contacted state reuses
+// "tertiary" the way the columns table does for CONVERTED.
+function getStatusClassName(status: string): string {
     const normalized = status.toLowerCase();
     if (normalized.includes("qualified") || normalized.includes("contact")) {
-        return { bg: alpha(theme.palette.success.main, 0.12), fg: theme.palette.success.main };
+        return "bg-tertiary/12 text-tertiary border-tertiary/25";
     }
     if (normalized.includes("lost") || normalized.includes("dead")) {
-        return { bg: alpha(theme.palette.error.main, 0.12), fg: theme.palette.error.main };
+        return "bg-destructive/12 text-destructive border-destructive/25";
     }
-    return { bg: alpha(theme.palette.primary.main, 0.1), fg: theme.palette.primary.main };
+    return "bg-primary/10 text-primary border-primary/20";
 }
 
 function relativeDay(value: string) {

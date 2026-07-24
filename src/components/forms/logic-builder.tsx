@@ -1,26 +1,16 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { ArrowRight as ArrowRightIcon, Plus as PlusIcon, Trash2 as DeleteIcon } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import {
-    Box,
-    Button,
-    FormControl,
-    InputLabel,
     Select,
-    MenuItem,
-    TextField,
-    Typography,
-    Stack,
-    IconButton,
-    Paper,
-    alpha,
-    useTheme
-} from "@mui/material";
-import {
-    Delete as DeleteIcon,
-    ArrowForward as ArrowRightIcon,
-    Add as PlusIcon
-} from "@mui/icons-material";
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from "@/components/ui/select";
 
 interface LogicRule {
     action: "SHOW" | "HIDE";
@@ -37,7 +27,6 @@ interface LogicBuilderProps {
 }
 
 export function ConditionalLogicBuilder({ fields, currentFieldId, value, onChange }: LogicBuilderProps) {
-    const theme = useTheme();
     const [rule, setRule] = useState<LogicRule>(value || {
         action: "SHOW",
         fieldId: "",
@@ -71,95 +60,88 @@ export function ConditionalLogicBuilder({ fields, currentFieldId, value, onChang
 
     if (!value && !rule.fieldId) {
         return (
-            <Paper
-                variant="outlined"
-                sx={{
-                    p: 4,
-                    borderStyle: 'dashed',
-                    textAlign: 'center',
-                    bgcolor: alpha(theme.palette.action.disabled, 0.05)
-                }}
-            >
-                <Typography variant="body2" color="text.secondary" gutterBottom>
+            <div className="rounded-lg border border-dashed bg-muted/40 p-6 text-center">
+                <p className="mb-2 text-sm text-muted-foreground">
                     No conditional logic applied.
-                </Typography>
+                </p>
                 <Button
-                    size="small"
-                    startIcon={<PlusIcon />}
+                    size="sm"
+                    variant="ghost"
+                    className="rounded-full"
                     onClick={() => updateRule({ fieldId: sourceFields[0]?.id || "" })}
-                    sx={{ borderRadius: 20 }}
                 >
+                    <PlusIcon className="size-4" />
                     Add Rule
                 </Button>
-            </Paper>
+            </div>
         );
     }
 
     return (
-        <Paper variant="outlined" sx={{ p: 2, bgcolor: alpha(theme.palette.primary.main, 0.02) }}>
-            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-                <Typography variant="subtitle2" sx={{ display: 'flex', alignItems: 'center', gap: 1, color: 'primary.main' }}>
-                    <ArrowRightIcon fontSize="small" /> Condition
-                </Typography>
-                <IconButton size="small" onClick={clearRule} color="error">
-                    <DeleteIcon fontSize="small" />
-                </IconButton>
-            </Box>
+        <div className="rounded-lg border bg-primary/[0.02] p-4">
+            <div className="mb-3 flex items-center justify-between">
+                <p className="flex items-center gap-1.5 text-sm font-semibold text-primary">
+                    <ArrowRightIcon className="size-3.5" /> Condition
+                </p>
+                <Button
+                    size="icon-sm"
+                    variant="ghost"
+                    className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+                    onClick={clearRule}
+                >
+                    <DeleteIcon className="size-3.5" />
+                </Button>
+            </div>
 
-            <Stack spacing={2}>
-                <Stack direction="row" spacing={1} alignItems="center">
-                    <Typography variant="body2">Then</Typography>
-                    <FormControl size="small" sx={{ width: 100 }}>
-                        <Select
-                            value={rule.action}
-                            onChange={(e) => updateRule({ action: e.target.value as any })}
-                        >
-                            <MenuItem value="SHOW">Show</MenuItem>
-                            <MenuItem value="HIDE">Hide</MenuItem>
-                        </Select>
-                    </FormControl>
-                    <Typography variant="body2">this field when:</Typography>
-                </Stack>
-
-                <FormControl fullWidth size="small">
-                    <InputLabel>Field</InputLabel>
-                    <Select
-                        value={rule.fieldId}
-                        label="Field"
-                        onChange={(e) => updateRule({ fieldId: e.target.value })}
-                    >
-                        {sourceFields.map((f) => (
-                            <MenuItem key={f.id} value={f.id}>
-                                {f.label}
-                            </MenuItem>
-                        ))}
+            <div className="space-y-3">
+                <div className="flex items-center gap-2 text-sm">
+                    <span>Then</span>
+                    <Select value={rule.action} onValueChange={(v) => updateRule({ action: v as LogicRule["action"] })}>
+                        <SelectTrigger size="sm" className="w-[100px]">
+                            <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="SHOW">Show</SelectItem>
+                            <SelectItem value="HIDE">Hide</SelectItem>
+                        </SelectContent>
                     </Select>
-                </FormControl>
+                    <span>this field when:</span>
+                </div>
 
-                <Stack direction="row" spacing={2}>
-                    <FormControl size="small" sx={{ width: '40%' }}>
-                        <InputLabel>Operator</InputLabel>
-                        <Select
-                            value={rule.operator}
-                            label="Operator"
-                            onChange={(e) => updateRule({ operator: e.target.value as any })}
-                        >
-                            <MenuItem value="equals">Equals</MenuItem>
-                            <MenuItem value="not_equals">Not Equals</MenuItem>
-                            <MenuItem value="contains">Contains</MenuItem>
-                            <MenuItem value="gt"> Greater Than</MenuItem>
-                            <MenuItem value="lt">Less Than</MenuItem>
-                        </Select>
-                    </FormControl>
-                    <TextField
-                        size="small"
+                <Select value={rule.fieldId} onValueChange={(v) => updateRule({ fieldId: v })}>
+                    <SelectTrigger size="sm" className="w-full">
+                        <SelectValue placeholder="Field" />
+                    </SelectTrigger>
+                    <SelectContent>
+                        {sourceFields.map((f) => (
+                            <SelectItem key={f.id} value={f.id}>
+                                {f.label}
+                            </SelectItem>
+                        ))}
+                    </SelectContent>
+                </Select>
+
+                <div className="flex gap-2">
+                    <Select value={rule.operator} onValueChange={(v) => updateRule({ operator: v as LogicRule["operator"] })}>
+                        <SelectTrigger size="sm" className="w-[40%]">
+                            <SelectValue placeholder="Operator" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="equals">Equals</SelectItem>
+                            <SelectItem value="not_equals">Not Equals</SelectItem>
+                            <SelectItem value="contains">Contains</SelectItem>
+                            <SelectItem value="gt">Greater Than</SelectItem>
+                            <SelectItem value="lt">Less Than</SelectItem>
+                        </SelectContent>
+                    </Select>
+                    <Input
                         placeholder="Value"
-                        fullWidth
+                        className="h-8 flex-1"
                         value={rule.value}
                         onChange={(e) => updateRule({ value: e.target.value })}
                     />
-                </Stack>
-            </Stack>
-        </Paper>
+                </div>
+            </div>
+        </div>
     );
 }

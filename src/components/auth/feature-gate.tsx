@@ -24,17 +24,19 @@ export function FeatureGate({
     // Check if user is platform admin (they see everything)
     if (user?.isPlatformAdmin) return <>{children}</>;
 
-    // Default features if not present in user profile
+    // Default features if not present in user profile (or not present on a
+    // partially-populated TenantFeature row — merge rather than replace so a
+    // missing column doesn't silently disable a feature that should default on).
     const defaultFeatures: Record<string, boolean> = {
         opportunityEnabled: true,
         automationEnabled: true,
         salesGroupsEnabled: true,
         formBuilderEnabled: true,
-        advancedReporting: false,
+        advancedReporting: true,
         apiAccessEnabled: false,
     };
 
-    const features = user?.features || defaultFeatures;
+    const features = { ...defaultFeatures, ...user?.features };
     const isEnabled = !!features[feature];
 
     if (invert) {
@@ -56,10 +58,10 @@ export function useFeature(feature: string): boolean {
         automationEnabled: true,
         salesGroupsEnabled: true,
         formBuilderEnabled: true,
-        advancedReporting: false,
+        advancedReporting: true,
         apiAccessEnabled: false,
     };
 
-    const features = user?.features || defaultFeatures;
+    const features = { ...defaultFeatures, ...user?.features };
     return !!features[feature];
 }

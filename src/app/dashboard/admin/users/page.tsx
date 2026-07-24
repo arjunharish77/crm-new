@@ -1,52 +1,29 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useMemo } from "react";
 import { apiFetch } from "@/lib/api";
-import {
-    Box,
-    Typography,
-    Button,
-    Card,
-    Stack,
-    Chip,
-    Avatar,
-    IconButton,
-    Tooltip,
-    useTheme,
-    alpha,
-} from "@mui/material";
-import { M3Button } from "@/components/ui-mui/m3-components";
-import {
-    Add as AddIcon,
-    Edit as EditIcon,
-    PersonOff as PersonOffIcon,
-    Delete as DeleteIcon,
-    Security as SecurityIcon,
-} from "@mui/icons-material";
-import {
-    GridColDef,
-    GridRenderCellParams,
-    GridRowId,
-} from "@mui/x-data-grid";
-import { StandardDataGrid } from "@/components/common/standard-data-grid";
+import { ColumnDef } from "@tanstack/react-table";
+import { Pencil, Shield, UserPlus, UserX, Users } from "lucide-react";
+import { DataTable } from "@/components/ui/data-table";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Badge } from "@/components/ui/badge";
+import { Button as IconButton } from "@/components/ui/button";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { toast } from "sonner";
 import { formatWorkspaceDateTime } from "@/lib/date-format";
 import { User } from "@/types/user";
 import { InviteUserDialog } from "./invite-user-dialog";
 import { EditUserDialog } from "./edit-user-dialog";
 import { BulkActionsToolbar } from "@/components/bulk-actions/bulk-toolbar";
-import { TableSkeleton } from "@/components/common/skeletons";
-import { EmptyState } from "@/components/common/empty-state";
 import { BulkAssignManagerDialog } from "./bulk-assign-manager-dialog";
 
 export default function UsersPage() {
-    const theme = useTheme();
     const [users, setUsers] = useState<User[]>([]);
     const [loading, setLoading] = useState(true);
     const [dialogOpen, setDialogOpen] = useState(false);
     const [editDialogOpen, setEditDialogOpen] = useState(false);
     const [userToEdit, setUserToEdit] = useState<User | null>(null);
-    const [selectedRows, setSelectedRows] = useState<GridRowId[]>([]);
+    const [selectedRows, setSelectedRows] = useState<string[]>([]);
     const [isAllSelected, setIsAllSelected] = useState(false);
     const [totalItems, setTotalItems] = useState(0);
 
@@ -115,6 +92,7 @@ export default function UsersPage() {
 
 
     const handleSelectAllFiltered = () => {
+        setSelectedRows(users.map((user) => user.id));
         setIsAllSelected(true);
         toast.success(`All ${totalItems} users selected`);
     };
@@ -124,246 +102,177 @@ export default function UsersPage() {
         setIsAllSelected(false);
     };
 
-    const columns: GridColDef[] = [
+    const columns = useMemo<ColumnDef<User, any>[]>(() => [
         {
-            field: 'name',
-            headerName: 'User',
-            flex: 1.5,
-            minWidth: 240,
-            renderCell: (params: GridRenderCellParams<User>) => (
-                <Stack
-                    direction="row"
-                    spacing={1.5}
-                    alignItems="center"
-                    sx={{
-                        width: '100%',
-                        minHeight: 56,
-                        py: 0.5,
-                    }}
-                >
-                    <Avatar
-                        sx={{
-                            width: 34,
-                            height: 34,
-                            bgcolor: alpha(theme.palette.primary.main, 0.1),
-                            color: theme.palette.primary.main,
-                            fontSize: '0.9rem',
-                            fontWeight: 700
-                        }}
-                    >
-                        {(params.row.name || params.row.email || "?").charAt(0).toUpperCase()}
+            accessorKey: 'name',
+            header: 'User',
+            size: 260,
+            cell: ({ row }) => (
+                <div className="flex min-h-14 w-full items-center gap-3 py-1">
+                    <Avatar className="size-8 bg-primary/10 text-sm font-bold text-primary">
+                        <AvatarFallback>
+                            {(row.original.name || row.original.email || "?").charAt(0).toUpperCase()}
+                        </AvatarFallback>
                     </Avatar>
-                    <Box sx={{ minWidth: 0, overflow: 'hidden' }}>
-                        <Typography
-                            variant="body2"
-                            sx={{
-                                fontWeight: 700,
-                                color: 'text.primary',
-                                lineHeight: 1.2,
-                                whiteSpace: 'nowrap',
-                                overflow: 'hidden',
-                                textOverflow: 'ellipsis',
-                            }}
-                        >
-                            {params.row.name || "Unnamed user"}
-                        </Typography>
-                        <Typography
-                            variant="caption"
-                            sx={{
-                                color: 'text.secondary',
-                                opacity: 0.8,
-                                display: 'block',
-                                mt: 0.35,
-                                whiteSpace: 'nowrap',
-                                overflow: 'hidden',
-                                textOverflow: 'ellipsis',
-                            }}
-                        >
-                            {params.row.email}
-                        </Typography>
-                    </Box>
-                </Stack>
+                    <div className="min-w-0 overflow-hidden">
+                        <div className="truncate text-sm font-bold leading-tight text-foreground">
+                            {row.original.name || "Unnamed user"}
+                        </div>
+                        <div className="mt-1 block truncate text-xs text-muted-foreground opacity-80">
+                            {row.original.email}
+                        </div>
+                    </div>
+                </div>
             ),
         },
         {
-            field: 'role',
-            headerName: 'Role',
-            flex: 1,
-            minWidth: 140,
-            renderCell: (params: GridRenderCellParams<User>) => (
-                params.row.role ? (
-                    <Chip
-                        icon={<SecurityIcon sx={{ fontSize: 14 }} />}
-                        label={params.row.role.name}
-                        size="small"
-                        sx={{
-                            borderRadius: '6px',
-                            fontWeight: 700,
-                            fontSize: '0.625rem',
-                            textTransform: 'uppercase',
-                            bgcolor: alpha(theme.palette.secondary.main, 0.08),
-                            color: theme.palette.secondary.main,
-                            border: '1px solid',
-                            borderColor: alpha(theme.palette.secondary.main, 0.2),
-                            '& .MuiChip-icon': { color: 'inherit' }
-                        }}
-                    />
-                ) : <Typography variant="caption" color="text.secondary">-</Typography>
+            accessorKey: 'role',
+            header: 'Role',
+            size: 160,
+            cell: ({ row }) => (
+                row.original.role ? (
+                    <Badge variant="outline" className="border-secondary/20 bg-secondary/10 font-bold uppercase text-secondary">
+                        <Shield className="size-3.5" />
+                        {row.original.role.name}
+                    </Badge>
+                ) : <span className="text-xs text-muted-foreground">-</span>
             ),
         },
         {
-            field: 'team',
-            headerName: 'Team',
-            flex: 1,
-            minWidth: 140,
-            renderCell: (params: GridRenderCellParams<User>) => (
-                <Typography variant="body2" color="text.secondary">
-                    {params.row.team?.name || "Unassigned"}
-                </Typography>
+            accessorKey: 'team',
+            header: 'Team',
+            size: 150,
+            cell: ({ row }) => (
+                <span className="text-sm text-muted-foreground">
+                    {row.original.team?.name || "Unassigned"}
+                </span>
             ),
         },
         {
-            field: 'status',
-            headerName: 'Status',
-            width: 120,
-            renderCell: (params: GridRenderCellParams<User>) => {
-                const status = params.row.status;
+            accessorKey: 'status',
+            header: 'Status',
+            size: 120,
+            cell: ({ row }) => {
+                const status = row.original.status;
                 const isActive = status === 'ACTIVE';
                 return (
-                    <Chip
-                        label={status}
-                        size="small"
-                        sx={{
-                            borderRadius: '6px',
-                            fontWeight: 700,
-                            fontSize: '0.625rem',
-                            textTransform: 'uppercase',
-                            bgcolor: isActive ? alpha(theme.palette.success.main, 0.08) : alpha(theme.palette.text.disabled, 0.08),
-                            color: isActive ? theme.palette.success.main : theme.palette.text.secondary,
-                            border: '1px solid',
-                            borderColor: isActive ? alpha(theme.palette.success.main, 0.2) : alpha(theme.palette.text.disabled, 0.2)
-                        }}
-                    />
+                    <Badge
+                        variant="outline"
+                        className={
+                            isActive
+                                ? "border-primary/20 bg-primary/10 font-bold uppercase text-primary"
+                                : "border-border bg-muted font-bold uppercase text-muted-foreground"
+                        }
+                    >
+                        {status}
+                    </Badge>
                 );
             },
         },
         {
-            field: 'lastLoginAt',
-            headerName: 'Last Login',
-            width: 160,
-            renderCell: (params: GridRenderCellParams<User>) => (
-                <Typography variant="caption" color="text.secondary">
-                    {params.row.lastLoginAt ? formatWorkspaceDateTime(params.row.lastLoginAt) : 'Never'}
-                </Typography>
+            accessorKey: 'lastLoginAt',
+            header: 'Last Login',
+            size: 170,
+            cell: ({ row }) => (
+                <span className="text-xs text-muted-foreground">
+                    {row.original.lastLoginAt ? formatWorkspaceDateTime(row.original.lastLoginAt) : 'Never'}
+                </span>
             ),
         },
         {
-            field: 'actions',
-            headerName: '',
-            type: 'actions',
-            width: 100,
-            renderCell: (params: GridRenderCellParams<User>) => (
-                <Stack direction="row" spacing={0.5}>
-                    <Tooltip title="Edit User">
-                        <IconButton size="small" onClick={() => handleEdit(params.row)}>
-                            <EditIcon sx={{ fontSize: 18 }} />
-                        </IconButton>
-                    </Tooltip>
-                    {params.row.status === 'ACTIVE' && (
-                        <Tooltip title="Deactivate">
+            id: 'actions',
+            header: '',
+            size: 110,
+            cell: ({ row }) => (
+                <div className="flex gap-1">
+                    <Tooltip>
+                        <TooltipTrigger asChild>
                             <IconButton
-                                size="small"
-                                color="warning"
-                                onClick={() => handleDeactivate([params.row.id])}
+                                variant="ghost"
+                                size="icon-sm"
+                                onClick={(event) => {
+                                    event.stopPropagation();
+                                    handleEdit(row.original);
+                                }}
                             >
-                                <PersonOffIcon sx={{ fontSize: 18 }} />
+                                <Pencil className="size-4" />
                             </IconButton>
+                        </TooltipTrigger>
+                        <TooltipContent>Edit User</TooltipContent>
+                    </Tooltip>
+                    {row.original.status === 'ACTIVE' && (
+                        <Tooltip>
+                            <TooltipTrigger asChild>
+                                <IconButton
+                                    variant="ghost"
+                                    size="icon-sm"
+                                    className="text-tertiary hover:bg-tertiary/10 hover:text-tertiary"
+                                    onClick={(event) => {
+                                        event.stopPropagation();
+                                        handleDeactivate([row.original.id]);
+                                    }}
+                                >
+                                    <UserX className="size-4" />
+                                </IconButton>
+                            </TooltipTrigger>
+                            <TooltipContent>Deactivate</TooltipContent>
                         </Tooltip>
                     )}
-                </Stack>
+                </div>
             ),
         },
-    ];
+    ], [handleDeactivate]);
 
     const [assignManagerDialogOpen, setAssignManagerDialogOpen] = useState(false);
 
-    // ... existing code ...
-
     return (
-        <Box sx={{ p: { xs: 1.5, md: 2 }, maxWidth: 1600, mx: 'auto' }}>
-            <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 2 }}>
-                <Box>
-                    <Typography variant="h6" sx={{ fontWeight: 800, letterSpacing: -0.7 }}>Users</Typography>
-                    <Typography variant="caption" color="text.secondary" sx={{ mt: 0.25 }}>
+        <div className="mx-auto max-w-[1600px] px-4 py-4 md:px-6">
+            <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                <div>
+                    <h1 className="text-xl font-semibold tracking-normal text-foreground">Users</h1>
+                    <p className="mt-1 text-sm text-muted-foreground">
                         Manage access, roles, and team assignments.
-                    </Typography>
-                </Box>
-                <M3Button
-                    variant="contained"
-                    startIcon={<AddIcon />}
+                    </p>
+                </div>
+                <IconButton
                     onClick={() => setDialogOpen(true)}
                 >
+                    <UserPlus className="size-4" />
                     Invite User
-                </M3Button>
-            </Stack>
+                </IconButton>
+            </div>
 
-            <Card
-                sx={{
-                    width: '100%',
-                    overflow: 'hidden',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    borderRadius: '14px',
-                    border: '1px solid',
-                    borderColor: 'divider',
-                    boxShadow: 'none',
-                }}
-            >
-                    {loading ? (
-                        <TableSkeleton rows={10} columns={5} />
-                    ) : users.length === 0 ? (
-                        <EmptyState
-                            title="No users found"
-                            description="Get started by inviting your first team member."
-                            action={
-                                <M3Button variant="outlined" startIcon={<AddIcon />} onClick={() => setDialogOpen(true)}>
-                                    Invite User
-                                </M3Button>
-                            }
-                        />
-                    ) : (
-                        <StandardDataGrid
-                            rows={users}
-                            columns={columns}
-                            getRowHeight={() => 56}
-                            checkboxSelection
-                            disableRowSelectionOnClick
-                            rowSelectionModel={selectedRows}
-                            onRowSelectionModelChange={setSelectedRows}
-                            totalItems={totalItems}
-                            selectedCount={selectedRows.length}
-                            isAllSelected={isAllSelected}
-                            onSelectAllFiltered={handleSelectAllFiltered}
-                            onClearSelection={clearSelection}
-                            currentCount={users.length}
-                            sx={{
-                                '& .MuiDataGrid-columnHeaders': {
-                                    bgcolor: 'surfaceContainerLowest',
-                                },
-                                '& .MuiDataGrid-row': {
-                                    minHeight: '56px !important',
-                                },
-                                '& .MuiDataGrid-cell': {
-                                    py: 0.5,
-                                    alignItems: 'center',
-                                },
-                                '& .MuiDataGrid-footerContainer': {
-                                    bgcolor: 'surfaceContainerLowest',
-                                },
-                            }}
-                        />
-                    )}
-            </Card>
+            <div className="flex w-full flex-col overflow-hidden rounded-xl border border-border bg-card">
+                <DataTable
+                    storageKey="admin-users-table"
+                    data={users}
+                    columns={columns}
+                    loading={loading}
+                    getRowId={(row) => row.id}
+                    enableRowSelection
+                    rowSelectionIds={selectedRows}
+                    onRowSelectionIdsChange={(ids) => {
+                        setSelectedRows(ids);
+                        if (isAllSelected) setIsAllSelected(false);
+                    }}
+                    totalItems={totalItems}
+                    isAllSelected={isAllSelected}
+                    onSelectAllFiltered={handleSelectAllFiltered}
+                    onClearSelection={clearSelection}
+                    defaultDensity="comfortable"
+                    emptyState={{
+                        icon: <Users className="size-10 text-muted-foreground opacity-50" />,
+                        title: "No users found",
+                        description: "Get started by inviting your first team member.",
+                        action: (
+                            <IconButton variant="outline" onClick={() => setDialogOpen(true)}>
+                                <UserPlus className="size-4" />
+                                Invite User
+                            </IconButton>
+                        ),
+                    }}
+                />
+            </div>
 
             <BulkActionsToolbar
                 selectedCount={isAllSelected ? totalItems : selectedRows.length}
@@ -373,7 +282,7 @@ export default function UsersPage() {
                     if (isAllSelected) {
                         handleDeactivate([/* all ids */]);
                     } else {
-                        handleDeactivate(selectedRows.map(id => String(id)));
+                        handleDeactivate(selectedRows);
                     }
                 }}
                 onAssignManager={() => setAssignManagerDialogOpen(true)}
@@ -381,7 +290,7 @@ export default function UsersPage() {
                     if (isAllSelected) {
                         handleDelete([/* all ids */]);
                     } else {
-                        handleDelete(selectedRows.map(id => String(id)));
+                        handleDelete(selectedRows);
                     }
                 }}
             />
@@ -410,7 +319,7 @@ export default function UsersPage() {
             <BulkAssignManagerDialog
                 open={assignManagerDialogOpen}
                 onOpenChange={setAssignManagerDialogOpen}
-                userIds={selectedRows.map(id => String(id))}
+                userIds={selectedRows}
                 isAllSelected={isAllSelected}
                 totalCount={totalItems}
                 onSuccess={() => {
@@ -418,6 +327,6 @@ export default function UsersPage() {
                     clearSelection();
                 }}
             />
-        </Box>
+        </div>
     );
 }

@@ -2,30 +2,18 @@
 
 import { useState } from 'react';
 import {
-    Dialog,
-    DialogTitle,
-    DialogContent,
-    DialogActions,
-    Button,
-    Tabs,
-    Tab,
-    Box,
-    Typography,
-    Paper,
-    IconButton,
-    Stack,
-    Tooltip,
-    alpha,
-    useTheme
-} from '@mui/material';
-import {
-    ContentCopy as CopyIcon,
     Check as CheckIcon,
     Code as CodeIcon,
-    Javascript as JavascriptIcon,
+    Copy as CopyIcon,
+    ExternalLink as ExternalLinkIcon,
+    FileCode as JavascriptIcon,
     Link as LinkIcon,
-    Close as CloseIcon
-} from '@mui/icons-material';
+} from 'lucide-react';
+import { StandardDialog } from '@/components/common/standard-dialog';
+import { Button } from '@/components/ui/button';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { cn } from '@/lib/utils';
 
 interface EmbedCodeDialogProps {
     open: boolean;
@@ -34,19 +22,25 @@ interface EmbedCodeDialogProps {
     formName: string;
 }
 
+function CodeBlock({ code }: { code: string }) {
+    return (
+        <pre className="my-2 overflow-x-auto rounded-lg border bg-neutral-900 p-4 font-mono text-[13px] text-neutral-100">
+            {code}
+        </pre>
+    );
+}
+
 export function EmbedCodeDialog({ open, onOpenChange, formId, formName }: EmbedCodeDialogProps) {
-    const theme = useTheme();
-    const [activeTab, setActiveTab] = useState('iframe');
     const [copiedTab, setCopiedTab] = useState<string | null>(null);
 
     const baseUrl = typeof window !== 'undefined' ? window.location.origin : 'https://yourcrm.com';
 
     const publicPath = `${baseUrl}/f/${formId}`;
 
-    const iframeCode = `<iframe 
-  src="${publicPath}" 
-  width="100%" 
-  height="600" 
+    const iframeCode = `<iframe
+  src="${publicPath}"
+  width="100%"
+  height="600"
   frameborder="0"
   style="border: 1px solid #e5e7eb; border-radius: 8px;">
 </iframe>`;
@@ -89,166 +83,93 @@ add_shortcode('crm_form', 'crm_form_shortcode');
         }
     };
 
-    const CodeBlock = ({ code }: { code: string }) => (
-        <Paper
-            variant="outlined"
-            sx={{
-                p: 2,
-                bgcolor: 'grey.900',
-                color: 'grey.100',
-                overflowX: 'auto',
-                fontFamily: 'monospace',
-                fontSize: 13,
-                borderRadius: 2,
-                my: 2,
-                position: 'relative'
-            }}
-        >
-            <pre style={{ margin: 0 }}>{code}</pre>
-        </Paper>
-    );
-
-    const handleClose = () => onOpenChange(false);
-
     return (
-        <Dialog
+        <StandardDialog
             open={open}
-            onClose={handleClose}
+            onClose={() => onOpenChange(false)}
+            title="Embed Form"
+            subtitle={formName}
+            icon={<CodeIcon className="size-4" />}
             maxWidth="md"
-            fullWidth
-            PaperProps={{
-                sx: { borderRadius: 3 }
-            }}
         >
-            <DialogTitle sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <Box>
-                    <Typography variant="h6">Embed Form</Typography>
-                    <Typography variant="body2" color="text.secondary">
-                        {formName}
-                    </Typography>
-                </Box>
-                <IconButton onClick={handleClose} size="small">
-                    <CloseIcon />
-                </IconButton>
-            </DialogTitle>
+            <Tabs defaultValue="iframe">
+                <TabsList>
+                    <TabsTrigger value="iframe">
+                        <CodeIcon className="size-3.5" /> Iframe
+                    </TabsTrigger>
+                    <TabsTrigger value="javascript">
+                        <JavascriptIcon className="size-3.5" /> JavaScript
+                    </TabsTrigger>
+                    <TabsTrigger value="wordpress">WordPress</TabsTrigger>
+                    <TabsTrigger value="link">
+                        <LinkIcon className="size-3.5" /> Direct Link
+                    </TabsTrigger>
+                </TabsList>
 
-            <DialogContent dividers>
-                <Box sx={{ borderBottom: 1, borderColor: 'divider', mb: 3 }}>
-                    <Tabs value={activeTab} onChange={(e, v) => setActiveTab(v)} aria-label="embed options">
-                        <Tab label="Iframe" value="iframe" icon={<CodeIcon fontSize="small" />} iconPosition="start" />
-                        <Tab label="JavaScript" value="javascript" icon={<JavascriptIcon fontSize="small" />} iconPosition="start" />
-                        <Tab label="WordPress" value="wordpress" />
-                        <Tab label="Direct Link" value="link" icon={<LinkIcon fontSize="small" />} iconPosition="start" />
-                    </Tabs>
-                </Box>
+                <TabsContent value="iframe">
+                    <p className="text-sm text-muted-foreground">
+                        Simple iframe embed - works on any HTML page.
+                    </p>
+                    <CodeBlock code={iframeCode} />
+                    <Button onClick={() => copyToClipboard(iframeCode, 'iframe')}>
+                        {copiedTab === 'iframe' ? <CheckIcon className="size-4" /> : <CopyIcon className="size-4" />}
+                        {copiedTab === 'iframe' ? 'Copied!' : 'Copy Code'}
+                    </Button>
+                </TabsContent>
 
-                {activeTab === 'iframe' && (
-                    <Box>
-                        <Typography variant="body2" color="text.secondary">
-                            Simple iframe embed - works on any HTML page.
-                        </Typography>
-                        <CodeBlock code={iframeCode} />
-                        <Button
-                            variant="contained"
-                            startIcon={copiedTab === 'iframe' ? <CheckIcon /> : <CopyIcon />}
-                            onClick={() => copyToClipboard(iframeCode, 'iframe')}
-                            color={copiedTab === 'iframe' ? "success" : "primary"}
-                        >
-                            {copiedTab === 'iframe' ? "Copied!" : "Copy Code"}
+                <TabsContent value="javascript">
+                    <p className="text-sm text-muted-foreground">
+                        JavaScript version - dynamically creates the iframe for better control.
+                    </p>
+                    <CodeBlock code={javascriptCode} />
+                    <Button onClick={() => copyToClipboard(javascriptCode, 'javascript')}>
+                        {copiedTab === 'javascript' ? <CheckIcon className="size-4" /> : <CopyIcon className="size-4" />}
+                        {copiedTab === 'javascript' ? 'Copied!' : 'Copy Code'}
+                    </Button>
+                </TabsContent>
+
+                <TabsContent value="wordpress">
+                    <p className="text-sm text-muted-foreground">
+                        WordPress shortcode setup. Add the PHP code to your theme&apos;s functions.php first.
+                    </p>
+                    <CodeBlock code={wordpressCode} />
+                    <Button onClick={() => copyToClipboard(wordpressCode, 'wordpress')}>
+                        {copiedTab === 'wordpress' ? <CheckIcon className="size-4" /> : <CopyIcon className="size-4" />}
+                        {copiedTab === 'wordpress' ? 'Copied!' : 'Copy Code'}
+                    </Button>
+                </TabsContent>
+
+                <TabsContent value="link">
+                    <p className="text-sm text-muted-foreground">
+                        Direct link to the standalone form page.
+                    </p>
+                    <div className="my-2 break-all rounded-lg border bg-muted/40 p-3 font-mono text-sm">
+                        {directLink}
+                    </div>
+                    <div className="flex gap-2">
+                        <Button onClick={() => copyToClipboard(directLink, 'link')}>
+                            {copiedTab === 'link' ? <CheckIcon className="size-4" /> : <CopyIcon className="size-4" />}
+                            {copiedTab === 'link' ? 'Copied!' : 'Copy Link'}
                         </Button>
-                    </Box>
-                )}
-
-                {activeTab === 'javascript' && (
-                    <Box>
-                        <Typography variant="body2" color="text.secondary">
-                            JavaScript version - dynamically creates the iframe for better control.
-                        </Typography>
-                        <CodeBlock code={javascriptCode} />
-                        <Button
-                            variant="contained"
-                            startIcon={copiedTab === 'javascript' ? <CheckIcon /> : <CopyIcon />}
-                            onClick={() => copyToClipboard(javascriptCode, 'javascript')}
-                            color={copiedTab === 'javascript' ? "success" : "primary"}
-                        >
-                            {copiedTab === 'javascript' ? "Copied!" : "Copy Code"}
+                        <Button variant="outline" onClick={() => window.open(directLink, '_blank')}>
+                            <LinkIcon className="size-4" />
+                            Open Preview
                         </Button>
-                    </Box>
-                )}
+                    </div>
+                </TabsContent>
+            </Tabs>
 
-                {activeTab === 'wordpress' && (
-                    <Box>
-                        <Typography variant="body2" color="text.secondary">
-                            WordPress shortcode setup. Add the PHP code to your theme's functions.php first.
-                        </Typography>
-                        <CodeBlock code={wordpressCode} />
-                        <Button
-                            variant="contained"
-                            startIcon={copiedTab === 'wordpress' ? <CheckIcon /> : <CopyIcon />}
-                            onClick={() => copyToClipboard(wordpressCode, 'wordpress')}
-                            color={copiedTab === 'wordpress' ? "success" : "primary"}
-                        >
-                            {copiedTab === 'wordpress' ? "Copied!" : "Copy Code"}
-                        </Button>
-                    </Box>
-                )}
-
-                {activeTab === 'link' && (
-                    <Box>
-                        <Typography variant="body2" color="text.secondary">
-                            Direct link to the standalone form page.
-                        </Typography>
-                        <Paper
-                            variant="outlined"
-                            sx={{
-                                p: 2,
-                                my: 2,
-                                bgcolor: alpha(theme.palette.action.disabled, 0.05),
-                                fontFamily: 'monospace',
-                                wordBreak: 'break-all'
-                            }}
-                        >
-                            {directLink}
-                        </Paper>
-                        <Stack direction="row" spacing={2}>
-                            <Button
-                                variant="contained"
-                                startIcon={copiedTab === 'link' ? <CheckIcon /> : <CopyIcon />}
-                                onClick={() => copyToClipboard(directLink, 'link')}
-                                color={copiedTab === 'link' ? "success" : "primary"}
-                            >
-                                {copiedTab === 'link' ? "Copied!" : "Copy Link"}
-                            </Button>
-                            <Button
-                                variant="outlined"
-                                onClick={() => window.open(directLink, '_blank')}
-                                startIcon={<LinkIcon />}
-                            >
-                                Open Preview
-                            </Button>
-                        </Stack>
-                    </Box>
-                )}
-
-                <Paper
-                    variant="outlined"
-                    sx={{
-                        mt: 4,
-                        p: 2,
-                        bgcolor: alpha(theme.palette.info.main, 0.05),
-                        borderColor: alpha(theme.palette.info.main, 0.2)
-                    }}
-                >
-                    <Typography variant="subtitle2" gutterBottom color="info.main">
-                        Tips
-                    </Typography>
-                    <Typography variant="body2" component="ul" sx={{ pl: 2, color: 'text.secondary' }}>
+            <Alert variant="info" className="mt-6">
+                <ExternalLinkIcon />
+                <AlertTitle>Tips</AlertTitle>
+                <AlertDescription>
+                    <ul className={cn('list-disc pl-4')}>
                         <li>Adjust width and height values to fit your container</li>
                         <li>Add UTM parameters to the URL for better tracking</li>
                         <li>Submissions will appear instantly in your dashboard</li>
-                    </Typography>
-                </Paper>
-            </DialogContent>
-        </Dialog>
+                    </ul>
+                </AlertDescription>
+            </Alert>
+        </StandardDialog>
     );
 }

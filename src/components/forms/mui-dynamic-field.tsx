@@ -1,21 +1,19 @@
 'use client';
 
 import React from 'react';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Checkbox } from '@/components/ui/checkbox';
 import {
-    TextField,
-    FormControl,
-    InputLabel,
     Select,
-    MenuItem,
-    FormControlLabel,
-    Checkbox,
-    FormHelperText,
-    Box,
-    Typography,
-} from '@mui/material';
-import { DatePicker } from '@mui/x-date-pickers/DatePicker';
-import { DateTimePicker } from '@mui/x-date-pickers/DateTimePicker';
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from '@/components/ui/select';
+import { cn } from '@/lib/utils';
 import { CustomFieldDefinition } from '@/types/custom-fields';
+import { formatWorkspaceDateInput, formatWorkspaceDateTimeInput, workspaceDateInputToIso, workspaceDateTimeInputToIso } from '@/lib/date-format';
 
 interface MuiDynamicFieldProps {
     field: CustomFieldDefinition;
@@ -25,133 +23,176 @@ interface MuiDynamicFieldProps {
     helperText?: string;
 }
 
+function optionValue(opt: any) {
+    return typeof opt === 'string' ? opt : opt.value;
+}
+
+function optionLabel(opt: any) {
+    return typeof opt === 'string' ? opt : opt.label;
+}
+
 export function MuiDynamicField({ field, value, onChange, error, helperText }: MuiDynamicFieldProps) {
     const label = `${field.label}${field.required ? ' *' : ''}`;
+    const fieldId = `dynamic-field-${field.key}`;
+    const message = error || helperText;
 
     switch (field.type) {
         case 'TEXT':
             return (
-                <TextField
-                    label={label}
-                    fullWidth
-                    value={value || ''}
-                    onChange={(e) => onChange(e.target.value)}
-                    error={!!error}
-                    helperText={error || helperText}
-                />
+                <div className="space-y-1.5">
+                    <Label htmlFor={fieldId}>{label}</Label>
+                    <Input
+                        id={fieldId}
+                        value={value || ''}
+                        onChange={(e) => onChange(e.target.value)}
+                        aria-invalid={!!error}
+                    />
+                    {message && (
+                        <p className={cn('text-xs', error ? 'text-destructive' : 'text-muted-foreground')}>{message}</p>
+                    )}
+                </div>
             );
 
         case 'NUMBER':
             return (
-                <TextField
-                    label={label}
-                    type="number"
-                    fullWidth
-                    value={value !== undefined ? value : ''}
-                    onChange={(e) => onChange(e.target.value === '' ? null : Number(e.target.value))}
-                    error={!!error}
-                    helperText={error || helperText}
-                />
+                <div className="space-y-1.5">
+                    <Label htmlFor={fieldId}>{label}</Label>
+                    <Input
+                        id={fieldId}
+                        type="number"
+                        value={value !== undefined && value !== null ? value : ''}
+                        onChange={(e) => onChange(e.target.value === '' ? null : Number(e.target.value))}
+                        aria-invalid={!!error}
+                    />
+                    {message && (
+                        <p className={cn('text-xs', error ? 'text-destructive' : 'text-muted-foreground')}>{message}</p>
+                    )}
+                </div>
             );
 
         case 'DROPDOWN':
             return (
-                <FormControl fullWidth error={!!error}>
-                    <InputLabel>{label}</InputLabel>
-                    <Select
-                        label={label}
-                        value={value || ''}
-                        onChange={(e) => onChange(e.target.value)}
-                    >
-                        <MenuItem value=""><em>None</em></MenuItem>
-                        {Array.isArray(field.options) && field.options.map((opt: any) => (
-                            <MenuItem key={typeof opt === 'string' ? opt : opt.value} value={typeof opt === 'string' ? opt : opt.value}>
-                                {typeof opt === 'string' ? opt : opt.label}
-                            </MenuItem>
-                        ))}
+                <div className="space-y-1.5">
+                    <Label htmlFor={fieldId}>{label}</Label>
+                    <Select value={value || undefined} onValueChange={onChange}>
+                        <SelectTrigger id={fieldId} className="w-full" aria-invalid={!!error}>
+                            <SelectValue placeholder="None" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            {Array.isArray(field.options) && field.options.map((opt: any) => (
+                                <SelectItem key={optionValue(opt)} value={optionValue(opt)}>
+                                    {optionLabel(opt)}
+                                </SelectItem>
+                            ))}
+                        </SelectContent>
                     </Select>
-                    {(error || helperText) && <FormHelperText>{error || helperText}</FormHelperText>}
-                </FormControl>
+                    {message && (
+                        <p className={cn('text-xs', error ? 'text-destructive' : 'text-muted-foreground')}>{message}</p>
+                    )}
+                </div>
             );
 
-        case 'MULTI_SELECT':
+        case 'MULTI_SELECT': {
+            const selected: string[] = Array.isArray(value) ? value : [];
+            const toggle = (optValue: string) => {
+                onChange(
+                    selected.includes(optValue)
+                        ? selected.filter((v) => v !== optValue)
+                        : [...selected, optValue]
+                );
+            };
             return (
-                <FormControl fullWidth error={!!error}>
-                    <InputLabel>{label}</InputLabel>
-                    <Select
-                        label={label}
-                        multiple
-                        value={Array.isArray(value) ? value : []}
-                        onChange={(e) => onChange(e.target.value)}
-                    >
-                        {Array.isArray(field.options) && field.options.map((opt: any) => (
-                            <MenuItem key={typeof opt === 'string' ? opt : opt.value} value={typeof opt === 'string' ? opt : opt.value}>
-                                {typeof opt === 'string' ? opt : opt.label}
-                            </MenuItem>
-                        ))}
-                    </Select>
-                    {(error || helperText) && <FormHelperText>{error || helperText}</FormHelperText>}
-                </FormControl>
+                <div className="space-y-1.5">
+                    <Label>{label}</Label>
+                    <div className={cn('space-y-2 rounded-md border p-3', error && 'border-destructive')}>
+                        {Array.isArray(field.options) && field.options.length > 0 ? (
+                            field.options.map((opt: any) => {
+                                const optValue = optionValue(opt);
+                                return (
+                                    <label key={optValue} className="flex items-center gap-2 text-sm">
+                                        <Checkbox
+                                            checked={selected.includes(optValue)}
+                                            onCheckedChange={() => toggle(optValue)}
+                                        />
+                                        {optionLabel(opt)}
+                                    </label>
+                                );
+                            })
+                        ) : (
+                            <p className="text-xs text-muted-foreground">No options configured</p>
+                        )}
+                    </div>
+                    {message && (
+                        <p className={cn('text-xs', error ? 'text-destructive' : 'text-muted-foreground')}>{message}</p>
+                    )}
+                </div>
             );
+        }
 
         case 'BOOLEAN':
             return (
-                <FormControl error={!!error} component="fieldset">
-                    <FormControlLabel
-                        control={
-                            <Checkbox
-                                checked={!!value}
-                                onChange={(e) => onChange(e.target.checked)}
-                            />
-                        }
-                        label={label}
-                    />
-                    {(error || helperText) && <FormHelperText>{error || helperText}</FormHelperText>}
-                </FormControl>
+                <div className="space-y-1.5">
+                    <label className="flex items-center gap-2 text-sm font-medium">
+                        <Checkbox
+                            checked={!!value}
+                            onCheckedChange={(checked) => onChange(!!checked)}
+                        />
+                        {label}
+                    </label>
+                    {message && (
+                        <p className={cn('text-xs', error ? 'text-destructive' : 'text-muted-foreground')}>{message}</p>
+                    )}
+                </div>
             );
 
         case 'DATE':
             return (
-                <DatePicker
-                    label={label}
-                    value={value ? new Date(value) : null}
-                    onChange={(date: Date | null) => onChange(date?.toISOString() || null)}
-                    slotProps={{
-                        textField: {
-                            fullWidth: true,
-                            error: !!error,
-                            helperText: error || helperText
-                        }
-                    }}
-                />
+                <div className="space-y-1.5">
+                    <Label htmlFor={fieldId}>{label}</Label>
+                    <Input
+                        id={fieldId}
+                        type="date"
+                        value={formatWorkspaceDateInput(value)}
+                        onChange={(e) => onChange(workspaceDateInputToIso(e.target.value))}
+                        aria-invalid={!!error}
+                    />
+                    {message && (
+                        <p className={cn('text-xs', error ? 'text-destructive' : 'text-muted-foreground')}>{message}</p>
+                    )}
+                </div>
             );
 
         case 'DATETIME':
             return (
-                <DateTimePicker
-                    label={label}
-                    value={value ? new Date(value) : null}
-                    onChange={(date: Date | null) => onChange(date?.toISOString() || null)}
-                    slotProps={{
-                        textField: {
-                            fullWidth: true,
-                            error: !!error,
-                            helperText: error || helperText
-                        }
-                    }}
-                />
+                <div className="space-y-1.5">
+                    <Label htmlFor={fieldId}>{label}</Label>
+                    <Input
+                        id={fieldId}
+                        type="datetime-local"
+                        value={formatWorkspaceDateTimeInput(value)}
+                        onChange={(e) => onChange(workspaceDateTimeInputToIso(e.target.value))}
+                        aria-invalid={!!error}
+                    />
+                    {message && (
+                        <p className={cn('text-xs', error ? 'text-destructive' : 'text-muted-foreground')}>{message}</p>
+                    )}
+                </div>
             );
 
         default:
             return (
-                <TextField
-                    label={label}
-                    fullWidth
-                    value={value || ''}
-                    onChange={(e) => onChange(e.target.value)}
-                    error={!!error}
-                    helperText={error || helperText}
-                />
+                <div className="space-y-1.5">
+                    <Label htmlFor={fieldId}>{label}</Label>
+                    <Input
+                        id={fieldId}
+                        value={value || ''}
+                        onChange={(e) => onChange(e.target.value)}
+                        aria-invalid={!!error}
+                    />
+                    {message && (
+                        <p className={cn('text-xs', error ? 'text-destructive' : 'text-muted-foreground')}>{message}</p>
+                    )}
+                </div>
             );
     }
 }

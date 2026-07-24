@@ -1,11 +1,8 @@
 'use client';
 
 import React, { useState } from "react";
-import {
-    Button as MuiButton,
-    Box,
-} from "@mui/material";
-import { Add as AddIcon } from "@mui/icons-material";
+import { Plus } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { StandardDialog } from "@/components/common/standard-dialog";
 import { OpportunityForm } from "./opportunity-form";
 import { ContextualFormsPanel } from "@/components/forms/contextual-forms-panel";
@@ -32,27 +29,23 @@ export function CreateOpportunityDialog({ onSuccess, defaultLeadId, trigger, ope
     return (
         <>
             {trigger ? (
-                <Box onClick={handleOpen}>{trigger}</Box>
+                <div onClick={handleOpen}>{trigger}</div>
             ) : (
-                <MuiButton
-                    variant="contained"
-                    color="secondary"
-                    startIcon={<AddIcon />}
-                    onClick={handleOpen}
-                >
+                <Button className="bg-secondary text-secondary-foreground hover:bg-secondary/80" onClick={handleOpen}>
+                    <Plus className="size-4" />
                     Add Opportunity
-                </MuiButton>
+                </Button>
             )}
 
             <StandardDialog
                 open={open}
                 onClose={handleClose}
                 title="Add Opportunity"
-                subtitle="Create a new deal in your pipeline."
-                icon={<AddIcon />}
+                subtitle="Create a new deal with an opportunity type and stage."
+                icon={<Plus className="size-4" />}
             >
                 <div style={{ padding: '8px 0' }}>
-                    <Box sx={{ display: "flex", justifyContent: "flex-end", mb: 1 }}>
+                    <div className="mb-2 flex justify-end">
                         <ContextualFormsPanel
                             placement="OPPORTUNITY_CREATE"
                             context={{ leadId: defaultLeadId ?? null }}
@@ -61,7 +54,7 @@ export function CreateOpportunityDialog({ onSuccess, defaultLeadId, trigger, ope
                                 onSuccess();
                             }}
                         />
-                    </Box>
+                    </div>
                     <OpportunityForm
                         initialData={defaultLeadId ? { leadId: defaultLeadId } : {}}
                         onSuccess={() => {

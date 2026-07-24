@@ -18,6 +18,6 @@ export async function POST(
     return NextResponse.json(result);
   } catch (error) {
     if (error instanceof Error && error.message === "UNAUTHORIZED") return unauthorized();
-    return serverError("Failed to test automation");
+    return serverError("Failed to test automation", error);
   }
 }

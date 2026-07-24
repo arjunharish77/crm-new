@@ -1,24 +1,23 @@
 "use client";
 
-import React from "react";
+import { Checkbox } from "@/components/ui/checkbox";
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
 import {
     Table,
     TableBody,
     TableCell,
-    TableContainer,
     TableHead,
+    TableHeader,
     TableRow,
-    Checkbox,
-    Typography,
-    Box,
-    FormControl,
-    Select,
-    MenuItem,
-    Paper,
-    FormControlLabel,
-    Switch,
-} from "@mui/material";
-import { PermissionModule, PermissionAction, RecordAccess, ModulePermissions } from "@/types/user";
+} from "@/components/ui/table";
+import { ModulePermissions, PermissionAction, PermissionModule, RecordAccess } from "@/types/user";
 
 interface PermissionMatrixProps {
     permissions: ModulePermissions;
@@ -91,60 +90,55 @@ export function PermissionMatrix({ permissions, recordAccess, onChange }: Permis
     };
 
     return (
-        <Box>
-            <Box sx={{ mb: 3 }}>
-                <Typography variant="subtitle2" gutterBottom sx={{ fontWeight: 600 }}>
-                    Record Visibility Scope
-                </Typography>
-                <Typography variant="caption" color="text.secondary" display="block" sx={{ mb: 1 }}>
+        <div>
+            <div className="mb-6">
+                <p className="mb-1 text-sm font-semibold">Record Visibility Scope</p>
+                <p className="mb-2 text-xs text-muted-foreground">
                     Determines which records the user can see based on ownership.
-                </Typography>
-                <FormControl size="small" fullWidth sx={{ maxWidth: 300 }}>
-                    <Select
-                        value={recordAccess}
-                        onChange={(e) => onChange(permissions, e.target.value as RecordAccess)}
-                    >
-                        <MenuItem value="OWN">Owned Records Only (Standard Rep)</MenuItem>
-                        <MenuItem value="TEAM">Team Records (Group Manager)</MenuItem>
-                        <MenuItem value="ALL">All Records (Tenant Admin)</MenuItem>
-                    </Select>
-                </FormControl>
-            </Box>
+                </p>
+                <Select value={recordAccess} onValueChange={(value) => onChange(permissions, value as RecordAccess)}>
+                    <SelectTrigger className="w-full max-w-[300px]">
+                        <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                        <SelectItem value="OWN">Owned Records Only (Standard Rep)</SelectItem>
+                        <SelectItem value="TEAM">Team Records (Group Manager)</SelectItem>
+                        <SelectItem value="ALL">All Records (Tenant Admin)</SelectItem>
+                    </SelectContent>
+                </Select>
+            </div>
 
-            <Typography variant="subtitle2" gutterBottom sx={{ fontWeight: 600 }}>
-                Module Permissions
-            </Typography>
-            <TableContainer component={Paper} variant="outlined" sx={{ borderRadius: 2 }}>
-                <Table size="small">
-                    <TableHead>
-                        <TableRow sx={{ bgcolor: "action.hover" }}>
-                            <TableCell sx={{ fontWeight: 600 }}>Module</TableCell>
-                            <TableCell align="center" sx={{ fontWeight: 600 }}>Full Access</TableCell>
+            <p className="mb-2 text-sm font-semibold">Module Permissions</p>
+            <div className="overflow-hidden rounded-lg border border-border">
+                <Table>
+                    <TableHeader>
+                        <TableRow className="bg-muted/50 hover:bg-muted/50">
+                            <TableHead className="font-semibold">Module</TableHead>
+                            <TableHead className="text-center font-semibold">Full Access</TableHead>
                             {ACTIONS.map((action) => (
-                                <TableCell key={action.key} align="center" sx={{ fontWeight: 600 }}>
+                                <TableHead key={action.key} className="text-center font-semibold">
                                     {action.label}
-                                </TableCell>
+                                </TableHead>
                             ))}
                         </TableRow>
-                    </TableHead>
+                    </TableHeader>
                     <TableBody>
                         {MODULES.map((module) => (
-                            <TableRow key={module.key} hover>
-                                <TableCell sx={{ fontWeight: 500 }}>{module.label}</TableCell>
-                                <TableCell align="center">
+                            <TableRow key={module.key}>
+                                <TableCell className="font-medium">{module.label}</TableCell>
+                                <TableCell className="text-center">
                                     <Switch
-                                        size="small"
+                                        size="sm"
                                         checked={isFullAccess(module.key)}
-                                        onChange={() => handleFullToggle(module.key)}
+                                        onCheckedChange={() => handleFullToggle(module.key)}
                                     />
                                 </TableCell>
                                 {ACTIONS.map((action) => (
-                                    <TableCell key={action.key} align="center">
+                                    <TableCell key={action.key} className="text-center">
                                         <Checkbox
-                                            size="small"
                                             disabled={isFullAccess(module.key)}
                                             checked={isActionActive(module.key, action.key)}
-                                            onChange={() => handleActionToggle(module.key, action.key)}
+                                            onCheckedChange={() => handleActionToggle(module.key, action.key)}
                                         />
                                     </TableCell>
                                 ))}
@@ -152,7 +146,7 @@ export function PermissionMatrix({ permissions, recordAccess, onChange }: Permis
                         ))}
                     </TableBody>
                 </Table>
-            </TableContainer>
-        </Box>
+            </div>
+        </div>
     );
 }

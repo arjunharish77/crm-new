@@ -16,6 +16,7 @@ import {
 } from "recharts";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { apiFetch } from "@/lib/api";
+import { formatCurrency } from "@/lib/utils";
 
 export function AnalyticsDashboard() {
     const [oppStats, setOppStats] = useState([]);
@@ -52,7 +53,7 @@ export function AnalyticsDashboard() {
         <div className="grid gap-4 md:grid-cols-2">
             <Card className="col-span-1">
                 <CardHeader>
-                    <CardTitle>Pipeline Value by Stage</CardTitle>
+                    <CardTitle>Opportunity Value by Stage</CardTitle>
                 </CardHeader>
                 <CardContent className="h-[300px]">
                     <ResponsiveContainer width="100%" height="100%">
@@ -61,7 +62,7 @@ export function AnalyticsDashboard() {
                             <XAxis dataKey="stage" />
                             <YAxis />
                             <Tooltip
-                                formatter={(value) => [`$${Number(value).toLocaleString()}`, "Value"]}
+                                formatter={(value) => [formatCurrency(Number(value)), "Value"]}
                             />
                             <Bar dataKey="value" fill="#8884d8" name="Total Value" />
                         </BarChart>

@@ -4,69 +4,66 @@ import { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import { Lead } from "@/types/leads";
 import { PaginatedResponse } from "@/types/common";
 import { apiFetch } from "@/lib/api";
-import {
-    Box,
-    Typography,
-    Button,
-    Card,
-    CardContent,
-    Stack,
-    IconButton,
-    Tooltip,
-    Chip,
-    Dialog,
-    DialogActions,
-    DialogContent,
-    DialogTitle,
-    FormControl,
-    InputLabel,
-    MenuItem,
-    Avatar,
-    Paper,
-    Select,
-    useTheme,
-    alpha,
-} from "@mui/material";
-import { M3Button } from "@/components/ui-mui/m3-components";
-import {
-    GridColDef,
-    GridPaginationModel,
-    GridRowId,
-} from "@mui/x-data-grid";
-import { StandardDataGrid } from "@/components/common/standard-data-grid";
-import {
-    FilterAlt as FilterIcon,
-    Visibility as ViewIcon,
-    Delete as DeleteIcon,
-    Edit as EditIcon,
-    Link as LinkIcon,
-    PlaylistAdd as AddToListIcon,
-} from "@mui/icons-material";
+import { ListPlus } from "lucide-react";
+import { Filter as FilterIconLucide } from "lucide-react";
+import { DataTable } from "@/components/ui/data-table";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Label } from "@/components/ui/label";
+import { StandardDialog } from "@/components/common/standard-dialog";
+import { buildLeadColumns } from "./columns";
 import { toast } from "sonner";
 import Link from "next/link";
 import { formatWorkspaceDate } from "@/lib/date-format";
 import { CreateLeadDialog } from "./create-lead-dialog";
 import { RecordPreview } from "@/components/common/record-preview";
 import { BulkActionsToolbar } from "@/components/bulk-actions/bulk-toolbar";
-import { EmptyState } from "@/components/common/empty-state";
 import { EditLeadDialog } from "./edit-lead-dialog";
 import { AdvancedFilterModal, FilterGroup } from "@/components/filters/advanced-filter-modal";
+import { FilterConfig } from "@/types/filters";
+import { QueueExportButton } from "@/components/exports/queue-export-button";
+
+const EMPTY_FILTERS: FilterConfig = { conditions: [], logic: "AND" };
+
+function filtersToQuery(filters: FilterConfig) {
+    return filters.conditions.length > 0 ? JSON.stringify([filters]) : "";
+}
+
+function groupsToFilterConfig(groups: FilterGroup[]): FilterConfig {
+    const firstGroup = groups[0];
+    if (!firstGroup) return EMPTY_FILTERS;
+    return {
+        logic: firstGroup.logic,
+        conditions: groups.flatMap((group) =>
+            group.conditions
+                .filter((condition) => condition.field)
+                .map((condition) => ({
+                    id: condition.id,
+                    field: condition.field,
+                    operator: condition.operator as any,
+                    value: condition.value,
+                }))
+        ),
+    };
+}
 
 export default function LeadsPage() {
-    const theme = useTheme();
+    const [urlFilters, setUrlFilters] = useState("");
     const [data, setData] = useState<Lead[]>([]);
     const [loading, setLoading] = useState(true);
     const [totalItems, setTotalItems] = useState(0);
-    const [paginationModel, setPaginationModel] = useState<GridPaginationModel>({
+    const [paginationModel, setPaginationModel] = useState<{ page: number; pageSize: number }>({
         page: 0,
         pageSize: 10,
     });
     const [isAllSelected, setIsAllSelected] = useState(false);
-    const [selectedRows, setSelectedRows] = useState<GridRowId[]>([]);
+    const [selectedRows, setSelectedRows] = useState<string[]>([]);
     const [quickViewLeadId, setQuickViewLeadId] = useState<string | null>(null);
     const [editLeadOpen, setEditLeadOpen] = useState(false);
     const [leadToEdit, setLeadToEdit] = useState<Lead | null>(null);
     const [filterOpen, setFilterOpen] = useState(false);
+    const [filters, setFilters] = useState<FilterConfig>(EMPTY_FILTERS);
     const [addToListOpen, setAddToListOpen] = useState(false);
     const [staticLists, setStaticLists] = useState<any[]>([]);
     const [targetListId, setTargetListId] = useState("");
@@ -77,6 +74,7 @@ export default function LeadsPage() {
             const params = new URLSearchParams();
             params.set('page', (paginationModel.page + 1).toString());
             params.set('limit', paginationModel.pageSize.toString());
+            if (urlFilters) params.set("filters", urlFilters);
 
             const response = await apiFetch<PaginatedResponse<Lead> | Lead[]>(`/leads?${params.toString()}`);
 
@@ -94,7 +92,17 @@ export default function LeadsPage() {
         } finally {
             setLoading(false);
         }
-    }, [paginationModel]);
+    }, [paginationModel, urlFilters]);
+
+    useEffect(() => {
+        setUrlFilters(new URLSearchParams(window.location.search).get("filters") ?? "");
+    }, []);
+
+    const applyFilters = useCallback((nextFilters: FilterConfig) => {
+        setFilters(nextFilters);
+        setUrlFilters(filtersToQuery(nextFilters));
+        setPaginationModel((current) => ({ ...current, page: 0 }));
+    }, []);
 
     useEffect(() => {
         fetchData();
@@ -122,128 +130,14 @@ export default function LeadsPage() {
         setEditLeadOpen(true);
     };
 
-    const columns: GridColDef[] = [
-        {
-            field: 'name',
-            headerName: 'Lead Name',
-            flex: 1,
-            minWidth: 220,
-            renderCell: (params) => (
-                <Stack direction="row" spacing={1.5} alignItems="center" sx={{ height: '100%' }}>
-                    <Avatar
-                        sx={{
-                            width: 32,
-                            height: 32,
-                            fontSize: '0.875rem',
-                            bgcolor: alpha(theme.palette.primary.main, 0.1),
-                            color: theme.palette.primary.main,
-                            fontWeight: 700
-                        }}
-                    >
-                        {(params.value as string)?.[0] || 'L'}
-                    </Avatar>
-                    <Box component={Link} href={`/dashboard/leads/${params.row.id}`} sx={{
-                        color: 'primary.main',
-                        textDecoration: 'none',
-                        fontWeight: 700,
-                        '&:hover': { textDecoration: 'underline' }
-                    }}>
-                        {params.value}
-                    </Box>
-                </Stack>
-            ),
-        },
-        {
-            field: 'email',
-            headerName: 'Email',
-            flex: 1,
-            minWidth: 200,
-            renderCell: (params) => (
-                <Typography variant="body2" color="text.secondary">
-                    {params.value}
-                </Typography>
-            )
-        },
-        {
-            field: 'status',
-            headerName: 'Status',
-            width: 140,
-            renderCell: (params) => {
-                const status = params.value as string;
-                const getStatusColor = (s: string) => {
-                    switch (s) {
-                        case 'NEW': return theme.palette.primary;
-                        case 'QUALIFIED': return theme.palette.success;
-                        case 'LOST': return theme.palette.error;
-                        case 'CONVERTED': return theme.palette.secondary;
-                        default: return theme.palette.info;
-                    }
-                };
-                const color = getStatusColor(status);
-                return (
-                    <Chip
-                        label={status}
-                        size="small"
-                        sx={{
-                            fontWeight: 700,
-                            fontSize: '0.625rem',
-                            borderRadius: '6px',
-                            textTransform: 'uppercase',
-                            bgcolor: alpha(color.main, 0.08),
-                            color: color.main,
-                            border: '1px solid',
-                            borderColor: alpha(color.main, 0.2)
-                        }}
-                    />
-                );
-            }
-        },
-        {
-            field: 'source',
-            headerName: 'Source',
-            width: 130,
-            renderCell: (params) => (
-                <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 500 }}>
-                    {params.value}
-                </Typography>
-            )
-        },
-        {
-            field: 'createdAt',
-            headerName: 'Created',
-            width: 140,
-            renderCell: (params) => (
-                <Typography variant="caption" color="text.secondary">
-                    {formatWorkspaceDate(params.value as string)}
-                </Typography>
-            )
-        },
-        {
-            field: 'actions',
-            headerName: '',
-            type: 'actions',
-            width: 80,
-            renderCell: (params) => (
-                <Stack direction="row" spacing={0.5}>
-                    <Tooltip title="View Preview">
-                        <IconButton size="small" onClick={() => setQuickViewLeadId(params.row.id as string)}>
-                            <ViewIcon sx={{ fontSize: 18 }} />
-                        </IconButton>
-                    </Tooltip>
-                    <Tooltip title="Open Detail">
-                        <IconButton size="small" component={Link} href={`/dashboard/leads/${params.row.id}`}>
-                            <LinkIcon sx={{ fontSize: 18 }} />
-                        </IconButton>
-                    </Tooltip>
-                    <Tooltip title="Edit">
-                        <IconButton size="small" onClick={() => handleEdit(params.row as Lead)}>
-                            <EditIcon sx={{ fontSize: 18 }} />
-                        </IconButton>
-                    </Tooltip>
-                </Stack>
-            )
-        }
-    ];
+    const columns = useMemo(
+        () =>
+            buildLeadColumns({
+                onQuickView: (leadId) => setQuickViewLeadId(leadId),
+                onEdit: handleEdit,
+            }),
+        []
+    );
 
 
     const handleSelectAllFiltered = () => {
@@ -311,23 +205,30 @@ export default function LeadsPage() {
     };
 
     return (
-        <Box sx={{ height: '100%', width: '100%', display: 'flex', flexDirection: 'column' }}>
-            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-                <Box>
-                    <Typography variant="h6" sx={{ fontWeight: 700, letterSpacing: -0.5 }}>Leads</Typography>
-                    <Typography variant="caption" color="text.secondary">Manage and track your sales prospects</Typography>
-                </Box>
-                <Box sx={{ display: 'flex', gap: 1 }}>
-                    <M3Button
-                        variant="outlined"
-                        startIcon={<FilterIcon />}
+        <div className="flex h-full w-full flex-col">
+            <div className="mb-4 flex items-center justify-between">
+                <div>
+                    <h1 className="text-lg font-bold tracking-[-0.5px]">Leads</h1>
+                    <p className="text-xs text-muted-foreground">Manage and track your sales prospects</p>
+                </div>
+                <div className="flex gap-2">
+                    <QueueExportButton
+                        moduleName="LEADS"
+                        filters={{ ...filters, urlFilters }}
+                        selectedIds={isAllSelected ? [] : selectedRows}
+                        currentPageIds={data.map((lead) => lead.id)}
+                        totalItems={totalItems}
+                    />
+                    <Button
+                        variant="outline"
                         onClick={() => setFilterOpen(true)}
                     >
+                        <FilterIconLucide className="size-4" />
                         Filters
-                    </M3Button>
+                    </Button>
                     <CreateLeadDialog onSuccess={fetchData} />
-                </Box>
-            </Box>
+                </div>
+            </div>
 
             <AdvancedFilterModal
                 open={filterOpen}
@@ -345,76 +246,55 @@ export default function LeadsPage() {
                         ]
                     },
                     { label: 'Source', key: 'source', type: 'text' },
+                    {
+                        label: 'Score Band', key: 'predictiveScoreBand', type: 'select', options: [
+                            { label: 'Hot', value: 'HOT' },
+                            { label: 'Warm', value: 'WARM' },
+                            { label: 'Cold', value: 'COLD' },
+                            { label: 'Risk', value: 'RISK' },
+                        ]
+                    },
+                    { label: 'Score Confidence', key: 'predictiveConfidence', type: 'number' },
+                    { label: 'Conversion Probability', key: 'predictiveConversionProbability', type: 'number' },
+                    { label: 'Stall Risk', key: 'predictiveStallRisk', type: 'number' },
                 ]}
                 onApply={(filters: FilterGroup[]) => {
-                    // Refresh data with new filters (serialized as JSON for header/query)
-                    const params = new URLSearchParams();
-                    params.set('page', '1');
-                    params.set('limit', paginationModel.pageSize.toString());
-                    params.set('filters', JSON.stringify(filters));
-
-                    setLoading(true);
-                    apiFetch(`/leads?${params.toString()}`)
-                        .then((res: any) => {
-                            if (res.data) {
-                                setData(res.data);
-                                setTotalItems(res.meta?.total || res.data.length);
-                            }
-                        })
-                        .catch(() => toast.error("Failed to filter leads"))
-                        .finally(() => setLoading(false));
+                    applyFilters(groupsToFilterConfig(filters));
                 }}
             />
 
-            <Card sx={{
-                flexGrow: 1,
-                display: 'flex',
-                flexDirection: 'column',
-                borderRadius: '14px',
-                border: '1px solid',
-                borderColor: 'divider',
-                bgcolor: 'surfaceContainerLow',
-                overflow: 'hidden'
-            }}>
-                {data.length === 0 && !loading ? (
-                    <EmptyState
-                        icon={<FilterIcon sx={{ fontSize: 48, color: 'text.secondary', opacity: 0.5 }} />}
-                        title="No leads found"
-                        description="Get started by adding your first lead."
-                        action={<CreateLeadDialog onSuccess={fetchData} />}
-                    />
-                ) : (
-                    <Box sx={{ width: '100%', overflowX: 'auto' }}>
-                        <Box sx={{ minWidth: 800 }}>
-                            <StandardDataGrid
-                                rows={data}
-                                columns={columns}
-                                loading={loading}
-                                paginationMode="server"
-                                rowCount={totalItems}
-                                paginationModel={paginationModel}
-                                onPaginationModelChange={setPaginationModel}
-                                checkboxSelection
-                                disableRowSelectionOnClick
-                                rowSelectionModel={selectedRows}
-                                onRowSelectionModelChange={(rows) => {
-                                    setSelectedRows(rows);
-                                    if (isAllSelected) {
-                                        setIsAllSelected(false);
-                                    }
-                                }}
-                                getRowId={(row: any) => row.id}
-                                onRowClick={(params) => setQuickViewLeadId(params.row.id as string)}
-                                totalItems={totalItems}
-                                selectedCount={selectedRows.length}
-                                isAllSelected={isAllSelected}
-                                onSelectAllFiltered={handleSelectAllFiltered}
-                                onClearSelection={clearSelection}
-                                currentCount={data.length}
-                            />
-                        </Box>
-                    </Box>
-                )}
+            <Card className="flex flex-grow flex-col overflow-hidden rounded-[14px] bg-surface-container-low">
+                <div className="w-full overflow-x-auto">
+                    <div className="min-w-[800px]">
+                        <DataTable
+                            storageKey="leads-table"
+                            data={data}
+                            columns={columns}
+                            loading={loading}
+                            getRowId={(row) => row.id}
+                            onRowClick={(row) => setQuickViewLeadId(row.id)}
+                            enableRowSelection
+                            rowSelectionIds={selectedRows}
+                            onRowSelectionIdsChange={(ids) => {
+                                setSelectedRows(ids);
+                                if (isAllSelected) setIsAllSelected(false);
+                            }}
+                            totalItems={totalItems}
+                            isAllSelected={isAllSelected}
+                            onSelectAllFiltered={handleSelectAllFiltered}
+                            onClearSelection={clearSelection}
+                            pageIndex={paginationModel.page}
+                            pageSize={paginationModel.pageSize}
+                            onPaginationChange={({ pageIndex, pageSize }) => setPaginationModel({ page: pageIndex, pageSize })}
+                            emptyState={{
+                                icon: <FilterIconLucide className="size-10 text-muted-foreground opacity-50" />,
+                                title: "No leads found",
+                                description: "Get started by adding your first lead.",
+                                action: <CreateLeadDialog onSuccess={fetchData} />,
+                            }}
+                        />
+                    </div>
+                </div>
             </Card>
 
             <BulkActionsToolbar
@@ -425,37 +305,48 @@ export default function LeadsPage() {
                 onDelete={handleDelete}
             />
 
-            <Dialog open={addToListOpen} onClose={() => setAddToListOpen(false)} maxWidth="xs" fullWidth>
-                <DialogTitle>Add selected leads to list</DialogTitle>
-                <DialogContent>
-                    <Stack spacing={1.5} sx={{ mt: 1 }}>
-                        <Typography variant="body2" color="text.secondary">
-                            Add {isAllSelected ? totalItems : selectedRows.length} selected lead{(isAllSelected ? totalItems : selectedRows.length) === 1 ? "" : "s"} to a static list.
-                        </Typography>
-                        <FormControl size="small" fullWidth>
-                            <InputLabel>Static List</InputLabel>
-                            <Select value={targetListId} label="Static List" onChange={(event) => setTargetListId(event.target.value)}>
+            <StandardDialog
+                open={addToListOpen}
+                onClose={() => setAddToListOpen(false)}
+                title="Add selected leads to list"
+                icon={<ListPlus className="size-5" />}
+                maxWidth="xs"
+                actions={
+                    <>
+                        <Button variant="ghost" onClick={() => setAddToListOpen(false)}>Cancel</Button>
+                        <Button onClick={handleAddToList} disabled={!targetListId}>
+                            <ListPlus className="size-4" />
+                            Add To List
+                        </Button>
+                    </>
+                }
+            >
+                <div className="space-y-3">
+                    <p className="text-sm text-muted-foreground">
+                        Add {isAllSelected ? totalItems : selectedRows.length} selected lead{(isAllSelected ? totalItems : selectedRows.length) === 1 ? "" : "s"} to a static list.
+                    </p>
+                    <div className="space-y-2">
+                        <Label>Static List</Label>
+                        <Select value={targetListId} onValueChange={setTargetListId}>
+                            <SelectTrigger className="w-full">
+                                <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
                                 {staticLists.map((list) => (
-                                    <MenuItem key={list.id} value={list.id}>
+                                    <SelectItem key={list.id} value={list.id}>
                                         {list.name}
-                                    </MenuItem>
+                                    </SelectItem>
                                 ))}
-                            </Select>
-                        </FormControl>
-                        {staticLists.length === 0 ? (
-                            <Typography variant="caption" color="error">
-                                Create a static list first from Lists.
-                            </Typography>
-                        ) : null}
-                    </Stack>
-                </DialogContent>
-                <DialogActions>
-                    <Button onClick={() => setAddToListOpen(false)}>Cancel</Button>
-                    <Button variant="contained" startIcon={<AddToListIcon />} onClick={handleAddToList} disabled={!targetListId}>
-                        Add To List
-                    </Button>
-                </DialogActions>
-            </Dialog>
+                            </SelectContent>
+                        </Select>
+                    </div>
+                    {staticLists.length === 0 ? (
+                        <p className="text-xs text-destructive">
+                            Create a static list first from Lists.
+                        </p>
+                    ) : null}
+                </div>
+            </StandardDialog>
 
             <RecordPreview
                 entityType="lead"
@@ -472,6 +363,6 @@ export default function LeadsPage() {
                     onSuccess={fetchData}
                 />
             )}
-        </Box>
+        </div>
     );
 }

@@ -1,7 +1,7 @@
 "use client";
 
 import { AnimatePresence } from "framer-motion";
-import { PageTransition } from "@/components/ui-mui/m3-components";
+import { PageTransition } from "@/components/ui/page-transition";
 
 export default function DashboardPageTransition({
   children,

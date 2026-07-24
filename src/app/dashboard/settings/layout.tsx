@@ -1,9 +1,8 @@
 "use client";
 
-import { Box, Typography, Divider, Paper } from "@mui/material";
+import { motion } from "framer-motion";
 import { SettingsSidebar } from "./components/sidebar-nav";
 import { RoleGuard } from "@/components/auth/role-guard";
-import { motion } from "framer-motion";
 import { fadeInUp } from "@/lib/motion";
 
 export default function SettingsLayout({
@@ -13,54 +12,32 @@ export default function SettingsLayout({
 }) {
     return (
         <RoleGuard requiredRole="Tenant Admin">
-            <Box
-                component={motion.div}
+            <motion.div
                 variants={fadeInUp}
                 initial="initial"
                 animate="animate"
-                sx={{ py: { xs: 1.5, md: 2.5 }, px: { xs: 1.5, md: 2 }, maxWidth: 1680, mx: 'auto' }}
+                className="mx-auto max-w-[1680px] px-3 py-3 md:px-4 md:py-5"
             >
-                <Box sx={{ mb: 2 }}>
-                    <Typography variant="h3" sx={{ fontWeight: 800, letterSpacing: -2, mb: 1 }}>
+                <div className="mb-4">
+                    <h1 className="mb-1 text-3xl font-extrabold tracking-tighter">
                         Settings
-                    </Typography>
-                    <Typography variant="body1" color="text.secondary" sx={{ opacity: 0.8 }}>
-                        Configure your organization's workspace, teams, and integration preferences.
-                    </Typography>
-                </Box>
+                    </h1>
+                    <p className="text-muted-foreground/80">
+                        Configure your organization&apos;s workspace, teams, and integration preferences.
+                    </p>
+                </div>
 
-                <Box
-                    sx={{
-                        display: 'flex',
-                        flexDirection: { xs: 'column', lg: 'row' },
-                        gap: { xs: 2, lg: 2.5 },
-                    }}
-                >
-                    <Box
-                        sx={{
-                            width: { xs: '100%', lg: 260 },
-                            flexShrink: 0,
-                        }}
-                    >
+                <div className="flex flex-col gap-4 lg:flex-row lg:gap-5">
+                    <div className="w-full shrink-0 lg:w-[260px]">
                         <SettingsSidebar />
-                    </Box>
-                    <Box sx={{ flexGrow: 1, minWidth: 0 }}>
-                        <Paper
-                            elevation={0}
-                            sx={{
-                                p: { xs: 2, md: 2.5 },
-                                borderRadius: '22px',
-                                border: '1px solid',
-                                borderColor: 'divider',
-                                bgcolor: 'background.paper',
-                                minHeight: '600px'
-                            }}
-                        >
+                    </div>
+                    <div className="min-w-0 grow">
+                        <div className="min-h-[600px] rounded-[22px] border bg-card p-4 md:p-5">
                             {children}
-                        </Paper>
-                    </Box>
-                </Box>
-            </Box>
+                        </div>
+                    </div>
+                </div>
+            </motion.div>
         </RoleGuard>
     );
 }

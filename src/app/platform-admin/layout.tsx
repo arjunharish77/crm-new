@@ -1,18 +1,19 @@
 "use client";
 
 import { SuperAdminGuard } from "@/components/auth/super-admin-guard";
-import { Button, Box, Drawer, List, ListItem, ListItemButton, ListItemIcon, ListItemText, AppBar, Toolbar, Typography, alpha, useTheme, Avatar, IconButton } from "@mui/material";
-import { ShieldCheck, LogOut, LayoutDashboard, Users, Sidebar, FileText, Menu as MenuIcon, Bell, Search } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Sheet, SheetContent } from "@/components/ui/sheet";
+import { ShieldCheck, LogOut, LayoutDashboard, Users, FileText, Menu as MenuIcon } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
-import React, { useState } from "react";
+import { useState } from "react";
 
 const DRAWER_WIDTH = 280;
 
 export default function PlatformAdminLayout({ children }: { children: React.ReactNode }) {
     const pathname = usePathname();
-    const theme = useTheme();
     const [mobileOpen, setMobileOpen] = useState(false);
 
     const navItems = [
@@ -22,109 +23,77 @@ export default function PlatformAdminLayout({ children }: { children: React.Reac
     ];
 
     const drawerContent = (
-        <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%', bgcolor: 'background.paper', borderRight: '1px solid', borderColor: 'divider' }}>
-            {/* Header */}
-            <Box sx={{ p: 3, display: 'flex', alignItems: 'center', gap: 2 }}>
-                <Avatar sx={{ bgcolor: 'secondary.main', color: 'secondary.contrastText' }}>
-                    <ShieldCheck size={24} />
+        <div className="flex h-full flex-col border-r bg-card">
+            <div className="flex items-center gap-3 p-6">
+                <Avatar className="bg-secondary text-secondary-foreground">
+                    <AvatarFallback className="bg-secondary text-secondary-foreground">
+                        <ShieldCheck className="size-6" />
+                    </AvatarFallback>
                 </Avatar>
-                <Box>
-                    <Typography variant="subtitle1" fontWeight={700} sx={{ lineHeight: 1.2 }}>Platform</Typography>
-                    <Typography variant="caption" color="text.secondary">Administration</Typography>
-                </Box>
-            </Box>
+                <div>
+                    <div className="text-sm font-bold leading-tight">Platform</div>
+                    <div className="text-xs text-muted-foreground">Administration</div>
+                </div>
+            </div>
 
-            {/* Nav */}
-            <List sx={{ px: 2, flex: 1 }}>
+            <nav className="flex-1 space-y-1 px-4">
                 {navItems.map((item) => {
                     const isActive = pathname === item.href;
                     const Icon = item.icon;
                     return (
-                        <ListItem key={item.href} disablePadding sx={{ mb: 1 }}>
-                            <ListItemButton
-                                component={Link}
-                                href={item.href}
-                                selected={isActive}
-                                sx={{
-                                    borderRadius: '50px', // M3 Pill shape
-                                    minHeight: 56,
-                                    px: 3,
-                                    '&.Mui-selected': {
-                                        bgcolor: 'secondary.container',
-                                        color: 'secondary.onContainer',
-                                        '&:hover': { bgcolor: alpha(theme.palette.secondary.main, 0.2) }
-                                    }
-                                }}
-                            >
-                                <ListItemIcon sx={{ minWidth: 40, color: isActive ? 'inherit' : 'text.secondary' }}>
-                                    <Icon size={24} />
-                                </ListItemIcon>
-                                <ListItemText
-                                    primary={item.label}
-                                    primaryTypographyProps={{ fontWeight: isActive ? 700 : 500 }}
-                                />
-                            </ListItemButton>
-                        </ListItem>
+                        <Link
+                            key={item.href}
+                            href={item.href}
+                            className={cn(
+                                "flex min-h-14 items-center gap-3 rounded-full px-4 text-sm transition-colors",
+                                isActive
+                                    ? "bg-secondary text-secondary-foreground font-bold hover:bg-secondary/80"
+                                    : "font-medium text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+                            )}
+                        >
+                            <Icon className="size-6" />
+                            {item.label}
+                        </Link>
                     );
                 })}
-            </List>
+            </nav>
 
-            {/* Footer */}
-            <Box sx={{ p: 2, borderTop: '1px solid', borderColor: 'divider' }}>
-                <Button
-                    component={Link}
-                    href="/dashboard"
-                    fullWidth
-                    variant="outlined"
-                    startIcon={<LogOut size={18} />}
-                    sx={{ borderRadius: 28, textTransform: 'none', justifyContent: 'flex-start', px: 3 }}
-                >
-                    Back to App
+            <div className="border-t p-4">
+                <Button asChild variant="outline" className="w-full justify-start rounded-full px-4">
+                    <Link href="/dashboard">
+                        <LogOut className="size-4" />
+                        Back to App
+                    </Link>
                 </Button>
-            </Box>
-        </Box>
+            </div>
+        </div>
     );
 
     return (
         <SuperAdminGuard>
-            <Box sx={{ display: 'flex', bgcolor: 'background.default', minHeight: '100vh' }}>
-                {/* Mobile Drawer */}
-                <Drawer
-                    variant="temporary"
-                    open={mobileOpen}
-                    onClose={() => setMobileOpen(false)}
-                    ModalProps={{ keepMounted: true }}
-                    sx={{
-                        display: { xs: 'block', lg: 'none' },
-                        '& .MuiDrawer-paper': { boxSizing: 'border-box', width: DRAWER_WIDTH, border: 'none' },
-                    }}
-                >
-                    {drawerContent}
-                </Drawer>
+            <div className="flex min-h-screen bg-background">
+                <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
+                    <SheetContent side="left" className="w-[280px] p-0 lg:hidden">
+                        {drawerContent}
+                    </SheetContent>
+                </Sheet>
 
-                {/* Desktop Drawer */}
-                <Drawer
-                    variant="permanent"
-                    sx={{
-                        display: { xs: 'none', lg: 'block' },
-                        '& .MuiDrawer-paper': { boxSizing: 'border-box', width: DRAWER_WIDTH, border: 'none' },
-                    }}
-                    open
-                >
-                    {drawerContent}
-                </Drawer>
+                <div className="hidden lg:block" style={{ width: DRAWER_WIDTH }}>
+                    <div className="fixed inset-y-0 left-0" style={{ width: DRAWER_WIDTH }}>
+                        {drawerContent}
+                    </div>
+                </div>
 
-                {/* Main Content */}
-                <Box component="main" sx={{ flexGrow: 1, p: 3, width: { lg: `calc(100% - ${DRAWER_WIDTH}px)` } }}>
-                    <Box sx={{ display: { lg: 'none' }, mb: 2 }}>
-                        <IconButton onClick={() => setMobileOpen(true)}>
+                <main className="flex-1 p-6 lg:w-[calc(100%-280px)]">
+                    <div className="mb-4 lg:hidden">
+                        <Button variant="ghost" size="icon" onClick={() => setMobileOpen(true)}>
                             <MenuIcon />
-                        </IconButton>
-                    </Box>
+                        </Button>
+                    </div>
 
                     {children}
-                </Box>
-            </Box>
+                </main>
+            </div>
         </SuperAdminGuard>
     );
 }

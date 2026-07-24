@@ -1,14 +1,420 @@
-/* M3 Expressive Global Styles */
-/* Note: Most styles are handled by MUI theme.ts and CssBaseline */
+@import "tailwindcss";
 
+/* ============================================================
+   M3 COLOR TOKENS — single source of truth (see src/theme.ts
+   for the MUI-side values these were ported from byte-for-byte;
+   src/theme.ts should be considered deprecated in favor of these
+   once the MUI migration in later steps is complete).
+   ============================================================ */
 :root {
   --background: #f7fbf2;
   --foreground: #181d18;
+  --surface: #f7fbf2;
+
+  --primary: #1b6c31;
+  --primary-foreground: #FFFFFF;
+  --primary-container: #a3f5aa;
+  --on-primary-container: #002108;
+
+  --secondary: #516350;
+  --secondary-foreground: #FFFFFF;
+  --secondary-container: #d4e8cf;
+  --on-secondary-container: #0f1f10;
+
+  --tertiary: #39656b;
+  --tertiary-foreground: #FFFFFF;
+  --tertiary-container: #bcebef;
+  --on-tertiary-container: #001f21;
+
+  --destructive: #B3261E;
+  --destructive-foreground: #FFFFFF;
+  --error-container: #F9DEDC;
+  --on-error-container: #410E0B;
+
+  --muted: #dee5d9;
+  --muted-foreground: #424940;
+
+  --border: #727970;
+  --input: #c1c9be;
+
+  --shadow-color: #000000;
+  --scrim: #000000;
+
+  --inverse-surface: #2d322c;
+  --inverse-foreground: #eff2e9;
+  --inverse-primary: #88d891;
+
+  --surface-container-highest: #e0e4de;
+  --surface-container-high: #e6e9e3;
+  --surface-container: #ebefea;
+  --surface-container-low: #f1f4f0;
+  --surface-container-lowest: #FFFFFF;
+  --surface-dim: #d7dbd4;
+  --surface-bright: #f7fbf2;
+
+  /* Roles shadcn primitives expect that M3 doesn't define — mapped to the
+     closest equivalent already in this palette, not new colors. */
+  --card: var(--surface-container-low);
+  --card-foreground: var(--foreground);
+  --popover: var(--surface-container);
+  --popover-foreground: var(--foreground);
+  --ring: var(--primary);
+  --accent: color-mix(in srgb, var(--primary) 8%, transparent);
+  --accent-foreground: var(--foreground);
 }
 
 .dark {
   --background: #101410;
   --foreground: #e0e4de;
+  --surface: #101410;
+
+  --primary: #88d891;
+  --primary-foreground: #003915;
+  --primary-container: #005322;
+  --on-primary-container: #a3f5aa;
+
+  --secondary: #b8ccb4;
+  --secondary-foreground: #243424;
+  --secondary-container: #3a4b39;
+  --on-secondary-container: #d4e8cf;
+
+  --tertiary: #a1ced3;
+  --tertiary-foreground: #00363c;
+  --tertiary-container: #1f4d53;
+  --on-tertiary-container: #bcebef;
+
+  --destructive: #F2B8B5;
+  --destructive-foreground: #601410;
+  --error-container: #8C1D18;
+  --on-error-container: #F9DEDC;
+
+  --muted: #424940;
+  --muted-foreground: #c1c9be;
+
+  --border: #8b9389;
+  --input: #424940;
+
+  --shadow-color: #000000;
+  --scrim: #000000;
+
+  --inverse-surface: #e0e4de;
+  --inverse-foreground: #2d322c;
+  --inverse-primary: #1b6c31;
+
+  --surface-container-highest: #313631;
+  --surface-container-high: #272b26;
+  --surface-container: #1d201d;
+  --surface-container-low: #181d18;
+  --surface-container-lowest: #0d100d;
+  --surface-dim: #101410;
+  --surface-bright: #363a35;
+
+  --card: var(--surface-container-low);
+  --card-foreground: var(--foreground);
+  --popover: var(--surface-container);
+  --popover-foreground: var(--foreground);
+  --ring: var(--primary);
+  --accent: color-mix(in srgb, var(--primary) 8%, transparent);
+  --accent-foreground: var(--foreground);
+}
+
+/* ============================================================
+   ALTERNATE COLOR THEMES — selected via `data-color-theme` on
+   <html> (see src/lib/color-themes.ts + color-theme-provider.tsx).
+   "forest" (above) is the default and needs no override block.
+   Each theme keeps the same M3 role structure as forest; only the
+   hue changes. Error/destructive stays red across all themes,
+   matching M3 convention that error is theme-independent.
+   ============================================================ */
+html[data-color-theme="ocean"] {
+  --background: #f4f8fb;
+  --foreground: #14181c;
+  --surface: #f4f8fb;
+
+  --primary: #0967a3;
+  --primary-foreground: #FFFFFF;
+  --primary-container: #cfe6ff;
+  --on-primary-container: #001c34;
+
+  --secondary: #4c6478;
+  --secondary-foreground: #FFFFFF;
+  --secondary-container: #d2e4f5;
+  --on-secondary-container: #0c1f2c;
+
+  --tertiary: #6c5c8f;
+  --tertiary-foreground: #FFFFFF;
+  --tertiary-container: #e7ddff;
+  --on-tertiary-container: #24173d;
+
+  --muted: #dde6ec;
+  --muted-foreground: #40484d;
+
+  --border: #6d7780;
+  --input: #bcc7cf;
+
+  --inverse-surface: #282e33;
+  --inverse-foreground: #e9eef2;
+  --inverse-primary: #9ecfff;
+
+  --surface-container-highest: #dde3e8;
+  --surface-container-high: #e3e8ec;
+  --surface-container: #e9edf0;
+  --surface-container-low: #eff3f5;
+  --surface-container-lowest: #FFFFFF;
+  --surface-dim: #d5dadd;
+  --surface-bright: #f4f8fb;
+}
+
+html.dark[data-color-theme="ocean"] {
+  --background: #0e1215;
+  --foreground: #dde3e8;
+  --surface: #0e1215;
+
+  --primary: #9ecfff;
+  --primary-foreground: #00304d;
+  --primary-container: #004a75;
+  --on-primary-container: #cfe6ff;
+
+  --secondary: #b3ccdf;
+  --secondary-foreground: #1c333f;
+  --secondary-container: #344a57;
+  --on-secondary-container: #d2e4f5;
+
+  --tertiary: #d3bfff;
+  --tertiary-foreground: #392a57;
+  --tertiary-container: #52426f;
+  --on-tertiary-container: #e7ddff;
+
+  --muted: #40484d;
+  --muted-foreground: #bcc7cf;
+
+  --border: #7d8790;
+  --input: #40484d;
+
+  --inverse-surface: #dde3e8;
+  --inverse-foreground: #282e33;
+  --inverse-primary: #0967a3;
+
+  --surface-container-highest: #313940;
+  --surface-container-high: #262d33;
+  --surface-container: #1b2126;
+  --surface-container-low: #161c20;
+  --surface-container-lowest: #0a0d10;
+  --surface-dim: #0e1215;
+  --surface-bright: #343b41;
+}
+
+html[data-color-theme="sunset"] {
+  --background: #fff8f2;
+  --foreground: #211a12;
+  --surface: #fff8f2;
+
+  --primary: #7a4a00;
+  --primary-foreground: #FFFFFF;
+  --primary-container: #ffddb3;
+  --on-primary-container: #2b1700;
+
+  --secondary: #77574a;
+  --secondary-foreground: #FFFFFF;
+  --secondary-container: #ffdbc9;
+  --on-secondary-container: #2c160c;
+
+  --tertiary: #5c6238;
+  --tertiary-foreground: #FFFFFF;
+  --tertiary-container: #e0e6b8;
+  --on-tertiary-container: #1a1d05;
+
+  --muted: #ece0d3;
+  --muted-foreground: #4d4438;
+
+  --border: #837568;
+  --input: #d5c7b8;
+
+  --inverse-surface: #362f27;
+  --inverse-foreground: #f7efe4;
+  --inverse-primary: #ffb95c;
+
+  --surface-container-highest: #e6dccf;
+  --surface-container-high: #ece1d5;
+  --surface-container: #f1e8dc;
+  --surface-container-low: #f7efe4;
+  --surface-container-lowest: #FFFFFF;
+  --surface-dim: #ded4c8;
+  --surface-bright: #fff8f2;
+}
+
+html.dark[data-color-theme="sunset"] {
+  --background: #17130d;
+  --foreground: #ece1d5;
+  --surface: #17130d;
+
+  --primary: #ffb95c;
+  --primary-foreground: #452b00;
+  --primary-container: #653f00;
+  --on-primary-container: #ffddb3;
+
+  --secondary: #e7bcac;
+  --secondary-foreground: #442a1f;
+  --secondary-container: #5d4034;
+  --on-secondary-container: #ffdbc9;
+
+  --tertiary: #c4cb98;
+  --tertiary-foreground: #2e3310;
+  --tertiary-container: #444a24;
+  --on-tertiary-container: #e0e6b8;
+
+  --muted: #4d4438;
+  --muted-foreground: #d5c7b8;
+
+  --border: #948573;
+  --input: #4d4438;
+
+  --inverse-surface: #ece1d5;
+  --inverse-foreground: #362f27;
+  --inverse-primary: #7a4a00;
+
+  --surface-container-highest: #40372c;
+  --surface-container-high: #332c22;
+  --surface-container: #251f17;
+  --surface-container-low: #201a13;
+  --surface-container-lowest: #0d0a06;
+  --surface-dim: #17130d;
+  --surface-bright: #453b30;
+}
+
+html[data-color-theme="grape"] {
+  --background: #fbf8fd;
+  --foreground: #1c1a1f;
+  --surface: #fbf8fd;
+
+  --primary: #6b4ba3;
+  --primary-foreground: #FFFFFF;
+  --primary-container: #e9ddff;
+  --on-primary-container: #23134a;
+
+  --secondary: #625a72;
+  --secondary-foreground: #FFFFFF;
+  --secondary-container: #e8def8;
+  --on-secondary-container: #1e182a;
+
+  --tertiary: #7d5262;
+  --tertiary-foreground: #FFFFFF;
+  --tertiary-container: #ffd9e3;
+  --on-tertiary-container: #31101c;
+
+  --muted: #e6e0ea;
+  --muted-foreground: #48454b;
+
+  --border: #79757e;
+  --input: #c9c4cd;
+
+  --inverse-surface: #312f36;
+  --inverse-foreground: #f3edf7;
+  --inverse-primary: #d3bcff;
+
+  --surface-container-highest: #e2dce6;
+  --surface-container-high: #e8e1ec;
+  --surface-container: #ede7f1;
+  --surface-container-low: #f3edf7;
+  --surface-container-lowest: #FFFFFF;
+  --surface-dim: #dbd6df;
+  --surface-bright: #fbf8fd;
+}
+
+html.dark[data-color-theme="grape"] {
+  --background: #131218;
+  --foreground: #e2dce6;
+  --surface: #131218;
+
+  --primary: #d3bcff;
+  --primary-foreground: #391e6c;
+  --primary-container: #513685;
+  --on-primary-container: #e9ddff;
+
+  --secondary: #ccc2dc;
+  --secondary-foreground: #332d41;
+  --secondary-container: #4a4458;
+  --on-secondary-container: #e8def8;
+
+  --tertiary: #efb8c8;
+  --tertiary-foreground: #4a2530;
+  --tertiary-container: #633b48;
+  --on-tertiary-container: #ffd9e3;
+
+  --muted: #48454b;
+  --muted-foreground: #c9c4cd;
+
+  --border: #8a8590;
+  --input: #48454b;
+
+  --inverse-surface: #e2dce6;
+  --inverse-foreground: #312f36;
+  --inverse-primary: #6b4ba3;
+
+  --surface-container-highest: #383540;
+  --surface-container-high: #2c2933;
+  --surface-container: #211f27;
+  --surface-container-low: #1c1a21;
+  --surface-container-lowest: #0d0c11;
+  --surface-dim: #131218;
+  --surface-bright: #3a3741;
+}
+
+/* Exposes every variable above as a Tailwind color utility
+   (bg-primary, text-foreground, border-input, etc.) */
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-surface: var(--surface);
+
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary-container: var(--primary-container);
+  --color-on-primary-container: var(--on-primary-container);
+
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary-container: var(--secondary-container);
+  --color-on-secondary-container: var(--on-secondary-container);
+
+  --color-tertiary: var(--tertiary);
+  --color-tertiary-foreground: var(--tertiary-foreground);
+  --color-tertiary-container: var(--tertiary-container);
+  --color-on-tertiary-container: var(--on-tertiary-container);
+
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-error-container: var(--error-container);
+  --color-on-error-container: var(--on-error-container);
+
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+
+  --color-border: var(--border);
+  --color-input: var(--input);
+
+  --color-shadow-color: var(--shadow-color);
+  --color-scrim: var(--scrim);
+
+  --color-inverse-surface: var(--inverse-surface);
+  --color-inverse-foreground: var(--inverse-foreground);
+  --color-inverse-primary: var(--inverse-primary);
+
+  --color-surface-container-highest: var(--surface-container-highest);
+  --color-surface-container-high: var(--surface-container-high);
+  --color-surface-container: var(--surface-container);
+  --color-surface-container-low: var(--surface-container-low);
+  --color-surface-container-lowest: var(--surface-container-lowest);
+  --color-surface-dim: var(--surface-dim);
+  --color-surface-bright: var(--surface-bright);
+
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-ring: var(--ring);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
 }
 
 body {

@@ -3,13 +3,25 @@ import Cookies from 'js-cookie';
 import { getUserFriendlyError } from './error-utils';
 
 const API_URL = '/api';
+const API_DEBUG = process.env.NEXT_PUBLIC_API_DEBUG === 'true';
+
+function debugLog(method: 'log' | 'warn' | 'error', ...args: unknown[]) {
+    if (API_DEBUG) console[method](...args);
+}
+
+function createNetworkError(endpoint: string) {
+    const error: any = new Error('Could not reach the app server. Please refresh once the server is ready.');
+    error.status = 0;
+    error.originalMessage = `Network request failed for ${endpoint}`;
+    return error;
+}
 
 export async function apiFetch<T = any>(endpoint: string, options: RequestInit = {}): Promise<T> {
     const token = Cookies.get('token');
     const requestId = Math.random().toString(36).substring(7);
     const startTime = Date.now();
 
-    console.log(`[API ${requestId}] Starting fetch to: ${endpoint}`, {
+    debugLog('log', `[API ${requestId}] Starting fetch to: ${endpoint}`, {
         method: options.method || 'GET',
         hasToken: !!token,
         timestamp: new Date().toISOString()
@@ -25,7 +37,7 @@ export async function apiFetch<T = any>(endpoint: string, options: RequestInit =
         // Add 30-second timeout
         const controller = new AbortController();
         const timeoutId = setTimeout(() => {
-            console.error(`[API ${requestId}] TIMEOUT after 30s for: ${endpoint}`);
+            debugLog('error', `[API ${requestId}] TIMEOUT after 30s for: ${endpoint}`);
             controller.abort();
         }, 30000);
 
@@ -37,7 +49,7 @@ export async function apiFetch<T = any>(endpoint: string, options: RequestInit =
 
         clearTimeout(timeoutId);
         const elapsed = Date.now() - startTime;
-        console.log(`[API ${requestId}] Response received in ${elapsed}ms:`, {
+        debugLog('log', `[API ${requestId}] Response received in ${elapsed}ms:`, {
             status: response.status,
             ok: response.ok,
             endpoint
@@ -71,7 +83,7 @@ export async function apiFetch<T = any>(endpoint: string, options: RequestInit =
                 errorMessage = response.statusText;
             }
 
-            console.error(`[API ${requestId}] Error response:`, {
+            debugLog('error', `[API ${requestId}] Error ${response.status} for ${endpoint}: ${errorMessage}`, {
                 status: response.status,
                 message: errorMessage,
                 // Log full structured body from global exception filter
@@ -80,7 +92,7 @@ export async function apiFetch<T = any>(endpoint: string, options: RequestInit =
 
             // Special handling for 403
             if (response.status === 403) {
-                console.warn(`[API ${requestId}] Permission denied:`, errorData?.message || errorMessage);
+                debugLog('warn', `[API ${requestId}] Permission denied:`, errorData?.message || errorMessage);
             }
 
             // Create error with user-friendly message
@@ -94,6 +106,7 @@ export async function apiFetch<T = any>(endpoint: string, options: RequestInit =
             error.status = response.status;
             error.statusText = response.statusText;
             error.originalMessage = errorMessage;
+            error.body = errorData;
 
             throw error;
         }
@@ -102,7 +115,7 @@ export async function apiFetch<T = any>(endpoint: string, options: RequestInit =
         const data = contentType.includes('application/json')
             ? await response.json()
             : await response.text();
-        console.log(`[API ${requestId}] Data parsed successfully:`, {
+        debugLog('log', `[API ${requestId}] Data parsed successfully:`, {
             isArray: Array.isArray(data),
             keys: typeof data === 'object' ? Object.keys(data).slice(0, 5) : 'N/A'
         });
@@ -111,7 +124,7 @@ export async function apiFetch<T = any>(endpoint: string, options: RequestInit =
     } catch (error: any) {
         const elapsed = Date.now() - startTime;
         const isTimeout = error.name === 'AbortError';
-        console.error(`[API ${requestId}] ${isTimeout ? 'TIMEOUT' : 'Fetch failed'} after ${elapsed}ms:`, {
+        debugLog('error', `[API ${requestId}] ${isTimeout ? 'TIMEOUT' : 'Fetch failed'} after ${elapsed}ms:`, {
             name: error.name,
             message: error.message,
             status: error.status,
@@ -121,6 +134,9 @@ export async function apiFetch<T = any>(endpoint: string, options: RequestInit =
             const timeoutError: any = new Error('Request timed out. Please try again.');
             timeoutError.status = 408;
             throw timeoutError;
+        }
+        if (error instanceof TypeError && error.message === 'Failed to fetch') {
+            throw createNetworkError(endpoint);
         }
         throw error;
     }

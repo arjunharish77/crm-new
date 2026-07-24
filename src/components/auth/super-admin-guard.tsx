@@ -3,7 +3,7 @@
 import { useAuth } from "@/providers/auth-provider";
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
-import { Box, CircularProgress } from "@mui/material";
+import { Loader2 } from "lucide-react";
 
 export function SuperAdminGuard({ children }: { children: React.ReactNode }) {
     const { user, isLoading } = useAuth();
@@ -23,9 +23,9 @@ export function SuperAdminGuard({ children }: { children: React.ReactNode }) {
 
     if (isLoading) {
         return (
-            <Box sx={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', bgcolor: 'surfaceContainerLowest' }}>
-                <CircularProgress />
-            </Box>
+            <div className="flex min-h-screen items-center justify-center bg-background">
+                <Loader2 className="size-8 animate-spin text-muted-foreground" />
+            </div>
         );
     }
 

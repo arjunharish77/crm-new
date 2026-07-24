@@ -1,8 +1,8 @@
 'use client';
 
 import React, { useState } from "react";
-import { Button as MuiButton, Box } from "@mui/material";
-import { Add as AddIcon, PersonAdd as PersonAddIcon } from "@mui/icons-material";
+import { Plus, UserPlus } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { StandardDialog } from "@/components/common/standard-dialog";
 import { LeadForm } from "./lead-form";
 import { ContextualFormsPanel } from "@/components/forms/contextual-forms-panel";
@@ -28,26 +28,22 @@ export function CreateLeadDialog({ onSuccess, trigger, open: controlledOpen, onO
     return (
         <>
             {trigger ? (
-                <Box onClick={handleOpen}>{trigger}</Box>
+                <div onClick={handleOpen}>{trigger}</div>
             ) : (
-                <MuiButton
-                    variant="contained"
-                    color="primary"
-                    startIcon={<AddIcon />}
-                    onClick={handleOpen}
-                >
+                <Button onClick={handleOpen}>
+                    <Plus />
                     Add Lead
-                </MuiButton>
+                </Button>
             )}
 
             <StandardDialog
                 open={open}
                 onClose={handleClose}
                 title="Create New Lead"
-                subtitle="Add a new prospect to your pipeline"
-                icon={<PersonAddIcon />}
+                subtitle="Add a new prospect to your CRM"
+                icon={<UserPlus className="size-5" />}
             >
-                <Box sx={{ display: "flex", justifyContent: "flex-end", mb: 1 }}>
+                <div className="mb-2 flex justify-end">
                     <ContextualFormsPanel
                         placement="LEAD_CREATE"
                         context={{}}
@@ -56,7 +52,7 @@ export function CreateLeadDialog({ onSuccess, trigger, open: controlledOpen, onO
                             handleClose();
                         }}
                     />
-                </Box>
+                </div>
                 <LeadForm
                     onSuccess={() => {
                         onSuccess();

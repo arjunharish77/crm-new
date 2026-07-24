@@ -1,13 +1,12 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
-import { Pencil } from "lucide-react";
+import { Loader2, Pencil } from "lucide-react";
 import { Opportunity } from "@/types/opportunities";
 import { StandardDialog } from "@/components/common/standard-dialog";
 import { OpportunityForm } from "./opportunity-form";
 import { apiFetch } from "@/lib/api";
 import { toast } from "sonner";
-import { Box, CircularProgress, Typography } from "@mui/material";
 
 interface EditOpportunityDialogProps {
     opportunity: Opportunity;
@@ -69,13 +68,13 @@ export function EditOpportunityDialog({
             onClose={handleClose}
             title="Edit Opportunity"
             subtitle="Update deal details."
-            icon={<Pencil fontSize="small" />}
+            icon={<Pencil className="size-4" />}
         >
             <div style={{ padding: '8px 0' }}>
                 {loading && !fullOpportunity ? (
-                    <Box sx={{ minHeight: 180, display: "flex", alignItems: "center", justifyContent: "center" }}>
-                        <CircularProgress size={24} />
-                    </Box>
+                    <div className="flex min-h-[180px] items-center justify-center">
+                        <Loader2 className="size-6 animate-spin text-primary" />
+                    </div>
                 ) : fullOpportunity ? (
                     <OpportunityForm
                         initialData={fullOpportunity}
@@ -86,9 +85,7 @@ export function EditOpportunityDialog({
                         onCancel={handleClose}
                     />
                 ) : (
-                    <Typography variant="body2" color="text.secondary">
-                        Unable to load opportunity details.
-                    </Typography>
+                    <p className="text-sm text-muted-foreground">Unable to load opportunity details.</p>
                 )}
             </div>
         </StandardDialog>

@@ -1,0 +1,14 @@
+.next
+node_modules
+npm-debug.log
+.env
+.env.*
+!.env.example
+db-dumps
+storage
+backups
+.git
+.agents
+.codex
+coverage
+*.log

@@ -1,36 +1,31 @@
 "use client";
 
-import { useState } from "react";
-import { useForm, Controller } from "react-hook-form";
+import { ReactNode, useState } from "react";
+import { Controller, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import * as z from "zod";
+import { Copy, Loader2 } from "lucide-react";
 import { toast } from "sonner";
-import { apiFetch } from "@/lib/api";
-
+import * as z from "zod";
+import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
-    Button,
     Dialog,
-    DialogActions,
     DialogContent,
-    DialogContentText,
+    DialogDescription,
+    DialogFooter,
+    DialogHeader,
     DialogTitle,
-    TextField,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
     Select,
-    MenuItem,
-    FormControl,
-    InputLabel,
-    Checkbox,
-    FormControlLabel,
-    Grid,
-    Stack,
-    Typography,
-    Box,
-    Alert,
-    AlertTitle,
-    IconButton,
-    FormHelperText
-} from "@mui/material";
-import { ContentCopy as ContentCopyIcon } from "@mui/icons-material";
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from "@/components/ui/select";
+import { apiFetch } from "@/lib/api";
 
 const formSchema = z.object({
     name: z.string().min(2, "Tenant name must be at least 2 characters"),
@@ -42,16 +37,58 @@ const formSchema = z.object({
         automationEnabled: z.boolean().default(true),
         salesGroupsEnabled: z.boolean().default(true),
         formBuilderEnabled: z.boolean().default(true),
-        advancedReporting: z.boolean().default(false),
+        advancedReporting: z.boolean().default(true),
         apiAccessEnabled: z.boolean().default(false),
     }),
 });
+
+type CreateTenantFormValues = z.infer<typeof formSchema>;
 
 type CreateTenantDialogProps = {
     open: boolean;
     onOpenChange: (open: boolean) => void;
     onSuccess: () => void;
 };
+
+const FEATURE_FIELDS = [
+    { name: "features.opportunityEnabled", label: "Opportunities" },
+    { name: "features.automationEnabled", label: "Automation" },
+    { name: "features.salesGroupsEnabled", label: "Sales Groups" },
+    { name: "features.formBuilderEnabled", label: "Form Builder" },
+    { name: "features.advancedReporting", label: "Advanced Reporting" },
+    { name: "features.apiAccessEnabled", label: "API Access" },
+] as const;
+
+const DEFAULT_VALUES: CreateTenantFormValues = {
+    name: "",
+    plan: "BASIC",
+    adminEmail: "",
+    adminName: "",
+    features: {
+        opportunityEnabled: true,
+        automationEnabled: true,
+        salesGroupsEnabled: true,
+        formBuilderEnabled: true,
+        advancedReporting: true,
+        apiAccessEnabled: false,
+    },
+};
+
+interface FieldProps {
+    label: string;
+    error?: string;
+    children: ReactNode;
+}
+
+function Field({ label, error, children }: FieldProps) {
+    return (
+        <div className="space-y-2">
+            <Label>{label}</Label>
+            {children}
+            {error ? <p className="text-xs text-destructive">{error}</p> : null}
+        </div>
+    );
+}
 
 export function CreateTenantDialog({ open, onOpenChange, onSuccess }: CreateTenantDialogProps) {
     const [loading, setLoading] = useState(false);
@@ -60,25 +97,17 @@ export function CreateTenantDialog({ open, onOpenChange, onSuccess }: CreateTena
         password: string;
     } | null>(null);
 
-    const { control, handleSubmit, reset, formState: { errors } } = useForm<z.infer<typeof formSchema>>({
+    const {
+        control,
+        handleSubmit,
+        reset,
+        formState: { errors },
+    } = useForm<CreateTenantFormValues>({
         resolver: zodResolver(formSchema) as any,
-        defaultValues: {
-            name: "",
-            plan: "BASIC",
-            adminEmail: "",
-            adminName: "",
-            features: {
-                opportunityEnabled: true,
-                automationEnabled: true,
-                salesGroupsEnabled: true,
-                formBuilderEnabled: true,
-                advancedReporting: false,
-                apiAccessEnabled: false,
-            },
-        },
+        defaultValues: DEFAULT_VALUES,
     });
 
-    async function onSubmit(values: z.infer<typeof formSchema>) {
+    async function onSubmit(values: CreateTenantFormValues) {
         setLoading(true);
         try {
             const res = await apiFetch("/platform-admin/tenants", {
@@ -103,7 +132,7 @@ export function CreateTenantDialog({ open, onOpenChange, onSuccess }: CreateTena
     function handleClose() {
         if (credentials) {
             setCredentials(null);
-            reset();
+            reset(DEFAULT_VALUES);
         }
         onOpenChange(false);
     }
@@ -116,175 +145,136 @@ export function CreateTenantDialog({ open, onOpenChange, onSuccess }: CreateTena
     }
 
     return (
-        <Dialog
-            open={open}
-            onClose={handleClose}
-            maxWidth="sm"
-            fullWidth
-            PaperProps={{
-                sx: { borderRadius: 3 }
-            }}
-        >
-            <DialogTitle sx={{ pb: 1 }}>
-                {credentials ? "Tenant Created" : "Create New Tenant"}
-            </DialogTitle>
-            <DialogContent>
-                <DialogContentText sx={{ mb: 3 }}>
-                    {credentials
-                        ? "Save these credentials securely. The password will only be shown once."
-                        : "Enter the details below to provision a new tenant environment."}
-                </DialogContentText>
+        <Dialog open={open} onOpenChange={(nextOpen) => (nextOpen ? onOpenChange(true) : handleClose())}>
+            <DialogContent className="sm:max-w-[600px]">
+                <DialogHeader>
+                    <DialogTitle>{credentials ? "Tenant Created" : "Create New Tenant"}</DialogTitle>
+                    <DialogDescription>
+                        {credentials
+                            ? "Save these credentials securely. The password will only be shown once."
+                            : "Enter the details below to provision a new tenant environment."}
+                    </DialogDescription>
+                </DialogHeader>
 
                 {credentials ? (
-                    <Stack spacing={3}>
-                        <Alert severity="warning" icon={false} sx={{ borderRadius: 2 }}>
-                            <AlertTitle>Credentials</AlertTitle>
-                            Please copy these now.
-                        </Alert>
+                    <div className="space-y-4">
+                        <div className="rounded-lg border border-tertiary/30 bg-tertiary/10 px-4 py-3">
+                            <h3 className="text-sm font-semibold text-tertiary">Credentials</h3>
+                            <p className="mt-1 text-sm text-muted-foreground">Please copy these now.</p>
+                        </div>
 
-                        <Box sx={{ p: 2, bgcolor: 'action.hover', borderRadius: 2, border: '1px solid', borderColor: 'divider' }}>
-                            <Stack spacing={2}>
-                                <Box>
-                                    <Typography variant="caption" color="text.secondary" fontWeight={600}>EMAIL</Typography>
-                                    <Typography variant="body2" fontFamily="monospace">{credentials.email}</Typography>
-                                </Box>
-                                <Box>
-                                    <Typography variant="caption" color="text.secondary" fontWeight={600}>TEMPORARY PASSWORD</Typography>
-                                    <Stack direction="row" alignItems="center" justifyContent="space-between">
-                                        <Typography variant="body2" fontFamily="monospace">{credentials.password}</Typography>
-                                        <IconButton size="small" onClick={copyPassword}>
-                                            <ContentCopyIcon fontSize="small" />
-                                        </IconButton>
-                                    </Stack>
-                                </Box>
-                            </Stack>
-                        </Box>
-                    </Stack>
+                        <div className="rounded-lg border border-border bg-muted/40 p-4">
+                            <div className="space-y-4">
+                                <div>
+                                    <p className="text-xs font-semibold uppercase text-muted-foreground">Email</p>
+                                    <p className="mt-1 font-mono text-sm">{credentials.email}</p>
+                                </div>
+                                <div>
+                                    <p className="text-xs font-semibold uppercase text-muted-foreground">Temporary Password</p>
+                                    <div className="mt-1 flex items-center justify-between gap-3">
+                                        <p className="min-w-0 truncate font-mono text-sm">{credentials.password}</p>
+                                        <Button type="button" variant="ghost" size="icon-sm" onClick={copyPassword}>
+                                            <Copy className="h-4 w-4" />
+                                        </Button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
                 ) : (
-                    <form id="create-tenant-form" onSubmit={handleSubmit(onSubmit)}>
-                        <Stack spacing={3} sx={{ mt: 1 }}>
+                    <form id="create-tenant-form" onSubmit={handleSubmit(onSubmit)} className="space-y-5">
+                        <Controller
+                            name="name"
+                            control={control}
+                            render={({ field }) => (
+                                <Field label="Tenant Name" error={errors.name?.message}>
+                                    <Input {...field} placeholder="Acme Corp" />
+                                </Field>
+                            )}
+                        />
+
+                        <Controller
+                            name="plan"
+                            control={control}
+                            render={({ field }) => (
+                                <Field label="Plan" error={errors.plan?.message}>
+                                    <Select value={field.value} onValueChange={field.onChange}>
+                                        <SelectTrigger>
+                                            <SelectValue />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="BASIC">Basic</SelectItem>
+                                            <SelectItem value="PRO">Pro</SelectItem>
+                                            <SelectItem value="ENTERPRISE">Enterprise</SelectItem>
+                                        </SelectContent>
+                                    </Select>
+                                </Field>
+                            )}
+                        />
+
+                        <div className="grid gap-4 sm:grid-cols-2">
                             <Controller
-                                name="name"
+                                name="adminName"
                                 control={control}
                                 render={({ field }) => (
-                                    <TextField
-                                        {...field}
-                                        label="Tenant Name"
-                                        placeholder="Acme Corp"
-                                        fullWidth
-                                        error={!!errors.name}
-                                        helperText={errors.name?.message}
+                                    <Field label="Admin Name" error={errors.adminName?.message}>
+                                        <Input {...field} placeholder="John Doe" />
+                                    </Field>
+                                )}
+                            />
+                            <Controller
+                                name="adminEmail"
+                                control={control}
+                                render={({ field }) => (
+                                    <Field label="Admin Email" error={errors.adminEmail?.message}>
+                                        <Input {...field} placeholder="admin@example.com" />
+                                    </Field>
+                                )}
+                            />
+                        </div>
+
+                        <div className="space-y-3">
+                            <h3 className="text-sm font-semibold text-muted-foreground">Feature Flags</h3>
+                            <div className="grid gap-2 sm:grid-cols-2">
+                                {FEATURE_FIELDS.map((feature) => (
+                                    <Controller
+                                        key={feature.name}
+                                        name={feature.name}
+                                        control={control}
+                                        render={({ field }) => (
+                                            <label className="flex items-center gap-2 rounded-md border border-border px-3 py-2 text-sm">
+                                                <Checkbox
+                                                    checked={field.value}
+                                                    onCheckedChange={(checked) => field.onChange(checked === true)}
+                                                />
+                                                {feature.label}
+                                            </label>
+                                        )}
                                     />
-                                )}
-                            />
-
-                            <Controller
-                                name="plan"
-                                control={control}
-                                render={({ field }) => (
-                                    <FormControl fullWidth error={!!errors.plan}>
-                                        <InputLabel>Plan</InputLabel>
-                                        <Select
-                                            {...field}
-                                            label="Plan"
-                                        >
-                                            <MenuItem value="BASIC">Basic</MenuItem>
-                                            <MenuItem value="PRO">Pro</MenuItem>
-                                            <MenuItem value="ENTERPRISE">Enterprise</MenuItem>
-                                        </Select>
-                                        <FormHelperText>{errors.plan?.message}</FormHelperText>
-                                    </FormControl>
-                                )}
-                            />
-
-                            <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
-                                <Controller
-                                    name="adminName"
-                                    control={control}
-                                    render={({ field }) => (
-                                        <TextField
-                                            {...field}
-                                            label="Admin Name"
-                                            placeholder="John Doe"
-                                            fullWidth
-                                            error={!!errors.adminName}
-                                            helperText={errors.adminName?.message}
-                                        />
-                                    )}
-                                />
-                                <Controller
-                                    name="adminEmail"
-                                    control={control}
-                                    render={({ field }) => (
-                                        <TextField
-                                            {...field}
-                                            label="Admin Email"
-                                            placeholder="admin@example.com"
-                                            fullWidth
-                                            error={!!errors.adminEmail}
-                                            helperText={errors.adminEmail?.message}
-                                        />
-                                    )}
-                                />
-                            </Stack>
-
-                            <Box>
-                                <Typography variant="subtitle2" sx={{ mb: 1, color: 'text.secondary' }}>Feature Flags</Typography>
-                                <Grid container spacing={1}>
-                                    {[
-                                        { name: 'features.opportunityEnabled', label: 'Opportunities' },
-                                        { name: 'features.automationEnabled', label: 'Automation' },
-                                        { name: 'features.salesGroupsEnabled', label: 'Sales Groups' },
-                                        { name: 'features.formBuilderEnabled', label: 'Form Builder' },
-                                        { name: 'features.advancedReporting', label: 'Advanced Reporting' },
-                                        { name: 'features.apiAccessEnabled', label: 'API Access' },
-                                    ].map((feature) => (
-                                        <Grid size={{ xs: 6 }} key={feature.name}>
-                                            <Controller
-                                                name={feature.name as any}
-                                                control={control}
-                                                render={({ field }) => (
-                                                    <FormControlLabel
-                                                        control={
-                                                            <Checkbox
-                                                                checked={field.value}
-                                                                onChange={field.onChange}
-                                                            />
-                                                        }
-                                                        label={<Typography variant="body2">{feature.label}</Typography>}
-                                                    />
-                                                )}
-                                            />
-                                        </Grid>
-                                    ))}
-                                </Grid>
-                            </Box>
-                        </Stack>
+                                ))}
+                            </div>
+                        </div>
                     </form>
                 )}
+
+                <DialogFooter>
+                    {credentials ? (
+                        <Button onClick={handleClose} className="w-full">
+                            Done
+                        </Button>
+                    ) : (
+                        <>
+                            <Button variant="outline" onClick={handleClose}>
+                                Cancel
+                            </Button>
+                            <Button type="submit" form="create-tenant-form" disabled={loading}>
+                                {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                                {loading ? "Creating..." : "Create Tenant"}
+                            </Button>
+                        </>
+                    )}
+                </DialogFooter>
             </DialogContent>
-            <DialogActions sx={{ px: 3, pb: 3 }}>
-                {credentials ? (
-                    <Button onClick={handleClose} variant="contained" fullWidth sx={{ borderRadius: 20 }}>
-                        Done
-                    </Button>
-                ) : (
-                    <>
-                        <Button onClick={handleClose} sx={{ borderRadius: 20, color: 'text.secondary' }}>
-                            Cancel
-                        </Button>
-                        <Button
-                            type="submit"
-                            variant="contained"
-                            form="create-tenant-form"
-                            disabled={loading}
-                            sx={{ borderRadius: 20 }}
-                        >
-                            {loading ? "Creating..." : "Create Tenant"}
-                        </Button>
-                    </>
-                )}
-            </DialogActions>
         </Dialog>
     );
 }

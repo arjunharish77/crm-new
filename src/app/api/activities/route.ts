@@ -8,17 +8,18 @@ export async function GET(request: Request) {
     const user = await requireCurrentUser(request);
     const { searchParams } = new URL(request.url);
     const limit = Number(searchParams.get("limit") ?? "100");
+    const page = Number(searchParams.get("page") ?? "1");
     const filters = searchParams.get("filters");
     const parsedFilters = filters ? JSON.parse(filters) : null;
 
-    const response = await listActivitiesForTenant(user, limit, parsedFilters);
+    const response = await listActivitiesForTenant(user, limit, parsedFilters, page);
     return NextResponse.json(response);
   } catch (error) {
     if (error instanceof Error && error.message === "UNAUTHORIZED") {
       return unauthorized();
     }
 
-    return serverError("Failed to fetch activities");
+    return serverError("Failed to fetch activities", error);
   }
 }
 

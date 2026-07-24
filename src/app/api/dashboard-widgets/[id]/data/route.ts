@@ -17,6 +17,6 @@ export async function GET(
       return unauthorized();
     }
 
-    return serverError("Failed to fetch widget data");
+    return serverError("Failed to fetch widget data", error);
   }
 }

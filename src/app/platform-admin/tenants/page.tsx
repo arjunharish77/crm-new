@@ -1,44 +1,23 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useMemo } from "react";
 import { apiFetch } from "@/lib/api";
-import {
-    Box,
-    Typography,
-    Button,
-    Card,
-    Stack,
-    Chip,
-    IconButton,
-    Tooltip,
-    useTheme,
-    alpha,
-} from "@mui/material";
-import {
-    DataGrid,
-    GridColDef,
-    GridRowSelectionModel,
-    GridRowId
-} from "@mui/x-data-grid";
-import {
-    MoreVert as MoreIcon,
-    Add as AddIcon,
-    Block as BlockIcon,
-    CheckCircle as CheckCircleIcon,
-    Delete as DeleteIcon
-} from "@mui/icons-material";
+import { Card } from "@/components/ui/card";
+import { ColumnDef } from "@tanstack/react-table";
+import { Ban, CheckCircle2, Building2 } from "lucide-react";
+import { DataTable } from "@/components/ui/data-table";
+import { Badge } from "@/components/ui/badge";
+import { Button as IconButton } from "@/components/ui/button";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { formatWorkspaceRelativeTime } from "@/lib/date-format";
 import { toast } from "sonner";
 import { CreateTenantDialog } from "./create-tenant-dialog";
 import { BulkActionsToolbar } from "@/components/bulk-actions/bulk-toolbar";
-import { useRouter } from "next/navigation";
 
 export default function TenantsPage() {
-    const theme = useTheme();
-    const router = useRouter();
     const [tenants, setTenants] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
-    const [selectedRows, setSelectedRows] = useState<any>([]);
+    const [selectedRows, setSelectedRows] = useState<string[]>([]);
     const [isAllSelected, setIsAllSelected] = useState(false);
     const [totalItems, setTotalItems] = useState(0);
 
@@ -85,14 +64,8 @@ export default function TenantsPage() {
         setIsAllSelected(false);
     };
 
-    const handleSelectionChange = (newSelection: any) => {
-        setSelectedRows(newSelection);
-        if (isAllSelected && newSelection.length !== totalItems) {
-            setIsAllSelected(false);
-        }
-    };
-
     const handleSelectAllFiltered = () => {
+        setSelectedRows(tenants.map((tenant) => tenant.id));
         setIsAllSelected(true);
         toast.success(`All ${totalItems} tenants selected`);
     };
@@ -102,139 +75,126 @@ export default function TenantsPage() {
         setIsAllSelected(false);
     };
 
-    const columns: GridColDef[] = [
+    const columns = useMemo<ColumnDef<any, any>[]>(() => [
         {
-            field: 'name',
-            headerName: 'Name',
-            flex: 1.5,
-            minWidth: 200,
-            renderCell: (params) => (
-                <Box>
-                    <Typography variant="body2" sx={{ fontWeight: 600, color: 'text.primary' }}>
-                        {params.value}
-                    </Typography>
-                    <Typography variant="caption" color="text.secondary" sx={{ fontFamily: 'monospace' }}>
-                        {params.row.id.substring(0, 8)}...
-                    </Typography>
-                </Box>
+            accessorKey: 'name',
+            header: 'Name',
+            size: 240,
+            cell: ({ row }) => (
+                <div>
+                    <div className="text-sm font-semibold text-foreground">{row.original.name}</div>
+                    <div className="text-xs text-muted-foreground">{row.original.plan ?? "Tenant"}</div>
+                </div>
             ),
         },
         {
-            field: 'status',
-            headerName: 'Status',
-            width: 120,
-            renderCell: (params) => {
-                const isSuspended = params.value === 'SUSPENDED';
+            accessorKey: 'status',
+            header: 'Status',
+            size: 120,
+            cell: ({ row }) => {
+                const isSuspended = row.original.status === 'SUSPENDED';
                 return (
-                    <Chip
-                        label={params.value}
-                        size="small"
-                        color={isSuspended ? 'error' : 'success'}
-                        variant={isSuspended ? 'filled' : 'outlined'}
-                        sx={{ fontWeight: 600, borderRadius: '6px' }}
-                    />
+                    <Badge
+                        variant="outline"
+                        className={
+                            isSuspended
+                                ? "border-destructive/20 bg-destructive/10 font-semibold text-destructive"
+                                : "border-primary/20 bg-primary/10 font-semibold text-primary"
+                        }
+                    >
+                        {row.original.status}
+                    </Badge>
                 );
             },
         },
         {
-            field: 'plan',
-            headerName: 'Plan',
-            width: 120,
-            renderCell: (params) => (
-                <Chip
-                    label={params.value}
-                    size="small"
-                    sx={{
-                        bgcolor: alpha(theme.palette.primary.main, 0.1),
-                        color: theme.palette.primary.main,
-                        fontWeight: 600,
-                        fontSize: '0.75rem'
-                    }}
-                />
+            accessorKey: 'plan',
+            header: 'Plan',
+            size: 120,
+            cell: ({ row }) => (
+                <Badge variant="outline" className="border-primary/20 bg-primary/10 font-semibold text-primary">
+                    {row.original.plan}
+                </Badge>
             ),
         },
         {
-            field: '_count',
-            headerName: 'Users',
-            width: 100,
-            valueGetter: (params: any) => params?.users || 0,
-            renderCell: (params) => (
-                <Typography variant="body2" color="text.secondary">
-                    {params.value} users
-                </Typography>
+            id: 'users',
+            header: 'Users',
+            size: 100,
+            cell: ({ row }) => (
+                <span className="text-sm text-muted-foreground">{row.original._count?.users || 0} users</span>
             )
         },
         {
-            field: 'createdAt',
-            headerName: 'Created',
-            width: 150,
-            renderCell: (params) => (
-                <Typography variant="caption" color="text.secondary">
-                    {formatWorkspaceRelativeTime(params.value as string)}
-                </Typography>
+            accessorKey: 'createdAt',
+            header: 'Created',
+            size: 150,
+            cell: ({ row }) => (
+                <span className="text-xs text-muted-foreground">
+                    {formatWorkspaceRelativeTime(row.original.createdAt)}
+                </span>
             ),
         },
         {
-            field: 'actions',
-            headerName: '',
-            type: 'actions',
-            width: 100,
-            renderCell: (params) => (
-                <Stack direction="row" spacing={1}>
-                    <Tooltip title={params.row.status === 'SUSPENDED' ? "Unsuspend" : "Suspend"}>
-                        <IconButton
-                            size="small"
-                            color={params.row.status === 'SUSPENDED' ? "success" : "warning"}
-                            onClick={() => handleSuspend(params.row.id, params.row.status)}
-                        >
-                            {params.row.status === 'SUSPENDED' ? <CheckCircleIcon fontSize="small" /> : <BlockIcon fontSize="small" />}
-                        </IconButton>
+            id: 'actions',
+            header: '',
+            size: 100,
+            cell: ({ row }) => (
+                <div className="flex gap-1">
+                    <Tooltip>
+                        <TooltipTrigger asChild>
+                            <IconButton
+                                variant="ghost"
+                                size="icon-sm"
+                                className={row.original.status === 'SUSPENDED' ? "text-primary hover:bg-primary/10" : "text-tertiary hover:bg-tertiary/10"}
+                                onClick={(event) => {
+                                    event.stopPropagation();
+                                    handleSuspend(row.original.id, row.original.status);
+                                }}
+                            >
+                                {row.original.status === 'SUSPENDED' ? <CheckCircle2 className="size-4" /> : <Ban className="size-4" />}
+                            </IconButton>
+                        </TooltipTrigger>
+                        <TooltipContent>{row.original.status === 'SUSPENDED' ? "Unsuspend" : "Suspend"}</TooltipContent>
                     </Tooltip>
-                </Stack>
+                </div>
             ),
         },
-    ];
+    ], [handleSuspend]);
 
     return (
-        <Box sx={{ p: 3, maxWidth: 1600, mx: 'auto' }}>
-            <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 4 }}>
-                <Box>
-                    <Typography variant="h4" sx={{ fontWeight: 700, letterSpacing: -0.5 }}>Tenants</Typography>
-                    <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+        <div className="mx-auto max-w-[1600px] p-6">
+            <div className="mb-8 flex items-center justify-between">
+                <div>
+                    <h1 className="text-2xl font-bold tracking-[-0.5px]">Tenants</h1>
+                    <p className="mt-1 text-sm text-muted-foreground">
                         Manage workspaces and subscriptions.
-                    </Typography>
-                </Box>
+                    </p>
+                </div>
                 <CreateTenantDialog onSuccess={fetchTenants} />
-            </Stack>
+            </div>
 
-            <Card sx={{ height: 600, width: '100%', overflow: 'hidden' }}>
-                <DataGrid
-                    rows={tenants || []}
+            <Card className="h-[600px] w-full overflow-hidden">
+                <DataTable
+                    storageKey="platform-admin-tenants-table"
+                    data={tenants || []}
                     columns={columns}
                     loading={loading}
-                    checkboxSelection
-                    disableRowSelectionOnClick
-                    rowSelectionModel={selectedRows}
-                    onRowSelectionModelChange={handleSelectionChange}
-                    getRowId={(row) => row?.id || Math.random().toString()}
-                    slots={{
-                        toolbar: CustomToolbar,
+                    getRowId={(row) => row?.id}
+                    enableRowSelection
+                    rowSelectionIds={selectedRows}
+                    onRowSelectionIdsChange={(ids) => {
+                        setSelectedRows(ids);
+                        if (isAllSelected) setIsAllSelected(false);
                     }}
-                    slotProps={{
-                        toolbar: {
-                            totalItems: totalItems,
-                            selectedCount: selectedRows.length,
-                            isAllSelected,
-                            onSelectAllFiltered: handleSelectAllFiltered,
-                            onClear: clearSelection,
-                            currentCount: (tenants || []).length
-                        } as any
-                    }}
-                    sx={{
-                        border: 'none',
-                        '& .MuiDataGrid-columnHeaders': {
-                            bgcolor: alpha(theme.palette.primary.main, 0.02),
-                        },
+                    totalItems={totalItems}
+                    isAllSelected={isAllSelected}
+                    onSelectAllFiltered={handleSelectAllFiltered}
+                    onClearSelection={clearSelection}
+                    emptyState={{
+                        icon: <Building2 className="size-10 text-muted-foreground opacity-50" />,
+                        title: "No tenants found",
+                        description: "Create a tenant to start managing workspaces.",
                     }}
                 />
             </Card>
@@ -245,58 +205,6 @@ export default function TenantsPage() {
                 module="tenants"
                 onDelete={handleBulkDelete}
             />
-        </Box>
-    );
-}
-
-function CustomToolbar({ totalItems, selectedCount, isAllSelected, onSelectAllFiltered, onClear, currentCount }: any) {
-    const showSelectAllOption = selectedCount > 0 && selectedCount === currentCount && totalItems > currentCount && !isAllSelected;
-
-    return (
-        <Box sx={{ p: 0, borderBottom: '1px solid', borderColor: 'divider', display: 'flex', flexDirection: 'column', alignItems: 'stretch' }}>
-            {showSelectAllOption && (
-                <Box sx={{
-                    p: 1,
-                    bgcolor: 'primary.lighter',
-                    display: 'flex',
-                    justifyContent: 'center',
-                    borderTop: '1px solid',
-                    borderColor: 'divider'
-                }}>
-                    <Typography variant="body2">
-                        All {currentCount} tenants on this page are selected.
-                        <Button
-                            size="small"
-                            onClick={onSelectAllFiltered}
-                            sx={{ ml: 1, textTransform: 'none', fontWeight: 600 }}
-                        >
-                            Select all {totalItems} tenants
-                        </Button>
-                    </Typography>
-                </Box>
-            )}
-
-            {isAllSelected && (
-                <Box sx={{
-                    p: 1,
-                    bgcolor: 'primary.lighter',
-                    display: 'flex',
-                    justifyContent: 'center',
-                    borderTop: '1px solid',
-                    borderColor: 'divider'
-                }}>
-                    <Typography variant="body2" fontWeight={600} color="primary.main">
-                        All {totalItems} tenants are selected.
-                        <Button
-                            size="small"
-                            onClick={onClear}
-                            sx={{ ml: 1, textTransform: 'none' }}
-                        >
-                            Clear selection
-                        </Button>
-                    </Typography>
-                </Box>
-            )}
-        </Box>
+        </div>
     );
 }

@@ -3,25 +3,27 @@
 import * as React from 'react';
 import { NavigationDrawer } from './NavigationDrawer';
 import { Header } from './header';
-import { Breadcrumbs } from './breadcrumbs';
 import { ImpersonationBanner } from './impersonation-banner';
-import {
-    Box,
-    CssBaseline,
-    Container,
-    useMediaQuery,
-    useTheme,
-    Paper,
-} from '@mui/material';
 import { PageTransition } from '@/components/ui/page-transition';
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
-    const theme = useTheme();
-    const isMobile = useMediaQuery(theme.breakpoints.down('md'));
+    const [mounted, setMounted] = React.useState(false);
+    const [isMobile, setIsMobile] = React.useState(false);
     const [open, setOpen] = React.useState(true);
 
     // Right side sheet state (placeholder for now)
     const [sideSheetOpen, setSideSheetOpen] = React.useState(false);
+
+    React.useEffect(() => {
+        setMounted(true);
+        const mediaQuery = window.matchMedia('(max-width: 767px)');
+        const updateIsMobile = () => setIsMobile(mediaQuery.matches);
+
+        updateIsMobile();
+        mediaQuery.addEventListener('change', updateIsMobile);
+
+        return () => mediaQuery.removeEventListener('change', updateIsMobile);
+    }, []);
 
     React.useEffect(() => {
         if (isMobile) {
@@ -42,69 +44,48 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         }
     };
 
-    return (
-        <Box sx={{ display: 'flex', minHeight: '100vh', bgcolor: 'background.default' }}>
-            <CssBaseline />
+    if (!mounted) {
+        return (
+            <div className="flex min-h-screen bg-background">
+                <div className="hidden w-[68px] shrink-0 border-r bg-sidebar md:block" />
+                <main className="flex min-w-0 grow flex-col">
+                    <div className="h-16 border-b bg-background" />
+                    <div className="mt-2 mb-4 flex grow flex-col px-4">
+                        <div className="h-28 rounded-xl border bg-card/60" />
+                    </div>
+                </main>
+            </div>
+        );
+    }
 
+    return (
+        <div className="flex min-h-screen bg-background">
             <NavigationDrawer open={open} toggleDrawer={handleDrawerToggle} />
 
-            <Box
-                component="main"
-                sx={{
-                    flexGrow: 1,
-                    minWidth: 0, // Prevent overflow
-                    display: 'flex',
-                    flexDirection: 'column',
-                    transition: theme.transitions.create('margin', {
-                        easing: theme.transitions.easing.sharp,
-                        duration: theme.transitions.duration.leavingScreen,
-                    }),
-                }}
-            >
+            <main className="flex min-w-0 grow flex-col transition-[margin] duration-200 ease-in-out">
                 <ImpersonationBanner />
 
                 <Header />
 
-                <Container maxWidth={false} sx={{ mt: 2, mb: 4, flexGrow: 1, display: 'flex', flexDirection: 'column' }}>
-
-
+                <div className="mt-2 mb-4 flex grow flex-col px-4">
                     <PageTransition>
-                        <Box sx={{
-                            position: 'relative',
-                            display: 'flex',
-                            gap: 2,
-                            alignItems: 'start'
-                        }}>
+                        <div className="relative flex items-start gap-4">
                             {/* Main Content Area */}
-                            <Box sx={{ flexGrow: 1, minWidth: 0, width: '100%' }}>
+                            <div className="min-w-0 grow">
                                 {children}
-                            </Box>
+                            </div>
 
                             {/* Contextual Side Sheet (Hidden by default) */}
                             {sideSheetOpen && (
-                                <Paper
-                                    elevation={1}
-                                    sx={{
-                                        width: 360,
-                                        flexShrink: 0,
-                                        borderRadius: 3,
-                                        p: 2,
-                                        display: { xs: 'none', lg: 'block' },
-                                        position: 'sticky',
-                                        top: 80,
-                                        height: 'calc(100vh - 100px)',
-                                        overflowY: 'auto',
-                                        bgcolor: 'surface.main' // M3 Surface
-                                    }}
-                                >
+                                <aside className="sticky top-20 hidden h-[calc(100vh-100px)] w-[360px] shrink-0 overflow-y-auto rounded-xl border bg-card p-4 lg:block">
                                     {/* Side Sheet Content would go here */}
                                     Contextual Info
-                                </Paper>
+                                </aside>
                             )}
-                        </Box>
+                        </div>
                     </PageTransition>
-                </Container>
-            </Box>
-        </Box>
+                </div>
+            </main>
+        </div>
     );
 }

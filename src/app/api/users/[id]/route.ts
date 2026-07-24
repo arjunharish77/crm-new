@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { requireCurrentUser } from "@/lib/server/auth";
+import { requireInternalUser } from "@/lib/server/auth";
 import { updateTenantScopedUser } from "@/lib/server/admin";
 import { forbidden, serverError, unauthorized } from "@/lib/server/http";
 
@@ -8,7 +8,7 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const user = await requireCurrentUser(request);
+    const user = await requireInternalUser(request);
 
     if (!user.tenantId) {
       return forbidden("Tenant context required");
@@ -20,6 +20,7 @@ export async function PATCH(
     return NextResponse.json(updated);
   } catch (error) {
     if (error instanceof Error && error.message === "UNAUTHORIZED") return unauthorized();
+    if (error instanceof Error && error.message === "FORBIDDEN") return forbidden();
     return serverError("Failed to update user");
   }
 }

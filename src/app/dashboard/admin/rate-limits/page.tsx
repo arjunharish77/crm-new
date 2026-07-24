@@ -124,9 +124,7 @@ export default function RateLimitsPage() {
                                 >
                                     <div className="flex-1">
                                         <p className="text-sm font-medium">{tenant.tenantName}</p>
-                                        <p className="text-xs text-muted-foreground">
-                                            ID: {tenant.tenantId}
-                                        </p>
+                                        <p className="text-xs text-muted-foreground">Tenant workspace</p>
                                     </div>
                                     <div className="text-right">
                                         <p className="text-sm font-bold text-red-500">

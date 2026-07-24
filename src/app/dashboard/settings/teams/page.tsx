@@ -1,44 +1,25 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
-import {
-    Box,
-    Typography,
-    Button,
-    Card,
-    Stack,
-    IconButton,
-    Tooltip,
-    useTheme,
-    alpha,
-    Avatar,
-    Chip,
-} from "@mui/material";
-import {
-    Add as AddIcon,
-    Edit as EditIcon,
-    Delete as DeleteIcon,
-    Groups as TeamsIcon,
-} from "@mui/icons-material";
-import {
-    GridColDef,
-    GridRenderCellParams,
-    GridRowId,
-} from "@mui/x-data-grid";
-import { StandardDataGrid } from "@/components/common/standard-data-grid";
+import { useEffect, useState, useCallback, useMemo } from "react";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import { ColumnDef } from "@tanstack/react-table";
+import { Plus, Pencil, Trash2, Users } from "lucide-react";
+import { DataTable } from "@/components/ui/data-table";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Badge } from "@/components/ui/badge";
+import { Button as UiButton } from "@/components/ui/button";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { toast } from "sonner";
 import { Team } from "@/types/user";
-import { EmptyState } from "@/components/common/empty-state";
-import { TableSkeleton } from "@/components/common/skeletons";
 import { apiFetch } from "@/lib/api";
 
 import { CreateTeamDialog } from "./create-team-dialog";
 
 export default function TeamsPage() {
-    const theme = useTheme();
     const [teams, setTeams] = useState<Team[]>([]);
     const [loading, setLoading] = useState(false);
-    const [selectedRows, setSelectedRows] = useState<GridRowId[]>([]);
+    const [selectedRows, setSelectedRows] = useState<string[]>([]);
     const [createDialogOpen, setCreateDialogOpen] = useState(false);
     const [selectedTeam, setSelectedTeam] = useState<Team | null>(null);
 
@@ -90,116 +71,122 @@ export default function TeamsPage() {
         }
     };
 
-    const columns: GridColDef[] = [
+    const columns = useMemo<ColumnDef<Team, any>[]>(() => [
         {
-            field: 'name',
-            headerName: 'Team Name',
-            flex: 1.5,
-            minWidth: 200,
-            renderCell: (params: GridRenderCellParams<Team>) => (
-                <Stack direction="row" spacing={1.5} alignItems="center" sx={{ height: '100%' }}>
-                    <Avatar
-                        sx={{
-                            width: 32,
-                            height: 32,
-                            bgcolor: alpha(theme.palette.primary.main, 0.1),
-                            color: theme.palette.primary.main,
-                        }}
-                    >
-                        <TeamsIcon fontSize="small" />
+            accessorKey: 'name',
+            header: 'Team Name',
+            size: 260,
+            cell: ({ row }) => (
+                <div className="flex h-full items-center gap-3">
+                    <Avatar className="size-8 bg-primary/10 text-primary">
+                        <AvatarFallback>
+                            <Users className="size-4" />
+                        </AvatarFallback>
                     </Avatar>
-                    <Box>
-                        <Typography variant="body2" sx={{ fontWeight: 600 }}>
-                            {params.row.name}
-                        </Typography>
-                        {params.row.description && (
-                            <Typography variant="caption" color="text.secondary">
-                                {params.row.description}
-                            </Typography>
-                        )}
-                    </Box>
-                </Stack>
+                    <div>
+                        <div className="text-sm font-semibold">{row.original.name}</div>
+                        {row.original.description ? (
+                            <div className="text-xs text-muted-foreground">{row.original.description}</div>
+                        ) : null}
+                    </div>
+                </div>
             ),
         },
         {
-            field: 'memberCount',
-            headerName: 'Members',
-            width: 120,
-            renderCell: (params: GridRenderCellParams<Team>) => (
-                <Chip
-                    label={`${params.row.memberCount} members`}
-                    size="small"
-                    sx={{ borderRadius: '6px', bgcolor: 'action.hover' }}
-                />
+            accessorKey: 'memberCount',
+            header: 'Members',
+            size: 140,
+            cell: ({ row }) => (
+                <Badge variant="outline" className="border-border bg-muted text-muted-foreground">
+                    {row.original.memberCount} members
+                </Badge>
             ),
         },
         {
-            field: 'actions',
-            headerName: '',
-            type: 'actions',
-            width: 100,
-            renderCell: (params: GridRenderCellParams<Team>) => (
-                <Stack direction="row" spacing={0.5}>
-                    <Tooltip title="Edit">
-                        <IconButton size="small" onClick={() => handleEdit(params.row)}>
-                            <EditIcon sx={{ fontSize: 18 }} />
-                        </IconButton>
+            id: 'actions',
+            header: '',
+            size: 110,
+            cell: ({ row }) => (
+                <div className="flex gap-1">
+                    <Tooltip>
+                        <TooltipTrigger asChild>
+                            <UiButton
+                                variant="ghost"
+                                size="icon-sm"
+                                onClick={(event) => {
+                                    event.stopPropagation();
+                                    handleEdit(row.original);
+                                }}
+                            >
+                                <Pencil className="size-4" />
+                            </UiButton>
+                        </TooltipTrigger>
+                        <TooltipContent>Edit</TooltipContent>
                     </Tooltip>
-                    <Tooltip title="Delete">
-                        <IconButton size="small" color="error" onClick={() => handleDelete(params.row)}>
-                            <DeleteIcon sx={{ fontSize: 18 }} />
-                        </IconButton>
+                    <Tooltip>
+                        <TooltipTrigger asChild>
+                            <UiButton
+                                variant="ghost"
+                                size="icon-sm"
+                                className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+                                onClick={(event) => {
+                                    event.stopPropagation();
+                                    handleDelete(row.original);
+                                }}
+                            >
+                                <Trash2 className="size-4" />
+                            </UiButton>
+                        </TooltipTrigger>
+                        <TooltipContent>Delete</TooltipContent>
                     </Tooltip>
-                </Stack>
+                </div>
             ),
         },
-    ];
+    ], []);
 
     return (
-        <Box sx={{ p: { xs: 1.5, md: 2 }, maxWidth: 1600, mx: 'auto' }}>
-            <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 2 }}>
-                <Box>
-                    <Typography variant="h6" sx={{ fontWeight: 700, letterSpacing: -0.5 }}>Teams</Typography>
-                    <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+        <div className="mx-auto max-w-[1600px] px-3 py-3 md:px-4 md:py-4">
+            <div className="mb-4 flex items-center justify-between">
+                <div>
+                    <h1 className="text-lg font-bold tracking-[-0.5px]">Teams</h1>
+                    <p className="mt-1 text-sm text-muted-foreground">
                         Organize users into functional groups for assignment and reporting.
-                    </Typography>
-                </Box>
+                    </p>
+                </div>
                 <Button
-                    variant="contained"
-                    startIcon={<AddIcon />}
+                    className="rounded-full px-3"
                     onClick={() => {
                         setSelectedTeam(null);
                         setCreateDialogOpen(true);
                     }}
-                    sx={{ borderRadius: 28, px: 3 }}
                 >
+                    <Plus className="size-4" />
                     Create Team
                 </Button>
-            </Stack>
+            </div>
 
-            <Card sx={{ height: 600, width: '100%', overflow: 'hidden' }}>
-                {loading ? (
-                    <TableSkeleton rows={6} columns={3} />
-                ) : teams.length === 0 ? (
-                    <EmptyState
-                        title="No teams defined"
-                        description="Create teams to group your users."
-                        action={
-                            <Button variant="outlined" startIcon={<AddIcon />} onClick={() => setCreateDialogOpen(true)}>
-                                Create Team
-                            </Button>
-                        }
-                    />
-                ) : (
-                    <StandardDataGrid
-                        rows={teams}
+            <Card className="h-[600px] w-full overflow-hidden">
+                    <DataTable
+                        storageKey="settings-teams-table"
+                        data={teams}
                         columns={columns}
-                        checkboxSelection
-                        disableRowSelectionOnClick
-                        rowSelectionModel={selectedRows}
-                        onRowSelectionModelChange={setSelectedRows}
+                        loading={loading}
+                        getRowId={(row) => row.id}
+                        enableRowSelection
+                        rowSelectionIds={selectedRows}
+                        onRowSelectionIdsChange={setSelectedRows}
+                        emptyState={{
+                            icon: <Users className="size-10 text-muted-foreground opacity-50" />,
+                            title: "No teams defined",
+                            description: "Create teams to group your users.",
+                            action: (
+                                <Button variant="outline" onClick={() => setCreateDialogOpen(true)}>
+                                    <Plus className="size-4" />
+                                    Create Team
+                                </Button>
+                            ),
+                        }}
                     />
-                )}
             </Card>
 
             <CreateTeamDialog
@@ -208,6 +195,6 @@ export default function TeamsPage() {
                 team={selectedTeam}
                 onSuccess={handleCreateSuccess}
             />
-        </Box>
+        </div>
     );
 }

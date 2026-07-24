@@ -4,22 +4,19 @@ import { useState } from "react";
 import { Activity } from "@/types/activities";
 import * as LucideIcons from "lucide-react";
 import { ChevronDown, FileText } from "lucide-react";
-import {
-    alpha,
-    Avatar,
-    Box,
-    Collapse,
-    Chip,
-    Divider,
-    Paper,
-    Stack,
-    Typography,
-    useTheme,
-} from "@mui/material";
+import { Badge } from "@/components/ui/badge";
 import { formatWorkspaceDate, formatWorkspaceDateTime, formatWorkspaceRelativeTime, formatWorkspaceTime, parseWorkspaceDate } from "@/lib/date-format";
+import { cn } from "@/lib/utils";
 
 interface TimelineProps {
     activities: Activity[];
+}
+
+// Mirrors the color-mix approach used for CSS tokens in globals.css — lets
+// per-activity-type accent colors (arbitrary hex values from the DB) get
+// alpha-blended without needing MUI's `alpha()` helper.
+function withAlpha(color: string, percent: number) {
+    return `color-mix(in srgb, ${color} ${percent}%, transparent)`;
 }
 
 function getDayLabel(date: Date) {
@@ -99,7 +96,6 @@ function activityChangedFields(event: any) {
 }
 
 export function Timeline({ activities }: TimelineProps) {
-    const theme = useTheme();
     const [expandedActivityIds, setExpandedActivityIds] = useState<string[]>([]);
 
     const toggleExpanded = (activityId: string) => {
@@ -112,23 +108,13 @@ export function Timeline({ activities }: TimelineProps) {
 
     if (activities.length === 0) {
         return (
-            <Box
-                sx={{
-                    textAlign: "center",
-                    py: 6,
-                    border: "1px dashed",
-                    borderColor: "divider",
-                    borderRadius: 4,
-                    color: "text.secondary",
-                    bgcolor: "surfaceContainerLowest",
-                }}
-            >
-                <FileText size={40} style={{ opacity: 0.18, marginBottom: 12 }} />
-                <Typography variant="subtitle1" fontWeight={700}>
+            <div className="rounded-2xl border border-dashed bg-surface-container-lowest py-12 text-center text-muted-foreground">
+                <FileText size={40} className="mx-auto mb-3 opacity-[0.18]" />
+                <p className="text-base font-bold">
                     No activity yet
-                </Typography>
-                <Typography variant="body2">Activity history will appear here.</Typography>
-            </Box>
+                </p>
+                <p className="text-sm">Activity history will appear here.</p>
+            </div>
         );
     }
 
@@ -140,35 +126,21 @@ export function Timeline({ activities }: TimelineProps) {
     }, {});
 
     return (
-        <Stack spacing={3}>
+        <div className="flex flex-col gap-6">
             {Object.entries(grouped).map(([label, items]) => (
-                <Box key={label}>
-                    <Typography
-                        variant="caption"
-                        sx={{
-                            display: "inline-flex",
-                            mb: 1.5,
-                            px: 1.25,
-                            py: 0.5,
-                            borderRadius: 99,
-                            bgcolor: alpha(theme.palette.primary.main, 0.08),
-                            color: "primary.main",
-                            fontWeight: 800,
-                            letterSpacing: "0.04em",
-                            textTransform: "uppercase",
-                        }}
-                    >
+                <div key={label}>
+                    <span className="mb-3 inline-flex rounded-full bg-primary/8 px-2.5 py-1 text-xs font-extrabold uppercase tracking-[0.04em] text-primary">
                         {label}
-                    </Typography>
+                    </span>
 
-                    <Stack spacing={1.25}>
+                    <div className="flex flex-col gap-2.5">
                         {items.map((activity) => {
                             const type = activity.type;
                             const IconComponent = type?.icon
                                 ? (LucideIcons as any)[type.icon]
                                 : LucideIcons.FileText;
                             const Icon = IconComponent || LucideIcons.FileText;
-                            const accent = type?.color || theme.palette.primary.main;
+                            const accent = type?.color || "var(--primary)";
                             const activityDate = parseWorkspaceDate(activity.createdAt) ?? new Date(activity.createdAt);
                             const isExpanded = expandedActivityIds.includes(activity.id);
                             const customFieldEntries = Object.entries(activity.customFields ?? {}).filter(
@@ -200,258 +172,179 @@ export function Timeline({ activities }: TimelineProps) {
                             const auditEvents = (activity.auditEvents ?? []).filter((event) => event.action === "UPDATE" && activityChangedFields(event).length > 0);
 
                             return (
-                                <Paper
+                                <div
                                     key={activity.id}
-                                    elevation={0}
+                                    role="button"
+                                    tabIndex={0}
                                     onClick={() => toggleExpanded(activity.id)}
-                                    sx={{
-                                        p: 1.5,
-                                        borderRadius: 3,
-                                        border: "1px solid",
-                                        borderColor: alpha(accent, 0.18),
-                                        bgcolor: "background.paper",
-                                        cursor: "pointer",
-                                        transition: "border-color 160ms ease, box-shadow 160ms ease, background-color 160ms ease",
-                                        "&:hover": {
-                                            borderColor: alpha(accent, 0.28),
-                                            boxShadow: `0 10px 28px ${alpha(accent, 0.08)}`,
-                                        },
+                                    onKeyDown={(event) => {
+                                        if (event.key === "Enter" || event.key === " ") {
+                                            event.preventDefault();
+                                            toggleExpanded(activity.id);
+                                        }
                                     }}
+                                    className="cursor-pointer rounded-2xl border bg-card p-3 transition-[border-color,box-shadow,background-color] duration-150 hover:shadow-[0_10px_28px_var(--tw-shadow-color)]"
+                                    style={{
+                                        borderColor: withAlpha(accent, 18),
+                                        "--tw-shadow-color": withAlpha(accent, 8),
+                                    } as React.CSSProperties}
                                 >
-                                    <Stack direction="row" spacing={1.5} alignItems="flex-start">
-                                        <Box
-                                            sx={{
-                                                width: 52,
-                                                minWidth: 52,
-                                                textAlign: "center",
-                                                pt: 0.25,
-                                            }}
-                                        >
-                                            <Avatar
-                                                sx={{
-                                                    width: 32,
-                                                    height: 32,
-                                                    mx: "auto",
-                                                    mb: 0.5,
-                                                    bgcolor: alpha(accent, 0.1),
+                                    <div className="flex items-start gap-3">
+                                        <div className="w-[52px] min-w-[52px] pt-0.5 text-center">
+                                            <div
+                                                className="mx-auto mb-1 flex size-8 items-center justify-center rounded-full border"
+                                                style={{
+                                                    backgroundColor: withAlpha(accent, 10),
                                                     color: accent,
-                                                    border: "1px solid",
-                                                    borderColor: alpha(accent, 0.18),
+                                                    borderColor: withAlpha(accent, 18),
                                                 }}
                                             >
                                                 <Icon size={14} />
-                                            </Avatar>
-                                            <Typography variant="caption" sx={{ display: "block", fontWeight: 700 }}>
+                                            </div>
+                                            <span className="block text-xs font-bold">
                                                 {formatWorkspaceTime(activityDate)}
-                                            </Typography>
-                                        </Box>
+                                            </span>
+                                        </div>
 
-                                        <Box sx={{ flex: 1, minWidth: 0 }}>
-                                            <Stack
-                                                direction={{ xs: "column", sm: "row" }}
-                                                spacing={1}
-                                                justifyContent="space-between"
-                                                alignItems={{ xs: "flex-start", sm: "center" }}
-                                                sx={{ mb: 0.75 }}
-                                            >
-                                                <Stack direction="row" spacing={0.75} alignItems="center" flexWrap="wrap">
-                                                    <Typography variant="body2" fontWeight={800}>
+                                        <div className="min-w-0 flex-1">
+                                            <div className="mb-1.5 flex flex-col justify-between gap-1 sm:flex-row sm:items-center">
+                                                <div className="flex flex-wrap items-center gap-1.5">
+                                                    <span className="text-sm font-extrabold">
                                                         {activity.type?.name || "Activity"}
-                                                    </Typography>
+                                                    </span>
                                                     {activity.outcome && (
-                                                        <Chip
-                                                            label={activity.outcome}
-                                                            size="small"
-                                                            sx={{
-                                                                height: 20,
-                                                                fontSize: "0.65rem",
-                                                                fontWeight: 700,
-                                                                borderRadius: 1.5,
-                                                                bgcolor: "surfaceContainerHighest",
-                                                            }}
-                                                        />
+                                                        <Badge variant="secondary" className="h-5 rounded-[6px] text-[0.65rem] font-bold">
+                                                            {activity.outcome}
+                                                        </Badge>
                                                     )}
                                                     {activity.slaStatus && activity.slaStatus !== "PENDING" && (
-                                                        <Chip
-                                                            label={activity.slaStatus}
-                                                            size="small"
-                                                            color={activity.slaStatus === "MET" ? "success" : "error"}
-                                                            variant="outlined"
-                                                            sx={{
-                                                                height: 20,
-                                                                fontSize: "0.65rem",
-                                                                fontWeight: 700,
-                                                                borderRadius: 1.5,
-                                                            }}
-                                                        />
+                                                        <Badge
+                                                            variant="outline"
+                                                            className={cn(
+                                                                "h-5 rounded-[6px] text-[0.65rem] font-bold",
+                                                                activity.slaStatus === "MET"
+                                                                    ? "border-emerald-500/40 text-emerald-600"
+                                                                    : "border-destructive/40 text-destructive"
+                                                            )}
+                                                        >
+                                                            {activity.slaStatus}
+                                                        </Badge>
                                                     )}
-                                                </Stack>
+                                                </div>
 
-                                                <Stack direction="row" spacing={1} alignItems="center">
-                                                    <Typography variant="caption" color="text.secondary">
+                                                <div className="flex items-center gap-2">
+                                                    <span className="text-xs text-muted-foreground">
                                                         {formatWorkspaceRelativeTime(activity.createdAt)}
-                                                    </Typography>
-                                                    <Box
-                                                        sx={{
-                                                            width: 24,
-                                                            height: 24,
-                                                            display: "inline-flex",
-                                                            alignItems: "center",
-                                                            justifyContent: "center",
-                                                            borderRadius: 1.5,
-                                                            bgcolor: alpha(accent, 0.08),
-                                                            color: accent,
-                                                            transform: isExpanded ? "rotate(180deg)" : "rotate(0deg)",
-                                                            transition: "transform 160ms ease",
-                                                        }}
+                                                    </span>
+                                                    <div
+                                                        className={cn(
+                                                            "inline-flex size-6 items-center justify-center rounded-[6px] transition-transform duration-150",
+                                                            isExpanded && "rotate-180"
+                                                        )}
+                                                        style={{ backgroundColor: withAlpha(accent, 8), color: accent }}
                                                     >
                                                         <ChevronDown size={14} />
-                                                    </Box>
-                                                </Stack>
-                                            </Stack>
+                                                    </div>
+                                                </div>
+                                            </div>
 
                                             {activity.notes ? (
-                                                <Typography
-                                                    variant="body2"
-                                                    sx={{
-                                                        color: "text.primary",
-                                                        mb: 0.75,
-                                                        whiteSpace: "pre-wrap",
-                                                        lineHeight: 1.45,
-                                                    }}
-                                                >
+                                                <p className="mb-1.5 whitespace-pre-wrap text-sm leading-[1.45] text-foreground">
                                                     {activity.notes}
-                                                </Typography>
+                                                </p>
                                             ) : (
-                                                <Typography variant="body2" color="text.secondary" sx={{ mb: 0.75 }}>
+                                                <p className="mb-1.5 text-sm text-muted-foreground">
                                                     No notes were added for this activity.
-                                                </Typography>
+                                                </p>
                                             )}
 
-                                            <Stack direction="row" spacing={1.25} flexWrap="wrap">
+                                            <div className="flex flex-wrap gap-3">
                                                 {activity.lead && (
-                                                    <Typography variant="caption" color="text.secondary">
+                                                    <span className="text-xs text-muted-foreground">
                                                         Lead: <strong>{activity.lead.name}</strong>
-                                                    </Typography>
+                                                    </span>
                                                 )}
                                                 {activity.opportunity && (
-                                                    <Typography variant="caption" color="text.secondary">
+                                                    <span className="text-xs text-muted-foreground">
                                                         Opportunity: <strong>{activity.opportunity.title}</strong>
-                                                    </Typography>
+                                                    </span>
                                                 )}
                                                 {activity.user && (
-                                                    <Typography variant="caption" color="text.secondary">
+                                                    <span className="text-xs text-muted-foreground">
                                                         by {activity.user.name || activity.user.email}
-                                                    </Typography>
+                                                    </span>
                                                 )}
                                                 {auditEvents.length > 0 && (
-                                                    <Typography variant="caption" color="text.secondary">
+                                                    <span className="text-xs text-muted-foreground">
                                                         {auditEvents.length} modification{auditEvents.length === 1 ? "" : "s"} tracked
-                                                    </Typography>
+                                                    </span>
                                                 )}
-                                            </Stack>
+                                            </div>
 
-                                            <Collapse in={isExpanded} timeout="auto" unmountOnExit>
-                                                <Divider sx={{ my: 1.25 }} />
-                                                {auditEvents.length > 0 && (
-                                                    <Stack spacing={1} sx={{ mb: 1.25 }}>
-                                                        {auditEvents.map((event) => {
-                                                            const changes = activityChangedFields(event);
-                                                            const actor = event.user?.name || event.user?.email || "Unknown User";
-                                                            return (
-                                                                <Box key={event.id} sx={{ p: 1.25, borderRadius: 2, bgcolor: alpha(theme.palette.info.main, 0.06), border: "1px solid", borderColor: alpha(theme.palette.info.main, 0.18) }}>
-                                                                    <Typography variant="caption" sx={{ display: "block", fontWeight: 800, color: "info.main", mb: 0.75 }}>
-                                                                        Activity modified by {actor} / {formatWorkspaceRelativeTime(event.createdAt)}
-                                                                    </Typography>
-                                                                    <Stack spacing={0.5}>
-                                                                        {changes.map((change) => (
-                                                                            <Typography key={`${event.id}-${change.field}`} variant="caption" color="text.secondary">
-                                                                                <strong>{activityFieldLabel(change.field)}</strong>: {formatAuditActivityValue(change.before, change.field, event)} -&gt; {formatAuditActivityValue(change.after, change.field, event)}
-                                                                            </Typography>
-                                                                        ))}
-                                                                    </Stack>
-                                                                </Box>
-                                                            );
-                                                        })}
-                                                    </Stack>
+                                            {/* Pure-CSS collapse (grid-template-rows trick) instead of MUI's Collapse */}
+                                            <div
+                                                className={cn(
+                                                    "grid transition-[grid-template-rows] duration-200 ease-in-out",
+                                                    isExpanded ? "grid-rows-[1fr]" : "grid-rows-[0fr]"
                                                 )}
-                                                <Stack
-                                                    spacing={1}
-                                                    sx={{
-                                                        display: "grid",
-                                                        gridTemplateColumns: {
-                                                            xs: "1fr",
-                                                            sm: "repeat(2, minmax(0, 1fr))",
-                                                        },
-                                                        gap: 1,
-                                                    }}
-                                                >
-                                                    {expandedFields.length > 0 ? (
-                                                        expandedFields.map((field) => (
-                                                            <Box
-                                                                key={`${activity.id}-${field.label}`}
-                                                                sx={{
-                                                                    px: 1.25,
-                                                                    py: 1,
-                                                                    borderRadius: 2,
-                                                                    bgcolor: "surfaceContainerLowest",
-                                                                    border: "1px solid",
-                                                                    borderColor: "divider",
-                                                                }}
-                                                            >
-                                                                <Typography
-                                                                    variant="caption"
-                                                                    sx={{
-                                                                        display: "block",
-                                                                        mb: 0.25,
-                                                                        color: "text.secondary",
-                                                                        fontWeight: 700,
-                                                                        letterSpacing: "0.02em",
-                                                                        textTransform: "uppercase",
-                                                                    }}
-                                                                >
-                                                                    {field.label}
-                                                                </Typography>
-                                                                <Typography
-                                                                    variant="body2"
-                                                                    sx={{
-                                                                        color: "text.primary",
-                                                                        fontWeight: 600,
-                                                                        wordBreak: "break-word",
-                                                                        whiteSpace: "pre-wrap",
-                                                                    }}
-                                                                >
-                                                                    {formatActivityValue(field.value)}
-                                                                </Typography>
-                                                            </Box>
-                                                        ))
-                                                    ) : (
-                                                        <Box
-                                                            sx={{
-                                                                gridColumn: "1 / -1",
-                                                                px: 1.25,
-                                                                py: 1,
-                                                                borderRadius: 2,
-                                                                bgcolor: "surfaceContainerLowest",
-                                                                border: "1px dashed",
-                                                                borderColor: "divider",
-                                                            }}
-                                                        >
-                                                            <Typography variant="body2" color="text.secondary">
-                                                                No additional fields were stored for this activity.
-                                                            </Typography>
-                                                        </Box>
+                                            >
+                                                <div className="overflow-hidden">
+                                                    <div className="my-3 border-t" />
+                                                    {auditEvents.length > 0 && (
+                                                        <div className="mb-3 flex flex-col gap-2">
+                                                            {auditEvents.map((event) => {
+                                                                const changes = activityChangedFields(event);
+                                                                const actor = event.user?.name || event.user?.email || "Unknown User";
+                                                                return (
+                                                                    <div key={event.id} className="rounded-lg border border-sky-500/20 bg-sky-500/[0.06] p-2.5">
+                                                                        <span className="mb-1.5 block text-xs font-extrabold text-sky-600">
+                                                                            Activity modified by {actor} / {formatWorkspaceRelativeTime(event.createdAt)}
+                                                                        </span>
+                                                                        <div className="flex flex-col gap-1">
+                                                                            {changes.map((change) => (
+                                                                                <span key={`${event.id}-${change.field}`} className="text-xs text-muted-foreground">
+                                                                                    <strong>{activityFieldLabel(change.field)}</strong>: {formatAuditActivityValue(change.before, change.field, event)} -&gt; {formatAuditActivityValue(change.after, change.field, event)}
+                                                                                </span>
+                                                                            ))}
+                                                                        </div>
+                                                                    </div>
+                                                                );
+                                                            })}
+                                                        </div>
                                                     )}
-                                                </Stack>
-                                            </Collapse>
-                                        </Box>
-                                    </Stack>
-                                </Paper>
+                                                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                                                        {expandedFields.length > 0 ? (
+                                                            expandedFields.map((field) => (
+                                                                <div
+                                                                    key={`${activity.id}-${field.label}`}
+                                                                    className="rounded-lg border bg-surface-container-lowest px-2.5 py-2"
+                                                                >
+                                                                    <span className="mb-0.5 block text-xs font-bold uppercase tracking-[0.02em] text-muted-foreground">
+                                                                        {field.label}
+                                                                    </span>
+                                                                    <span className="block whitespace-pre-wrap break-words text-sm font-semibold text-foreground">
+                                                                        {formatActivityValue(field.value)}
+                                                                    </span>
+                                                                </div>
+                                                            ))
+                                                        ) : (
+                                                            <div className="col-span-full rounded-lg border border-dashed px-2.5 py-2">
+                                                                <span className="text-sm text-muted-foreground">
+                                                                    No additional fields were stored for this activity.
+                                                                </span>
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
                             );
                         })}
-                    </Stack>
-                </Box>
+                    </div>
+                </div>
             ))}
-        </Stack>
+        </div>
     );
 }

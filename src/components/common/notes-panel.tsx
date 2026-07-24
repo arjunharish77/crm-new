@@ -1,32 +1,16 @@
 'use client';
 
 import React, { useEffect, useState, useRef } from 'react';
-import {
-    Box,
-    Typography,
-    TextField,
-    IconButton,
-    Avatar,
-    Stack,
-    Chip,
-    Tooltip,
-    Divider,
-    CircularProgress,
-    alpha,
-    useTheme,
-} from '@mui/material';
-import {
-    PushPin as PinIcon,
-    PushPinOutlined as PinOutlinedIcon,
-    Edit as EditIcon,
-    Delete as DeleteIcon,
-    Send as SendIcon,
-    Add as AddIcon,
-    StickyNote2 as NoteIcon,
-} from '@mui/icons-material';
+import { Pin, PinOff, Pencil, Trash2, Send, StickyNote, Loader2, X } from 'lucide-react';
+import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Textarea } from '@/components/ui/textarea';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { apiFetch } from '@/lib/api';
 import { toast } from 'sonner';
 import { formatWorkspaceRelativeTime, parseWorkspaceDate } from '@/lib/date-format';
+import { cn } from '@/lib/utils';
 
 interface NoteAuthor {
     id: string;
@@ -50,14 +34,13 @@ interface NotesPanelProps {
 }
 
 export function NotesPanel({ entityType, entityId, currentUserId }: NotesPanelProps) {
-    const theme = useTheme();
     const [notes, setNotes] = useState<Note[]>([]);
     const [loading, setLoading] = useState(true);
     const [submitting, setSubmitting] = useState(false);
     const [content, setContent] = useState('');
     const [editingNote, setEditingNote] = useState<Note | null>(null);
     const [editContent, setEditContent] = useState('');
-    const textRef = useRef<HTMLInputElement>(null);
+    const textRef = useRef<HTMLTextAreaElement>(null);
 
     const fetchNotes = async () => {
         try {
@@ -141,175 +124,163 @@ export function NotesPanel({ entityType, entityId, currentUserId }: NotesPanelPr
     };
 
     return (
-        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+        <div className="flex flex-col gap-3">
             {/* Header */}
-            <Stack direction="row" spacing={1} alignItems="center">
-                <NoteIcon sx={{ fontSize: 20, color: 'primary.main' }} />
-                <Typography variant="subtitle1" fontWeight={700}>
+            <div className="flex items-center gap-2">
+                <StickyNote className="size-5 text-primary" />
+                <span className="text-base font-bold">
                     Notes
-                </Typography>
-                <Chip
-                    label={notes.length}
-                    size="small"
-                    sx={{ height: 18, fontSize: '0.7rem', bgcolor: 'action.selected', borderRadius: '6px' }}
-                />
-            </Stack>
+                </span>
+                <Badge variant="secondary" className="h-[18px] rounded-md text-[0.7rem]">
+                    {notes.length}
+                </Badge>
+            </div>
 
             {/* Compose */}
-            <Box
-                component="form"
+            <form
                 onSubmit={handleSubmit}
-                sx={{
-                    border: '1px solid',
-                    borderColor: 'divider',
-                    borderRadius: '10px',
-                    overflow: 'hidden',
-                    '&:focus-within': {
-                        borderColor: 'primary.main',
-                        boxShadow: `0 0 0 3px ${alpha(theme.palette.primary.main, 0.1)}`,
-                    },
-                    transition: 'box-shadow 0.2s, border-color 0.2s',
-                }}
+                className="overflow-hidden rounded-[10px] border transition-[box-shadow,border-color] focus-within:border-primary focus-within:ring-3 focus-within:ring-primary/10"
             >
-                <TextField
-                    inputRef={textRef}
-                    multiline
-                    minRows={3}
-                    maxRows={6}
-                    fullWidth
+                <Textarea
+                    ref={textRef}
+                    rows={3}
                     placeholder="Add a note…"
                     value={content}
                     onChange={e => setContent(e.target.value)}
-                    variant="filled"
-                    sx={{
-                        '& .MuiFilledInput-root': {
-                            bgcolor: 'transparent',
-                            '&::before, &::after': { display: 'none' },
-                        },
-                    }}
+                    className="min-h-16 resize-none rounded-none border-0 bg-transparent shadow-none focus-visible:ring-0"
                 />
-                    <Box sx={{ display: 'flex', justifyContent: 'flex-end', px: 1, py: 0.75, bgcolor: alpha(theme.palette.action.hover, 0.35), borderTop: '1px solid', borderColor: 'divider' }}>
-                        <IconButton
-                            type="submit"
-                            disabled={!content.trim() || submitting}
-                            size="small"
-                            color="primary"
-                            sx={{ bgcolor: 'primary.main', color: 'white', borderRadius: '8px', '&:hover': { bgcolor: 'primary.dark' }, '&:disabled': { bgcolor: 'action.disabled' } }}
-                        >
-                        {submitting ? <CircularProgress size={16} color="inherit" /> : <SendIcon fontSize="small" />}
-                    </IconButton>
-                </Box>
-            </Box>
+                <div className="flex justify-end border-t bg-muted/40 px-2 py-1.5">
+                    <Button
+                        type="submit"
+                        disabled={!content.trim() || submitting}
+                        size="icon-sm"
+                        className="rounded-lg"
+                    >
+                        {submitting ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />}
+                    </Button>
+                </div>
+            </form>
 
             {/* Notes List */}
             {loading ? (
-                <Box sx={{ display: 'flex', justifyContent: 'center', py: 3 }}>
-                    <CircularProgress size={24} />
-                </Box>
+                <div className="flex justify-center py-6">
+                    <Loader2 className="size-6 animate-spin text-muted-foreground" />
+                </div>
             ) : notes.length === 0 ? (
-                <Box sx={{ textAlign: 'center', py: 3, color: 'text.disabled' }}>
-                    <NoteIcon sx={{ fontSize: 32, mb: 1 }} />
-                    <Typography variant="body2">No notes yet. Add one above!</Typography>
-                </Box>
+                <div className="py-6 text-center text-muted-foreground/60">
+                    <StickyNote className="mx-auto mb-2 size-8" />
+                    <p className="text-sm">No notes yet. Add one above!</p>
+                </div>
             ) : (
-                <Stack spacing={1.5}>
+                <div className="flex flex-col gap-3">
                     {notes.map(note => (
-                        <Box
+                        <div
                             key={note.id}
-                            sx={{
-                                p: 1.5,
-                                borderRadius: '10px',
-                                border: '1px solid',
-                                borderColor: note.isPinned ? 'warning.main' : 'divider',
-                                bgcolor: note.isPinned
-                                    ? alpha(theme.palette.warning.main, 0.04)
-                                    : 'background.paper',
-                                transition: 'border-color 0.2s',
-                            }}
+                            className={cn(
+                                "rounded-[10px] border p-3 transition-colors",
+                                note.isPinned ? "border-amber-500 bg-amber-500/[0.04]" : "border-border bg-card"
+                            )}
                         >
-                            <Stack direction="row" spacing={1.5} alignItems="flex-start">
-                                <Avatar sx={{ width: 28, height: 28, fontSize: '0.72rem', bgcolor: 'primary.main' }}>
-                                    {note.author.name[0].toUpperCase()}
+                            <div className="flex items-start gap-3">
+                                <Avatar className="size-7 text-[0.72rem]">
+                                    <AvatarFallback>{note.author.name[0].toUpperCase()}</AvatarFallback>
                                 </Avatar>
-                                <Box sx={{ flex: 1, minWidth: 0 }}>
-                                    <Stack direction="row" spacing={1} alignItems="center" justifyContent="space-between">
-                                        <Stack direction="row" spacing={0.5} alignItems="center">
-                                            <Typography variant="caption" fontWeight={700}>
+                                <div className="min-w-0 flex-1">
+                                    <div className="flex items-center justify-between gap-2">
+                                        <div className="flex items-center gap-1">
+                                            <span className="text-xs font-bold">
                                                 {note.author.name}
-                                            </Typography>
+                                            </span>
                                             {note.isPinned && (
-                                                <Chip
-                                                    label="Pinned"
-                                                    size="small"
-                                                    icon={<PinIcon sx={{ fontSize: '10px !important' }} />}
-                                                    sx={{ height: 16, fontSize: '0.6rem', bgcolor: 'warning.main', color: 'warning.contrastText', borderRadius: '5px' }}
-                                                />
+                                                <Badge className="h-4 gap-0.5 rounded-[5px] bg-amber-500 text-[0.6rem] text-white hover:bg-amber-500">
+                                                    <Pin className="size-2.5" />
+                                                    Pinned
+                                                </Badge>
                                             )}
-                                        </Stack>
-                                        <Stack direction="row" spacing={0.5} alignItems="center">
-                                            <Typography variant="caption" color="text.disabled">
+                                        </div>
+                                        <div className="flex items-center gap-0.5">
+                                            <span className="text-xs text-muted-foreground/60">
                                                 {formatWorkspaceRelativeTime(note.createdAt)}
-                                            </Typography>
-                                            <Tooltip title={note.isPinned ? 'Unpin' : 'Pin'}>
-                                                <IconButton size="small" onClick={() => handlePin(note.id)}>
-                                                    {note.isPinned ? <PinIcon sx={{ fontSize: 14 }} color="warning" /> : <PinOutlinedIcon sx={{ fontSize: 14 }} />}
-                                                </IconButton>
+                                            </span>
+                                            <Tooltip>
+                                                <TooltipTrigger asChild>
+                                                    <Button
+                                                        size="icon-xs"
+                                                        variant="ghost"
+                                                        onClick={() => handlePin(note.id)}
+                                                    >
+                                                        {note.isPinned ? <Pin className="size-3.5 text-amber-500" /> : <PinOff className="size-3.5" />}
+                                                    </Button>
+                                                </TooltipTrigger>
+                                                <TooltipContent>{note.isPinned ? 'Unpin' : 'Pin'}</TooltipContent>
                                             </Tooltip>
                                             {note.author.id === currentUserId && (
                                                 <>
-                                                    <Tooltip title="Edit">
-                                                        <IconButton size="small" onClick={() => startEdit(note)}>
-                                                            <EditIcon sx={{ fontSize: 14 }} />
-                                                        </IconButton>
+                                                    <Tooltip>
+                                                        <TooltipTrigger asChild>
+                                                            <Button
+                                                                size="icon-xs"
+                                                                variant="ghost"
+                                                                onClick={() => startEdit(note)}
+                                                            >
+                                                                <Pencil className="size-3.5" />
+                                                            </Button>
+                                                        </TooltipTrigger>
+                                                        <TooltipContent>Edit</TooltipContent>
                                                     </Tooltip>
-                                                    <Tooltip title="Delete">
-                                                        <IconButton size="small" onClick={() => handleDelete(note.id)} color="error">
-                                                            <DeleteIcon sx={{ fontSize: 14 }} />
-                                                        </IconButton>
+                                                    <Tooltip>
+                                                        <TooltipTrigger asChild>
+                                                            <Button
+                                                                size="icon-xs"
+                                                                variant="ghost"
+                                                                onClick={() => handleDelete(note.id)}
+                                                                className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+                                                            >
+                                                                <Trash2 className="size-3.5" />
+                                                            </Button>
+                                                        </TooltipTrigger>
+                                                        <TooltipContent>Delete</TooltipContent>
                                                     </Tooltip>
                                                 </>
                                             )}
-                                        </Stack>
-                                    </Stack>
+                                        </div>
+                                    </div>
 
                                     {editingNote?.id === note.id ? (
-                                        <Box sx={{ mt: 1 }}>
-                                            <TextField
-                                                multiline
-                                                fullWidth
-                                                size="small"
+                                        <div className="mt-2">
+                                            <Textarea
                                                 value={editContent}
                                                 onChange={e => setEditContent(e.target.value)}
                                                 autoFocus
+                                                className="text-sm"
                                             />
-                                            <Stack direction="row" spacing={1} sx={{ mt: 1 }}>
-                                                <IconButton
-                                                    size="small"
-                                                    color="primary"
+                                            <div className="mt-2 flex gap-1.5">
+                                                <Button
+                                                    size="icon-sm"
                                                     onClick={() => handleEdit(note)}
-                                                    sx={{ bgcolor: 'primary.main', color: 'white', '&:hover': { bgcolor: 'primary.dark' } }}
                                                 >
-                                                    <SendIcon fontSize="small" />
-                                                </IconButton>
-                                                <IconButton size="small" onClick={() => setEditingNote(null)}>
-                                                    ✕
-                                                </IconButton>
-                                            </Stack>
-                                        </Box>
+                                                    <Send className="size-4" />
+                                                </Button>
+                                                <Button
+                                                    size="icon-sm"
+                                                    variant="ghost"
+                                                    onClick={() => setEditingNote(null)}
+                                                >
+                                                    <X className="size-4" />
+                                                </Button>
+                                            </div>
+                                        </div>
                                     ) : (
-                                        <Typography
-                                            variant="body2"
-                                            sx={{ mt: 0.5, whiteSpace: 'pre-wrap', wordBreak: 'break-word', lineHeight: 1.6 }}
-                                        >
+                                        <p className="mt-1 whitespace-pre-wrap break-words text-sm leading-relaxed">
                                             {note.content}
-                                        </Typography>
+                                        </p>
                                     )}
-                                </Box>
-                            </Stack>
-                        </Box>
+                                </div>
+                            </div>
+                        </div>
                     ))}
-                </Stack>
+                </div>
             )}
-        </Box>
+        </div>
     );
 }

@@ -1,29 +1,24 @@
 "use client";
 
 import { useState } from "react";
-import { useForm, Controller } from "react-hook-form";
+import { Controller, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import * as z from "zod";
-import { apiFetch } from "@/lib/api";
+import { Loader2, Plus } from "lucide-react";
 import { toast } from "sonner";
+import * as z from "zod";
+import { StandardDialog } from "@/components/common/standard-dialog";
+import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
-    Button,
-    Dialog,
-    DialogActions,
-    DialogContent,
-    DialogContentText,
-    DialogTitle,
-    TextField,
     Select,
-    MenuItem,
-    FormControl,
-    InputLabel,
-    FormControlLabel,
-    Checkbox,
-    Stack,
-    FormHelperText
-} from "@mui/material";
-import { Add as AddIcon } from "@mui/icons-material";
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from "@/components/ui/select";
+import { apiFetch } from "@/lib/api";
 
 const fieldTypes = ["TEXT", "NUMBER", "DROPDOWN", "MULTI_SELECT", "DATE", "DATETIME", "BOOLEAN"];
 
@@ -51,16 +46,15 @@ export function CreateCustomFieldDialog({ objectType, onSuccess }: CreateCustomF
             key: "",
             type: "TEXT",
             required: false,
-            options: ""
+            options: "",
         },
     });
 
     const watchType = watch("type");
 
-    const handleLabelChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        const label = e.target.value;
-        const key = label.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
-        setValue("label", label);
+    const handleLabelChange = (value: string) => {
+        const key = value.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+        setValue("label", value);
         if (!dirtyFields.key) {
             setValue("key", key);
         }
@@ -99,137 +93,111 @@ export function CreateCustomFieldDialog({ objectType, onSuccess }: CreateCustomF
 
     return (
         <>
-            <Button
-                variant="contained"
-                startIcon={<AddIcon />}
-                onClick={() => setOpen(true)}
-                sx={{ borderRadius: 20 }}
-            >
+            <Button onClick={() => setOpen(true)}>
+                <Plus className="h-4 w-4" />
                 Add Field
             </Button>
 
-            <Dialog
+            <StandardDialog
                 open={open}
                 onClose={handleClose}
+                title="Add Custom Field"
+                subtitle={`Define a new field for ${objectType}.`}
                 maxWidth="sm"
-                fullWidth
-                PaperProps={{
-                    sx: { borderRadius: 3 }
-                }}
+                actions={
+                    <>
+                        <Button variant="outline" onClick={handleClose}>
+                            Cancel
+                        </Button>
+                        <Button type="submit" form="create-field-form" disabled={loading}>
+                            {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                            {loading ? "Saving..." : "Save"}
+                        </Button>
+                    </>
+                }
             >
-                <DialogTitle>Add Custom Field</DialogTitle>
-                <DialogContent>
-                    <DialogContentText sx={{ mb: 3 }}>
-                        Define a new field for {objectType}.
-                    </DialogContentText>
-
-                    <form id="create-field-form" onSubmit={handleSubmit(onSubmit)}>
-                        <Stack spacing={2}>
-                            <Controller
-                                name="label"
-                                control={control}
-                                render={({ field }) => (
-                                    <TextField
-                                        {...field}
-                                        label="Label"
-                                        placeholder="e.g. Budget"
-                                        fullWidth
-                                        onChange={(e: any) => {
-                                            field.onChange(e);
-                                            handleLabelChange(e);
-                                        }}
-                                        error={!!errors.label}
-                                        helperText={errors.label?.message as string}
-                                    />
-                                )}
-                            />
-
-                            <Controller
-                                name="key"
-                                control={control}
-                                render={({ field }) => (
-                                    <TextField
-                                        {...field}
-                                        label="Key (Database Name)"
-                                        placeholder="e.g. budget_amount"
-                                        fullWidth
-                                        helperText={(errors.key?.message as string) || "Unique identifier used in API."}
-                                        error={!!errors.key}
-                                    />
-                                )}
-                            />
-
-                            <Controller
-                                name="type"
-                                control={control}
-                                render={({ field }) => (
-                                    <FormControl fullWidth error={!!errors.type}>
-                                        <InputLabel>Type</InputLabel>
-                                        <Select
-                                            {...field}
-                                            label="Type"
-                                        >
-                                            {fieldTypes.map((type) => (
-                                                <MenuItem key={type} value={type}>
-                                                    {type}
-                                                </MenuItem>
-                                            ))}
-                                        </Select>
-                                        <FormHelperText>{errors.type?.message as string}</FormHelperText>
-                                    </FormControl>
-                                )}
-                            />
-
-                            {(watchType === 'DROPDOWN' || watchType === 'MULTI_SELECT') && (
-                                <Controller
-                                    name="options"
-                                    control={control}
-                                    render={({ field }) => (
-                                        <TextField
-                                            {...field}
-                                            label="Options (Comma Separated)"
-                                            placeholder="Option A, Option B"
-                                            fullWidth
-                                            error={!!errors.options}
-                                            helperText={errors.options?.message as string}
-                                        />
-                                    )}
+                <form id="create-field-form" onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+                    <Controller
+                        name="label"
+                        control={control}
+                        render={({ field }) => (
+                            <div className="space-y-2">
+                                <Label htmlFor="field-label">Label</Label>
+                                <Input
+                                    id="field-label"
+                                    placeholder="e.g. Budget"
+                                    {...field}
+                                    onChange={(e) => {
+                                        field.onChange(e);
+                                        handleLabelChange(e.target.value);
+                                    }}
                                 />
-                            )}
+                                {errors.label && <p className="text-xs text-destructive">{errors.label.message}</p>}
+                            </div>
+                        )}
+                    />
 
-                            <Controller
-                                name="required"
-                                control={control}
-                                render={({ field }) => (
-                                    <FormControlLabel
-                                        control={
-                                            <Checkbox
-                                                checked={field.value}
-                                                onChange={field.onChange}
-                                            />
-                                        }
-                                        label="Required Field"
-                                    />
-                                )}
-                            />
-                        </Stack>
-                    </form>
-                </DialogContent>
-                <DialogActions sx={{ px: 3, pb: 3 }}>
-                    <Button onClick={handleClose} sx={{ borderRadius: 20, color: 'text.secondary' }}>
-                        Cancel
-                    </Button>
-                    <Button
-                        type="submit"
-                        form="create-field-form"
-                        variant="contained"
-                        disabled={loading}
-                        sx={{ borderRadius: 20 }}
-                    >
-                        {loading ? "Saving..." : "Save"}
-                    </Button>
-                </DialogActions>
-            </Dialog>
+                    <Controller
+                        name="key"
+                        control={control}
+                        render={({ field }) => (
+                            <div className="space-y-2">
+                                <Label htmlFor="field-key">Key (Database Name)</Label>
+                                <Input id="field-key" placeholder="e.g. budget_amount" {...field} />
+                                <p className="text-xs text-muted-foreground">
+                                    {errors.key?.message || "Unique identifier used in API."}
+                                </p>
+                            </div>
+                        )}
+                    />
+
+                    <Controller
+                        name="type"
+                        control={control}
+                        render={({ field }) => (
+                            <div className="space-y-2">
+                                <Label>Type</Label>
+                                <Select value={field.value} onValueChange={field.onChange}>
+                                    <SelectTrigger className="w-full">
+                                        <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        {fieldTypes.map((type) => (
+                                            <SelectItem key={type} value={type}>{type}</SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                                {errors.type && <p className="text-xs text-destructive">{errors.type.message}</p>}
+                            </div>
+                        )}
+                    />
+
+                    {(watchType === 'DROPDOWN' || watchType === 'MULTI_SELECT') && (
+                        <Controller
+                            name="options"
+                            control={control}
+                            render={({ field }) => (
+                                <div className="space-y-2">
+                                    <Label htmlFor="field-options">Options (Comma Separated)</Label>
+                                    <Input id="field-options" placeholder="Option A, Option B" {...field} />
+                                    {errors.options && <p className="text-xs text-destructive">{errors.options.message}</p>}
+                                </div>
+                            )}
+                        />
+                    )}
+
+                    <Controller
+                        name="required"
+                        control={control}
+                        render={({ field }) => (
+                            <label className="flex items-center gap-2 text-sm font-medium">
+                                <Checkbox checked={field.value} onCheckedChange={field.onChange} />
+                                Required Field
+                            </label>
+                        )}
+                    />
+                </form>
+            </StandardDialog>
         </>
     );
 }

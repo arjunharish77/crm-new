@@ -1,27 +1,24 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { useForm, Controller } from "react-hook-form";
+import { ReactNode, useEffect, useState } from "react";
+import { Controller, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import * as z from "zod";
-import { apiFetch } from "@/lib/api";
+import { Loader2, UserPlus } from "lucide-react";
 import { toast } from "sonner";
-import {
-    Button,
-    TextField,
-    Select,
-    MenuItem,
-    FormControl,
-    InputLabel,
-    Stack,
-    FormHelperText,
-    Typography,
-    Autocomplete
-} from "@mui/material";
-import { PersonAdd as PersonAddIcon } from "@mui/icons-material";
+import * as z from "zod";
 import { StandardDialog } from "@/components/common/standard-dialog";
-
-import { User, Role } from "@/types/user";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from "@/components/ui/select";
+import { apiFetch } from "@/lib/api";
+import { Role, User } from "@/types/user";
 
 interface InviteUserDialogProps {
     open: boolean;
@@ -29,6 +26,17 @@ interface InviteUserDialogProps {
     onSuccess: () => void;
 }
 
+interface PermissionTemplate {
+    id: string;
+    name: string;
+}
+
+interface Team {
+    id: string;
+    name: string;
+}
+
+const NONE_VALUE = "__none__";
 
 const formSchema = z.object({
     name: z.string().min(2, "Name is required"),
@@ -40,6 +48,24 @@ const formSchema = z.object({
     password: z.string().min(6, "Password must be at least 6 characters"),
 });
 
+type InviteUserFormValues = z.infer<typeof formSchema>;
+
+interface FieldProps {
+    label: string;
+    error?: string;
+    children: ReactNode;
+}
+
+function Field({ label, error, children }: FieldProps) {
+    return (
+        <div className="space-y-2">
+            <Label>{label}</Label>
+            {children}
+            {error ? <p className="text-xs text-destructive">{error}</p> : null}
+        </div>
+    );
+}
+
 export function InviteUserDialog({
     open,
     onOpenChange,
@@ -47,11 +73,16 @@ export function InviteUserDialog({
 }: InviteUserDialogProps) {
     const [loading, setLoading] = useState(false);
     const [roles, setRoles] = useState<Role[]>([]);
-    const [permissionTemplates, setPermissionTemplates] = useState<any[]>([]);
-    const [teams, setTeams] = useState<any[]>([]);
-    const [managers, setManagers] = useState<any[]>([]);
+    const [permissionTemplates, setPermissionTemplates] = useState<PermissionTemplate[]>([]);
+    const [teams, setTeams] = useState<Team[]>([]);
+    const [managers, setManagers] = useState<User[]>([]);
 
-    const { control, handleSubmit, reset, formState: { errors } } = useForm({
+    const {
+        control,
+        handleSubmit,
+        reset,
+        formState: { errors },
+    } = useForm<InviteUserFormValues>({
         resolver: zodResolver(formSchema),
         defaultValues: {
             name: "",
@@ -72,9 +103,9 @@ export function InviteUserDialog({
                         apiFetch("/roles"),
                         apiFetch("/users"),
                         apiFetch("/teams"),
-                        apiFetch("/permission-templates")
+                        apiFetch("/permission-templates"),
                     ]);
-                    setRoles(rolesData);
+                    setRoles(Array.isArray(rolesData) ? rolesData : []);
                     setPermissionTemplates(Array.isArray(templateData) ? templateData : []);
                     setTeams(Array.isArray(teamsData) ? teamsData : []);
                     setManagers(Array.isArray(usersData) ? usersData : []);
@@ -91,7 +122,7 @@ export function InviteUserDialog({
         reset();
     };
 
-    async function onSubmit(values: any) {
+    async function onSubmit(values: InviteUserFormValues) {
         setLoading(true);
         try {
             await apiFetch("/users", {
@@ -118,165 +149,146 @@ export function InviteUserDialog({
             onClose={handleClose}
             title="Invite User"
             subtitle="Add a new team member to your organization."
-            icon={<PersonAddIcon />}
+            icon={<UserPlus className="h-5 w-5" />}
             actions={
                 <>
-                    <Button onClick={handleClose} sx={{ color: 'text.secondary' }}>
+                    <Button variant="outline" onClick={handleClose}>
                         Cancel
                     </Button>
-                    <Button
-                        type="submit"
-                        form="invite-user-form"
-                        variant="contained"
-                        disabled={loading}
-                    >
+                    <Button type="submit" form="invite-user-form" disabled={loading}>
+                        {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
                         {loading ? "Inviting..." : "Invite User"}
                     </Button>
                 </>
             }
         >
-            <form id="invite-user-form" onSubmit={handleSubmit(onSubmit)}>
-                <Stack spacing={2}>
-                    <Controller
-                        name="name"
-                        control={control}
-                        render={({ field }) => (
-                            <TextField
-                                {...field}
-                                label="Full Name"
-                                placeholder="John Doe"
-                                fullWidth
-                                error={!!errors.name}
-                                helperText={errors.name?.message as string}
-                            />
-                        )}
-                    />
+            <form id="invite-user-form" onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+                <Controller
+                    name="name"
+                    control={control}
+                    render={({ field }) => (
+                        <Field label="Full Name" error={errors.name?.message}>
+                            <Input {...field} placeholder="John Doe" />
+                        </Field>
+                    )}
+                />
 
-                    <Controller
-                        name="email"
-                        control={control}
-                        render={({ field }) => (
-                            <TextField
-                                {...field}
-                                label="Email"
-                                type="email"
-                                placeholder="john@example.com"
-                                fullWidth
-                                error={!!errors.email}
-                                helperText={errors.email?.message as string}
-                            />
-                        )}
-                    />
+                <Controller
+                    name="email"
+                    control={control}
+                    render={({ field }) => (
+                        <Field label="Email" error={errors.email?.message}>
+                            <Input {...field} type="email" placeholder="john@example.com" />
+                        </Field>
+                    )}
+                />
 
-                    <Controller
-                        name="password"
-                        control={control}
-                        render={({ field }) => (
-                            <TextField
-                                {...field}
-                                label="Temporary Password"
-                                type="password"
-                                placeholder="Min. 6 characters"
-                                fullWidth
-                                error={!!errors.password}
-                                helperText={errors.password?.message as string}
-                            />
-                        )}
-                    />
+                <Controller
+                    name="password"
+                    control={control}
+                    render={({ field }) => (
+                        <Field label="Temporary Password" error={errors.password?.message}>
+                            <Input {...field} type="password" placeholder="Min. 6 characters" />
+                        </Field>
+                    )}
+                />
 
-                    <Controller
-                        name="roleId"
-                        control={control}
-                        render={({ field }) => (
-                            <FormControl fullWidth error={!!errors.roleId}>
-                                <InputLabel>Role</InputLabel>
-                                <Select
-                                    {...field}
-                                    label="Role"
-                                >
+                <Controller
+                    name="roleId"
+                    control={control}
+                    render={({ field }) => (
+                        <Field label="Role" error={errors.roleId?.message}>
+                            <Select value={field.value} onValueChange={field.onChange}>
+                                <SelectTrigger>
+                                    <SelectValue placeholder="Select role" />
+                                </SelectTrigger>
+                                <SelectContent>
                                     {roles.map((role) => (
-                                        <MenuItem key={role.id} value={role.id}>
+                                        <SelectItem key={role.id} value={role.id}>
                                             {role.name}
-                                        </MenuItem>
+                                        </SelectItem>
                                     ))}
-                                </Select>
-                                <FormHelperText>{errors.roleId?.message as string}</FormHelperText>
-                            </FormControl>
-                        )}
-                    />
+                                </SelectContent>
+                            </Select>
+                        </Field>
+                    )}
+                />
 
+                <Controller
+                    name="permissionTemplateId"
+                    control={control}
+                    render={({ field }) => (
+                        <Field label="Permission Template Override">
+                            <Select
+                                value={field.value || NONE_VALUE}
+                                onValueChange={(value) => field.onChange(value === NONE_VALUE ? "" : value)}
+                            >
+                                <SelectTrigger>
+                                    <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value={NONE_VALUE}>Use role template</SelectItem>
+                                    {permissionTemplates.map((template) => (
+                                        <SelectItem key={template.id} value={template.id}>
+                                            {template.name}
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                        </Field>
+                    )}
+                />
+
+                <div className="grid gap-4 sm:grid-cols-2">
                     <Controller
-                        name="permissionTemplateId"
+                        name="teamId"
                         control={control}
                         render={({ field }) => (
-                            <FormControl fullWidth>
-                                <InputLabel>Permission Template Override</InputLabel>
-                                <Select {...field} label="Permission Template Override">
-                                    <MenuItem value=""><em>Use role template</em></MenuItem>
-                                    {permissionTemplates.map((template) => (
-                                        <MenuItem key={template.id} value={template.id}>
-                                            {template.name}
-                                        </MenuItem>
-                                    ))}
+                            <Field label="Team">
+                                <Select
+                                    value={field.value || NONE_VALUE}
+                                    onValueChange={(value) => field.onChange(value === NONE_VALUE ? "" : value)}
+                                >
+                                    <SelectTrigger>
+                                        <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value={NONE_VALUE}>None</SelectItem>
+                                        {teams.map((team) => (
+                                            <SelectItem key={team.id} value={team.id}>
+                                                {team.name}
+                                            </SelectItem>
+                                        ))}
+                                    </SelectContent>
                                 </Select>
-                            </FormControl>
+                            </Field>
                         )}
                     />
-
-                    <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
-                        <Controller
-                            name="teamId"
-                            control={control}
-                            render={({ field }) => (
-                                <FormControl fullWidth>
-                                    <InputLabel>Team</InputLabel>
-                                    <Select {...field} label="Team">
-                                        <MenuItem value=""><em>None</em></MenuItem>
-                                        {teams.map((team) => (
-                                            <MenuItem key={team.id} value={team.id}>
-                                                {team.name}
-                                            </MenuItem>
+                    <Controller
+                        name="managerId"
+                        control={control}
+                        render={({ field }) => (
+                            <Field label="Manager">
+                                <Select
+                                    value={field.value || NONE_VALUE}
+                                    onValueChange={(value) => field.onChange(value === NONE_VALUE ? "" : value)}
+                                >
+                                    <SelectTrigger>
+                                        <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value={NONE_VALUE}>None</SelectItem>
+                                        {managers.map((manager) => (
+                                            <SelectItem key={manager.id} value={manager.id}>
+                                                {manager.name}
+                                            </SelectItem>
                                         ))}
-                                    </Select>
-                                </FormControl>
-                            )}
-                        />
-                        <Controller
-                            name="managerId"
-                            control={control}
-                            render={({ field: { onChange, value } }) => (
-                                <FormControl fullWidth>
-                                    <Autocomplete
-                                        options={managers}
-                                        getOptionLabel={(option) => option.name}
-                                        renderOption={(props, option) => {
-                                            const { key, ...otherProps } = props;
-                                            return (
-                                                <li key={key} {...otherProps}>
-                                                    {option.name}
-                                                </li>
-                                            );
-                                        }}
-                                        value={managers.find((m) => m.id === value) || null}
-                                        onChange={(_, newValue) => {
-                                            onChange(newValue ? newValue.id : "");
-                                        }}
-                                        renderInput={(params) => (
-                                            <TextField
-                                                {...params}
-                                                label="Manager"
-                                                placeholder="Search manager..."
-                                                error={!!errors.managerId}
-                                                helperText={errors.managerId?.message as string}
-                                                fullWidth
-                                            />
-                                        )}
-                                    />
-                                </FormControl>
-                            )}
-                        />
-                    </Stack>
-                </Stack>
+                                    </SelectContent>
+                                </Select>
+                            </Field>
+                        )}
+                    />
+                </div>
             </form>
         </StandardDialog>
     );

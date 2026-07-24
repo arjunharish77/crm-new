@@ -26,6 +26,7 @@ export function GeneralSettingsProvider({ children }: { children: React.ReactNod
                     timezone: settings.timezone,
                     dateFormat: settings.dateFormat,
                     language: settings.language,
+                    currency: settings.currency,
                 });
             })
             .catch(() => undefined);

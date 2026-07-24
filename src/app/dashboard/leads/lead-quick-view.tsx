@@ -9,7 +9,7 @@ import {
     SheetHeader,
     SheetTitle,
 } from "@/components/ui/sheet";
-import { Chip } from "@mui/material";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -17,8 +17,8 @@ import { Mail, Phone, Calendar, MapPin, Tag, Building, ArrowUpRight } from "luci
 import { apiFetch } from "@/lib/api";
 import { Lead } from "@/types/leads";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Skeleton } from "@/components/ui/skeleton";
 import Link from "next/link";
-import { Skeleton, Stack, Box } from "@mui/material";
 import { RecordHistory } from "@/components/governance/record-history";
 
 interface LeadQuickViewProps {
@@ -49,10 +49,10 @@ export function LeadQuickView({ leadId, open, onOpenChange }: LeadQuickViewProps
         <Sheet open={open} onOpenChange={onOpenChange}>
             <SheetContent className="w-[400px] sm:w-[540px] overflow-y-auto">
                 {loading || !lead ? (
-                    <Stack spacing={2} sx={{ mt: 8 }}>
-                        <Skeleton variant="rectangular" height={120} sx={{ borderRadius: 2 }} />
-                        <Skeleton variant="rectangular" height={120} sx={{ borderRadius: 2 }} />
-                    </Stack>
+                    <div className="mt-16 flex flex-col gap-4">
+                        <Skeleton className="h-[120px] rounded-lg" />
+                        <Skeleton className="h-[120px] rounded-lg" />
+                    </div>
                 ) : (
                     <div className="h-full flex flex-col">
                         <SheetHeader className="pb-4">
@@ -64,12 +64,9 @@ export function LeadQuickView({ leadId, open, onOpenChange }: LeadQuickViewProps
                                         {lead.email}
                                     </SheetDescription>
                                 </div>
-                                <Chip
-                                    label={lead.status}
-                                    color={lead.status === "NEW" ? "primary" : "default"}
-                                    size="small"
-                                    sx={{ fontWeight: 600 }}
-                                />
+                                <Badge variant={lead.status === "NEW" ? "default" : "secondary"} className="font-semibold">
+                                    {lead.status}
+                                </Badge>
                             </div>
                             <div className="flex gap-2 mt-4">
                                 <Link href={`/dashboard/leads/${lead.id}`} className="w-full">
@@ -130,14 +127,10 @@ export function LeadQuickView({ leadId, open, onOpenChange }: LeadQuickViewProps
                                         <h4 className="text-sm font-medium text-muted-foreground uppercase tracking-wider">Tags</h4>
                                         <div className="flex flex-wrap gap-2">
                                             {lead.tags.map(tag => (
-                                                <Chip
-                                                    key={tag}
-                                                    label={tag}
-                                                    icon={<Tag size={12} />}
-                                                    variant="outlined"
-                                                    size="small"
-                                                    sx={{ height: 24, fontSize: '0.75rem' }}
-                                                />
+                                                <Badge key={tag} variant="outline" className="h-6 text-xs">
+                                                    <Tag size={12} />
+                                                    {tag}
+                                                </Badge>
                                             ))}
                                         </div>
                                     </div>
@@ -146,9 +139,9 @@ export function LeadQuickView({ leadId, open, onOpenChange }: LeadQuickViewProps
 
                             <TabsContent value="activity" className="min-h-[400px]">
                                 <ScrollArea className="h-full pr-4">
-                                    <Box sx={{ py: 2 }}>
+                                    <div className="py-4">
                                         <RecordHistory entityType="LEAD" entityId={lead.id} />
-                                    </Box>
+                                    </div>
                                 </ScrollArea>
                             </TabsContent>
                         </Tabs>

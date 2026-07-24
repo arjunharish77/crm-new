@@ -1,7 +1,8 @@
 "use client";
 
 import React from "react";
-import { Box, Skeleton, Card, Stack } from "@mui/material";
+import { Skeleton } from "@/components/ui/skeleton";
+import { cn } from "@/lib/utils";
 
 interface TableSkeletonProps {
     rows?: number;
@@ -15,68 +16,44 @@ const ROW_WIDTHS = [68, 82, 55, 90, 72, 60, 88, 77, 65, 93, 58, 85, 70, 95, 63, 
 
 export function TableSkeleton({ rows = 8, columns = 5, hasToolbar = true }: TableSkeletonProps) {
     return (
-        <Card sx={{ overflow: "hidden" }}>
+        <div className="overflow-hidden rounded-xl border bg-card">
             {hasToolbar && (
-                <Box
-                    sx={{
-                        px: 2,
-                        py: 1.5,
-                        borderBottom: "1px solid",
-                        borderColor: "divider",
-                        display: "flex",
-                        gap: 1,
-                    }}
-                >
-                    <Skeleton variant="rounded" width={80} height={32} />
-                    <Skeleton variant="rounded" width={80} height={32} />
-                    <Skeleton variant="rounded" width={80} height={32} />
-                    <Box sx={{ flexGrow: 1 }} />
-                    <Skeleton variant="rounded" width={100} height={32} />
-                </Box>
+                <div className="flex gap-2 border-b px-4 py-3">
+                    <Skeleton className="h-8 w-20 rounded-lg" />
+                    <Skeleton className="h-8 w-20 rounded-lg" />
+                    <Skeleton className="h-8 w-20 rounded-lg" />
+                    <div className="grow" />
+                    <Skeleton className="h-8 w-[100px] rounded-lg" />
+                </div>
             )}
 
             {/* Header row */}
-            <Box
-                sx={{
-                    display: "grid",
-                    gridTemplateColumns: `repeat(${columns}, 1fr)`,
-                    gap: 2,
-                    px: 2,
-                    py: 1.5,
-                    borderBottom: "1px solid",
-                    borderColor: "divider",
-                }}
+            <div
+                className="grid gap-4 border-b px-4 py-3"
+                style={{ gridTemplateColumns: `repeat(${columns}, 1fr)` }}
             >
                 {Array.from({ length: columns }).map((_, i) => (
-                    <Skeleton key={`h-${i}`} variant="text" width={`${HEADER_WIDTHS[i % HEADER_WIDTHS.length]}%`} height={20} />
+                    <Skeleton key={`h-${i}`} className="h-5" style={{ width: `${HEADER_WIDTHS[i % HEADER_WIDTHS.length]}%` }} />
                 ))}
-            </Box>
+            </div>
 
             {/* Data rows */}
             {Array.from({ length: rows }).map((_, rowIdx) => (
-                <Box
+                <div
                     key={`r-${rowIdx}`}
-                    sx={{
-                        display: "grid",
-                        gridTemplateColumns: `repeat(${columns}, 1fr)`,
-                        gap: 2,
-                        px: 2,
-                        py: 1.5,
-                        borderBottom: "1px solid",
-                        borderColor: "divider",
-                    }}
+                    className="grid gap-4 border-b px-4 py-3 last:border-b-0"
+                    style={{ gridTemplateColumns: `repeat(${columns}, 1fr)` }}
                 >
                     {Array.from({ length: columns }).map((_, colIdx) => (
                         <Skeleton
                             key={`c-${rowIdx}-${colIdx}`}
-                            variant="text"
-                            width={`${ROW_WIDTHS[(rowIdx * columns + colIdx) % ROW_WIDTHS.length]}%`}
-                            height={18}
+                            className="h-[18px]"
+                            style={{ width: `${ROW_WIDTHS[(rowIdx * columns + colIdx) % ROW_WIDTHS.length]}%` }}
                         />
                     ))}
-                </Box>
+                </div>
             ))}
-        </Card>
+        </div>
     );
 }
 
@@ -87,23 +64,23 @@ interface PageSkeletonProps {
 
 export function PageSkeleton({ hasHeader = true, cardCount = 3 }: PageSkeletonProps) {
     return (
-        <Box>
+        <div>
             {hasHeader && (
-                <Box sx={{ mb: 4 }}>
-                    <Skeleton variant="text" width={240} height={36} />
-                    <Skeleton variant="text" width={320} height={20} sx={{ mt: 0.5 }} />
-                </Box>
+                <div className="mb-8">
+                    <Skeleton className="h-9 w-60" />
+                    <Skeleton className="mt-1 h-5 w-80" />
+                </div>
             )}
-            <Stack spacing={2}>
+            <div className="flex flex-col gap-4">
                 {Array.from({ length: cardCount }).map((_, i) => (
-                    <Card key={i} sx={{ p: 3 }}>
-                        <Skeleton variant="text" width="30%" height={24} />
-                        <Skeleton variant="text" width="80%" height={18} sx={{ mt: 1 }} />
-                        <Skeleton variant="text" width="60%" height={18} sx={{ mt: 0.5 }} />
-                    </Card>
+                    <div key={i} className="rounded-xl border bg-card p-6">
+                        <Skeleton className="h-6 w-[30%]" />
+                        <Skeleton className="mt-2 h-[18px] w-[80%]" />
+                        <Skeleton className="mt-1 h-[18px] w-[60%]" />
+                    </div>
                 ))}
-            </Stack>
-        </Box>
+            </div>
+        </div>
     );
 }
 
@@ -113,36 +90,34 @@ interface DashboardSkeletonProps {
 
 export function DashboardSkeleton({ statCount = 4 }: DashboardSkeletonProps) {
     return (
-        <Box>
+        <div>
             {/* Stat cards */}
-            <Box
-                sx={{
-                    display: "grid",
-                    gridTemplateColumns: { xs: "1fr", sm: "repeat(2, 1fr)", md: `repeat(${statCount}, 1fr)` },
-                    gap: 2,
-                    mb: 2,
-                }}
+            <div
+                className={cn(
+                    "mb-4 grid grid-cols-1 gap-4 sm:grid-cols-2",
+                    statCount === 4 ? "md:grid-cols-4" : "md:grid-cols-3"
+                )}
             >
                 {Array.from({ length: statCount }).map((_, i) => (
-                    <Card key={i} sx={{ p: 3 }}>
-                        <Skeleton variant="text" width="40%" height={16} />
-                        <Skeleton variant="text" width="60%" height={36} sx={{ mt: 1 }} />
-                        <Skeleton variant="text" width="50%" height={14} sx={{ mt: 0.5 }} />
-                    </Card>
+                    <div key={i} className="rounded-xl border bg-card p-6">
+                        <Skeleton className="h-4 w-[40%]" />
+                        <Skeleton className="mt-2 h-9 w-[60%]" />
+                        <Skeleton className="mt-1 h-3.5 w-[50%]" />
+                    </div>
                 ))}
-            </Box>
+            </div>
 
             {/* Chart area */}
-            <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "1fr 1fr" }, gap: 2 }}>
-                <Card sx={{ p: 3 }}>
-                    <Skeleton variant="text" width="30%" height={24} />
-                    <Skeleton variant="rounded" width="100%" height={240} sx={{ mt: 2 }} />
-                </Card>
-                <Card sx={{ p: 3 }}>
-                    <Skeleton variant="text" width="30%" height={24} />
-                    <Skeleton variant="rounded" width="100%" height={240} sx={{ mt: 2 }} />
-                </Card>
-            </Box>
-        </Box>
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                <div className="rounded-xl border bg-card p-6">
+                    <Skeleton className="h-6 w-[30%]" />
+                    <Skeleton className="mt-4 h-60 w-full rounded-lg" />
+                </div>
+                <div className="rounded-xl border bg-card p-6">
+                    <Skeleton className="h-6 w-[30%]" />
+                    <Skeleton className="mt-4 h-60 w-full rounded-lg" />
+                </div>
+            </div>
+        </div>
     );
 }

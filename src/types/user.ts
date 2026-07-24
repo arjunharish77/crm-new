@@ -21,6 +21,7 @@ export interface Role {
     permissions: {
         modules: ModulePermissions;
         recordAccess: RecordAccess;
+        isPartnerRole?: boolean;
     };
     createdAt: string;
     updatedAt: string;

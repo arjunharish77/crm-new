@@ -1,42 +1,24 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useMemo } from "react";
 import { apiFetch } from "@/lib/api";
 import { formatWorkspaceRelativeTime } from "@/lib/date-format";
-import {
-    Box,
-    Button,
-    Typography,
-    Divider,
-    IconButton,
-    Paper,
-    useTheme,
-    alpha,
-    Stack,
-    Avatar,
-    AvatarGroup,
-    Tooltip,
-    FormControl,
-    Select,
-    MenuItem
-} from "@mui/material";
-import {
-    People as UsersIcon,
-    Settings as SettingsIcon,
-    Delete as TrashIcon,
-    Groups as GroupsIcon,
-    Add as AddIcon
-} from "@mui/icons-material";
+import { ColumnDef } from "@tanstack/react-table";
+import { Settings, Trash2, Users } from "lucide-react";
 import { toast } from "sonner";
 import { SalesGroupDialog } from "./sales-group-dialog";
 import { ManageMembersDialog } from "./manage-members-dialog";
-import { StandardDataGrid } from "@/components/common/standard-data-grid";
-import { GridColDef } from "@mui/x-data-grid";
+import { DataTable } from "@/components/ui/data-table";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Button } from "@/components/ui/button";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { motion } from "framer-motion";
 import { fadeInUp } from "@/lib/motion";
 
+const NO_TEMPLATE_VALUE = "__none__";
+
 export default function SalesGroupsPage() {
-    const theme = useTheme();
     const [groups, setGroups] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [selectedGroup, setSelectedGroup] = useState<any>(null);
@@ -95,165 +77,154 @@ export default function SalesGroupsPage() {
         setManageMembersOpen(true);
     };
 
-    const columns: GridColDef[] = [
+    const columns = useMemo<ColumnDef<any, any>[]>(() => [
         {
-            field: 'name',
-            headerName: 'Group Name',
-            flex: 1,
-            minWidth: 250,
-            renderCell: (params) => (
-                <Stack spacing={0.5} sx={{ py: 1 }}>
-                    <Typography variant="body2" sx={{ fontWeight: 700 }}>{params.value}</Typography>
-                    {params.row.description && (
-                        <Typography variant="caption" color="text.secondary" noWrap sx={{ maxWidth: 300 }}>
-                            {params.row.description}
-                        </Typography>
+            accessorKey: 'name',
+            header: 'Group Name',
+            size: 280,
+            cell: ({ row }) => (
+                <div className="flex flex-col gap-0.5 py-1">
+                    <span className="text-sm font-bold">{row.original.name}</span>
+                    {row.original.description && (
+                        <span className="max-w-[300px] truncate text-xs text-muted-foreground">
+                            {row.original.description}
+                        </span>
                     )}
-                </Stack>
+                </div>
             )
         },
         {
-            field: 'members',
-            headerName: 'Members',
-            width: 180,
-            renderCell: (params) => {
-                const members = params.row.members || [];
-                const count = params.row._count?.members || 0;
+            id: 'members',
+            header: 'Members',
+            size: 190,
+            cell: ({ row }) => {
+                const members = row.original.members || [];
+                const count = row.original._count?.members || 0;
+                const visibleMembers = members.slice(0, 4);
+
                 return (
-                    <Stack direction="row" spacing={1.5} alignItems="center">
-                        <AvatarGroup max={4} sx={{
-                            '& .MuiAvatar-root': { width: 28, height: 28, fontSize: '0.75rem', border: '2px solid', borderColor: 'background.paper' }
-                        }}>
-                            {members.map((m: any) => (
-                                <Tooltip key={m.id} title={m.user.name}>
-                                    <Avatar sx={{ bgcolor: alpha(theme.palette.primary.main, 0.2), color: 'primary.main' }}>
-                                        {m.user.name?.charAt(0)}
-                                    </Avatar>
+                    <div className="flex items-center gap-3">
+                        <div className="flex -space-x-2">
+                            {visibleMembers.map((member: any) => (
+                                <Tooltip key={member.id}>
+                                    <TooltipTrigger asChild>
+                                        <Avatar className="size-7 border-2 border-background bg-primary/20 text-xs font-bold text-primary">
+                                            <AvatarFallback>{member.user.name?.charAt(0) ?? "U"}</AvatarFallback>
+                                        </Avatar>
+                                    </TooltipTrigger>
+                                    <TooltipContent>{member.user.name}</TooltipContent>
                                 </Tooltip>
                             ))}
-                        </AvatarGroup>
-                        <Typography variant="caption" sx={{ fontWeight: 600, color: 'text.secondary' }}>
-                            {count} total
-                        </Typography>
-                    </Stack>
+                        </div>
+                        <span className="text-xs font-semibold text-muted-foreground">{count} total</span>
+                    </div>
                 )
             }
         },
         {
-            field: 'permissionTemplateId',
-            headerName: 'Permission Template',
-            minWidth: 220,
-            flex: 1,
-            renderCell: (params) => (
-                <FormControl size="small" fullWidth>
+            accessorKey: 'permissionTemplateId',
+            header: 'Permission Template',
+            size: 240,
+            cell: ({ row }) => (
+                <div onClick={(event) => event.stopPropagation()}>
                     <Select
-                        value={params.row.permissionTemplateId ?? ""}
-                        displayEmpty
-                        onClick={(event) => event.stopPropagation()}
-                        onChange={(event) => updateGroupTemplate(params.row, String(event.target.value))}
+                        value={row.original.permissionTemplateId ?? NO_TEMPLATE_VALUE}
+                        onValueChange={(value) => updateGroupTemplate(row.original, value === NO_TEMPLATE_VALUE ? "" : value)}
                     >
-                        <MenuItem value=""><em>No template</em></MenuItem>
+                        <SelectTrigger size="sm" className="w-full min-w-[210px]">
+                            <SelectValue placeholder="No template" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value={NO_TEMPLATE_VALUE}>No template</SelectItem>
                         {templates.map((template) => (
-                            <MenuItem key={template.id} value={template.id}>{template.name}</MenuItem>
+                            <SelectItem key={template.id} value={template.id}>{template.name}</SelectItem>
                         ))}
+                        </SelectContent>
                     </Select>
-                </FormControl>
+                </div>
             )
         },
         {
-            field: 'createdAt',
-            headerName: 'Created',
-            width: 150,
-            renderCell: (params) => (
-                <Typography variant="body2" color="text.secondary">
-                    {formatWorkspaceRelativeTime(params.value as string)}
-                </Typography>
+            accessorKey: 'createdAt',
+            header: 'Created',
+            size: 150,
+            cell: ({ row }) => (
+                <span className="text-sm text-muted-foreground">
+                    {formatWorkspaceRelativeTime(row.original.createdAt)}
+                </span>
             )
         },
         {
-            field: 'actions',
-            headerName: 'Actions',
-            width: 160,
-            sortable: false,
-            align: 'right',
-            headerAlign: 'right',
-            renderCell: (params) => (
-                <Stack direction="row" spacing={1} justifyContent="flex-end">
+            id: 'actions',
+            header: 'Actions',
+            size: 170,
+            cell: ({ row }) => (
+                <div className="flex justify-end gap-1">
                     <Button
-                        variant="outlined"
-                        size="small"
-                        startIcon={<SettingsIcon sx={{ fontSize: 16 }} />}
+                        variant="outline"
+                        size="sm"
                         onClick={(e) => {
                             e.stopPropagation();
-                            handleManageMembers(params.row);
+                            handleManageMembers(row.original);
                         }}
-                        sx={{ borderRadius: '12px', borderStyle: 'dashed', py: 0.5 }}
+                        className="border-dashed"
                     >
+                        <Settings className="size-4" />
                         Members
                     </Button>
-                    <IconButton
-                        size="small"
-                        color="error"
+                    <Button
+                        variant="ghost"
+                        size="icon-sm"
+                        className="text-destructive hover:bg-destructive/10 hover:text-destructive"
                         onClick={(e) => {
                             e.stopPropagation();
-                            handleDelete(params.row.id);
+                            handleDelete(row.original.id);
                         }}
                     >
-                        <TrashIcon fontSize="small" />
-                    </IconButton>
-                </Stack>
+                        <Trash2 className="size-4" />
+                    </Button>
+                </div>
             )
         }
-    ];
+    ], [templates, updateGroupTemplate, handleManageMembers, handleDelete]);
 
     return (
-        <Box
-            component={motion.div}
+        <motion.div
             variants={fadeInUp}
             initial="initial"
             animate="animate"
-            sx={{ maxWidth: 1200, mx: 'auto', p: { xs: 1.5, md: 2 } }}
+            className="mx-auto max-w-[1200px] px-4 py-4 md:px-6"
         >
-            <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 2 }}>
-                <Box>
-                    <Typography variant="h6" sx={{ fontWeight: 800, letterSpacing: -1 }}>Sales Groups</Typography>
-                    <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+            <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                <div>
+                    <h1 className="text-xl font-semibold tracking-normal text-foreground">Sales Groups</h1>
+                    <p className="mt-1 text-sm text-muted-foreground">
                         Organize your sales team into units for intelligent routing and reporting
-                    </Typography>
-                </Box>
+                    </p>
+                </div>
                 <SalesGroupDialog onSuccess={fetchGroups} />
-            </Stack>
+            </div>
 
-            <Paper
-                elevation={0}
-                sx={{
-                    borderRadius: '24px',
-                    overflow: 'hidden',
-                    border: '1px solid',
-                    borderColor: 'divider',
-                    bgcolor: 'background.paper'
-                }}
-            >
-                <Box sx={{ p: 2, display: 'flex', alignItems: 'center', gap: 1.5, bgcolor: alpha(theme.palette.primary.main, 0.02) }}>
-                    <Paper sx={{ p: 1, borderRadius: '10px', bgcolor: alpha(theme.palette.primary.main, 0.1), color: 'primary.main', display: 'flex' }}>
-                        <GroupsIcon fontSize="small" />
-                    </Paper>
-                    <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>Sales Organization</Typography>
-                </Box>
-                <Divider />
-                <StandardDataGrid
-                    rows={groups}
+            <div className="overflow-hidden rounded-xl border border-border bg-card">
+                <div className="flex items-center gap-3 border-b border-border bg-primary/5 p-4">
+                    <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                        <Users className="size-5" />
+                    </div>
+                    <h2 className="text-sm font-semibold">Sales Organization</h2>
+                </div>
+                <DataTable
+                    storageKey="sales-groups-table"
+                    data={groups}
                     columns={columns}
                     loading={loading}
-                    disableRowSelectionOnClick
-                    sx={{
-                        border: 'none',
-                        '& .MuiDataGrid-row:hover': {
-                            bgcolor: alpha(theme.palette.primary.main, 0.02),
-                        }
+                    getRowId={(row) => row.id}
+                    emptyState={{
+                        icon: <Users className="size-10 text-muted-foreground opacity-50" />,
+                        title: "No sales groups found",
+                        description: "Create a group to organize users for routing and reporting.",
                     }}
                 />
-            </Paper>
+            </div>
 
             {selectedGroup && (
                 <ManageMembersDialog
@@ -263,6 +234,6 @@ export default function SalesGroupsPage() {
                     onSuccess={fetchGroups}
                 />
             )}
-        </Box>
+        </motion.div>
     );
 }

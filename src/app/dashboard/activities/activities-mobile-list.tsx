@@ -1,8 +1,9 @@
 "use client";
 
-import { Activity } from "@/types/activities";
-import { Box, Chip, Typography, alpha, Paper, Stack } from "@mui/material";
 import Link from "next/link";
+import { Activity } from "@/types/activities";
+import { Badge } from "@/components/ui/badge";
+import { cn } from "@/lib/utils";
 import { formatWorkspaceRelativeTime } from "@/lib/date-format";
 
 interface ActivitiesMobileListProps {
@@ -12,127 +13,87 @@ interface ActivitiesMobileListProps {
 export function ActivitiesMobileList({ data }: ActivitiesMobileListProps) {
     if (data.length === 0) {
         return (
-            <Paper
-                elevation={0}
-                sx={{
-                    p: 4,
-                    textAlign: 'center',
-                    borderRadius: '16px',
-                    bgcolor: 'action.hover',
-                    border: '1px dashed',
-                    borderColor: 'divider'
-                }}
-            >
-                <Typography variant="body2" color="text.secondary">
-                    No activities found.
-                </Typography>
-            </Paper>
+            <div className="rounded-2xl border border-dashed bg-accent p-8 text-center">
+                <p className="text-sm text-muted-foreground">No activities found.</p>
+            </div>
         );
     }
 
     return (
-        <Stack spacing={2} sx={{ display: { md: 'none' } }}>
+        <div className="flex flex-col gap-2 md:hidden">
             {data.map((activity) => (
-                <Paper
+                <div
                     key={activity.id}
-                    elevation={0}
-                    sx={{
-                        p: 2,
-                        borderRadius: '16px',
-                        border: '1px solid',
-                        borderColor: 'divider',
-                        bgcolor: 'background.paper',
-                        '&:hover': { bgcolor: 'action.hover' }
-                    }}
+                    className="rounded-2xl border bg-card p-4 transition-colors hover:bg-accent/50"
                 >
-                    <Stack spacing={1.5}>
-                        <Stack direction="row" justifyContent="space-between" alignItems="flex-start">
-                            <Box sx={{ flex: 1 }}>
+                    <div className="flex flex-col gap-1.5">
+                        <div className="flex items-start justify-between gap-2">
+                            <div className="flex-1">
                                 {activity.type && (
-                                    <Chip
-                                        label={activity.type.name}
-                                        size="small"
-                                        sx={{
-                                            mb: 1,
-                                            fontWeight: 700,
-                                            fontSize: '0.625rem',
-                                            textTransform: 'uppercase',
-                                            borderRadius: '6px',
-                                            bgcolor: activity.type.color ? alpha(activity.type.color, 0.08) : 'action.hover',
-                                            color: activity.type.color || 'text.secondary',
-                                            border: '1px solid',
-                                            borderColor: activity.type.color ? alpha(activity.type.color, 0.2) : 'divider'
+                                    <Badge
+                                        variant="outline"
+                                        className="mb-1 rounded-md text-[0.625rem] font-bold uppercase"
+                                        style={{
+                                            backgroundColor: activity.type.color ? `${activity.type.color}14` : undefined,
+                                            borderColor: activity.type.color ? `${activity.type.color}33` : undefined,
+                                            color: activity.type.color ?? undefined,
                                         }}
-                                    />
+                                    >
+                                        {activity.type.name}
+                                    </Badge>
                                 )}
-                                <Typography variant="body2" sx={{ fontWeight: 600, lineClamp: 2, display: '-webkit-box', WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
-                                    {activity.notes}
-                                </Typography>
-                            </Box>
+                                <p className="line-clamp-2 text-sm font-semibold">{activity.notes}</p>
+                            </div>
                             {activity.outcome && (
-                                <Chip
-                                    label={activity.outcome}
-                                    size="small"
-                                    sx={{
-                                        fontWeight: 700,
-                                        fontSize: '0.625rem',
-                                        borderRadius: '4px',
-                                        bgcolor: 'surfaceContainerHighest',
-                                        color: 'text.secondary'
-                                    }}
-                                />
+                                <Badge
+                                    variant="outline"
+                                    className="shrink-0 rounded border-border bg-muted text-[0.625rem] font-bold text-muted-foreground"
+                                >
+                                    {activity.outcome}
+                                </Badge>
                             )}
-                        </Stack>
+                        </div>
 
-                        <Box>
-                            <Typography variant="caption" sx={{ fontWeight: 600, color: activity.completedAt ? 'success.main' : activity.dueAt ? 'warning.main' : 'text.secondary' }}>
-                                {activity.completedAt ? (
-                                    `✓ Completed ${formatWorkspaceRelativeTime(activity.completedAt)}`
-                                ) : activity.dueAt ? (
-                                    `Due ${formatWorkspaceRelativeTime(activity.dueAt)}`
-                                ) : (
-                                    `Logged ${formatWorkspaceRelativeTime(activity.createdAt)}`
-                                )}
-                            </Typography>
-                        </Box>
+                        <p
+                            className={cn(
+                                "text-xs font-semibold",
+                                activity.completedAt
+                                    ? "text-emerald-600 dark:text-emerald-400"
+                                    : activity.dueAt
+                                        ? "text-amber-600 dark:text-amber-400"
+                                        : "text-muted-foreground"
+                            )}
+                        >
+                            {activity.completedAt
+                                ? `✓ Completed ${formatWorkspaceRelativeTime(activity.completedAt)}`
+                                : activity.dueAt
+                                    ? `Due ${formatWorkspaceRelativeTime(activity.dueAt)}`
+                                    : `Logged ${formatWorkspaceRelativeTime(activity.createdAt)}`}
+                        </p>
 
                         {(activity.lead || activity.opportunity) && (
-                            <Stack direction="row" spacing={1} sx={{ pt: 1, borderTop: '1px solid', borderColor: 'divider' }}>
+                            <div className="flex flex-wrap gap-3 border-t pt-2 text-[0.7rem] font-bold">
                                 {activity.lead && (
-                                    <Box
-                                        component={Link}
+                                    <Link
                                         href={`/dashboard/leads/${activity.lead.id}`}
-                                        sx={{
-                                            fontSize: '0.7rem',
-                                            color: 'primary.main',
-                                            textDecoration: 'none',
-                                            fontWeight: 700,
-                                            '&:hover': { textDecoration: 'underline' }
-                                        }}
+                                        className="text-primary hover:underline"
                                     >
                                         Lead: {activity.lead.name}
-                                    </Box>
+                                    </Link>
                                 )}
                                 {activity.opportunity && (
-                                    <Box
-                                        component={Link}
+                                    <Link
                                         href={`/dashboard/opportunities/${activity.opportunity.id}`}
-                                        sx={{
-                                            fontSize: '0.7rem',
-                                            color: 'secondary.main',
-                                            textDecoration: 'none',
-                                            fontWeight: 700,
-                                            '&:hover': { textDecoration: 'underline' }
-                                        }}
+                                        className="text-secondary hover:underline"
                                     >
                                         Opp: {activity.opportunity.title}
-                                    </Box>
+                                    </Link>
                                 )}
-                            </Stack>
+                            </div>
                         )}
-                    </Stack>
-                </Paper>
+                    </div>
+                </div>
             ))}
-        </Stack>
+        </div>
     );
 }

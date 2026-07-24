@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { submitPublicForm } from "@/lib/server/crm";
-import { badRequest, serverError } from "@/lib/server/http";
+import { badRequest, serverError, tooManyRequests } from "@/lib/server/http";
 
 export async function POST(
   request: Request,
@@ -18,6 +18,9 @@ export async function POST(
     }
     if (error instanceof Error && error.message === "FORM_INACTIVE") {
       return badRequest("This form is currently inactive");
+    }
+    if (error instanceof Error && error.message === "RATE_LIMITED") {
+      return tooManyRequests("This form is receiving too many submissions right now. Please try again later.");
     }
     return serverError("Failed to submit form");
   }

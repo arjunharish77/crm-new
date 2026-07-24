@@ -1,6 +1,7 @@
-import { Card, Box, Typography, Stack, IconButton, Divider, useTheme } from '@mui/material';
-import { Add as AddIcon, Edit as EditIcon, Label as LabelIcon } from '@mui/icons-material';
-import { motion } from 'framer-motion';
+import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Plus, Pencil, Tag } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 export interface CustomField {
     id: string;
@@ -17,54 +18,52 @@ interface CustomFieldsCardProps {
 }
 
 export function CustomFieldsCard({ fields, onAdd, onEdit }: CustomFieldsCardProps) {
-    const theme = useTheme();
-
     return (
-        <Card
-            elevation={0}
-            sx={{
-                borderRadius: '16px',
-                border: '1px solid',
-                borderColor: 'divider',
-                bgcolor: 'surfaceContainerLowest',
-            }}
-        >
-            <Box sx={{ p: 1.5, display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid', borderColor: 'divider' }}>
-                <Stack direction="row" spacing={1} alignItems="center">
-                    <LabelIcon sx={{ color: 'primary.main', fontSize: 18 }} />
-                    <Typography variant="subtitle1" fontWeight={800}>Custom Fields</Typography>
-                </Stack>
-                <IconButton size="small" onClick={onAdd} sx={{ bgcolor: 'primaryContainer', color: 'onPrimaryContainer', width: 30, height: 30 }}>
-                    <AddIcon fontSize="small" />
-                </IconButton>
-            </Box>
+        <Card className="gap-0 rounded-2xl border bg-surface-container-lowest py-0">
+            <div className="flex items-center justify-between border-b p-3">
+                <div className="flex items-center gap-2">
+                    <Tag className="size-[18px] text-primary" />
+                    <span className="text-base font-extrabold">Custom Fields</span>
+                </div>
+                <Button
+                    size="icon-sm"
+                    variant="ghost"
+                    onClick={onAdd}
+                    className="size-[30px] bg-primary-container text-on-primary-container hover:bg-primary-container/80"
+                >
+                    <Plus className="size-4" />
+                </Button>
+            </div>
 
-            <Box sx={{ p: 1.5 }}>
+            <div className="p-3">
                 {fields.length === 0 ? (
-                    <Box sx={{ textAlign: 'center', py: 2.5, opacity: 0.6 }}>
-                        <Typography variant="body2" color="text.secondary">No custom fields defined</Typography>
-                    </Box>
+                    <div className="py-5 text-center opacity-60">
+                        <p className="text-sm text-muted-foreground">No custom fields defined</p>
+                    </div>
                 ) : (
-                    <Stack spacing={1.25}>
-                        {fields.map((field) => (
-                            <Box key={field.id} className="group">
-                                <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 0.375 }}>
-                                    <Typography variant="caption" color="text.secondary" fontWeight={700} sx={{ textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                    <div className="flex flex-col gap-3">
+                        {fields.map((field, index) => (
+                            <div key={field.id} className="group">
+                                <div className="mb-1 flex items-center justify-between">
+                                    <span className="text-xs font-bold uppercase tracking-wide text-muted-foreground">
                                         {field.label}
-                                    </Typography>
-                                    <IconButton size="small" onClick={() => onEdit?.(field)} sx={{ opacity: 0, '.group:hover &': { opacity: 1 }, width: 28, height: 28 }}>
-                                        <EditIcon fontSize="small" sx={{ fontSize: 16 }} />
-                                    </IconButton>
-                                </Stack>
-                                <Typography variant="body1" fontWeight={500}>
-                                    {String(field.value)}
-                                </Typography>
-                                <Divider sx={{ mt: 1.125, opacity: 0.5 }} />
-                            </Box>
+                                    </span>
+                                    <Button
+                                        size="icon-sm"
+                                        variant="ghost"
+                                        onClick={() => onEdit?.(field)}
+                                        className="size-7 opacity-0 group-hover:opacity-100"
+                                    >
+                                        <Pencil className="size-4" />
+                                    </Button>
+                                </div>
+                                <p className="text-sm font-medium">{String(field.value)}</p>
+                                <div className={cn("mt-[9px] h-px bg-border opacity-50", index === fields.length - 1 && "hidden")} />
+                            </div>
                         ))}
-                    </Stack>
+                    </div>
                 )}
-            </Box>
+            </div>
         </Card>
     );
 }

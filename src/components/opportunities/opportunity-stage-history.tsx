@@ -1,118 +1,70 @@
 'use client';
 
 import React from 'react';
-import {
-    Box,
-    Typography,
-    Stack,
-    Avatar,
-    Paper,
-    useTheme,
-    alpha
-} from '@mui/material';
-import {
-    History as HistoryIcon,
-    ArrowForward as ArrowIcon,
-    Person as PersonIcon
-} from '@mui/icons-material';
+import { History, ArrowRight, User } from 'lucide-react';
 import { formatWorkspaceRelativeTime } from '@/lib/date-format';
 import { OpportunityStageHistory } from '@/types/opportunities';
+import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 
 interface OpportunityStageHistoryProps {
     history: OpportunityStageHistory[];
 }
 
 export function OpportunityStageHistoryList({ history }: OpportunityStageHistoryProps) {
-    const theme = useTheme();
-
     if (history.length === 0) {
         return (
-            <Box sx={{
-                textAlign: 'center',
-                py: 4,
-                bgcolor: 'surfaceContainerLowest',
-                borderRadius: 4,
-                border: '1px dashed',
-                borderColor: 'divider',
-                color: 'text.secondary'
-            }}>
-                <HistoryIcon sx={{ fontSize: 40, opacity: 0.2, mb: 1 }} />
-                <Typography variant="body2">No stage transitions recorded yet</Typography>
-            </Box>
+            <div className="rounded-2xl border border-dashed border-border bg-surface-container-lowest py-8 text-center text-muted-foreground">
+                <History className="mx-auto mb-2 size-10 opacity-20" />
+                <p className="text-sm">No stage transitions recorded yet</p>
+            </div>
         );
     }
 
     return (
-        <Stack spacing={1.25}>
+        <div className="flex flex-col gap-2.5">
             {history.map((item) => (
-                <Paper
+                <div
                     key={item.id}
-                    elevation={0}
-                    sx={{
-                        p: 1.5,
-                        borderRadius: 3,
-                        border: '1px solid',
-                        borderColor: 'divider',
-                        bgcolor: 'surfaceContainerLowest',
-                        '&:hover': {
-                            bgcolor: alpha(theme.palette.primary.main, 0.02),
-                            borderColor: alpha(theme.palette.primary.main, 0.1)
-                        }
-                    }}
+                    className="rounded-xl border border-border bg-surface-container-lowest p-3 transition-colors hover:border-primary/10 hover:bg-primary/[0.02]"
                 >
-                    <Stack direction="row" spacing={1.5} alignItems="center">
-                        <Avatar sx={{
-                            width: 30,
-                            height: 30,
-                            bgcolor: 'secondaryContainer',
-                            color: 'onSecondaryContainer'
-                        }}>
-                            <HistoryIcon sx={{ fontSize: 16 }} />
+                    <div className="flex items-center gap-3">
+                        <Avatar className="size-7.5">
+                            <AvatarFallback className="bg-secondary-container text-on-secondary-container">
+                                <History className="size-4" />
+                            </AvatarFallback>
                         </Avatar>
 
-                        <Box sx={{ flexGrow: 1 }}>
-                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, flexWrap: 'wrap', mb: 0.35 }}>
+                        <div className="flex-1">
+                            <div className="mb-0.5 flex flex-wrap items-center gap-1.5">
                                 {item.fromStage ? (
-                                    <Typography variant="body2" sx={{ fontWeight: 700, color: 'text.secondary' }}>
-                                        {item.fromStage.name}
-                                    </Typography>
+                                    <span className="text-sm font-bold text-muted-foreground">{item.fromStage.name}</span>
                                 ) : (
-                                    <Typography variant="body2" sx={{ fontWeight: 700, color: 'text.disabled' }}>
-                                        Initial
-                                    </Typography>
+                                    <span className="text-sm font-bold text-muted-foreground/60">Initial</span>
                                 )}
 
-                                <ArrowIcon sx={{ fontSize: 14, color: 'text.disabled' }} />
+                                <ArrowRight className="size-3.5 text-muted-foreground/60" />
 
-                                <Typography variant="body2" sx={{ fontWeight: 800, color: 'primary.main' }}>
-                                    {item.toStage.name}
-                                </Typography>
-                            </Box>
+                                <span className="text-sm font-extrabold text-primary">{item.toStage.name}</span>
+                            </div>
 
-                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                                    <PersonIcon sx={{ fontSize: 12, color: 'text.disabled' }} />
-                                    <Typography variant="caption" color="text.secondary">
-                                        {item.changedBy.name}
-                                    </Typography>
-                                </Box>
-                                <Typography variant="caption" color="text.disabled">•</Typography>
-                                <Typography variant="caption" color="text.secondary">
-                                    {formatWorkspaceRelativeTime(item.changedAt)}
-                                </Typography>
-                            </Box>
-                        </Box>
-                    </Stack>
+                            <div className="flex items-center gap-1.5">
+                                <div className="flex items-center gap-1">
+                                    <User className="size-3 text-muted-foreground/60" />
+                                    <span className="text-xs text-muted-foreground">{item.changedBy.name}</span>
+                                </div>
+                                <span className="text-xs text-muted-foreground/60">•</span>
+                                <span className="text-xs text-muted-foreground">{formatWorkspaceRelativeTime(item.changedAt)}</span>
+                            </div>
+                        </div>
+                    </div>
 
                     {item.notes && (
-                        <Box sx={{ mt: 1.5, pl: 6.5 }}>
-                            <Typography variant="body2" color="text.secondary" sx={{ fontStyle: 'italic' }}>
-                                "{item.notes}"
-                            </Typography>
-                        </Box>
+                        <div className="mt-2.5 pl-[42px]">
+                            <p className="text-sm text-muted-foreground italic">&quot;{item.notes}&quot;</p>
+                        </div>
                     )}
-                </Paper>
+                </div>
             ))}
-        </Stack>
+        </div>
     );
 }

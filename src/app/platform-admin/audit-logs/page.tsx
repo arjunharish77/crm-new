@@ -19,7 +19,7 @@ import {
     TableHeader,
     TableRow,
 } from '@/components/ui/table';
-import { Chip } from "@mui/material";
+import { Badge } from '@/components/ui/badge';
 import { apiFetch } from '@/lib/api';
 import { FileText, Search, ChevronLeft, ChevronRight } from 'lucide-react';
 import { formatWorkspaceDateTime } from '@/lib/date-format';
@@ -190,7 +190,7 @@ export default function AuditLogsPage() {
                                             <TableHead>Tenant</TableHead>
                                             <TableHead>Action</TableHead>
                                             <TableHead>Entity Type</TableHead>
-                                            <TableHead>Entity ID</TableHead>
+                                            <TableHead>Record</TableHead>
                                             <TableHead>Changes</TableHead>
                                         </TableRow>
                                     </TableHeader>
@@ -216,28 +216,19 @@ export default function AuditLogsPage() {
                                                     )}
                                                 </TableCell>
                                                 <TableCell>
-                                                    <Chip
-                                                        label={log.action}
-                                                        size="small"
-                                                        color={
-                                                            log.action === 'CREATE' ? 'success' :
-                                                                log.action === 'UPDATE' ? 'primary' :
-                                                                    log.action === 'DELETE' ? 'error' :
-                                                                        log.action === 'LOGIN' ? 'secondary' : 'default'
+                                                    <Badge
+                                                        variant={
+                                                            log.action === 'DELETE' ? 'destructive' :
+                                                                log.action === 'LOGIN' ? 'secondary' :
+                                                                    log.action === 'CREATE' || log.action === 'UPDATE' ? 'default' : 'outline'
                                                         }
-                                                        variant="filled"
-                                                        sx={{ fontSize: '0.75rem', height: 24 }}
-                                                    />
+                                                    >
+                                                        {log.action}
+                                                    </Badge>
                                                 </TableCell>
                                                 <TableCell>{log.entityType || 'N/A'}</TableCell>
                                                 <TableCell>
-                                                    {log.entityId ? (
-                                                        <code className="text-xs bg-muted px-1 py-0.5 rounded">
-                                                            {log.entityId.substring(0, 8)}...
-                                                        </code>
-                                                    ) : (
-                                                        'N/A'
-                                                    )}
+                                                    {log.entityId ? "Linked record" : 'N/A'}
                                                 </TableCell>
                                                 <TableCell>
                                                     {log.changes ? (

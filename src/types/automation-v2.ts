@@ -4,6 +4,12 @@ import { Node, Edge } from 'reactflow';
 export interface AutomationWorkflow {
     nodes: Node[];
     edges: Edge[];
+    config?: {
+        maxExecutionsPerRecord?: number;
+        maxStepsPerRun?: number;
+        exitConditionLogic?: "AND" | "OR";
+        exitConditions?: Array<Record<string, any>>;
+    };
 }
 
 export interface AutomationTrigger {

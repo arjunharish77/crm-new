@@ -1,31 +1,29 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import {
-    Box,
-    Button,
-    Chip,
-    Divider,
-    FormControl,
-    FormControlLabel,
-    IconButton,
-    InputLabel,
-    MenuItem,
-    Paper,
-    Select,
-    Stack,
-    Switch,
-    TextField,
-    Typography,
-} from "@mui/material";
-import {
-    Add as AddIcon,
-    Close as CloseIcon,
-    Save as SaveIcon,
-} from "@mui/icons-material";
+import { Plus as AddIcon, ChevronDown, Save as SaveIcon, X as CloseIcon } from "lucide-react";
 import { nanoid } from "nanoid";
 import { toast } from "sonner";
 import { apiFetch } from "@/lib/api";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Badge } from "@/components/ui/badge";
+import { Switch } from "@/components/ui/switch";
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from "@/components/ui/select";
+import {
+    DropdownMenu,
+    DropdownMenuCheckboxItem,
+    DropdownMenuContent,
+    DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 const CRM_PLACEMENTS = [
     { value: "LEAD_DETAIL", label: "Lead detail", helper: "Visible on an existing lead record." },
@@ -223,105 +221,118 @@ export function CrmPlacementEditor({ initialForm, onSaved }: { initialForm: any;
     };
 
     return (
-        <Box sx={{ p: { xs: 1.5, md: 2 } }}>
-            <Stack spacing={2}>
-                <Stack direction={{ xs: "column", md: "row" }} justifyContent="space-between" spacing={1.5}>
-                    <Box>
-                        <Typography variant="h6" fontWeight={800}>CRM Placement</Typography>
-                        <Typography variant="body2" color="text.secondary">
+        <div className="p-3 md:p-4">
+            <div className="flex flex-col gap-4">
+                <div className="flex flex-col justify-between gap-3 md:flex-row">
+                    <div>
+                        <h2 className="text-lg font-extrabold">CRM Placement</h2>
+                        <p className="text-sm text-muted-foreground">
                             Configure where this form appears, who can see it, and which record/user conditions must match.
-                        </Typography>
-                    </Box>
-                    <Button variant="contained" startIcon={<SaveIcon />} onClick={save} disabled={saving} sx={{ borderRadius: "10px", alignSelf: { xs: "stretch", md: "center" } }}>
+                        </p>
+                    </div>
+                    <Button onClick={save} disabled={saving} className="self-stretch md:self-center">
+                        <SaveIcon className="size-4" />
                         {saving ? "Saving..." : "Save Placement"}
                     </Button>
-                </Stack>
+                </div>
 
                 {CRM_PLACEMENTS.map((placement) => {
                     const rule = ruleFor(placement.value);
                     return (
-                        <Paper key={placement.value} variant="outlined" sx={{ p: 1.5, borderRadius: 2 }}>
-                            <Stack spacing={1.5}>
-                                <Stack direction={{ xs: "column", md: "row" }} justifyContent="space-between" spacing={1}>
-                                    <Box>
-                                        <Stack direction="row" spacing={1} alignItems="center">
-                                            <Typography variant="subtitle1" fontWeight={800}>{placement.label}</Typography>
-                                            <Chip size="small" label={rule.enabled ? "Enabled" : "Off"} color={rule.enabled ? "success" : "default"} />
-                                        </Stack>
-                                        <Typography variant="caption" color="text.secondary">{placement.helper}</Typography>
-                                    </Box>
-                                    <FormControlLabel
-                                        control={<Switch checked={rule.enabled} onChange={(event) => updateRule(placement.value, { enabled: event.target.checked })} />}
-                                        label="Enable"
+                        <Card key={placement.value} className="gap-3 rounded-xl p-3">
+                            <div className="flex flex-col justify-between gap-2 md:flex-row">
+                                <div>
+                                    <div className="flex items-center gap-2">
+                                        <span className="text-base font-extrabold">{placement.label}</span>
+                                        <Badge variant={rule.enabled ? "default" : "outline"}>{rule.enabled ? "Enabled" : "Off"}</Badge>
+                                    </div>
+                                    <p className="text-xs text-muted-foreground">{placement.helper}</p>
+                                </div>
+                                <label className="flex items-center gap-2 text-sm font-medium">
+                                    <Switch
+                                        checked={rule.enabled}
+                                        onCheckedChange={(checked) => updateRule(placement.value, { enabled: checked })}
                                     />
-                                </Stack>
+                                    Enable
+                                </label>
+                            </div>
 
-                                {rule.enabled && (
-                                    <>
-                                        <Stack direction={{ xs: "column", md: "row" }} spacing={1}>
-                                            <TextField label="Button Label" size="small" fullWidth value={rule.label} onChange={(event) => updateRule(placement.value, { label: event.target.value })} />
-                                            <TextField label="Order" size="small" type="number" sx={{ width: { xs: "100%", md: 120 } }} value={rule.order} onChange={(event) => updateRule(placement.value, { order: Number(event.target.value || 0) })} />
-                                        </Stack>
+                            {rule.enabled && (
+                                <>
+                                    <div className="flex flex-col gap-2 md:flex-row">
+                                        <div className="flex-1 space-y-1.5">
+                                            <Label>Button Label</Label>
+                                            <Input value={rule.label} onChange={(event) => updateRule(placement.value, { label: event.target.value })} />
+                                        </div>
+                                        <div className="space-y-1.5 md:w-[120px]">
+                                            <Label>Order</Label>
+                                            <Input type="number" value={rule.order} onChange={(event) => updateRule(placement.value, { order: Number(event.target.value || 0) })} />
+                                        </div>
+                                    </div>
 
-                                        <FormControl fullWidth size="small">
-                                            <InputLabel>Visible Here To</InputLabel>
-                                            <Select value={rule.visibilityMode} label="Visible Here To" onChange={(event) => updateRule(placement.value, { visibilityMode: event.target.value })}>
-                                                <MenuItem value="INHERIT">Use form visibility</MenuItem>
-                                                <MenuItem value="ALL">All users</MenuItem>
-                                                <MenuItem value="ROLES">Selected roles</MenuItem>
-                                                <MenuItem value="USERS">Selected users</MenuItem>
-                                                <MenuItem value="SALES_GROUPS">Selected sales groups</MenuItem>
-                                                <MenuItem value="TEAMS">Selected teams</MenuItem>
-                                            </Select>
-                                        </FormControl>
+                                    <div className="space-y-1.5">
+                                        <Label>Visible Here To</Label>
+                                        <Select value={rule.visibilityMode} onValueChange={(value) => updateRule(placement.value, { visibilityMode: value })}>
+                                            <SelectTrigger className="w-full">
+                                                <SelectValue />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                <SelectItem value="INHERIT">Use form visibility</SelectItem>
+                                                <SelectItem value="ALL">All users</SelectItem>
+                                                <SelectItem value="ROLES">Selected roles</SelectItem>
+                                                <SelectItem value="USERS">Selected users</SelectItem>
+                                                <SelectItem value="SALES_GROUPS">Selected sales groups</SelectItem>
+                                                <SelectItem value="TEAMS">Selected teams</SelectItem>
+                                            </SelectContent>
+                                        </Select>
+                                    </div>
 
-                                        {rule.visibilityMode === "ROLES" && (
-                                            <MultiSelect label="Roles" value={rule.visibleRoleIds} items={roles} onChange={(value) => updateRule(placement.value, { visibleRoleIds: value })} />
-                                        )}
-                                        {rule.visibilityMode === "USERS" && (
-                                            <MultiSelect label="Users" value={rule.visibleUserIds} items={users.map((user) => ({ ...user, name: user.name || user.email }))} onChange={(value) => updateRule(placement.value, { visibleUserIds: value })} />
-                                        )}
-                                        {rule.visibilityMode === "SALES_GROUPS" && (
-                                            <MultiSelect label="Sales Groups" value={rule.visibleSalesGroupIds} items={salesGroups} onChange={(value) => updateRule(placement.value, { visibleSalesGroupIds: value })} />
-                                        )}
-                                        {rule.visibilityMode === "TEAMS" && (
-                                            <MultiSelect label="Teams" value={rule.visibleTeamIds} items={teams} onChange={(value) => updateRule(placement.value, { visibleTeamIds: value })} />
-                                        )}
+                                    {rule.visibilityMode === "ROLES" && (
+                                        <MultiSelect label="Roles" value={rule.visibleRoleIds} items={roles} onChange={(value) => updateRule(placement.value, { visibleRoleIds: value })} />
+                                    )}
+                                    {rule.visibilityMode === "USERS" && (
+                                        <MultiSelect label="Users" value={rule.visibleUserIds} items={users.map((user) => ({ ...user, name: user.name || user.email }))} onChange={(value) => updateRule(placement.value, { visibleUserIds: value })} />
+                                    )}
+                                    {rule.visibilityMode === "SALES_GROUPS" && (
+                                        <MultiSelect label="Sales Groups" value={rule.visibleSalesGroupIds} items={salesGroups} onChange={(value) => updateRule(placement.value, { visibleSalesGroupIds: value })} />
+                                    )}
+                                    {rule.visibilityMode === "TEAMS" && (
+                                        <MultiSelect label="Teams" value={rule.visibleTeamIds} items={teams} onChange={(value) => updateRule(placement.value, { visibleTeamIds: value })} />
+                                    )}
 
-                                        <Divider />
-                                        <ConditionGroup
-                                            title="Record Conditions"
-                                            description="Match against lead, opportunity, or activity fields in the current CRM page context."
-                                            logic={rule.conditionLogic}
-                                            conditions={rule.conditions}
-                                            fields={recordFieldsForPlacement(placement.value, opportunityTypes, activityTypes)}
-                                            fieldPlaceholder="status or lead.source"
-                                            onLogicChange={(value) => updateRule(placement.value, { conditionLogic: value as "AND" | "OR" })}
-                                            onAdd={() => addCondition(placement.value, "conditions")}
-                                            onUpdate={(index, patch) => updateCondition(placement.value, "conditions", index, patch)}
-                                            onRemove={(index) => removeCondition(placement.value, "conditions", index)}
-                                        />
+                                    <div className="h-px w-full bg-border" />
+                                    <ConditionGroup
+                                        title="Record Conditions"
+                                        description="Match against lead, opportunity, or activity fields in the current CRM page context."
+                                        logic={rule.conditionLogic}
+                                        conditions={rule.conditions}
+                                        fields={recordFieldsForPlacement(placement.value, opportunityTypes, activityTypes)}
+                                        fieldPlaceholder="status or lead.source"
+                                        onLogicChange={(value) => updateRule(placement.value, { conditionLogic: value as "AND" | "OR" })}
+                                        onAdd={() => addCondition(placement.value, "conditions")}
+                                        onUpdate={(index, patch) => updateCondition(placement.value, "conditions", index, patch)}
+                                        onRemove={(index) => removeCondition(placement.value, "conditions", index)}
+                                    />
 
-                                        <ConditionGroup
-                                            title="User Conditions"
-                                            description="Match against current user fields like roleId, email, managerId, or skills.region."
-                                            logic={rule.userConditionLogic}
-                                            conditions={rule.userConditions}
-                                            fields={userConditionFields(users, roles, salesGroups)}
-                                            fieldPlaceholder="roleId, email, skills.region"
-                                            onLogicChange={(value) => updateRule(placement.value, { userConditionLogic: value as "AND" | "OR" })}
-                                            onAdd={() => addCondition(placement.value, "userConditions")}
-                                            onUpdate={(index, patch) => updateCondition(placement.value, "userConditions", index, patch)}
-                                            onRemove={(index) => removeCondition(placement.value, "userConditions", index)}
-                                        />
-                                    </>
-                                )}
-                            </Stack>
-                        </Paper>
+                                    <ConditionGroup
+                                        title="User Conditions"
+                                        description="Match against current user fields like roleId, email, managerId, or skills.region."
+                                        logic={rule.userConditionLogic}
+                                        conditions={rule.userConditions}
+                                        fields={userConditionFields(users, roles, salesGroups)}
+                                        fieldPlaceholder="roleId, email, skills.region"
+                                        onLogicChange={(value) => updateRule(placement.value, { userConditionLogic: value as "AND" | "OR" })}
+                                        onAdd={() => addCondition(placement.value, "userConditions")}
+                                        onUpdate={(index, patch) => updateCondition(placement.value, "userConditions", index, patch)}
+                                        onRemove={(index) => removeCondition(placement.value, "userConditions", index)}
+                                    />
+                                </>
+                            )}
+                        </Card>
                     );
                 })}
-            </Stack>
-        </Box>
+            </div>
+        </div>
     );
 }
 
@@ -368,15 +379,45 @@ function userConditionFields(users: any[], roles: any[], salesGroups: any[]) {
 }
 
 function MultiSelect({ label, value, items, onChange }: { label: string; value: string[]; items: any[]; onChange: (value: string[]) => void }) {
+    const selected = value || [];
+    const toggle = (id: string) => {
+        onChange(selected.includes(id) ? selected.filter((v) => v !== id) : [...selected, id]);
+    };
+    const summary = selected.length === 0
+        ? `Select ${label.toLowerCase()}`
+        : items
+            .filter((item) => selected.includes(item.id))
+            .map((item) => item.name || item.email)
+            .join(", ");
+
     return (
-        <FormControl fullWidth size="small">
-            <InputLabel>{label}</InputLabel>
-            <Select multiple value={value || []} label={label} onChange={(event) => onChange(event.target.value as string[])}>
-                {items.map((item) => (
-                    <MenuItem key={item.id} value={item.id}>{item.name || item.email}</MenuItem>
-                ))}
-            </Select>
-        </FormControl>
+        <div className="space-y-1.5">
+            <Label>{label}</Label>
+            <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                    <Button variant="outline" className="w-full justify-between font-normal">
+                        <span className="truncate text-left">{summary}</span>
+                        <ChevronDown className="size-4 shrink-0 opacity-50" />
+                    </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start" className="max-h-64 w-64 overflow-y-auto">
+                    {items.length === 0 ? (
+                        <p className="px-2 py-1.5 text-sm text-muted-foreground">No options available</p>
+                    ) : (
+                        items.map((item) => (
+                            <DropdownMenuCheckboxItem
+                                key={item.id}
+                                checked={selected.includes(item.id)}
+                                onCheckedChange={() => toggle(item.id)}
+                                onSelect={(e) => e.preventDefault()}
+                            >
+                                {item.name || item.email}
+                            </DropdownMenuCheckboxItem>
+                        ))
+                    )}
+                </DropdownMenuContent>
+            </DropdownMenu>
+        </div>
     );
 }
 
@@ -404,79 +445,91 @@ function ConditionGroup({
     onRemove: (index: number) => void;
 }) {
     return (
-        <Stack spacing={1}>
-            <Stack direction={{ xs: "column", md: "row" }} spacing={1} justifyContent="space-between">
-                <Box>
-                    <Typography variant="subtitle2" fontWeight={800}>{title}</Typography>
-                    <Typography variant="caption" color="text.secondary">{description}</Typography>
-                </Box>
-                <Stack direction="row" spacing={1}>
-                    <FormControl size="small" sx={{ minWidth: 110 }}>
-                        <InputLabel>Logic</InputLabel>
-                        <Select value={logic || "AND"} label="Logic" onChange={(event) => onLogicChange(String(event.target.value))}>
-                            <MenuItem value="AND">All</MenuItem>
-                            <MenuItem value="OR">Any</MenuItem>
-                        </Select>
-                    </FormControl>
-                    <Button size="small" startIcon={<AddIcon />} onClick={onAdd}>Condition</Button>
-                </Stack>
-            </Stack>
+        <div className="space-y-2">
+            <div className="flex flex-col justify-between gap-2 md:flex-row">
+                <div>
+                    <p className="text-sm font-extrabold">{title}</p>
+                    <p className="text-xs text-muted-foreground">{description}</p>
+                </div>
+                <div className="flex items-center gap-2">
+                    <Select value={logic || "AND"} onValueChange={(value) => onLogicChange(value)}>
+                        <SelectTrigger size="sm" className="w-[110px]">
+                            <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="AND">All</SelectItem>
+                            <SelectItem value="OR">Any</SelectItem>
+                        </SelectContent>
+                    </Select>
+                    <Button size="sm" variant="outline" onClick={onAdd}>
+                        <AddIcon className="size-4" />
+                        Condition
+                    </Button>
+                </div>
+            </div>
 
             {conditions.length === 0 ? (
-                <Typography variant="caption" color="text.secondary">No conditions. This part always passes.</Typography>
+                <p className="text-xs text-muted-foreground">No conditions. This part always passes.</p>
             ) : conditions.map((condition, index) => {
                 const selectedField = fields.find((field) => field.key === condition.field);
                 const valueOptions = Array.isArray(selectedField?.options) ? selectedField.options : [];
                 const valueDisabled = ["contains_data", "not_contains_data"].includes(condition.operator || "");
                 return (
-                <Stack key={index} direction={{ xs: "column", md: "row" }} spacing={1} alignItems={{ xs: "stretch", md: "center" }}>
-                    <FormControl size="small" sx={{ flex: 1 }}>
-                        <InputLabel>Field</InputLabel>
+                    <div key={index} className="flex flex-col items-stretch gap-2 md:flex-row md:items-center">
                         <Select
-                            value={condition.field || ""}
-                            label="Field"
-                            onChange={(event) => onUpdate(index, { field: event.target.value, value: "" })}
-                            displayEmpty
+                            value={condition.field || undefined}
+                            onValueChange={(value) => onUpdate(index, { field: value, value: "" })}
                         >
-                            {fields.map((field) => (
-                                <MenuItem key={field.key} value={field.key}>{field.label}</MenuItem>
-                            ))}
-                        </Select>
-                    </FormControl>
-                    <FormControl size="small" sx={{ minWidth: 140 }}>
-                        <InputLabel>Operator</InputLabel>
-                        <Select value={condition.operator || "equals"} label="Operator" onChange={(event) => onUpdate(index, { operator: event.target.value })}>
-                            {OPERATORS.map((operator) => (
-                                <MenuItem key={operator.value} value={operator.value}>{operator.label}</MenuItem>
-                            ))}
-                        </Select>
-                    </FormControl>
-                    {valueOptions.length > 0 ? (
-                        <FormControl size="small" sx={{ flex: 1 }}>
-                            <InputLabel>Value</InputLabel>
-                            <Select value={condition.value || ""} label="Value" onChange={(event) => onUpdate(index, { value: event.target.value })} disabled={valueDisabled}>
-                                {valueOptions.map((option: any) => (
-                                    <MenuItem key={option.value} value={option.value}>{option.label}</MenuItem>
+                            <SelectTrigger size="sm" className="flex-1">
+                                <SelectValue placeholder="Field" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                {fields.map((field) => (
+                                    <SelectItem key={field.key} value={field.key}>{field.label}</SelectItem>
                                 ))}
+                            </SelectContent>
+                        </Select>
+                        <Select value={condition.operator || "equals"} onValueChange={(value) => onUpdate(index, { operator: value })}>
+                            <SelectTrigger size="sm" className="w-[150px] shrink-0">
+                                <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                                {OPERATORS.map((operator) => (
+                                    <SelectItem key={operator.value} value={operator.value}>{operator.label}</SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                        {valueOptions.length > 0 ? (
+                            <Select
+                                value={condition.value || undefined}
+                                onValueChange={(value) => onUpdate(index, { value })}
+                                disabled={valueDisabled}
+                            >
+                                <SelectTrigger size="sm" className="flex-1">
+                                    <SelectValue placeholder="Value" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    {valueOptions.map((option: any) => (
+                                        <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
+                                    ))}
+                                </SelectContent>
                             </Select>
-                        </FormControl>
-                    ) : (
-                        <TextField
-                            label="Value"
-                            size="small"
-                            value={condition.value || ""}
-                            placeholder={fieldPlaceholder}
-                            disabled={valueDisabled}
-                            type={selectedField?.type === "number" ? "number" : selectedField?.type === "date" ? "date" : "text"}
-                            onChange={(event) => onUpdate(index, { value: event.target.value })}
-                            sx={{ flex: 1 }}
-                            InputLabelProps={selectedField?.type === "date" ? { shrink: true } : undefined}
-                        />
-                    )}
-                    <IconButton size="small" onClick={() => onRemove(index)}><CloseIcon fontSize="small" /></IconButton>
-                </Stack>
+                        ) : (
+                            <Input
+                                placeholder={fieldPlaceholder}
+                                value={condition.value || ""}
+                                disabled={valueDisabled}
+                                type={selectedField?.type === "number" ? "number" : selectedField?.type === "date" ? "date" : "text"}
+                                onChange={(event) => onUpdate(index, { value: event.target.value })}
+                                className="h-8 flex-1"
+                            />
+                        )}
+                        <Button variant="ghost" size="icon-sm" onClick={() => onRemove(index)}>
+                            <CloseIcon className="size-3.5" />
+                        </Button>
+                    </div>
                 );
             })}
-        </Stack>
+        </div>
     );
 }

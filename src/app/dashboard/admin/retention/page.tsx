@@ -1,29 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import {
-    Box,
-    Button,
-    Card,
-    CardContent,
-    CardHeader,
-    Typography,
-    Divider,
-    TextField,
-    Grid,
-    CircularProgress,
-    Stack,
-    IconButton,
-    Paper,
-    FormControl
-} from "@mui/material";
-import {
-    PlayArrow as PlayIcon,
-    Save as SaveIcon,
-    Edit as EditIcon,
-    Close as CloseIcon,
-    History as HistoryIcon
-} from "@mui/icons-material";
+import { Edit, History, Loader2, Play, Save, X } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { useAuth } from "@/providers/auth-provider";
 import { toast } from "sonner";
 import { formatWorkspaceDateTime } from "@/lib/date-format";
@@ -135,182 +116,150 @@ export default function RetentionPage() {
 
     if (!isPlatformAdmin) {
         return (
-            <Box sx={{ p: 4, textAlign: 'center' }}>
-                <Typography color="error">You do not have permission to view this page.</Typography>
-            </Box>
+            <div className="p-8 text-center text-destructive">You do not have permission to view this page.</div>
         );
     }
 
     if (loading) {
         return (
-            <Box sx={{ display: 'flex', justifyContent: 'center', py: 8 }}>
-                <CircularProgress />
-            </Box>
+            <div className="flex justify-center py-16">
+                <Loader2 className="size-6 animate-spin text-primary" />
+            </div>
         );
     }
 
     return (
-        <Box sx={{ maxWidth: 1200, mx: 'auto', p: { xs: 1.5, md: 2 } }}>
-            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-                <Box>
-                    <Typography variant="h6" sx={{ fontWeight: 700, mb: 1 }}>Data Retention Policies</Typography>
-                    <Typography variant="body1" color="text.secondary">
+        <div className="mx-auto max-w-[1200px] p-4">
+            <div className="mb-4 flex items-center justify-between gap-4">
+                <div>
+                    <h1 className="mb-1 text-lg font-bold">Data Retention Policies</h1>
+                    <p className="text-sm text-muted-foreground">
                         Configure automatic deletion rules for data compliance.
-                    </Typography>
-                </Box>
+                    </p>
+                </div>
                 <Button
-                    variant="contained"
-                    color="primary"
                     onClick={enforceNow}
                     disabled={enforcing}
-                    startIcon={enforcing ? <CircularProgress size={20} color="inherit" /> : <PlayIcon />}
-                    sx={{ borderRadius: 20 }}
                 >
+                    {enforcing ? <Loader2 className="size-4 animate-spin" /> : <Play className="size-4" />}
                     {enforcing ? "Enforcing..." : "Enforce Now"}
                 </Button>
-            </Box>
-            <Divider sx={{ mb: 2 }} />
+            </div>
 
-            <Card variant="outlined" sx={{ borderRadius: 2 }}>
-                <CardHeader
-                    title={<Typography variant="h6" sx={{ fontWeight: 600 }}>Retention Periods</Typography>}
-                    subheader="Configure how long data is retained (in days). Set to 0 to disable deletion."
-                />
-                <Divider />
-                <CardContent sx={{ p: 0 }}>
+            <div className="rounded-lg border bg-card">
+                <div className="border-b p-4">
+                    <h2 className="text-base font-semibold">Retention Periods</h2>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                        Configure how long data is retained (in days). Set to 0 to disable deletion.
+                    </p>
+                </div>
+                <div>
                     {policies.length === 0 ? (
-                        <Box sx={{ p: 4, textAlign: 'center' }}>
-                            <Typography color="text.secondary">
+                        <div className="p-8 text-center text-sm text-muted-foreground">
                                 No retention policies configured. Create one to get started.
-                            </Typography>
-                        </Box>
+                        </div>
                     ) : (
-                        <Stack divider={<Divider />}>
+                        <div className="divide-y">
                             {policies.map((policy) => (
-                                <Box key={policy.id} sx={{ p: 3 }}>
-                                    <Stack direction="row" justifyContent="space-between" alignItems="start" sx={{ mb: 3 }}>
-                                        <Box>
-                                            <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
+                                <div key={policy.id} className="p-6">
+                                    <div className="mb-6 flex items-start justify-between gap-4">
+                                        <div>
+                                            <div className="font-semibold">
                                                 {policy.tenant ? policy.tenant.name : "Global Default Policy"}
-                                            </Typography>
-                                            <Stack direction="row" alignItems="center" spacing={1} sx={{ mt: 0.5 }}>
-                                                <HistoryIcon fontSize="small" color="action" />
-                                                <Typography variant="caption" color="text.secondary">
+                                            </div>
+                                            <div className="mt-1 flex items-center gap-2 text-xs text-muted-foreground">
+                                                <History className="size-4" />
+                                                <span>
                                                     {policy.lastEnforcedAt
                                                         ? `Last enforced: ${formatWorkspaceDateTime(policy.lastEnforcedAt)}`
                                                         : "Never enforced"}
-                                                </Typography>
-                                            </Stack>
-                                        </Box>
+                                                </span>
+                                            </div>
+                                        </div>
                                         <Button
-                                            variant={editingPolicy?.id === policy.id ? "outlined" : "text"}
-                                            size="small"
+                                            variant={editingPolicy?.id === policy.id ? "outline" : "ghost"}
+                                            size="sm"
                                             onClick={() => setEditingPolicy(editingPolicy?.id === policy.id ? null : policy)}
-                                            startIcon={editingPolicy?.id === policy.id ? <CloseIcon /> : <EditIcon />}
-                                            sx={{ borderRadius: 20 }}
                                         >
+                                            {editingPolicy?.id === policy.id ? <X className="size-4" /> : <Edit className="size-4" />}
                                             {editingPolicy?.id === policy.id ? "Cancel" : "Edit"}
                                         </Button>
-                                    </Stack>
+                                    </div>
 
                                     {editingPolicy?.id === policy.id ? (
-                                        <Box component="form">
-                                            <Grid container spacing={2}>
-                                                <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-                                                    <TextField
-                                                        label="Leads (days)"
-                                                        type="number"
-                                                        fullWidth
-                                                        size="small"
-                                                        value={editingPolicy.leadRetentionDays}
-                                                        onChange={(e) => setEditingPolicy({
-                                                            ...editingPolicy,
-                                                            leadRetentionDays: parseInt(e.target.value) || 0
-                                                        })}
-                                                    />
-                                                </Grid>
-                                                <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-                                                    <TextField
-                                                        label="Opportunities (days)"
-                                                        type="number"
-                                                        fullWidth
-                                                        size="small"
-                                                        value={editingPolicy.opportunityRetentionDays}
-                                                        onChange={(e) => setEditingPolicy({
-                                                            ...editingPolicy,
-                                                            opportunityRetentionDays: parseInt(e.target.value) || 0
-                                                        })}
-                                                    />
-                                                </Grid>
-                                                <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-                                                    <TextField
-                                                        label="Activities (days)"
-                                                        type="number"
-                                                        fullWidth
-                                                        size="small"
-                                                        value={editingPolicy.activityRetentionDays}
-                                                        onChange={(e) => setEditingPolicy({
-                                                            ...editingPolicy,
-                                                            activityRetentionDays: parseInt(e.target.value) || 0
-                                                        })}
-                                                    />
-                                                </Grid>
-                                                <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-                                                    <TextField
-                                                        label="Audit Logs (days)"
-                                                        type="number"
-                                                        fullWidth
-                                                        size="small"
-                                                        value={editingPolicy.auditLogRetentionDays}
-                                                        onChange={(e) => setEditingPolicy({
-                                                            ...editingPolicy,
-                                                            auditLogRetentionDays: parseInt(e.target.value) || 0
-                                                        })}
-                                                    />
-                                                </Grid>
-                                                <Grid size={{ xs: 12 }} sx={{ display: 'flex', justifyContent: 'flex-end' }}>
+                                        <div>
+                                            <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-4">
+                                                <RetentionInput
+                                                    label="Leads (days)"
+                                                    value={editingPolicy.leadRetentionDays}
+                                                    onChange={(value) => setEditingPolicy({ ...editingPolicy, leadRetentionDays: value })}
+                                                />
+                                                <RetentionInput
+                                                    label="Opportunities (days)"
+                                                    value={editingPolicy.opportunityRetentionDays}
+                                                    onChange={(value) => setEditingPolicy({ ...editingPolicy, opportunityRetentionDays: value })}
+                                                />
+                                                <RetentionInput
+                                                    label="Activities (days)"
+                                                    value={editingPolicy.activityRetentionDays}
+                                                    onChange={(value) => setEditingPolicy({ ...editingPolicy, activityRetentionDays: value })}
+                                                />
+                                                <RetentionInput
+                                                    label="Audit Logs (days)"
+                                                    value={editingPolicy.auditLogRetentionDays}
+                                                    onChange={(value) => setEditingPolicy({ ...editingPolicy, auditLogRetentionDays: value })}
+                                                />
+                                            </div>
+                                            <div className="mt-4 flex justify-end">
                                                     <Button
-                                                        variant="contained"
                                                         onClick={() => updatePolicy(policy.tenantId, {
                                                             leadRetentionDays: editingPolicy.leadRetentionDays,
                                                             opportunityRetentionDays: editingPolicy.opportunityRetentionDays,
                                                             activityRetentionDays: editingPolicy.activityRetentionDays,
                                                             auditLogRetentionDays: editingPolicy.auditLogRetentionDays,
                                                         })}
-                                                        startIcon={<SaveIcon />}
-                                                        sx={{ borderRadius: 20 }}
                                                     >
+                                                        <Save className="size-4" />
                                                         Save Changes
                                                     </Button>
-                                                </Grid>
-                                            </Grid>
-                                        </Box>
+                                            </div>
+                                        </div>
                                     ) : (
-                                        <Grid container spacing={2}>
-                                            <Grid size={{ xs: 6, sm: 3 }}>
-                                                <Typography variant="body2" color="text.secondary">Leads</Typography>
-                                                <Typography variant="body1" fontWeight={500}>{policy.leadRetentionDays} days</Typography>
-                                            </Grid>
-                                            <Grid size={{ xs: 6, sm: 3 }}>
-                                                <Typography variant="body2" color="text.secondary">Opportunities</Typography>
-                                                <Typography variant="body1" fontWeight={500}>{policy.opportunityRetentionDays} days</Typography>
-                                            </Grid>
-                                            <Grid size={{ xs: 6, sm: 3 }}>
-                                                <Typography variant="body2" color="text.secondary">Activities</Typography>
-                                                <Typography variant="body1" fontWeight={500}>{policy.activityRetentionDays} days</Typography>
-                                            </Grid>
-                                            <Grid size={{ xs: 6, sm: 3 }}>
-                                                <Typography variant="body2" color="text.secondary">Audit Logs</Typography>
-                                                <Typography variant="body1" fontWeight={500}>{policy.auditLogRetentionDays} days</Typography>
-                                            </Grid>
-                                        </Grid>
+                                        <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+                                            <RetentionStat label="Leads" value={policy.leadRetentionDays} />
+                                            <RetentionStat label="Opportunities" value={policy.opportunityRetentionDays} />
+                                            <RetentionStat label="Activities" value={policy.activityRetentionDays} />
+                                            <RetentionStat label="Audit Logs" value={policy.auditLogRetentionDays} />
+                                        </div>
                                     )}
-                                </Box>
+                                </div>
                             ))}
-                        </Stack>
+                        </div>
                     )}
-                </CardContent>
-            </Card>
-        </Box>
+                </div>
+            </div>
+        </div>
+    );
+}
+
+function RetentionInput({ label, value, onChange }: { label: string; value: number; onChange: (value: number) => void }) {
+    return (
+        <div className="space-y-2">
+            <Label>{label}</Label>
+            <Input
+                type="number"
+                value={value}
+                onChange={(event) => onChange(parseInt(event.target.value) || 0)}
+            />
+        </div>
+    );
+}
+
+function RetentionStat({ label, value }: { label: string; value: number }) {
+    return (
+        <div>
+            <div className="text-sm text-muted-foreground">{label}</div>
+            <div className="font-medium">{value} days</div>
+        </div>
     );
 }

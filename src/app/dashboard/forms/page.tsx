@@ -5,45 +5,39 @@ import { apiFetch } from "@/lib/api";
 import { useRouter } from "next/navigation";
 import { formatWorkspaceRelativeTime } from "@/lib/date-format";
 import {
-    Box,
-    Button,
-    Card,
-    CardContent,
-    CardActions,
-    Typography,
-    Grid,
-    IconButton,
-    InputAdornment,
-    TextField,
-    Menu,
-    MenuItem,
-    Chip,
-    Stack,
-    CircularProgress,
-    Divider,
-    Container,
-    Paper,
-    useTheme,
-    alpha
-} from "@mui/material";
-import {
-    Add as PlusIcon,
+    Filter as FilterListIcon,
+    FileText as DescriptionIcon,
+    Loader2,
+    MoreVertical as MoreVertIcon,
+    Pencil as EditIcon,
+    Plus as PlusIcon,
     Search as SearchIcon,
-    MoreVert as MoreVertIcon,
-    Description as DescriptionIcon,
-    Edit as EditIcon,
-    Delete as DeleteIcon,
-    Visibility as VisibilityIcon,
-    FilterList as FilterListIcon
-} from "@mui/icons-material";
+    Trash2 as DeleteIcon,
+    Eye as VisibilityIcon,
+} from "lucide-react";
 import { toast } from "sonner";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
+import { Label } from "@/components/ui/label";
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuSeparator,
+    DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import {
     Dialog,
-    DialogTitle,
     DialogContent,
-    DialogContentText,
-    DialogActions
-} from "@mui/material";
+    DialogDescription,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle,
+} from "@/components/ui/dialog";
+import { EmptyState } from "@/components/common/empty-state";
+import { QueueExportButton } from "@/components/exports/queue-export-button";
 
 interface Form {
     id: string;
@@ -58,7 +52,6 @@ interface Form {
 }
 
 export default function FormsPage() {
-    const theme = useTheme();
     const [forms, setForms] = useState<Form[]>([]);
     const [loading, setLoading] = useState(true);
     const [createOpen, setCreateOpen] = useState(false);
@@ -66,10 +59,6 @@ export default function FormsPage() {
     const [creating, setCreating] = useState(false);
     const [searchQuery, setSearchQuery] = useState("");
     const router = useRouter();
-
-    // Menu state
-    const [menuAnchor, setMenuAnchor] = useState<null | HTMLElement>(null);
-    const [selectedFormId, setSelectedFormId] = useState<string | null>(null);
 
     const fetchForms = async () => {
         setLoading(true);
@@ -106,30 +95,16 @@ export default function FormsPage() {
         }
     };
 
-    const handleDelete = async () => {
-        if (!selectedFormId) return;
+    const handleDelete = async (formId: string) => {
         if (!confirm("Are you sure? This will delete the form and all submissions.")) return;
 
         try {
-            await apiFetch(`/forms/${selectedFormId}`, { method: "DELETE" });
+            await apiFetch(`/forms/${formId}`, { method: "DELETE" });
             toast.success("Form deleted");
             fetchForms();
         } catch (error) {
             toast.error("Failed to delete form");
-        } finally {
-            handleMenuClose();
         }
-    };
-
-    const handleMenuOpen = (event: React.MouseEvent<HTMLElement>, id: string) => {
-        event.stopPropagation();
-        setMenuAnchor(event.currentTarget);
-        setSelectedFormId(id);
-    };
-
-    const handleMenuClose = () => {
-        setMenuAnchor(null);
-        setSelectedFormId(null);
     };
 
     const filteredForms = forms.filter(f =>
@@ -145,215 +120,161 @@ export default function FormsPage() {
     };
 
     return (
-        <Container maxWidth="xl" sx={{ py: 2 }}>
+        <div className="mx-auto max-w-[1600px] px-4 py-4 md:px-6">
             {/* Header Section */}
-            <Box sx={{ mb: 3, display: 'flex', flexDirection: { xs: 'column', md: 'row' }, justifyContent: 'space-between', alignItems: { xs: 'start', md: 'center' }, gap: 2 }}>
-                <Box>
-                    <Typography variant="h6" fontWeight={700} gutterBottom>
-                        Forms
-                    </Typography>
-                    <Typography variant="body1" color="text.secondary">
+            <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                <div>
+                    <h1 className="text-xl font-semibold tracking-normal text-foreground">Forms</h1>
+                    <p className="mt-1 text-sm text-muted-foreground">
                         Create and manage lead capture forms for your campaigns.
-                    </Typography>
-                </Box>
-                <Button
-                    variant="contained"
-                    startIcon={<PlusIcon />}
-                    onClick={() => setCreateOpen(true)}
-                    sx={{ borderRadius: '10px', px: 2.25 }}
-                >
-                    Create Form
-                </Button>
-            </Box>
+                    </p>
+                </div>
+                <div className="flex items-center gap-2">
+                    <QueueExportButton moduleName="FORMS" filters={{ search: searchQuery || null }} />
+                    <Button onClick={() => setCreateOpen(true)}>
+                        <PlusIcon className="size-4" />
+                        Create Form
+                    </Button>
+                </div>
+            </div>
 
             {/* Filter Bar */}
-            <Paper
-                elevation={0}
-                variant="outlined"
-                sx={{
-                    p: 1.5,
-                    mb: 3,
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 2,
-                    borderRadius: '12px',
-                    bgcolor: 'background.paper'
-                }}
-            >
-                <TextField
-                    placeholder="Search forms..."
-                    size="small"
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    InputProps={{
-                        startAdornment: (
-                            <InputAdornment position="start">
-                                <SearchIcon color="action" />
-                            </InputAdornment>
-                        ),
-                    }}
-                    sx={{ flexGrow: 1, maxWidth: 400 }}
-                />
-                <Button variant="outlined" startIcon={<FilterListIcon />} sx={{ borderRadius: '10px' }}>
+            <Card className="mb-4 flex-row items-center gap-3 rounded-xl p-3">
+                <div className="relative max-w-[400px] flex-1">
+                    <SearchIcon className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+                    <Input
+                        placeholder="Search forms..."
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        className="pl-8"
+                    />
+                </div>
+                <Button variant="outline">
+                    <FilterListIcon className="size-4" />
                     Filters
                 </Button>
-            </Paper>
+            </Card>
 
             {/* Content Area */}
             {loading ? (
-                <Box sx={{ display: 'flex', justifyContent: 'center', py: 8 }}>
-                    <CircularProgress />
-                </Box>
+                <div className="flex justify-center py-16">
+                    <Loader2 className="size-8 animate-spin text-primary" />
+                </div>
             ) : filteredForms.length === 0 ? (
-                <Paper
-                    variant="outlined"
-                    sx={{
-                        p: 6,
-                        textAlign: 'center',
-                        borderRadius: '12px',
-                        borderStyle: 'dashed',
-                        bgcolor: alpha(theme.palette.primary.main, 0.02)
-                    }}
-                >
-                    <DescriptionIcon sx={{ fontSize: 48, color: 'text.secondary', mb: 2, opacity: 0.5 }} />
-                    <Typography variant="h6" gutterBottom>No forms found</Typography>
-                    <Typography color="text.secondary" sx={{ mb: 3 }}>
-                        {searchQuery ? "Try adjusting your search terms" : "Create your first form to start collecting leads"}
-                    </Typography>
-                    {!searchQuery && (
-                        <Button variant="contained" onClick={() => setCreateOpen(true)} sx={{ borderRadius: '10px' }}>
-                            Create Form
-                        </Button>
-                    )}
-                </Paper>
+                <div className="rounded-xl border border-dashed bg-primary/[0.02]">
+                    <EmptyState
+                        icon={<DescriptionIcon className="size-10 text-muted-foreground opacity-50" />}
+                        title="No forms found"
+                        description={searchQuery ? "Try adjusting your search terms" : "Create your first form to start collecting leads"}
+                        action={!searchQuery && (
+                            <Button onClick={() => setCreateOpen(true)}>Create Form</Button>
+                        )}
+                    />
+                </div>
             ) : (
-                <Grid container spacing={2}>
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
                     {filteredForms.map((form) => (
-                        <Grid size={{ xs: 12, md: 6, lg: 4 }} key={form.id}>
-                            <Card
-                                variant="outlined"
-                                sx={{
-                                    borderRadius: '12px',
-                                    transition: 'all 0.2s',
-                                    '&:hover': {
-                                        boxShadow: theme.shadows[4],
-                                        borderColor: 'primary.main',
-                                        transform: 'translateY(-2px)'
-                                    },
-                                    cursor: 'pointer'
-                                }}
-                                onClick={() => router.push(`/dashboard/forms/${form.id}`)}
-                            >
-                                <CardContent>
-                                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 2 }}>
-                                        <Box>
-                                            <Typography variant="h6" fontWeight={600} noWrap sx={{ maxWidth: 200 }}>
-                                                {form.name}
-                                            </Typography>
-                                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 0.5 }}>
-                                                <Chip
-                                                    label={form.isActive ? "Active" : "Draft"}
-                                                    size="small"
-                                                    color={form.isActive ? "success" : "default"}
-                                                    variant={form.isActive ? "filled" : "outlined"}
-                                                    sx={{ height: 20, fontSize: '0.7rem' }}
-                                                />
-                                                <Typography variant="caption" color="text.secondary">
-                                                    • {formatWorkspaceRelativeTime(form.createdAt)}
-                                                </Typography>
-                                            </Box>
-                                        </Box>
-                                        <IconButton size="small" onClick={(e) => handleMenuOpen(e, form.id)}>
-                                            <MoreVertIcon />
-                                        </IconButton>
-                                    </Box>
+                        <Card
+                            key={form.id}
+                            className="cursor-pointer gap-0 rounded-xl py-0 transition-all hover:-translate-y-0.5 hover:border-primary hover:shadow-md"
+                            onClick={() => router.push(`/dashboard/forms/${form.id}`)}
+                        >
+                            <CardContent className="p-4">
+                                <div className="mb-3 flex items-start justify-between gap-2">
+                                    <div className="min-w-0">
+                                        <p className="truncate text-base font-semibold">{form.name}</p>
+                                        <div className="mt-1 flex items-center gap-1.5">
+                                            <Badge variant={form.isActive ? "default" : "outline"} className="h-5 rounded-md text-[10px] font-bold">
+                                                {form.isActive ? "Active" : "Draft"}
+                                            </Badge>
+                                            <span className="text-xs text-muted-foreground">
+                                                &bull; {formatWorkspaceRelativeTime(form.createdAt)}
+                                            </span>
+                                        </div>
+                                    </div>
+                                    <DropdownMenu>
+                                        <DropdownMenuTrigger asChild>
+                                            <Button
+                                                variant="ghost"
+                                                size="icon-sm"
+                                                onClick={(e) => e.stopPropagation()}
+                                            >
+                                                <MoreVertIcon className="size-4" />
+                                            </Button>
+                                        </DropdownMenuTrigger>
+                                        <DropdownMenuContent align="end" className="w-40" onClick={(e) => e.stopPropagation()}>
+                                            <DropdownMenuItem onClick={() => router.push(`/dashboard/forms/${form.id}`)}>
+                                                <EditIcon className="size-4 text-muted-foreground" />
+                                                Edit
+                                            </DropdownMenuItem>
+                                            <DropdownMenuItem onClick={() => window.open(getFormSlug(form.slug), '_blank')}>
+                                                <VisibilityIcon className="size-4 text-muted-foreground" />
+                                                View Public
+                                            </DropdownMenuItem>
+                                            <DropdownMenuSeparator />
+                                            <DropdownMenuItem
+                                                variant="destructive"
+                                                onClick={() => handleDelete(form.id)}
+                                            >
+                                                <DeleteIcon className="size-4" />
+                                                Delete
+                                            </DropdownMenuItem>
+                                        </DropdownMenuContent>
+                                    </DropdownMenu>
+                                </div>
 
-                                    <Typography variant="body2" color="text.secondary" sx={{ mb: 3, minHeight: 40, overflow: 'hidden', textOverflow: 'ellipsis', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>
-                                        {form.description || "No description provided."}
-                                    </Typography>
+                                <p className="mb-3 line-clamp-2 min-h-10 text-sm text-muted-foreground">
+                                    {form.description || "No description provided."}
+                                </p>
 
-                                    <Divider sx={{ mb: 2 }} />
+                                <div className="my-2 h-px w-full bg-border" />
 
-                                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                        <Typography variant="caption" color="text.secondary">
-                                            <b>{form._count?.submissions || 0}</b> Submissions
-                                        </Typography>
-                                        <Button
-                                            size="small"
-                                            endIcon={<EditIcon sx={{ fontSize: 16 }} />}
-                                            sx={{ borderRadius: '10px' }}
-                                        >
-                                            Edit
-                                        </Button>
-                                    </Box>
-                                </CardContent>
-                            </Card>
-                        </Grid>
+                                <div className="flex items-center justify-between">
+                                    <span className="text-xs text-muted-foreground">
+                                        <b>{form._count?.submissions || 0}</b> Submissions
+                                    </span>
+                                    <Button variant="ghost" size="sm">
+                                        Edit
+                                        <EditIcon className="size-3.5" />
+                                    </Button>
+                                </div>
+                            </CardContent>
+                        </Card>
                     ))}
-                </Grid>
+                </div>
             )}
 
             {/* Create Dialog */}
-            <Dialog
-                open={createOpen}
-                onClose={() => setCreateOpen(false)}
-                PaperProps={{ sx: { borderRadius: '12px', width: '100%', maxWidth: 400 } }}
-            >
-                <DialogTitle>Create New Form</DialogTitle>
-                <DialogContent>
-                    <DialogContentText sx={{ mb: 3 }}>
-                        Give your form a name to get started. You can configure fields later.
-                    </DialogContentText>
-                    <TextField
-                        autoFocus
-                        label="Form Name"
-                        placeholder="e.g. Contact Us"
-                        fullWidth
-                        value={newFormName}
-                        onChange={(e) => setNewFormName(e.target.value)}
-                        onKeyDown={(e) => e.key === "Enter" && handleCreate()}
-                    />
+            <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+                <DialogContent className="sm:max-w-[400px]">
+                    <DialogHeader>
+                        <DialogTitle>Create New Form</DialogTitle>
+                        <DialogDescription>
+                            Give your form a name to get started. You can configure fields later.
+                        </DialogDescription>
+                    </DialogHeader>
+                    <div className="space-y-1.5">
+                        <Label htmlFor="new-form-name">Form Name</Label>
+                        <Input
+                            id="new-form-name"
+                            autoFocus
+                            placeholder="e.g. Contact Us"
+                            value={newFormName}
+                            onChange={(e) => setNewFormName(e.target.value)}
+                            onKeyDown={(e) => e.key === "Enter" && handleCreate()}
+                        />
+                    </div>
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => setCreateOpen(false)}>
+                            Cancel
+                        </Button>
+                        <Button onClick={handleCreate} disabled={!newFormName.trim() || creating}>
+                            {creating ? <Loader2 className="size-4 animate-spin" /> : null}
+                            {creating ? "Creating..." : "Create & Edit"}
+                        </Button>
+                    </DialogFooter>
                 </DialogContent>
-                <DialogActions sx={{ p: 3 }}>
-                    <Button onClick={() => setCreateOpen(false)} sx={{ borderRadius: '10px', color: 'text.secondary' }}>
-                        Cancel
-                    </Button>
-                    <Button
-                        onClick={handleCreate}
-                        variant="contained"
-                        disabled={!newFormName.trim() || creating}
-                        sx={{ borderRadius: '10px' }}
-                    >
-                        {creating ? "Creating..." : "Create & Edit"}
-                    </Button>
-                </DialogActions>
             </Dialog>
-
-            {/* Action Menu */}
-            <Menu
-                anchorEl={menuAnchor}
-                open={Boolean(menuAnchor)}
-                onClose={handleMenuClose}
-                PaperProps={{ sx: { borderRadius: '10px', minWidth: 150 } }}
-            >
-                <MenuItem onClick={() => {
-                    router.push(`/dashboard/forms/${selectedFormId}`);
-                    handleMenuClose();
-                }}>
-                    <EditIcon fontSize="small" sx={{ mr: 1.5, color: 'text.secondary' }} /> Edit
-                </MenuItem>
-                <MenuItem onClick={() => {
-                    const form = forms.find(f => f.id === selectedFormId);
-                    if (form) window.open(getFormSlug(form.slug), '_blank');
-                    handleMenuClose();
-                }}>
-                    <VisibilityIcon fontSize="small" sx={{ mr: 1.5, color: 'text.secondary' }} /> View Public
-                </MenuItem>
-                <Divider />
-                <MenuItem onClick={handleDelete} sx={{ color: 'error.main' }}>
-                    <DeleteIcon fontSize="small" sx={{ mr: 1.5 }} /> Delete
-                </MenuItem>
-            </Menu>
-        </Container>
+        </div>
     );
 }

@@ -1,22 +1,23 @@
 import { NextResponse } from "next/server";
-import { requireCurrentUser } from "@/lib/server/auth";
+import { requireInternalUser } from "@/lib/server/auth";
 import { createTenantScopedUser, listTenantUsers } from "@/lib/server/admin";
 import { badRequest, forbidden, serverError, unauthorized } from "@/lib/server/http";
 
 export async function GET(request: Request) {
   try {
-    const user = await requireCurrentUser(request);
+    const user = await requireInternalUser(request);
     const users = await listTenantUsers(user.tenantId);
     return NextResponse.json(users);
   } catch (error) {
     if (error instanceof Error && error.message === "UNAUTHORIZED") return unauthorized();
+    if (error instanceof Error && error.message === "FORBIDDEN") return forbidden();
     return serverError("Failed to fetch users");
   }
 }
 
 export async function POST(request: Request) {
   try {
-    const user = await requireCurrentUser(request);
+    const user = await requireInternalUser(request);
 
     if (!user.tenantId) {
       return forbidden("Tenant context required");
@@ -31,6 +32,7 @@ export async function POST(request: Request) {
     return NextResponse.json(created);
   } catch (error) {
     if (error instanceof Error && error.message === "UNAUTHORIZED") return unauthorized();
+    if (error instanceof Error && error.message === "FORBIDDEN") return forbidden();
     return serverError("Failed to create user");
   }
 }

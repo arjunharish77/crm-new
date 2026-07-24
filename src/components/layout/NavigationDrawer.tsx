@@ -3,98 +3,39 @@
 import * as React from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import {
-    Box,
-    Drawer,
+    Activity,
+    BarChart3,
+    BadgeDollarSign,
+    BriefcaseBusiness,
+    CheckSquare,
+    ChevronDown,
+    ChevronLeft,
+    ChevronRight,
+    ChevronUp,
+    Download,
+    FileText,
+    LayoutDashboard,
+    LayoutList,
     List,
-    ListItem,
-    ListItemButton,
-    ListItemIcon,
-    ListItemText,
-    IconButton,
-    Divider,
-    Typography,
-    Tooltip,
-    Collapse,
-    useTheme,
-    CSSObject,
-    Theme,
-    styled,
-    alpha,
-    useMediaQuery,
-} from '@mui/material';
-import {
-    ChevronLeft as ChevronLeftIcon,
-    ChevronRight as ChevronRightIcon,
-    Dashboard as DashboardIcon,
-    People as PeopleIcon,
-    AssignmentTurnedIn as TaskIcon,
-    Settings as SettingsIcon,
-    Security as SecurityIcon,
-    Analytics as AnalyticsIcon,
-    Work as WorkIcon,
-    Description as FormIcon,
-    AutoFixHigh as AutomationIcon,
-    Groups as GroupsIcon,
-    Rule as RuleIcon,
-    FormatListBulleted as PipelineIcon,
-    AdminPanelSettings as PlatformIcon,
-    ExpandLess,
-    ExpandMore,
-    Tune as TuneIcon,
-    Extension as ExtensionIcon,
-} from '@mui/icons-material';
+    Puzzle,
+    Shield,
+    ShieldCheck,
+    SlidersHorizontal,
+    Sparkles,
+    Star,
+    Trophy,
+    Users,
+    UsersRound,
+    WandSparkles,
+} from 'lucide-react';
 import { useAuth } from '@/providers/auth-provider';
 import { apiFetch } from '@/lib/api';
+import { cn } from '@/lib/utils';
+import { Button } from '@/components/ui/button';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 
 const drawerWidth = 248;
 const railWidth = 68;
-
-const openedMixin = (theme: Theme): CSSObject => ({
-    width: drawerWidth,
-    transition: theme.transitions.create('width', {
-        easing: theme.transitions.easing.sharp,
-        duration: theme.transitions.duration.enteringScreen,
-    }),
-    overflowX: 'hidden',
-    borderRight: 'none',
-    backgroundColor: theme.palette.background.paper,
-});
-
-const closedMixin = (theme: Theme): CSSObject => ({
-    transition: theme.transitions.create('width', {
-        easing: theme.transitions.easing.sharp,
-        duration: theme.transitions.duration.leavingScreen,
-    }),
-    overflowX: 'hidden',
-    width: railWidth,
-    borderRight: 'none',
-    backgroundColor: theme.palette.background.paper,
-});
-
-const DrawerHeader = styled('div')(({ theme }) => ({
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    padding: theme.spacing(0, 1.5),
-    minHeight: 56,
-}));
-
-const StyledDrawer = styled(Drawer, { shouldForwardProp: (prop) => prop !== 'open' })(
-    ({ theme, open }) => ({
-        width: drawerWidth,
-        flexShrink: 0,
-        whiteSpace: 'nowrap',
-        boxSizing: 'border-box',
-        ...(open && {
-            ...openedMixin(theme),
-            '& .MuiDrawer-paper': openedMixin(theme),
-        }),
-        ...(!open && {
-            ...closedMixin(theme),
-            '& .MuiDrawer-paper': closedMixin(theme),
-        }),
-    }),
-);
 
 interface NavItem {
     name: string;
@@ -105,16 +46,26 @@ interface NavItem {
 }
 
 export function NavigationDrawer({ open, toggleDrawer }: { open: boolean; toggleDrawer: () => void }) {
-    const theme = useTheme();
     const pathname = usePathname();
     const router = useRouter();
     const { user } = useAuth();
-    const isMobile = useMediaQuery(theme.breakpoints.down('md'));
+    const [isMobile, setIsMobile] = React.useState(false);
 
     const [adminOpen, setAdminOpen] = React.useState(true);
     const [platformOpen, setPlatformOpen] = React.useState(true);
     const [customOpen, setCustomOpen] = React.useState(true);
     const [customObjects, setCustomObjects] = React.useState<any[]>([]);
+    const [canAccessPayouts, setCanAccessPayouts] = React.useState(true);
+
+    React.useEffect(() => {
+        const mediaQuery = window.matchMedia('(max-width: 767px)');
+        const updateIsMobile = () => setIsMobile(mediaQuery.matches);
+
+        updateIsMobile();
+        mediaQuery.addEventListener('change', updateIsMobile);
+
+        return () => mediaQuery.removeEventListener('change', updateIsMobile);
+    }, []);
 
     React.useEffect(() => {
         apiFetch('/metadata/objects')
@@ -126,102 +77,99 @@ export function NavigationDrawer({ open, toggleDrawer }: { open: boolean; toggle
             .catch(console.error);
     }, []);
 
-    const navigation: NavItem[] = [
-        { name: 'Dashboard', href: '/dashboard', icon: <DashboardIcon /> },
-        { name: 'Leads', href: '/dashboard/leads', icon: <PeopleIcon />, enabled: true },
-        { name: 'Lists', href: '/dashboard/lists', icon: <PipelineIcon />, enabled: true },
-        { name: 'Opportunities', href: '/dashboard/opportunities', icon: <WorkIcon />, enabled: user?.features?.opportunityEnabled !== false },
-        { name: 'Activities', href: '/dashboard/activities', icon: <TaskIcon /> },
-        { name: 'Forms', href: '/dashboard/forms', icon: <FormIcon />, enabled: user?.features?.formBuilderEnabled !== false },
-        { name: 'Automations', href: '/dashboard/automations-v2', icon: <AutomationIcon />, enabled: user?.features?.automationEnabled !== false },
-        { name: 'Reports', href: '/dashboard/reports', icon: <AnalyticsIcon />, enabled: user?.features?.advancedReporting !== false },
-    ];
+    const isPartner = !!(user?.role as any)?.permissions?.isPartnerRole;
+
+    React.useEffect(() => {
+        if (!isPartner) return;
+        apiFetch<{ canAccess: boolean }>('/partners/me/payout-access')
+            .then((data) => setCanAccessPayouts(data.canAccess !== false))
+            .catch(() => setCanAccessPayouts(false));
+    }, [isPartner]);
+
+    const navigation: NavItem[] = isPartner
+        ? [
+            { name: 'Dashboard', href: '/dashboard', icon: <LayoutDashboard className="size-5" /> },
+            { name: 'My Leads', href: '/dashboard/leads', icon: <Users className="size-5" /> },
+            { name: 'My Opportunities', href: '/dashboard/opportunities', icon: <BriefcaseBusiness className="size-5" />, enabled: user?.features?.opportunityEnabled !== false },
+            { name: 'My Activities', href: '/dashboard/activities', icon: <Activity className="size-5" /> },
+            { name: 'My Tasks', href: '/dashboard/tasks', icon: <CheckSquare className="size-5" /> },
+            { name: 'Views', href: '/dashboard/views', icon: <LayoutList className="size-5" /> },
+            { name: 'Exports', href: '/dashboard/exports', icon: <Download className="size-5" /> },
+            { name: 'My Payouts', href: '/dashboard/payouts', icon: <BadgeDollarSign className="size-5" />, enabled: canAccessPayouts },
+            { name: 'My Points', href: '/dashboard/my-points', icon: <Star className="size-5" /> },
+        ]
+        : [
+            { name: 'Dashboard', href: '/dashboard', icon: <LayoutDashboard className="size-5" /> },
+            { name: 'Leads', href: '/dashboard/leads', icon: <Users className="size-5" />, enabled: true },
+            { name: 'Lists', href: '/dashboard/lists', icon: <List className="size-5" />, enabled: true },
+            { name: 'Opportunities', href: '/dashboard/opportunities', icon: <BriefcaseBusiness className="size-5" />, enabled: user?.features?.opportunityEnabled !== false },
+            { name: 'Activities', href: '/dashboard/activities', icon: <Activity className="size-5" /> },
+            { name: 'Tasks', href: '/dashboard/tasks', icon: <CheckSquare className="size-5" /> },
+            { name: 'Views', href: '/dashboard/views', icon: <LayoutList className="size-5" /> },
+            { name: 'Exports', href: '/dashboard/exports', icon: <Download className="size-5" /> },
+            { name: 'Forms', href: '/dashboard/forms', icon: <FileText className="size-5" />, enabled: user?.features?.formBuilderEnabled !== false },
+            { name: 'Automations', href: '/dashboard/automations-v2', icon: <WandSparkles className="size-5" />, enabled: user?.features?.automationEnabled !== false },
+            { name: 'Reports', href: '/dashboard/reports', icon: <BarChart3 className="size-5" />, enabled: user?.features?.advancedReporting !== false },
+            { name: 'Leaderboard', href: '/dashboard/leaderboard', icon: <Trophy className="size-5" /> },
+            { name: 'My Points', href: '/dashboard/my-points', icon: <Star className="size-5" /> },
+        ];
 
     const adminNavigation: NavItem[] = [
-        { name: 'Settings', href: '/dashboard/settings', icon: <TuneIcon /> },
+        { name: 'Settings', href: '/dashboard/settings', icon: <SlidersHorizontal className="size-5" /> },
     ];
 
     const platformNavigation: NavItem[] = [
-        { name: 'Tenants', href: '/platform-admin', icon: <PlatformIcon />, adminOnly: true },
-        { name: 'Audit Logs', href: '/platform-admin/audit-logs', icon: <SecurityIcon />, adminOnly: true },
+        { name: 'Tenants', href: '/platform-admin', icon: <ShieldCheck className="size-5" />, adminOnly: true },
+        { name: 'Audit Logs', href: '/platform-admin/audit-logs', icon: <Shield className="size-5" />, adminOnly: true },
     ];
 
+    const goTo = (href: string) => {
+        if (pathname !== href) {
+            router.push(href);
+        }
+        if (isMobile) toggleDrawer();
+    };
+
     const renderNavItem = (item: NavItem) => {
-        // Precise route matching: active if current path is exactly item.href 
-        // OR if it's a sub-path of item.href (except for root dashboard)
         const isRoot = item.href === '/dashboard';
         const active = isRoot ? pathname === '/dashboard' : (pathname === item.href || pathname.startsWith(item.href + '/'));
+        const labelVisible = open || isMobile;
+
+        const button = (
+            <button
+                type="button"
+                onClick={() => goTo(item.href)}
+                className={cn(
+                    "group flex min-h-10 w-full items-center rounded-full px-3 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/20",
+                    labelVisible ? "justify-start gap-3" : "mx-auto size-10 justify-center px-0",
+                    active
+                        ? "bg-secondary text-secondary-foreground"
+                        : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+                )}
+            >
+                <span
+                    className={cn(
+                        "flex size-7 shrink-0 items-center justify-center rounded-lg",
+                        !labelVisible && active ? "bg-secondary text-secondary-foreground" : "text-current"
+                    )}
+                >
+                    {item.icon}
+                </span>
+                {labelVisible ? (
+                    <span className={cn("truncate", active ? "font-bold" : "font-medium")}>{item.name}</span>
+                ) : null}
+            </button>
+        );
 
         return (
-            <ListItem key={item.name} disablePadding sx={{ display: 'block', mb: 0.5 }}>
-                <Tooltip
-                    title={!open && !isMobile ? item.name : ''}
-                    placement="right"
-                    arrow
-                    enterDelay={400}
-                >
-                    <ListItemButton
-                        onClick={() => {
-                            router.push(item.href);
-                            if (isMobile) toggleDrawer();
-                        }}
-                        sx={{
-                            minHeight: 40,
-                            justifyContent: open ? 'initial' : 'center',
-                            px: 1.25,
-                            borderRadius: active ? '12px 20px 20px 12px' : 20,
-                            mx: open ? 0 : 0.75,
-                            backgroundColor: active ? theme.palette.secondaryContainer : 'transparent',
-                            color: active ? theme.palette.onSecondaryContainer : theme.palette.onSurfaceVariant,
-                            '&:hover': {
-                                backgroundColor: active
-                                    ? alpha(theme.palette.secondaryContainer, 0.8)
-                                    : alpha(theme.palette.onSurface, 0.08),
-                            },
-                            transition: theme.transitions.create(['background-color', 'color', 'transform', 'border-radius'], {
-                                duration: theme.transitions.duration.shorter,
-                            }),
-                        }}
-                    >
-                        <ListItemIcon
-                            sx={{
-                                minWidth: 0,
-                                mr: open ? 1.5 : 'auto',
-                                justifyContent: 'center',
-                                color: active ? theme.palette.onSecondaryContainer : theme.palette.onSurfaceVariant,
-                                transition: 'margin 0.2s',
-                            }}
-                        >
-                            {/* Visual indicator for active item in rail mode */}
-                            {!open && active ? (
-                                <Box sx={{
-                                    bgcolor: theme.palette.secondaryContainer,
-                                    p: 0.625,
-                                    borderRadius: 2,
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    justifyContent: 'center',
-                                    color: theme.palette.onSecondaryContainer
-                                }}>
-                                    {item.icon}
-                                </Box>
-                            ) : item.icon}
-                        </ListItemIcon>
-                        <ListItemText
-                            primary={item.name}
-                            sx={{
-                                opacity: open ? 1 : 0,
-                                display: open ? 'block' : 'none', // Remove from DOM in rail mode to prevent text wrapping issues
-                            }}
-                            primaryTypographyProps={{
-                                variant: 'body2',
-                                fontWeight: active ? 700 : 500,
-                                fontSize: '0.83rem',
-                            }}
-                        />
-                    </ListItemButton>
-                </Tooltip>
-            </ListItem>
+            <li key={item.name} className="mb-1">
+                {!labelVisible ? (
+                    <Tooltip>
+                        <TooltipTrigger asChild>{button}</TooltipTrigger>
+                        <TooltipContent side="right">{item.name}</TooltipContent>
+                    </Tooltip>
+                ) : button}
+            </li>
         );
     };
 
@@ -234,139 +182,118 @@ export function NavigationDrawer({ open, toggleDrawer }: { open: boolean; toggle
         const filtered = items.filter(item => item.enabled !== false && (!item.adminOnly || user?.isPlatformAdmin));
         if (filtered.length === 0) return null;
 
-        // Check if any child is active
         const hasActiveChild = filtered.some(item => pathname === item.href || pathname.startsWith(item.href + '/'));
+        const labelVisible = open || isMobile;
+
+        if (!labelVisible) {
+            return (
+                <div className="relative mb-2">
+                    <ul className="space-y-1 px-2">{filtered.map(renderNavItem)}</ul>
+                    {hasActiveChild ? <div className="absolute left-0 top-2 h-6 w-1 rounded-r bg-primary" /> : null}
+                </div>
+            );
+        }
 
         return (
-            <Box sx={{ mb: 1 }}>
-                {(open || isMobile) ? (
-                    <ListItemButton
-                        onClick={onToggle}
-                        sx={{
-                            mx: 1.5,
-                            borderRadius: 1.5,
-                            py: 0.5,
-                            minHeight: 30,
-                            color: hasActiveChild ? 'primary.main' : 'text.secondary',
-                        }}
-                    >
-                        <ListItemText
-                            primary={title}
-                            primaryTypographyProps={{
-                                variant: 'labelMedium',
-                                sx: { fontWeight: 700, letterSpacing: 0.5, textTransform: 'uppercase' },
-                            }}
-                        />
-                        {isOpen ? <ExpandLess fontSize="small" /> : <ExpandMore fontSize="small" />}
-                    </ListItemButton>
-                ) : (
-                    <List sx={{ px: 0.75, pt: 0 }}>
-                        {filtered.map(renderNavItem)}
-                    </List>
-                )}
-                <Collapse in={(open || isMobile) && isOpen} timeout="auto" unmountOnExit>
-                    <List sx={{ px: (open || isMobile) ? 1.25 : 0.75, pt: 0 }}>
-                        {filtered.map(renderNavItem)}
-                    </List>
-                </Collapse>
-                {!open && !isMobile && hasActiveChild && (
-                    <Box sx={{ width: 4, height: 24, bgcolor: 'primary.main', position: 'absolute', left: 0, borderRadius: '0 4px 4px 0' }} />
-                )}
-            </Box>
+            <div className="mb-2">
+                <button
+                    type="button"
+                    onClick={onToggle}
+                    className={cn(
+                        "mb-1 flex min-h-8 w-full items-center justify-between rounded-md px-3 text-xs font-bold uppercase tracking-[0.04em] text-muted-foreground hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                        hasActiveChild && "text-primary"
+                    )}
+                >
+                    <span>{title}</span>
+                    {isOpen ? <ChevronUp className="size-4" /> : <ChevronDown className="size-4" />}
+                </button>
+                {isOpen ? <ul className="space-y-1 px-2">{filtered.map(renderNavItem)}</ul> : null}
+            </div>
         );
     };
 
     const drawerContent = (
         <>
-            <DrawerHeader>
+            <div className="flex min-h-14 items-center justify-between px-3">
                 {(open || isMobile) ? (
                     <>
-                        <Box display="flex" alignItems="center" gap={1.25} sx={{ px: 0 }}>
-                            <Box
-                                sx={{
-                                    width: 32,
-                                    height: 32,
-                                    bgcolor: theme.palette.primary.main,
-                                    color: theme.palette.primary.contrastText,
-                                    borderRadius: 1.75,
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    justifyContent: 'center',
-                                    fontWeight: 'bold',
-                                    fontSize: '1rem',
-                                }}
-                            >
+                        <div className="flex items-center gap-3">
+                            <div className="flex size-8 items-center justify-center rounded-xl bg-primary text-base font-bold text-primary-foreground">
                                 U
-                            </Box>
-                            <Typography variant="body2" sx={{ fontWeight: 800, fontSize: '0.92rem' }}>
-                                Unnatify
-                            </Typography>
-                        </Box>
-                        {/* Always-visible expand/collapse toggle */}
-                        <IconButton onClick={toggleDrawer} size="small">
-                            {isMobile ? <ChevronLeftIcon /> : <ChevronLeftIcon />}
-                        </IconButton>
+                            </div>
+                            <div className="text-sm font-extrabold">Unnatify</div>
+                        </div>
+                        <Button variant="ghost" size="icon-sm" onClick={toggleDrawer} aria-label="Collapse navigation">
+                            <ChevronLeft className="size-5" />
+                        </Button>
                     </>
                 ) : (
-                    <Box sx={{ width: '100%', display: 'flex', justifyContent: 'center' }}>
-                        <IconButton onClick={toggleDrawer} size="small">
-                            <ChevronRightIcon />
-                        </IconButton>
-                    </Box>
+                    <div className="flex w-full justify-center">
+                        <Button variant="ghost" size="icon-sm" onClick={toggleDrawer} aria-label="Expand navigation">
+                            <ChevronRight className="size-5" />
+                        </Button>
+                    </div>
                 )}
-            </DrawerHeader>
+            </div>
 
-            <Box sx={{ flexGrow: 1, overflowY: 'auto', mt: 0.25 }}>
-                {/* Main navigation */}
-                <List sx={{ px: 0.75 }}>
+            <div className="grow overflow-y-auto py-1">
+                <ul className="space-y-1 px-2">
                     {navigation.filter(item => item.enabled !== false).map(renderNavItem)}
-                </List>
+                </ul>
 
-                {(open || isMobile) && <Divider sx={{ my: 0.75, mx: 1.25 }} />}
+                {!isPartner && (open || isMobile) ? <div className="mx-3 my-2 h-px bg-border" /> : null}
+                {!isPartner && renderSection('Administration', adminNavigation, adminOpen, () => setAdminOpen(!adminOpen))}
 
-                {/* Administration section */}
-                {renderSection('Administration', adminNavigation, adminOpen, () => setAdminOpen(!adminOpen))}
-
-                {(open || isMobile) && <Divider sx={{ my: 0.75, mx: 1.25 }} />}
-
-                {/* Custom Objects section */}
-                {customObjects.length > 0 && renderSection('Custom Objects', customObjects.map(obj => ({
-                    name: obj.label || obj.name,
-                    href: `/dashboard/objects/${obj.name}`,
-                    icon: <ExtensionIcon />
-                })), customOpen, () => setCustomOpen(!customOpen))}
-
-                {/* Platform section (only for platform admins) */}
-                {user?.isPlatformAdmin && (
+                {!isPartner && customObjects.length > 0 ? (
                     <>
-                        {(open || isMobile) && <Divider sx={{ my: 0.75, mx: 1.25 }} />}
+                        {(open || isMobile) ? <div className="mx-3 my-2 h-px bg-border" /> : null}
+                        {renderSection('Custom Objects', customObjects.map(obj => ({
+                            name: obj.label || obj.name,
+                            href: `/dashboard/objects/${obj.name}`,
+                            icon: <Puzzle className="size-5" />,
+                        })), customOpen, () => setCustomOpen(!customOpen))}
+                    </>
+                ) : null}
+
+                {user?.isPlatformAdmin ? (
+                    <>
+                        {(open || isMobile) ? <div className="mx-3 my-2 h-px bg-border" /> : null}
                         {renderSection('Platform', platformNavigation, platformOpen, () => setPlatformOpen(!platformOpen))}
                     </>
-                )}
-            </Box>
+                ) : null}
+            </div>
         </>
     );
 
     if (isMobile) {
         return (
-            <Drawer
-                variant="temporary"
-                open={open}
-                onClose={toggleDrawer}
-                ModalProps={{ keepMounted: true }}
-                sx={{
-                    display: { xs: 'block', md: 'none' },
-                    '& .MuiDrawer-paper': { boxSizing: 'border-box', width: drawerWidth },
-                }}
-            >
-                {drawerContent}
-            </Drawer>
+            <>
+                {open ? (
+                    <button
+                        type="button"
+                        aria-label="Close navigation overlay"
+                        className="fixed inset-0 z-40 bg-black/35 md:hidden focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
+                        onClick={toggleDrawer}
+                    />
+                ) : null}
+                <aside
+                    className={cn(
+                        "fixed inset-y-0 left-0 z-50 flex w-[248px] flex-col border-r bg-background shadow-xl transition-transform md:hidden",
+                        open ? "translate-x-0" : "-translate-x-full"
+                    )}
+                >
+                    {drawerContent}
+                </aside>
+            </>
         );
     }
 
     return (
-        <StyledDrawer variant="permanent" open={open}>
+        <aside
+            className="hidden shrink-0 flex-col border-r bg-background transition-[width] duration-200 ease-in-out md:flex"
+            style={{ width: open ? drawerWidth : railWidth }}
+        >
             {drawerContent}
-        </StyledDrawer>
+        </aside>
     );
 }

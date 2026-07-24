@@ -1,39 +1,20 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import {
-    Button,
-    Dialog,
-    DialogContent,
-
-    DialogTitle,
-    DialogContentText,
-    Stack,
-    Select,
-    MenuItem,
-    FormControl,
-    InputLabel,
-    Box,
-    Avatar,
-    Typography,
-    IconButton,
-    Paper,
-    List,
-    ListItem,
-    ListItemAvatar,
-    ListItemText,
-    ListItemSecondaryAction,
-    Chip,
-    CircularProgress,
-    Divider
-} from "@mui/material";
-import {
-    PersonAdd as PersonAddIcon,
-    Delete as DeleteIcon,
-    Close as CloseIcon
-} from "@mui/icons-material";
-import { apiFetch } from "@/lib/api";
+import { Loader2, Trash2, UserPlus } from "lucide-react";
 import { toast } from "sonner";
+import { StandardDialog } from "@/components/common/standard-dialog";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from "@/components/ui/select";
+import { apiFetch } from "@/lib/api";
 
 interface ManageMembersDialogProps {
     open: boolean;
@@ -46,7 +27,6 @@ export function ManageMembersDialog({ open, onOpenChange, group, onSuccess }: Ma
     const [users, setUsers] = useState<any[]>([]); // All users in tenant
     const [selectedUser, setSelectedUser] = useState("");
     const [selectedRole, setSelectedRole] = useState("MEMBER");
-    const [loading, setLoading] = useState(false);
     const [adding, setAdding] = useState(false);
 
     // Fetch all tenant users to populate dropdown
@@ -96,96 +76,89 @@ export function ManageMembersDialog({ open, onOpenChange, group, onSuccess }: Ma
     );
 
     return (
-        <Dialog open={open} onClose={handleClose} maxWidth="sm" fullWidth>
-            <DialogTitle>
-                Manage Members: {group.name}
-            </DialogTitle>
-            <DialogContent>
-                <DialogContentText sx={{ mb: 3 }}>
-                    Add or remove users from this sales group.
-                </DialogContentText>
-
-                <Stack direction="row" spacing={2} alignItems="flex-end" sx={{ mb: 2 }}>
-                    <FormControl fullWidth size="small">
-                        <InputLabel>Add User</InputLabel>
-                        <Select
-                            value={selectedUser}
-                            label="Add User"
-                            onChange={(e) => setSelectedUser(e.target.value)}
-                        >
-                            {availableUsers.map((u) => (
-                                <MenuItem key={u.id} value={u.id}>
-                                    {u.name} ({u.email})
-                                </MenuItem>
-                            ))}
-                        </Select>
-                    </FormControl>
-                    <FormControl sx={{ minWidth: 120 }} size="small">
-                        <InputLabel>Role</InputLabel>
-                        <Select
-                            value={selectedRole}
-                            label="Role"
-                            onChange={(e) => setSelectedRole(e.target.value)}
-                        >
-                            <MenuItem value="MEMBER">Member</MenuItem>
-                            <MenuItem value="MANAGER">Manager</MenuItem>
-                        </Select>
-                    </FormControl>
-                    <Button
-                        variant="contained"
-                        onClick={handleAddMember}
-                        disabled={!selectedUser || adding}
-                        sx={{ minWidth: 40, height: 40, borderRadius: 2 }}
-                    >
-                        {adding ? <CircularProgress size={20} color="inherit" /> : <PersonAddIcon />}
-                    </Button>
-                </Stack>
-
-                <Paper variant="outlined" sx={{ maxHeight: 300, overflow: 'auto' }}>
-                    <List dense>
-                        {group.members?.length === 0 && (
-                            <ListItem>
-                                <ListItemText
-                                    primary="No members yet."
-                                    primaryTypographyProps={{ align: 'center', color: 'text.secondary' }}
-                                />
-                            </ListItem>
-                        )}
-                        {group.members?.map((member: any) => (
-                            <ListItem key={member.id} divider>
-                                <ListItemAvatar>
-                                    <Avatar sx={{ width: 32, height: 32, fontSize: '0.875rem' }}>
-                                        {member.user.name?.charAt(0)}
-                                    </Avatar>
-                                </ListItemAvatar>
-                                <ListItemText
-                                    primary={member.user.name}
-                                    secondary={member.user.email}
-                                    primaryTypographyProps={{ fontWeight: 500 }}
-                                />
-                                <ListItemSecondaryAction>
-                                    <Stack direction="row" spacing={1} alignItems="center">
-                                        <Chip
-                                            label={member.role}
-                                            size="small"
-                                            variant="outlined"
-                                            sx={{ borderRadius: 1, height: 20, fontSize: '0.625rem' }}
-                                        />
-                                        <IconButton edge="end" size="small" onClick={() => handleRemoveMember(member.user.id)}>
-                                            <DeleteIcon fontSize="small" />
-                                        </IconButton>
-                                    </Stack>
-                                </ListItemSecondaryAction>
-                            </ListItem>
-                        ))}
-                    </List>
-                </Paper>
-            </DialogContent>
-            <Stack direction="row" justifyContent="flex-end" sx={{ p: 2 }}>
-                <Button onClick={handleClose}>
+        <StandardDialog
+            open={open}
+            onClose={handleClose}
+            title={`Manage Members: ${group.name}`}
+            subtitle="Add or remove users from this sales group."
+            maxWidth="sm"
+            actions={
+                <Button variant="outline" onClick={handleClose}>
                     Close
                 </Button>
-            </Stack>
-        </Dialog>
+            }
+        >
+            <div className="space-y-4">
+                <div className="flex items-end gap-2">
+                    <div className="min-w-0 flex-1">
+                        <Select value={selectedUser} onValueChange={setSelectedUser}>
+                            <SelectTrigger className="w-full">
+                                <SelectValue placeholder="Add user" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                {availableUsers.map((u) => (
+                                    <SelectItem key={u.id} value={u.id}>
+                                        {u.name} ({u.email})
+                                    </SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                    </div>
+                    <Select value={selectedRole} onValueChange={setSelectedRole}>
+                        <SelectTrigger className="w-[120px] shrink-0">
+                            <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="MEMBER">Member</SelectItem>
+                            <SelectItem value="MANAGER">Manager</SelectItem>
+                        </SelectContent>
+                    </Select>
+                    <Button
+                        size="icon"
+                        onClick={handleAddMember}
+                        disabled={!selectedUser || adding}
+                        aria-label="Add member"
+                    >
+                        {adding ? <Loader2 className="h-4 w-4 animate-spin" /> : <UserPlus className="h-4 w-4" />}
+                    </Button>
+                </div>
+
+                <div className="max-h-[300px] overflow-y-auto rounded-lg border border-border">
+                    {group.members?.length === 0 && (
+                        <p className="py-6 text-center text-sm text-muted-foreground">No members yet.</p>
+                    )}
+                    {group.members?.map((member: any) => (
+                        <div
+                            key={member.id}
+                            className="flex items-center justify-between gap-3 border-b border-border p-3 last:border-b-0"
+                        >
+                            <div className="flex items-center gap-3">
+                                <Avatar className="size-8 text-sm">
+                                    <AvatarFallback>{member.user.name?.charAt(0)}</AvatarFallback>
+                                </Avatar>
+                                <div>
+                                    <p className="text-sm font-medium">{member.user.name}</p>
+                                    <p className="text-xs text-muted-foreground">{member.user.email}</p>
+                                </div>
+                            </div>
+                            <div className="flex items-center gap-2">
+                                <Badge variant="outline" className="h-5 rounded text-[10px]">
+                                    {member.role}
+                                </Badge>
+                                <Button
+                                    variant="ghost"
+                                    size="icon-sm"
+                                    className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+                                    onClick={() => handleRemoveMember(member.user.id)}
+                                    aria-label={`Remove ${member.user.name}`}
+                                >
+                                    <Trash2 className="h-4 w-4" />
+                                </Button>
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            </div>
+        </StandardDialog>
     );
 }

@@ -7,40 +7,32 @@ import * as z from "zod";
 import { apiFetch } from "@/lib/api";
 import { toast } from "sonner";
 import {
-    Button,
-    Dialog,
-    DialogActions,
-    DialogContent,
-    DialogContentText,
-    DialogTitle,
-    TextField,
-    Select,
-    MenuItem,
-    FormControl,
-    InputLabel,
-    Stack,
-    FormHelperText,
-    Typography,
-    Divider,
-    Grid,
-    Box,
-    Switch,
-    FormControlLabel,
-    InputAdornment
-} from "@mui/material";
+    Phone,
+    Mail,
+    Calendar,
+    Users,
+    FileText,
+    CheckCircle2,
+    MessageSquare,
+    Video,
+    Coffee,
+    Briefcase,
+    Circle,
+    Loader2,
+} from "lucide-react";
+import { StandardDialog } from "@/components/common/standard-dialog";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import {
-    Phone as PhoneIcon,
-    Email as EmailIcon,
-    CalendarToday as CalendarIcon,
-    Group as GroupIcon,
-    Description as FileTextIcon,
-    CheckCircle as CheckCircleIcon,
-    Message as MessageIcon,
-    Videocam as VideoIcon,
-    LocalCafe as CoffeeIcon,
-    Work as BriefcaseIcon,
-    Circle as CircleIcon
-} from "@mui/icons-material";
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from "@/components/ui/select";
+import { cn } from "@/lib/utils";
 
 interface ActivityType {
     id: string;
@@ -70,16 +62,16 @@ const formSchema = z.object({
 });
 
 const iconOptions = [
-    { value: "Phone", label: "Phone", icon: PhoneIcon },
-    { value: "Mail", label: "Email", icon: EmailIcon },
-    { value: "Calendar", label: "Meeting", icon: CalendarIcon },
-    { value: "Users", label: "Group Meeting", icon: GroupIcon },
-    { value: "FileText", label: "Note", icon: FileTextIcon },
-    { value: "CheckCircle2", label: "Task", icon: CheckCircleIcon },
-    { value: "MessageSquare", label: "Message", icon: MessageIcon },
-    { value: "Video", label: "Video Call", icon: VideoIcon },
-    { value: "Coffee", label: "Lunch/Coffee", icon: CoffeeIcon },
-    { value: "Briefcase", label: "Presentation", icon: BriefcaseIcon },
+    { value: "Phone", label: "Phone", icon: Phone },
+    { value: "Mail", label: "Email", icon: Mail },
+    { value: "Calendar", label: "Meeting", icon: Calendar },
+    { value: "Users", label: "Group Meeting", icon: Users },
+    { value: "FileText", label: "Note", icon: FileText },
+    { value: "CheckCircle2", label: "Task", icon: CheckCircle2 },
+    { value: "MessageSquare", label: "Message", icon: MessageSquare },
+    { value: "Video", label: "Video Call", icon: Video },
+    { value: "Coffee", label: "Lunch/Coffee", icon: Coffee },
+    { value: "Briefcase", label: "Presentation", icon: Briefcase },
 ];
 
 const defaultColors = [
@@ -92,6 +84,8 @@ const defaultColors = [
     "#6366f1", // indigo
     "#14b8a6", // teal
 ];
+
+const NO_OUTCOME = "__none__";
 
 export function ActivityTypeDialog({
     open,
@@ -107,7 +101,7 @@ export function ActivityTypeDialog({
             name: "",
             icon: "Phone",
             color: "#3b82f6",
-            defaultSLA: "",
+            defaultSLA: "" as number | "",
             defaultOutcome: "",
             isActive: true,
         },
@@ -177,177 +171,164 @@ export function ActivityTypeDialog({
     }
 
     return (
-        <Dialog
+        <StandardDialog
             open={open}
             onClose={handleClose}
+            title={activityType ? "Edit Activity Type" : "Create Activity Type"}
+            subtitle="Configure activity types for logging interactions and tasks."
             maxWidth="sm"
-            fullWidth
-            PaperProps={{
-                sx: { borderRadius: 3, maxHeight: '90vh' }
-            }}
+            actions={
+                <>
+                    <Button variant="ghost" onClick={handleClose}>
+                        Cancel
+                    </Button>
+                    <Button type="submit" form="activity-type-form" disabled={loading}>
+                        {loading ? <Loader2 className="size-4 animate-spin" /> : null}
+                        {loading ? "Saving..." : activityType ? "Update Type" : "Create Type"}
+                    </Button>
+                </>
+            }
         >
-            <DialogTitle>{activityType ? "Edit Activity Type" : "Create Activity Type"}</DialogTitle>
-            <DialogContent>
-                <DialogContentText sx={{ mb: 3 }}>
-                    Configure activity types for logging interactions and tasks.
-                </DialogContentText>
+            <form id="activity-type-form" onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+                <Controller
+                    name="name"
+                    control={control}
+                    render={({ field }) => (
+                        <div className="space-y-2">
+                            <Label htmlFor="activity-type-name">Name</Label>
+                            <Input
+                                id="activity-type-name"
+                                {...field}
+                                placeholder="Phone Call"
+                                aria-invalid={!!errors.name}
+                            />
+                            {errors.name && (
+                                <p className="text-xs text-destructive">{errors.name.message as string}</p>
+                            )}
+                        </div>
+                    )}
+                />
 
-                <form id="activity-type-form" onSubmit={handleSubmit(onSubmit)}>
-                    <Stack spacing={2}>
+                <Controller
+                    name="icon"
+                    control={control}
+                    render={({ field }) => {
+                        const selectedOption = iconOptions.find((o) => o.value === field.value);
+                        return (
+                            <div className="space-y-2">
+                                <Label>Icon</Label>
+                                <Select value={field.value} onValueChange={field.onChange}>
+                                    <SelectTrigger className="w-full">
+                                        <SelectValue placeholder="Select icon">
+                                            {selectedOption && (
+                                                <span className="flex items-center gap-2">
+                                                    <selectedOption.icon className="size-4" />
+                                                    {selectedOption.label}
+                                                </span>
+                                            )}
+                                        </SelectValue>
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        {iconOptions.map((option) => (
+                                            <SelectItem key={option.value} value={option.value}>
+                                                <span className="flex items-center gap-2">
+                                                    <option.icon className="size-4" />
+                                                    {option.label}
+                                                </span>
+                                            </SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                        );
+                    }}
+                />
+
+                <div>
+                    <Label className="mb-2 block text-xs text-muted-foreground">Color</Label>
+                    <div className="flex items-center gap-2">
                         <Controller
-                            name="name"
+                            name="color"
                             control={control}
                             render={({ field }) => (
-                                <TextField
-                                    {...field}
-                                    label="Name"
-                                    placeholder="Phone Call"
-                                    fullWidth
-                                    error={!!errors.name}
-                                    helperText={errors.name?.message as string}
+                                <input
+                                    type="color"
+                                    value={field.value}
+                                    onChange={field.onChange}
+                                    className="h-10 w-[60px] cursor-pointer rounded-md border border-input bg-transparent p-0.5"
                                 />
                             )}
                         />
-
-                        <Controller
-                            name="icon"
-                            control={control}
-                            render={({ field }) => (
-                                <FormControl fullWidth>
-                                    <InputLabel>Icon</InputLabel>
-                                    <Select
-                                        {...field}
-                                        label="Icon"
-                                        renderValue={(selected) => {
-                                            const option = iconOptions.find(o => o.value === selected);
-                                            const Icon = option?.icon || CircleIcon;
-                                            return (
-                                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                                                    <Icon fontSize="small" />
-                                                    {option?.label}
-                                                </Box>
-                                            );
-                                        }}
-                                    >
-                                        {iconOptions.map((option) => {
-                                            const IconComponent = option.icon;
-                                            return (
-                                                <MenuItem key={option.value} value={option.value}>
-                                                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                                                        <IconComponent fontSize="small" />
-                                                        {option.label}
-                                                    </Box>
-                                                </MenuItem>
-                                            );
-                                        })}
-                                    </Select>
-                                </FormControl>
-                            )}
-                        />
-
-                        <Box>
-                            <Typography variant="caption" color="text.secondary" sx={{ mb: 1, display: 'block' }}>Color</Typography>
-                            <Stack direction="row" spacing={1} alignItems="center">
-                                <Controller
-                                    name="color"
-                                    control={control}
-                                    render={({ field }) => (
-                                        <TextField
-                                            {...field}
-                                            type="color"
-                                            sx={{ width: 60, p: 0, '& input': { p: 0.5, height: 40 } }}
-                                        />
+                        <div className="flex items-center gap-1.5">
+                            {defaultColors.map((color) => (
+                                <button
+                                    key={color}
+                                    type="button"
+                                    onClick={() => setValue("color", color)}
+                                    className={cn(
+                                        "size-8 rounded-full border-2 transition-transform hover:scale-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+                                        selectedColor === color ? "border-foreground" : "border-transparent"
                                     )}
+                                    style={{ backgroundColor: color }}
+                                    aria-label={`Select color ${color}`}
                                 />
-                                <Stack direction="row" spacing={0.5}>
-                                    {defaultColors.map((color) => (
-                                        <Box
-                                            key={color}
-                                            onClick={() => setValue("color", color)}
-                                            sx={{
-                                                width: 32,
-                                                height: 32,
-                                                borderRadius: '50%',
-                                                bgcolor: color,
-                                                cursor: 'pointer',
-                                                border: selectedColor === color ? '2px solid black' : '2px solid transparent',
-                                                transition: 'all 0.2s',
-                                                '&:hover': { transform: 'scale(1.1)' }
-                                            }}
-                                        />
-                                    ))}
-                                </Stack>
-                            </Stack>
-                        </Box>
+                            ))}
+                        </div>
+                    </div>
+                </div>
 
-                        <Grid container spacing={2}>
-                            <Grid size={{ xs: 6 }}>
-                                <Controller
-                                    name="defaultSLA"
-                                    control={control}
-                                    render={({ field }) => (
-                                        <TextField
-                                            {...field}
-                                            label="Default SLA (Minutes)"
-                                            type="number"
-                                            fullWidth
-                                            helperText="Expected duration"
-                                        />
-                                    )}
-                                />
-                            </Grid>
-                            <Grid size={{ xs: 6 }}>
-                                <Controller
-                                    name="defaultOutcome"
-                                    control={control}
-                                    render={({ field }) => (
-                                        <FormControl fullWidth>
-                                            <InputLabel>Default Outcome</InputLabel>
-                                            <Select
-                                                {...field}
-                                                label="Default Outcome"
-                                                value={field.value || ""}
-                                            >
-                                                <MenuItem value=""><em>None</em></MenuItem>
-                                                <MenuItem value="SUCCESS">Success</MenuItem>
-                                                <MenuItem value="FOLLOW_UP_NEEDED">Follow-up Needed</MenuItem>
-                                                <MenuItem value="NO_ANSWER">No Answer</MenuItem>
-                                                <MenuItem value="VOICEMAIL">Voicemail</MenuItem>
-                                                <MenuItem value="NOT_INTERESTED">Not Interested</MenuItem>
-                                            </Select>
-                                        </FormControl>
-                                    )}
-                                />
-                            </Grid>
-                        </Grid>
+                <div className="grid grid-cols-2 gap-4">
+                    <Controller
+                        name="defaultSLA"
+                        control={control}
+                        render={({ field }) => (
+                            <div className="space-y-2">
+                                <Label htmlFor="activity-type-sla">Default SLA (Minutes)</Label>
+                                <Input id="activity-type-sla" {...field} value={field.value as any} type="number" />
+                                <p className="text-xs text-muted-foreground">Expected duration</p>
+                            </div>
+                        )}
+                    />
+                    <Controller
+                        name="defaultOutcome"
+                        control={control}
+                        render={({ field }) => (
+                            <div className="space-y-2">
+                                <Label>Default Outcome</Label>
+                                <Select
+                                    value={field.value || NO_OUTCOME}
+                                    onValueChange={(value) => field.onChange(value === NO_OUTCOME ? "" : value)}
+                                >
+                                    <SelectTrigger className="w-full">
+                                        <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value={NO_OUTCOME}>
+                                            <em>None</em>
+                                        </SelectItem>
+                                        <SelectItem value="SUCCESS">Success</SelectItem>
+                                        <SelectItem value="FOLLOW_UP_NEEDED">Follow-up Needed</SelectItem>
+                                        <SelectItem value="NO_ANSWER">No Answer</SelectItem>
+                                        <SelectItem value="VOICEMAIL">Voicemail</SelectItem>
+                                        <SelectItem value="NOT_INTERESTED">Not Interested</SelectItem>
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                        )}
+                    />
+                </div>
 
-                        <Controller
-                            name="isActive"
-                            control={control}
-                            render={({ field }) => (
-                                <FormControlLabel
-                                    control={<Switch checked={field.value} onChange={field.onChange} />}
-                                    label="Active (visible in forms)"
-                                />
-                            )}
-                        />
-                    </Stack>
-                </form>
-            </DialogContent>
-            <DialogActions sx={{ px: 3, pb: 3 }}>
-                <Button onClick={handleClose} sx={{ borderRadius: 20, color: 'text.secondary' }}>
-                    Cancel
-                </Button>
-                <Button
-                    type="submit"
-                    form="activity-type-form"
-                    variant="contained"
-                    disabled={loading}
-                    sx={{ borderRadius: 20 }}
-                >
-                    {loading ? "Saving..." : activityType ? "Update Type" : "Create Type"}
-                </Button>
-            </DialogActions>
-        </Dialog>
+                <Controller
+                    name="isActive"
+                    control={control}
+                    render={({ field }) => (
+                        <div className="flex items-center gap-2">
+                            <Switch id="activity-type-active" checked={field.value} onCheckedChange={field.onChange} />
+                            <Label htmlFor="activity-type-active">Active (visible in forms)</Label>
+                        </div>
+                    )}
+                />
+            </form>
+        </StandardDialog>
     );
 }

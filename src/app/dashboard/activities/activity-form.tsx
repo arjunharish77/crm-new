@@ -2,17 +2,16 @@
 
 import React, { useEffect, useState, useMemo } from 'react';
 import { Controller } from 'react-hook-form';
+import { Info } from 'lucide-react';
 import {
-    FormControl,
-    InputLabel,
     Select,
-    MenuItem,
-    FormHelperText,
-    Box,
-    Typography,
-    Alert
-} from '@mui/material';
-import { DateTimePicker } from '@mui/x-date-pickers/DateTimePicker';
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from '@/components/ui/select';
+import { Label } from '@/components/ui/label';
+import { Input } from '@/components/ui/input';
 import { DynamicFormRenderer } from '@/components/common/DynamicFormRenderer';
 import { useObjectMetadata } from '@/hooks/use-object-metadata';
 import { apiFetch } from '@/lib/api';
@@ -25,6 +24,16 @@ interface ActivityFormProps {
     initialData?: any;
     onSuccess?: (data: any) => void;
     onCancel?: () => void;
+}
+
+const NONE_VALUE = '__none__';
+
+function toDatetimeLocalValue(value?: string | null) {
+    if (!value) return '';
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return '';
+    const pad = (n: number) => String(n).padStart(2, '0');
+    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
 
 export function ActivityForm({ initialData, onSuccess, onCancel }: ActivityFormProps) {
@@ -40,9 +49,9 @@ export function ActivityForm({ initialData, onSuccess, onCancel }: ActivityFormP
         name: 'activity',
         groups: [{ id: 'default', name: 'General Information' }],
         fields: [
-            { id: 'activity_type_id', key: 'typeId', label: 'Activity Type', type: 'TEXT', isRequired: true, isCustom: false },
-            { id: 'activity_lead_id', key: 'leadId', label: 'Lead', type: 'TEXT', isRequired: false, isCustom: false },
-            { id: 'activity_opportunity_id', key: 'opportunityId', label: 'Opportunity', type: 'TEXT', isRequired: false, isCustom: false },
+            { id: 'activity_type_id', key: 'typeId', label: 'Activity Type', type: 'SELECT', isRequired: true, isCustom: false },
+            { id: 'activity_lead_id', key: 'leadId', label: 'Lead', type: 'SELECT', isRequired: false, isCustom: false },
+            { id: 'activity_opportunity_id', key: 'opportunityId', label: 'Opportunity', type: 'SELECT', isRequired: false, isCustom: false },
             { id: 'activity_outcome', key: 'outcome', label: 'Outcome', type: 'TEXT', isRequired: false, isCustom: false },
             { id: 'activity_notes', key: 'notes', label: 'Notes', type: 'TEXTAREA', isRequired: false, isCustom: false },
             { id: 'activity_due_at', key: 'dueAt', label: 'Due At', type: 'DATE', isRequired: false, isCustom: false },
@@ -142,39 +151,47 @@ export function ActivityForm({ initialData, onSuccess, onCancel }: ActivityFormP
     const selectedType = activityTypes.find(t => t.id === selectedTypeId);
 
     const fieldOverrides = {
-        typeId: ({ control, errors, setValue }: any) => (
+        typeId: ({ control, errors }: any) => (
             <Controller
                 name="typeId"
                 control={control}
                 render={({ field: hookField }) => (
-                    <Box>
-                        <FormControl fullWidth error={!!errors.typeId}>
-                            <InputLabel>Activity Type *</InputLabel>
-                            <Select
-                                {...hookField}
-                                label="Activity Type *"
-                                onChange={(e) => {
-                                    hookField.onChange(e.target.value);
-                                    setSelectedTypeId(e.target.value);
-                                }}
-                            >
+                    <div className="space-y-1.5">
+                        <Label>Activity Type *</Label>
+                        <Select
+                            value={hookField.value || undefined}
+                            onValueChange={(value) => {
+                                hookField.onChange(value);
+                                setSelectedTypeId(value);
+                            }}
+                        >
+                            <SelectTrigger className="w-full" aria-invalid={!!errors.typeId}>
+                                <SelectValue placeholder="Select activity type" />
+                            </SelectTrigger>
+                            <SelectContent>
                                 {activityTypes.map((type) => (
-                                    <MenuItem key={type.id} value={type.id}>
-                                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-                                            <Box sx={{ width: 12, height: 12, borderRadius: '50%', bgcolor: type.color || 'divider' }} />
+                                    <SelectItem key={type.id} value={type.id}>
+                                        <span className="flex items-center gap-2">
+                                            <span
+                                                className="size-3 shrink-0 rounded-full"
+                                                style={{ backgroundColor: type.color || 'var(--border)' }}
+                                            />
                                             {type.name}
-                                        </Box>
-                                    </MenuItem>
+                                        </span>
+                                    </SelectItem>
                                 ))}
-                            </Select>
-                            {errors.typeId && <FormHelperText>{errors.typeId.message}</FormHelperText>}
-                        </FormControl>
-                        {selectedType?.defaultSLA && (
-                            <Alert severity="info" sx={{ mt: 1, py: 0.5 }}>
-                                SLA: {selectedType.defaultSLA} min
-                            </Alert>
+                            </SelectContent>
+                        </Select>
+                        {errors.typeId && (
+                            <p className="text-xs text-destructive">{errors.typeId.message}</p>
                         )}
-                    </Box>
+                        {selectedType?.defaultSLA && (
+                            <div className="flex items-center gap-2 rounded-lg border border-primary/20 bg-primary/5 px-3 py-1.5 text-sm text-foreground">
+                                <Info className="size-3.5 shrink-0 text-primary" />
+                                SLA: {selectedType.defaultSLA} min
+                            </div>
+                        )}
+                    </div>
                 )}
             />
         ),
@@ -183,17 +200,25 @@ export function ActivityForm({ initialData, onSuccess, onCancel }: ActivityFormP
                 name="outcome"
                 control={control}
                 render={({ field: hookField }) => (
-                    <FormControl fullWidth>
-                        <InputLabel>Outcome</InputLabel>
-                        <Select {...hookField} label="Outcome">
-                            <MenuItem value="">None</MenuItem>
-                            <MenuItem value="SUCCESS">Success</MenuItem>
-                            <MenuItem value="FOLLOW_UP_NEEDED">Follow-up Needed</MenuItem>
-                            <MenuItem value="NO_ANSWER">No Answer</MenuItem>
-                            <MenuItem value="VOICEMAIL">Voicemail</MenuItem>
-                            <MenuItem value="NOT_INTERESTED">Not Interested</MenuItem>
+                    <div className="space-y-1.5">
+                        <Label>Outcome</Label>
+                        <Select
+                            value={hookField.value || NONE_VALUE}
+                            onValueChange={(value) => hookField.onChange(value === NONE_VALUE ? '' : value)}
+                        >
+                            <SelectTrigger className="w-full">
+                                <SelectValue placeholder="Select outcome" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value={NONE_VALUE}>None</SelectItem>
+                                <SelectItem value="SUCCESS">Success</SelectItem>
+                                <SelectItem value="FOLLOW_UP_NEEDED">Follow-up Needed</SelectItem>
+                                <SelectItem value="NO_ANSWER">No Answer</SelectItem>
+                                <SelectItem value="VOICEMAIL">Voicemail</SelectItem>
+                                <SelectItem value="NOT_INTERESTED">Not Interested</SelectItem>
+                            </SelectContent>
                         </Select>
-                    </FormControl>
+                    </div>
                 )}
             />
         ),
@@ -202,15 +227,18 @@ export function ActivityForm({ initialData, onSuccess, onCancel }: ActivityFormP
                 name="dueAt"
                 control={control}
                 render={({ field: hookField }) => (
-                    <DateTimePicker
-                        label="Due Date (optional)"
-                        value={hookField.value ? new Date(hookField.value) : null}
-                        onChange={(date) => hookField.onChange(date ? date.toISOString() : null)}
-                        slotProps={{
-                            textField: { fullWidth: true },
-                            popper: { sx: { zIndex: 1501 } }
-                        }}
-                    />
+                    <div className="space-y-1.5">
+                        <Label htmlFor="activity-due-at">Due Date (optional)</Label>
+                        <Input
+                            id="activity-due-at"
+                            type="datetime-local"
+                            value={toDatetimeLocalValue(hookField.value)}
+                            onChange={(e) => {
+                                const raw = e.target.value;
+                                hookField.onChange(raw ? new Date(raw).toISOString() : null);
+                            }}
+                        />
+                    </div>
                 )}
             />
         ),
@@ -219,17 +247,25 @@ export function ActivityForm({ initialData, onSuccess, onCancel }: ActivityFormP
                 name="leadId"
                 control={control}
                 render={({ field: hookField }) => (
-                    <FormControl fullWidth>
-                        <InputLabel>Related Lead</InputLabel>
-                        <Select {...hookField} label="Related Lead">
-                            <MenuItem value="">None</MenuItem>
-                            {leads.map((l) => (
-                                <MenuItem key={l.id} value={l.id}>
-                                    {l.name}
-                                </MenuItem>
-                            ))}
+                    <div className="space-y-1.5">
+                        <Label>Related Lead</Label>
+                        <Select
+                            value={hookField.value || NONE_VALUE}
+                            onValueChange={(value) => hookField.onChange(value === NONE_VALUE ? '' : value)}
+                        >
+                            <SelectTrigger className="w-full">
+                                <SelectValue placeholder="Select lead" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value={NONE_VALUE}>None</SelectItem>
+                                {leads.map((l) => (
+                                    <SelectItem key={l.id} value={l.id}>
+                                        {l.name || l.email || l.company || "Lead"}
+                                    </SelectItem>
+                                ))}
+                            </SelectContent>
                         </Select>
-                    </FormControl>
+                    </div>
                 )}
             />
         ),
@@ -238,32 +274,41 @@ export function ActivityForm({ initialData, onSuccess, onCancel }: ActivityFormP
                 name="opportunityId"
                 control={control}
                 render={({ field: hookField }) => (
-                    <FormControl fullWidth>
-                        <InputLabel>Related Opportunity</InputLabel>
-                        <Select {...hookField} label="Related Opportunity">
-                            <MenuItem value="">None</MenuItem>
-                            {opportunities.map((opportunity) => (
-                                <MenuItem key={opportunity.id} value={opportunity.id}>
-                                    {opportunity.title}
-                                </MenuItem>
-                            ))}
+                    <div className="space-y-1.5">
+                        <Label>Related Opportunity</Label>
+                        <Select
+                            value={hookField.value || NONE_VALUE}
+                            onValueChange={(value) => hookField.onChange(value === NONE_VALUE ? '' : value)}
+                        >
+                            <SelectTrigger className="w-full">
+                                <SelectValue placeholder="Select opportunity" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value={NONE_VALUE}>None</SelectItem>
+                                {opportunities.map((opportunity) => (
+                                    <SelectItem key={opportunity.id} value={opportunity.id}>
+                                        {opportunity.title || opportunity.lead?.name || "Opportunity"}
+                                    </SelectItem>
+                                ))}
+                            </SelectContent>
                         </Select>
-                    </FormControl>
+                    </div>
                 )}
             />
         )
     };
 
     if (coreLoading && !mergedMetadata) {
-        return <Typography>Loading activity form...</Typography>;
+        return <p className="text-sm text-muted-foreground">Loading activity form...</p>;
     }
 
     return (
-        <Box>
+        <div>
             {bootstrapError && (
-                <Alert severity="warning" sx={{ mb: 2, py: 0.5 }}>
+                <div className="mb-4 flex items-center gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-800 dark:text-amber-300">
+                    <Info className="size-4 shrink-0" />
                     {bootstrapError}
-                </Alert>
+                </div>
             )}
             <DynamicFormRenderer
                 metadata={mergedMetadata}
@@ -272,6 +317,6 @@ export function ActivityForm({ initialData, onSuccess, onCancel }: ActivityFormP
                 onSuccess={onSuccess}
                 onCancel={onCancel}
             />
-        </Box>
+        </div>
     );
 }

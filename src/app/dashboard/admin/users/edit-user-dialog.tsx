@@ -1,35 +1,25 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { useForm, useFieldArray, Controller } from "react-hook-form";
+import { KeyboardEvent, ReactNode, useEffect, useState } from "react";
+import { Controller, useFieldArray, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import * as z from "zod";
-import { apiFetch } from "@/lib/api";
+import { Edit, Loader2, Plus, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
-import {
-    Button,
-    TextField,
-    Select,
-    MenuItem,
-    FormControl,
-    InputLabel,
-    Stack,
-    Box,
-    Typography,
-    Chip,
-    IconButton,
-    FormHelperText,
-    Paper,
-    Autocomplete
-} from "@mui/material";
-import {
-    Add as AddIcon,
-    Delete as DeleteIcon,
-    Edit as EditIcon
-} from "@mui/icons-material";
+import * as z from "zod";
 import { StandardDialog } from "@/components/common/standard-dialog";
-
-import { User, Role } from "@/types/user";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from "@/components/ui/select";
+import { apiFetch } from "@/lib/api";
+import { Role, User } from "@/types/user";
 
 interface EditUserDialogProps {
     user: User | null;
@@ -37,6 +27,18 @@ interface EditUserDialogProps {
     onOpenChange: (open: boolean) => void;
     onSuccess: () => void;
 }
+
+interface PermissionTemplate {
+    id: string;
+    name: string;
+}
+
+interface Team {
+    id: string;
+    name: string;
+}
+
+const NONE_VALUE = "__none__";
 
 const formSchema = z.object({
     name: z.string().min(2, "Name is required"),
@@ -51,6 +53,93 @@ const formSchema = z.object({
     })),
 });
 
+type EditUserFormValues = z.infer<typeof formSchema>;
+
+interface FieldProps {
+    label: string;
+    error?: string;
+    children: ReactNode;
+}
+
+function Field({ label, error, children }: FieldProps) {
+    return (
+        <div className="space-y-2">
+            <Label>{label}</Label>
+            {children}
+            {error ? <p className="text-xs text-destructive">{error}</p> : null}
+        </div>
+    );
+}
+
+function transformSkillsToArray(skillsObj: unknown): EditUserFormValues["skills"] {
+    if (!skillsObj || typeof skillsObj !== "object") return [];
+    return Object.entries(skillsObj).map(([category, values]) => ({
+        category,
+        values: Array.isArray(values) ? values.map(String) : [String(values)],
+    }));
+}
+
+interface SkillValueInputProps {
+    values: string[];
+    onChange: (values: string[]) => void;
+}
+
+function SkillValueInput({ values, onChange }: SkillValueInputProps) {
+    const [input, setInput] = useState("");
+
+    const addValue = () => {
+        const trimmed = input.trim();
+        if (trimmed && !values.includes(trimmed)) {
+            onChange([...values, trimmed]);
+            setInput("");
+        }
+    };
+
+    const removeValue = (valueToRemove: string) => {
+        onChange(values.filter((value) => value !== valueToRemove));
+    };
+
+    const handleKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
+        if (event.key === "Enter") {
+            event.preventDefault();
+            addValue();
+        }
+    };
+
+    return (
+        <div className="space-y-2">
+            {values.length > 0 ? (
+                <div className="flex flex-wrap gap-2">
+                    {values.map((value) => (
+                        <Badge key={value} variant="secondary" className="gap-1 pr-1">
+                            {value}
+                            <button
+                                type="button"
+                                className="rounded-sm p-0.5 hover:bg-background/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                                onClick={() => removeValue(value)}
+                                aria-label={`Remove ${value}`}
+                            >
+                                <X className="h-3 w-3" />
+                            </button>
+                        </Badge>
+                    ))}
+                </div>
+            ) : null}
+            <div className="flex gap-2">
+                <Input
+                    placeholder="Type value & Enter"
+                    value={input}
+                    onChange={(event) => setInput(event.target.value)}
+                    onKeyDown={handleKeyDown}
+                />
+                <Button type="button" variant="outline" onClick={addValue}>
+                    Add
+                </Button>
+            </div>
+        </div>
+    );
+}
+
 export function EditUserDialog({
     user,
     open,
@@ -59,20 +148,16 @@ export function EditUserDialog({
 }: EditUserDialogProps) {
     const [loading, setLoading] = useState(false);
     const [roles, setRoles] = useState<Role[]>([]);
-    const [permissionTemplates, setPermissionTemplates] = useState<any[]>([]);
-    const [teams, setTeams] = useState<any[]>([]);
-    const [managers, setManagers] = useState<any[]>([]);
-    const [searchingManagers, setSearchingManagers] = useState(false);
+    const [permissionTemplates, setPermissionTemplates] = useState<PermissionTemplate[]>([]);
+    const [teams, setTeams] = useState<Team[]>([]);
+    const [managers, setManagers] = useState<User[]>([]);
 
-    const transformSkillsToArray = (skillsObj: any) => {
-        if (!skillsObj) return [];
-        return Object.entries(skillsObj).map(([category, values]) => ({
-            category,
-            values: Array.isArray(values) ? values : [String(values)],
-        }));
-    };
-
-    const { control, handleSubmit, reset, formState: { errors } } = useForm({
+    const {
+        control,
+        handleSubmit,
+        reset,
+        formState: { errors },
+    } = useForm<EditUserFormValues>({
         resolver: zodResolver(formSchema),
         defaultValues: {
             name: "",
@@ -81,7 +166,7 @@ export function EditUserDialog({
             permissionTemplateId: "",
             teamId: "",
             managerId: "",
-            skills: [] as { category: string, values: string[] }[],
+            skills: [],
         },
     });
 
@@ -98,15 +183,14 @@ export function EditUserDialog({
                         apiFetch("/roles"),
                         apiFetch("/users"),
                         apiFetch("/teams"),
-                        apiFetch("/permission-templates")
+                        apiFetch("/permission-templates"),
                     ]);
-                    setRoles(rolesData);
+                    setRoles(Array.isArray(rolesData) ? rolesData : []);
                     setPermissionTemplates(Array.isArray(templateData) ? templateData : []);
                     setTeams(Array.isArray(teamsData) ? teamsData : []);
 
-                    // Filter out the current user from potential managers to avoid cycles
                     const potentialManagers = (Array.isArray(usersData) ? usersData : [])
-                        .filter((u: any) => u.id !== user?.id);
+                        .filter((candidate: User) => candidate.id !== user?.id);
                     setManagers(potentialManagers);
                 } catch (error) {
                     toast.error("Failed to load form data");
@@ -132,11 +216,11 @@ export function EditUserDialog({
         onOpenChange(false);
     };
 
-    async function onSubmit(values: any) {
+    async function onSubmit(values: EditUserFormValues) {
         if (!user) return;
         setLoading(true);
         try {
-            const skillsObj = values.skills.reduce((acc: any, curr: any) => {
+            const skillsObj = values.skills.reduce<Record<string, string[]>>((acc, curr) => {
                 acc[curr.category] = curr.values;
                 return acc;
             }, {});
@@ -162,268 +246,199 @@ export function EditUserDialog({
         }
     }
 
-    const SkillValueInput = ({ index, values, onChange }: { index: number, values: string[], onChange: (vals: string[]) => void }) => {
-        const [input, setInput] = useState("");
-
-        const handleKeyDown = (e: React.KeyboardEvent) => {
-            if (e.key === 'Enter') {
-                e.preventDefault();
-                addValue();
-            }
-        };
-
-        const addValue = () => {
-            if (input.trim() && !values.includes(input.trim())) {
-                onChange([...values, input.trim()]);
-                setInput("");
-            }
-        };
-
-        const removeValue = (valToRemove: string) => {
-            onChange(values.filter(v => v !== valToRemove));
-        };
-
-        return (
-            <Box>
-                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mb: 1 }}>
-                    {values.map((val) => (
-                        <Chip
-                            key={val}
-                            label={val}
-                            size="small"
-                            onDelete={() => removeValue(val)}
-                        />
-                    ))}
-                </Box>
-                <Stack direction="row" spacing={1}>
-                    <TextField
-                        size="small"
-                        placeholder="Type value & Enter"
-                        value={input}
-                        onChange={(e) => setInput(e.target.value)}
-                        onKeyDown={handleKeyDown}
-                        fullWidth
-                    />
-                    <Button variant="outlined" size="small" onClick={addValue}>
-                        Add
-                    </Button>
-                </Stack>
-            </Box>
-        );
-    };
-
     return (
         <StandardDialog
             open={open}
             onClose={handleClose}
             title="Edit User"
             subtitle="Update user details and assignment skills."
-            icon={<EditIcon />}
+            icon={<Edit className="h-5 w-5" />}
             actions={
                 <>
-                    <Button onClick={handleClose} sx={{ color: 'text.secondary' }}>
+                    <Button variant="outline" onClick={handleClose}>
                         Cancel
                     </Button>
-                    <Button
-                        type="submit"
-                        form="edit-user-form"
-                        variant="contained"
-                        disabled={loading}
-                    >
+                    <Button type="submit" form="edit-user-form" disabled={loading}>
+                        {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
                         {loading ? "Saving..." : "Save Changes"}
                     </Button>
                 </>
             }
         >
-            <form id="edit-user-form" onSubmit={handleSubmit(onSubmit)}>
-                <Stack spacing={2}>
-                    <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
-                        <Controller
-                            name="name"
-                            control={control}
-                            render={({ field }) => (
-                                <TextField
-                                    {...field}
-                                    label="Full Name"
-                                    fullWidth
-                                    error={!!errors.name}
-                                    helperText={errors.name?.message as string}
-                                />
-                            )}
-                        />
-                        <Controller
-                            name="email"
-                            control={control}
-                            render={({ field }) => (
-                                <TextField
-                                    {...field}
-                                    label="Email"
-                                    disabled
-                                    fullWidth
-                                />
-                            )}
-                        />
-                    </Stack>
-
+            <form id="edit-user-form" onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+                <div className="grid gap-4 sm:grid-cols-2">
                     <Controller
-                        name="roleId"
+                        name="name"
                         control={control}
                         render={({ field }) => (
-                            <FormControl fullWidth error={!!errors.roleId}>
-                                <InputLabel>Role</InputLabel>
-                                <Select
-                                    {...field}
-                                    label="Role"
-                                >
+                            <Field label="Full Name" error={errors.name?.message}>
+                                <Input {...field} />
+                            </Field>
+                        )}
+                    />
+                    <Controller
+                        name="email"
+                        control={control}
+                        render={({ field }) => (
+                            <Field label="Email">
+                                <Input {...field} disabled />
+                            </Field>
+                        )}
+                    />
+                </div>
+
+                <Controller
+                    name="roleId"
+                    control={control}
+                    render={({ field }) => (
+                        <Field label="Role" error={errors.roleId?.message}>
+                            <Select value={field.value} onValueChange={field.onChange}>
+                                <SelectTrigger>
+                                    <SelectValue placeholder="Select role" />
+                                </SelectTrigger>
+                                <SelectContent>
                                     {roles.map((role) => (
-                                        <MenuItem key={role.id} value={role.id}>
+                                        <SelectItem key={role.id} value={role.id}>
                                             {role.name}
-                                        </MenuItem>
+                                        </SelectItem>
                                     ))}
-                                </Select>
-                                <FormHelperText>{errors.roleId?.message as string}</FormHelperText>
-                            </FormControl>
-                        )}
-                    />
+                                </SelectContent>
+                            </Select>
+                        </Field>
+                    )}
+                />
 
+                <Controller
+                    name="permissionTemplateId"
+                    control={control}
+                    render={({ field }) => (
+                        <Field label="Permission Template Override">
+                            <Select
+                                value={field.value || NONE_VALUE}
+                                onValueChange={(value) => field.onChange(value === NONE_VALUE ? "" : value)}
+                            >
+                                <SelectTrigger>
+                                    <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value={NONE_VALUE}>Use role template</SelectItem>
+                                    {permissionTemplates.map((template) => (
+                                        <SelectItem key={template.id} value={template.id}>
+                                            {template.name}
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                        </Field>
+                    )}
+                />
+
+                <div className="grid gap-4 sm:grid-cols-2">
                     <Controller
-                        name="permissionTemplateId"
+                        name="teamId"
                         control={control}
                         render={({ field }) => (
-                            <FormControl fullWidth>
-                                <InputLabel>Permission Template Override</InputLabel>
-                                <Select {...field} label="Permission Template Override">
-                                    <MenuItem value=""><em>Use role template</em></MenuItem>
-                                    {permissionTemplates.map((template) => (
-                                        <MenuItem key={template.id} value={template.id}>
-                                            {template.name}
-                                        </MenuItem>
-                                    ))}
+                            <Field label="Team">
+                                <Select
+                                    value={field.value || NONE_VALUE}
+                                    onValueChange={(value) => field.onChange(value === NONE_VALUE ? "" : value)}
+                                >
+                                    <SelectTrigger>
+                                        <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value={NONE_VALUE}>None</SelectItem>
+                                        {teams.map((team) => (
+                                            <SelectItem key={team.id} value={team.id}>
+                                                {team.name}
+                                            </SelectItem>
+                                        ))}
+                                    </SelectContent>
                                 </Select>
-                            </FormControl>
+                            </Field>
                         )}
                     />
-
-                    <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
-                        <Controller
-                            name="teamId"
-                            control={control}
-                            render={({ field }) => (
-                                <FormControl fullWidth>
-                                    <InputLabel>Team</InputLabel>
-                                    <Select {...field} label="Team">
-                                        <MenuItem value=""><em>None</em></MenuItem>
-                                        {teams.map((team) => (
-                                            <MenuItem key={team.id} value={team.id}>
-                                                {team.name}
-                                            </MenuItem>
+                    <Controller
+                        name="managerId"
+                        control={control}
+                        render={({ field }) => (
+                            <Field label="Manager">
+                                <Select
+                                    value={field.value || NONE_VALUE}
+                                    onValueChange={(value) => field.onChange(value === NONE_VALUE ? "" : value)}
+                                >
+                                    <SelectTrigger>
+                                        <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value={NONE_VALUE}>None</SelectItem>
+                                        {managers.map((manager) => (
+                                            <SelectItem key={manager.id} value={manager.id}>
+                                                {manager.name}
+                                            </SelectItem>
                                         ))}
-                                    </Select>
-                                </FormControl>
-                            )}
-                        />
-                        <Controller
-                            name="managerId"
-                            control={control}
-                            render={({ field: { onChange, value } }) => (
-                                <FormControl fullWidth>
-                                    <Autocomplete
-                                        options={managers}
-                                        getOptionLabel={(option) => option.name}
-                                        renderOption={(props, option) => {
-                                            const { key, ...otherProps } = props;
-                                            return (
-                                                <li key={key} {...otherProps}>
-                                                    {option.name}
-                                                </li>
-                                            );
-                                        }}
-                                        value={managers.find((m) => m.id === value) || null}
-                                        onChange={(_, newValue) => {
-                                            onChange(newValue ? newValue.id : "");
-                                        }}
-                                        renderInput={(params) => (
-                                            <TextField
-                                                {...params}
-                                                label="Manager"
-                                                placeholder="Search manager..."
-                                                error={!!errors.managerId}
-                                                helperText={errors.managerId?.message as string}
-                                                fullWidth
-                                            />
+                                    </SelectContent>
+                                </Select>
+                            </Field>
+                        )}
+                    />
+                </div>
+
+                <div className="rounded-lg border border-border p-4">
+                    <div className="mb-4 flex items-center justify-between gap-3">
+                        <h2 className="text-sm font-semibold">Assignment Skills</h2>
+                        <Button type="button" size="sm" variant="outline" onClick={() => append({ category: "", values: [] })}>
+                            <Plus className="h-4 w-4" />
+                            Add Category
+                        </Button>
+                    </div>
+
+                    {fields.length === 0 ? (
+                        <p className="py-4 text-center text-sm text-muted-foreground">No skills assigned.</p>
+                    ) : null}
+
+                    <div className="space-y-3">
+                        {fields.map((field, index) => (
+                            <div key={field.id} className="relative rounded-lg bg-muted/40 p-4 pr-12">
+                                <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="icon-sm"
+                                    className="absolute right-2 top-2 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                                    onClick={() => remove(index)}
+                                    aria-label="Remove skill category"
+                                >
+                                    <Trash2 className="h-4 w-4" />
+                                </Button>
+
+                                <div className="space-y-3">
+                                    <Controller
+                                        name={`skills.${index}.category`}
+                                        control={control}
+                                        render={({ field }) => (
+                                            <Field
+                                                label="Category (Key)"
+                                                error={errors.skills?.[index]?.category?.message}
+                                            >
+                                                <Input {...field} placeholder="e.g. Language" />
+                                            </Field>
                                         )}
                                     />
-                                </FormControl>
-                            )}
-                        />
-                    </Stack>
 
-                    <Paper variant="outlined" sx={{ p: 2, borderRadius: 3 }}>
-                        <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 2 }}>
-                            <Typography variant="subtitle2">Assignment Skills</Typography>
-                            <Button
-                                startIcon={<AddIcon />}
-                                size="small"
-                                onClick={() => append({ category: "", values: [] })}
-                            >
-                                Add Category
-                            </Button>
-                        </Stack>
-
-                        {fields.length === 0 && (
-                            <Typography variant="body2" color="text.secondary" align="center" sx={{ py: 2 }}>
-                                No skills assigned.
-                            </Typography>
-                        )}
-
-                        <Stack spacing={2}>
-                            {fields.map((field, index) => (
-                                <Box key={field.id} sx={{ p: 2, bgcolor: 'action.hover', borderRadius: 2, position: 'relative' }}>
-                                    <IconButton
-                                        size="small"
-                                        color="error"
-                                        onClick={() => remove(index)}
-                                        sx={{ position: 'absolute', top: 8, right: 8 }}
-                                    >
-                                        <DeleteIcon fontSize="small" />
-                                    </IconButton>
-
-                                    <Stack spacing={2}>
-                                        <Controller
-                                            name={`skills.${index}.category`}
-                                            control={control}
-                                            render={({ field }) => (
-                                                <TextField
-                                                    {...field}
-                                                    label="Category (Key)"
-                                                    size="small"
-                                                    fullWidth
-                                                    placeholder="e.g. Language"
-                                                    sx={{ maxWidth: '90%' }}
-                                                />
-                                            )}
-                                        />
-
-                                        <Controller
-                                            name={`skills.${index}.values`}
-                                            control={control}
-                                            render={({ field }) => (
-                                                <Box>
-                                                    <Typography variant="caption" color="text.secondary" sx={{ mb: 0.5, display: 'block' }}>Values</Typography>
-                                                    <SkillValueInput
-                                                        index={index}
-                                                        values={field.value}
-                                                        onChange={field.onChange}
-                                                    />
-                                                </Box>
-                                            )}
-                                        />
-                                    </Stack>
-                                </Box>
-                            ))}
-                        </Stack>
-                    </Paper>
-                </Stack>
+                                    <Controller
+                                        name={`skills.${index}.values`}
+                                        control={control}
+                                        render={({ field }) => (
+                                            <Field label="Values" error={errors.skills?.[index]?.values?.message}>
+                                                <SkillValueInput values={field.value} onChange={field.onChange} />
+                                            </Field>
+                                        )}
+                                    />
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
             </form>
         </StandardDialog>
     );

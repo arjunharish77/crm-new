@@ -1,5 +1,5 @@
 import { randomUUID } from "crypto";
-import { createSupabaseAdminClient } from "@/lib/supabase/server";
+import { execute, query, queryOne } from "@/lib/db/query";
 
 type TenantUser = {
   id: string;
@@ -45,7 +45,10 @@ function conditionMatches(actual: unknown, expected: unknown) {
     const config = expected as Record<string, unknown>;
     const operator = String(config.operator ?? "equals");
     const value = config.value;
+    const values = Array.isArray(value) ? value.map(String) : [];
 
+    if ((operator === "equals" || operator === "in") && values.length > 0) return values.includes(String(actual ?? ""));
+    if ((operator === "not_equals" || operator === "not_in") && values.length > 0) return !values.includes(String(actual ?? ""));
     if (operator === "not_equals") return String(actual ?? "") !== String(value ?? "");
     if (operator === "contains") return String(actual ?? "").toLowerCase().includes(String(value ?? "").toLowerCase());
     if (operator === "greater_than") return Number(actual) > Number(value);
@@ -68,49 +71,37 @@ function ruleMatches(rule: any, record: Record<string, unknown>) {
 }
 
 async function getUsersForRule(tenantId: string, rule: any) {
-  const supabase = createSupabaseAdminClient();
   let userIds = Array.isArray(rule.targetUserIds) ? rule.targetUserIds.map(String) : [];
 
   if (userIds.length === 0 && rule.targetGroupId) {
-    const { data, error } = await supabase
-      .from("SalesGroupMember")
-      .select("userId")
-      .eq("tenantId", tenantId)
-      .eq("groupId", rule.targetGroupId);
-
-    if (error) throw error;
-    userIds = (data ?? []).map((member) => member.userId).filter(Boolean);
+    const members = await query<{ userId: string }>(
+      'select "userId" from "SalesGroupMember" where "tenantId" = $1 and "groupId" = $2',
+      [tenantId, rule.targetGroupId],
+    );
+    userIds = members.map((member) => member.userId).filter(Boolean);
   }
 
   if (userIds.length === 0) return [];
 
-  const { data, error } = await supabase
-    .from("User")
-    .select("id,name,email")
-    .eq("tenantId", tenantId)
-    .in("id", userIds);
-
-  if (error) throw error;
-
-  const userMap = new Map((data ?? []).map((user) => [user.id, user]));
+  const users = await query<any>(
+    'select id, name, email from "User" where "tenantId" = $1 and id = any($2::text[])',
+    [tenantId, userIds],
+  );
+  const userMap = new Map(users.map((user) => [user.id, user]));
   return userIds.map((id: string) => userMap.get(id)).filter(Boolean);
 }
 
 async function countOpenAssignments(tenantId: string, entityType: EntityType, userIds: string[]) {
   if (userIds.length === 0) return new Map<string, number>();
 
-  const supabase = createSupabaseAdminClient();
-  const table = entityType === "OPPORTUNITY" ? "Opportunity" : "Lead";
-  const { data, error } = await supabase
-    .from(table)
-    .select("ownerId")
-    .eq("tenantId", tenantId)
-    .in("ownerId", userIds);
-
-  if (error) throw error;
+  const table = entityType === "OPPORTUNITY" ? '"Opportunity"' : '"Lead"';
+  const rows = await query<{ ownerId: string | null }>(
+    `select "ownerId" from ${table} where "tenantId" = $1 and "ownerId" = any($2::text[])`,
+    [tenantId, userIds],
+  );
 
   const counts = new Map(userIds.map((id) => [id, 0]));
-  for (const record of data ?? []) {
+  for (const record of rows) {
     if (record.ownerId) counts.set(record.ownerId, (counts.get(record.ownerId) ?? 0) + 1);
   }
 
@@ -135,12 +126,10 @@ async function chooseUser(tenantId: string, entityType: EntityType, rule: any, u
   const nextIndex = (cursor + 1) % users.length;
   conditions.__roundRobinCursor = nextIndex;
 
-  const supabase = createSupabaseAdminClient();
-  await supabase
-    .from("AssignmentRule")
-    .update({ conditions, updatedAt: new Date().toISOString() })
-    .eq("tenantId", tenantId)
-    .eq("id", rule.id);
+  await execute(
+    'update "AssignmentRule" set conditions = $1, "updatedAt" = $2 where "tenantId" = $3 and id = $4',
+    [conditions, new Date().toISOString(), tenantId, rule.id],
+  );
 
   return users[nextIndex];
 }
@@ -149,16 +138,10 @@ async function getFallbackUser(tenantId: string, rule: any) {
   const fallbackUserId = rule.conditions?.__fallbackUserId;
   if (!fallbackUserId) return null;
 
-  const supabase = createSupabaseAdminClient();
-  const { data, error } = await supabase
-    .from("User")
-    .select("id,name,email")
-    .eq("tenantId", tenantId)
-    .eq("id", String(fallbackUserId))
-    .maybeSingle();
-
-  if (error) throw error;
-  return data;
+  return queryOne<any>(
+    'select id, name, email from "User" where "tenantId" = $1 and id = $2',
+    [tenantId, String(fallbackUserId)],
+  );
 }
 
 async function writeAssignmentLog(input: {
@@ -170,65 +153,57 @@ async function writeAssignmentLog(input: {
   strategy: string | null;
   reason: string;
 }) {
-  const supabase = createSupabaseAdminClient();
-  const now = new Date().toISOString();
-
-  await supabase.from("AuditLog").insert({
-    id: randomUUID(),
-    tenantId: input.tenantId,
-    userId: input.assignedUserId,
-    action: "ASSIGN",
-    entityType: input.entityType,
-    entityId: input.entityId,
-    before: null,
-    after: { ownerId: input.assignedUserId },
-    diff: {
-      ruleId: input.ruleId,
-      strategy: input.strategy,
-      reason: input.reason,
-    },
-    metadata: { source: "distribution_engine" },
-    createdAt: now,
-  });
+  await execute(
+    `insert into "AuditLog" (id, "tenantId", "userId", action, "entityType", "entityId", before, after, diff, metadata, "createdAt")
+     values ($1, $2, $3, 'ASSIGN', $4, $5, $6, $7, $8, $9, $10)`,
+    [
+      randomUUID(),
+      input.tenantId,
+      input.assignedUserId,
+      input.entityType,
+      input.entityId,
+      null,
+      { ownerId: input.assignedUserId },
+      {
+        ruleId: input.ruleId,
+        strategy: input.strategy,
+        reason: input.reason,
+      },
+      { source: "distribution_engine" },
+      new Date().toISOString(),
+    ],
+  );
 }
 
 export async function distributeRecord(
   user: TenantUser,
   entityTypeInput: string,
   entityId: string,
-  record: Record<string, unknown>
+  record: Record<string, unknown>,
 ): Promise<DistributionResult> {
   const tenantId = tenantIdFor(user);
   const entityType = normalizeEntityType(entityTypeInput);
-  const supabase = createSupabaseAdminClient();
+  const rules = await query<any>(
+    `select id, name, "entityType", priority, "isActive", conditions, strategy, "targetGroupId", "targetUserIds"
+     from "AssignmentRule"
+     where "tenantId" = $1 and "entityType" = $2 and "isActive" = true
+     order by priority desc`,
+    [tenantId, entityType],
+  );
 
-  const { data: rules, error } = await supabase
-    .from("AssignmentRule")
-    .select("id,name,entityType,priority,isActive,conditions,strategy,targetGroupId,targetUserIds")
-    .eq("tenantId", tenantId)
-    .eq("entityType", entityType)
-    .eq("isActive", true)
-    .order("priority", { ascending: false });
-
-  if (error) throw error;
-
-  for (const rule of rules ?? []) {
+  for (const rule of rules) {
     if (!ruleMatches(rule, record)) continue;
 
     const users = await getUsersForRule(tenantId, rule);
     const selectedUser = await chooseUser(tenantId, entityType, rule, users);
-
     const assignee = selectedUser?.id ? selectedUser : await getFallbackUser(tenantId, rule);
     if (!assignee?.id) continue;
 
-    const table = entityType === "OPPORTUNITY" ? "Opportunity" : "Lead";
-    const { error: updateError } = await supabase
-      .from(table)
-      .update({ ownerId: assignee.id, updatedAt: new Date().toISOString() })
-      .eq("tenantId", tenantId)
-      .eq("id", entityId);
-
-    if (updateError) throw updateError;
+    const table = entityType === "OPPORTUNITY" ? '"Opportunity"' : '"Lead"';
+    await execute(
+      `update ${table} set "ownerId" = $1, "updatedAt" = $2 where "tenantId" = $3 and id = $4`,
+      [assignee.id, new Date().toISOString(), tenantId, entityId],
+    );
 
     const result = {
       assignedUserId: assignee.id,

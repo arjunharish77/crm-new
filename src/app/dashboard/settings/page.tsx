@@ -1,35 +1,33 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import {
-    Box,
-    Typography,
-    TextField,
-    Button,
-    FormControl,
-    InputLabel,
-    Select,
-    MenuItem,
-    Divider,
-    Alert,
-    Stack,
-} from "@mui/material";
-import { Save as SaveIcon, Settings as GeneralIcon } from "@mui/icons-material";
+import { Save, Settings } from "lucide-react";
 import { toast } from "sonner";
-import { useTheme, alpha, Grid } from "@mui/material";
 import { apiFetch } from "@/lib/api";
-import { saveDisplaySettings } from "@/lib/date-format";
+import { DEFAULT_WORKSPACE_TIME_ZONE, saveDisplaySettings } from "@/lib/date-format";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { ColorThemePicker } from "@/components/settings/color-theme-picker";
+import { ModeToggle } from "@/components/settings/mode-toggle";
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from "@/components/ui/select";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 export default function GeneralSettingsPage() {
-    const theme = useTheme();
     const [saving, setSaving] = useState(false);
     const [loading, setLoading] = useState(true);
     const [settings, setSettings] = useState({
         companyName: "",
-        timezone: "America/New_York",
-        currency: "USD",
+        timezone: DEFAULT_WORKSPACE_TIME_ZONE,
+        currency: "INR",
         language: "en",
-        dateFormat: "MM/dd/yyyy",
+        dateFormat: "dd/MM/yyyy",
     });
 
     useEffect(() => {
@@ -45,7 +43,7 @@ export default function GeneralSettingsPage() {
                     timezone: data.timezone ?? current.timezone,
                     currency: data.currency ?? current.currency,
                     language: data.language ?? current.language,
-                    dateFormat: data.dateFormat ?? current.dateFormat,
+                    dateFormat: "dd/MM/yyyy",
                 }));
             } catch {
                 toast.error("Failed to load settings");
@@ -77,135 +75,151 @@ export default function GeneralSettingsPage() {
     };
 
     return (
-        <Box>
-            <Stack direction="row" alignItems="center" spacing={1.5} sx={{ mb: 1 }}>
-                <Box sx={{ p: 1, borderRadius: '10px', bgcolor: alpha(theme.palette.primary.main, 0.1), color: 'primary.main', display: 'flex' }}>
-                    <GeneralIcon fontSize="small" />
-                </Box>
-                <Typography variant="h5" sx={{ fontWeight: 800, letterSpacing: -1 }}>
-                    General Settings
-                </Typography>
-            </Stack>
-            <Typography variant="body1" color="text.secondary" sx={{ mb: 2, opacity: 0.8 }}>
-                Configure your organization's core profile, localization, and display preferences.
-            </Typography>
+        <div>
+            <div className="mb-1 flex items-center gap-3">
+                <div className="flex items-center justify-center rounded-[10px] bg-primary/10 p-2 text-primary">
+                    <Settings className="size-4" />
+                </div>
+                <h1 className="text-xl font-extrabold tracking-tight">General Settings</h1>
+            </div>
+            <p className="mb-4 text-muted-foreground/80">
+                Configure your organization&apos;s core profile, localization, and display preferences.
+            </p>
 
-            <Stack spacing={4} sx={{ maxWidth: 560 }}>
-                <Box>
-                    <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 1.5, textTransform: 'uppercase', fontSize: '0.75rem', letterSpacing: 0.5, color: 'text.disabled' }}>
-                        ORGANIZATION PROFILE
-                    </Typography>
-                    <TextField
-                        label="Company Name"
-                        placeholder="Acme Corp"
-                        value={settings.companyName}
-                        onChange={(e) => setSettings((s) => ({ ...s, companyName: e.target.value }))}
-                        disabled={loading}
-                        fullWidth
-                        variant="outlined"
-                        sx={{ '& .MuiOutlinedInput-root': { borderRadius: '12px' } }}
-                    />
-                </Box>
+            <Tabs defaultValue="appearance" className="mt-4 max-w-3xl space-y-4">
+                <TabsList className="h-10">
+                    <TabsTrigger value="appearance">Appearance</TabsTrigger>
+                    <TabsTrigger value="profile">Organization</TabsTrigger>
+                    <TabsTrigger value="localization">Localization</TabsTrigger>
+                </TabsList>
 
-                <Box>
-                    <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 1.5, textTransform: 'uppercase', fontSize: '0.75rem', letterSpacing: 0.5, color: 'text.disabled' }}>
-                        LOCALIZATION
-                    </Typography>
-                    <Grid container spacing={2}>
-                        <Grid size={{ xs: 12, md: 6 }}>
-                            <FormControl fullWidth>
-                                <InputLabel>Timezone</InputLabel>
+                <TabsContent value="appearance">
+                    <section className="rounded-[14px] border bg-card p-4">
+                        <p className="mb-3 text-xs font-bold uppercase tracking-wide text-muted-foreground/60">
+                            Appearance
+                        </p>
+                        <div className="grid gap-4 sm:grid-cols-2">
+                            <div className="space-y-1.5">
+                                <Label>Mode</Label>
+                                <ModeToggle />
+                            </div>
+                            <div className="space-y-1.5">
+                                <Label>Color theme</Label>
+                                <ColorThemePicker />
+                            </div>
+                        </div>
+                    </section>
+                </TabsContent>
+
+                <TabsContent value="profile">
+                    <section className="rounded-[14px] border bg-card p-4">
+                        <p className="mb-3 text-xs font-bold uppercase tracking-wide text-muted-foreground/60">
+                            Organization Profile
+                        </p>
+                        <div className="max-w-xl space-y-1.5">
+                            <Label htmlFor="company-name">Company Name</Label>
+                            <Input
+                                id="company-name"
+                                placeholder="Acme Corp"
+                                value={settings.companyName}
+                                onChange={(e) => setSettings((s) => ({ ...s, companyName: e.target.value }))}
+                                disabled={loading}
+                            />
+                        </div>
+                    </section>
+                </TabsContent>
+
+                <TabsContent value="localization">
+                    <section className="rounded-[14px] border bg-card p-4">
+                        <p className="mb-3 text-xs font-bold uppercase tracking-wide text-muted-foreground/60">
+                            Localization
+                        </p>
+                        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                            <div className="space-y-1.5">
+                                <Label>Timezone</Label>
                                 <Select
                                     value={settings.timezone}
-                                    label="Timezone"
-                                    onChange={(e) => setSettings((s) => ({ ...s, timezone: e.target.value }))}
+                                    onValueChange={(value) => setSettings((s) => ({ ...s, timezone: value }))}
                                     disabled={loading}
-                                    sx={{ borderRadius: '12px' }}
                                 >
-                                    <MenuItem value="America/New_York">Eastern (US & Canada)</MenuItem>
-                                    <MenuItem value="America/Chicago">Central (US & Canada)</MenuItem>
-                                    <MenuItem value="America/Denver">Mountain (US & Canada)</MenuItem>
-                                    <MenuItem value="America/Los_Angeles">Pacific (US & Canada)</MenuItem>
-                                    <MenuItem value="Europe/London">London (GMT)</MenuItem>
-                                    <MenuItem value="Europe/Paris">Paris (CET)</MenuItem>
-                                    <MenuItem value="Asia/Tokyo">Tokyo (JST)</MenuItem>
-                                    <MenuItem value="Asia/Kolkata">Kolkata (IST)</MenuItem>
+                                    <SelectTrigger className="w-full">
+                                        <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="Asia/Kolkata">Kolkata</SelectItem>
+                                        <SelectItem value="America/New_York">Eastern (US & Canada)</SelectItem>
+                                        <SelectItem value="America/Chicago">Central (US & Canada)</SelectItem>
+                                        <SelectItem value="America/Denver">Mountain (US & Canada)</SelectItem>
+                                        <SelectItem value="America/Los_Angeles">Pacific (US & Canada)</SelectItem>
+                                        <SelectItem value="Europe/London">London</SelectItem>
+                                        <SelectItem value="Europe/Paris">Paris</SelectItem>
+                                        <SelectItem value="Asia/Tokyo">Tokyo</SelectItem>
+                                    </SelectContent>
                                 </Select>
-                            </FormControl>
-                        </Grid>
-                        <Grid size={{ xs: 12, md: 6 }}>
-                            <FormControl fullWidth>
-                                <InputLabel>Currency</InputLabel>
+                                <p className="text-xs text-muted-foreground">Timestamps are converted from UTC into this tenant timezone.</p>
+                            </div>
+                            <div className="space-y-1.5">
+                                <Label>Currency</Label>
                                 <Select
                                     value={settings.currency}
-                                    label="Currency"
-                                    onChange={(e) => setSettings((s) => ({ ...s, currency: e.target.value }))}
+                                    onValueChange={(value) => setSettings((s) => ({ ...s, currency: value }))}
                                     disabled={loading}
-                                    sx={{ borderRadius: '12px' }}
                                 >
-                                    <MenuItem value="USD">USD — US Dollar</MenuItem>
-                                    <MenuItem value="EUR">EUR — Euro</MenuItem>
-                                    <MenuItem value="GBP">GBP — British Pound</MenuItem>
-                                    <MenuItem value="JPY">JPY — Japanese Yen</MenuItem>
-                                    <MenuItem value="INR">INR — Indian Rupee</MenuItem>
+                                    <SelectTrigger className="w-full">
+                                        <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="USD">USD — US Dollar</SelectItem>
+                                        <SelectItem value="EUR">EUR — Euro</SelectItem>
+                                        <SelectItem value="GBP">GBP — British Pound</SelectItem>
+                                        <SelectItem value="JPY">JPY — Japanese Yen</SelectItem>
+                                        <SelectItem value="INR">INR — Indian Rupee</SelectItem>
+                                    </SelectContent>
                                 </Select>
-                            </FormControl>
-                        </Grid>
-                        <Grid size={{ xs: 12, md: 6 }}>
-                            <FormControl fullWidth>
-                                <InputLabel>Language</InputLabel>
+                            </div>
+                            <div className="space-y-1.5">
+                                <Label>Language</Label>
                                 <Select
                                     value={settings.language}
-                                    label="Language"
-                                    onChange={(e) => setSettings((s) => ({ ...s, language: e.target.value }))}
+                                    onValueChange={(value) => setSettings((s) => ({ ...s, language: value }))}
                                     disabled={loading}
-                                    sx={{ borderRadius: '12px' }}
                                 >
-                                    <MenuItem value="en">English</MenuItem>
-                                    <MenuItem value="hi">Hindi</MenuItem>
+                                    <SelectTrigger className="w-full">
+                                        <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="en">English</SelectItem>
+                                        <SelectItem value="hi">Hindi</SelectItem>
+                                    </SelectContent>
                                 </Select>
-                            </FormControl>
-                        </Grid>
-                        <Grid size={{ xs: 12 }}>
-                            <FormControl fullWidth>
-                                <InputLabel>Date Format</InputLabel>
+                            </div>
+                            <div className="space-y-1.5">
+                                <Label>Date Format</Label>
                                 <Select
                                     value={settings.dateFormat}
-                                    label="Date Format"
-                                    onChange={(e) => setSettings((s) => ({ ...s, dateFormat: e.target.value }))}
-                                    disabled={loading}
-                                    sx={{ borderRadius: '12px' }}
+                                    onValueChange={() => undefined}
+                                    disabled
                                 >
-                                    <MenuItem value="MM/dd/yyyy">MM/dd/yyyy</MenuItem>
-                                    <MenuItem value="dd/MM/yyyy">dd/MM/yyyy</MenuItem>
-                                    <MenuItem value="yyyy-MM-dd">yyyy-MM-dd</MenuItem>
+                                    <SelectTrigger className="w-full">
+                                        <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="dd/MM/yyyy">dd/MM/yyyy</SelectItem>
+                                    </SelectContent>
                                 </Select>
-                            </FormControl>
-                        </Grid>
-                    </Grid>
-                </Box>
-            </Stack>
+                                <p className="text-xs text-muted-foreground">Date-time format: dd/MM/yyyy, hh:mm AM/PM.</p>
+                            </div>
+                        </div>
+                    </section>
+                </TabsContent>
+            </Tabs>
 
-            <Box sx={{ mt: 6 }}>
-                <Button
-                    variant="contained"
-                    size="large"
-                    startIcon={<SaveIcon />}
-                    onClick={handleSave}
-                    disabled={saving || loading}
-                    sx={{
-                        borderRadius: '12px',
-                        px: 4,
-                        py: 1.5,
-                        boxShadow: `0 8px 16px ${alpha(theme.palette.primary.main, 0.15)}`,
-                        '&:hover': {
-                            boxShadow: `0 12px 24px ${alpha(theme.palette.primary.main, 0.2)}`,
-                        }
-                    }}
-                >
+            <div className="mt-10">
+                <Button size="lg" onClick={handleSave} disabled={saving || loading}>
+                    <Save className="size-4" />
                     {saving ? "Saving Changes..." : loading ? "Loading..." : "Save Settings"}
                 </Button>
-            </Box>
-        </Box>
+            </div>
+        </div>
     );
 }

@@ -57,7 +57,7 @@ export function FloatingBulkActions({
                     <div className="flex items-center gap-3 border-r border-white/20 pr-4">
                         <button
                             onClick={onClear}
-                            className="p-1 hover:bg-white/10 rounded-full transition-colors"
+                            className="p-1 hover:bg-white/10 rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60"
                         >
                             <X className="h-4 w-4" />
                         </button>

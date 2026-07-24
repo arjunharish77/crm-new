@@ -6,8 +6,11 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { apiFetch } from "@/lib/api";
 import { toast } from "sonner";
-import { Button, TextField, Stack } from "@mui/material";
-import { Groups as TeamsIcon } from "@mui/icons-material";
+import { UsersRound } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
 import { StandardDialog } from "@/components/common/standard-dialog";
 
 interface TeamRecord {
@@ -89,16 +92,15 @@ export function CreateTeamDialog({
       onClose={handleClose}
       title={team?.id ? "Edit Team" : "Create Team"}
       subtitle="Add a new functional group for your users."
-      icon={<TeamsIcon />}
+      icon={<UsersRound className="size-4" />}
       actions={
         <>
-          <Button onClick={handleClose} sx={{ color: "text.secondary" }}>
+          <Button variant="ghost" onClick={handleClose}>
             Cancel
           </Button>
           <Button
             type="submit"
             form="create-team-form"
-            variant="contained"
             disabled={loading}
           >
             {loading ? "Saving..." : team?.id ? "Save Team" : "Create Team"}
@@ -106,41 +108,46 @@ export function CreateTeamDialog({
         </>
       }
     >
-      <form id="create-team-form" onSubmit={handleSubmit(onSubmit)}>
-        <Stack spacing={2}>
-          <Controller
-            name="name"
-            control={control}
-            render={({ field }) => (
-              <TextField
+      <form id="create-team-form" onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-4 pb-1">
+        <Controller
+          name="name"
+          control={control}
+          render={({ field }) => (
+            <div className="space-y-1.5">
+              <Label htmlFor="team-name">Team Name</Label>
+              <Input
+                id="team-name"
                 {...field}
-                label="Team Name"
                 placeholder="e.g. Engineering"
-                fullWidth
-                error={!!errors.name}
-                helperText={errors.name?.message as string}
                 autoFocus
+                aria-invalid={!!errors.name}
               />
-            )}
-          />
+              {errors.name && (
+                <p className="text-xs text-destructive">{errors.name.message as string}</p>
+              )}
+            </div>
+          )}
+        />
 
-          <Controller
-            name="description"
-            control={control}
-            render={({ field }) => (
-              <TextField
+        <Controller
+          name="description"
+          control={control}
+          render={({ field }) => (
+            <div className="space-y-1.5">
+              <Label htmlFor="team-description">Description</Label>
+              <Textarea
+                id="team-description"
                 {...field}
-                label="Description"
                 placeholder="Brief description of the team's purpose"
-                fullWidth
-                multiline
                 rows={3}
-                error={!!errors.description}
-                helperText={errors.description?.message as string}
+                aria-invalid={!!errors.description}
               />
-            )}
-          />
-        </Stack>
+              {errors.description && (
+                <p className="text-xs text-destructive">{errors.description.message as string}</p>
+              )}
+            </div>
+          )}
+        />
       </form>
     </StandardDialog>
   );

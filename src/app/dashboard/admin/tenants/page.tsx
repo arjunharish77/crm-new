@@ -1,32 +1,19 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useMemo } from "react";
+import { ColumnDef } from "@tanstack/react-table";
+import { Ban, Building2, CheckCircle, MoreVertical, Plus, Settings } from "lucide-react";
+import { DataTable } from "@/components/ui/data-table";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Badge } from "@/components/ui/badge";
+import { Button as IconButton } from "@/components/ui/button";
 import {
-    Box,
-    Typography,
-    Button,
-    Chip,
-    IconButton,
-    Menu,
-    MenuItem,
-    Stack,
-    alpha,
-    useTheme,
-    ListItemIcon,
-    ListItemText,
-    Avatar,
-    Tooltip
-} from "@mui/material";
-import {
-    Add as AddIcon,
-    MoreVert as MoreVertIcon,
-    Settings as SettingsIcon,
-    Block as BlockIcon,
-    CheckCircle as CheckCircleIcon,
-    Business as BusinessIcon
-} from "@mui/icons-material";
-import { GridColDef, GridRenderCellParams } from "@mui/x-data-grid";
-import { StandardDataGrid } from "@/components/common/standard-data-grid";
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useAuth } from "@/providers/auth-provider";
 import { toast } from "sonner";
 import { FeaturesDialog } from "@/components/admin/features-dialog";
@@ -48,16 +35,10 @@ interface Tenant {
 }
 
 export default function TenantsPage() {
-    const theme = useTheme();
     const [tenants, setTenants] = useState<Tenant[]>([]);
     const [loading, setLoading] = useState(true);
     const [createDialogOpen, setCreateDialogOpen] = useState(false);
     const { token, user } = useAuth();
-
-    // Menu State
-    const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
-    const [selectedTenant, setSelectedTenant] = useState<Tenant | null>(null);
-    const menuOpen = Boolean(anchorEl);
 
     const fetchTenants = useCallback(async () => {
         if (!token) return;
@@ -83,237 +64,198 @@ export default function TenantsPage() {
         fetchTenants();
     }, [fetchTenants]);
 
-    const handleMenuOpen = (event: React.MouseEvent<HTMLElement>, tenant: Tenant) => {
-        setAnchorEl(event.currentTarget);
-        setSelectedTenant(tenant);
-    };
-
-    const handleMenuClose = () => {
-        setAnchorEl(null);
-        setSelectedTenant(null);
-    };
-
-    const updateTenantStatus = async (status: string) => {
-        if (!selectedTenant) return;
+    const updateTenantStatus = async (tenant: Tenant, status: string) => {
         try {
-            await apiFetch(`/platform-admin/tenants/${selectedTenant.id}/status`, {
+            await apiFetch(`/platform-admin/tenants/${tenant.id}/status`, {
                 method: "PATCH",
                 body: JSON.stringify({ status }),
             });
             toast.success(`Tenant ${status.toLowerCase()}d successfully`);
             fetchTenants();
-            handleMenuClose();
         } catch (error: any) {
             toast.error(error.message || "Failed to update tenant status");
         }
     };
 
-    const columns: GridColDef[] = [
+    const columns = useMemo<ColumnDef<Tenant, any>[]>(() => [
         {
-            field: 'name',
-            headerName: 'Organization',
-            flex: 1.5,
-            minWidth: 250,
-            renderCell: (params: GridRenderCellParams<Tenant>) => (
-                <Stack direction="row" spacing={1.5} alignItems="center" sx={{ height: '100%' }}>
-                    <Avatar
-                        sx={{
-                            width: 36,
-                            height: 36,
-                            bgcolor: alpha(theme.palette.primary.main, 0.1),
-                            color: theme.palette.primary.main,
-                            borderRadius: '8px'
-                        }}
-                    >
-                        <BusinessIcon sx={{ fontSize: 20 }} />
+            accessorKey: 'name',
+            header: 'Organization',
+            size: 280,
+            cell: ({ row }) => (
+                <div className="flex h-full items-center gap-3">
+                    <Avatar className="size-9 rounded-lg bg-primary/10 text-primary">
+                        <AvatarFallback className="rounded-lg bg-primary/10">
+                            <Building2 className="size-5" />
+                        </AvatarFallback>
                     </Avatar>
-                    <Box>
-                        <Typography variant="body2" sx={{ fontWeight: 700, color: 'text.primary' }}>
-                            {params.row.name}
-                        </Typography>
-                        <Typography variant="caption" sx={{ color: 'text.secondary', opacity: 0.7 }}>
-                            ID: {params.row.id.substring(0, 8)}...
-                        </Typography>
-                    </Box>
-                </Stack>
+                    <div>
+                        <div className="text-sm font-bold text-foreground">{row.original.name}</div>
+                        <div className="text-xs text-muted-foreground opacity-70">{row.original.plan ?? "Tenant"}</div>
+                    </div>
+                </div>
             )
         },
         {
-            field: 'plan',
-            headerName: 'Plan',
-            width: 140,
-            renderCell: (params: GridRenderCellParams<Tenant>) => (
-                <Chip
-                    label={params.value}
-                    size="small"
-                    sx={{
-                        fontWeight: 700,
-                        fontSize: '0.625rem',
-                        textTransform: 'uppercase',
-                        borderRadius: '6px',
-                        bgcolor: alpha(theme.palette.secondary.main, 0.08),
-                        color: theme.palette.secondary.main,
-                        border: '1px solid',
-                        borderColor: alpha(theme.palette.secondary.main, 0.2)
-                    }}
-                />
+            accessorKey: 'plan',
+            header: 'Plan',
+            size: 140,
+            cell: ({ row }) => (
+                <Badge variant="outline" className="border-secondary/20 bg-secondary/10 font-bold uppercase text-secondary">
+                    {row.original.plan}
+                </Badge>
             )
         },
         {
-            field: 'status',
-            headerName: 'Status',
-            width: 140,
-            renderCell: (params: GridRenderCellParams<Tenant>) => {
-                const status = params.value as string;
-                const isActive = status === 'ACTIVE';
-                const color = status === 'SUSPENDED' ? theme.palette.error.main :
-                    status === 'TRIAL' ? theme.palette.warning.main :
-                        status === 'ACTIVE' ? theme.palette.success.main :
-                            theme.palette.text.disabled;
+            accessorKey: 'status',
+            header: 'Status',
+            size: 140,
+            cell: ({ row }) => {
+                const status = row.original.status;
+                const statusClassName = status === 'SUSPENDED'
+                    ? "border-destructive/20 bg-destructive/10 text-destructive"
+                    : status === 'TRIAL'
+                        ? "border-tertiary/25 bg-tertiary/10 text-tertiary"
+                        : status === 'ACTIVE'
+                            ? "border-primary/20 bg-primary/10 text-primary"
+                            : "border-border bg-muted text-muted-foreground";
 
                 return (
-                    <Chip
-                        label={status}
-                        size="small"
-                        sx={{
-                            fontWeight: 700,
-                            fontSize: '0.625rem',
-                            textTransform: 'uppercase',
-                            borderRadius: '6px',
-                            bgcolor: alpha(color, 0.08),
-                            color: color,
-                            border: '1px solid',
-                            borderColor: alpha(color, 0.2)
-                        }}
-                    />
+                    <Badge variant="outline" className={`font-bold uppercase ${statusClassName}`}>
+                        {status}
+                    </Badge>
                 );
             }
         },
         {
-            field: 'users',
-            headerName: 'Users',
-            width: 100,
-            valueGetter: (params, row: Tenant) => row._count.users,
-            renderCell: (params) => (
-                <Typography variant="body2" sx={{ fontWeight: 600 }}>{params.value}</Typography>
+            id: 'users',
+            header: 'Users',
+            size: 100,
+            cell: ({ row }) => (
+                <span className="text-sm font-semibold">{row.original._count.users}</span>
             )
         },
         {
-            field: 'data',
-            headerName: 'Data Usage',
-            width: 180,
-            renderCell: (params: GridRenderCellParams<Tenant>) => (
-                <Box>
-                    <Typography variant="body2" sx={{ fontWeight: 600 }}>{params.row._count.leads} Leads</Typography>
-                    <Typography variant="caption" color="text.secondary">{params.row._count.opportunities} Opportunities</Typography>
-                </Box>
+            id: 'data',
+            header: 'Data Usage',
+            size: 180,
+            cell: ({ row }) => (
+                <div>
+                    <div className="text-sm font-semibold">{row.original._count.leads} Leads</div>
+                    <div className="text-xs text-muted-foreground">{row.original._count.opportunities} Opportunities</div>
+                </div>
             )
         },
         {
-            field: 'createdAt',
-            headerName: 'Created',
-            width: 140,
-            renderCell: (params) => (
-                <Typography variant="caption" color="text.secondary">
-                    {formatWorkspaceDate(params.value as string)}
-                </Typography>
+            accessorKey: 'createdAt',
+            header: 'Created',
+            size: 140,
+            cell: ({ row }) => (
+                <span className="text-xs text-muted-foreground">
+                    {formatWorkspaceDate(row.original.createdAt)}
+                </span>
             )
         },
         {
-            field: 'actions',
-            headerName: '',
-            type: 'actions',
-            width: 140,
-            renderCell: (params: GridRenderCellParams<Tenant>) => (
-                <Stack direction="row" spacing={1} justifyContent="flex-end" alignItems="center">
+            id: 'actions',
+            header: '',
+            size: 140,
+            cell: ({ row }) => (
+                <div className="flex items-center justify-end gap-1">
                     <FeaturesDialog
-                        tenantId={params.row.id}
-                        tenantName={params.row.name}
+                        tenantId={row.original.id}
+                        tenantName={row.original.name}
                         trigger={
-                            <Tooltip title="Manage Features">
-                                <IconButton size="small">
-                                    <SettingsIcon sx={{ fontSize: 18 }} />
-                                </IconButton>
+                            <Tooltip>
+                                <TooltipTrigger asChild>
+                                    <IconButton variant="ghost" size="icon-sm">
+                                        <Settings className="size-4" />
+                                    </IconButton>
+                                </TooltipTrigger>
+                                <TooltipContent>Manage Features</TooltipContent>
                             </Tooltip>
                         }
                     />
-                    <IconButton
-                        size="small"
-                        onClick={(e) => handleMenuOpen(e, params.row)}
-                    >
-                        <MoreVertIcon sx={{ fontSize: 18 }} />
-                    </IconButton>
-                </Stack>
+                    <DropdownMenu>
+                        <Tooltip>
+                            <TooltipTrigger asChild>
+                                <DropdownMenuTrigger asChild>
+                                    <IconButton variant="ghost" size="icon-sm">
+                                        <MoreVertical className="size-4" />
+                                    </IconButton>
+                                </DropdownMenuTrigger>
+                            </TooltipTrigger>
+                            <TooltipContent>More Actions</TooltipContent>
+                        </Tooltip>
+                        <DropdownMenuContent align="end" className="w-52">
+                            {row.original.status === "ACTIVE" ? (
+                                <DropdownMenuItem
+                                    className="text-destructive focus:text-destructive"
+                                    onClick={() => updateTenantStatus(row.original, "SUSPENDED")}
+                                >
+                                    <Ban className="size-4" />
+                                    Suspend Tenant
+                                </DropdownMenuItem>
+                            ) : (
+                                <DropdownMenuItem
+                                    className="text-primary focus:text-primary"
+                                    onClick={() => updateTenantStatus(row.original, "ACTIVE")}
+                                >
+                                    <CheckCircle className="size-4" />
+                                    Activate Tenant
+                                </DropdownMenuItem>
+                            )}
+                        </DropdownMenuContent>
+                    </DropdownMenu>
+                </div>
             )
         }
-    ];
+    ], [fetchTenants]);
 
     if (!user?.isPlatformAdmin) {
         return (
-            <Box sx={{ p: 4, textAlign: 'center' }}>
-                <Typography variant="h5" sx={{ fontWeight: 700 }}>Access Denied</Typography>
-                <Typography color="text.secondary">You do not have platform administrator privileges.</Typography>
-            </Box>
+            <div className="px-4 py-10 text-center">
+                <h1 className="text-xl font-semibold text-foreground">Access Denied</h1>
+                <p className="mt-1 text-sm text-muted-foreground">You do not have platform administrator privileges.</p>
+            </div>
         );
     }
 
     return (
-        <Box sx={{ p: { xs: 1.5, md: 2 }, maxWidth: 1600, mx: 'auto' }}>
-            {/* Header */}
-            <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 2 }}>
-                <Box>
-                    <Typography variant="h6" sx={{ fontWeight: 700, letterSpacing: -0.5 }}>Tenants</Typography>
-                    <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+        <div className="mx-auto max-w-[1600px] px-4 py-4 md:px-6">
+            <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                <div>
+                    <h1 className="text-xl font-semibold tracking-normal text-foreground">Tenants</h1>
+                    <p className="mt-1 text-sm text-muted-foreground">
                         Platform administration and multi-tenant management
-                    </Typography>
-                </Box>
-                <Button
-                    variant="contained"
-                    startIcon={<AddIcon />}
-                    onClick={() => setCreateDialogOpen(true)}
-                    sx={{ borderRadius: '12px', px: 3, py: 1 }}
-                >
+                    </p>
+                </div>
+                <IconButton onClick={() => setCreateDialogOpen(true)}>
+                    <Plus className="size-4" />
                     Create Tenant
-                </Button>
-            </Stack>
+                </IconButton>
+            </div>
 
-            <Box sx={{ height: 'calc(100vh - 250px)', minHeight: 600 }}>
-                <StandardDataGrid
-                    rows={tenants}
+            <div className="min-h-[600px]">
+                <DataTable
+                    storageKey="admin-tenants-table"
+                    data={tenants}
                     columns={columns}
                     loading={loading}
-                    rowHeight={72}
+                    getRowId={(row) => row.id}
+                    emptyState={{
+                        icon: <Building2 className="size-10 text-muted-foreground opacity-50" />,
+                        title: "No tenants found",
+                        description: "Create a tenant to begin managing the platform.",
+                    }}
                 />
-            </Box>
-
-            <Menu
-                anchorEl={anchorEl}
-                open={menuOpen}
-                onClose={handleMenuClose}
-                transformOrigin={{ horizontal: 'right', vertical: 'top' }}
-                anchorOrigin={{ horizontal: 'right', vertical: 'bottom' }}
-                PaperProps={{
-                    sx: { minWidth: 200, borderRadius: '12px', mt: 1 }
-                }}
-            >
-                {selectedTenant?.status === 'ACTIVE' ? (
-                    <MenuItem onClick={() => updateTenantStatus('SUSPENDED')} sx={{ color: 'error.main' }}>
-                        <ListItemIcon><BlockIcon fontSize="small" sx={{ color: 'inherit' }} /></ListItemIcon>
-                        <ListItemText>Suspend Tenant</ListItemText>
-                    </MenuItem>
-                ) : (
-                    <MenuItem onClick={() => updateTenantStatus('ACTIVE')} sx={{ color: 'success.main' }}>
-                        <ListItemIcon><CheckCircleIcon fontSize="small" sx={{ color: 'inherit' }} /></ListItemIcon>
-                        <ListItemText>Activate Tenant</ListItemText>
-                    </MenuItem>
-                )}
-            </Menu>
+            </div>
 
             <CreateTenantDialog
                 open={createDialogOpen}
                 onOpenChange={setCreateDialogOpen}
                 onSuccess={fetchTenants}
             />
-        </Box>
+        </div>
     );
 }

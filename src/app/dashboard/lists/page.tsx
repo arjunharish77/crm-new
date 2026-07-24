@@ -3,38 +3,24 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import {
-    Box,
-    Button,
-    Card,
-    Chip,
-    Dialog,
-    DialogActions,
-    DialogContent,
-    DialogTitle,
-    FormControl,
-    InputAdornment,
-    InputLabel,
-    MenuItem,
-    Select,
-    Stack,
-    TextField,
-    Typography,
-} from "@mui/material";
-import {
-    Add as AddIcon,
-    FormatListBulleted as ListIcon,
-    Search as SearchIcon,
-    Visibility as ViewIcon,
-} from "@mui/icons-material";
-import { GridColDef } from "@mui/x-data-grid";
+import { ColumnDef } from "@tanstack/react-table";
+import { Eye, ListFilter, ListPlus, Plus, Search } from "lucide-react";
+import { Card } from "@/components/ui/card";
 import { apiFetch } from "@/lib/api";
 import { toast } from "sonner";
-import { StandardDataGrid } from "@/components/common/standard-data-grid";
+import { DataTable } from "@/components/ui/data-table";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Button as UiButton } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { StandardDialog } from "@/components/common/standard-dialog";
 import { AdvancedFilterModal, FilterGroup } from "@/components/filters/advanced-filter-modal";
 import { formatWorkspaceDateTime } from "@/lib/date-format";
+import type { FilterField } from "@/types/filters";
 
-const LEAD_FILTER_FIELDS = [
+const LEAD_FILTER_FIELDS: FilterField[] = [
     { label: "Name", key: "name", type: "text" },
     { label: "Email", key: "email", type: "text" },
     {
@@ -75,6 +61,7 @@ export default function LeadListsPage() {
     const [filters, setFilters] = useState<FilterGroup[]>([]);
     const [search, setSearch] = useState("");
     const [typeFilter, setTypeFilter] = useState<"ALL" | "SMART" | "STATIC">("ALL");
+    const [pagination, setPagination] = useState({ pageIndex: 0, pageSize: 25 });
 
     const fetchLists = useCallback(async () => {
         if (mountedRef.current) {
@@ -136,176 +123,198 @@ export default function LeadListsPage() {
         });
     }, [lists, search, typeFilter]);
 
-    const columns: GridColDef[] = [
+    useEffect(() => {
+        setPagination((current) => ({ ...current, pageIndex: 0 }));
+    }, [search, typeFilter]);
+
+    const paginatedLists = useMemo(() => {
+        const start = pagination.pageIndex * pagination.pageSize;
+        return filteredLists.slice(start, start + pagination.pageSize);
+    }, [filteredLists, pagination]);
+
+    const columns = useMemo<ColumnDef<LeadListSummary, any>[]>(() => [
         {
-            field: "name",
-            headerName: "List Name",
-            flex: 1.2,
-            minWidth: 260,
-            renderCell: (params) => (
-                <Box component={Link} href={`/dashboard/lists/${params.row.id}`} sx={{ textDecoration: "none", color: "inherit" }}>
-                    <Typography sx={{ fontWeight: 800, color: "primary.main", lineHeight: 1.25 }}>
-                        {params.value}
-                    </Typography>
-                    {params.row.description ? (
-                        <Typography variant="caption" color="text.secondary" noWrap>
-                            {params.row.description}
-                        </Typography>
-                    ) : null}
-                </Box>
-            ),
-        },
-        {
-            field: "type",
-            headerName: "Type",
-            width: 150,
-            renderCell: (params) => (
-                <Chip
-                    size="small"
-                    label={params.value === "SMART" ? "Smart list" : "Static list"}
-                    color={params.value === "SMART" ? "primary" : "default"}
-                    sx={{ fontWeight: 800 }}
-                />
-            ),
-        },
-        {
-            field: "count",
-            headerName: "Leads",
-            width: 120,
-            renderCell: (params) => (
-                <Typography sx={{ fontWeight: 800 }}>{params.value ?? 0}</Typography>
-            ),
-        },
-        {
-            field: "updatedAt",
-            headerName: "Modified On",
-            width: 170,
-            renderCell: (params) => (
-                <Typography variant="body2" color="text.secondary">
-                    {formatWorkspaceDateTime(params.value as string)}
-                </Typography>
-            ),
-        },
-        {
-            field: "actions",
-            headerName: "",
-            width: 120,
-            sortable: false,
-            filterable: false,
-            renderCell: (params) => (
-                <Button
-                    component={Link}
-                    href={`/dashboard/lists/${params.row.id}`}
-                    size="small"
-                    startIcon={<ViewIcon />}
+            accessorKey: "name",
+            header: "List Name",
+            size: 280,
+            cell: ({ row }) => (
+                <Link
+                    href={`/dashboard/lists/${row.original.id}`}
+                    className="block text-inherit"
                     onClick={(event) => event.stopPropagation()}
                 >
-                    View
-                </Button>
+                    <div className="font-extrabold leading-tight text-primary">{row.original.name}</div>
+                    {row.original.description ? (
+                        <div className="truncate text-xs text-muted-foreground">{row.original.description}</div>
+                    ) : null}
+                </Link>
             ),
         },
-    ];
+        {
+            accessorKey: "type",
+            header: "Type",
+            size: 150,
+            cell: ({ row }) => (
+                <Badge
+                    variant="outline"
+                    className={
+                        row.original.type === "SMART"
+                            ? "border-primary/20 bg-primary/10 font-extrabold text-primary"
+                            : "border-border bg-muted font-extrabold text-muted-foreground"
+                    }
+                >
+                    {row.original.type === "SMART" ? "Smart list" : "Static list"}
+                </Badge>
+            ),
+        },
+        {
+            accessorKey: "count",
+            header: "Leads",
+            size: 120,
+            cell: ({ row }) => (
+                <span className="font-extrabold">{row.original.count ?? 0}</span>
+            ),
+        },
+        {
+            accessorKey: "updatedAt",
+            header: "Modified On",
+            size: 180,
+            cell: ({ row }) => (
+                <span className="text-sm text-muted-foreground">
+                    {row.original.updatedAt ? formatWorkspaceDateTime(row.original.updatedAt) : "-"}
+                </span>
+            ),
+        },
+        {
+            id: "actions",
+            header: "",
+            size: 120,
+            cell: ({ row }) => (
+                <UiButton
+                    asChild
+                    variant="ghost"
+                    size="sm"
+                    onClick={(event) => event.stopPropagation()}
+                >
+                    <Link
+                        href={`/dashboard/lists/${row.original.id}`}
+                    >
+                        <Eye className="size-4" />
+                        View
+                    </Link>
+                </UiButton>
+            ),
+        },
+    ], []);
 
     return (
-        <Box sx={{ p: { xs: 1.5, md: 2 }, maxWidth: 1480, mx: "auto" }}>
-            <Stack spacing={1.5}>
-                <Stack direction={{ xs: "column", md: "row" }} justifyContent="space-between" spacing={1.5}>
-                    <Box>
-                        <Typography variant="h6" sx={{ fontWeight: 800 }}>Lead Lists</Typography>
-                        <Typography variant="body2" color="text.secondary">
+        <div className="mx-auto max-w-[1480px] px-3 py-3 md:px-4 md:py-4">
+            <div className="space-y-3">
+                <div className="flex flex-col justify-between gap-3 md:flex-row md:items-center">
+                    <div>
+                        <h1 className="text-lg font-extrabold">Lead Lists</h1>
+                        <p className="text-sm text-muted-foreground">
                             Create static and smart lead views for segmentation, follow-up, and automation enrollment.
-                        </Typography>
-                    </Box>
-                    <Button variant="contained" startIcon={<AddIcon />} onClick={() => setOpen(true)} sx={{ borderRadius: "10px" }}>
+                        </p>
+                    </div>
+                    <Button onClick={() => setOpen(true)} className="rounded-[10px]">
+                        <Plus className="size-4" />
                         New List
                     </Button>
-                </Stack>
+                </div>
 
-                <Card sx={{ p: 1.25, borderRadius: 2, border: "1px solid", borderColor: "divider" }}>
-                    <Stack direction={{ xs: "column", md: "row" }} spacing={1} alignItems={{ md: "center" }}>
-                        <TextField
-                            size="small"
-                            placeholder="Search lists"
-                            value={search}
-                            onChange={(event) => setSearch(event.target.value)}
-                            InputProps={{
-                                startAdornment: (
-                                    <InputAdornment position="start">
-                                        <SearchIcon fontSize="small" />
-                                    </InputAdornment>
-                                ),
-                            }}
-                            sx={{ minWidth: { md: 320 } }}
-                        />
-                        <FormControl size="small" sx={{ minWidth: 160 }}>
-                            <InputLabel>List Type</InputLabel>
-                            <Select value={typeFilter} label="List Type" onChange={(event) => setTypeFilter(event.target.value as any)}>
-                                <MenuItem value="ALL">All lists</MenuItem>
-                                <MenuItem value="SMART">Smart lists</MenuItem>
-                                <MenuItem value="STATIC">Static lists</MenuItem>
-                            </Select>
-                        </FormControl>
-                        <Box sx={{ flexGrow: 1 }} />
-                        <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 700 }}>
+                <Card className="rounded-xl p-2.5">
+                    <div className="flex flex-col gap-2 md:flex-row md:items-center">
+                        <div className="relative md:min-w-[320px]">
+                            <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+                            <Input
+                                placeholder="Search lists"
+                                value={search}
+                                onChange={(event) => setSearch(event.target.value)}
+                                className="pl-9"
+                            />
+                        </div>
+                        <Select value={typeFilter} onValueChange={(value) => setTypeFilter(value as any)}>
+                            <SelectTrigger className="min-w-[160px]">
+                                <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="ALL">All lists</SelectItem>
+                                <SelectItem value="SMART">Smart lists</SelectItem>
+                                <SelectItem value="STATIC">Static lists</SelectItem>
+                            </SelectContent>
+                        </Select>
+                        <div className="flex-grow" />
+                        <span className="text-xs font-bold text-muted-foreground">
                             {filteredLists.length} lists
-                        </Typography>
-                    </Stack>
+                        </span>
+                    </div>
                 </Card>
 
-                <Card sx={{ borderRadius: 2, border: "1px solid", borderColor: "divider", overflow: "hidden" }}>
-                    {filteredLists.length === 0 && !loading ? (
-                        <Box sx={{ p: 5, textAlign: "center" }}>
-                            <ListIcon sx={{ fontSize: 42, color: "text.disabled", mb: 1 }} />
-                            <Typography fontWeight={800}>No lists found</Typography>
-                            <Typography variant="body2" color="text.secondary">
-                                Create a smart list from filters or a static list for manual membership.
-                            </Typography>
-                        </Box>
-                    ) : (
-                        <StandardDataGrid
-                            rows={filteredLists}
+                <Card className="overflow-hidden rounded-xl">
+                        <DataTable
+                            storageKey="lead-lists-table"
+                            data={paginatedLists}
                             columns={columns}
                             loading={loading}
                             getRowId={(row) => row.id}
-                            disableRowSelectionOnClick
-                            hideFooterSelectedRowCount
-                            initialState={{ pagination: { paginationModel: { page: 0, pageSize: 25 } } }}
+                            totalItems={filteredLists.length}
+                            pageIndex={pagination.pageIndex}
+                            pageSize={pagination.pageSize}
                             pageSizeOptions={[25, 50, 100]}
-                            onRowClick={(params) => {
-                                router.push(`/dashboard/lists/${params.row.id}`);
+                            onPaginationChange={setPagination}
+                            onRowClick={(row) => router.push(`/dashboard/lists/${row.id}`)}
+                            emptyState={{
+                                icon: <ListFilter className="size-10 text-muted-foreground opacity-50" />,
+                                title: "No lists found",
+                                description: "Create a smart list from filters or a static list for manual membership.",
                             }}
-                            sx={{ minHeight: 420 }}
                         />
-                    )}
                 </Card>
-            </Stack>
+            </div>
 
-            <Dialog open={open} onClose={() => setOpen(false)} maxWidth="sm" fullWidth>
-                <DialogTitle>New lead list</DialogTitle>
-                <DialogContent>
-                    <Stack spacing={2} sx={{ mt: 1 }}>
-                        <TextField label="Name" size="small" value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} />
-                        <TextField label="Description" size="small" value={form.description} onChange={(event) => setForm({ ...form, description: event.target.value })} />
-                        <FormControl size="small">
-                            <InputLabel>Type</InputLabel>
-                            <Select value={form.type} label="Type" onChange={(event) => setForm({ ...form, type: event.target.value })}>
-                                <MenuItem value="SMART">Smart list</MenuItem>
-                                <MenuItem value="STATIC">Static list</MenuItem>
-                            </Select>
-                        </FormControl>
-                        {form.type === "SMART" && (
-                            <Stack direction="row" spacing={1} alignItems="center">
-                                <Button variant="outlined" size="small" onClick={() => setFilterOpen(true)}>Configure filters</Button>
-                                <Typography variant="caption" color="text.secondary">{filters.reduce((sum, group) => sum + group.conditions.length, 0)} conditions</Typography>
-                            </Stack>
-                        )}
-                    </Stack>
-                </DialogContent>
-                <DialogActions>
-                    <Button onClick={() => setOpen(false)}>Cancel</Button>
-                    <Button variant="contained" onClick={createList}>Create</Button>
-                </DialogActions>
-            </Dialog>
+            <StandardDialog
+                open={open}
+                onClose={() => setOpen(false)}
+                title="New lead list"
+                icon={<ListPlus className="size-5" />}
+                maxWidth="sm"
+                actions={
+                    <>
+                        <Button variant="ghost" onClick={() => setOpen(false)}>Cancel</Button>
+                        <Button onClick={createList}>Create</Button>
+                    </>
+                }
+            >
+                <div className="space-y-4">
+                    <div className="space-y-2">
+                        <Label>Name</Label>
+                        <Input value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} />
+                    </div>
+                    <div className="space-y-2">
+                        <Label>Description</Label>
+                        <Input value={form.description} onChange={(event) => setForm({ ...form, description: event.target.value })} />
+                    </div>
+                    <div className="space-y-2">
+                        <Label>Type</Label>
+                        <Select value={form.type} onValueChange={(value) => setForm({ ...form, type: value })}>
+                            <SelectTrigger className="w-full">
+                                <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="SMART">Smart list</SelectItem>
+                                <SelectItem value="STATIC">Static list</SelectItem>
+                            </SelectContent>
+                        </Select>
+                    </div>
+                    {form.type === "SMART" && (
+                        <div className="flex items-center gap-2">
+                            <Button variant="outline" size="sm" onClick={() => setFilterOpen(true)}>Configure filters</Button>
+                            <span className="text-xs text-muted-foreground">{filters.reduce((sum, group) => sum + group.conditions.length, 0)} conditions</span>
+                        </div>
+                    )}
+                </div>
+            </StandardDialog>
 
             <AdvancedFilterModal
                 open={filterOpen}
@@ -313,6 +322,6 @@ export default function LeadListsPage() {
                 fields={LEAD_FILTER_FIELDS}
                 onApply={setFilters}
             />
-        </Box>
+        </div>
     );
 }

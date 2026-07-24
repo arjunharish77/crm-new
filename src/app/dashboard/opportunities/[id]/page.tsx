@@ -4,35 +4,7 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { motion } from "framer-motion";
-import {
-    alpha,
-    Avatar,
-    Box,
-    Button,
-    Card,
-    Chip,
-    CircularProgress,
-    Divider,
-    Grid,
-    MenuItem,
-    Paper,
-    Select,
-    Stack,
-    Typography,
-    useTheme,
-} from "@mui/material";
-import {
-    Add as AddIcon,
-    ArrowBack as ArrowBackIcon,
-    AttachMoney as MoneyIcon,
-    CalendarToday as CalendarIcon,
-    Edit as EditIcon,
-    Flag as PriorityIcon,
-    Link as LinkIcon,
-    Person as PersonIcon,
-    Sell as PipelineIcon,
-    TrendingUp as ProbabilityIcon,
-} from "@mui/icons-material";
+import { ArrowLeft, Loader2, Pencil, Plus } from "lucide-react";
 import { toast } from "sonner";
 import { formatWorkspaceDate, formatWorkspaceDateTime, parseWorkspaceDate } from "@/lib/date-format";
 import { apiFetch } from "@/lib/api";
@@ -46,14 +18,25 @@ import { CreateActivityDialog } from "../../activities/create-activity-dialog";
 import { OpportunityStageHistoryList } from "@/components/opportunities/opportunity-stage-history";
 import { NotesPanel } from "@/components/common/notes-panel";
 import { ContextualFormsPanel } from "@/components/forms/contextual-forms-panel";
-import { formatCurrency } from "@/lib/utils";
+import { RelatedTasksPanel } from "@/components/tasks/related-tasks-panel";
+import { formatCurrency, cn } from "@/lib/utils";
 import { fadeInUp } from "@/lib/motion";
 import { useAuth } from "@/providers/auth-provider";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from "@/components/ui/select";
+import { PredictiveScorePanel } from "@/components/scoring/predictive-score";
 
 type ActivityTimeFilter = "ALL" | "TODAY" | "7D" | "30D";
 
 export default function OpportunityDetailPage() {
-    const theme = useTheme();
     const params = useParams();
     const router = useRouter();
     const { user } = useAuth();
@@ -63,9 +46,10 @@ export default function OpportunityDetailPage() {
     const [stages, setStages] = useState<StageDefinition[]>([]);
     const [activities, setActivities] = useState<Activity[]>([]);
     const [history, setHistory] = useState<OpportunityStageHistory[]>([]);
+    const [taskCount, setTaskCount] = useState(0);
     const [loading, setLoading] = useState(true);
     const [showEditDialog, setShowEditDialog] = useState(false);
-    const [tabValue, setTabValue] = useState<"activity" | "details" | "stage" | "notes" | "audit">("activity");
+    const [tabValue, setTabValue] = useState<"activity" | "details" | "scoring" | "stage" | "tasks" | "notes" | "audit">("activity");
     const [activityTypeFilter, setActivityTypeFilter] = useState<string>("ALL");
     const [activityTimeFilter, setActivityTimeFilter] = useState<ActivityTimeFilter>("ALL");
 
@@ -91,6 +75,8 @@ export default function OpportunityDetailPage() {
 
             const histData = await apiFetch(`/opportunities/${opportunityId}/history`);
             setHistory(histData);
+            const taskData = await apiFetch<any[]>(`/tasks?opportunityId=${opportunityId}`);
+            setTaskCount(Array.isArray(taskData) ? taskData.length : 0);
         } catch {
             toast.error("Failed to load opportunity details");
         } finally {
@@ -154,65 +140,51 @@ export default function OpportunityDetailPage() {
 
     if (loading) {
         return (
-            <Box sx={{ display: "flex", justifyContent: "center", alignItems: "center", minHeight: "60vh" }}>
-                <CircularProgress size={44} />
-            </Box>
+            <div className="flex min-h-[60vh] items-center justify-center">
+                <Loader2 className="size-9 animate-spin text-primary" />
+            </div>
         );
     }
 
     if (!opportunity) {
         return (
-            <Box sx={{ p: 4, textAlign: "center" }}>
-                <Typography variant="h5">Opportunity not found</Typography>
-                <Button onClick={() => router.push("/dashboard/opportunities")} sx={{ mt: 2 }}>
+            <div className="p-8 text-center">
+                <h2 className="text-xl font-bold">Opportunity not found</h2>
+                <Button className="mt-4" onClick={() => router.push("/dashboard/opportunities")}>
                     Back to Opportunities
                 </Button>
-            </Box>
+            </div>
         );
     }
 
     return (
-        <Box
-            component={motion.div}
+        <motion.div
             variants={fadeInUp}
             initial="initial"
             animate="animate"
-            sx={{ maxWidth: 1440, mx: "auto", p: { xs: 1.25, md: 2 } }}
+            className="mx-auto max-w-[1440px] p-3 md:p-4"
         >
-            <Stack
-                direction={{ xs: "column", md: "row" }}
-                justifyContent="space-between"
-                alignItems={{ xs: "flex-start", md: "center" }}
-                spacing={2}
-                sx={{ mb: 2 }}
-            >
-                <Box>
-                    <Button
-                        startIcon={<ArrowBackIcon />}
-                        onClick={() => router.back()}
-                        sx={{ mb: 0.75, borderRadius: "10px", color: "text.secondary", minHeight: 34 }}
-                    >
-                        Back
-                    </Button>
-                </Box>
+            <div className="mb-4 flex flex-col items-start justify-between gap-3 md:flex-row md:items-center">
+                <Button
+                    variant="ghost"
+                    onClick={() => router.back()}
+                    className="min-h-[34px] text-muted-foreground"
+                >
+                    <ArrowLeft className="size-4" />
+                    Back
+                </Button>
 
-                <Stack direction="row" spacing={1} flexWrap="wrap">
+                <div className="flex flex-wrap gap-2">
                     <CreateActivityDialog
                         defaultLeadId={opportunity.leadId || undefined}
                         defaultOpportunityId={opportunity.id}
                         onSuccess={loadData}
                         trigger={
                             <Button
-                                color="secondary"
-                                startIcon={<AddIcon />}
-                                sx={{
-                                    borderRadius: "10px",
-                                    px: 1.75,
-                                    bgcolor: "secondaryContainer",
-                                    color: "onSecondaryContainer",
-                                    minHeight: 36,
-                                }}
+                                size="sm"
+                                className="min-h-9 bg-secondary-container px-3.5 text-on-secondary-container shadow-none hover:bg-secondary-container/80"
                             >
+                                <Plus className="size-4" />
                                 Activity
                             </Button>
                         }
@@ -223,388 +195,283 @@ export default function OpportunityDetailPage() {
                         entityData={opportunity}
                         onSaved={loadData}
                     />
-                    <Button
-                        variant="contained"
-                        startIcon={<EditIcon />}
-                        onClick={() => setShowEditDialog(true)}
-                        sx={{ borderRadius: "10px", px: 2, minHeight: 36 }}
-                    >
+                    <Button size="sm" className="min-h-9 px-4" onClick={() => setShowEditDialog(true)}>
+                        <Pencil className="size-4" />
                         Edit
                     </Button>
-                </Stack>
-            </Stack>
+                </div>
+            </div>
 
-            <Grid container spacing={1.5}>
-                <Grid size={{ xs: 12, lg: 3.8 }}>
-                    <Stack spacing={1.5} sx={{ position: { lg: "sticky" }, top: { lg: 16 } }}>
-                        <Card
-                            sx={{
-                                borderRadius: "14px",
-                                overflow: "hidden",
-                                border: "1px solid",
-                                borderColor: alpha(theme.palette.secondary.main, 0.22),
-                            }}
-                        >
-                            <Box
-                                sx={{
-                                    px: 2.5,
-                                    py: 2.25,
-                                    color: "common.white",
-                                    background: `linear-gradient(180deg, ${alpha(theme.palette.secondary.dark, 0.96)} 0%, ${alpha(
-                                        theme.palette.secondary.main,
-                                        0.92
-                                    )} 100%)`,
-                                }}
-                            >
-                                <Stack direction="row" spacing={1.25} alignItems="center" sx={{ mb: 1.25 }}>
-                                    <Avatar
-                                        sx={{
-                                            width: 48,
-                                            height: 48,
-                                            bgcolor: alpha("#ffffff", 0.14),
-                                            color: "common.white",
-                                            fontWeight: 800,
-                                            fontSize: "1.05rem",
-                                        }}
-                                    >
+            <div className="grid grid-cols-1 gap-4 lg:grid-cols-[380px_1fr]">
+                <div className="flex flex-col gap-4 lg:sticky lg:top-4 lg:self-start">
+                    <div className="overflow-hidden rounded-2xl border border-secondary/20">
+                        <div className="bg-secondary px-5 py-4.5 text-secondary-foreground">
+                            <div className="mb-3 flex items-center gap-3">
+                                <Avatar className="size-12">
+                                    <AvatarFallback className="bg-white/15 text-base font-extrabold text-white">
                                         {opportunity.title.charAt(0)}
-                                    </Avatar>
-                                    <Box sx={{ minWidth: 0 }}>
-                                        <Typography variant="h6" sx={{ fontWeight: 800, lineHeight: 1.1 }}>
-                                            {opportunity.title}
-                                        </Typography>
-                                        <Typography variant="body2" sx={{ opacity: 0.82 }}>
-                                            {opportunity.opportunityType?.name || "Opportunity"}
-                                        </Typography>
-                                    </Box>
-                                </Stack>
+                                    </AvatarFallback>
+                                </Avatar>
+                                <div className="min-w-0">
+                                    <h2 className="text-lg leading-tight font-extrabold">{opportunity.title}</h2>
+                                    <p className="text-sm text-secondary-foreground/80">
+                                        {opportunity.opportunityType?.name || "Opportunity"}
+                                    </p>
+                                </div>
+                            </div>
 
-                                <Stack direction="row" spacing={0.75} flexWrap="wrap">
-                                    <Chip
-                                        label={currentStage?.name || "Unassigned"}
-                                        size="small"
-                                        sx={{
-                                            bgcolor: alpha("#fff", 0.14),
-                                            color: "common.white",
-                                            fontWeight: 800,
-                                            borderRadius: "8px",
-                                            height: 22,
-                                        }}
-                                    />
-                                    <Chip
-                                        label={opportunity.priority || "MEDIUM"}
-                                        size="small"
-                                        sx={{
-                                            bgcolor: alpha("#fff", 0.1),
-                                            color: "common.white",
-                                            fontWeight: 800,
-                                            borderRadius: "8px",
-                                            height: 22,
-                                        }}
-                                    />
-                </Stack>
-            </Box>
+                            <div className="flex flex-wrap gap-1.5">
+                                <Badge className="h-[22px] rounded-lg border-transparent bg-white/15 font-extrabold text-white">
+                                    {currentStage?.name || "Unassigned"}
+                                </Badge>
+                                <Badge className="h-[22px] rounded-lg border-transparent bg-white/10 font-extrabold text-white">
+                                    {opportunity.priority || "MEDIUM"}
+                                </Badge>
+                            </div>
+                        </div>
 
-                            <Grid container>
-                                <MetricCell label="Value" value={formatCurrency(opportunity.amount || 0)} />
-                                <MetricCell label="Probability" value={`${currentStage?.probability ?? 0}%`} />
-                                <MetricCell label="Activities" value={String(activities.length)} />
-                            </Grid>
-                        </Card>
+                        <div className="grid grid-cols-3 divide-x divide-white/10 bg-black/20">
+                            <MetricCell label="Value" value={formatCurrency(opportunity.amount || 0)} />
+                            <MetricCell label="Probability" value={`${currentStage?.probability ?? 0}%`} />
+                            <MetricCell label="Activities" value={String(activities.length)} />
+                        </div>
+                    </div>
 
-                        <Card sx={{ borderRadius: "12px", border: "1px solid", borderColor: "divider" }}>
-                            <Box sx={{ px: 1.5, py: 1.125, borderBottom: "1px solid", borderColor: "divider" }}>
-                                <Typography variant="subtitle1" sx={{ fontWeight: 800 }}>
-                                    Deal Properties
-                                </Typography>
-                            </Box>
-                            <Stack divider={<Divider flexItem />}>
-                                <PropertyRow label="Stage">{currentStage?.name || "—"}</PropertyRow>
-                                <PropertyRow label="Type">{opportunity.opportunityType?.name || "—"}</PropertyRow>
-                                <PropertyRow label="Value">{formatCurrency(opportunity.amount || 0)}</PropertyRow>
-                                <PropertyRow label="Priority">{opportunity.priority || "—"}</PropertyRow>
-                                <PropertyRow label="Expected Close">
-                                    {opportunity.expectedCloseDate ? formatWorkspaceDate(opportunity.expectedCloseDate) : "—"}
-                                </PropertyRow>
-                                <PropertyRow label="Created">{formatWorkspaceDate(opportunity.createdAt)}</PropertyRow>
-                            </Stack>
-                        </Card>
+                    <div className="rounded-xl border border-border bg-card">
+                        <div className="border-b border-border px-3 py-2.5">
+                            <h3 className="text-sm font-extrabold">Deal Properties</h3>
+                        </div>
+                        <div className="divide-y divide-border">
+                            <PropertyRow label="Stage">{currentStage?.name || "—"}</PropertyRow>
+                            <PropertyRow label="Type">{opportunity.opportunityType?.name || "—"}</PropertyRow>
+                            <PropertyRow label="Value">{formatCurrency(opportunity.amount || 0)}</PropertyRow>
+                            <PropertyRow label="Priority">{opportunity.priority || "—"}</PropertyRow>
+                            <PropertyRow label="Expected Close">
+                                {opportunity.expectedCloseDate ? formatWorkspaceDate(opportunity.expectedCloseDate) : "—"}
+                            </PropertyRow>
+                            <PropertyRow label="Created">{formatWorkspaceDate(opportunity.createdAt)}</PropertyRow>
+                        </div>
+                    </div>
 
-                        <Card sx={{ borderRadius: "12px", border: "1px solid", borderColor: "divider" }}>
-                            <Box sx={{ px: 1.5, py: 1.125, borderBottom: "1px solid", borderColor: "divider" }}>
-                                <Typography variant="subtitle1" sx={{ fontWeight: 800 }}>
-                                    Stage Progression
-                                </Typography>
-                            </Box>
-                            <Stack spacing={0.75} sx={{ p: 1.25 }}>
-                                {stages.map((stage) => {
-                                    const active = stage.id === opportunity.stageId;
-                                    return (
-                                        <Button
-                                            key={stage.id}
-                                            variant={active ? "contained" : "text"}
-                                            onClick={() => !active && handleStageChange(stage.id)}
-                                            sx={{
-                                                justifyContent: "space-between",
-                                                borderRadius: "8px",
-                                                px: 1.25,
-                                                py: 0.8,
-                                                bgcolor: active ? "primary.main" : alpha(theme.palette.primary.main, 0.04),
-                                                color: active ? "primary.contrastText" : "text.primary",
-                                                minHeight: 36,
-                                            }}
-                                        >
-                                            <Stack direction="row" spacing={1} alignItems="center">
-                                                <Box
-                                                    sx={{
-                                                        width: 8,
-                                                        height: 8,
-                                                        borderRadius: "50%",
-                                                        bgcolor: active ? "common.white" : stage.color || "primary.main",
-                                                    }}
-                                                />
-                                                <Typography variant="body2" sx={{ fontWeight: 700 }}>
-                                                    {stage.name}
-                                                </Typography>
-                                            </Stack>
-                                            <Typography variant="caption" sx={{ opacity: active ? 0.9 : 0.7 }}>
-                                                {stage.probability}%
-                                            </Typography>
-                                        </Button>
-                                    );
-                                })}
-                            </Stack>
-                        </Card>
+                    <PredictiveScorePanel recordType="OPPORTUNITY" recordId={opportunity.id} score={opportunity.predictiveScore} />
 
-                        <Card sx={{ borderRadius: "12px", border: "1px solid", borderColor: "divider", p: 1.5 }}>
-                            <Typography variant="subtitle1" sx={{ fontWeight: 800, mb: 1.125 }}>
-                                Linked Lead
-                            </Typography>
-                            {opportunity.lead ? (
-                                <Stack spacing={1}>
-                                    <Stack direction="row" spacing={1} alignItems="center">
-                                        <Avatar sx={{ width: 38, height: 38, bgcolor: "primaryContainer", color: "onPrimaryContainer" }}>
-                                            {opportunity.lead.name.charAt(0)}
-                                        </Avatar>
-                                        <Box sx={{ minWidth: 0 }}>
-                                            <Typography variant="body1" sx={{ fontWeight: 800 }}>
-                                                {opportunity.lead.name}
-                                            </Typography>
-                                            <Typography variant="body2" color="text.secondary">
-                                                {opportunity.lead.email || "No email"}
-                                            </Typography>
-                                        </Box>
-                                    </Stack>
-                                    <Button component={Link} href={`/dashboard/leads/${opportunity.leadId}`} variant="outlined" sx={{ borderRadius: "10px", minHeight: 34 }}>
-                                        Open Lead
-                                    </Button>
-                                </Stack>
-                            ) : (
-                                <Typography variant="body2" color="text.secondary">
-                                    No linked lead.
-                                </Typography>
-                            )}
-                        </Card>
-                    </Stack>
-                </Grid>
-
-                <Grid size={{ xs: 12, lg: 8.2 }}>
-                    <Card sx={{ borderRadius: "14px", border: "1px solid", borderColor: "divider", overflow: "hidden" }}>
-                        <Box
-                            sx={{
-                                px: 1,
-                                py: 1,
-                                borderBottom: "1px solid",
-                                borderColor: "divider",
-                                bgcolor: "surfaceContainerLowest",
-                            }}
-                        >
-                            <Stack
-                                direction={{ xs: "column", md: "row" }}
-                                justifyContent="space-between"
-                                alignItems={{ xs: "stretch", md: "center" }}
-                                spacing={1}
-                            >
-                                <Stack direction="row" spacing={0.75} sx={{ overflowX: "auto", pb: { xs: 0.25, md: 0 } }}>
-                                    <WorkspaceTab label={`Activity History (${filteredActivities.length})`} active={tabValue === "activity"} onClick={() => setTabValue("activity")} />
-                                    <WorkspaceTab label="Deal Details" active={tabValue === "details"} onClick={() => setTabValue("details")} />
-                                    <WorkspaceTab label={`Stage History (${history.length})`} active={tabValue === "stage"} onClick={() => setTabValue("stage")} />
-
-                                    <WorkspaceTab label="Notes" active={tabValue === "notes"} onClick={() => setTabValue("notes")} />
-                                    <WorkspaceTab label="Audit" active={tabValue === "audit"} onClick={() => setTabValue("audit")} />
-                                </Stack>
-
-                            </Stack>
-                        </Box>
-
-                        <Box sx={{ p: { xs: 1.25, md: 1.5 } }}>
-                            {tabValue === "activity" && (
-                                <Stack spacing={1.25}>
-                                    <Stack
-                                        direction={{ xs: "column", sm: "row" }}
-                                        spacing={0.75}
-                                        justifyContent="space-between"
-                                        alignItems={{ xs: "stretch", sm: "center" }}
-                                        sx={{
-                                            p: 1,
-                                            border: "1px solid",
-                                            borderColor: "divider",
-                                            borderRadius: "10px",
-                                            bgcolor: "surfaceContainerLowest",
-                                        }}
+                    <div className="rounded-xl border border-border bg-card">
+                        <div className="border-b border-border px-3 py-2.5">
+                            <h3 className="text-sm font-extrabold">Stage Progression</h3>
+                        </div>
+                        <div className="flex flex-col gap-1.5 p-2.5">
+                            {stages.map((stage) => {
+                                const active = stage.id === opportunity.stageId;
+                                return (
+                                    <button
+                                        key={stage.id}
+                                        type="button"
+                                        onClick={() => !active && handleStageChange(stage.id)}
+                                        className={cn(
+                                            "flex min-h-9 items-center justify-between rounded-lg px-2.5 py-2 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                                            active
+                                                ? "bg-primary text-primary-foreground"
+                                                : "bg-primary/[0.04] text-foreground hover:bg-primary/10"
+                                        )}
                                     >
-                                        <Typography variant="caption" sx={{ fontWeight: 800, color: "text.secondary", textTransform: "uppercase", letterSpacing: "0.08em" }}>
-                                            Activity Filters
-                                        </Typography>
-                                        <Stack direction="row" spacing={0.75} flexWrap="wrap">
-                                            <Select
-                                                size="small"
-                                                value={activityTypeFilter}
-                                                onChange={(e) => setActivityTypeFilter(String(e.target.value))}
-                                                sx={{ minWidth: 148, borderRadius: "8px", bgcolor: "background.paper" }}
-                                            >
-                                                <MenuItem value="ALL">All Types</MenuItem>
+                                        <span className="flex items-center gap-2">
+                                            <span
+                                                className="size-2 shrink-0 rounded-full"
+                                                style={{ backgroundColor: active ? "#fff" : stage.color || "var(--primary)" }}
+                                            />
+                                            <span className="text-sm font-bold">{stage.name}</span>
+                                        </span>
+                                        <span className={cn("text-xs", active ? "opacity-90" : "opacity-70")}>
+                                            {stage.probability}%
+                                        </span>
+                                    </button>
+                                );
+                            })}
+                        </div>
+                    </div>
+
+                    <div className="rounded-xl border border-border bg-card p-3">
+                        <h3 className="mb-2.5 text-sm font-extrabold">Linked Lead</h3>
+                        {opportunity.lead ? (
+                            <div className="space-y-2">
+                                <div className="flex items-center gap-2">
+                                    <Avatar className="size-9.5">
+                                        <AvatarFallback className="bg-primary-container text-on-primary-container">
+                                            {opportunity.lead.name.charAt(0)}
+                                        </AvatarFallback>
+                                    </Avatar>
+                                    <div className="min-w-0">
+                                        <p className="font-extrabold">{opportunity.lead.name}</p>
+                                        <p className="text-sm text-muted-foreground">{opportunity.lead.email || "No email"}</p>
+                                    </div>
+                                </div>
+                                <Button asChild variant="outline" size="sm" className="min-h-[34px] w-full">
+                                    <Link href={`/dashboard/leads/${opportunity.leadId}`}>Open Lead</Link>
+                                </Button>
+                            </div>
+                        ) : (
+                            <p className="text-sm text-muted-foreground">No linked lead.</p>
+                        )}
+                    </div>
+                </div>
+
+                <div className="overflow-hidden rounded-2xl border border-border bg-card">
+                    <div className="border-b border-border bg-surface-container-lowest px-2 py-2">
+                        <div className="flex gap-1.5 overflow-x-auto pb-0.5">
+                            <WorkspaceTab
+                                label={`Activity History (${filteredActivities.length})`}
+                                active={tabValue === "activity"}
+                                onClick={() => setTabValue("activity")}
+                            />
+                            <WorkspaceTab label="Deal Details" active={tabValue === "details"} onClick={() => setTabValue("details")} />
+                            <WorkspaceTab label="Scoring" active={tabValue === "scoring"} onClick={() => setTabValue("scoring")} />
+                            <WorkspaceTab
+                                label={`Stage History (${history.length})`}
+                                active={tabValue === "stage"}
+                                onClick={() => setTabValue("stage")}
+                            />
+                            <WorkspaceTab label={`Tasks (${taskCount})`} active={tabValue === "tasks"} onClick={() => setTabValue("tasks")} />
+                            <WorkspaceTab label="Notes" active={tabValue === "notes"} onClick={() => setTabValue("notes")} />
+                            <WorkspaceTab label="Audit" active={tabValue === "audit"} onClick={() => setTabValue("audit")} />
+                        </div>
+                    </div>
+
+                    <div className="p-3 md:p-4">
+                        {tabValue === "activity" && (
+                            <div className="space-y-3">
+                                <div className="flex flex-col gap-2 rounded-lg border border-border bg-surface-container-lowest p-2.5 sm:flex-row sm:items-center sm:justify-between">
+                                    <span className="text-xs font-extrabold tracking-wide text-muted-foreground uppercase">
+                                        Activity Filters
+                                    </span>
+                                    <div className="flex flex-wrap gap-2">
+                                        <Select value={activityTypeFilter} onValueChange={setActivityTypeFilter}>
+                                            <SelectTrigger className="w-[148px] bg-background">
+                                                <SelectValue />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                <SelectItem value="ALL">All Types</SelectItem>
                                                 {activityTypes.map((type) => (
-                                                    <MenuItem key={type.id} value={type.id}>
+                                                    <SelectItem key={type.id} value={type.id}>
                                                         {type.name}
-                                                    </MenuItem>
+                                                    </SelectItem>
                                                 ))}
-                                            </Select>
-                                            <Select
-                                                size="small"
-                                                value={activityTimeFilter}
-                                                onChange={(e) => setActivityTimeFilter(e.target.value as ActivityTimeFilter)}
-                                                sx={{ minWidth: 120, borderRadius: "8px", bgcolor: "background.paper" }}
-                                            >
-                                                <MenuItem value="ALL">All Time</MenuItem>
-                                                <MenuItem value="TODAY">Today</MenuItem>
-                                                <MenuItem value="7D">7 Days</MenuItem>
-                                                <MenuItem value="30D">30 Days</MenuItem>
-                                            </Select>
-                                        </Stack>
-                                    </Stack>
-                                    <Timeline activities={filteredActivities} />
-                                </Stack>
-                            )}
+                                            </SelectContent>
+                                        </Select>
+                                        <Select
+                                            value={activityTimeFilter}
+                                            onValueChange={(value) => setActivityTimeFilter(value as ActivityTimeFilter)}
+                                        >
+                                            <SelectTrigger className="w-[120px] bg-background">
+                                                <SelectValue />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                <SelectItem value="ALL">All Time</SelectItem>
+                                                <SelectItem value="TODAY">Today</SelectItem>
+                                                <SelectItem value="7D">7 Days</SelectItem>
+                                                <SelectItem value="30D">30 Days</SelectItem>
+                                            </SelectContent>
+                                        </Select>
+                                    </div>
+                                </div>
+                                <Timeline activities={filteredActivities} />
+                            </div>
+                        )}
 
-                            {tabValue === "details" && (
-                                <Grid container spacing={1.25}>
-                                    <Grid size={{ xs: 12, md: 6 }}>
-                                        <DetailPanel title="Deal Summary">
-                                            <PropertyRow label="Title">{opportunity.title}</PropertyRow>
-                                            <PropertyRow label="Type">{opportunity.opportunityType?.name || "—"}</PropertyRow>
-                                            <PropertyRow label="Stage">{currentStage?.name || "—"}</PropertyRow>
-                                            <PropertyRow label="Value">{formatCurrency(opportunity.amount || 0)}</PropertyRow>
-                                        </DetailPanel>
-                                    </Grid>
-                                    <Grid size={{ xs: 12, md: 6 }}>
-                                        <DetailPanel title="Commercials">
-                                            <PropertyRow label="Priority">{opportunity.priority || "—"}</PropertyRow>
-                                            <PropertyRow label="Probability">{`${currentStage?.probability ?? 0}%`}</PropertyRow>
-                                            <PropertyRow label="Expected Close">
-                                                {opportunity.expectedCloseDate ? formatWorkspaceDateTime(opportunity.expectedCloseDate) : "—"}
-                                            </PropertyRow>
-                                            <PropertyRow label="Created">{formatWorkspaceDateTime(opportunity.createdAt)}</PropertyRow>
-                                        </DetailPanel>
-                                    </Grid>
-                                </Grid>
-                            )}
+                        {tabValue === "details" && (
+                            <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                                <DetailPanel title="Deal Summary">
+                                    <PropertyRow label="Title">{opportunity.title}</PropertyRow>
+                                    <PropertyRow label="Type">{opportunity.opportunityType?.name || "—"}</PropertyRow>
+                                    <PropertyRow label="Stage">{currentStage?.name || "—"}</PropertyRow>
+                                    <PropertyRow label="Value">{formatCurrency(opportunity.amount || 0)}</PropertyRow>
+                                </DetailPanel>
+                                <DetailPanel title="Commercials">
+                                    <PropertyRow label="Priority">{opportunity.priority || "—"}</PropertyRow>
+                                    <PropertyRow label="Probability">{`${currentStage?.probability ?? 0}%`}</PropertyRow>
+                                    <PropertyRow label="Expected Close">
+                                        {opportunity.expectedCloseDate ? formatWorkspaceDateTime(opportunity.expectedCloseDate) : "—"}
+                                    </PropertyRow>
+                                    <PropertyRow label="Created">{formatWorkspaceDateTime(opportunity.createdAt)}</PropertyRow>
+                                </DetailPanel>
+                            </div>
+                        )}
 
-                            {tabValue === "stage" && <OpportunityStageHistoryList history={history} />}
+                        {tabValue === "scoring" && (
+                            <PredictiveScorePanel recordType="OPPORTUNITY" recordId={opportunity.id} score={opportunity.predictiveScore} />
+                        )}
 
+                        {tabValue === "stage" && <OpportunityStageHistoryList history={history} />}
 
+                        {tabValue === "tasks" && (
+                            <div className="rounded-lg bg-surface-container-lowest p-2.5">
+                                <RelatedTasksPanel
+                                    leadId={opportunity.leadId}
+                                    opportunityId={opportunity.id}
+                                    currentUserId={user?.id}
+                                />
+                            </div>
+                        )}
 
-                            {tabValue === "notes" && (
-                                <Paper sx={{ p: 1.25, borderRadius: "10px", bgcolor: "surfaceContainerLowest" }}>
-                                    <NotesPanel entityType="opportunity" entityId={opportunity.id} currentUserId={user?.id} />
-                                </Paper>
-                            )}
+                        {tabValue === "notes" && (
+                            <div className="rounded-lg bg-surface-container-lowest p-2.5">
+                                <NotesPanel entityType="opportunity" entityId={opportunity.id} currentUserId={user?.id} />
+                            </div>
+                        )}
 
-                            {tabValue === "audit" && (
-                                <Paper sx={{ p: 1.125, borderRadius: "10px", bgcolor: "surfaceContainerLowest" }}>
-                                    <RecordHistory entityType="OPPORTUNITY" entityId={opportunity.id} />
-                                </Paper>
-                            )}
-                        </Box>
-                    </Card>
-                </Grid>
-            </Grid>
+                        {tabValue === "audit" && (
+                            <div className="rounded-lg bg-surface-container-lowest p-2.5">
+                                <RecordHistory entityType="OPPORTUNITY" entityId={opportunity.id} />
+                            </div>
+                        )}
+                    </div>
+                </div>
+            </div>
 
             <EditOpportunityDialog opportunity={opportunity} open={showEditDialog} onOpenChange={setShowEditDialog} onSuccess={loadData} />
-        </Box>
+        </motion.div>
     );
 }
 
 function MetricCell({ label, value }: { label: string; value: string }) {
     return (
-        <Grid size={{ xs: 4 }}>
-            <Box
-                sx={{
-                    py: 1.125,
-                    px: 0.875,
-                    textAlign: "center",
-                    bgcolor: alpha("#000", 0.18),
-                    borderTop: "1px solid",
-                    borderColor: alpha("#fff", 0.08),
-                }}
-            >
-                <Typography variant="subtitle1" sx={{ color: "common.white", fontWeight: 800, lineHeight: 1.1 }}>
-                    {value}
-                </Typography>
-                <Typography variant="caption" sx={{ color: alpha("#fff", 0.8) }}>
-                    {label}
-                </Typography>
-            </Box>
-        </Grid>
+        <div className="border-t border-white/10 px-2 py-2.5 text-center">
+            <p className="text-base leading-tight font-extrabold text-white">{value}</p>
+            <p className="text-xs text-white/80">{label}</p>
+        </div>
     );
 }
 
 function DetailPanel({ title, children }: { title: string; children: React.ReactNode }) {
     return (
-        <Card sx={{ borderRadius: "10px", border: "1px solid", borderColor: "divider" }}>
-            <Box sx={{ px: 1.5, py: 1.125, borderBottom: "1px solid", borderColor: "divider" }}>
-                <Typography variant="subtitle1" sx={{ fontWeight: 800 }}>
-                    {title}
-                </Typography>
-            </Box>
-            <Stack divider={<Divider flexItem />}>{children}</Stack>
-        </Card>
+        <div className="rounded-lg border border-border bg-card">
+            <div className="border-b border-border px-3 py-2.5">
+                <h4 className="text-sm font-extrabold">{title}</h4>
+            </div>
+            <div className="divide-y divide-border">{children}</div>
+        </div>
     );
 }
 
 function PropertyRow({ label, children }: { label: string; children: React.ReactNode }) {
     return (
-        <Stack direction="row" justifyContent="space-between" spacing={2} sx={{ px: 1.5, py: 1.05 }}>
-            <Typography variant="body2" color="text.secondary">
-                {label}
-            </Typography>
-            <Box sx={{ fontWeight: 700, textAlign: "right", fontSize: '0.875rem' }}>
-                {children}
-            </Box>
-        </Stack>
+        <div className="flex items-center justify-between gap-3 px-3 py-2.5">
+            <span className="text-sm text-muted-foreground">{label}</span>
+            <span className="text-right text-sm font-bold">{children}</span>
+        </div>
     );
 }
 
 function WorkspaceTab({ label, active, onClick }: { label: string; active: boolean; onClick: () => void }) {
     return (
-        <Button
+        <button
+            type="button"
             onClick={onClick}
-            sx={{
-                borderRadius: "8px",
-                px: 1.25,
-                py: 0.7,
-                minHeight: 34,
-                whiteSpace: "nowrap",
-                bgcolor: active ? "primary.main" : "transparent",
-                color: active ? "primary.contrastText" : "text.secondary",
-                fontWeight: active ? 800 : 600,
-                fontSize: "0.82rem",
-                "&:hover": {
-                    bgcolor: active ? "primary.main" : "action.hover",
-                },
-            }}
+            className={cn(
+                "min-h-[34px] shrink-0 rounded-lg px-2.5 py-1.5 text-[0.82rem] font-semibold whitespace-nowrap transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                active ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-accent"
+            )}
         >
             {label}
-        </Button>
+        </button>
     );
 }

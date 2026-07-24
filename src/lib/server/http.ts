@@ -12,6 +12,11 @@ export function forbidden(message = "Forbidden") {
   return NextResponse.json({ message }, { status: 403 });
 }
 
+export function tooManyRequests(message = "Too many requests", retryAfterSeconds?: number) {
+  const headers = retryAfterSeconds !== undefined ? { "Retry-After": String(retryAfterSeconds) } : undefined;
+  return NextResponse.json({ message }, { status: 429, headers });
+}
+
 function getErrorDetail(error: unknown) {
   if (error instanceof Error) {
     return {

@@ -3,156 +3,140 @@
 import { usePathname } from "next/navigation";
 import Link from "next/link";
 import {
-    List,
-    ListItem,
-    ListItemButton,
-    ListItemText,
-    ListItemIcon,
-    Typography,
-    useTheme,
-    alpha,
-} from "@mui/material";
-import {
-    Settings as GeneralIcon,
-    Groups as TeamsIcon,
-    Security as PermissionsIcon,
-    Tune as IntegrationsIcon,
-    BackupTable as FieldsIcon,
-    FormatListBulleted as PipelinesIcon,
-    Rule as RulesIcon,
-    GroupWork as GroupsSettingsIcon,
-    People as UsersIcon,
-    Work as OpportunityTypesIcon,
-    AssignmentTurnedIn as ActivityTypesIcon,
-    AutoFixHigh as ScoringIcon,
-} from "@mui/icons-material";
+    Settings,
+    UsersRound,
+    Users,
+    Shield,
+    Handshake,
+    Wallet,
+    Percent,
+    Trophy,
+    Briefcase,
+    ClipboardCheck,
+    Table2,
+    Layers,
+    Workflow,
+    Sparkles,
+    SlidersHorizontal,
+} from "lucide-react";
+import { cn } from "@/lib/utils";
 
 const sidebarNavItems = [
     {
         title: "General",
         href: "/dashboard/settings",
-        icon: GeneralIcon,
+        icon: Settings,
     },
     {
         title: "Teams",
         href: "/dashboard/settings/teams",
-        icon: TeamsIcon,
+        icon: UsersRound,
     },
     {
         title: "Users",
         href: "/dashboard/settings/users",
-        icon: UsersIcon,
+        icon: Users,
     },
     {
         title: "Roles & Permissions",
         href: "/dashboard/settings/roles",
-        icon: PermissionsIcon,
+        icon: Shield,
     },
     {
-        title: "Pipelines",
-        href: "/dashboard/settings/pipelines",
-        icon: PipelinesIcon,
+        title: "Partners",
+        href: "/dashboard/settings/partners",
+        icon: Handshake,
+    },
+    {
+        title: "Payout Cycles",
+        href: "/dashboard/settings/payout-cycles",
+        icon: Wallet,
+    },
+    {
+        title: "Commission Rules",
+        href: "/dashboard/settings/commission-rules",
+        icon: Percent,
+    },
+    {
+        title: "Gamification",
+        href: "/dashboard/settings/gamification",
+        icon: Trophy,
     },
     {
         title: "Opportunity Types",
         href: "/dashboard/settings/opportunity-types",
-        icon: OpportunityTypesIcon,
+        icon: Briefcase,
     },
     {
         title: "Activity Types",
         href: "/dashboard/settings/activity-types",
-        icon: ActivityTypesIcon,
+        icon: ClipboardCheck,
     },
     {
         title: "Custom Fields",
         href: "/dashboard/settings/custom-fields",
-        icon: FieldsIcon,
+        icon: Table2,
     },
     {
         title: "Sales Groups",
         href: "/dashboard/settings/sales-groups",
-        icon: GroupsSettingsIcon,
+        icon: Layers,
     },
     {
         title: "Assignment Rules",
         href: "/dashboard/settings/assignment-rules",
-        icon: RulesIcon,
+        icon: Workflow,
     },
     {
         title: "Lead Scoring",
         href: "/dashboard/settings/lead-scoring",
-        icon: ScoringIcon,
+        icon: Sparkles,
     },
     {
         title: "Security",
         href: "/dashboard/settings/security",
-        icon: PermissionsIcon,
+        icon: Shield,
     },
     {
         title: "Permission Templates",
         href: "/dashboard/settings/permission-templates",
-        icon: PermissionsIcon,
+        icon: Shield,
     },
     {
         title: "Integrations",
         href: "/dashboard/settings/integrations",
-        icon: IntegrationsIcon,
+        icon: SlidersHorizontal,
     },
 ];
 
 export function SettingsSidebar() {
     const pathname = usePathname();
-    const theme = useTheme();
 
     return (
-        <List component="nav" sx={{ p: 0, maxHeight: { lg: 'calc(100vh - 210px)' }, overflowY: 'auto', pr: 0.5, pb: 8 }}>
-            {sidebarNavItems.map((item) => {
-                const Icon = item.icon;
-                const active = pathname === item.href;
+        <nav className="overflow-y-auto pr-1 pb-8 lg:max-h-[calc(100vh-210px)]">
+            <ul className="flex flex-col gap-[3px]">
+                {sidebarNavItems.map((item) => {
+                    const Icon = item.icon;
+                    const active = pathname === item.href;
 
-                return (
-                    <ListItem key={item.href} disablePadding sx={{ mb: 0.35 }}>
-                        <ListItemButton
-                            component={Link}
-                            href={item.href}
-                            selected={active}
-                            sx={{
-                                borderRadius: '12px',
-                                p: '8px 12px',
-                                color: active ? 'primary.main' : 'text.secondary',
-                                bgcolor: active ? alpha(theme.palette.primary.main, 0.08) : 'transparent',
-                                transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
-                                '&:hover': {
-                                    bgcolor: active ? alpha(theme.palette.primary.main, 0.12) : alpha(theme.palette.action.hover, 0.04),
-                                    transform: 'translateX(4px)',
-                                },
-                                '&.Mui-selected': {
-                                    bgcolor: alpha(theme.palette.primary.main, 0.1),
-                                    '&:hover': {
-                                        bgcolor: alpha(theme.palette.primary.main, 0.14),
-                                    },
-                                },
-                            }}
-                        >
-                            <ListItemIcon sx={{
-                                minWidth: 34,
-                                color: 'inherit',
-                                opacity: active ? 1 : 0.7
-                            }}>
-                                <Icon sx={{ fontSize: 19 }} />
-                            </ListItemIcon>
-                            <ListItemText
-                                primary={item.title}
-                                primaryTypographyProps={{
-                                    variant: 'body2',
-                                    fontWeight: active ? 700 : 500,
-                                    letterSpacing: active ? 0.2 : 0,
-                                }}
-                            />
-                        </ListItemButton>
-                    </ListItem>
-                );
-            })}
-        </List>
+                    return (
+                        <li key={item.href}>
+                            <Link
+                                href={item.href}
+                                className={cn(
+                                    "flex items-center gap-2.5 rounded-xl px-3 py-2 text-sm transition-all",
+                                    active
+                                        ? "bg-primary/10 font-bold text-primary"
+                                        : "font-medium text-muted-foreground hover:translate-x-1 hover:bg-accent hover:text-accent-foreground"
+                                )}
+                            >
+                                <Icon className={cn("size-[19px] shrink-0", active ? "opacity-100" : "opacity-70")} />
+                                <span className="truncate">{item.title}</span>
+                            </Link>
+                        </li>
+                    );
+                })}
+            </ul>
+        </nav>
     );
 }

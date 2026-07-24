@@ -2,31 +2,33 @@
 
 import { useEffect, useState, useMemo, useCallback } from "react";
 import {
-    Box,
-    Button,
-    Stack,
-    Typography,
-    Dialog,
-    DialogTitle,
-    DialogContent,
-    IconButton,
-    CircularProgress,
-    TextField,
-    MenuItem,
-    FormControlLabel,
-    Checkbox,
-    Radio,
-    RadioGroup,
-    Menu,
-    ListItemIcon,
-    ListItemText,
-} from "@mui/material";
-import CloseIcon from "@mui/icons-material/Close";
-import CheckCircleIcon from "@mui/icons-material/CheckCircle";
-import DescriptionIcon from "@mui/icons-material/Description";
-import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown";
+    CheckCircle2 as CheckCircleIcon,
+    ChevronDown as KeyboardArrowDownIcon,
+    FileText as DescriptionIcon,
+    Loader2,
+} from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import { toast } from "sonner";
+import { StandardDialog } from "@/components/common/standard-dialog";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from "@/components/ui/select";
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 type ContextualFormsPanelProps = {
     placement: "LEAD_DETAIL" | "OPPORTUNITY_DETAIL" | "ACTIVITY_DETAIL" | "LEAD_CREATE" | "OPPORTUNITY_CREATE";
@@ -42,6 +44,30 @@ type ContextualFormsPanelProps = {
     showEmpty?: boolean;
 };
 
+const formsCache = new Map<string, any[]>();
+const formsRequests = new Map<string, Promise<any[]>>();
+
+function loadAvailableForms(placement: ContextualFormsPanelProps["placement"]) {
+    const key = placement;
+    const cached = formsCache.get(key);
+    if (cached) return Promise.resolve(cached);
+
+    const pending = formsRequests.get(key);
+    if (pending) return pending;
+
+    const request = apiFetch(`/forms/available?placement=${encodeURIComponent(placement)}`)
+        .then((data: any) => {
+            const forms = Array.isArray(data) ? data : [];
+            formsCache.set(key, forms);
+            return forms;
+        })
+        .finally(() => {
+            formsRequests.delete(key);
+        });
+    formsRequests.set(key, request);
+    return request;
+}
+
 /**
  * Renders a "Forms" dropdown button.  Clicking shows available forms.
  * Picking a form opens a dialog with entity data prefilled.
@@ -50,16 +76,17 @@ type ContextualFormsPanelProps = {
 export function ContextualFormsPanel({ placement, context, entityData, onSaved, showEmpty = false }: ContextualFormsPanelProps) {
     const [forms, setForms] = useState<any[]>([]);
     const [openFormId, setOpenFormId] = useState<string | null>(null);
-    const [anchorEl, setAnchorEl] = useState<HTMLElement | null>(null);
-    const menuOpen = Boolean(anchorEl);
 
     useEffect(() => {
-        apiFetch(`/forms/available?placement=${encodeURIComponent(placement)}`)
-            .then((data: any) => {
-                const all = Array.isArray(data) ? data : [];
-                setForms(all);
+        let mounted = true;
+        loadAvailableForms(placement)
+            .then((all) => {
+                if (mounted) setForms(all);
             })
             .catch(() => setForms([]));
+        return () => {
+            mounted = false;
+        };
     }, [placement]);
 
     const availableForms = useMemo(() => {
@@ -71,70 +98,43 @@ export function ContextualFormsPanel({ placement, context, entityData, onSaved, 
     if (availableForms.length === 0) {
         if (!showEmpty) return null;
         return (
-            <Typography variant="caption" color="text.secondary">
+            <p className="text-xs text-muted-foreground">
                 No forms are enabled for this CRM location.
-            </Typography>
+            </p>
         );
     }
 
     return (
         <>
-            <Button
-                color="secondary"
-                startIcon={<DescriptionIcon />}
-                endIcon={<KeyboardArrowDownIcon />}
-                onClick={(e) => setAnchorEl(e.currentTarget)}
-                sx={{
-                    borderRadius: "10px",
-                    px: 1.75,
-                    bgcolor: "secondaryContainer",
-                    color: "onSecondaryContainer",
-                    minHeight: 36,
-                }}
-            >
-                Forms
-            </Button>
-
-            <Menu
-                anchorEl={anchorEl}
-                open={menuOpen}
-                onClose={() => setAnchorEl(null)}
-                anchorOrigin={{ vertical: "bottom", horizontal: "left" }}
-                transformOrigin={{ vertical: "top", horizontal: "left" }}
-                slotProps={{
-                    paper: {
-                        sx: {
-                            borderRadius: "12px",
-                            minWidth: 200,
-                            mt: 0.5,
-                        },
-                    },
-                }}
-            >
-                {availableForms.map((form) => {
-                    const rule = placementRuleFor(form, placement);
-                    return (
-                    <MenuItem
-                        key={form.id}
-                        onClick={() => {
-                            setOpenFormId(form.id);
-                            setAnchorEl(null);
-                        }}
-                        sx={{ py: 1 }}
+            <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                    <Button
+                        variant="secondary"
+                        className="min-h-9 rounded-[10px] px-3.5"
                     >
-                        <ListItemIcon>
-                            <DescriptionIcon fontSize="small" />
-                        </ListItemIcon>
-                        <ListItemText
-                            primary={rule?.label || form.name}
-                            secondary={rule?.label ? form.name : undefined}
-                            primaryTypographyProps={{ fontWeight: 600, fontSize: "0.875rem" }}
-                            secondaryTypographyProps={{ fontSize: "0.75rem" }}
-                        />
-                    </MenuItem>
-                    );
-                })}
-            </Menu>
+                        <DescriptionIcon className="size-4" />
+                        Forms
+                        <KeyboardArrowDownIcon className="size-4" />
+                    </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start" className="w-52">
+                    {availableForms.map((form) => {
+                        const rule = placementRuleFor(form, placement);
+                        return (
+                            <DropdownMenuItem
+                                key={form.id}
+                                onClick={() => setOpenFormId(form.id)}
+                                className="flex-col items-start gap-0 py-2"
+                            >
+                                <span className="text-sm font-semibold">{rule?.label || form.name}</span>
+                                {rule?.label && (
+                                    <span className="text-xs text-muted-foreground">{form.name}</span>
+                                )}
+                            </DropdownMenuItem>
+                        );
+                    })}
+                </DropdownMenuContent>
+            </DropdownMenu>
 
             {openFormId && (
                 <FormDialog
@@ -232,63 +232,38 @@ function FormDialog({
     }, [form]);
 
     return (
-        <Dialog
+        <StandardDialog
             open
             onClose={onClose}
+            title={form?.name || "Form"}
+            subtitle={form?.description || undefined}
             maxWidth="sm"
-            fullWidth
-            PaperProps={{
-                sx: {
-                    borderRadius: "16px",
-                    maxHeight: "85vh",
-                },
-            }}
         >
-            <DialogTitle sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", pb: 0.5 }}>
-                <Box>
-                    <Typography variant="h6" fontWeight={700}>
-                        {form?.name || "Form"}
-                    </Typography>
-                    {form?.description && (
-                        <Typography variant="caption" color="text.secondary">
-                            {form.description}
-                        </Typography>
-                    )}
-                </Box>
-                <IconButton onClick={onClose} size="small">
-                    <CloseIcon fontSize="small" />
-                </IconButton>
-            </DialogTitle>
-
-            <DialogContent dividers sx={{ pt: 2 }}>
-                {loading ? (
-                    <Box sx={{ display: "flex", justifyContent: "center", py: 6 }}>
-                        <CircularProgress size={32} />
-                    </Box>
-                ) : error ? (
-                    <Typography color="error" textAlign="center" py={4}>
-                        {error}
-                    </Typography>
-                ) : configFields.length > 0 ? (
-                    <FormRenderer
-                        formId={formId}
-                        fields={configFields}
-                        context={context}
-                        entityData={entityData}
-                        placement={placement}
-                        submitButtonText={form?.config?.submitButtonText}
-                        onSuccess={() => {
-                            onSaved?.();
-                            onClose();
-                        }}
-                    />
-                ) : (
-                    <Typography color="text.secondary" textAlign="center" py={4}>
-                        This form has no configured fields.
-                    </Typography>
-                )}
-            </DialogContent>
-        </Dialog>
+            {loading ? (
+                <div className="flex justify-center py-12">
+                    <Loader2 className="size-6 animate-spin text-primary" />
+                </div>
+            ) : error ? (
+                <p className="py-8 text-center text-destructive">{error}</p>
+            ) : configFields.length > 0 ? (
+                <FormRenderer
+                    formId={formId}
+                    fields={configFields}
+                    context={context}
+                    entityData={entityData}
+                    placement={placement}
+                    submitButtonText={form?.config?.submitButtonText}
+                    onSuccess={() => {
+                        onSaved?.();
+                        onClose();
+                    }}
+                />
+            ) : (
+                <p className="py-8 text-center text-muted-foreground">
+                    This form has no configured fields.
+                </p>
+            )}
+        </StandardDialog>
     );
 }
 
@@ -412,7 +387,7 @@ function FormRenderer({
                     const parts = mappingStr.split('.');
                     const entityKey = parts.pop() || "";
                     const modulePrefix = parts.length > 0 ? parts[0].toLowerCase() : "";
-                    
+
                     const source = modulePrefix || (f.sourceModule ? f.sourceModule.toLowerCase() : "");
 
                     publicPayload[f.mapping || f.label || f.id] = formData[f.id];
@@ -434,7 +409,7 @@ function FormRenderer({
             });
 
             const promises = [];
-            
+
             if (Object.keys(leadPayload).length > 0 && context.leadId) {
                 promises.push(
                     apiFetch(`/leads/${context.leadId}`, {
@@ -485,15 +460,13 @@ function FormRenderer({
 
     if (submitted) {
         return (
-            <Box sx={{ textAlign: "center", py: 6 }}>
-                <CheckCircleIcon sx={{ fontSize: 56, color: "success.main", mb: 2 }} />
-                <Typography variant="h6" fontWeight={700} gutterBottom>
-                    Saved!
-                </Typography>
-                <Typography color="text.secondary">
+            <div className="py-10 text-center">
+                <CheckCircleIcon className="mx-auto mb-3 size-12 text-primary" />
+                <h3 className="mb-1 text-lg font-bold">Saved!</h3>
+                <p className="text-muted-foreground">
                     Data has been updated successfully.
-                </Typography>
-            </Box>
+                </p>
+            </div>
         );
     }
 
@@ -506,153 +479,137 @@ function FormRenderer({
     return (
         <form onSubmit={handleSubmit}>
             {Object.keys(formData).length > 0 && (
-                <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 1.5, px: 1.25, py: 0.75, border: "1px solid", borderColor: "divider", borderRadius: 1.5, bgcolor: "background.default" }}>
-                    <Typography variant="caption" color="text.secondary">Draft is saved automatically on this device.</Typography>
-                    <Button type="button" size="small" onClick={clearDraft}>Clear draft</Button>
-                </Stack>
+                <div className="mb-3 flex items-center justify-between rounded-lg border bg-muted/30 px-2.5 py-1.5">
+                    <span className="text-xs text-muted-foreground">Draft is saved automatically on this device.</span>
+                    <Button type="button" size="sm" variant="ghost" onClick={clearDraft}>Clear draft</Button>
+                </div>
             )}
-            <Box
-                sx={{
-                    display: "grid",
-                    gridTemplateColumns: { xs: "1fr", sm: "repeat(2, minmax(0, 1fr))" },
-                    gap: 1.5,
-                }}
-            >
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 {visibleFields.map((field) => (
-                    <Box key={field.id} sx={{ gridColumn: field.type === "TEXTAREA" ? "1 / -1" : undefined }}>
+                    <div
+                        key={field.id}
+                        className={field.type === "TEXTAREA" ? "col-span-1 sm:col-span-2" : "col-span-1"}
+                    >
                         {field.type === "HIDDEN" ? (
                             <input type="hidden" value={formData[field.id] || ""} readOnly />
                         ) : field.type === "TEXTAREA" ? (
-                            <TextField
-                                label={field.label}
-                                placeholder={field.placeholder}
-                                value={formData[field.id] || ""}
-                                onChange={(e) => handleChange(field.id, e.target.value)}
-                                required={field.required}
-                                fullWidth
-                                size="small"
-                                multiline
-                                rows={3}
-                                helperText={field.helpText}
-                            />
+                            <div className="space-y-1.5">
+                                <Label htmlFor={`ctx-field-${field.id}`}>{field.label}{field.required && " *"}</Label>
+                                <Textarea
+                                    id={`ctx-field-${field.id}`}
+                                    placeholder={field.placeholder}
+                                    value={formData[field.id] || ""}
+                                    onChange={(e) => handleChange(field.id, e.target.value)}
+                                    required={field.required}
+                                    rows={3}
+                                />
+                                {field.helpText && (
+                                    <p className="text-xs text-muted-foreground">{field.helpText}</p>
+                                )}
+                            </div>
                         ) : field.type === "SELECT" ? (
-                            <TextField
-                                select
-                                label={field.label}
-                                value={formData[field.id] || ""}
-                                onChange={(e) => handleChange(field.id, e.target.value)}
-                                required={field.required}
-                                fullWidth
-                                size="small"
-                                helperText={field.helpText}
-                            >
-                                {field.options?.map((opt: string) => (
-                                    <MenuItem key={opt} value={opt}>
-                                        {opt}
-                                    </MenuItem>
-                                ))}
-                            </TextField>
+                            <div className="space-y-1.5">
+                                <Label htmlFor={`ctx-field-${field.id}`}>{field.label}{field.required && " *"}</Label>
+                                <Select value={formData[field.id] || undefined} onValueChange={(v) => handleChange(field.id, v)}>
+                                    <SelectTrigger id={`ctx-field-${field.id}`} className="w-full">
+                                        <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        {field.options?.map((opt: string) => (
+                                            <SelectItem key={opt} value={opt}>
+                                                {opt}
+                                            </SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                                {field.helpText && (
+                                    <p className="text-xs text-muted-foreground">{field.helpText}</p>
+                                )}
+                            </div>
                         ) : field.type === "CHECKBOX" ? (
-                            <Box>
-                                <Typography variant="body2" fontWeight={600} sx={{ mb: 0.5 }}>
+                            <div className="space-y-1.5">
+                                <p className="text-sm font-semibold">
                                     {field.label}
-                                    {field.required && <Box component="span" sx={{ color: "error.main", ml: 0.5 }}>*</Box>}
-                                </Typography>
-                                {field.options?.map((opt: string) => (
-                                    <FormControlLabel
-                                        key={opt}
-                                        control={
+                                    {field.required && <span className="ml-0.5 text-destructive">*</span>}
+                                </p>
+                                <div className="space-y-1.5">
+                                    {field.options?.map((opt: string) => (
+                                        <label key={opt} className="flex items-center gap-2 text-sm">
                                             <Checkbox
-                                                size="small"
                                                 checked={(formData[field.id] || []).includes(opt)}
-                                                onChange={(e) => {
+                                                onCheckedChange={(checked) => {
                                                     const current = formData[field.id] || [];
                                                     handleChange(
                                                         field.id,
-                                                        e.target.checked
+                                                        checked
                                                             ? [...current, opt]
                                                             : current.filter((v: string) => v !== opt)
                                                     );
                                                 }}
                                             />
-                                        }
-                                        label={opt}
-                                    />
-                                ))}
+                                            {opt}
+                                        </label>
+                                    ))}
+                                </div>
                                 {field.helpText && (
-                                    <Typography variant="caption" color="text.secondary">
-                                        {field.helpText}
-                                    </Typography>
+                                    <p className="text-xs text-muted-foreground">{field.helpText}</p>
                                 )}
-                            </Box>
+                            </div>
                         ) : field.type === "RADIO" ? (
-                            <Box>
-                                <Typography variant="body2" fontWeight={600} sx={{ mb: 0.5 }}>
+                            <div className="space-y-1.5">
+                                <p className="text-sm font-semibold">
                                     {field.label}
-                                    {field.required && <Box component="span" sx={{ color: "error.main", ml: 0.5 }}>*</Box>}
-                                </Typography>
+                                    {field.required && <span className="ml-0.5 text-destructive">*</span>}
+                                </p>
                                 <RadioGroup
                                     value={formData[field.id] || ""}
-                                    onChange={(e) => handleChange(field.id, e.target.value)}
+                                    onValueChange={(v) => handleChange(field.id, v)}
                                 >
                                     {field.options?.map((opt: string) => (
-                                        <FormControlLabel
-                                            key={opt}
-                                            value={opt}
-                                            control={<Radio size="small" />}
-                                            label={opt}
-                                        />
+                                        <label key={opt} className="flex items-center gap-2 text-sm">
+                                            <RadioGroupItem value={opt} />
+                                            {opt}
+                                        </label>
                                     ))}
                                 </RadioGroup>
-                            </Box>
+                            </div>
                         ) : (
-                            <TextField
-                                label={field.label}
-                                type={
-                                    field.type === "NUMBER" ? "number"
-                                        : field.type === "EMAIL" ? "email"
-                                            : field.type === "DATE" ? "date"
-                                                : "text"
-                                }
-                                placeholder={field.placeholder}
-                                value={formData[field.id] || ""}
-                                onChange={(e) => handleChange(field.id, e.target.value)}
-                                required={field.required}
-                                fullWidth
-                                size="small"
-                                helperText={field.helpText}
-                                slotProps={{
-                                    inputLabel: field.type === "DATE" ? { shrink: true } : undefined,
-                                }}
-                            />
+                            <div className="space-y-1.5">
+                                <Label htmlFor={`ctx-field-${field.id}`}>{field.label}{field.required && " *"}</Label>
+                                <Input
+                                    id={`ctx-field-${field.id}`}
+                                    type={
+                                        field.type === "NUMBER" ? "number"
+                                            : field.type === "EMAIL" ? "email"
+                                                : field.type === "DATE" ? "date"
+                                                    : "text"
+                                    }
+                                    placeholder={field.placeholder}
+                                    value={formData[field.id] || ""}
+                                    onChange={(e) => handleChange(field.id, e.target.value)}
+                                    required={field.required}
+                                />
+                                {field.helpText && (
+                                    <p className="text-xs text-muted-foreground">{field.helpText}</p>
+                                )}
+                            </div>
                         )}
-                    </Box>
+                    </div>
                 ))}
 
-                <Box sx={{ gridColumn: "1 / -1" }}>
-                    <Button
-                        type="submit"
-                        variant="contained"
-                        fullWidth
-                        disabled={submitting}
-                        sx={{
-                            py: 1.25,
-                            fontWeight: 700,
-                            borderRadius: "10px",
-                            mt: 1,
-                        }}
-                    >
+                <div className="col-span-1 mt-1 sm:col-span-2">
+                    <Button type="submit" disabled={submitting} className="w-full font-bold">
                         {submitting ? (
-                            <Stack direction="row" spacing={1} alignItems="center">
-                                <CircularProgress size={18} color="inherit" />
-                                <span>Saving…</span>
-                            </Stack>
+                            <>
+                                <Loader2 className="size-4 animate-spin" />
+                                Saving…
+                            </>
                         ) : (
                             "Save Changes"
                         )}
                     </Button>
-                </Box>
-            </Box>
+                </div>
+            </div>
         </form>
     );
 }

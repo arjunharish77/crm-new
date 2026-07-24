@@ -1,25 +1,17 @@
 "use client";
 
+import { Palette as PaletteIcon, Type as TypeIcon } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
 import {
-    Box,
-    Typography,
-    TextField,
     Select,
-    MenuItem,
-    FormControl,
-    InputLabel,
-    Input,
-    Stack,
-    Button,
-    ButtonGroup,
-    Paper,
-    useTheme,
-    alpha
-} from "@mui/material";
-import {
-    Palette as PaletteIcon,
-    TextFields as TypeIcon
-} from "@mui/icons-material";
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from "@/components/ui/select";
+import { Label } from "@/components/ui/label";
+import { cn } from "@/lib/utils";
 
 interface StyleEditorProps {
     values: {
@@ -44,8 +36,9 @@ const FONTS = [
     { value: "Courier New, monospace", label: "Monospace" },
 ];
 
+const RADII = ["0px", "4px", "8px", "16px", "99px"];
+
 export function StyleEditor({ values, onChange }: StyleEditorProps) {
-    const theme = useTheme();
     const updateCssVariable = (variable: string, value: string) => {
         let css = values.customCss || "";
         const rootRegex = /:root\s*{([^}]*)}/;
@@ -74,150 +67,120 @@ export function StyleEditor({ values, onChange }: StyleEditorProps) {
         return match ? match[1].trim() : "";
     };
 
+    const currentRadius = getCssVariable("--radius");
+
     return (
-        <Stack spacing={3}>
-            <FormControl fullWidth size="small">
-                <InputLabel>Theme Preset</InputLabel>
-                <Select
-                    value={values.theme}
-                    label="Theme Preset"
-                    onChange={(e) => onChange({ ...values, theme: e.target.value })}
-                >
-                    {THEMES.map(t => (
-                        <MenuItem key={t.value} value={t.value}>{t.label}</MenuItem>
-                    ))}
+        <div className="space-y-6">
+            <div className="space-y-1.5">
+                <Label>Theme Preset</Label>
+                <Select value={values.theme} onValueChange={(v) => onChange({ ...values, theme: v })}>
+                    <SelectTrigger className="w-full">
+                        <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                        {THEMES.map((t) => (
+                            <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
+                        ))}
+                    </SelectContent>
                 </Select>
-            </FormControl>
+            </div>
 
-            <Paper
-                elevation={0}
-                sx={{
-                    p: 3,
-                    borderRadius: '24px',
-                    bgcolor: alpha(theme.palette.primary.main, 0.02),
-                    border: `1px solid ${theme.palette.divider}`
-                }}
-            >
-                <Stack spacing={2.5}>
-                    <Typography variant="overline" sx={{ display: 'flex', alignItems: 'center', gap: 1, fontWeight: 700, color: 'text.secondary' }}>
-                        <PaletteIcon fontSize="small" /> Color Palette
-                    </Typography>
-                    <ColorInput
-                        label="Primary"
-                        variable="--primary"
-                        value={getCssVariable("--primary") || "#0f172a"}
-                        onChange={(v) => updateCssVariable("--primary", v)}
-                    />
-                    <ColorInput
-                        label="Background"
-                        variable="--background"
-                        value={getCssVariable("--background") || "#ffffff"}
-                        onChange={(v) => updateCssVariable("--background", v)}
-                    />
-                    <ColorInput
-                        label="Text"
-                        variable="--foreground"
-                        value={getCssVariable("--foreground") || "#020817"}
-                        onChange={(v) => updateCssVariable("--foreground", v)}
-                    />
-                </Stack>
-            </Paper>
+            <div className="space-y-3 rounded-3xl border bg-primary/[0.02] p-4">
+                <p className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wide text-muted-foreground">
+                    <PaletteIcon className="size-3.5" /> Color Palette
+                </p>
+                <ColorInput
+                    label="Primary"
+                    variable="--primary"
+                    value={getCssVariable("--primary") || "#0f172a"}
+                    onChange={(v) => updateCssVariable("--primary", v)}
+                />
+                <ColorInput
+                    label="Background"
+                    variable="--background"
+                    value={getCssVariable("--background") || "#ffffff"}
+                    onChange={(v) => updateCssVariable("--background", v)}
+                />
+                <ColorInput
+                    label="Text"
+                    variable="--foreground"
+                    value={getCssVariable("--foreground") || "#020817"}
+                    onChange={(v) => updateCssVariable("--foreground", v)}
+                />
+            </div>
 
-            <Paper
-                elevation={0}
-                sx={{
-                    p: 3,
-                    borderRadius: '24px',
-                    bgcolor: alpha(theme.palette.primary.main, 0.02),
-                    border: `1px solid ${theme.palette.divider}`
-                }}
-            >
-                <Stack spacing={2.5}>
-                    <Typography variant="overline" sx={{ display: 'flex', alignItems: 'center', gap: 1, fontWeight: 700, color: 'text.secondary' }}>
-                        <TypeIcon fontSize="small" /> Typography
-                    </Typography>
-                    <FormControl fullWidth size="small">
-                        <InputLabel>Font Family</InputLabel>
-                        <Select
-                            value={getCssVariable("--font-sans")}
-                            label="Font Family"
-                            onChange={(e) => updateCssVariable("--font-sans", e.target.value)}
-                            sx={{ borderRadius: '12px' }}
-                        >
-                            {FONTS.map(f => (
-                                <MenuItem key={f.value} value={f.value}>{f.label}</MenuItem>
+            <div className="space-y-3 rounded-3xl border bg-primary/[0.02] p-4">
+                <p className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wide text-muted-foreground">
+                    <TypeIcon className="size-3.5" /> Typography
+                </p>
+                <div className="space-y-1.5">
+                    <Label>Font Family</Label>
+                    <Select value={getCssVariable("--font-sans")} onValueChange={(v) => updateCssVariable("--font-sans", v)}>
+                        <SelectTrigger className="w-full">
+                            <SelectValue placeholder="Font Family" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            {FONTS.map((f) => (
+                                <SelectItem key={f.value} value={f.value}>{f.label}</SelectItem>
                             ))}
-                        </Select>
-                    </FormControl>
+                        </SelectContent>
+                    </Select>
+                </div>
 
-                    <Box>
-                        <Typography variant="caption" sx={{ fontWeight: 600, mb: 1, display: 'block' }}>Corner Smoothing</Typography>
-                        <ButtonGroup size="small" fullWidth sx={{ '& .MuiButton-root': { borderRadius: '12px', border: 'none' } }}>
-                            {["0px", "4px", "8px", "16px", "99px"].map((r) => (
-                                <Button
-                                    key={r}
-                                    variant={getCssVariable("--radius") === r ? "contained" : "outlined"}
-                                    onClick={() => updateCssVariable("--radius", r)}
-                                    sx={{
-                                        borderRadius: '12px !important',
-                                        mr: 1,
-                                        border: '1px solid !important',
-                                        borderColor: getCssVariable("--radius") === r ? 'primary.main' : 'divider'
-                                    }}
-                                >
-                                    {r === "99px" ? "Round" : r}
-                                </Button>
-                            ))}
-                        </ButtonGroup>
-                    </Box>
-                </Stack>
-            </Paper>
+                <div>
+                    <p className="mb-1 text-xs font-semibold">Corner Smoothing</p>
+                    <div className="grid grid-cols-5 gap-1">
+                        {RADII.map((r) => (
+                            <Button
+                                key={r}
+                                type="button"
+                                size="sm"
+                                variant={currentRadius === r ? "default" : "outline"}
+                                onClick={() => updateCssVariable("--radius", r)}
+                                className="px-1 text-xs"
+                            >
+                                {r === "99px" ? "Round" : r}
+                            </Button>
+                        ))}
+                    </div>
+                </div>
+            </div>
 
-            <TextField
-                label="Custom CSS"
-                multiline
-                rows={6}
-                value={values.customCss}
-                onChange={(e) => onChange({ ...values, customCss: e.target.value })}
-                placeholder=":root { --primary: blue; }"
-                InputProps={{ sx: { fontFamily: 'monospace', fontSize: 12 } }}
-            />
-        </Stack>
+            <div className="space-y-1.5">
+                <Label>Custom CSS</Label>
+                <Textarea
+                    rows={6}
+                    value={values.customCss}
+                    onChange={(e) => onChange({ ...values, customCss: e.target.value })}
+                    placeholder=":root { --primary: blue; }"
+                    className="font-mono text-xs"
+                />
+            </div>
+        </div>
     );
 }
 
 function ColorInput({ label, variable, value, onChange }: { label: string, variable: string, value: string, onChange: (val: string) => void }) {
+    const inputId = `color-${variable}`;
     return (
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <Typography variant="caption">{label}</Typography>
-            <Stack direction="row" spacing={1} alignItems="center">
-                <Box
-                    sx={{
-                        width: 24,
-                        height: 24,
-                        borderRadius: 1,
-                        bgcolor: value,
-                        border: '1px solid #ddd'
-                    }}
+        <div className="flex items-center justify-between">
+            <span className="text-xs">{label}</span>
+            <div className="flex items-center gap-2">
+                <div
+                    className={cn("h-6 w-6 rounded border")}
+                    style={{ backgroundColor: value }}
                 />
-                <Input
+                <input
                     type="color"
-                    disableUnderline
+                    id={inputId}
                     value={value}
                     onChange={(e) => onChange(e.target.value)}
-                    sx={{ p: 0, width: 0, height: 0, opacity: 0, overflow: 'hidden', position: 'absolute' }}
-                    id={`color-${variable}`}
+                    className="absolute h-0 w-0 overflow-hidden opacity-0"
                 />
-                <Button
-                    variant="outlined"
-                    size="small"
-                    component="label"
-                    htmlFor={`color-${variable}`}
-                    sx={{ minWidth: 80, p: 0.5, fontSize: 11, textTransform: 'none' }}
-                >
-                    {value}
+                <Button asChild variant="outline" size="sm" className="min-w-20 px-2 text-[11px] font-normal normal-case">
+                    <label htmlFor={inputId} className="cursor-pointer">{value}</label>
                 </Button>
-            </Stack>
-        </Box>
+            </div>
+        </div>
     );
 }

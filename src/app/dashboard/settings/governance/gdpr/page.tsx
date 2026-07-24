@@ -1,45 +1,27 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import {
-    Box,
-    Typography,
-    Card,
-    CardContent,
-    Stack,
-    TextField,
-    Button,
-    Table,
-    TableBody,
-    TableCell,
-    TableContainer,
-    TableHead,
-    TableRow,
-    Paper,
-    Chip,
-    Alert,
-    Dialog,
-    DialogTitle,
-    DialogContent,
-    DialogActions,
-    FormControl,
-    FormLabel,
-    RadioGroup,
-    FormControlLabel,
-    Radio,
-    Divider,
-    alpha
-} from '@mui/material';
-import {
-    Security as SecurityIcon,
-    Add as AddIcon,
-    GetApp as ExportIcon,
-    DeleteForever as DeleteIcon,
-    Info as InfoIcon
-} from '@mui/icons-material';
+import { ShieldCheck, Plus, Download, Trash2 } from 'lucide-react';
 import { apiFetch } from '@/lib/api';
 import { formatWorkspaceDate } from '@/lib/date-format';
 import { toast } from 'sonner';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Badge } from '@/components/ui/badge';
+import {
+    Table,
+    TableBody,
+    TableCell,
+    TableHead,
+    TableHeader,
+    TableRow,
+} from '@/components/ui/table';
+import { StandardDialog } from '@/components/common/standard-dialog';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+import { EmptyState } from '@/components/common/empty-state';
+import { TableSkeleton } from '@/components/common/skeletons';
+import { cn } from '@/lib/utils';
 
 interface GDPRRequest {
     id: string;
@@ -90,107 +72,137 @@ export default function GDPRPage() {
     };
 
     return (
-        <Box sx={{ p: 4 }}>
-            <Typography variant="h6" fontWeight="bold" gutterBottom>
-                GDPR & Data Privacy
-            </Typography>
-            <Typography color="text.secondary" sx={{ mb: 2 }}>
-                Manage Subject Access Requests (SARs) and "Right to be Forgotten" mandates.
-            </Typography>
+        <div className="p-8">
+            <h1 className="text-lg font-bold">GDPR & Data Privacy</h1>
+            <p className="mb-4 text-muted-foreground">
+                Manage Subject Access Requests (SARs) and &quot;Right to be Forgotten&quot; mandates.
+            </p>
 
-            <Stack spacing={4}>
-                <Alert severity="info" icon={<SecurityIcon />}>
-                    Initiating a "DELETE" request will permanently purge all leads, opportunities, and activities associated with that email across your entire tenant.
-                </Alert>
+            <div className="flex flex-col gap-4">
+                <div className="flex items-start gap-2.5 rounded-lg border border-primary/20 bg-primary/5 px-3 py-2.5 text-sm text-foreground">
+                    <ShieldCheck className="mt-0.5 size-4 shrink-0 text-primary" />
+                    <p>
+                        Initiating a &quot;DELETE&quot; request will permanently purge all leads, opportunities, and
+                        activities associated with that email across your entire tenant.
+                    </p>
+                </div>
 
-                <Box display="flex" justifyContent="space-between" alignItems="center">
-                    <Typography variant="h6">Request History</Typography>
-                    <Button
-                        variant="contained"
-                        startIcon={<AddIcon />}
-                        onClick={() => setIsAdding(true)}
-                    >
+                <div className="flex items-center justify-between">
+                    <h2 className="text-base font-semibold">Request History</h2>
+                    <Button onClick={() => setIsAdding(true)}>
+                        <Plus className="size-4" />
                         New Request
                     </Button>
-                </Box>
+                </div>
 
-                <TableContainer component={Paper} variant="outlined">
-                    <Table>
-                        <TableHead sx={{ bgcolor: (theme) => alpha(theme.palette.primary.main, 0.05) }}>
-                            <TableRow>
-                                <TableCell>Date</TableCell>
-                                <TableCell>Contact Email</TableCell>
-                                <TableCell>Type</TableCell>
-                                <TableCell>Status</TableCell>
-                                <TableCell>Actions</TableCell>
-                            </TableRow>
-                        </TableHead>
-                        <TableBody>
-                            {requests.length === 0 ? (
-                                <TableRow><TableCell colSpan={5} align="center" sx={{ py: 4 }}>No privacy requests found.</TableCell></TableRow>
-                            ) : requests.map((req) => (
-                                <TableRow key={req.id}>
-                                    <TableCell>{formatWorkspaceDate(req.createdAt)}</TableCell>
-                                    <TableCell>{req.contactEmail}</TableCell>
-                                    <TableCell>
-                                        <Chip
-                                            label={req.type}
-                                            size="small"
-                                            variant="outlined"
-                                            icon={req.type === 'EXPORT' ? <ExportIcon /> : <DeleteIcon />}
-                                        />
-                                    </TableCell>
-                                    <TableCell>
-                                        <Chip
-                                            label={req.status}
-                                            size="small"
-                                            color={req.status === 'COMPLETED' ? 'success' : 'warning'}
-                                        />
-                                    </TableCell>
-                                    <TableCell>
-                                        {req.status === 'COMPLETED' && req.type === 'EXPORT' && (
-                                            <Button size="small" startIcon={<ExportIcon />}>Download</Button>
-                                        )}
-                                    </TableCell>
+                {loading ? (
+                    <TableSkeleton rows={5} columns={5} hasToolbar={false} />
+                ) : requests.length === 0 ? (
+                    <div className="rounded-xl border">
+                        <EmptyState
+                            icon={<ShieldCheck className="size-10 text-muted-foreground opacity-50" />}
+                            title="No privacy requests found"
+                        />
+                    </div>
+                ) : (
+                    <div className="overflow-hidden rounded-xl border">
+                        <Table>
+                            <TableHeader>
+                                <TableRow className="bg-primary/5">
+                                    <TableHead>Date</TableHead>
+                                    <TableHead>Contact Email</TableHead>
+                                    <TableHead>Type</TableHead>
+                                    <TableHead>Status</TableHead>
+                                    <TableHead>Actions</TableHead>
                                 </TableRow>
-                            ))}
-                        </TableBody>
-                    </Table>
-                </TableContainer>
-            </Stack>
+                            </TableHeader>
+                            <TableBody>
+                                {requests.map((req) => (
+                                    <TableRow key={req.id}>
+                                        <TableCell>{formatWorkspaceDate(req.createdAt)}</TableCell>
+                                        <TableCell>{req.contactEmail}</TableCell>
+                                        <TableCell>
+                                            <Badge variant="outline" className="gap-1">
+                                                {req.type === 'EXPORT' ? (
+                                                    <Download className="size-3" />
+                                                ) : (
+                                                    <Trash2 className="size-3" />
+                                                )}
+                                                {req.type}
+                                            </Badge>
+                                        </TableCell>
+                                        <TableCell>
+                                            <Badge
+                                                variant="outline"
+                                                className={cn(
+                                                    req.status === 'COMPLETED'
+                                                        ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400'
+                                                        : 'border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-400'
+                                                )}
+                                            >
+                                                {req.status}
+                                            </Badge>
+                                        </TableCell>
+                                        <TableCell>
+                                            {req.status === 'COMPLETED' && req.type === 'EXPORT' && (
+                                                <Button variant="ghost" size="sm">
+                                                    <Download className="size-4" />
+                                                    Download
+                                                </Button>
+                                            )}
+                                        </TableCell>
+                                    </TableRow>
+                                ))}
+                            </TableBody>
+                        </Table>
+                    </div>
+                )}
+            </div>
 
-            <Dialog open={isAdding} onClose={() => setIsAdding(false)} maxWidth="sm" fullWidth>
-                <DialogTitle>New Privacy Request</DialogTitle>
-                <DialogContent>
-                    <Stack spacing={2} sx={{ mt: 1 }}>
-                        <Typography variant="body2" color="text.secondary">
-                            Enter the email of the person making the request. We will search all modules for matching records.
-                        </Typography>
-                        <TextField
-                            label="Contact Email"
-                            fullWidth
+            <StandardDialog
+                open={isAdding}
+                onClose={() => setIsAdding(false)}
+                title="New Privacy Request"
+                icon={<ShieldCheck className="size-4" />}
+                actions={
+                    <>
+                        <Button variant="outline" onClick={() => setIsAdding(false)}>Cancel</Button>
+                        <Button onClick={handleCreateRequest}>Initiate Request</Button>
+                    </>
+                }
+            >
+                <div className="flex flex-col gap-4 pb-1">
+                    <p className="text-sm text-muted-foreground">
+                        Enter the email of the person making the request. We will search all modules for matching records.
+                    </p>
+                    <div className="space-y-1.5">
+                        <Label htmlFor="gdpr-email">Contact Email</Label>
+                        <Input
+                            id="gdpr-email"
                             value={newRequest.contactEmail}
                             onChange={(e) => setNewRequest({ ...newRequest, contactEmail: e.target.value })}
                             placeholder="customer@example.com"
                         />
-                        <Divider />
-                        <FormControl>
-                            <FormLabel>Request Type</FormLabel>
-                            <RadioGroup
-                                value={newRequest.type}
-                                onChange={(e) => setNewRequest({ ...newRequest, type: e.target.value })}
-                            >
-                                <FormControlLabel value="EXPORT" control={<Radio />} label="Data Export (Subject Access Request)" />
-                                <FormControlLabel value="DELETE" control={<Radio />} label="Data Deletion (Right to be Forgotten)" />
-                            </RadioGroup>
-                        </FormControl>
-                    </Stack>
-                </DialogContent>
-                <DialogActions>
-                    <Button onClick={() => setIsAdding(false)}>Cancel</Button>
-                    <Button variant="contained" onClick={handleCreateRequest}>Initiate Request</Button>
-                </DialogActions>
-            </Dialog>
-        </Box>
+                    </div>
+                    <div className="h-px bg-border" />
+                    <div className="space-y-2">
+                        <Label>Request Type</Label>
+                        <RadioGroup
+                            value={newRequest.type}
+                            onValueChange={(value) => setNewRequest({ ...newRequest, type: value })}
+                        >
+                            <label className="flex items-center gap-2 text-sm">
+                                <RadioGroupItem value="EXPORT" id="gdpr-type-export" />
+                                Data Export (Subject Access Request)
+                            </label>
+                            <label className="flex items-center gap-2 text-sm">
+                                <RadioGroupItem value="DELETE" id="gdpr-type-delete" />
+                                Data Deletion (Right to be Forgotten)
+                            </label>
+                        </RadioGroup>
+                    </div>
+                </div>
+            </StandardDialog>
+        </div>
     );
 }

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { createLeadForTenant } from "@/lib/server/crm";
-import { createSupabaseAdminClient } from "@/lib/supabase/server";
-import { badRequest, serverError } from "@/lib/server/http";
+import { queryOne } from "@/lib/db/query";
+import { badRequest, forbidden, serverError } from "@/lib/server/http";
 
 type Params = {
   params: Promise<{ tenantId: string }>;
@@ -10,17 +10,19 @@ type Params = {
 export async function POST(request: Request, { params }: Params) {
   try {
     const { tenantId } = await params;
+    const url = new URL(request.url);
+    const webhookSecret = process.env.WEBHOOK_SIGNING_SECRET;
+    const suppliedSecret = request.headers.get("x-webhook-secret") ?? url.searchParams.get("secret");
+    if (!webhookSecret) return forbidden("Webhook signing secret is not configured");
+    if (suppliedSecret !== webhookSecret) return forbidden("Invalid webhook secret");
+
     const body = await request.json().catch(() => null);
     if (!body?.name) return badRequest("Lead name is required");
 
-    const supabase = createSupabaseAdminClient();
-    const { data: user, error } = await supabase
-      .from("User")
-      .select("id,name,email,tenantId")
-      .eq("tenantId", tenantId)
-      .limit(1)
-      .maybeSingle();
-    if (error) throw error;
+    const user = await queryOne<{ id: string; name: string | null; email: string | null; tenantId: string }>(
+      `select id, name, email, "tenantId" from "User" where "tenantId" = $1 order by "createdAt" asc limit 1`,
+      [tenantId],
+    );
     if (!user?.id) return badRequest("No active tenant user found for inbound capture");
 
     const lead = await createLeadForTenant(user, { ...body, source: body.source ?? "Inbound Webhook" });

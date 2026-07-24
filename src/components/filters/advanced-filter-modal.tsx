@@ -1,13 +1,24 @@
 
 import { useState } from 'react';
-import {
-    Dialog, DialogTitle, DialogContent, DialogActions,
-    Button, Box, Typography, IconButton, Stack,
-    Select, MenuItem, TextField, FormControl, InputLabel, alpha, useTheme
-} from '@mui/material';
-import { Close as CloseIcon, Add as AddIcon, Delete as DeleteIcon } from '@mui/icons-material';
+import { Plus, Trash2 } from 'lucide-react';
 import { StandardDialog } from '@/components/common/standard-dialog';
-import { DatePicker } from '@mui/x-date-pickers/DatePicker';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from '@/components/ui/select';
+import {
+    DropdownMenu,
+    DropdownMenuCheckboxItem,
+    DropdownMenuContent,
+    DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import { OPERATORS_BY_TYPE, type FilterField, type FilterFieldType, type FilterOperator } from '@/types/filters';
+import { formatWorkspaceDateInput, workspaceDateInputToIso } from '@/lib/date-format';
 
 export interface FilterCondition {
     id: string;
@@ -25,12 +36,11 @@ export interface FilterGroup {
 interface AdvancedFilterModalProps {
     open: boolean;
     onClose: () => void;
-    fields: { label: string; key: string; type: string; options?: { label: string; value: string }[] }[];
+    fields: FilterField[];
     onApply: (filters: FilterGroup[]) => void;
 }
 
 export function AdvancedFilterModal({ open, onClose, fields, onApply }: AdvancedFilterModalProps) {
-    const theme = useTheme();
     const [groups, setGroups] = useState<FilterGroup[]>([
         { id: 'g1', logic: 'AND', conditions: [{ id: 'c1', field: '', operator: 'equals', value: '' }] }
     ]);
@@ -68,6 +78,108 @@ export function AdvancedFilterModal({ open, onClose, fields, onApply }: Advanced
         }));
     };
 
+    const fieldFor = (fieldKey: string) => fields.find((field) => field.key === fieldKey);
+    const operatorsFor = (fieldKey: string) => {
+        const type = (fieldFor(fieldKey)?.type || 'text') as FilterFieldType;
+        return OPERATORS_BY_TYPE[type] || OPERATORS_BY_TYPE.text;
+    };
+    const resetForField = (fieldKey: string) => ({
+        field: fieldKey,
+        operator: operatorsFor(fieldKey)[0]?.value || 'equals',
+        value: '',
+    });
+    const valueArray = (value: unknown) => Array.isArray(value) ? value.map(String) : value ? [String(value)] : [];
+
+    const renderValueInput = (groupId: string, condition: FilterCondition) => {
+        const field = fieldFor(condition.field);
+        const fieldType = (field?.type || 'text') as FilterFieldType;
+        const options = field?.options || [];
+
+        if (condition.operator === 'is_empty' || condition.operator === 'is_not_empty') {
+            return <div className="min-w-[160px] flex-1" />;
+        }
+
+        if (fieldType === 'boolean') {
+            return (
+                <Select
+                    value={condition.value === true ? 'true' : condition.value === false ? 'false' : ''}
+                    onValueChange={(value) => handleUpdateCondition(groupId, condition.id, { value: value === 'true' })}
+                >
+                    <SelectTrigger size="sm" className="min-w-[160px] flex-1">
+                        <SelectValue placeholder="Value" />
+                    </SelectTrigger>
+                    <SelectContent>
+                        <SelectItem value="true">Yes</SelectItem>
+                        <SelectItem value="false">No</SelectItem>
+                    </SelectContent>
+                </Select>
+            );
+        }
+
+        if (fieldType === 'select' && options.length > 0) {
+            const values = valueArray(condition.value);
+            return (
+                <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                        <Button variant="outline" size="sm" className="min-w-[180px] flex-1 justify-between">
+                            {values.length === 0
+                                ? 'Select values'
+                                : values.length === 1
+                                    ? options.find((option) => option.value === values[0])?.label ?? '1 selected'
+                                    : `${values.length} selected`}
+                        </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="start" className="max-h-64 w-64 overflow-y-auto">
+                        {options.map((option) => (
+                            <DropdownMenuCheckboxItem
+                                key={option.value}
+                                checked={values.includes(option.value)}
+                                onCheckedChange={(checked) => {
+                                    const nextValues = checked
+                                        ? [...new Set([...values, option.value])]
+                                        : values.filter((value) => value !== option.value);
+                                    handleUpdateCondition(groupId, condition.id, { value: nextValues });
+                                }}
+                                onSelect={(event) => event.preventDefault()}
+                            >
+                                {option.label}
+                            </DropdownMenuCheckboxItem>
+                        ))}
+                    </DropdownMenuContent>
+                </DropdownMenu>
+            );
+        }
+
+        if (fieldType === 'date') {
+            return (
+                <Input
+                    type="date"
+                    value={formatWorkspaceDateInput(condition.value as string)}
+                    onChange={(event) => {
+                        const raw = event.target.value;
+                        handleUpdateCondition(groupId, condition.id, { value: workspaceDateInputToIso(raw) ?? '' });
+                    }}
+                    className="min-w-[180px] flex-1"
+                />
+            );
+        }
+
+        return (
+            <Input
+                type={fieldType === 'number' ? 'number' : 'text'}
+                placeholder={condition.operator === 'in' || condition.operator === 'not_in' ? 'Comma-separated values' : 'Value'}
+                value={Array.isArray(condition.value) ? condition.value.join(', ') : condition.value ?? ''}
+                onChange={(event) => {
+                    const value = condition.operator === 'in' || condition.operator === 'not_in'
+                        ? event.target.value.split(',').map((item) => item.trim()).filter(Boolean)
+                        : event.target.value;
+                    handleUpdateCondition(groupId, condition.id, { value });
+                }}
+                className="min-w-[180px] flex-1"
+            />
+        );
+    };
+
     return (
         <StandardDialog
             open={open}
@@ -77,77 +189,88 @@ export function AdvancedFilterModal({ open, onClose, fields, onApply }: Advanced
             maxWidth="md"
             actions={
                 <>
-                    <Button onClick={onClose}>Cancel</Button>
-                    <Button variant="contained" onClick={() => { onApply(groups); onClose(); }}>Apply Filters</Button>
+                    <Button variant="outline" onClick={onClose}>Cancel</Button>
+                    <Button onClick={() => { onApply(groups); onClose(); }}>Apply Filters</Button>
                 </>
             }
         >
-            <Stack spacing={3}>
+            <div className="flex flex-col gap-6">
                 {groups.map((group, gIndex) => (
-                    <Box key={group.id} sx={{ p: 2, border: '1px solid', borderColor: 'divider', borderRadius: 2, bgcolor: alpha(theme.palette.background.paper, 0.5) }}>
-                        <Stack direction="row" alignItems="center" spacing={2} sx={{ mb: 2 }}>
-                            <Typography variant="subtitle2" fontWeight={700}>Group {gIndex + 1}</Typography>
+                    <div key={group.id} className="rounded-xl border bg-muted/30 p-4">
+                        <div className="mb-4 flex items-center gap-4">
+                            <span className="text-sm font-bold">Group {gIndex + 1}</span>
                             <Select
                                 value={group.logic}
-                                size="small"
-                                onChange={(e) => setGroups(prev => prev.map(g => g.id === group.id ? { ...g, logic: e.target.value as any } : g))}
-                                sx={{ minWidth: 100 }}
+                                onValueChange={(value) => setGroups(prev => prev.map(g => g.id === group.id ? { ...g, logic: value as any } : g))}
                             >
-                                <MenuItem value="AND">Match ALL (AND)</MenuItem>
-                                <MenuItem value="OR">Match ANY (OR)</MenuItem>
+                                <SelectTrigger size="sm" className="min-w-[160px]">
+                                    <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="AND">Match ALL (AND)</SelectItem>
+                                    <SelectItem value="OR">Match ANY (OR)</SelectItem>
+                                </SelectContent>
                             </Select>
-                        </Stack>
+                        </div>
 
-                        <Stack spacing={2}>
+                        <div className="flex flex-col gap-3">
                             {group.conditions.map((condition) => (
-                                <Stack key={condition.id} direction={{ xs: 'column', sm: 'row' }} spacing={1.5} alignItems="center">
-                                    <FormControl size="small" sx={{ minWidth: 150, flex: 1 }}>
-                                        <InputLabel>Field</InputLabel>
-                                        <Select
-                                            value={condition.field}
-                                            label="Field"
-                                            onChange={(e) => handleUpdateCondition(group.id, condition.id, { field: e.target.value })}
-                                        >
-                                            {fields.map(f => <MenuItem key={f.key} value={f.key}>{f.label}</MenuItem>)}
-                                        </Select>
-                                    </FormControl>
+                                <div key={condition.id} className="flex flex-col items-stretch gap-2.5 sm:flex-row sm:items-center">
+                                    <Select
+                                        value={condition.field}
+                                        onValueChange={(value) => handleUpdateCondition(group.id, condition.id, resetForField(value))}
+                                    >
+                                        <SelectTrigger size="sm" className="min-w-[150px] flex-1">
+                                            <SelectValue placeholder="Field" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            {fields.map(f => (
+                                                <SelectItem key={f.key} value={f.key}>{f.label}</SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
 
-                                    <FormControl size="small" sx={{ minWidth: 120 }}>
-                                        <InputLabel>Operator</InputLabel>
-                                        <Select
-                                            value={condition.operator}
-                                            label="Operator"
-                                            onChange={(e) => handleUpdateCondition(group.id, condition.id, { operator: e.target.value })}
-                                        >
-                                            <MenuItem value="equals">Is</MenuItem>
-                                            <MenuItem value="not_equals">Is not</MenuItem>
-                                            <MenuItem value="contains">Contains</MenuItem>
-                                            <MenuItem value="greater_than">Greater than</MenuItem>
-                                            <MenuItem value="less_than">Less than</MenuItem>
-                                        </Select>
-                                    </FormControl>
+                                    <Select
+                                        value={condition.operator}
+                                        onValueChange={(value) => handleUpdateCondition(group.id, condition.id, { operator: value as FilterOperator, value: '' })}
+                                    >
+                                        <SelectTrigger size="sm" className="min-w-[120px]">
+                                            <SelectValue placeholder="Operator" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            {operatorsFor(condition.field).map((operator) => (
+                                                <SelectItem key={operator.value} value={operator.value}>
+                                                    {operator.label}
+                                                </SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
 
-                                    <TextField
-                                        size="small"
-                                        placeholder="Value"
-                                        value={condition.value}
-                                        onChange={(e) => handleUpdateCondition(group.id, condition.id, { value: e.target.value })}
-                                        sx={{ flex: 1 }}
-                                    />
+                                    {renderValueInput(group.id, condition)}
 
-                                    <IconButton size="small" color="error" onClick={() => handleRemoveCondition(group.id, condition.id)}>
-                                        <DeleteIcon fontSize="small" />
-                                    </IconButton>
-                                </Stack>
+                                    <Button
+                                        variant="ghost"
+                                        size="icon-sm"
+                                        className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+                                        onClick={() => handleRemoveCondition(group.id, condition.id)}
+                                    >
+                                        <Trash2 className="size-4" />
+                                    </Button>
+                                </div>
                             ))}
-                            <Button startIcon={<AddIcon />} size="small" onClick={() => handleAddCondition(group.id)}>
+                            <Button
+                                variant="ghost"
+                                size="sm"
+                                className="w-fit"
+                                onClick={() => handleAddCondition(group.id)}
+                            >
+                                <Plus className="size-4" />
                                 Add Condition
                             </Button>
-                        </Stack>
-                    </Box>
+                        </div>
+                    </div>
                 ))}
-            </Stack>
+            </div>
         </StandardDialog>
     );
 }
-

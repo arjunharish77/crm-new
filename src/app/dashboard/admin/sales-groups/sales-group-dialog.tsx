@@ -1,28 +1,27 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import {
-    Button,
-    Dialog,
-    DialogContent,
-    DialogContentText,
-    DialogActions,
-    DialogTitle,
-    TextField,
-    FormControl,
-    InputLabel,
-    Select,
-    MenuItem,
-    Stack,
-    CircularProgress
-} from "@mui/material";
-import { Add as AddIcon } from "@mui/icons-material";
-import { apiFetch } from "@/lib/api";
+import { FormEvent, useEffect, useState } from "react";
+import { Loader2, Plus } from "lucide-react";
 import { toast } from "sonner";
+import { StandardDialog } from "@/components/common/standard-dialog";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
+import { apiFetch } from "@/lib/api";
 
 interface SalesGroupDialogProps {
     onSuccess: () => void;
 }
+
+const NO_TEMPLATE_VALUE = "__none__";
 
 export function SalesGroupDialog({ onSuccess }: SalesGroupDialogProps) {
     const [open, setOpen] = useState(false);
@@ -38,7 +37,7 @@ export function SalesGroupDialog({ onSuccess }: SalesGroupDialogProps) {
         }
     }, [open]);
 
-    const handleSubmit = async (e: React.FormEvent) => {
+    const handleSubmit = async (e: FormEvent) => {
         e.preventDefault();
         setLoading(true);
 
@@ -61,71 +60,71 @@ export function SalesGroupDialog({ onSuccess }: SalesGroupDialogProps) {
 
     return (
         <>
-            <Button
-                variant="contained"
-                startIcon={<AddIcon />}
-                onClick={() => setOpen(true)}
-                sx={{ borderRadius: 20 }}
-            >
+            <Button onClick={() => setOpen(true)}>
+                <Plus className="h-4 w-4" />
                 Create Group
             </Button>
 
-            <Dialog open={open} onClose={() => setOpen(false)} maxWidth="sm" fullWidth>
-                <DialogTitle>Create Sales Group</DialogTitle>
-                <DialogContent>
-                    <DialogContentText sx={{ mb: 3 }}>
-                        Create a group to pool leads and manage assignments.
-                    </DialogContentText>
-                    <form id="create-group-form" onSubmit={handleSubmit}>
-                        <Stack spacing={2}>
-                            <TextField
-                                label="Group Name"
-                                placeholder="e.g. Enterprise Sales East"
-                                required
-                                fullWidth
-                                value={form.name}
-                                onChange={(e) => setForm({ ...form, name: e.target.value })}
-                            />
-                            <TextField
-                                label="Description"
-                                placeholder="Optional description"
-                                fullWidth
-                                multiline
-                                rows={2}
-                                value={form.description}
-                                onChange={(e) => setForm({ ...form, description: e.target.value })}
-                            />
-                            <FormControl fullWidth>
-                                <InputLabel>Permission Template</InputLabel>
-                                <Select
-                                    label="Permission Template"
-                                    value={form.permissionTemplateId}
-                                    onChange={(e) => setForm({ ...form, permissionTemplateId: e.target.value })}
-                                >
-                                    <MenuItem value=""><em>No template</em></MenuItem>
-                                    {templates.map((template) => (
-                                        <MenuItem key={template.id} value={template.id}>{template.name}</MenuItem>
-                                    ))}
-                                </Select>
-                            </FormControl>
-                        </Stack>
-                    </form>
-                </DialogContent>
-                <DialogActions sx={{ p: 3 }}>
-                    <Button onClick={() => setOpen(false)} color="inherit" sx={{ borderRadius: 20 }}>
-                        Cancel
-                    </Button>
-                    <Button
-                        type="submit"
-                        form="create-group-form"
-                        variant="contained"
-                        disabled={loading}
-                        sx={{ borderRadius: 20 }}
-                    >
-                        {loading ? "Creating..." : "Create Group"}
-                    </Button>
-                </DialogActions>
-            </Dialog>
+            <StandardDialog
+                open={open}
+                onClose={() => setOpen(false)}
+                title="Create Sales Group"
+                subtitle="Create a group to pool leads and manage assignments."
+                maxWidth="sm"
+                actions={
+                    <>
+                        <Button variant="outline" onClick={() => setOpen(false)}>
+                            Cancel
+                        </Button>
+                        <Button type="submit" form="create-group-form" disabled={loading}>
+                            {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                            {loading ? "Creating..." : "Create Group"}
+                        </Button>
+                    </>
+                }
+            >
+                <form id="create-group-form" onSubmit={handleSubmit} className="space-y-4">
+                    <div className="space-y-2">
+                        <Label htmlFor="sales-group-name">Group Name</Label>
+                        <Input
+                            id="sales-group-name"
+                            placeholder="e.g. Enterprise Sales East"
+                            required
+                            value={form.name}
+                            onChange={(e) => setForm({ ...form, name: e.target.value })}
+                        />
+                    </div>
+                    <div className="space-y-2">
+                        <Label htmlFor="sales-group-description">Description</Label>
+                        <Textarea
+                            id="sales-group-description"
+                            placeholder="Optional description"
+                            rows={2}
+                            value={form.description}
+                            onChange={(e) => setForm({ ...form, description: e.target.value })}
+                        />
+                    </div>
+                    <div className="space-y-2">
+                        <Label>Permission Template</Label>
+                        <Select
+                            value={form.permissionTemplateId || NO_TEMPLATE_VALUE}
+                            onValueChange={(value) =>
+                                setForm({ ...form, permissionTemplateId: value === NO_TEMPLATE_VALUE ? "" : value })
+                            }
+                        >
+                            <SelectTrigger className="w-full">
+                                <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value={NO_TEMPLATE_VALUE}>No template</SelectItem>
+                                {templates.map((template) => (
+                                    <SelectItem key={template.id} value={template.id}>{template.name}</SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                    </div>
+                </form>
+            </StandardDialog>
         </>
     );
 }

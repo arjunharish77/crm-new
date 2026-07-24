@@ -1,37 +1,12 @@
 'use client';
 
-import { useState } from 'react';
-import {
-    Dialog,
-    DialogTitle,
-    DialogContent,
-    DialogContentText,
-    DialogActions,
-    Button,
-    TextField,
-    Select,
-    MenuItem,
-    FormControl,
-    InputLabel,
-    Box,
-    Typography,
-    Paper,
-    Chip,
-    Stack,
-    CircularProgress,
-    IconButton,
-    Alert,
-    AlertTitle,
-    Divider
-} from '@mui/material';
-import {
-    PlayArrow as PlayIcon,
-    CheckCircle as CheckIcon,
-    Error as ErrorIcon,
-    Warning as WarningIcon,
-    Close as CloseIcon,
-    Science as ScienceIcon
-} from '@mui/icons-material';
+import { useEffect, useMemo, useState } from 'react';
+import { Button } from '@/components/ui/button';
+import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
+import { StandardDialog } from '@/components/common/standard-dialog';
+import { FlaskConical, Play, CheckCircle2, XCircle, AlertTriangle, Loader2 } from 'lucide-react';
 import { apiFetch } from '@/lib/api';
 
 interface TestDialogProps {
@@ -44,14 +19,41 @@ interface TestDialogProps {
 export function TestWorkflowDialog({ open, onClose, automationId, automationName }: TestDialogProps) {
     const [entityType, setEntityType] = useState<'LEAD' | 'OPPORTUNITY'>('LEAD');
     const [entityId, setEntityId] = useState('');
+    const [leads, setLeads] = useState<any[]>([]);
+    const [opportunities, setOpportunities] = useState<any[]>([]);
+    const [loadingRecords, setLoadingRecords] = useState(false);
     const [testing, setTesting] = useState(false);
     const [testResults, setTestResults] = useState<any>(null);
 
+    useEffect(() => {
+        if (!open) return;
+        setLoadingRecords(true);
+        Promise.all([
+            apiFetch<any>('/leads?limit=100')
+                .then((response) => setLeads(Array.isArray(response) ? response : Array.isArray(response?.data) ? response.data : []))
+                .catch(() => setLeads([])),
+            apiFetch<any>('/opportunities?limit=100')
+                .then((response) => setOpportunities(Array.isArray(response) ? response : Array.isArray(response?.data) ? response.data : []))
+                .catch(() => setOpportunities([])),
+        ]).finally(() => setLoadingRecords(false));
+    }, [open]);
+
+    const recordOptions = useMemo(() => {
+        return entityType === 'LEAD'
+            ? leads.map((lead) => ({
+                id: lead.id,
+                label: lead.name || lead.email || lead.company || 'Unnamed lead',
+                description: [lead.email, lead.company].filter(Boolean).join(' | '),
+            }))
+            : opportunities.map((opportunity) => ({
+                id: opportunity.id,
+                label: opportunity.title || opportunity.name || 'Untitled opportunity',
+                description: opportunity.lead?.name || opportunity.leadName || opportunity.stage?.name || '',
+            }));
+    }, [entityType, leads, opportunities]);
+
     const runTest = async () => {
-        if (!entityId) {
-            // Toast or alert handled by UI validation usually, but we'll just return here
-            return;
-        }
+        if (!entityId) return;
 
         setTesting(true);
         setTestResults(null);
@@ -83,130 +85,116 @@ export function TestWorkflowDialog({ open, onClose, automationId, automationName
     };
 
     return (
-        <Dialog
+        <StandardDialog
             open={open}
             onClose={handleClose}
+            title="Test Workflow"
+            subtitle={automationName}
+            icon={<FlaskConical className="size-5" />}
             maxWidth="md"
-            fullWidth
-            PaperProps={{ sx: { borderRadius: 3 } }}
         >
-            <DialogTitle sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', pb: 1 }}>
-                <Box display="flex" alignItems="center" gap={1}>
-                    <ScienceIcon color="primary" />
-                    <Box>
-                        <Typography variant="h6">Test Workflow</Typography>
-                        <Typography variant="body2" color="text.secondary">{automationName}</Typography>
-                    </Box>
-                </Box>
-                <IconButton onClick={handleClose} size="small">
-                    <CloseIcon />
-                </IconButton>
-            </DialogTitle>
+            <p className="mb-3 text-sm text-muted-foreground">
+                Run a test execution without making any actual changes (dry run).
+            </p>
 
-            <DialogContent dividers>
-                <DialogContentText sx={{ mb: 3 }}>
-                    Run a test execution without making any actual changes (dry run).
-                </DialogContentText>
+            <div className="mb-3 space-y-3 rounded-lg border bg-muted/30 p-4">
+                <div className="space-y-2">
+                    <Label>Entity Type</Label>
+                    <Select
+                        value={entityType}
+                        onValueChange={(value) => {
+                            setEntityType(value as any);
+                            setEntityId('');
+                            setTestResults(null);
+                        }}
+                    >
+                        <SelectTrigger className="w-full">
+                            <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="LEAD">Lead</SelectItem>
+                            <SelectItem value="OPPORTUNITY">Opportunity</SelectItem>
+                        </SelectContent>
+                    </Select>
+                </div>
+                <div className="space-y-2">
+                    <Label>{entityType === 'LEAD' ? 'Lead' : 'Opportunity'}</Label>
+                    <Select value={entityId || '__none__'} onValueChange={(value) => setEntityId(value === '__none__' ? '' : value)}>
+                        <SelectTrigger className="w-full">
+                            <SelectValue placeholder={loadingRecords ? 'Loading records...' : 'Select a record'} />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="__none__">Select a record</SelectItem>
+                            {recordOptions.map((record) => (
+                                <SelectItem key={record.id} value={record.id}>
+                                    {record.label}{record.description ? ` - ${record.description}` : ''}
+                                </SelectItem>
+                            ))}
+                        </SelectContent>
+                    </Select>
+                </div>
+                <Button onClick={runTest} disabled={testing || !entityId} className="w-full">
+                    {testing ? <Loader2 className="size-4 animate-spin" /> : <Play className="size-4" />}
+                    {testing ? 'Running Test...' : 'Run Test'}
+                </Button>
+            </div>
 
-                <Paper variant="outlined" sx={{ p: 3, mb: 3, borderRadius: 2, bgcolor: 'background.default' }}>
-                    <Stack spacing={2}>
-                        <FormControl fullWidth size="small">
-                            <InputLabel>Entity Type</InputLabel>
-                            <Select
-                                value={entityType}
-                                label="Entity Type"
-                                onChange={(e) => setEntityType(e.target.value as any)}
-                            >
-                                <MenuItem value="LEAD">Lead</MenuItem>
-                                <MenuItem value="OPPORTUNITY">Opportunity</MenuItem>
-                            </Select>
-                        </FormControl>
-                        <TextField
-                            label="Entity ID"
-                            placeholder="Enter lead or opportunity ID"
-                            fullWidth
-                            size="small"
-                            value={entityId}
-                            onChange={(e) => setEntityId(e.target.value)}
-                            helperText="The ID of the record you want to test against"
-                        />
-                        <Button
-                            variant="contained"
-                            onClick={runTest}
-                            disabled={testing || !entityId}
-                            startIcon={testing ? <CircularProgress size={20} color="inherit" /> : <PlayIcon />}
-                        >
-                            {testing ? 'Running Test...' : 'Run Test'}
-                        </Button>
-                    </Stack>
-                </Paper>
+            {testResults && (
+                <div>
+                    <div className="mb-3 flex items-center gap-3">
+                        <div className="h-px flex-1 bg-border" />
+                        <span className="text-xs font-semibold text-muted-foreground">Test Results</span>
+                        <div className="h-px flex-1 bg-border" />
+                    </div>
 
-                {testResults && (
-                    <Box sx={{ animation: 'fadeIn 0.3s ease-in' }}>
-                        <Divider sx={{ mb: 3 }}>
-                            <Chip label="Test Results" size="small" />
-                        </Divider>
+                    <Alert variant={testResults.success ? 'default' : 'destructive'} className="mb-3">
+                        {testResults.success ? <CheckCircle2 className="size-4" /> : <XCircle className="size-4" />}
+                        <AlertTitle>{testResults.success ? 'Test Passed' : 'Test Failed'}</AlertTitle>
+                        <AlertDescription>
+                            {testResults.error || 'Workflow execution simulation completed successfully.'}
+                        </AlertDescription>
+                    </Alert>
 
-                        <Alert
-                            severity={testResults.success ? "success" : "error"}
-                            icon={testResults.success ? <CheckIcon fontSize="inherit" /> : <ErrorIcon fontSize="inherit" />}
-                            sx={{ mb: 3, borderRadius: 2 }}
-                        >
-                            <AlertTitle>{testResults.success ? "Test Passed" : "Test Failed"}</AlertTitle>
-                            {testResults.error || "Workflow execution simulation completed successfully."}
-                        </Alert>
+                    {testResults.log && testResults.log.length > 0 && (
+                        <div className="mb-3 overflow-hidden rounded-lg border">
+                            <div className="border-b bg-muted/50 px-3 py-2">
+                                <span className="text-sm font-semibold">Execution Log</span>
+                            </div>
+                            <div className="max-h-[300px] overflow-y-auto">
+                                {testResults.log.map((entry: any, idx: number) => (
+                                    <div
+                                        key={idx}
+                                        className={`flex gap-3 p-3 ${idx < testResults.log.length - 1 ? 'border-b' : ''}`}
+                                    >
+                                        <div className="mt-0.5">
+                                            {entry.status === 'TEST_SUCCESS' ? (
+                                                <CheckCircle2 className="size-4 text-primary" />
+                                            ) : entry.status === 'UNKNOWN' ? (
+                                                <AlertTriangle className="size-4 text-amber-500" />
+                                            ) : (
+                                                <XCircle className="size-4 text-destructive" />
+                                            )}
+                                        </div>
+                                        <div>
+                                            <div className="text-xs font-semibold text-muted-foreground">{entry.type}</div>
+                                            <div className="text-sm font-medium">{entry.action || entry.node}</div>
+                                            {entry.result !== undefined && (
+                                                <div className="mt-0.5 font-mono text-xs text-muted-foreground">
+                                                    Result: {String(entry.result)}
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
 
-                        {testResults.log && testResults.log.length > 0 && (
-                            <Paper variant="outlined" sx={{ borderRadius: 2, overflow: 'hidden' }}>
-                                <Box sx={{ p: 1.5, bgcolor: 'action.hover', borderBottom: 1, borderColor: 'divider' }}>
-                                    <Typography variant="subtitle2">Execution Log</Typography>
-                                </Box>
-                                <Box sx={{ maxHeight: 300, overflowY: 'auto', p: 0 }}>
-                                    {testResults.log.map((entry: any, idx: number) => (
-                                        <Box
-                                            key={idx}
-                                            sx={{
-                                                p: 1.5,
-                                                borderBottom: idx < testResults.log.length - 1 ? 1 : 0,
-                                                borderColor: 'divider',
-                                                display: 'flex',
-                                                gap: 2
-                                            }}
-                                        >
-                                            <Box sx={{ mt: 0.5 }}>
-                                                {entry.status === 'TEST_SUCCESS' ? (
-                                                    <CheckIcon color="success" fontSize="small" />
-                                                ) : entry.status === 'UNKNOWN' ? (
-                                                    <WarningIcon color="warning" fontSize="small" />
-                                                ) : (
-                                                    <ErrorIcon color="error" fontSize="small" />
-                                                )}
-                                            </Box>
-                                            <Box>
-                                                <Typography variant="caption" sx={{ fontWeight: 600, color: 'text.secondary' }}>
-                                                    {entry.type}
-                                                </Typography>
-                                                <Typography variant="body2" sx={{ fontWeight: 500 }}>
-                                                    {entry.action || entry.node}
-                                                </Typography>
-                                                {entry.result !== undefined && (
-                                                    <Typography variant="caption" sx={{ fontFamily: 'monospace', display: 'block', mt: 0.5, color: 'text.secondary' }}>
-                                                        Result: {String(entry.result)}
-                                                    </Typography>
-                                                )}
-                                            </Box>
-                                        </Box>
-                                    ))}
-                                </Box>
-                            </Paper>
-                        )}
-
-                        <Alert severity="info" sx={{ mt: 3, borderRadius: 2 }}>
-                            This was a test run. No actual changes were made to your data.
-                        </Alert>
-                    </Box>
-                )}
-            </DialogContent>
-        </Dialog>
+                    <Alert>
+                        <AlertDescription>This was a test run. No actual changes were made to your data.</AlertDescription>
+                    </Alert>
+                </div>
+            )}
+        </StandardDialog>
     );
 }

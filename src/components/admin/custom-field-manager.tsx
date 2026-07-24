@@ -1,54 +1,41 @@
 "use client";
 
-import { useState, useEffect } from 'react';
-import { apiFetch } from '@/lib/api';
-import { toast } from 'sonner';
+import { FormEvent, useEffect, useState } from 'react';
 import {
-    Box,
-    Button,
-    Dialog,
-    DialogActions,
-    DialogContent,
-    DialogContentText,
-    DialogTitle,
-    TextField,
-    Select,
-    MenuItem,
-    FormControl,
-    InputLabel,
-    Stack,
-    IconButton,
-    Paper,
-    Typography,
-    Switch,
-    FormControlLabel,
-    Divider,
-    Grid
-} from "@mui/material";
-import {
-    Add as PlusIcon,
-    Edit as EditIcon,
-    Delete as TrashIcon,
-    DragIndicator as DragIcon,
-    Close as CloseIcon
-} from "@mui/icons-material";
-import {
-    DndContext,
     closestCenter,
+    DndContext,
+    DragEndEvent,
     KeyboardSensor,
     PointerSensor,
     useSensor,
     useSensors,
-    DragEndEvent,
 } from '@dnd-kit/core';
 import {
     arrayMove,
     SortableContext,
     sortableKeyboardCoordinates,
-    verticalListSortingStrategy,
     useSortable,
+    verticalListSortingStrategy,
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
+import { GripVertical, Loader2, Pencil, Plus, Trash2 } from 'lucide-react';
+import { toast } from 'sonner';
+import { StandardDialog } from '@/components/common/standard-dialog';
+import { Button } from '@/components/ui/button';
+import { Card } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from '@/components/ui/select';
+import { Switch } from '@/components/ui/switch';
+import { Textarea } from '@/components/ui/textarea';
+import { apiFetch } from '@/lib/api';
+import { cn } from '@/lib/utils';
 
 interface CustomField {
     id: string;
@@ -93,47 +80,56 @@ function SortableFieldItem({ field, onEdit, onDelete }: { field: CustomField; on
     };
 
     return (
-        <Paper
-            ref={setNodeRef}
-            style={style}
-            variant="outlined"
-            sx={{
-                p: 2,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                gap: 2,
-                borderRadius: 2,
-                bgcolor: 'background.paper',
-                '&:hover': {
-                    bgcolor: 'action.hover'
-                }
-            }}
-        >
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                <Box {...attributes} {...listeners} sx={{ cursor: 'grab', display: 'flex', alignItems: 'center', color: 'text.secondary' }}>
-                    <DragIcon />
-                </Box>
-                <Box>
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                        <Typography variant="subtitle1" fontWeight={600}>{field.fieldLabel}</Typography>
-                        {field.isRequired && <Typography variant="caption" color="error">*</Typography>}
-                    </Box>
-                    <Typography variant="body2" color="text.secondary">
-                        {FIELD_TYPES.find(t => t.value === field.fieldType)?.label || field.fieldType}
-                    </Typography>
-                </Box>
-            </Box>
+        <div ref={setNodeRef} style={style}>
+            <Card
+                className={cn(
+                    "flex-row items-center justify-between gap-3 rounded-xl px-4 py-3 transition-colors hover:bg-accent",
+                    isDragging && "border-primary shadow-md"
+                )}
+            >
+                <div className="flex items-center gap-3">
+                    <button
+                        type="button"
+                        className="cursor-grab rounded-md p-1 text-muted-foreground outline-none hover:text-primary focus-visible:ring-2 focus-visible:ring-primary/30"
+                        aria-label={`Drag ${field.fieldLabel}`}
+                        {...attributes}
+                        {...listeners}
+                    >
+                        <GripVertical size={18} />
+                    </button>
+                    <div>
+                        <div className="flex items-center gap-1">
+                            <p className="text-sm font-semibold">{field.fieldLabel}</p>
+                            {field.isRequired && <span className="text-xs text-destructive">*</span>}
+                        </div>
+                        <p className="text-xs text-muted-foreground">
+                            {FIELD_TYPES.find((t) => t.value === field.fieldType)?.label || field.fieldType}
+                        </p>
+                    </div>
+                </div>
 
-            <Stack direction="row" spacing={1}>
-                <IconButton size="small" onClick={onEdit} color="primary">
-                    <EditIcon fontSize="small" />
-                </IconButton>
-                <IconButton size="small" onClick={onDelete} color="error">
-                    <TrashIcon fontSize="small" />
-                </IconButton>
-            </Stack>
-        </Paper>
+                <div className="flex items-center gap-1">
+                    <Button
+                        variant="ghost"
+                        size="icon-sm"
+                        onClick={onEdit}
+                        className="text-primary hover:bg-primary/10 hover:text-primary"
+                        aria-label={`Edit ${field.fieldLabel}`}
+                    >
+                        <Pencil size={16} />
+                    </Button>
+                    <Button
+                        variant="ghost"
+                        size="icon-sm"
+                        onClick={onDelete}
+                        className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+                        aria-label={`Delete ${field.fieldLabel}`}
+                    >
+                        <Trash2 size={16} />
+                    </Button>
+                </div>
+            </Card>
+        </div>
     );
 }
 
@@ -159,7 +155,7 @@ function FieldEditor({
     const [placeholder, setPlaceholder] = useState(field?.fieldConfig?.placeholder || '');
     const [submitting, setSubmitting] = useState(false);
 
-    const handleSubmit = async (e: React.FormEvent) => {
+    const handleSubmit = async (e: FormEvent) => {
         e.preventDefault();
         if (!label) return toast.error("Label is required");
 
@@ -197,78 +193,78 @@ function FieldEditor({
     };
 
     return (
-        <Dialog
+        <StandardDialog
             open={open}
             onClose={() => onOpenChange(false)}
+            title={field ? 'Edit Field' : 'Add Field'}
             maxWidth="sm"
-            fullWidth
-            PaperProps={{ sx: { borderRadius: 3 } }}
+            actions={
+                <>
+                    <Button variant="outline" onClick={() => onOpenChange(false)}>
+                        Cancel
+                    </Button>
+                    <Button onClick={handleSubmit} disabled={submitting}>
+                        {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                        Save
+                    </Button>
+                </>
+            }
         >
-            <DialogTitle>{field ? 'Edit Field' : 'Add Field'}</DialogTitle>
-            <DialogContent>
-                <Stack spacing={3} component="form" onSubmit={handleSubmit} sx={{ mt: 1 }}>
-                    <TextField
-                        label="Field Label"
+            <form className="space-y-4" onSubmit={handleSubmit}>
+                <div className="space-y-2">
+                    <Label htmlFor="field-editor-label">Field Label</Label>
+                    <Input
+                        id="field-editor-label"
                         value={label}
-                        onChange={e => setLabel(e.target.value)}
+                        onChange={(e) => setLabel(e.target.value)}
                         placeholder="e.g. Budget, Start Date"
                         required
-                        fullWidth
                     />
+                </div>
 
-                    <FormControl fullWidth>
-                        <InputLabel>Type</InputLabel>
-                        <Select
-                            value={type}
-                            label="Type"
-                            onChange={(e) => setType(e.target.value)}
-                        >
-                            {FIELD_TYPES.map(t => (
-                                <MenuItem key={t.value} value={t.value}>{t.label}</MenuItem>
+                <div className="space-y-2">
+                    <Label>Type</Label>
+                    <Select value={type} onValueChange={setType}>
+                        <SelectTrigger className="w-full">
+                            <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                            {FIELD_TYPES.map((t) => (
+                                <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
                             ))}
-                        </Select>
-                    </FormControl>
+                        </SelectContent>
+                    </Select>
+                </div>
 
-                    {(type === 'DROPDOWN' || type === 'MULTI_SELECT') && (
-                        <TextField
-                            label="Options (one per line)"
+                {(type === 'DROPDOWN' || type === 'MULTI_SELECT') && (
+                    <div className="space-y-2">
+                        <Label htmlFor="field-editor-options">Options (one per line)</Label>
+                        <Textarea
+                            id="field-editor-options"
                             value={options}
-                            onChange={e => setOptions(e.target.value)}
-                            placeholder="Option 1&#10;Option 2"
-                            multiline
+                            onChange={(e) => setOptions(e.target.value)}
+                            placeholder={"Option 1\nOption 2"}
                             rows={4}
-                            fullWidth
                         />
-                    )}
+                    </div>
+                )}
 
-                    <TextField
-                        label="Placeholder"
+                <div className="space-y-2">
+                    <Label htmlFor="field-editor-placeholder">Placeholder</Label>
+                    <Input
+                        id="field-editor-placeholder"
                         value={placeholder}
-                        onChange={e => setPlaceholder(e.target.value)}
+                        onChange={(e) => setPlaceholder(e.target.value)}
                         placeholder="Helper text..."
-                        fullWidth
                     />
+                </div>
 
-                    <FormControlLabel
-                        control={<Switch checked={required} onChange={(e) => setRequired(e.target.checked)} />}
-                        label="Required Field"
-                    />
-                </Stack>
-            </DialogContent>
-            <DialogActions sx={{ px: 3, pb: 3 }}>
-                <Button onClick={() => onOpenChange(false)} sx={{ borderRadius: 20, color: 'text.secondary' }}>
-                    Cancel
-                </Button>
-                <Button
-                    onClick={handleSubmit}
-                    variant="contained"
-                    disabled={submitting}
-                    sx={{ borderRadius: 20 }}
-                >
-                    Save
-                </Button>
-            </DialogActions>
-        </Dialog>
+                <label className="flex items-center gap-2 text-sm font-medium">
+                    <Switch checked={required} onCheckedChange={setRequired} />
+                    Required Field
+                </label>
+            </form>
+        </StandardDialog>
     );
 }
 
@@ -340,76 +336,53 @@ export function CustomFieldManager({
     };
 
     return (
-        <Dialog
+        <StandardDialog
             open={open}
             onClose={() => onOpenChange(false)}
+            title={`Manage Fields: ${relatedTypeName}`}
+            subtitle="Define custom fields for this type."
             maxWidth="md"
-            fullWidth
-            PaperProps={{ sx: { borderRadius: 3, height: '80vh', display: 'flex', flexDirection: 'column' } }}
         >
-            <Box sx={{ px: 3, pt: 3 }}>
-                <Stack direction="row" justifyContent="space-between" alignItems="center">
-                    <Box>
-                        <DialogTitle sx={{ p: 0 }}>Manage Fields: {relatedTypeName}</DialogTitle>
-                        <DialogContentText>Define custom fields for this type.</DialogContentText>
-                    </Box>
-                    <IconButton onClick={() => onOpenChange(false)}>
-                        <CloseIcon />
-                    </IconButton>
-                </Stack>
-            </Box>
-            <Divider sx={{ my: 2 }} />
+            <div className="flex justify-end pb-3">
+                <Button size="sm" onClick={() => { setEditingField(null); setEditorOpen(true); }}>
+                    <Plus size={16} />
+                    Add Field
+                </Button>
+            </div>
 
-            <DialogContent sx={{ p: 3, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-                <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 2 }}>
-                    <Button
-                        variant="contained"
-                        size="small"
-                        onClick={() => { setEditingField(null); setEditorOpen(true); }}
-                        startIcon={<PlusIcon />}
-                        sx={{ borderRadius: 20 }}
+            <div className="max-h-[55vh] overflow-y-auto">
+                {loading ? (
+                    <div className="flex justify-center py-10">
+                        <Loader2 className="h-6 w-6 animate-spin text-primary" />
+                    </div>
+                ) : fields.length === 0 ? (
+                    <div className="rounded-lg border-2 border-dashed border-border p-8 text-center text-muted-foreground">
+                        <p>No custom fields yet.</p>
+                    </div>
+                ) : (
+                    <DndContext
+                        sensors={sensors}
+                        collisionDetection={closestCenter}
+                        onDragEnd={handleDragEnd}
                     >
-                        Add Field
-                    </Button>
-                </Box>
-
-                <Box sx={{ flex: 1, overflowY: 'auto' }}>
-                    {fields.length === 0 ? (
-                        <Box sx={{
-                            p: 4,
-                            textAlign: 'center',
-                            border: '2px dashed',
-                            borderColor: 'divider',
-                            borderRadius: 2,
-                            color: 'text.secondary'
-                        }}>
-                            <Typography>No custom fields yet.</Typography>
-                        </Box>
-                    ) : (
-                        <DndContext
-                            sensors={sensors}
-                            collisionDetection={closestCenter}
-                            onDragEnd={handleDragEnd}
+                        <SortableContext
+                            items={fields.map(f => f.id)}
+                            strategy={verticalListSortingStrategy}
                         >
-                            <SortableContext
-                                items={fields.map(f => f.id)}
-                                strategy={verticalListSortingStrategy}
-                            >
-                                <Stack spacing={2}>
-                                    {fields.map((field) => (
-                                        <SortableFieldItem
-                                            key={field.id}
-                                            field={field}
-                                            onEdit={() => { setEditingField(field); setEditorOpen(true); }}
-                                            onDelete={() => handleDelete(field.id)}
-                                        />
-                                    ))}
-                                </Stack>
-                            </SortableContext>
-                        </DndContext>
-                    )}
-                </Box>
-            </DialogContent>
+                            <div className="space-y-2">
+                                {fields.map((field) => (
+                                    <SortableFieldItem
+                                        key={field.id}
+                                        field={field}
+                                        onEdit={() => { setEditingField(field); setEditorOpen(true); }}
+                                        onDelete={() => handleDelete(field.id)}
+                                    />
+                                ))}
+                            </div>
+                        </SortableContext>
+                    </DndContext>
+                )}
+            </div>
 
             {editorOpen && (
                 <FieldEditor
@@ -424,6 +397,6 @@ export function CustomFieldManager({
                     }}
                 />
             )}
-        </Dialog>
+        </StandardDialog>
     );
 }

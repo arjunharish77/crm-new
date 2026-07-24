@@ -4,20 +4,9 @@ import React from "react";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { Opportunity } from "@/types/opportunities";
-import {
-    Card,
-    CardContent,
-    Typography,
-    Box,
-    Chip,
-    Stack,
-    alpha,
-    useTheme,
-    Link as MuiLink,
-    IconButton
-} from "@mui/material";
-import { Edit as EditIcon } from "@mui/icons-material";
-import { formatCurrency } from "@/lib/utils";
+import { Pencil } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { formatCurrency, cn } from "@/lib/utils";
 import Link from "next/link";
 import { formatWorkspaceDate } from "@/lib/date-format";
 
@@ -28,7 +17,6 @@ interface KanbanCardProps {
 }
 
 export function KanbanCard({ opportunity, isDragging: isOverlay, onEdit }: KanbanCardProps) {
-    const theme = useTheme();
     const {
         attributes,
         listeners,
@@ -52,152 +40,101 @@ export function KanbanCard({ opportunity, isDragging: isOverlay, onEdit }: Kanba
 
     const getPriorityColor = (priority: string) => {
         switch (priority) {
-            case 'HIGH': return theme.palette.error.main;
-            case 'MEDIUM': return theme.palette.warning.main;
-            default: return theme.palette.text.secondary;
+            case 'HIGH': return "var(--destructive)";
+            case 'MEDIUM': return "var(--tertiary)";
+            default: return "var(--muted-foreground)";
         }
     };
 
     return (
-        <Box
+        <div
             ref={setNodeRef}
             style={style}
             {...attributes}
             {...listeners}
-            sx={{
-                touchAction: 'none',
-                cursor: 'grab',
-                '&:active': { cursor: 'grabbing' }
-            }}
+            className="cursor-grab touch-none active:cursor-grabbing"
         >
-            <Card
-                sx={{
-                    position: 'relative',
-                    borderRadius: 3,
-                    border: '1px solid',
-                    borderColor: 'divider',
-                    boxShadow: isOverlay ? theme.shadows[4] : 'none',
-                    bgcolor: 'background.paper',
-                    '&:hover': {
-                        borderColor: 'primary.main',
-                        boxShadow: 1,
-                        '& .edit-button': { opacity: 1 }
-                    },
-                    transition: 'all 0.2s ease-in-out'
-                }}
+            <div
+                className={cn(
+                    "group relative rounded-xl border border-border bg-background p-3 transition-all hover:border-primary hover:shadow-sm",
+                    isOverlay && "shadow-md"
+                )}
             >
-                <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
-                    <Stack spacing={1.5}>
-                        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 1 }}>
-                            <Link
-                                href={`/dashboard/opportunities/${opportunity.id}`}
-                                passHref
-                                style={{ textDecoration: 'none' }}
-                                onClick={(e) => e.stopPropagation()}
-                                onPointerDown={(e) => e.stopPropagation()}
-                            >
-                                <Typography
-                                    variant="body2"
-                                    sx={{
-                                        fontWeight: 700,
-                                        color: 'text.primary',
-                                        lineHeight: 1.3,
-                                        '&:hover': { color: 'primary.main', textDecoration: 'underline' }
+                <div className="flex flex-col gap-2">
+                    <div className="flex items-start justify-between gap-2">
+                        <Link
+                            href={`/dashboard/opportunities/${opportunity.id}`}
+                            onClick={(e) => e.stopPropagation()}
+                            onPointerDown={(e) => e.stopPropagation()}
+                            className="text-sm font-bold leading-snug text-foreground hover:text-primary hover:underline"
+                        >
+                            {opportunity.title}
+                        </Link>
+
+                        <div className="flex shrink-0 items-center gap-1">
+                            {onEdit && (
+                                <button
+                                    type="button"
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        e.preventDefault();
+                                        onEdit(opportunity);
                                     }}
+                                    onPointerDown={(e) => e.stopPropagation()}
+                                    className="flex size-6 items-center justify-center rounded-md text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 hover:bg-primary/10 hover:text-primary focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                                 >
-                                    {opportunity.title}
-                                </Typography>
-                            </Link>
-
-                            <Stack direction="row" spacing={0.5} alignItems="center">
-                                {onEdit && (
-                                    <IconButton
-                                        className="edit-button"
-                                        size="small"
-                                        onClick={(e) => {
-                                            e.stopPropagation();
-                                            e.preventDefault();
-                                            onEdit(opportunity);
-                                        }}
-                                        onPointerDown={(e) => e.stopPropagation()}
-                                        sx={{
-                                            opacity: 0,
-                                            transition: 'opacity 0.2s',
-                                            width: 24,
-                                            height: 24,
-                                            padding: 0.5,
-                                            color: 'text.secondary',
-                                            '&:hover': { color: 'primary.main', bgcolor: 'primary.lighter' }
-                                        }}
-                                    >
-                                        <EditIcon sx={{ fontSize: 14 }} />
-                                    </IconButton>
-                                )}
-
-                                {opportunity.priority && (
-                                    <Box
-                                        sx={{
-                                            width: 6,
-                                            height: 6,
-                                            borderRadius: '50%',
-                                            bgcolor: getPriorityColor(opportunity.priority),
-                                            flexShrink: 0
-                                        }}
-                                    />
-                                )}
-                            </Stack>
-                        </Box>
-
-                        <Stack direction="row" justifyContent="space-between" alignItems="center">
-                            <Typography variant="body2" sx={{ fontWeight: 800, color: 'primary.main' }}>
-                                {formatCurrency(opportunity.amount || 0)}
-                            </Typography>
-                            {opportunity.expectedCloseDate && (
-                                <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 500 }}>
-                                    {formatWorkspaceDate(opportunity.expectedCloseDate)}
-                                </Typography>
+                                    <Pencil className="size-3.5" />
+                                </button>
                             )}
-                        </Stack>
 
-                        <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
-                            {opportunity.opportunityType && (
-                                <Chip
-                                    label={opportunity.opportunityType.name}
-                                    size="small"
-                                    sx={{
-                                        height: 20,
-                                        fontSize: '0.65rem',
-                                        fontWeight: 700,
-                                        bgcolor: alpha(opportunity.opportunityType.color || theme.palette.primary.main, 0.1),
-                                        color: opportunity.opportunityType.color || theme.palette.primary.main,
-                                        border: 'none'
-                                    }}
+                            {opportunity.priority && (
+                                <span
+                                    className="size-1.5 shrink-0 rounded-full"
+                                    style={{ backgroundColor: getPriorityColor(opportunity.priority) }}
                                 />
                             )}
-                            {opportunity.tags?.slice(0, 2).map(tag => (
-                                <Chip
-                                    key={tag}
-                                    label={tag}
-                                    size="small"
-                                    variant="outlined"
-                                    sx={{
-                                        height: 20,
-                                        fontSize: '0.65rem',
-                                        fontWeight: 500,
-                                        borderColor: 'divider',
-                                        color: 'text.secondary'
-                                    }}
-                                />
-                            ))}
-                            {opportunity.tags && opportunity.tags.length > 2 && (
-                                <Typography variant="caption" sx={{ fontSize: '0.65rem', color: 'text.secondary', mt: 0.2 }}>
-                                    +{opportunity.tags.length - 2}
-                                </Typography>
-                            )}
-                        </Stack>
-                    </Stack>
-                </CardContent>
-            </Card>
-        </Box>
+                        </div>
+                    </div>
+
+                    <div className="flex items-center justify-between">
+                        <span className="text-sm font-extrabold text-primary">
+                            {formatCurrency(opportunity.amount || 0)}
+                        </span>
+                        {opportunity.expectedCloseDate && (
+                            <span className="text-xs font-medium text-muted-foreground">
+                                {formatWorkspaceDate(opportunity.expectedCloseDate)}
+                            </span>
+                        )}
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-1">
+                        {opportunity.opportunityType && (
+                            <Badge
+                                variant="outline"
+                                className="h-5 border-transparent text-[0.65rem] font-bold"
+                                style={{
+                                    backgroundColor: opportunity.opportunityType.color
+                                        ? `${opportunity.opportunityType.color}1a`
+                                        : "var(--primary-container)",
+                                    color: opportunity.opportunityType.color || "var(--primary)",
+                                }}
+                            >
+                                {opportunity.opportunityType.name}
+                            </Badge>
+                        )}
+                        {opportunity.tags?.slice(0, 2).map(tag => (
+                            <Badge key={tag} variant="outline" className="h-5 text-[0.65rem] font-medium text-muted-foreground">
+                                {tag}
+                            </Badge>
+                        ))}
+                        {opportunity.tags && opportunity.tags.length > 2 && (
+                            <span className="text-[0.65rem] text-muted-foreground">
+                                +{opportunity.tags.length - 2}
+                            </span>
+                        )}
+                    </div>
+                </div>
+            </div>
+        </div>
     );
 }

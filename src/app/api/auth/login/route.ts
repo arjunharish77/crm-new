@@ -1,8 +1,9 @@
 import bcrypt from "bcryptjs";
 import { NextResponse } from "next/server";
-import { createSupabaseAdminClient } from "@/lib/supabase/server";
+import { getActivePlatformAdminByUserId, getLoginUserByEmail } from "@/lib/repositories/auth-admin-postgres";
 import { signAuthToken } from "@/lib/server/auth";
-import { badRequest, unauthorized } from "@/lib/server/http";
+import { badRequest, tooManyRequests, unauthorized } from "@/lib/server/http";
+import { checkRateLimit, clientIpFromRequest } from "@/lib/server/rate-limit";
 
 function shouldExposeAuthDebug() {
   return process.env.NODE_ENV !== "production" || process.env.AUTH_DEBUG === "true";
@@ -27,17 +28,22 @@ export async function POST(request: Request) {
     return badRequest("Email and password are required");
   }
 
-  const supabase = createSupabaseAdminClient();
-  const { data: user, error } = await supabase
-    .from("User")
-    .select("id,email,name,password,tenantId,roleId")
-    .eq("email", email)
-    .maybeSingle();
+  const ip = clientIpFromRequest(request);
+  const [ipLimit, emailLimit] = await Promise.all([
+    checkRateLimit({ key: `login:ip:${ip}`, limit: 20, windowSeconds: 15 * 60 }),
+    checkRateLimit({ key: `login:email:${email}`, limit: 5, windowSeconds: 15 * 60 }),
+  ]);
+  if (!ipLimit.allowed || !emailLimit.allowed) {
+    const retryAfter = Math.max(ipLimit.resetSeconds, emailLimit.resetSeconds);
+    return tooManyRequests("Too many login attempts. Please try again later.", retryAfter);
+  }
 
-  if (error || !user) {
+  const user = await getLoginUserByEmail(email);
+
+  if (!user) {
     console.error("AUTH_LOGIN_FAILED", {
       stage: "user_lookup",
-      error: error?.message ?? null,
+      error: null,
       foundUser: !!user,
       email,
     });
@@ -45,7 +51,7 @@ export async function POST(request: Request) {
     if (shouldExposeAuthDebug()) {
       return authDebugResponse({
         stage: "user_lookup",
-        error: error?.message ?? null,
+        error: null,
         foundUser: !!user,
         email,
       });
@@ -91,12 +97,7 @@ export async function POST(request: Request) {
     return unauthorized("Invalid credentials");
   }
 
-  const { data: platformAdmin } = await supabase
-    .from("PlatformAdmin")
-    .select("id,isActive")
-    .eq("userId", user.id)
-    .eq("isActive", true)
-    .maybeSingle();
+  const platformAdmin = await getActivePlatformAdminByUserId(user.id);
 
   const accessToken = await signAuthToken({
     sub: user.id,

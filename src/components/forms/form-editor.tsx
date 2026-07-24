@@ -16,52 +16,43 @@ import {
 import { SortableContext, verticalListSortingStrategy, arrayMove, useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import {
-    Box,
-    Button,
-    Typography,
-    TextField,
-    Switch,
-    FormControlLabel,
-    Divider,
-    Tab,
-    Tabs,
-    List,
-    ListItemButton,
-    ListItemIcon,
-    ListItemText,
-    Paper,
-    Stack,
-    Select,
-    MenuItem,
-    InputLabel,
-    FormControl,
-    IconButton,
-    useTheme,
-    alpha
-} from "@mui/material";
-import {
-    TextFields as TextFieldsIcon,
-    Notes as NotesIcon,
-    Numbers as NumbersIcon,
-    Email as EmailIcon,
+    Type as TextFieldsIcon,
+    AlignLeft as NotesIcon,
+    Hash as NumbersIcon,
+    Mail as EmailIcon,
     Phone as PhoneIcon,
-    Event as EventIcon,
+    Calendar as EventIcon,
     List as ListIcon,
-    CheckBox as CheckBoxIcon,
-    RadioButtonChecked as RadioButtonCheckedIcon,
-    VisibilityOff as VisibilityOffIcon,
+    CheckSquare as CheckBoxIcon,
+    CircleDot as RadioButtonCheckedIcon,
+    EyeOff as VisibilityOffIcon,
     Code as CodeIcon,
     Save as SaveIcon,
-    DragIndicator as DragIndicatorIcon,
-    Delete as DeleteIcon,
-    Add as AddIcon,
-    ColorLens as ColorLensIcon,
+    GripVertical as DragIndicatorIcon,
+    Trash2 as DeleteIcon,
+    Plus as AddIcon,
+    Palette as ColorLensIcon,
     Settings as SettingsIcon,
-    Tune as TuneIcon,
-    Close as CloseIcon,
-    ViewColumn as WidthIcon
-} from "@mui/icons-material";
+    SlidersHorizontal as TuneIcon,
+    X as CloseIcon,
+    Columns2 as WidthIcon,
+} from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
+import { Separator } from "@/components/ui/separator";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from "@/components/ui/select";
 import { apiFetch } from "@/lib/api";
+import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { nanoid } from "nanoid";
 
@@ -148,12 +139,15 @@ const CRM_PLACEMENTS = [
     { value: "OPPORTUNITY_CREATE", label: "Opportunity create" },
 ];
 
+// Radix Select rejects an empty-string item value, so unmapped fields use this sentinel,
+// translated back to "" at the state-update boundary.
+const NO_MAPPING = "__none__";
+
 function moduleLabel(module: SourceModule) {
     return module.charAt(0).toUpperCase() + module.slice(1);
 }
 
 export function FormEditor({ initialForm }: EditorProps) {
-    const theme = useTheme();
     const [fields, setFields] = useState<FormField[]>(initialForm.config?.fields || []);
     const [selectedFieldId, setSelectedFieldId] = useState<string | null>(null);
     const [activeDragItem, setActiveDragItem] = useState<any>(null);
@@ -511,75 +505,66 @@ export function FormEditor({ initialForm }: EditorProps) {
 
     return (
         <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd} collisionDetection={closestCenter}>
-            <Box sx={{ display: 'flex', height: 'calc(100vh - 240px)', minHeight: 720, overflow: 'hidden', bgcolor: 'background.default' }}>
+            <div className="flex h-[calc(100vh-240px)] min-h-[720px] overflow-hidden bg-background">
                 {/* Left Sidebar: Tools */}
-                <Paper
-                    elevation={0}
-                    sx={{
-                        width: 240,
-                        borderRight: `1px solid ${theme.palette.divider}`,
-                        display: 'flex',
-                        flexDirection: 'column',
-                        zIndex: 2,
-                        borderRadius: 0,
-                        bgcolor: alpha(theme.palette.background.default, 0.5),
-                        backdropFilter: 'blur(8px)'
-                    }}
-                >
-                    <Box sx={{ p: 1.75, borderBottom: `1px solid ${theme.palette.divider}` }}>
-                        <Typography variant="subtitle2" fontWeight={700} sx={{ letterSpacing: 0.5, textTransform: 'uppercase', fontSize: '0.75rem', color: 'text.secondary' }}>
+                <div className="z-[2] flex w-60 flex-col border-r bg-background/50 backdrop-blur-sm">
+                    <div className="border-b p-3.5">
+                        <p className="text-xs font-bold tracking-wide text-muted-foreground uppercase">
                             Field Library
-                        </Typography>
-                        <Typography variant="caption" color="text.secondary">
+                        </p>
+                        <p className="text-xs text-muted-foreground">
                             Drag module fields or generic blocks into the form
-                        </Typography>
-                    </Box>
-                    <Box sx={{ px: 1.5, pt: 1.5 }}>
-                        <FormControl fullWidth size="small">
-                            <InputLabel>Source Module</InputLabel>
-                            <Select
-                                value={fieldLibraryModule}
-                                label="Source Module"
-                                onChange={(event) => setFieldLibraryModule(event.target.value as SourceModule)}
-                            >
-                                <MenuItem value="lead">Lead</MenuItem>
-                                <MenuItem value="opportunity">Opportunity</MenuItem>
-                                <MenuItem value="activity">Activity</MenuItem>
+                        </p>
+                    </div>
+                    <div className="space-y-2 px-3 pt-3">
+                        <div className="space-y-1.5">
+                            <Label className="text-xs">Source Module</Label>
+                            <Select value={fieldLibraryModule} onValueChange={(value) => setFieldLibraryModule(value as SourceModule)}>
+                                <SelectTrigger size="sm" className="w-full">
+                                    <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="lead">Lead</SelectItem>
+                                    <SelectItem value="opportunity">Opportunity</SelectItem>
+                                    <SelectItem value="activity">Activity</SelectItem>
+                                </SelectContent>
                             </Select>
-                        </FormControl>
+                        </div>
                         {fieldLibraryModule === "opportunity" && (
-                            <FormControl fullWidth size="small" sx={{ mt: 1 }}>
-                                <InputLabel>Opportunity Type</InputLabel>
-                                <Select
-                                    value={selectedOpportunityTypeId}
-                                    label="Opportunity Type"
-                                    onChange={(event) => setSelectedOpportunityTypeId(String(event.target.value))}
-                                >
-                                    {opportunityTypes.map((type) => (
-                                        <MenuItem key={type.id} value={type.id}>{type.name}</MenuItem>
-                                    ))}
+                            <div className="space-y-1.5">
+                                <Label className="text-xs">Opportunity Type</Label>
+                                <Select value={selectedOpportunityTypeId} onValueChange={(value) => setSelectedOpportunityTypeId(value)}>
+                                    <SelectTrigger size="sm" className="w-full">
+                                        <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        {opportunityTypes.map((type) => (
+                                            <SelectItem key={type.id} value={type.id}>{type.name}</SelectItem>
+                                        ))}
+                                    </SelectContent>
                                 </Select>
-                            </FormControl>
+                            </div>
                         )}
                         {fieldLibraryModule === "activity" && (
-                            <FormControl fullWidth size="small" sx={{ mt: 1 }}>
-                                <InputLabel>Activity Type</InputLabel>
-                                <Select
-                                    value={selectedActivityTypeId}
-                                    label="Activity Type"
-                                    onChange={(event) => setSelectedActivityTypeId(String(event.target.value))}
-                                >
-                                    {activityTypes.map((type) => (
-                                        <MenuItem key={type.id} value={type.id}>{type.name}</MenuItem>
-                                    ))}
+                            <div className="space-y-1.5">
+                                <Label className="text-xs">Activity Type</Label>
+                                <Select value={selectedActivityTypeId} onValueChange={(value) => setSelectedActivityTypeId(value)}>
+                                    <SelectTrigger size="sm" className="w-full">
+                                        <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        {activityTypes.map((type) => (
+                                            <SelectItem key={type.id} value={type.id}>{type.name}</SelectItem>
+                                        ))}
+                                    </SelectContent>
                                 </Select>
-                            </FormControl>
+                            </div>
                         )}
-                    </Box>
-                    <List sx={{ flex: 1, overflowY: 'auto', p: 1.5 }}>
-                        <Typography variant="caption" sx={{ display: "block", mb: 1, color: "text.secondary", fontWeight: 700 }}>
+                    </div>
+                    <div className="flex-1 overflow-y-auto p-3">
+                        <p className="mb-2 block text-xs font-bold text-muted-foreground">
                             {moduleLabel(fieldLibraryModule)} Fields
-                        </Typography>
+                        </p>
                         {moduleFields.map((field) => (
                             <DraggableModuleField
                                 key={`${fieldLibraryModule}.${field.key}`}
@@ -588,81 +573,46 @@ export function FormEditor({ initialForm }: EditorProps) {
                                 disabled={isModuleFieldAlreadyUsed(fieldLibraryModule, field.key)}
                             />
                         ))}
-                        <Divider sx={{ my: 1.5 }} />
-                        <Typography variant="caption" sx={{ display: "block", mb: 1, color: "text.secondary", fontWeight: 700 }}>
+                        <Separator className="my-3" />
+                        <p className="mb-2 block text-xs font-bold text-muted-foreground">
                             Special Fields
-                        </Typography>
+                        </p>
                         {FIELD_TYPES.map(t => (
                             <DraggableTool key={t.type} type={t.type} label={t.label} icon={t.icon} />
                         ))}
-                    </List>
-                </Paper>
+                    </div>
+                </div>
 
                 {/* Center: Canvas */}
-                <Box
-                    sx={{
-                        flex: 1,
-                        bgcolor: alpha(theme.palette.primary.main, 0.02),
-                        p: 2,
-                        overflowY: 'auto',
-                        display: 'flex',
-                        flexDirection: 'column',
-                        alignItems: 'center',
-                        position: 'relative',
-                        gap: 2
-                    }}
-                >
+                <div className="relative flex flex-1 flex-col items-center gap-4 overflow-y-auto bg-primary/[0.02] p-4">
                     {/* Toolbar */}
-                    <Paper
-                        elevation={0}
-                        sx={{
-                            width: '100%',
-                            maxWidth: 800,
-                            p: 1.5,
-                            borderRadius: '12px',
-                            display: 'flex',
-                            justifyContent: 'space-between',
-                            alignItems: 'center',
-                            border: `1px solid ${theme.palette.divider}`,
-                            bgcolor: 'background.paper',
-                            boxShadow: '0 4px 20px rgba(0,0,0,0.05)'
-                        }}
-                    >
-                        <Box>
-                            <Typography variant="caption" sx={{ color: 'text.secondary', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+                    <div className="flex w-full max-w-[800px] items-center justify-between rounded-xl border bg-card p-3 shadow-[0_4px_20px_rgba(0,0,0,0.05)]">
+                        <div>
+                            <p className="text-xs tracking-wider text-muted-foreground uppercase">
                                 Canvas Preview
-                            </Typography>
-                            <Typography variant="h6" fontWeight={700} sx={{ fontSize: '1.1rem' }}>{initialForm.name}</Typography>
-                            {initialForm.description && <Typography variant="caption" color="text.secondary">{initialForm.description}</Typography>}
-                        </Box>
-                        <Stack direction="row" spacing={1}>
-                            <Button variant="outlined" startIcon={<AddIcon />} size="small" onClick={addTab} sx={{ borderRadius: '10px' }}>
+                            </p>
+                            <h2 className="text-[1.1rem] font-bold">{initialForm.name}</h2>
+                            {initialForm.description && <p className="text-xs text-muted-foreground">{initialForm.description}</p>}
+                        </div>
+                        <div className="flex items-center gap-2">
+                            <Button variant="outline" size="sm" onClick={addTab}>
+                                <AddIcon className="size-4" />
                                 Tab
                             </Button>
-                            <Button variant="outlined" startIcon={<AddIcon />} size="small" onClick={addSection} sx={{ borderRadius: '10px' }}>
+                            <Button variant="outline" size="sm" onClick={addSection}>
+                                <AddIcon className="size-4" />
                                 Section
                             </Button>
-                            <Button
-                                variant="outlined"
-                                startIcon={<CodeIcon />}
-                                size="small"
-                                onClick={() => setEmbedDialogOpen(true)}
-                                sx={{ borderRadius: '10px' }}
-                            >
+                            <Button variant="outline" size="sm" onClick={() => setEmbedDialogOpen(true)}>
+                                <CodeIcon className="size-4" />
                                 Embed
                             </Button>
-                            <Button
-                                variant="contained"
-                                startIcon={<SaveIcon />}
-                                size="small"
-                                onClick={handleSave}
-                                disabled={saving}
-                                sx={{ borderRadius: '10px' }}
-                            >
+                            <Button size="sm" onClick={handleSave} disabled={saving}>
+                                <SaveIcon className="size-4" />
                                 {saving ? "Saving..." : "Save"}
                             </Button>
-                        </Stack>
-                    </Paper>
+                        </div>
+                    </div>
 
                     {/* Canvas Area */}
                     <DroppableCanvas
@@ -680,234 +630,274 @@ export function FormEditor({ initialForm }: EditorProps) {
                         onRemoveTab={removeTab}
                         onRemoveSection={removeSection}
                     />
-                </Box>
+                </div>
 
                 {/* Right Sidebar: Properties */}
-                <Paper
-                    elevation={0}
-                    sx={{
-                        width: 320,
-                        borderLeft: `1px solid ${theme.palette.divider}`,
-                        display: 'flex',
-                        flexDirection: 'column',
-                        zIndex: 2,
-                        borderRadius: 0
-                    }}
-                >
-                    <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>
-                        <Box sx={{ px: 2, pt: 1.5 }}>
-                            <Typography variant="caption" sx={{ color: 'text.secondary', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+                <div className="z-[2] flex w-80 flex-col border-l">
+                    <div className="border-b">
+                        <div className="px-4 pt-3">
+                            <p className="text-xs tracking-wider text-muted-foreground uppercase">
                                 Inspector
-                            </Typography>
-                        </Box>
-                        <Tabs
-                            value={activeTab}
-                            onChange={(e, val) => setActiveTab(val)}
-                            variant="fullWidth"
-                            textColor="primary"
-                            indicatorColor="primary"
-                        >
-                            <Tab icon={<TuneIcon fontSize="small" />} iconPosition="start" label="Field" value="field" />
-                            <Tab icon={<ColorLensIcon fontSize="small" />} iconPosition="start" label="Design" value="design" />
-                            <Tab icon={<SettingsIcon fontSize="small" />} iconPosition="start" label="Settings" value="settings" />
+                            </p>
+                        </div>
+                        <Tabs value={activeTab} onValueChange={setActiveTab}>
+                            <TabsList className="flex h-auto w-full rounded-none bg-transparent p-0">
+                                <TabsTrigger
+                                    value="field"
+                                    className="flex-1 gap-1.5 rounded-none border-b-2 border-transparent py-2.5 text-xs font-semibold text-muted-foreground data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:text-primary data-[state=active]:shadow-none"
+                                >
+                                    <TuneIcon className="size-3.5" />
+                                    Field
+                                </TabsTrigger>
+                                <TabsTrigger
+                                    value="design"
+                                    className="flex-1 gap-1.5 rounded-none border-b-2 border-transparent py-2.5 text-xs font-semibold text-muted-foreground data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:text-primary data-[state=active]:shadow-none"
+                                >
+                                    <ColorLensIcon className="size-3.5" />
+                                    Design
+                                </TabsTrigger>
+                                <TabsTrigger
+                                    value="settings"
+                                    className="flex-1 gap-1.5 rounded-none border-b-2 border-transparent py-2.5 text-xs font-semibold text-muted-foreground data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:text-primary data-[state=active]:shadow-none"
+                                >
+                                    <SettingsIcon className="size-3.5" />
+                                    Settings
+                                </TabsTrigger>
+                            </TabsList>
                         </Tabs>
-                    </Box>
+                    </div>
 
-                    <Box sx={{ flex: 1, overflowY: 'auto', p: 2 }}>
+                    <div className="flex-1 overflow-y-auto p-4">
                         {activeTab === "field" && (
                             selectedField ? (
-                                <Stack spacing={3}>
-                                    <Box>
-                                        <Typography variant="subtitle2" gutterBottom>Basic Properties</Typography>
-                                        <Stack spacing={2}>
-                                            <TextField
-                                                label="Label"
-                                                size="small"
-                                                fullWidth
-                                                value={selectedField.label}
-                                                onChange={e => updateField(selectedField.id, { label: e.target.value })}
-                                            />
-                                            <FormControl fullWidth size="small">
-                                                <InputLabel>Tab</InputLabel>
-                                                <Select value={selectedField.tabId || settings.tabs[0]?.id || "tab_1"} label="Tab" onChange={e => {
-                                                    const tabId = String(e.target.value);
-                                                    const sectionId = settings.sections.find((section: any) => section.tabId === tabId)?.id;
-                                                    updateField(selectedField.id, { tabId, sectionId });
-                                                }}>
-                                                    {settings.tabs.map((tab: any) => (
-                                                        <MenuItem key={tab.id} value={tab.id}>{tab.label}</MenuItem>
-                                                    ))}
+                                <div className="space-y-6">
+                                    <div>
+                                        <p className="mb-2 text-sm font-semibold">Basic Properties</p>
+                                        <div className="space-y-3">
+                                            <div className="space-y-1.5">
+                                                <Label htmlFor="field-editor-label-input">Label</Label>
+                                                <Input
+                                                    id="field-editor-label-input"
+                                                    value={selectedField.label}
+                                                    onChange={e => updateField(selectedField.id, { label: e.target.value })}
+                                                />
+                                            </div>
+                                            <div className="space-y-1.5">
+                                                <Label>Tab</Label>
+                                                <Select
+                                                    value={selectedField.tabId || settings.tabs[0]?.id || "tab_1"}
+                                                    onValueChange={value => {
+                                                        const tabId = value;
+                                                        const sectionId = settings.sections.find((section: any) => section.tabId === tabId)?.id;
+                                                        updateField(selectedField.id, { tabId, sectionId });
+                                                    }}
+                                                >
+                                                    <SelectTrigger className="w-full">
+                                                        <SelectValue />
+                                                    </SelectTrigger>
+                                                    <SelectContent>
+                                                        {settings.tabs.map((tab: any) => (
+                                                            <SelectItem key={tab.id} value={tab.id}>{tab.label}</SelectItem>
+                                                        ))}
+                                                    </SelectContent>
                                                 </Select>
-                                            </FormControl>
-                                            <FormControl fullWidth size="small">
-                                                <InputLabel>Section</InputLabel>
-                                                <Select value={selectedField.sectionId || ""} label="Section" onChange={e => updateField(selectedField.id, { sectionId: String(e.target.value) })}>
-                                                    {settings.sections.filter((section: any) => section.tabId === (selectedField.tabId || settings.tabs[0]?.id)).map((section: any) => (
-                                                        <MenuItem key={section.id} value={section.id}>{section.label}</MenuItem>
-                                                    ))}
+                                            </div>
+                                            <div className="space-y-1.5">
+                                                <Label>Section</Label>
+                                                <Select
+                                                    value={selectedField.sectionId || ""}
+                                                    onValueChange={value => updateField(selectedField.id, { sectionId: value })}
+                                                >
+                                                    <SelectTrigger className="w-full">
+                                                        <SelectValue />
+                                                    </SelectTrigger>
+                                                    <SelectContent>
+                                                        {settings.sections.filter((section: any) => section.tabId === (selectedField.tabId || settings.tabs[0]?.id)).map((section: any) => (
+                                                            <SelectItem key={section.id} value={section.id}>{section.label}</SelectItem>
+                                                        ))}
+                                                    </SelectContent>
                                                 </Select>
-                                            </FormControl>
+                                            </div>
                                             {selectedField.type !== 'HIDDEN' && selectedField.type !== 'CHECKBOX' && (
-                                                <TextField
-                                                    label="Placeholder"
-                                                    size="small"
-                                                    fullWidth
-                                                    value={selectedField.placeholder || ''}
-                                                    onChange={e => updateField(selectedField.id, { placeholder: e.target.value })}
-                                                />
+                                                <div className="space-y-1.5">
+                                                    <Label htmlFor="field-editor-placeholder-input">Placeholder</Label>
+                                                    <Input
+                                                        id="field-editor-placeholder-input"
+                                                        value={selectedField.placeholder || ''}
+                                                        onChange={e => updateField(selectedField.id, { placeholder: e.target.value })}
+                                                    />
+                                                </div>
                                             )}
-                                            <TextField
-                                                label="Help Text"
-                                                size="small"
-                                                fullWidth
-                                                value={selectedField.helpText || ''}
-                                                onChange={e => updateField(selectedField.id, { helpText: e.target.value })}
-                                                helperText="Displayed below the input field"
-                                            />
+                                            <div className="space-y-1.5">
+                                                <Label htmlFor="field-editor-help-text-input">Help Text</Label>
+                                                <Input
+                                                    id="field-editor-help-text-input"
+                                                    value={selectedField.helpText || ''}
+                                                    onChange={e => updateField(selectedField.id, { helpText: e.target.value })}
+                                                />
+                                                <p className="text-xs text-muted-foreground">Displayed below the input field</p>
+                                            </div>
                                             {selectedField.type !== 'HIDDEN' && (
-                                                <FormControlLabel
-                                                    control={<Switch checked={selectedField.required} onChange={e => updateField(selectedField.id, { required: e.target.checked })} />}
-                                                    label="Required Field"
-                                                    sx={{ ml: 0 }}
-                                                />
+                                                <label className="flex items-center gap-2 text-sm font-medium">
+                                                    <Switch
+                                                        checked={selectedField.required}
+                                                        onCheckedChange={checked => updateField(selectedField.id, { required: checked })}
+                                                    />
+                                                    Required Field
+                                                </label>
                                             )}
-                                        </Stack>
-                                    </Box>
+                                        </div>
+                                    </div>
 
                                     {['SELECT', 'CHECKBOX', 'RADIO'].includes(selectedField.type) && (
-                                        <Box>
-                                            <Typography variant="subtitle2" gutterBottom>Options</Typography>
-                                            <TextField
-                                                label="Options (comma separated)"
-                                                size="small"
-                                                fullWidth
-                                                multiline
-                                                rows={3}
-                                                value={selectedField.options?.join(', ') || ''}
-                                                onChange={e => updateField(selectedField.id, {
-                                                    options: e.target.value.split(',').map(s => s.trim()).filter((option) => option.length > 0)
-                                                })}
-                                            />
-                                        </Box>
+                                        <div>
+                                            <p className="mb-2 text-sm font-semibold">Options</p>
+                                            <div className="space-y-1.5">
+                                                <Label htmlFor="field-editor-options-input">Options (comma separated)</Label>
+                                                <Textarea
+                                                    id="field-editor-options-input"
+                                                    rows={3}
+                                                    value={selectedField.options?.join(', ') || ''}
+                                                    onChange={e => updateField(selectedField.id, {
+                                                        options: e.target.value.split(',').map(s => s.trim()).filter((option) => option.length > 0)
+                                                    })}
+                                                />
+                                            </div>
+                                        </div>
                                     )}
 
-                                    <Divider />
+                                    <Separator />
 
-                                    <Box>
-                                        <Typography variant="subtitle2" gutterBottom>Data Mapping</Typography>
-                                        <FormControl fullWidth size="small" sx={{ mb: 2 }}>
-                                            <InputLabel>Source Module</InputLabel>
-                                            <Select
-                                                value={selectedField.sourceModule || "lead"}
-                                                label="Source Module"
-                                                onChange={e => {
-                                                    const sourceModule = e.target.value as SourceModule;
-                                                    const fieldKey = selectedField.mapping?.split(".").pop() || "";
-                                                    updateField(selectedField.id, {
-                                                        sourceModule,
-                                                        mapping: fieldKey ? `${sourceModule}.${fieldKey}` : "",
-                                                        opportunityTypeId: sourceModule === "opportunity" ? selectedOpportunityTypeId : undefined,
-                                                        activityTypeId: sourceModule === "activity" ? selectedActivityTypeId : undefined,
-                                                    });
-                                                }}
-                                            >
-                                                <MenuItem value="lead">Lead</MenuItem>
-                                                <MenuItem value="opportunity">Opportunity</MenuItem>
-                                                <MenuItem value="activity">Activity</MenuItem>
-                                            </Select>
-                                        </FormControl>
-                                        <FormControl fullWidth size="small">
-                                            <InputLabel>Module Field</InputLabel>
-                                            <Select
-                                                value={selectedField.mapping || ''}
-                                                label="Module Field"
-                                                onChange={e => updateField(selectedField.id, { mapping: e.target.value })}
-                                            >
-                                                <MenuItem value=""><em>None (store submission only)</em></MenuItem>
-                                                {fieldsForModule((selectedField.sourceModule || "lead") as SourceModule).map((field) => (
-                                                    <MenuItem
-                                                        key={field.key}
-                                                        value={`${selectedField.sourceModule || "lead"}.${field.key}`}
-                                                    >
-                                                        {field.label}
-                                                    </MenuItem>
-                                                ))}
-                                            </Select>
-                                        </FormControl>
-                                        <TextField
-                                            label="Default Value"
-                                            size="small"
-                                            fullWidth
-                                            sx={{ mt: 2 }}
-                                            value={selectedField.defaultValue || ''}
-                                            onChange={e => updateField(selectedField.id, { defaultValue: e.target.value })}
-                                        />
-                                    </Box>
+                                    <div>
+                                        <p className="mb-2 text-sm font-semibold">Data Mapping</p>
+                                        <div className="space-y-3">
+                                            <div className="space-y-1.5">
+                                                <Label>Source Module</Label>
+                                                <Select
+                                                    value={selectedField.sourceModule || "lead"}
+                                                    onValueChange={value => {
+                                                        const sourceModule = value as SourceModule;
+                                                        const fieldKey = selectedField.mapping?.split(".").pop() || "";
+                                                        updateField(selectedField.id, {
+                                                            sourceModule,
+                                                            mapping: fieldKey ? `${sourceModule}.${fieldKey}` : "",
+                                                            opportunityTypeId: sourceModule === "opportunity" ? selectedOpportunityTypeId : undefined,
+                                                            activityTypeId: sourceModule === "activity" ? selectedActivityTypeId : undefined,
+                                                        });
+                                                    }}
+                                                >
+                                                    <SelectTrigger className="w-full">
+                                                        <SelectValue />
+                                                    </SelectTrigger>
+                                                    <SelectContent>
+                                                        <SelectItem value="lead">Lead</SelectItem>
+                                                        <SelectItem value="opportunity">Opportunity</SelectItem>
+                                                        <SelectItem value="activity">Activity</SelectItem>
+                                                    </SelectContent>
+                                                </Select>
+                                            </div>
+                                            <div className="space-y-1.5">
+                                                <Label>Module Field</Label>
+                                                <Select
+                                                    value={selectedField.mapping || NO_MAPPING}
+                                                    onValueChange={value => updateField(selectedField.id, { mapping: value === NO_MAPPING ? "" : value })}
+                                                >
+                                                    <SelectTrigger className="w-full">
+                                                        <SelectValue />
+                                                    </SelectTrigger>
+                                                    <SelectContent>
+                                                        <SelectItem value={NO_MAPPING}>
+                                                            <em>None (store submission only)</em>
+                                                        </SelectItem>
+                                                        {fieldsForModule((selectedField.sourceModule || "lead") as SourceModule).map((field) => (
+                                                            <SelectItem
+                                                                key={field.key}
+                                                                value={`${selectedField.sourceModule || "lead"}.${field.key}`}
+                                                            >
+                                                                {field.label}
+                                                            </SelectItem>
+                                                        ))}
+                                                    </SelectContent>
+                                                </Select>
+                                            </div>
+                                            <div className="space-y-1.5">
+                                                <Label htmlFor="field-editor-default-value-input">Default Value</Label>
+                                                <Input
+                                                    id="field-editor-default-value-input"
+                                                    value={selectedField.defaultValue || ''}
+                                                    onChange={e => updateField(selectedField.id, { defaultValue: e.target.value })}
+                                                />
+                                            </div>
+                                        </div>
+                                    </div>
 
-                                    <Divider />
+                                    <Separator />
 
-                                    <Box>
-                                        <Typography variant="subtitle2" gutterBottom>Validation</Typography>
-                                        <Stack spacing={2} direction="row">
-                                            <TextField
-                                                label="Min"
-                                                type="number"
-                                                size="small"
-                                                value={selectedField.validation?.min ?? ''}
+                                    <div>
+                                        <p className="mb-2 text-sm font-semibold">Validation</p>
+                                        <div className="flex gap-2">
+                                            <div className="flex-1 space-y-1.5">
+                                                <Label htmlFor="field-editor-min-input">Min</Label>
+                                                <Input
+                                                    id="field-editor-min-input"
+                                                    type="number"
+                                                    value={selectedField.validation?.min ?? ''}
+                                                    onChange={e => updateField(selectedField.id, {
+                                                        validation: { ...selectedField.validation, min: e.target.value ? parseInt(e.target.value) : undefined }
+                                                    })}
+                                                />
+                                            </div>
+                                            <div className="flex-1 space-y-1.5">
+                                                <Label htmlFor="field-editor-max-input">Max</Label>
+                                                <Input
+                                                    id="field-editor-max-input"
+                                                    type="number"
+                                                    value={selectedField.validation?.max ?? ''}
+                                                    onChange={e => updateField(selectedField.id, {
+                                                        validation: { ...selectedField.validation, max: e.target.value ? parseInt(e.target.value) : undefined }
+                                                    })}
+                                                />
+                                            </div>
+                                        </div>
+                                        <div className="mt-3 space-y-1.5">
+                                            <Label htmlFor="field-editor-pattern-input">Pattern (Regex)</Label>
+                                            <Input
+                                                id="field-editor-pattern-input"
+                                                value={selectedField.validation?.pattern ?? ''}
                                                 onChange={e => updateField(selectedField.id, {
-                                                    validation: { ...selectedField.validation, min: e.target.value ? parseInt(e.target.value) : undefined }
+                                                    validation: { ...selectedField.validation, pattern: e.target.value }
                                                 })}
                                             />
-                                            <TextField
-                                                label="Max"
-                                                type="number"
-                                                size="small"
-                                                value={selectedField.validation?.max ?? ''}
-                                                onChange={e => updateField(selectedField.id, {
-                                                    validation: { ...selectedField.validation, max: e.target.value ? parseInt(e.target.value) : undefined }
-                                                })}
-                                            />
-                                        </Stack>
-                                        <TextField
-                                            label="Pattern (Regex)"
-                                            size="small"
-                                            fullWidth
-                                            sx={{ mt: 2 }}
-                                            value={selectedField.validation?.pattern ?? ''}
-                                            onChange={e => updateField(selectedField.id, {
-                                                validation: { ...selectedField.validation, pattern: e.target.value }
-                                            })}
-                                        />
-                                    </Box>
+                                        </div>
+                                    </div>
 
-                                    <Divider />
+                                    <Separator />
 
-                                    <Box>
-                                        <Typography variant="subtitle2" gutterBottom>Conditional Logic</Typography>
+                                    <div>
+                                        <p className="mb-2 text-sm font-semibold">Conditional Logic</p>
                                         <ConditionalLogicBuilder
                                             fields={fields}
                                             currentFieldId={selectedField.id}
                                             value={selectedField.logic as any}
                                             onChange={(rule) => updateField(selectedField.id, { logic: rule })}
                                         />
-                                    </Box>
+                                    </div>
 
-                                    <Divider />
+                                    <Separator />
 
                                     <Button
-                                        variant="outlined"
-                                        color="error"
-                                        startIcon={<DeleteIcon />}
-                                        fullWidth
+                                        variant="outline"
+                                        className="w-full text-destructive hover:bg-destructive/10 hover:text-destructive"
                                         onClick={() => removeField(selectedField.id)}
                                     >
+                                        <DeleteIcon className="size-4" />
                                         Remove Field
                                     </Button>
-                                </Stack>
+                                </div>
                             ) : (
-                                <Box sx={{ py: 8, textAlign: 'center', opacity: 0.5 }}>
-                                    <Typography variant="body2">Select a field on the canvas to edit its properties.</Typography>
-                                </Box>
+                                <div className="py-16 text-center opacity-50">
+                                    <p className="text-sm">Select a field on the canvas to edit its properties.</p>
+                                </div>
                             )
                         )}
 
@@ -919,169 +909,185 @@ export function FormEditor({ initialForm }: EditorProps) {
                         )}
 
                         {activeTab === "settings" && (
-                            <Stack spacing={3}>
-                                <TextField
-                                    label="Submit Button Text"
-                                    size="small"
-                                    fullWidth
-                                    value={settings.submitButtonText}
-                                    onChange={e => setSettings({ ...settings, submitButtonText: e.target.value })}
-                                />
-                                <FormControl fullWidth size="small">
-                                    <InputLabel>Form Layout</InputLabel>
+                            <div className="space-y-6">
+                                <div className="space-y-1.5">
+                                    <Label htmlFor="settings-submit-button-text-input">Submit Button Text</Label>
+                                    <Input
+                                        id="settings-submit-button-text-input"
+                                        value={settings.submitButtonText}
+                                        onChange={e => setSettings({ ...settings, submitButtonText: e.target.value })}
+                                    />
+                                </div>
+                                <div className="space-y-1.5">
+                                    <Label>Form Layout</Label>
                                     <Select
-                                        value={settings.layoutColumns}
-                                        label="Form Layout"
-                                        onChange={e => setSettings({ ...settings, layoutColumns: Number(e.target.value) })}
+                                        value={String(settings.layoutColumns)}
+                                        onValueChange={value => setSettings({ ...settings, layoutColumns: Number(value) })}
                                     >
-                                        <MenuItem value={1}>Single column</MenuItem>
-                                        <MenuItem value={2}>Two columns</MenuItem>
+                                        <SelectTrigger className="w-full">
+                                            <SelectValue />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="1">Single column</SelectItem>
+                                            <SelectItem value="2">Two columns</SelectItem>
+                                        </SelectContent>
                                     </Select>
-                                </FormControl>
-                                <FormControlLabel
-                                    control={<Switch checked={settings.useMultiStep} onChange={e => setSettings({ ...settings, useMultiStep: e.target.checked })} />}
-                                    label="Use as multi-step form"
-                                />
-                                <FormControlLabel
-                                    control={<Switch checked={settings.showSectionNames} onChange={e => setSettings({ ...settings, showSectionNames: e.target.checked })} />}
-                                    label="Show section names"
-                                />
-                                <FormControl fullWidth size="small">
-                                    <InputLabel>Tabs Placement</InputLabel>
-                                    <Select value={settings.tabsPlacement} label="Tabs Placement" onChange={e => setSettings({ ...settings, tabsPlacement: e.target.value })}>
-                                        <MenuItem value="TOP">Top</MenuItem>
-                                        <MenuItem value="LEFT">Left</MenuItem>
+                                </div>
+                                <label className="flex items-center gap-2 text-sm font-medium">
+                                    <Switch
+                                        checked={settings.useMultiStep}
+                                        onCheckedChange={checked => setSettings({ ...settings, useMultiStep: checked })}
+                                    />
+                                    Use as multi-step form
+                                </label>
+                                <label className="flex items-center gap-2 text-sm font-medium">
+                                    <Switch
+                                        checked={settings.showSectionNames}
+                                        onCheckedChange={checked => setSettings({ ...settings, showSectionNames: checked })}
+                                    />
+                                    Show section names
+                                </label>
+                                <div className="space-y-1.5">
+                                    <Label>Tabs Placement</Label>
+                                    <Select value={settings.tabsPlacement} onValueChange={value => setSettings({ ...settings, tabsPlacement: value })}>
+                                        <SelectTrigger className="w-full">
+                                            <SelectValue />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="TOP">Top</SelectItem>
+                                            <SelectItem value="LEFT">Left</SelectItem>
+                                        </SelectContent>
                                     </Select>
-                                </FormControl>
-                                <Box>
-                                    <Typography variant="subtitle2" gutterBottom>Tabs</Typography>
-                                    <Stack spacing={1}>
+                                </div>
+                                <div>
+                                    <p className="mb-2 text-sm font-semibold">Tabs</p>
+                                    <div className="space-y-2">
                                         {settings.tabs.map((tab: any, index: number) => (
-                                            <Stack key={tab.id} direction="row" spacing={1} alignItems="center">
-                                                <TextField
-                                                    size="small"
-                                                    label={`Tab ${index + 1}`}
+                                            <div key={tab.id} className="flex items-center gap-2">
+                                                <Input
+                                                    aria-label={`Tab ${index + 1}`}
                                                     value={tab.label}
-                                                    fullWidth
                                                     onChange={e => updateTabLabel(tab.id, e.target.value)}
                                                 />
-                                                <IconButton size="small" onClick={() => removeTab(tab.id)} disabled={settings.tabs.length <= 1}>
-                                                    <CloseIcon fontSize="small" />
-                                                </IconButton>
-                                            </Stack>
+                                                <Button
+                                                    variant="ghost"
+                                                    size="icon-sm"
+                                                    onClick={() => removeTab(tab.id)}
+                                                    disabled={settings.tabs.length <= 1}
+                                                >
+                                                    <CloseIcon className="size-4" />
+                                                </Button>
+                                            </div>
                                         ))}
-                                    </Stack>
-                                </Box>
-                                <Box>
-                                    <Typography variant="subtitle2" gutterBottom>Sections</Typography>
-                                    <Stack spacing={1}>
+                                    </div>
+                                </div>
+                                <div>
+                                    <p className="mb-2 text-sm font-semibold">Sections</p>
+                                    <div className="space-y-2">
                                         {settings.sections.map((section: any, index: number) => (
-                                            <Stack key={section.id} direction="row" spacing={1} alignItems="center">
-                                                <TextField
-                                                    size="small"
-                                                    label={`Section ${index + 1}`}
+                                            <div key={section.id} className="flex items-center gap-2">
+                                                <Input
+                                                    aria-label={`Section ${index + 1}`}
                                                     value={section.label}
-                                                    fullWidth
                                                     onChange={e => updateSectionLabel(section.id, e.target.value)}
                                                 />
-                                                <IconButton size="small" onClick={() => removeSection(section.id)} disabled={settings.sections.filter((item: any) => item.tabId === section.tabId).length <= 1}>
-                                                    <CloseIcon fontSize="small" />
-                                                </IconButton>
-                                            </Stack>
+                                                <Button
+                                                    variant="ghost"
+                                                    size="icon-sm"
+                                                    onClick={() => removeSection(section.id)}
+                                                    disabled={settings.sections.filter((item: any) => item.tabId === section.tabId).length <= 1}
+                                                >
+                                                    <CloseIcon className="size-4" />
+                                                </Button>
+                                            </div>
                                         ))}
-                                    </Stack>
-                                </Box>
-                                <TextField
-                                    label="Success Message"
-                                    size="small"
-                                    fullWidth
-                                    multiline
-                                    rows={2}
-                                    value={settings.successMessage}
-                                    onChange={e => setSettings({ ...settings, successMessage: e.target.value })}
-                                />
-                                <TextField
-                                    label="Redirect URL"
-                                    size="small"
-                                    fullWidth
-                                    placeholder="https://"
-                                    value={settings.redirectUrl}
-                                    onChange={e => setSettings({ ...settings, redirectUrl: e.target.value })}
-                                />
-                                <TextField
-                                    label="Notification Emails"
-                                    size="small"
-                                    fullWidth
-                                    placeholder="admin@example.com"
-                                    value={settings.notificationEmails}
-                                    onChange={e => setSettings({ ...settings, notificationEmails: e.target.value })}
-                                />
-
-                                <Divider />
-
-                                <Box>
-                                    <Typography variant="subtitle2" gutterBottom>Security & Limits</Typography>
-                                    <FormControlLabel
-                                        control={<Switch checked={settings.spamProtection} onChange={e => setSettings({ ...settings, spamProtection: e.target.checked })} />}
-                                        label="Spam Protection"
+                                    </div>
+                                </div>
+                                <div className="space-y-1.5">
+                                    <Label htmlFor="settings-success-message-input">Success Message</Label>
+                                    <Textarea
+                                        id="settings-success-message-input"
+                                        rows={2}
+                                        value={settings.successMessage}
+                                        onChange={e => setSettings({ ...settings, successMessage: e.target.value })}
                                     />
-                                    <TextField
-                                        label="Rate Limit (submissions/hr)"
-                                        type="number"
-                                        size="small"
-                                        fullWidth
-                                        sx={{ mt: 2 }}
-                                        value={settings.rateLimit}
-                                        onChange={e => setSettings({ ...settings, rateLimit: parseInt(e.target.value) || 10 })}
+                                </div>
+                                <div className="space-y-1.5">
+                                    <Label htmlFor="settings-redirect-url-input">Redirect URL</Label>
+                                    <Input
+                                        id="settings-redirect-url-input"
+                                        placeholder="https://"
+                                        value={settings.redirectUrl}
+                                        onChange={e => setSettings({ ...settings, redirectUrl: e.target.value })}
                                     />
-                                </Box>
+                                </div>
+                                <div className="space-y-1.5">
+                                    <Label htmlFor="settings-notification-emails-input">Notification Emails</Label>
+                                    <Input
+                                        id="settings-notification-emails-input"
+                                        placeholder="admin@example.com"
+                                        value={settings.notificationEmails}
+                                        onChange={e => setSettings({ ...settings, notificationEmails: e.target.value })}
+                                    />
+                                </div>
 
-                                <Box>
-                                    <Typography variant="subtitle2" gutterBottom>Duplicate Handling</Typography>
-                                    <FormControl fullWidth size="small">
-                                        <Select
-                                            value={settings.duplicateAction}
-                                            onChange={e => setSettings({ ...settings, duplicateAction: e.target.value })}
-                                        >
-                                            <MenuItem value="CREATE">Always Create New Lead</MenuItem>
-                                            <MenuItem value="UPDATE">Update Existing Lead</MenuItem>
-                                            <MenuItem value="SKIP">Skip (Don't Create)</MenuItem>
-                                        </Select>
-                                    </FormControl>
-                                </Box>
+                                <Separator />
 
-                                <Divider />
+                                <div>
+                                    <p className="mb-2 text-sm font-semibold">Security & Limits</p>
+                                    <label className="flex items-center gap-2 text-sm font-medium">
+                                        <Switch
+                                            checked={settings.spamProtection}
+                                            onCheckedChange={checked => setSettings({ ...settings, spamProtection: checked })}
+                                        />
+                                        Spam Protection
+                                    </label>
+                                    <div className="mt-3 space-y-1.5">
+                                        <Label htmlFor="settings-rate-limit-input">Rate Limit (submissions/hr)</Label>
+                                        <Input
+                                            id="settings-rate-limit-input"
+                                            type="number"
+                                            value={settings.rateLimit}
+                                            onChange={e => setSettings({ ...settings, rateLimit: parseInt(e.target.value) || 10 })}
+                                        />
+                                    </div>
+                                </div>
 
-                                <FormControlLabel
-                                    control={<Switch checked={settings.isActive} onChange={e => setSettings({ ...settings, isActive: e.target.checked })} />}
-                                    label="Form Active"
-                                />
-                            </Stack>
+                                <div>
+                                    <p className="mb-2 text-sm font-semibold">Duplicate Handling</p>
+                                    <Select value={settings.duplicateAction} onValueChange={value => setSettings({ ...settings, duplicateAction: value })}>
+                                        <SelectTrigger className="w-full">
+                                            <SelectValue />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="CREATE">Always Create New Lead</SelectItem>
+                                            <SelectItem value="UPDATE">Update Existing Lead</SelectItem>
+                                            <SelectItem value="SKIP">Skip (Don&apos;t Create)</SelectItem>
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+
+                                <Separator />
+
+                                <label className="flex items-center gap-2 text-sm font-medium">
+                                    <Switch
+                                        checked={settings.isActive}
+                                        onCheckedChange={checked => setSettings({ ...settings, isActive: checked })}
+                                    />
+                                    Form Active
+                                </label>
+                            </div>
                         )}
-                    </Box>
-                </Paper>
-            </Box>
+                    </div>
+                </div>
+            </div>
 
             <DragOverlay>
                 {activeDragItem ? (
-                    <Paper
-                        elevation={4}
-                        sx={{
-                            p: 2,
-                            width: 200,
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: 2,
-                            opacity: 0.9,
-                            cursor: 'grabbing'
-                        }}
-                    >
-                        <Box sx={{ color: 'text.secondary' }}>
-                            {/* Icon would go here if we passed it in activeDragItem context */}
-                            <DragIndicatorIcon />
-                        </Box>
-                        <Typography variant="body2" fontWeight={600}>{activeDragItem.label}</Typography>
-                    </Paper>
+                    <div className="flex w-[200px] cursor-grabbing items-center gap-3 rounded-lg border bg-card p-4 opacity-90 shadow-lg">
+                        <DragIndicatorIcon className="size-4 text-muted-foreground" />
+                        <p className="text-sm font-semibold">{activeDragItem.label}</p>
+                    </div>
                 ) : null}
             </DragOverlay>
 
@@ -1091,77 +1097,53 @@ export function FormEditor({ initialForm }: EditorProps) {
                 formId={initialForm.id}
                 formName={initialForm.name}
             />
-        </DndContext >
+        </DndContext>
     );
 }
 
 function DraggableTool({ type, label, icon: Icon }: any) {
-    const theme = useTheme();
     const { attributes, listeners, setNodeRef } = useDraggable({
         id: `tool-${type}`,
         data: { type, label, isTool: true }
     });
 
     return (
-        <ListItemButton
+        <button
+            type="button"
             ref={setNodeRef}
             {...listeners}
             {...attributes}
-            sx={{
-                mb: 1,
-                border: `1px solid ${theme.palette.divider}`,
-                borderRadius: '10px',
-                '&:hover': {
-                    borderColor: 'primary.main',
-                    bgcolor: alpha(theme.palette.primary.main, 0.04)
-                },
-                cursor: 'grab'
-            }}
+            className="mb-2 flex w-full cursor-grab items-center gap-2.5 rounded-[10px] border px-2.5 py-2 text-left transition-colors hover:border-primary hover:bg-primary/[0.04] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
-            <ListItemIcon sx={{ minWidth: 36 }}>
-                <Icon fontSize="small" color="action" />
-            </ListItemIcon>
-            <ListItemText primary={label} primaryTypographyProps={{ variant: 'body2', fontWeight: 500 }} />
-        </ListItemButton>
+            <Icon className="size-4 shrink-0 text-muted-foreground" />
+            <span className="text-sm font-medium">{label}</span>
+        </button>
     );
 }
 
 function DraggableModuleField({ sourceModule, field, disabled }: any) {
-    const theme = useTheme();
     const { attributes, listeners, setNodeRef } = useDraggable({
         id: `module-${sourceModule}-${field.key}`,
         data: { ...field, sourceModule, isModuleField: true }
     });
 
     return (
-        <ListItemButton
+        <button
+            type="button"
             ref={setNodeRef}
             {...listeners}
             {...attributes}
-            sx={{
-                mb: 1,
-                border: `1px solid ${theme.palette.divider}`,
-                borderRadius: '8px',
-                bgcolor: alpha(theme.palette.background.paper, 0.7),
-                opacity: disabled ? 0.45 : 1,
-                pointerEvents: disabled ? "none" : "auto",
-                '&:hover': {
-                    borderColor: 'primary.main',
-                    bgcolor: alpha(theme.palette.primary.main, 0.04)
-                },
-                cursor: 'grab'
-            }}
+            className={cn(
+                "mb-2 flex w-full cursor-grab items-center gap-2 rounded-lg border bg-card/70 px-2.5 py-2 text-left transition-colors hover:border-primary hover:bg-primary/[0.04] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                disabled && "pointer-events-none opacity-45"
+            )}
         >
-            <ListItemIcon sx={{ minWidth: 30 }}>
-                <DragIndicatorIcon fontSize="small" color="action" />
-            </ListItemIcon>
-            <ListItemText
-                primary={field.label}
-                secondary={disabled ? "Already added" : moduleLabel(sourceModule)}
-                primaryTypographyProps={{ variant: 'body2', fontWeight: 600 }}
-                secondaryTypographyProps={{ variant: 'caption' }}
-            />
-        </ListItemButton>
+            <DragIndicatorIcon className="size-4 shrink-0 text-muted-foreground" />
+            <div>
+                <p className="text-sm font-semibold">{field.label}</p>
+                <p className="text-xs text-muted-foreground">{disabled ? "Already added" : moduleLabel(sourceModule)}</p>
+            </div>
+        </button>
     );
 }
 
@@ -1180,7 +1162,6 @@ function DroppableCanvas({
     onRemoveTab,
     onRemoveSection,
 }: any) {
-    const theme = useTheme();
     const { setNodeRef } = useDroppable({
         id: 'canvas-droppable',
     });
@@ -1189,87 +1170,75 @@ function DroppableCanvas({
     const visibleFields = fields.filter((field: any) => (field.tabId || tabs[0]?.id || "tab_1") === activeTab);
 
     return (
-        <Paper
+        <div
             ref={setNodeRef}
-            elevation={2}
-            sx={{
-                width: '100%',
-                maxWidth: 920,
-                minHeight: 600,
-                flex: '0 0 auto',
-                borderRadius: '12px',
-                p: 2.5,
-                mb: 3,
-                bgcolor: 'background.paper',
-                transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-                ...(fields.length === 0 && {
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    borderStyle: 'dashed',
-                    borderColor: 'divider'
-                })
-            }}
+            className={cn(
+                "mb-6 min-h-[600px] w-full max-w-[920px] flex-none rounded-xl border bg-card p-5 shadow-md transition-all",
+                fields.length === 0 && "flex items-center justify-center border-dashed"
+            )}
         >
             <SortableContext items={fields.map((f: any) => f.id)} strategy={verticalListSortingStrategy}>
                 {fields.length === 0 ? (
-                    <Box sx={{ textAlign: 'center', color: 'text.secondary' }}>
-                        <AddIcon sx={{ fontSize: 48, opacity: 0.2, mb: 1 }} />
-                        <Typography variant="body1">Drag fields here from the left sidebar</Typography>
-                    </Box>
+                    <div className="text-center text-muted-foreground">
+                        <AddIcon className="mx-auto mb-2 size-12 opacity-20" />
+                        <p className="text-sm">Drag fields here from the left sidebar</p>
+                    </div>
                 ) : (
-                    <Box>
-                        <Tabs value={activeTab} onChange={(_, value) => onTabChange?.(value)} variant="scrollable" scrollButtons="auto" sx={{ mb: 2, borderBottom: 1, borderColor: "divider", minHeight: 38 }}>
+                    <div>
+                        <div className="mb-4 flex items-center gap-1 overflow-x-auto border-b">
                             {tabs.map((tab: any) => (
-                                <Tab
+                                <div
                                     key={tab.id}
-                                    value={tab.id}
-                                    sx={{ minHeight: 38, py: 0, pr: 0.5 }}
-                                    label={(
-                                        <Stack direction="row" spacing={0.5} alignItems="center">
-                                            <Box component="span">{tab.label}</Box>
-                                            <IconButton
-                                                size="small"
-                                                onClick={(event: any) => {
-                                                    event.stopPropagation();
-                                                    onRemoveTab?.(tab.id);
-                                                }}
-                                                sx={{ width: 18, height: 18 }}
-                                            >
-                                                <CloseIcon sx={{ fontSize: 14 }} />
-                                            </IconButton>
-                                        </Stack>
+                                    className={cn(
+                                        "flex items-center gap-1 border-b-2 py-2 pr-1 pl-2.5 text-sm whitespace-nowrap",
+                                        activeTab === tab.id ? "border-primary font-medium text-foreground" : "border-transparent text-muted-foreground hover:text-foreground"
                                     )}
-                                />
+                                >
+                                    <button type="button" onClick={() => onTabChange?.(tab.id)} className="rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                                        {tab.label}
+                                    </button>
+                                    <Button
+                                        variant="ghost"
+                                        size="icon-xs"
+                                        className="size-[18px]"
+                                        onClick={(event) => {
+                                            event.stopPropagation();
+                                            onRemoveTab?.(tab.id);
+                                        }}
+                                    >
+                                        <CloseIcon className="size-3.5" />
+                                    </Button>
+                                </div>
                             ))}
-                        </Tabs>
+                        </div>
                         {(activeSections.length ? activeSections : [{ id: "section_1", label: "Section 1" }]).map((section: any) => {
                             const sectionFields = visibleFields.filter((field: any) => (field.sectionId || activeSections[0]?.id || section.id) === section.id);
                             return (
-                                <Box key={section.id} sx={{ mb: 2.25, position: 'relative' }}>
+                                <div key={section.id} className="relative mb-[18px]">
                                     {showSectionNames && (
-                                        <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 0.75 }}>
-                                            <Typography variant="subtitle2" fontWeight={800} sx={{ color: "primary.main" }}>
+                                        <div className="mb-[6px] flex items-center justify-between">
+                                            <p className="text-sm font-extrabold text-primary">
                                                 {section.label}
-                                            </Typography>
-                                            <IconButton size="small" onClick={() => onRemoveSection?.(section.id)} sx={{ width: 22, height: 22 }}>
-                                                <CloseIcon sx={{ fontSize: 15 }} />
-                                            </IconButton>
-                                        </Stack>
+                                            </p>
+                                            <Button
+                                                variant="ghost"
+                                                size="icon-xs"
+                                                className="size-[22px]"
+                                                onClick={() => onRemoveSection?.(section.id)}
+                                            >
+                                                <CloseIcon className="size-[15px]" />
+                                            </Button>
+                                        </div>
                                     )}
-                                    <Box
-                                        sx={{
-                                            display: 'grid',
-                                            gridTemplateColumns: columns === 2 ? { xs: '1fr', md: '1fr 1fr' } : '1fr',
-                                            gap: 1.5,
-                                            minHeight: 64,
-                                            border: sectionFields.length === 0 ? `1px dashed ${theme.palette.divider}` : "none",
-                                            borderRadius: 2,
-                                            p: sectionFields.length === 0 ? 1.5 : 0,
-                                        }}
+                                    <div
+                                        className={cn(
+                                            "grid min-h-16 gap-3",
+                                            columns === 2 ? "grid-cols-1 md:grid-cols-2" : "grid-cols-1",
+                                            sectionFields.length === 0 && "rounded-lg border border-dashed p-3"
+                                        )}
                                     >
                                         {sectionFields.length === 0 ? (
-                                            <Typography variant="caption" color="text.secondary">Drop fields into this section</Typography>
+                                            <p className="text-xs text-muted-foreground">Drop fields into this section</p>
                                         ) : sectionFields.map((field: FormField) => (
                                             <SortableField
                                                 key={field.id}
@@ -1281,31 +1250,61 @@ function DroppableCanvas({
                                                 onToggleWidth={() => onToggleFieldWidth?.(field.id)}
                                             />
                                         ))}
-                                    </Box>
-                                </Box>
+                                    </div>
+                                </div>
                             );
                         })}
-                    </Box>
+                    </div>
                 )}
             </SortableContext>
-        </Paper>
+        </div>
     );
 }
 
 function SortableField({ field, columns, isSelected, onSelect, onRemove, onToggleWidth }: any) {
-    const theme = useTheme();
     const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: field.id });
 
     // Simple render of field based on type
     const renderInput = () => {
         switch (field.type) {
-            case 'TEXTAREA': return <TextField fullWidth multiline rows={3} disabled placeholder={field.placeholder || "Long text answer"} size="small" />;
-            case 'SELECT': return <Select fullWidth size="small" disabled displayEmpty value=""><MenuItem value="">Select...</MenuItem></Select>;
-            case 'CHECKBOX': return <Box>{field.options?.map((o: string, i: number) => <FormControlLabel key={i} control={<Switch size="small" disabled />} label={o} />) || <FormControlLabel control={<Switch size="small" disabled />} label="Option 1" />}</Box>;
-            case 'RADIO': return <Box>{field.options?.map((o: string, i: number) => <FormControlLabel key={i} control={<Switch size="small" disabled />} label={o} />) || <FormControlLabel control={<Switch size="small" disabled />} label="Option 1" />}</Box>;
-            case 'FILE': return <Box sx={{ p: 2, border: '1px dashed grey', borderRadius: 1, textAlign: 'center', color: 'text.secondary' }}>File Upload Area</Box>;
-            case 'HIDDEN': return <Box sx={{ p: 1, border: '1px dashed gold', bgcolor: alpha('#ffd700', 0.1), borderRadius: 1, display: 'flex', alignItems: 'center', gap: 1 }}><VisibilityOffIcon fontSize="small" /> <Typography variant="caption">Hidden Field: {field.mapping || 'Unmapped'}</Typography></Box>;
-            default: return <TextField fullWidth disabled placeholder={field.placeholder || field.label} size="small" />;
+            case 'TEXTAREA':
+                return <Textarea rows={3} disabled placeholder={field.placeholder || "Long text answer"} className="resize-none text-sm" />;
+            case 'SELECT':
+                return (
+                    <Select disabled>
+                        <SelectTrigger size="sm" className="w-full">
+                            <SelectValue placeholder="Select..." />
+                        </SelectTrigger>
+                        <SelectContent />
+                    </Select>
+                );
+            case 'CHECKBOX':
+            case 'RADIO':
+                return (
+                    <div className="space-y-1">
+                        {(field.options?.length ? field.options : ["Option 1"]).map((option: string, index: number) => (
+                            <label key={index} className="flex items-center gap-2 text-sm">
+                                <Switch size="sm" disabled />
+                                {option}
+                            </label>
+                        ))}
+                    </div>
+                );
+            case 'FILE':
+                return (
+                    <div className="rounded border border-dashed p-4 text-center text-sm text-muted-foreground">
+                        File Upload Area
+                    </div>
+                );
+            case 'HIDDEN':
+                return (
+                    <div className="flex items-center gap-2 rounded border border-dashed border-yellow-500 bg-yellow-500/10 p-2">
+                        <VisibilityOffIcon className="size-4" />
+                        <span className="text-xs">Hidden Field: {field.mapping || 'Unmapped'}</span>
+                    </div>
+                );
+            default:
+                return <Input disabled placeholder={field.placeholder || field.label} className="text-sm" />;
         }
     };
 
@@ -1316,7 +1315,7 @@ function SortableField({ field, columns, isSelected, onSelect, onRemove, onToggl
     };
 
     return (
-        <Box
+        <div
             ref={setNodeRef}
             style={style}
             onClick={(e) => {
@@ -1324,97 +1323,68 @@ function SortableField({ field, columns, isSelected, onSelect, onRemove, onToggl
                 e.stopPropagation();
                 onSelect();
             }}
-            sx={{
-                position: 'relative',
-                p: 1.5,
-                gridColumn: columns === 2 && field.width === 2 ? '1 / -1' : 'auto',
-                borderRadius: '10px',
-                border: '1px solid',
-                borderColor: isSelected ? 'primary.main' : 'transparent',
-                bgcolor: isSelected ? alpha(theme.palette.primary.main, 0.05) : 'transparent',
-                '&:hover': {
-                    bgcolor: alpha(theme.palette.action.hover, 0.08),
-                    borderColor: isSelected ? 'primary.main' : 'divider',
-                    transform: 'translateY(-1px)',
-                    boxShadow: '0 2px 8px rgba(0,0,0,0.05)'
-                },
-                cursor: 'pointer',
-                transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)'
-            }}
+            className={cn(
+                "group relative cursor-pointer rounded-[10px] border p-3 transition-all",
+                columns === 2 && field.width === 2 && "col-span-full",
+                isSelected
+                    ? "border-primary bg-primary/5"
+                    : "border-transparent hover:-translate-y-px hover:border-border hover:bg-accent/60 hover:shadow-sm"
+            )}
         >
-            <Box sx={{ mb: 1, display: 'flex', justifyContent: 'space-between', alignItems: 'center', pr: 5 }}>
-                <Typography variant="subtitle2" fontWeight={600}>
-                    {field.label} {field.required && <Box component="span" sx={{ color: 'error.main' }}>*</Box>}
-                </Typography>
-                <Box
+            <div className="mb-2 flex items-center justify-between gap-2 pr-10">
+                <p className="text-sm font-semibold">
+                    {field.label} {field.required && <span className="text-destructive">*</span>}
+                </p>
+                <div
                     {...attributes}
                     {...listeners}
-                    sx={{
-                        cursor: 'grab',
-                        color: 'text.disabled',
-                        '&:hover': { color: 'text.secondary' },
-                        display: 'flex'
-                    }}
+                    className="flex cursor-grab text-muted-foreground/60 hover:text-muted-foreground"
                 >
-                    <DragIndicatorIcon fontSize="small" />
-                </Box>
-            </Box>
-            <Stack
-                direction="row"
-                spacing={0.25}
-                sx={{
-                    position: 'absolute',
-                    top: 6,
-                    right: 6,
-                    opacity: isSelected ? 1 : 0,
-                    transition: 'opacity 0.15s ease',
-                    '.MuiBox-root:hover > &': { opacity: 1 },
-                }}
+                    <DragIndicatorIcon className="size-4" />
+                </div>
+            </div>
+
+            <div
+                className={cn(
+                    "absolute top-1.5 right-1.5 flex gap-0.5 transition-opacity",
+                    isSelected ? "opacity-100" : "opacity-0 group-hover:opacity-100"
+                )}
             >
                 {columns === 2 && (
-                    <IconButton
-                        size="small"
-                        onClick={(event: any) => {
+                    <Button
+                        variant="outline"
+                        size="icon-xs"
+                        className="size-[22px] bg-card"
+                        onClick={(event) => {
                             event.preventDefault();
                             event.stopPropagation();
                             onToggleWidth?.();
                         }}
-                        sx={{ width: 22, height: 22, bgcolor: 'background.paper' }}
                     >
-                        <WidthIcon sx={{ fontSize: 15 }} />
-                    </IconButton>
+                        <WidthIcon className="size-[15px]" />
+                    </Button>
                 )}
-                <IconButton
-                    size="small"
-                    onClick={(event: any) => {
+                <Button
+                    variant="outline"
+                    size="icon-xs"
+                    className="size-[22px] bg-card"
+                    onClick={(event) => {
                         event.preventDefault();
                         event.stopPropagation();
                         onRemove?.();
                     }}
-                    sx={{ width: 22, height: 22, bgcolor: 'background.paper' }}
                 >
-                    <CloseIcon sx={{ fontSize: 15 }} />
-                </IconButton>
-            </Stack>
+                    <CloseIcon className="size-[15px]" />
+                </Button>
+            </div>
 
-            <Box sx={{ pointerEvents: 'none' }}>
+            <div className="pointer-events-none">
                 {renderInput()}
-            </Box>
+            </div>
 
             {isSelected && (
-                <Box
-                    sx={{
-                        position: 'absolute',
-                        left: -2,
-                        top: 0,
-                        bottom: 0,
-                        width: 4,
-                        bgcolor: 'primary.main',
-                        borderTopLeftRadius: 4,
-                        borderBottomLeftRadius: 4
-                    }}
-                />
+                <div className="absolute inset-y-0 left-[-2px] w-1 rounded-l-full bg-primary" />
             )}
-        </Box>
+        </div>
     );
 }

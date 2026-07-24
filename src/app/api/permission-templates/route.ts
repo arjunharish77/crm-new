@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { requireCurrentUser } from "@/lib/server/auth";
+import { requireInternalUser } from "@/lib/server/auth";
 import {
   createPermissionTemplateForTenant,
   listPermissionTemplatesForTenant,
@@ -8,19 +8,20 @@ import { badRequest, forbidden, serverError, unauthorized } from "@/lib/server/h
 
 export async function GET(request: Request) {
   try {
-    const user = await requireCurrentUser(request);
+    const user = await requireInternalUser(request);
     if (!user.tenantId) return forbidden("Tenant context required");
     const templates = await listPermissionTemplatesForTenant(user.tenantId);
     return NextResponse.json(templates);
   } catch (error) {
     if (error instanceof Error && error.message === "UNAUTHORIZED") return unauthorized();
+    if (error instanceof Error && error.message === "FORBIDDEN") return forbidden();
     return serverError("Failed to fetch permission templates", error);
   }
 }
 
 export async function POST(request: Request) {
   try {
-    const user = await requireCurrentUser(request);
+    const user = await requireInternalUser(request);
     if (!user.tenantId) return forbidden("Tenant context required");
     const body = await request.json().catch(() => null);
     if (!body?.name || !body?.permissions) return badRequest("Template name and permissions are required");
@@ -28,6 +29,7 @@ export async function POST(request: Request) {
     return NextResponse.json(template);
   } catch (error) {
     if (error instanceof Error && error.message === "UNAUTHORIZED") return unauthorized();
+    if (error instanceof Error && error.message === "FORBIDDEN") return forbidden();
     return serverError("Failed to create permission template", error);
   }
 }

@@ -1,24 +1,12 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import {
-    Box,
-    Typography,
-    Stack,
-    Tooltip,
-    CircularProgress,
-    Chip,
-    alpha,
-    useTheme,
-} from '@mui/material';
-import {
-    History as HistoryIcon,
-    ArrowForward as ArrowIcon,
-    Person as PersonIcon,
-} from '@mui/icons-material';
+import { History, ArrowRight, Loader2 } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
 import { apiFetch } from '@/lib/api';
 import { toast } from 'sonner';
 import { formatWorkspaceRelativeTime } from '@/lib/date-format';
+import { cn } from '@/lib/utils';
 
 interface AuditEntry {
     id: string;
@@ -41,14 +29,24 @@ interface FieldHistoryPanelProps {
     entityId: string;
 }
 
-const ACTION_COLORS: Record<string, 'default' | 'success' | 'warning' | 'error' | 'info' | 'primary' | 'secondary'> = {
-    LEAD_CREATED: 'success',
-    LEAD_UPDATED: 'info',
-    LEAD_DELETED: 'error',
-    OPPORTUNITY_CREATED: 'success',
-    OPPORTUNITY_UPDATED: 'info',
-    STAGE_CHANGED: 'warning',
-    DEFAULT: 'default',
+const ACTION_BADGE_CLASSNAMES: Record<string, string> = {
+    LEAD_CREATED: 'bg-emerald-500/15 text-emerald-600 border-emerald-500/30',
+    LEAD_UPDATED: 'bg-sky-500/15 text-sky-600 border-sky-500/30',
+    LEAD_DELETED: 'bg-destructive/15 text-destructive border-destructive/30',
+    OPPORTUNITY_CREATED: 'bg-emerald-500/15 text-emerald-600 border-emerald-500/30',
+    OPPORTUNITY_UPDATED: 'bg-sky-500/15 text-sky-600 border-sky-500/30',
+    STAGE_CHANGED: 'bg-amber-500/15 text-amber-600 border-amber-500/30',
+    DEFAULT: 'bg-muted text-muted-foreground border-border',
+};
+
+const DOT_CLASSNAMES: Record<string, string> = {
+    LEAD_CREATED: 'bg-emerald-500',
+    LEAD_UPDATED: 'bg-sky-500',
+    LEAD_DELETED: 'bg-destructive',
+    OPPORTUNITY_CREATED: 'bg-emerald-500',
+    OPPORTUNITY_UPDATED: 'bg-sky-500',
+    STAGE_CHANGED: 'bg-amber-500',
+    DEFAULT: 'bg-muted-foreground/40',
 };
 
 function formatValue(val: any): string {
@@ -77,54 +75,31 @@ function ChangedFields({ before, after }: { before: any; after: any }) {
     if (changedKeys.length === 0) return null;
 
     return (
-        <Box sx={{ mt: 1, display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+        <div className="mt-1 flex flex-col gap-1">
             {changedKeys.slice(0, 5).map(key => (
-                <Stack key={key} direction="row" spacing={1} alignItems="center" flexWrap="wrap">
-                    <Typography variant="caption" fontWeight={600} sx={{ minWidth: 80, color: 'text.secondary' }}>
+                <div key={key} className="flex flex-wrap items-center gap-1.5">
+                    <span className="min-w-20 text-xs font-semibold text-muted-foreground">
                         {key}
-                    </Typography>
-                    <Typography variant="caption" sx={{
-                        bgcolor: 'error.main',
-                        color: 'error.contrastText',
-                        px: 0.75,
-                        py: 0.25,
-                        borderRadius: 1,
-                        textDecoration: 'line-through',
-                        opacity: 0.8,
-                        maxWidth: 120,
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                        whiteSpace: 'nowrap',
-                    }}>
+                    </span>
+                    <span className="max-w-[120px] truncate rounded px-1.5 py-0.5 text-xs text-white line-through opacity-80 bg-destructive">
                         {formatValue((before || {})[key])}
-                    </Typography>
-                    <ArrowIcon sx={{ fontSize: 12, color: 'text.disabled' }} />
-                    <Typography variant="caption" sx={{
-                        bgcolor: 'success.main',
-                        color: 'success.contrastText',
-                        px: 0.75,
-                        py: 0.25,
-                        borderRadius: 1,
-                        maxWidth: 120,
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                        whiteSpace: 'nowrap',
-                    }}>
+                    </span>
+                    <ArrowRight className="size-3 text-muted-foreground/60" />
+                    <span className="max-w-[120px] truncate rounded px-1.5 py-0.5 text-xs text-white bg-emerald-600">
                         {formatValue((after || {})[key])}
-                    </Typography>
-                </Stack>
+                    </span>
+                </div>
             ))}
             {changedKeys.length > 5 && (
-                <Typography variant="caption" color="text.disabled">
+                <span className="text-xs text-muted-foreground/70">
                     +{changedKeys.length - 5} more fields changed
-                </Typography>
+                </span>
             )}
-        </Box>
+        </div>
     );
 }
 
 export function FieldHistoryPanel({ entityType, entityId }: FieldHistoryPanelProps) {
-    const theme = useTheme();
     const [history, setHistory] = useState<AuditEntry[]>([]);
     const [loading, setLoading] = useState(true);
 
@@ -150,98 +125,79 @@ export function FieldHistoryPanel({ entityType, entityId }: FieldHistoryPanelPro
     }, [entityId, entityType]);
 
     return (
-        <Box>
-            <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 2 }}>
-                <HistoryIcon sx={{ fontSize: 20, color: 'primary.main' }} />
-                <Typography variant="subtitle1" fontWeight={700}>
+        <div>
+            <div className="mb-2 flex items-center gap-2">
+                <History className="size-5 text-primary" />
+                <span className="text-base font-bold">
                     Field History
-                </Typography>
+                </span>
                 {history.length > 0 && (
-                    <Chip
-                        label={history.length}
-                        size="small"
-                        sx={{ height: 20, fontSize: '0.7rem', bgcolor: 'action.selected' }}
-                    />
+                    <Badge variant="secondary" className="h-5 text-[0.7rem]">
+                        {history.length}
+                    </Badge>
                 )}
-            </Stack>
+            </div>
 
             {loading ? (
-                <Box sx={{ display: 'flex', justifyContent: 'center', py: 3 }}>
-                    <CircularProgress size={24} />
-                </Box>
+                <div className="flex justify-center py-6">
+                    <Loader2 className="size-6 animate-spin text-muted-foreground" />
+                </div>
             ) : history.length === 0 ? (
-                <Box sx={{ textAlign: 'center', py: 4, color: 'text.disabled' }}>
-                    <HistoryIcon sx={{ fontSize: 32, mb: 1 }} />
-                    <Typography variant="body2">No history recorded yet.</Typography>
-                </Box>
+                <div className="py-8 text-center text-muted-foreground/60">
+                    <History className="mx-auto mb-2 size-8" />
+                    <p className="text-sm">No history recorded yet.</p>
+                </div>
             ) : (
-                <Box sx={{ position: 'relative' }}>
+                <div className="relative">
                     {/* Vertical timeline line */}
-                    <Box sx={{
-                        position: 'absolute',
-                        left: 11,
-                        top: 0,
-                        bottom: 0,
-                        width: 2,
-                        bgcolor: 'divider',
-                        zIndex: 0,
-                    }} />
+                    <div className="absolute inset-y-0 left-[11px] z-0 w-0.5 bg-border" />
 
-                    <Stack spacing={2}>
-                        {history.map((entry, idx) => {
-                            const color = ACTION_COLORS[entry.action] || 'default';
+                    <div className="flex flex-col gap-4">
+                        {history.map((entry) => {
+                            const badgeClassName = ACTION_BADGE_CLASSNAMES[entry.action] || ACTION_BADGE_CLASSNAMES.DEFAULT;
+                            const dotClassName = DOT_CLASSNAMES[entry.action] || DOT_CLASSNAMES.DEFAULT;
                             return (
-                                <Box key={entry.id} sx={{ display: 'flex', gap: 2, position: 'relative', zIndex: 1 }}>
+                                <div key={entry.id} className="relative z-10 flex gap-2">
                                     {/* Dot */}
-                                    <Box sx={{
-                                        width: 24,
-                                        height: 24,
-                                        borderRadius: '50%',
-                                        bgcolor: `${color}.main`,
-                                        flexShrink: 0,
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        justifyContent: 'center',
-                                        border: '2px solid',
-                                        borderColor: 'background.paper',
-                                        boxShadow: `0 0 0 2px ${color === 'default' ? theme.palette.grey[400] : alpha((theme.palette[color as keyof typeof theme.palette] as any).main, 0.2)}`,
-                                    }}>
-                                        <PersonIcon sx={{ fontSize: 12, color: 'white' }} />
-                                    </Box>
+                                    <div
+                                        className={cn(
+                                            "flex size-6 shrink-0 items-center justify-center rounded-full border-2 border-card shadow-[0_0_0_2px_var(--border)]",
+                                            dotClassName
+                                        )}
+                                    >
+                                        <History className="size-3 text-white" />
+                                    </div>
 
                                     {/* Content */}
-                                    <Box sx={{ flex: 1, pb: 2 }}>
-                                        <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap">
-                                            <Chip
-                                                label={entry.action.replace(/_/g, ' ')}
-                                                size="small"
-                                                color={color}
-                                                sx={{ height: 20, fontSize: '0.65rem', fontWeight: 700 }}
-                                            />
-                                            <Typography variant="caption" fontWeight={600}>
+                                    <div className="flex-1 pb-2">
+                                        <div className="flex flex-wrap items-center gap-1.5">
+                                            <Badge variant="outline" className={cn("h-5 text-[0.65rem] font-bold uppercase", badgeClassName)}>
+                                                {entry.action.replace(/_/g, ' ')}
+                                            </Badge>
+                                            <span className="text-xs font-semibold">
                                                 {entry.user.name}
-                                            </Typography>
-                                            <Typography variant="caption" color="text.disabled">
+                                            </span>
+                                            <span className="text-xs text-muted-foreground/60">
                                                 {formatWorkspaceRelativeTime(entry.createdAt)}
-                                            </Typography>
-                                        </Stack>
+                                            </span>
+                                        </div>
 
                                         {entry.before && entry.after && (
                                             <ChangedFields before={entry.before} after={entry.after} />
                                         )}
 
                                         {entry.diff && !entry.before && (
-                                            <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5, display: 'block' }}>
+                                            <p className="mt-1 block text-xs text-muted-foreground">
                                                 {JSON.stringify(entry.diff).slice(0, 120)}
-                                            </Typography>
+                                            </p>
                                         )}
-                                    </Box>
-                                </Box>
+                                    </div>
+                                </div>
                             );
                         })}
-                    </Stack>
-                </Box>
+                    </div>
+                </div>
             )}
-        </Box>
+        </div>
     );
 }

@@ -6,12 +6,21 @@ import { useAuth } from './auth-provider';
 import { toast } from "sonner";
 
 interface Notification {
+    id?: string;
     type: string;
     title: string;
     message: string;
     data: any;
     timestamp: string;
 }
+
+type NotificationSnapshotItem = {
+    id?: string;
+    title: string;
+    message: string;
+    data: any;
+    createdAt?: string;
+};
 
 interface NotificationContextType {
     notifications: Notification[];
@@ -41,15 +50,37 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
                 return;
             }
 
-            // Skip heartbeat events — they are only for keeping the connection alive
             if (payload?.type === 'heartbeat') return;
 
+            if (payload?.type === "snapshot") {
+                const items = Array.isArray(payload.notifications) ? payload.notifications : [];
+                const normalized: Notification[] = items.map((item: NotificationSnapshotItem) => ({
+                    id: item.id,
+                    type: item.data?.type || "notification",
+                    title: item.title,
+                    message: item.message,
+                    data: item.data,
+                    timestamp: item.createdAt || new Date().toISOString(),
+                }));
+
+                setNotifications((prev) => {
+                    const seen = new Set(prev.map((item) => item.id).filter(Boolean));
+                    return [...normalized.filter((item) => !item.id || !seen.has(item.id)), ...prev];
+                });
+                setUnreadCount((prev) => Math.max(prev, normalized.length));
+                return;
+            }
+
             const newNotification: Notification = {
+                id: payload.id,
                 ...payload,
                 timestamp: new Date().toISOString()
             };
 
-            setNotifications(prev => [newNotification, ...prev]);
+            setNotifications(prev => {
+                if (newNotification.id && prev.some((item) => item.id === newNotification.id)) return prev;
+                return [newNotification, ...prev];
+            });
             setUnreadCount(prev => prev + 1);
 
             toast(newNotification.title, {
@@ -58,9 +89,7 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
         };
 
         eventSource.onerror = () => {
-            // Connection errors are expected (server restart, etc.) — just close and let
-            // the component re-mount via dependency change if needed
-            eventSource.close();
+            // EventSource reconnects automatically; no polling fallback is used.
         };
 
         return () => {
@@ -68,70 +97,20 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
         };
     }, [isAuthenticated, token]);
 
-    useEffect(() => {
-        if (!isAuthenticated || !token) return;
-
-        const fetchUnread = async () => {
-            try {
-                const response = await fetch(`${API_URL}/notifications`, {
-                    headers: { Authorization: `Bearer ${token}` },
-                });
-                if (!response.ok) return;
-                const items = await response.json();
-                if (!Array.isArray(items) || items.length === 0) return;
-
-                const normalized = items.map((item) => ({
-                    type: "automation",
-                    title: item.title,
-                    message: item.message,
-                    data: item.data,
-                    timestamp: item.createdAt || new Date().toISOString(),
-                }));
-
-                setNotifications(prev => [...normalized, ...prev]);
-                setUnreadCount(prev => prev + normalized.length);
-                normalized.forEach((item) => {
-                    toast(item.title, { description: item.message });
-                });
-
-                await fetch(`${API_URL}/notifications`, {
-                    method: "PATCH",
-                    headers: {
-                        "Content-Type": "application/json",
-                        Authorization: `Bearer ${token}`,
-                    },
-                    body: JSON.stringify({ ids: items.map((item) => item.id) }),
-                });
-            } catch {
-                // notification polling should never interrupt the app shell
-            }
-        };
-
-        fetchUnread();
-        const interval = window.setInterval(fetchUnread, 30_000);
-        return () => window.clearInterval(interval);
-    }, [isAuthenticated, token]);
-
-    useEffect(() => {
-        if (!isAuthenticated || !token) return;
-
-        const processDueJobs = () => {
-            fetch(`${API_URL}/automation-v2/process-due`, {
-                method: "POST",
-                headers: {
-                    Authorization: `Bearer ${token}`,
-                },
-            }).catch(() => undefined);
-        };
-
-        processDueJobs();
-        const interval = window.setInterval(processDueJobs, 60_000);
-        return () => window.clearInterval(interval);
-    }, [isAuthenticated, token]);
-
     const clearNotifications = () => {
+        const ids = notifications.map((item) => item.id).filter((id): id is string => typeof id === "string" && id.length > 0);
         setNotifications([]);
         setUnreadCount(0);
+        if (ids.length && token) {
+            fetch(`${API_URL}/notifications`, {
+                method: "PATCH",
+                headers: {
+                    "Content-Type": "application/json",
+                    Authorization: `Bearer ${token}`,
+                },
+                body: JSON.stringify({ ids }),
+            }).catch(() => undefined);
+        }
     };
 
     return (

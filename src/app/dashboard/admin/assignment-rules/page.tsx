@@ -1,35 +1,18 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useMemo } from "react";
 import { apiFetch } from "@/lib/api";
-import {
-    Box,
-    Button,
-    Typography,
-    Divider,
-    IconButton,
-    Chip,
-    Paper,
-    useTheme,
-    alpha,
-    Stack,
-    CircularProgress
-} from "@mui/material";
-import {
-    Add as AddIcon,
-    Edit as EditIcon,
-    Delete as TrashIcon,
-    Rule as RuleIcon
-} from "@mui/icons-material";
+import { ColumnDef } from "@tanstack/react-table";
+import { Plus, Pencil, Route, Trash2, Workflow } from "lucide-react";
 import { toast } from "sonner";
-import { GridColDef } from "@mui/x-data-grid";
-import { StandardDataGrid } from "@/components/common/standard-data-grid";
+import { DataTable } from "@/components/ui/data-table";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { RuleBuilder } from "./rule-builder";
 import { motion } from "framer-motion";
 import { fadeInUp } from "@/lib/motion";
 
 export default function AssignmentSettingsPage() {
-    const theme = useTheme();
     const [rules, setRules] = useState<any[]>([]);
     const [loading, setLoading] = useState(false);
     const [isBuilderOpen, setIsBuilderOpen] = useState(false);
@@ -96,135 +79,109 @@ export default function AssignmentSettingsPage() {
         }
     };
 
-    const columns: GridColDef[] = [
+    const columns = useMemo<ColumnDef<any, any>[]>(() => [
         {
-            field: 'name',
-            headerName: 'Rule Name',
-            flex: 1,
-            minWidth: 250,
-            renderCell: (params) => (
-                <Typography variant="body2" sx={{ fontWeight: 700, py: 1 }}>{params.value}</Typography>
+            accessorKey: 'name',
+            header: 'Rule Name',
+            size: 280,
+            cell: ({ row }) => (
+                <span className="py-1 text-sm font-bold">{row.original.name}</span>
             )
         },
         {
-            field: 'isActive',
-            headerName: 'Status',
-            width: 140,
-            renderCell: (params) => (
-                <Chip
-                    label={params.value ? "Active" : "Paused"}
-                    size="small"
-                    sx={{
-                        borderRadius: '8px',
-                        fontWeight: 800,
-                        fontSize: '0.625rem',
-                        textTransform: 'uppercase',
-                        bgcolor: params.value ? alpha(theme.palette.success.main, 0.08) : alpha(theme.palette.text.disabled, 0.08),
-                        color: params.value ? 'success.main' : 'text.disabled',
-                        border: '1px solid',
-                        borderColor: params.value ? alpha(theme.palette.success.main, 0.2) : alpha(theme.palette.text.disabled, 0.2)
-                    }}
-                />
+            accessorKey: 'isActive',
+            header: 'Status',
+            size: 140,
+            cell: ({ row }) => (
+                <Badge
+                    variant="outline"
+                    className={
+                        row.original.isActive
+                            ? "border-tertiary/25 bg-tertiary/10 font-extrabold uppercase text-tertiary"
+                            : "border-border bg-muted font-extrabold uppercase text-muted-foreground"
+                    }
+                >
+                    {row.original.isActive ? "Active" : "Paused"}
+                </Badge>
             )
         },
         {
-            field: 'priority',
-            headerName: 'Priority',
-            width: 120,
-            type: 'number',
-            align: 'center',
-            headerAlign: 'center',
-            renderCell: (params) => (
-                <Paper sx={{
-                    px: 1.5,
-                    py: 0.5,
-                    borderRadius: '8px',
-                    bgcolor: alpha(theme.palette.info.main, 0.08),
-                    color: 'info.main',
-                    fontWeight: 800,
-                    fontSize: '0.75rem',
-                    border: '1px solid',
-                    borderColor: alpha(theme.palette.info.main, 0.2)
-                }}>
-                    P{params.value}
-                </Paper>
+            accessorKey: 'priority',
+            header: 'Priority',
+            size: 120,
+            cell: ({ row }) => (
+                <span className="inline-flex rounded-md border border-primary/20 bg-primary/10 px-3 py-1 text-xs font-extrabold text-primary">
+                    P{row.original.priority}
+                </span>
             )
         },
         {
-            field: 'actions',
-            headerName: 'Actions',
-            width: 140,
-            sortable: false,
-            align: 'right',
-            headerAlign: 'right',
-            renderCell: (params) => (
-                <Stack direction="row" spacing={1} justifyContent="flex-end" width="100%">
-                    <IconButton size="small" onClick={(e) => { e.stopPropagation(); handleEdit(params.row); }} sx={{ color: 'primary.main' }}>
-                        <EditIcon fontSize="small" />
-                    </IconButton>
-                    <IconButton size="small" color="error" onClick={(e) => { e.stopPropagation(); handleDelete(params.row.id); }}>
-                        <TrashIcon fontSize="small" />
-                    </IconButton>
-                </Stack>
+            id: 'actions',
+            header: 'Actions',
+            size: 140,
+            cell: ({ row }) => (
+                <div className="flex w-full justify-end gap-1">
+                    <Button
+                        variant="ghost"
+                        size="icon-sm"
+                        onClick={(e) => { e.stopPropagation(); handleEdit(row.original); }}
+                    >
+                        <Pencil className="size-4" />
+                    </Button>
+                    <Button
+                        variant="ghost"
+                        size="icon-sm"
+                        className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+                        onClick={(e) => { e.stopPropagation(); handleDelete(row.original.id); }}
+                    >
+                        <Trash2 className="size-4" />
+                    </Button>
+                </div>
             )
         }
-    ];
+    ], []);
 
     return (
-        <Box
-            component={motion.div}
+        <motion.div
             variants={fadeInUp}
             initial="initial"
             animate="animate"
-            sx={{ maxWidth: 1200, mx: 'auto', p: { xs: 1.5, md: 2 } }}
+            className="mx-auto max-w-[1200px] p-3 md:p-4"
         >
-            <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 2 }}>
-                <Box>
-                    <Typography variant="h6" sx={{ fontWeight: 800, letterSpacing: -1 }}>Assignment Rules</Typography>
-                    <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+            <div className="mb-4 flex items-center justify-between">
+                <div>
+                    <h1 className="text-lg font-extrabold">Assignment Rules</h1>
+                    <p className="mt-1 text-xs text-muted-foreground">
                         Configure dynamic logic for routing leads and opportunities based on criteria
-                    </Typography>
-                </Box>
-                <Button
-                    variant="contained"
-                    startIcon={<AddIcon />}
-                    onClick={handleCreate}
-                    sx={{ borderRadius: '12px', px: 3, py: 1 }}
-                >
+                    </p>
+                </div>
+                <Button onClick={handleCreate}>
+                    <Plus className="size-4" />
                     Create Rule
                 </Button>
-            </Stack>
+            </div>
 
-            <Paper
-                elevation={0}
-                sx={{
-                    borderRadius: '24px',
-                    overflow: 'hidden',
-                    border: '1px solid',
-                    borderColor: 'divider',
-                    bgcolor: 'background.paper'
-                }}
-            >
-                <Box sx={{ p: 2, display: 'flex', alignItems: 'center', gap: 1.5, bgcolor: alpha(theme.palette.primary.main, 0.02) }}>
-                    <Paper sx={{ p: 1, borderRadius: '10px', bgcolor: alpha(theme.palette.primary.main, 0.1), color: 'primary.main', display: 'flex' }}>
-                        <RuleIcon fontSize="small" />
-                    </Paper>
-                    <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>Routing Logic</Typography>
-                </Box>
-                <Divider />
-                <StandardDataGrid
-                    rows={rules}
+            <div className="overflow-hidden rounded-3xl border bg-card">
+                <div className="flex items-center gap-3 bg-primary/[0.02] p-4">
+                    <div className="flex rounded-[10px] bg-primary/10 p-2 text-primary">
+                        <Workflow className="size-4" />
+                    </div>
+                    <span className="text-sm font-bold">Routing Logic</span>
+                </div>
+                <div className="border-b" />
+                <DataTable
+                    storageKey="assignment-rules-table"
+                    data={rules}
                     columns={columns}
                     loading={loading}
-                    disableRowSelectionOnClick
-                    sx={{
-                        border: 'none',
-                        '& .MuiDataGrid-row:hover': {
-                            bgcolor: alpha(theme.palette.primary.main, 0.02),
-                        }
+                    getRowId={(row) => row.id}
+                    emptyState={{
+                        icon: <Route className="size-10 text-muted-foreground opacity-50" />,
+                        title: "No assignment rules found",
+                        description: "Create a rule to start routing records automatically.",
                     }}
                 />
-            </Paper>
+            </div>
 
             <RuleBuilder
                 open={isBuilderOpen}
@@ -232,6 +189,6 @@ export default function AssignmentSettingsPage() {
                 rule={selectedRule}
                 onSave={handleSave}
             />
-        </Box>
+        </motion.div>
     );
 }

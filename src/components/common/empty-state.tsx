@@ -1,12 +1,9 @@
 "use client";
 
 import React from "react";
-import { Box, Typography, Button, useTheme, alpha } from "@mui/material";
 import { motion } from "framer-motion";
+import { SearchX } from "lucide-react";
 import { fadeInUp, spring } from "@/lib/motion";
-import {
-    SearchOff as DefaultIcon,
-} from "@mui/icons-material";
 
 export interface EmptyStateProps {
     icon?: React.ReactNode;
@@ -16,64 +13,27 @@ export interface EmptyStateProps {
 }
 
 export function EmptyState({ icon, title, description, action }: EmptyStateProps) {
-    const theme = useTheme();
-
     return (
-        <motion.div
-            variants={fadeInUp}
-            initial="initial"
-            animate="animate"
-        >
-            <Box
-                sx={{
-                    display: "flex",
-                    flexDirection: "column",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    py: 8,
-                    px: 4,
-                    textAlign: "center",
-                }}
-            >
+        <motion.div variants={fadeInUp} initial="initial" animate="animate">
+            <div className="flex flex-col items-center justify-center py-16 px-8 text-center">
                 <motion.div
                     initial={{ scale: 0.8, opacity: 0 }}
                     animate={{ scale: 1, opacity: 1 }}
                     transition={spring.expressive}
                 >
-                    <Box
-                        sx={{
-                            width: 80,
-                            height: 80,
-                            borderRadius: "50%",
-                            bgcolor: alpha(theme.palette.primary.main, 0.08),
-                            display: "flex",
-                            alignItems: "center",
-                            justifyContent: "center",
-                            mb: 3,
-                        }}
-                    >
-                        {icon || (
-                            <DefaultIcon
-                                sx={{ fontSize: 40, color: theme.palette.primary.main, opacity: 0.6 }}
-                            />
-                        )}
-                    </Box>
+                    <div className="mb-6 flex h-20 w-20 items-center justify-center rounded-full bg-primary/8">
+                        {icon || <SearchX className="size-10 text-primary opacity-60" />}
+                    </div>
                 </motion.div>
 
-                <Typography variant="h6" sx={{ fontWeight: 700, mb: 0.5 }}>
-                    {title}
-                </Typography>
+                <h3 className="text-lg font-bold mb-1">{title}</h3>
                 {description && (
-                    <Typography
-                        variant="body2"
-                        color="text.secondary"
-                        sx={{ maxWidth: 400, mb: action ? 3 : 0 }}
-                    >
+                    <p className={`max-w-[400px] text-sm text-muted-foreground ${action ? "mb-6" : ""}`}>
                         {description}
-                    </Typography>
+                    </p>
                 )}
                 {action}
-            </Box>
+            </div>
         </motion.div>
     );
 }

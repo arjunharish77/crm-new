@@ -1,6 +1,6 @@
 import jwt from "jsonwebtoken";
 import { cookies } from "next/headers";
-import { createSupabaseAdminClient } from "@/lib/supabase/server";
+import * as pgAuth from "@/lib/repositories/auth-admin-postgres";
 
 type JwtPayload = {
   sub: string;
@@ -81,123 +81,12 @@ export async function getCurrentUser(request?: Request) {
     return null;
   }
 
-  const supabase = createSupabaseAdminClient();
-
-  let { data: userRecord, error: userError }: { data: any; error: any } = await supabase
-    .from("User")
-    .select("id,email,name,tenantId,roleId,permissionTemplateId")
-    .eq("id", payload.sub)
-    .maybeSingle();
-
-  if (userError && /permissionTemplateId|schema cache|does not exist/i.test(userError.message ?? "")) {
-    const fallback = await supabase
-      .from("User")
-      .select("id,email,name,tenantId,roleId")
-      .eq("id", payload.sub)
-      .maybeSingle();
-    userRecord = fallback.data;
-    userError = fallback.error;
-  }
-
-  if (userError || !userRecord) {
-    return null;
-  }
-
-  let roleResultPromise = userRecord.roleId
-      ? supabase
-          .from("Role")
-          .select("id,name,permissionTemplateId,permissions")
-          .eq("id", userRecord.roleId)
-          .maybeSingle()
-      : Promise.resolve({ data: null, error: null });
-  let [{ data: roleRecord, error: roleError }, { data: platformAdminRecord }, tenantFeatureResult] = await Promise.all([
-    roleResultPromise,
-    supabase
-      .from("PlatformAdmin")
-      .select("id,isActive")
-      .eq("userId", userRecord.id)
-      .eq("isActive", true)
-      .maybeSingle(),
-    userRecord.tenantId
-      ? supabase
-          .from("TenantFeature")
-          .select("opportunityEnabled,automationEnabled,advancedReporting,apiAccessEnabled,salesGroupsEnabled,formBuilderEnabled")
-          .eq("tenantId", userRecord.tenantId)
-          .maybeSingle()
-      : Promise.resolve({ data: null, error: null }),
-  ]);
-
-  if (roleError && /permissionTemplateId|schema cache|does not exist/i.test(roleError.message ?? "")) {
-    const fallback = await (userRecord.roleId
-      ? supabase
-          .from("Role")
-          .select("id,name,permissions")
-          .eq("id", userRecord.roleId)
-          .maybeSingle()
-      : Promise.resolve({ data: null, error: null }));
-    roleRecord = fallback.data ? { ...fallback.data, permissionTemplateId: null } : null;
-  }
-
-  let salesGroupTemplateIds: string[] = [];
-  if (userRecord.tenantId) {
-    const memberResult = await supabase
-      .from("SalesGroupMember")
-      .select("groupId")
-      .eq("tenantId", userRecord.tenantId)
-      .eq("userId", userRecord.id);
-    const groupIds = (memberResult.data ?? []).map((member: any) => member.groupId).filter((id: unknown) => typeof id === "string" && id.length > 0);
-    if (groupIds.length > 0) {
-      const groupResult = await supabase
-        .from("SalesGroup")
-        .select("permissionTemplateId")
-        .eq("tenantId", userRecord.tenantId)
-        .in("id", groupIds);
-      if (!groupResult.error || !/permissionTemplateId|schema cache|does not exist/i.test(groupResult.error.message ?? "")) {
-        salesGroupTemplateIds = (groupResult.data ?? [])
-          .map((group: any) => group.permissionTemplateId)
-          .filter((id: unknown) => typeof id === "string" && id.length > 0);
-      }
-    }
-  }
-
-  const templateIds = [
-    ...salesGroupTemplateIds,
-    roleRecord?.permissionTemplateId,
-    userRecord.permissionTemplateId,
-  ].filter((id) => typeof id === "string" && id.length > 0);
-  const templateResult = templateIds.length && userRecord.tenantId
-    ? await supabase
-        .from("PermissionTemplate")
-        .select("id,name,permissions,isActive")
-        .eq("tenantId", userRecord.tenantId)
-        .eq("isActive", true)
-        .in("id", templateIds)
-    : { data: [], error: null };
-  const permissionTemplates = templateResult.error && /does not exist|schema cache/i.test(templateResult.error.message ?? "")
-    ? []
-    : (templateResult.data ?? []).sort((a: any, b: any) => templateIds.indexOf(a.id) - templateIds.indexOf(b.id));
-
+  const user = await pgAuth.getCurrentUserById(payload.sub);
+  if (!user) return null;
   return {
-    id: userRecord.id,
-    email: userRecord.email,
-    name: userRecord.name,
-    tenantId: userRecord.tenantId,
-    roleId: userRecord.roleId,
-    permissionTemplateId: userRecord.permissionTemplateId ?? null,
-    role: roleRecord,
-    permissionTemplates,
-    isPlatformAdmin: !!platformAdminRecord,
-    platformAdminId: platformAdminRecord?.id ?? null,
+    ...user,
     isImpersonating: !!payload.isImpersonating,
     impersonatedBy: payload.impersonatedBy ?? null,
-    features: tenantFeatureResult?.data ?? {
-      opportunityEnabled: true,
-      automationEnabled: true,
-      salesGroupsEnabled: true,
-      formBuilderEnabled: true,
-      advancedReporting: false,
-      apiAccessEnabled: false,
-    },
   };
 }
 
@@ -215,6 +104,34 @@ export async function requirePlatformAdmin(request?: Request) {
   const user = await requireCurrentUser(request);
 
   if (!user.isPlatformAdmin) {
+    throw new Error("FORBIDDEN");
+  }
+
+  return user;
+}
+
+// Reject requests from PARTNER-role users. Most existing tenant API routes only check
+// requireCurrentUser (authenticated), not role authorization — there's no general RBAC
+// enforcement in this app today. Since partners are external users, routes touching
+// Internal/admin data paths use this instead of propagating nullable tenant context into new surfaces.
+export async function requireInternalUser(request?: Request) {
+  const user = await requireCurrentUser(request);
+
+  if (user.isPartner) {
+    throw new Error("FORBIDDEN");
+  }
+
+  return user;
+}
+
+// Tenant-admin gate for new admin-only surface (partner management, commission rules,
+// payout approval). Mirrors the "Tenant Admin" seed role's permissions shape
+// (recordAccess: "ALL" or modules.admin === "full") since no requireTenantAdmin
+// helper existed anywhere in the app prior to this.
+export async function requireTenantAdmin(request?: Request) {
+  const user = await requireCurrentUser(request);
+
+  if (!user.isPlatformAdmin && !user.isTenantAdmin) {
     throw new Error("FORBIDDEN");
   }
 

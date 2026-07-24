@@ -4,64 +4,52 @@ import React, { useEffect, useState, useCallback, useMemo } from "react";
 import { Opportunity, OpportunityType } from "@/types/opportunities";
 import { PaginatedResponse } from "@/types/common";
 import { apiFetch } from "@/lib/api";
-import {
-    Box,
-    Typography,
-    Button,
-    Card,
-    Stack,
-    IconButton,
-    Tooltip,
-    Tabs,
-    Tab,
-    ToggleButtonGroup,
-    ToggleButton,
-    Divider,
-    Select,
-    MenuItem,
-    Chip,
-    alpha,
-    useTheme
-} from "@mui/material";
-import {
-    List as ListIcon,
-    ViewKanban as KanbanIcon,
-    BarChart as AnalyticsIcon,
-    Add as AddIcon,
-    FilterAlt as FilterIcon,
-    Edit as EditIcon,
-    Visibility as ViewIcon,
-    Link as LinkIcon
-} from "@mui/icons-material";
-import {
-    GridColDef,
-    GridPaginationModel,
-    GridRowId,
-} from "@mui/x-data-grid";
-import { StandardDataGrid } from "@/components/common/standard-data-grid";
+import { Card } from "@/components/ui/card";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { ColumnDef } from "@tanstack/react-table";
+import { Eye, ExternalLink, Filter, ListFilter, Pencil, List as ListIcon, Kanban as KanbanIcon, BarChart3 as AnalyticsIcon } from "lucide-react";
+import { cn } from "@/lib/utils";
+import { DataTable } from "@/components/ui/data-table";
+import { Badge } from "@/components/ui/badge";
+import { Button, Button as IconButton } from "@/components/ui/button";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { toast } from "sonner";
 import Link from "next/link";
 import { CreateOpportunityDialog } from "./create-opportunity-dialog";
 import { EditOpportunityDialog } from "./edit-opportunity-dialog";
 import { KanbanBoard } from "@/components/opportunities/kanban-board";
-import { PipelineAnalytics } from "@/components/opportunities/pipeline-analytics";
+import { OpportunityStageAnalytics } from "@/components/opportunities/opportunity-stage-analytics";
 import { BulkActionsToolbar } from "@/components/bulk-actions/bulk-toolbar";
 import { formatCurrency } from "@/lib/utils";
 import { FeatureGate } from "@/components/auth/feature-gate";
 import { TableSkeleton } from "@/components/common/skeletons";
 import { EmptyState } from "@/components/common/empty-state";
+import { FilterBuilder } from "@/components/filters/filter-builder";
+import { FilterConfig, FilterField } from "@/types/filters";
+import { PredictiveScoreBadge } from "@/components/scoring/predictive-score";
+import { QueueExportButton } from "@/components/exports/queue-export-button";
+
+const EMPTY_FILTERS: FilterConfig = { conditions: [], logic: "AND" };
+const SELECTED_TYPE_STORAGE_KEY = "unnatify.opportunities.selectedTypeId";
+
+function filtersToQuery(filters: FilterConfig) {
+    return filters.conditions.length > 0 ? JSON.stringify([filters]) : "";
+}
 
 export default function OpportunitiesPage() {
-    const theme = useTheme();
+    const [urlFilters, setUrlFilters] = useState("");
+    const [filters, setFilters] = useState<FilterConfig>(EMPTY_FILTERS);
+    const [filterOpen, setFilterOpen] = useState(false);
     const [data, setData] = useState<Opportunity[]>([]);
     const [loading, setLoading] = useState(true);
     const [viewMode, setViewMode] = useState<'LIST' | 'KANBAN' | 'ANALYTICS'>('LIST');
     const [opportunityTypes, setOpportunityTypes] = useState<OpportunityType[]>([]);
     const [selectedTypeId, setSelectedTypeId] = useState<string>("ALL");
 
-    const [selectedRows, setSelectedRows] = useState<any>([]);
+    const [selectedRows, setSelectedRows] = useState<string[]>([]);
     const [isAllSelected, setIsAllSelected] = useState(false);
     const [totalItems, setTotalItems] = useState(0);
+    const [paginationModel, setPaginationModel] = useState({ page: 0, pageSize: 25 });
 
     const [editOpportunityOpen, setEditOpportunityOpen] = useState(false);
     const [opportunityToEdit, setOpportunityToEdit] = useState<Opportunity | null>(null);
@@ -69,8 +57,12 @@ export default function OpportunitiesPage() {
     const fetchData = useCallback(async () => {
         setLoading(true);
         try {
-            const params = new URLSearchParams({ limit: "100" });
+            const params = new URLSearchParams({
+                page: viewMode === "LIST" ? String(paginationModel.page + 1) : "1",
+                limit: viewMode === "LIST" ? String(paginationModel.pageSize) : "500",
+            });
             if (selectedTypeId !== "ALL") params.set("opportunityTypeId", selectedTypeId);
+            if (urlFilters) params.set("filters", urlFilters);
             const response = await apiFetch<PaginatedResponse<Opportunity> | Opportunity[]>(`/opportunities?${params.toString()}`);
 
             if ('meta' in response && response.data) {
@@ -85,17 +77,19 @@ export default function OpportunitiesPage() {
         } finally {
             setLoading(false);
         }
-    }, [selectedTypeId]);
+    }, [paginationModel.page, paginationModel.pageSize, selectedTypeId, urlFilters, viewMode]);
 
     const fetchTypes = useCallback(async () => {
         try {
             const data = await apiFetch<OpportunityType[]>("/opportunity-types");
             const types = Array.isArray(data) ? data : [];
             setOpportunityTypes(types);
-            // Auto-select the first type so kanban works immediately
-            if (types.length > 0 && selectedTypeId === "ALL") {
-                setSelectedTypeId(types[0].id);
-            }
+            setSelectedTypeId((current) => {
+                const saved = typeof window !== "undefined" ? window.localStorage.getItem(SELECTED_TYPE_STORAGE_KEY) : null;
+                const candidate = current !== "ALL" ? current : saved;
+                if (candidate && candidate !== "ALL" && types.some((type) => type.id === candidate)) return candidate;
+                return current;
+            });
         } catch (error) {
             // Silently handle - the list view still works without types
             console.warn("Failed to load opportunity types:", error);
@@ -103,15 +97,29 @@ export default function OpportunitiesPage() {
     }, []);
 
     useEffect(() => {
-        fetchTypes();
-        fetchData();
-    }, [fetchTypes, fetchData]);
+        setUrlFilters(new URLSearchParams(window.location.search).get("filters") ?? "");
+    }, []);
 
-    const handleViewChange = (event: React.MouseEvent<HTMLElement>, nextView: 'LIST' | 'KANBAN' | 'ANALYTICS' | null) => {
-        if (nextView !== null) {
-            setViewMode(nextView);
+    const applyFilters = useCallback((nextFilters: FilterConfig) => {
+        setFilters(nextFilters);
+        setUrlFilters(filtersToQuery(nextFilters));
+    }, []);
+
+    useEffect(() => {
+        fetchTypes();
+    }, [fetchTypes]);
+
+    useEffect(() => {
+        fetchData();
+    }, [fetchData]);
+
+    const handleTypeChange = useCallback((value: string) => {
+        setSelectedTypeId(value);
+        if (typeof window !== "undefined") {
+            if (value === "ALL") window.localStorage.removeItem(SELECTED_TYPE_STORAGE_KEY);
+            else window.localStorage.setItem(SELECTED_TYPE_STORAGE_KEY, value);
         }
-    };
+    }, []);
 
     const handleEdit = (opportunity: Opportunity) => {
         setOpportunityToEdit(opportunity);
@@ -152,6 +160,7 @@ export default function OpportunitiesPage() {
 
 
     const handleSelectAllFiltered = () => {
+        setSelectedRows(kanbanOpportunities.map((opportunity) => opportunity.id));
         setIsAllSelected(true);
         toast.success(`All ${totalItems} opportunities selected`);
     };
@@ -161,114 +170,122 @@ export default function OpportunitiesPage() {
         setIsAllSelected(false);
     };
 
-    const columns: GridColDef[] = [
+    const columns = useMemo<ColumnDef<Opportunity, any>[]>(() => [
         {
-            field: 'title',
-            headerName: 'Opportunity',
-            flex: 1,
-            minWidth: 220,
-            renderCell: (params) => (
-                <Box
-                    component={Link}
-                    href={`/dashboard/opportunities/${params.row.id}`}
-                    sx={{
-                        color: 'primary.main',
-                        textDecoration: 'none',
-                        fontWeight: 700,
-                        '&:hover': { textDecoration: 'underline' },
-                        display: 'flex',
-                        alignItems: 'center',
-                        height: '100%'
+            accessorKey: 'title',
+            header: 'Opportunity',
+            size: 240,
+            cell: ({ row }) => (
+                <Link
+                    href={`/dashboard/opportunities/${row.original.id}`}
+                    className="flex h-full items-center font-bold text-primary hover:underline"
+                    onClick={(event) => event.stopPropagation()}
+                >
+                    {row.original.title}
+                </Link>
+            )
+        },
+        {
+            accessorKey: 'amount',
+            header: 'Value',
+            size: 150,
+            cell: ({ row }) => (
+                <span className="text-sm font-bold text-primary">
+                    {formatCurrency(row.original.amount ?? 0)}
+                </span>
+            )
+        },
+        {
+            accessorKey: 'stage',
+            header: 'Stage',
+            size: 180,
+            cell: ({ row }) => (
+                <Badge
+                    variant="outline"
+                    className="font-bold uppercase"
+                    style={{
+                        backgroundColor: row.original.stage?.color ? `${row.original.stage.color}14` : undefined,
+                        borderColor: row.original.stage?.color ? `${row.original.stage.color}33` : undefined,
+                        color: row.original.stage?.color ?? undefined,
                     }}
                 >
-                    {params.value}
-                </Box>
+                    {row.original.stage?.name || 'N/A'}
+                </Badge>
             )
         },
         {
-            field: 'amount',
-            headerName: 'Value',
-            width: 150,
-            renderCell: (params) => (
-                <Typography variant="body2" sx={{ fontWeight: 700, color: 'primary.main' }}>
-                    {formatCurrency(params.value as number)}
-                </Typography>
-            )
+            accessorKey: 'priority',
+            header: 'Priority',
+            size: 120,
+            cell: ({ row }) => {
+                const priority = row.original.priority;
+                const className = priority === 'HIGH'
+                    ? "border-destructive/20 bg-destructive/10 text-destructive"
+                    : priority === 'MEDIUM'
+                        ? "border-tertiary/25 bg-tertiary/10 text-tertiary"
+                        : "border-primary/20 bg-primary/10 text-primary";
+
+                return (
+                    <Badge variant="outline" className={`font-bold uppercase ${className}`}>
+                        {priority}
+                    </Badge>
+                );
+            }
         },
         {
-            field: 'stage',
-            headerName: 'Stage',
-            width: 180,
-            renderCell: (params) => (
-                <Chip
-                    label={params.value?.name || 'N/A'}
-                    size="small"
-                    sx={{
-                        borderRadius: '6px',
-                        fontWeight: 700,
-                        fontSize: '0.625rem',
-                        textTransform: 'uppercase',
-                        bgcolor: params.value?.color ? alpha(params.value.color, 0.08) : 'action.hover',
-                        color: params.value?.color || 'text.secondary',
-                        border: '1px solid',
-                        borderColor: params.value?.color ? alpha(params.value.color, 0.2) : 'divider'
-                    }}
-                />
-            )
+            accessorKey: 'predictiveScore',
+            header: 'Predictive Score',
+            size: 190,
+            sortingFn: (rowA, rowB) => {
+                const a = rowA.original.predictiveScore?.winProbability ?? 0;
+                const b = rowB.original.predictiveScore?.winProbability ?? 0;
+                return a - b;
+            },
+            cell: ({ row }) => <PredictiveScoreBadge score={row.original.predictiveScore} />,
         },
         {
-            field: 'priority',
-            headerName: 'Priority',
-            width: 120,
-            renderCell: (params) => (
-                <Chip
-                    label={params.value}
-                    size="small"
-                    sx={{
-                        fontWeight: 700,
-                        fontSize: '0.625rem',
-                        textTransform: 'uppercase',
-                        borderRadius: '6px',
-                        bgcolor: params.value === 'HIGH' ? alpha(theme.palette.error.main, 0.08) :
-                            params.value === 'MEDIUM' ? alpha(theme.palette.warning.main, 0.08) :
-                                alpha(theme.palette.info.main, 0.08),
-                        color: params.value === 'HIGH' ? theme.palette.error.main :
-                            params.value === 'MEDIUM' ? theme.palette.warning.main :
-                                theme.palette.info.main,
-                        border: '1px solid',
-                        borderColor: params.value === 'HIGH' ? alpha(theme.palette.error.main, 0.2) :
-                            params.value === 'MEDIUM' ? alpha(theme.palette.warning.main, 0.2) :
-                                alpha(theme.palette.info.main, 0.2),
-                    }}
-                />
-            )
-        },
-        {
-            field: 'actions',
-            headerName: '',
-            type: 'actions',
-            width: 120,
-            renderCell: (params) => (
-                <Stack direction="row" spacing={0.5}>
-                    <Tooltip title="View Preview">
-                        <IconButton size="small" onClick={() => {/* Existing logic for preview if any */ }}>
-                            <ViewIcon sx={{ fontSize: 18 }} />
-                        </IconButton>
+            id: 'actions',
+            header: '',
+            size: 120,
+            cell: ({ row }) => (
+                <div className="flex gap-1">
+                    <Tooltip>
+                        <TooltipTrigger asChild>
+                            <IconButton variant="ghost" size="icon-sm" onClick={(event) => event.stopPropagation()}>
+                                <Eye className="size-4" />
+                            </IconButton>
+                        </TooltipTrigger>
+                        <TooltipContent>View Preview</TooltipContent>
                     </Tooltip>
-                    <Tooltip title="Open Detail">
-                        <IconButton size="small" component={Link} href={`/dashboard/opportunities/${params.row.id}`}>
-                            <LinkIcon sx={{ fontSize: 18 }} />
-                        </IconButton>
+                    <Tooltip>
+                        <TooltipTrigger asChild>
+                            <IconButton variant="ghost" size="icon-sm" asChild onClick={(event) => event.stopPropagation()}>
+                                <Link href={`/dashboard/opportunities/${row.original.id}`}>
+                                    <ExternalLink className="size-4" />
+                                </Link>
+                            </IconButton>
+                        </TooltipTrigger>
+                        <TooltipContent>Open Detail</TooltipContent>
                     </Tooltip>
-                    <Tooltip title="Edit">
-                        <IconButton size="small" onClick={() => handleEdit(params.row as Opportunity)}>
-                            <EditIcon sx={{ fontSize: 18 }} />
-                        </IconButton>
+                    <Tooltip>
+                        <TooltipTrigger asChild>
+                            <IconButton
+                                variant="ghost"
+                                size="icon-sm"
+                                onClick={(event) => {
+                                    event.stopPropagation();
+                                    handleEdit(row.original);
+                                }}
+                            >
+                                <Pencil className="size-4" />
+                            </IconButton>
+                        </TooltipTrigger>
+                        <TooltipContent>Edit</TooltipContent>
                     </Tooltip>
-                </Stack>
+                </div>
             )
         }
-    ];
+    ], []);
 
     const kanbanOpportunities = useMemo(() =>
         selectedTypeId !== "ALL" ? data.filter(opp => opp.opportunityTypeId === selectedTypeId) : data,
@@ -280,103 +297,155 @@ export default function OpportunitiesPage() {
         [opportunityTypes, selectedTypeId]
     );
 
+    const filterFields = useMemo<FilterField[]>(() => [
+        { key: "title", label: "Title", type: "text" },
+        { key: "amount", label: "Amount", type: "number" },
+        {
+            key: "priority",
+            label: "Priority",
+            type: "select",
+            options: [
+                { label: "Low", value: "LOW" },
+                { label: "Medium", value: "MEDIUM" },
+                { label: "High", value: "HIGH" },
+            ],
+        },
+        {
+            key: "stageId",
+            label: "Stage",
+            type: "select",
+            options: (selectedType?.stages ?? []).map((stage: any) => ({ label: stage.label || stage.name, value: stage.id })),
+        },
+        {
+            key: "predictiveScoreBand",
+            label: "Score Band",
+            type: "select",
+            options: [
+                { label: "Hot", value: "HOT" },
+                { label: "Warm", value: "WARM" },
+                { label: "Cold", value: "COLD" },
+                { label: "Risk", value: "RISK" },
+            ],
+        },
+        { key: "predictiveConfidence", label: "Score Confidence", type: "number" },
+        { key: "predictiveWinProbability", label: "Win Probability", type: "number" },
+        { key: "predictiveStallRisk", label: "Stall Risk", type: "number" },
+    ], [selectedType]);
+
     useEffect(() => {
         clearSelection();
-    }, [selectedTypeId, viewMode]);
+        setPaginationModel((current) => ({ ...current, page: 0 }));
+    }, [filters, selectedTypeId, viewMode]);
+
+    const VIEW_OPTIONS: Array<{ value: 'KANBAN' | 'LIST' | 'ANALYTICS'; label: string; icon: typeof ListIcon }> = [
+        { value: 'KANBAN', label: 'Board', icon: KanbanIcon },
+        { value: 'LIST', label: 'List', icon: ListIcon },
+        { value: 'ANALYTICS', label: 'Analytics', icon: AnalyticsIcon },
+    ];
 
     return (
         <FeatureGate
             feature="opportunityEnabled"
             fallback={
-                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
-                    <Typography color="text.secondary">The Opportunities module is disabled for your tenant.</Typography>
-                </Box>
+                <div className="flex h-full items-center justify-center">
+                    <p className="text-muted-foreground">The Opportunities module is disabled for your tenant.</p>
+                </div>
             }
         >
-            <Box sx={{ flexGrow: 1, display: 'flex', flexDirection: 'column', height: '100%' }}>
-                <Box sx={{ px: 1.5, py: 1, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <Stack direction="row" spacing={2} alignItems="center">
-                        <Typography variant="h6" fontWeight={700}>Opportunities</Typography>
+            <div className="flex h-full flex-grow flex-col">
+                <div className="flex items-center justify-between px-3 py-2">
+                    <div className="flex items-center gap-3">
+                        <h1 className="text-lg font-bold">Opportunities</h1>
                         {/* Opportunity Type selector — switch between types to see their kanban */}
                         {opportunityTypes.length > 0 && (
-                            <Select
-                                size="small"
-                                value={selectedTypeId}
-                                onChange={(e) => {
-                                    setSelectedTypeId(String(e.target.value));
-                                }}
-                                sx={{ minWidth: 180 }}
-                            >
-                                <MenuItem value="ALL">All opportunity types</MenuItem>
-                                {opportunityTypes.map(t => (
-                                    <MenuItem key={t.id} value={t.id}>{t.name}</MenuItem>
-                                ))}
+                            <Select value={selectedTypeId} onValueChange={handleTypeChange}>
+                                <SelectTrigger className="min-w-[180px]">
+                                    <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="ALL">All opportunity types</SelectItem>
+                                    {opportunityTypes.map(t => (
+                                        <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
+                                    ))}
+                                </SelectContent>
                             </Select>
                         )}
-                    </Stack>
-                    <Stack direction="row" spacing={1}>
-                        <ToggleButtonGroup
-                            value={viewMode}
-                            exclusive
-                            onChange={handleViewChange}
-                            size="small"
-                            sx={{
-                                '& .MuiToggleButton-root': {
-                                    borderRadius: '8px',
-                                    border: '1px solid',
-                                    borderColor: 'divider',
-                                    px: 1.5,
-                                    py: 0.5,
-                                    textTransform: 'none',
-                                    fontWeight: 600,
-                                    color: 'text.secondary',
-                                    '&.Mui-selected': {
-                                        bgcolor: 'primary.main',
-                                        color: 'primary.contrastText',
-                                        '&:hover': { bgcolor: 'primary.dark' }
-                                    }
-                                }
+                    </div>
+                    <div className="flex items-center gap-2">
+                        <QueueExportButton
+                            moduleName="OPPORTUNITIES"
+                            filters={{
+                                ...filters,
+                                opportunityTypeId: selectedTypeId !== "ALL" ? selectedTypeId : null,
+                                viewMode,
+                                urlFilters,
                             }}
+                            selectedIds={isAllSelected ? [] : selectedRows}
+                            currentPageIds={kanbanOpportunities.map((opportunity) => opportunity.id)}
+                            totalItems={totalItems}
+                        />
+                        <div className="flex items-center gap-1 rounded-md border p-0.5">
+                            {VIEW_OPTIONS.map((option) => (
+                                <button
+                                    key={option.value}
+                                    type="button"
+                                    aria-pressed={viewMode === option.value}
+                                    onClick={() => setViewMode(option.value)}
+                                    className={cn(
+                                        "flex items-center gap-1.5 rounded-[6px] px-2.5 py-1 text-xs font-bold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                                        viewMode === option.value
+                                            ? "bg-primary text-primary-foreground"
+                                            : "text-muted-foreground hover:bg-accent"
+                                    )}
+                                >
+                                    <option.icon className="size-4" />
+                                    {option.label}
+                                </button>
+                            ))}
+                        </div>
+                        <Button
+                            variant="outline"
+                            className={cn(filters.conditions.length > 0 && "border-primary bg-primary/5")}
+                            onClick={() => setFilterOpen((current) => !current)}
                         >
-                            <ToggleButton value="KANBAN">
-                                <Stack direction="row" spacing={1} alignItems="center">
-                                    <KanbanIcon fontSize="small" />
-                                    <Typography variant="caption" fontWeight={700}>Board</Typography>
-                                </Stack>
-                            </ToggleButton>
-                            <ToggleButton value="LIST">
-                                <Stack direction="row" spacing={1} alignItems="center">
-                                    <ListIcon fontSize="small" />
-                                    <Typography variant="caption" fontWeight={700}>List</Typography>
-                                </Stack>
-                            </ToggleButton>
-                            <ToggleButton value="ANALYTICS">
-                                <Stack direction="row" spacing={1} alignItems="center">
-                                    <AnalyticsIcon fontSize="small" />
-                                    <Typography variant="caption" fontWeight={700}>Analytics</Typography>
-                                </Stack>
-                            </ToggleButton>
-                        </ToggleButtonGroup>
+                            <ListFilter className="size-4" />
+                            Filters
+                            {filters.conditions.length > 0 ? (
+                                <span className="flex size-5 items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-foreground">
+                                    {filters.conditions.length}
+                                </span>
+                            ) : null}
+                        </Button>
                         <CreateOpportunityDialog onSuccess={fetchData} />
-                    </Stack>
-                </Box>
+                    </div>
+                </div>
 
-                <Divider />
+                <div className="h-px bg-border" />
 
-                <Box sx={{ flexGrow: 1, overflow: 'hidden', px: 1.5, py: 1, bgcolor: 'background.default' }}>
+                {filterOpen ? (
+                    <div className="border-b bg-primary/[0.02] px-3 py-3">
+                        <FilterBuilder
+                            fields={filterFields}
+                            value={filters}
+                            onChange={applyFilters}
+                        />
+                    </div>
+                ) : null}
+
+                <div className="flex-grow overflow-hidden bg-background px-3 py-2">
                         {loading ? (
                             <TableSkeleton rows={10} columns={4} />
                         ) : viewMode === 'KANBAN' ? (
                             !selectedType ? (
                                 <EmptyState
-                                    icon={<KanbanIcon sx={{ fontSize: 48, color: 'text.secondary', opacity: 0.5 }} />}
+                                    icon={<KanbanIcon className="size-12 text-muted-foreground opacity-50" />}
                                     title="Select an opportunity type"
                                     description="Kanban boards are type-specific because each type has its own stages."
                                     action={<CreateOpportunityDialog onSuccess={fetchData} />}
                                 />
                             ) : kanbanOpportunities.length === 0 ? (
                                 <EmptyState
-                                    icon={<KanbanIcon sx={{ fontSize: 48, color: 'text.secondary', opacity: 0.5 }} />}
+                                    icon={<KanbanIcon className="size-12 text-muted-foreground opacity-50" />}
                                     title="No opportunities found"
                                     description="Create an opportunity to get started."
                                     action={<CreateOpportunityDialog onSuccess={fetchData} />}
@@ -390,35 +459,46 @@ export default function OpportunitiesPage() {
                                 />
                             )
                         ) : viewMode === 'ANALYTICS' ? (
-                            <PipelineAnalytics />
+                            <OpportunityStageAnalytics />
                         ) : (
                             data.length === 0 ? (
                                 <EmptyState
-                                    icon={<FilterIcon sx={{ fontSize: 48, color: 'text.secondary', opacity: 0.5 }} />}
+                                    icon={<Filter className="size-12 text-muted-foreground opacity-50" />}
                                     title="No opportunities found"
                                     description="Get started by adding your first opportunity."
                                     action={<CreateOpportunityDialog onSuccess={fetchData} />}
                                 />
                             ) : (
-                                <Card sx={{ borderRadius: '12px', overflow: 'hidden' }}>
-                                    <StandardDataGrid
-                                        rows={kanbanOpportunities}
+                                <Card className="overflow-hidden rounded-xl">
+                                    <DataTable
+                                        storageKey="opportunities-table"
+                                        data={kanbanOpportunities}
                                         columns={columns}
-                                        checkboxSelection
-                                        disableRowSelectionOnClick
-                                        rowSelectionModel={selectedRows}
-                                        onRowSelectionModelChange={setSelectedRows}
-                                        totalItems={kanbanOpportunities.length}
-                                        selectedCount={selectedRows.length}
+                                        getRowId={(row) => row.id}
+                                        enableRowSelection
+                                        rowSelectionIds={selectedRows}
+                                        onRowSelectionIdsChange={(ids) => {
+                                            setSelectedRows(ids);
+                                            if (isAllSelected) setIsAllSelected(false);
+                                        }}
+                                        totalItems={totalItems}
                                         isAllSelected={isAllSelected}
                                         onSelectAllFiltered={handleSelectAllFiltered}
                                         onClearSelection={clearSelection}
-                                        currentCount={kanbanOpportunities.length}
+                                        pageIndex={paginationModel.page}
+                                        pageSize={paginationModel.pageSize}
+                                        onPaginationChange={({ pageIndex, pageSize }) => setPaginationModel({ page: pageIndex, pageSize })}
+                                        emptyState={{
+                                            icon: <Filter className="size-10 text-muted-foreground opacity-50" />,
+                                            title: "No opportunities found",
+                                            description: "Get started by adding your first opportunity.",
+                                            action: <CreateOpportunityDialog onSuccess={fetchData} />,
+                                        }}
                                     />
                                 </Card>
                             )
                         )}
-                </Box>
+                </div>
 
                 <BulkActionsToolbar
                     selectedCount={Array.isArray(selectedRows) ? selectedRows.length : 0}
@@ -443,7 +523,7 @@ export default function OpportunitiesPage() {
                         }}
                     />
                 )}
-            </Box>
+            </div>
         </FeatureGate>
     );
 }

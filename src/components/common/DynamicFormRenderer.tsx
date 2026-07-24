@@ -4,16 +4,8 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
-import {
-    Box,
-    Button,
-    Grid,
-    Typography,
-    Divider,
-    Paper,
-    CircularProgress,
-    Stack
-} from '@mui/material';
+import { Loader2 } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 import { useObjectMetadata } from '@/hooks/use-object-metadata';
 import { MuiDynamicField } from '@/components/forms/mui-dynamic-field';
 import { apiFetch } from '@/lib/api';
@@ -148,13 +140,13 @@ export function DynamicFormRenderer({
 
     if (isMetadataLoading) {
         return (
-            <Box display="flex" justifyContent="center" p={8}>
-                <CircularProgress />
-            </Box>
+            <div className="flex justify-center p-8">
+                <Loader2 className="h-6 w-6 animate-spin text-primary" />
+            </div>
         );
     }
 
-    if (!metadata) return <Typography>No metadata found for {objectName}</Typography>;
+    if (!metadata) return <p className="text-sm text-muted-foreground">No metadata found for {objectName}</p>;
 
     // 2. Group fields for rendering
     const groups = Array.isArray(metadata.groups) && metadata.groups.length > 0
@@ -163,7 +155,7 @@ export function DynamicFormRenderer({
 
     return (
         <form onSubmit={handleSubmit(onSubmit)}>
-            <Stack spacing={4}>
+            <div className="flex flex-col gap-8">
                 {groups.map((group: any) => {
                     const groupFields = group.id === 'default'
                         ? (Array.isArray(group.fields) ? group.fields : fields)
@@ -172,12 +164,15 @@ export function DynamicFormRenderer({
                     if (!Array.isArray(groupFields) || groupFields.length === 0) return null;
 
                     return (
-                        <Box key={group.id}>
-                            <Typography variant="h6" gutterBottom>{group.name}</Typography>
-                            <Divider sx={{ mb: 2 }} />
-                            <Grid container spacing={2.5}>
+                        <div key={group.id}>
+                            <h3 className="text-base font-semibold text-foreground">{group.name}</h3>
+                            <div className="mt-1 mb-4 h-px w-full bg-border" />
+                            <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
                                 {groupFields.map((field: any) => (
-                                    <Grid size={{ xs: 12, sm: field.type === 'TEXTAREA' ? 12 : 6 }} key={field.id}>
+                                    <div
+                                        key={field.id}
+                                        className={field.type === 'TEXTAREA' ? 'col-span-1 sm:col-span-2' : 'col-span-1'}
+                                    >
                                         {fieldOverrides && fieldOverrides[field.key] ? (
                                             fieldOverrides[field.key]({ field, control, errors, setValue, watch })
                                         ) : (
@@ -194,29 +189,25 @@ export function DynamicFormRenderer({
                                                 )}
                                             />
                                         )}
-                                    </Grid>
+                                    </div>
                                 ))}
-                            </Grid>
-                        </Box>
+                            </div>
+                        </div>
                     );
                 })}
 
-                <Box display="flex" justifyContent="flex-end" gap={2} pt={2}>
+                <div className="flex justify-end gap-2 pt-2">
                     {onCancel && (
-                        <Button variant="outlined" onClick={onCancel} sx={{ borderRadius: '10px', minHeight: 38 }}>
+                        <Button type="button" variant="outline" onClick={onCancel}>
                             Cancel
                         </Button>
                     )}
-                    <Button
-                        type="submit"
-                        variant="contained"
-                        disabled={isSaving}
-                        sx={{ px: 3, borderRadius: '10px', minHeight: 38 }}
-                    >
+                    <Button type="submit" disabled={isSaving} className="px-6">
+                        {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
                         {isSaving ? 'Saving...' : `Save ${objectName}`}
                     </Button>
-                </Box>
-            </Stack>
+                </div>
+            </div>
         </form>
     );
 }

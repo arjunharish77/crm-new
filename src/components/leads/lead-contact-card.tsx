@@ -1,31 +1,23 @@
 'use client';
 
 import { motion } from 'framer-motion';
+import { Card, CardContent } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Separator } from '@/components/ui/separator';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import {
-    Box,
-    Card,
-    CardContent,
-    Typography,
-    Stack,
-    IconButton,
-    Button,
-    Chip,
-    alpha,
-    useTheme,
-    Tooltip,
-    Divider
-} from '@mui/material';
-import {
-    Phone as PhoneIcon,
-    Mail as MailIcon,
-    ContentCopy as CopyIcon,
-    Add as AddIcon,
-    History as ActivityIcon,
-    Business as BusinessIcon
-} from '@mui/icons-material';
+    Phone,
+    Mail,
+    Copy,
+    Plus,
+    History,
+    Building2,
+} from 'lucide-react';
 import { toast } from 'sonner';
 import { fadeInUp } from '@/lib/motion';
 import { apiFetch } from '@/lib/api';
+import { cn } from '@/lib/utils';
 
 interface LeadContactCardProps {
     lead: {
@@ -40,9 +32,17 @@ interface LeadContactCardProps {
     onCreateOpportunity?: () => void;
 }
 
-export function LeadContactCard({ lead, onCreateActivity, onCreateOpportunity }: LeadContactCardProps) {
-    const theme = useTheme();
+// Same status -> tone mapping convention used in leads/columns.tsx (M3 tokens,
+// no dedicated "success" role in this theme, so the qualified/contacted state
+// reuses "tertiary" the way the columns table does for CONVERTED).
+function getStatusClassName(status: string): string {
+    const s = status.toLowerCase();
+    if (s === 'new') return 'bg-primary/8 text-primary border-primary/20';
+    if (s === 'qualified' || s === 'contacted') return 'bg-tertiary/12 text-tertiary border-tertiary/25';
+    return 'bg-muted text-muted-foreground border-border';
+}
 
+export function LeadContactCard({ lead, onCreateActivity, onCreateOpportunity }: LeadContactCardProps) {
     const copyToClipboard = async (text: string, label: string) => {
         try {
             await navigator.clipboard.writeText(text);
@@ -52,113 +52,74 @@ export function LeadContactCard({ lead, onCreateActivity, onCreateOpportunity }:
         }
     };
 
-    const getStatusColor = (status: string) => {
-        const s = status.toLowerCase();
-        if (s === 'new') return { color: theme.palette.primary.main, bgcolor: 'primaryContainer' };
-        if (s === 'qualified' || s === 'contacted') return { color: theme.palette.success.main, bgcolor: alpha(theme.palette.success.main, 0.1) };
-        return { color: theme.palette.text.secondary, bgcolor: 'surfaceContainerHigh' };
-    };
-
-    const statusStyle = getStatusColor(lead.status);
+    const statusClassName = getStatusClassName(lead.status);
 
     return (
-        <Box
-            component={motion.div}
-            initial="initial"
-            animate="animate"
-            variants={fadeInUp}
-        >
-            <Card
-                elevation={0}
-                sx={{
-                    borderRadius: '16px',
-                    border: '1px solid',
-                    borderColor: 'divider',
-                    bgcolor: 'surfaceContainerLowest',
-                    transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-                    '&:hover': {
-                        borderColor: alpha(theme.palette.primary.main, 0.3),
-                        boxShadow: '0 8px 32px rgba(0,0,0,0.06)'
-                    }
-                }}
-            >
+        <motion.div initial="initial" animate="animate" variants={fadeInUp}>
+            <Card className="gap-0 rounded-2xl border bg-surface-container-lowest py-0 transition-all duration-300 hover:border-primary/30 hover:shadow-[0_8px_32px_rgba(0,0,0,0.06)]">
                 {/* Header */}
-                <Box sx={{ p: 1.5, borderBottom: '1px solid', borderColor: alpha(theme.palette.divider, 0.5) }}>
-                    <Stack direction="row" justifyContent="space-between" alignItems="flex-start">
-                        <Box>
-                            <Typography variant="h6" sx={{ fontWeight: 800, mb: 0.25, letterSpacing: '-0.2px' }}>
+                <div className="border-b border-border/50 p-3">
+                    <div className="flex items-start justify-between">
+                        <div>
+                            <h3 className="mb-0.5 text-lg font-extrabold tracking-tight">
                                 {lead.name}
-                            </Typography>
+                            </h3>
                             {lead.company && (
-                                <Stack direction="row" spacing={0.75} alignItems="center" sx={{ color: 'text.secondary' }}>
-                                    <BusinessIcon sx={{ fontSize: 14 }} />
-                                    <Typography variant="body2" sx={{ fontWeight: 500 }}>{lead.company}</Typography>
-                                </Stack>
+                                <div className="flex items-center gap-1.5 text-muted-foreground">
+                                    <Building2 className="size-3.5" />
+                                    <span className="text-sm font-medium">{lead.company}</span>
+                                </div>
                             )}
-                        </Box>
-                        <Chip
-                            label={lead.status}
-                            sx={{
-                                fontWeight: 800,
-                                textTransform: 'uppercase',
-                                fontSize: '0.625rem',
-                                letterSpacing: '0.05em',
-                                height: 20,
-                                bgcolor: statusStyle.bgcolor,
-                                color: statusStyle.color,
-                                border: '1px solid',
-                                borderColor: alpha(statusStyle.color || theme.palette.divider, 0.2)
-                            }}
-                        />
-                    </Stack>
-                </Box>
+                        </div>
+                        <Badge
+                            variant="outline"
+                            className={cn("h-5 text-[0.625rem] font-extrabold uppercase tracking-wide", statusClassName)}
+                        >
+                            {lead.status}
+                        </Badge>
+                    </div>
+                </div>
 
                 {/* Contact Info */}
-                <CardContent sx={{ p: 1.5, '&:last-child': { pb: 1.5 } }}>
-                    <Stack spacing={1.125}>
+                <CardContent className="p-3">
+                    <div className="flex flex-col gap-[9px]">
                         {lead.email && (
-                            <Stack direction="row" alignItems="center" justifyContent="space-between" className="group">
-                                <Stack direction="row" spacing={1.5} alignItems="center" sx={{ flexGrow: 1, minWidth: 0 }}>
-                                    <Box sx={{ p: 0.625, borderRadius: '7px', bgcolor: 'surfaceContainerHigh', color: 'text.secondary', display: 'flex' }}>
-                                        <MailIcon sx={{ fontSize: 15 }} />
-                                    </Box>
-                                    <Typography
-                                        component="a"
+                            <div className="group flex items-center justify-between">
+                                <div className="flex min-w-0 flex-1 items-center gap-3">
+                                    <div className="flex rounded-[7px] bg-surface-container-high p-[5px] text-muted-foreground">
+                                        <Mail className="size-[15px]" />
+                                    </div>
+                                    <a
                                         href={`mailto:${lead.email}`}
-                                        variant="body2"
-                                        sx={{
-                                            fontWeight: 700,
-                                            color: 'text.primary',
-                                            textDecoration: 'none',
-                                            overflow: 'hidden',
-                                            textOverflow: 'ellipsis',
-                                            whiteSpace: 'nowrap',
-                                            '&:hover': { color: 'primary.main' }
-                                        }}
+                                        className="truncate text-sm font-bold text-foreground no-underline hover:text-primary"
                                     >
                                         {lead.email}
-                                    </Typography>
-                                </Stack>
-                                <Tooltip title="Copy Email">
-                                    <IconButton
-                                        size="small"
-                                        onClick={() => copyToClipboard(lead.email!, 'Email')}
-                                        sx={{ opacity: 0, '.group:hover &': { opacity: 1 }, transition: 'opacity 0.2s', ml: 0.5 }}
-                                    >
-                                        <CopyIcon sx={{ fontSize: 16 }} />
-                                    </IconButton>
+                                    </a>
+                                </div>
+                                <Tooltip>
+                                    <TooltipTrigger asChild>
+                                        <Button
+                                            size="icon-sm"
+                                            variant="ghost"
+                                            onClick={() => copyToClipboard(lead.email!, 'Email')}
+                                            className="ml-1 opacity-0 transition-opacity group-hover:opacity-100"
+                                        >
+                                            <Copy className="size-4" />
+                                        </Button>
+                                    </TooltipTrigger>
+                                    <TooltipContent>Copy Email</TooltipContent>
                                 </Tooltip>
-                            </Stack>
+                            </div>
                         )}
 
                         {lead.phone && (
-                            <Stack direction="row" alignItems="center" justifyContent="space-between" className="group">
-                                <Stack direction="row" spacing={1.5} alignItems="center" sx={{ flexGrow: 1, minWidth: 0 }}>
-                                    <Box sx={{ p: 0.625, borderRadius: '7px', bgcolor: 'surfaceContainerHigh', color: 'text.secondary', display: 'flex' }}>
-                                        <PhoneIcon sx={{ fontSize: 15 }} />
-                                    </Box>
-                                    <Typography
-                                        component="button"
+                            <div className="group flex items-center justify-between">
+                                <div className="flex min-w-0 flex-1 items-center gap-3">
+                                    <div className="flex rounded-[7px] bg-surface-container-high p-[5px] text-muted-foreground">
+                                        <Phone className="size-[15px]" />
+                                    </div>
+                                    <button
+                                        type="button"
                                         onClick={async () => {
                                             try {
                                                 await apiFetch("/integrations/telephony/click-to-call", {
@@ -170,73 +131,45 @@ export function LeadContactCard({ lead, onCreateActivity, onCreateOpportunity }:
                                                 toast.error(error.message || "Failed to start click-to-call");
                                             }
                                         }}
-                                        variant="body2"
-                                        sx={{
-                                            fontWeight: 700,
-                                            color: 'text.primary',
-                                            textDecoration: 'none',
-                                            border: 0,
-                                            p: 0,
-                                            bgcolor: 'transparent',
-                                            cursor: 'pointer',
-                                            '&:hover': { color: 'primary.main' }
-                                        }}
+                                        className="truncate rounded-sm border-0 bg-transparent p-0 text-sm font-bold text-foreground hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                                     >
                                         {lead.phone}
-                                    </Typography>
-                                </Stack>
-                                <Tooltip title="Copy Phone">
-                                    <IconButton
-                                        size="small"
-                                        onClick={() => copyToClipboard(lead.phone!, 'Phone')}
-                                        sx={{ opacity: 0, '.group:hover &': { opacity: 1 }, transition: 'opacity 0.2s', ml: 0.5 }}
-                                    >
-                                        <CopyIcon sx={{ fontSize: 16 }} />
-                                    </IconButton>
+                                    </button>
+                                </div>
+                                <Tooltip>
+                                    <TooltipTrigger asChild>
+                                        <Button
+                                            size="icon-sm"
+                                            variant="ghost"
+                                            onClick={() => copyToClipboard(lead.phone!, 'Phone')}
+                                            className="ml-1 opacity-0 transition-opacity group-hover:opacity-100"
+                                        >
+                                            <Copy className="size-4" />
+                                        </Button>
+                                    </TooltipTrigger>
+                                    <TooltipContent>Copy Phone</TooltipContent>
                                 </Tooltip>
-                            </Stack>
+                            </div>
                         )}
-                    </Stack>
+                    </div>
                 </CardContent>
 
-                <Divider sx={{ mx: 1.5, opacity: 0.5 }} />
+                <Separator className="mx-3 w-auto opacity-50" />
 
                 {/* Actions */}
-                <Box sx={{ p: 1.25 }}>
-                    <Stack spacing={0.625}>
-                        <Button
-                            onClick={onCreateActivity}
-                            variant="contained"
-                            fullWidth
-                            startIcon={<ActivityIcon />}
-                            sx={{
-                                borderRadius: '10px',
-                                py: 0.8,
-                                fontWeight: 700,
-                                textTransform: 'none',
-                                boxShadow: 'none',
-                                '&:hover': { boxShadow: 'none' }
-                            }}
-                        >
+                <div className="p-[10px]">
+                    <div className="flex flex-col gap-[5px]">
+                        <Button onClick={onCreateActivity} className="w-full rounded-[10px] font-bold normal-case shadow-none hover:shadow-none">
+                            <History className="size-4" />
                             Log Activity
                         </Button>
-                        <Button
-                            onClick={onCreateOpportunity}
-                            variant="outlined"
-                            fullWidth
-                            startIcon={<AddIcon />}
-                            sx={{
-                                borderRadius: '10px',
-                                py: 0.8,
-                                fontWeight: 700,
-                                textTransform: 'none'
-                            }}
-                        >
+                        <Button onClick={onCreateOpportunity} variant="outline" className="w-full rounded-[10px] font-bold normal-case">
+                            <Plus className="size-4" />
                             Create Opportunity
                         </Button>
-                    </Stack>
-                </Box>
+                    </div>
+                </div>
             </Card>
-        </Box>
+        </motion.div>
     );
 }

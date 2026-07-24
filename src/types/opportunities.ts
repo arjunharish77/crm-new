@@ -1,10 +1,10 @@
-import { Lead } from './leads';
+import { Lead, PredictiveRecordScore } from './leads';
 
 /**
  * Opportunity type definitions.
  *
  * Architecture: Opportunities use OpportunityType + StageDefinition for stages.
- * There is NO pipeline model — stages are configured per-tenant via the
+ * Stages are configured per tenant via the
  * OpportunityTypes admin page (opportunity-types API).
  */
 export interface Opportunity {
@@ -34,11 +34,12 @@ export interface Opportunity {
     owner?: { id: string; name: string; email: string } | null;
     activities?: any[];
     stageHistory?: OpportunityStageHistory[];
+    predictiveScore?: PredictiveRecordScore | null;
 }
 
 /**
  * A stage within an OpportunityType.
- * Replaces the old `Stage` type which referenced a pipeline.
+ * Replaces the old standalone `Stage` type.
  */
 export interface StageDefinition {
     id: string;

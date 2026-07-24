@@ -1,20 +1,16 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
+import { MoreVertical, TrendingUp } from 'lucide-react';
+import { Card, CardContent, CardHeader, CardTitle, CardAction } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Skeleton } from '@/components/ui/skeleton';
 import {
-    Card,
-    CardContent,
-    CardHeader,
-    Typography,
-    Box,
-    Skeleton,
-    useTheme,
-    alpha,
-    IconButton,
-    Menu,
-    MenuItem
-} from '@mui/material';
-import MoreVertIcon from '@mui/icons-material/MoreVert';
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { apiFetch } from '@/lib/api';
 import {
     BarChart,
@@ -26,17 +22,8 @@ import {
     ResponsiveContainer,
     LineChart,
     Line,
-    Cell,
-    PieChart,
-    Pie
 } from 'recharts';
 import { StatCard } from './stat-card';
-import {
-    TrendingUp as TrendingUpIcon,
-    People as PeopleIcon,
-    Work as WorkIcon,
-    History as HistoryIcon
-} from '@mui/icons-material';
 
 interface WidgetProps {
     widget: {
@@ -54,10 +41,6 @@ export function DashboardWidget({ widget, onEdit, onDelete }: WidgetProps) {
     const [data, setData] = useState<any>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
-    const theme = useTheme();
-
-    const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
-    const open = Boolean(anchorEl);
 
     useEffect(() => {
         const fetchData = async () => {
@@ -74,17 +57,10 @@ export function DashboardWidget({ widget, onEdit, onDelete }: WidgetProps) {
         fetchData();
     }, [widget.id]);
 
-    const handleMenuClick = (event: React.MouseEvent<HTMLElement>) => {
-        setAnchorEl(event.currentTarget);
-    };
-    const handleMenuClose = () => {
-        setAnchorEl(null);
-    };
-
-    if (loading) return <Skeleton variant="rectangular" height="100%" sx={{ borderRadius: 4 }} />;
+    if (loading) return <Skeleton className="size-full rounded-2xl" />;
     if (error) return (
-        <Card sx={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <Typography color="error">{error}</Typography>
+        <Card className="flex h-full items-center justify-center">
+            <p className="text-sm text-destructive">{error}</p>
         </Card>
     );
 
@@ -95,7 +71,7 @@ export function DashboardWidget({ widget, onEdit, onDelete }: WidgetProps) {
                     <StatCard
                         title={widget.title}
                         value={data}
-                        icon={<TrendingUpIcon />}
+                        icon={<TrendingUp />}
                     />
                 );
 
@@ -103,21 +79,21 @@ export function DashboardWidget({ widget, onEdit, onDelete }: WidgetProps) {
                 return (
                     <ResponsiveContainer width="100%" height={250}>
                         <LineChart data={data}>
-                            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={theme.palette.divider} />
+                            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--border)" />
                             <XAxis
                                 dataKey="group"
-                                stroke={theme.palette.text.secondary}
+                                stroke="var(--muted-foreground)"
                                 fontSize={12}
                             />
                             <YAxis
-                                stroke={theme.palette.text.secondary}
+                                stroke="var(--muted-foreground)"
                                 fontSize={12}
                             />
                             <Tooltip />
                             <Line
                                 type="monotone"
                                 dataKey="value"
-                                stroke={theme.palette.primary.main}
+                                stroke="var(--primary)"
                                 strokeWidth={2}
                             />
                         </LineChart>
@@ -128,11 +104,11 @@ export function DashboardWidget({ widget, onEdit, onDelete }: WidgetProps) {
                 return (
                     <ResponsiveContainer width="100%" height={250}>
                         <BarChart data={data}>
-                            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={theme.palette.divider} />
+                            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--border)" />
                             <XAxis dataKey="group" fontSize={12} />
                             <YAxis fontSize={12} />
                             <Tooltip />
-                            <Bar dataKey="value" fill={theme.palette.secondary.main} radius={[4, 4, 0, 0]} />
+                            <Bar dataKey="value" fill="var(--secondary)" radius={[4, 4, 0, 0]} />
                         </BarChart>
                     </ResponsiveContainer>
                 );
@@ -145,36 +121,54 @@ export function DashboardWidget({ widget, onEdit, onDelete }: WidgetProps) {
                             <XAxis type="number" hide />
                             <YAxis dataKey="stage" type="category" width={100} fontSize={11} />
                             <Tooltip />
-                            <Bar dataKey="count" fill={theme.palette.primary.light} radius={[0, 4, 4, 0]} />
+                            <Bar dataKey="count" fill="var(--primary-container)" radius={[0, 4, 4, 0]} />
                         </BarChart>
                     </ResponsiveContainer>
                 );
 
             default:
-                return <Typography>Unknown widget type: {widget.type}</Typography>;
+                return <p className="text-sm">Unknown widget type: {widget.type}</p>;
         }
     };
 
-    // Stats are rendered differently (already contain their own card)
-    if (widget.type === 'STAT') return renderContent();
+    const renderMenu = () => (
+        <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="icon-sm">
+                    <MoreVertical className="size-4" />
+                </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={() => onEdit?.()}>Edit</DropdownMenuItem>
+                <DropdownMenuItem
+                    className="text-destructive focus:text-destructive"
+                    onClick={() => onDelete?.()}
+                >
+                    Delete
+                </DropdownMenuItem>
+            </DropdownMenuContent>
+        </DropdownMenu>
+    );
+
+    if (widget.type === 'STAT') {
+        return (
+            <div className="relative h-full">
+                {renderContent()}
+                <div className="absolute right-2 top-2">
+                    {renderMenu()}
+                </div>
+            </div>
+        );
+    }
 
     return (
-        <Card sx={{ height: '100%', borderRadius: 4 }}>
-            <CardHeader
-                title={widget.title}
-                titleTypographyProps={{ variant: 'subtitle1', fontWeight: 700 }}
-                action={
-                    <>
-                        <IconButton onClick={handleMenuClick} size="small">
-                            <MoreVertIcon />
-                        </IconButton>
-                        <Menu anchorEl={anchorEl} open={open} onClose={handleMenuClose}>
-                            <MenuItem onClick={() => { handleMenuClose(); onEdit?.(); }}>Edit</MenuItem>
-                            <MenuItem onClick={() => { handleMenuClose(); onDelete?.(); }} sx={{ color: 'error.main' }}>Delete</MenuItem>
-                        </Menu>
-                    </>
-                }
-            />
+        <Card className="h-full rounded-2xl">
+            <CardHeader>
+                <CardTitle className="text-base font-bold">{widget.title}</CardTitle>
+                <CardAction>
+                    {renderMenu()}
+                </CardAction>
+            </CardHeader>
             <CardContent>
                 {renderContent()}
             </CardContent>

@@ -1,38 +1,21 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { toast } from "sonner";
+import { Edit, Loader2, Lock, Save, Shield, X } from "lucide-react";
 import { apiFetch } from "@/lib/api";
+import { useAuth } from "@/providers/auth-provider";
+import { Button } from "@/components/ui/button";
 import {
-    Box,
-    Button,
     Card,
     CardContent,
+    CardDescription,
     CardHeader,
-    Typography,
-    Divider,
-    TextField,
-    Switch,
-    Stack,
-    CircularProgress,
-    FormControlLabel,
-    InputAdornment,
-    Grid,
-    Paper,
-    FormControl,
-    InputLabel,
-    Select,
-    MenuItem,
-    Alert
-} from "@mui/material";
-import {
-    Save as SaveIcon,
-    Shield as ShieldIcon,
-    Lock as LockIcon,
-    Edit as EditIcon,
-    Close as CloseIcon
-} from "@mui/icons-material";
-import { toast } from "sonner";
-import { useAuth } from "@/providers/auth-provider";
+    CardTitle,
+} from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 
 interface SecurityPolicy {
     id?: string;
@@ -58,6 +41,43 @@ interface SecurityPolicy {
         id: string;
         name: string;
     };
+}
+
+interface NumberFieldProps {
+    label: string;
+    value: number;
+    disabled: boolean;
+    onChange: (value: number) => void;
+}
+
+function NumberField({ label, value, disabled, onChange }: NumberFieldProps) {
+    return (
+        <div className="space-y-2">
+            <Label>{label}</Label>
+            <Input
+                type="number"
+                value={Number.isFinite(value) ? value : 0}
+                onChange={(event) => onChange(Number.parseInt(event.target.value, 10) || 0)}
+                disabled={disabled}
+            />
+        </div>
+    );
+}
+
+interface PolicySwitchProps {
+    label: string;
+    checked: boolean;
+    disabled: boolean;
+    onCheckedChange: (checked: boolean) => void;
+}
+
+function PolicySwitch({ label, checked, disabled, onCheckedChange }: PolicySwitchProps) {
+    return (
+        <div className="flex items-center justify-between gap-4 rounded-md border border-border px-3 py-2">
+            <Label className="text-sm font-medium leading-5">{label}</Label>
+            <Switch checked={checked} onCheckedChange={onCheckedChange} disabled={disabled} />
+        </div>
+    );
 }
 
 export default function SecurityPolicyPage() {
@@ -95,7 +115,7 @@ export default function SecurityPolicyPage() {
 
         setSaving(true);
         try {
-            const tenantId = selectedPolicy.tenantId || 'global';
+            const tenantId = selectedPolicy.tenantId || "global";
             await apiFetch(`/platform-admin/security/policy/${tenantId}`, {
                 method: "PATCH",
                 body: JSON.stringify(selectedPolicy),
@@ -110,7 +130,7 @@ export default function SecurityPolicyPage() {
         }
     };
 
-    const updateField = (field: keyof SecurityPolicy, value: any) => {
+    const updateField = (field: keyof SecurityPolicy, value: SecurityPolicy[keyof SecurityPolicy]) => {
         if (selectedPolicy) {
             setSelectedPolicy({ ...selectedPolicy, [field]: value });
         }
@@ -118,241 +138,191 @@ export default function SecurityPolicyPage() {
 
     if (!isPlatformAdmin) {
         return (
-            <Box sx={{ p: 4, textAlign: 'center' }}>
-                <Typography color="error">You do not have permission to view this page.</Typography>
-            </Box>
+            <div className="px-4 py-10 text-center text-sm font-medium text-destructive">
+                You do not have permission to view this page.
+            </div>
         );
     }
 
     if (loading) {
         return (
-            <Box sx={{ display: 'flex', justifyContent: 'center', py: 8 }}>
-                <CircularProgress />
-            </Box>
+            <div className="flex justify-center py-16">
+                <Loader2 className="h-6 w-6 animate-spin text-primary" />
+            </div>
         );
     }
 
     return (
-        <Box sx={{ maxWidth: 1200, mx: 'auto', p: { xs: 1.5, md: 2 } }}>
-            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-                <Box>
-                    <Typography variant="h6" sx={{ fontWeight: 700, mb: 1 }}>Security Policies</Typography>
-                    <Typography variant="body1" color="text.secondary">
-                        Configure security settings for tenants.
-                    </Typography>
-                </Box>
+        <div className="mx-auto max-w-[1200px] px-4 py-4 md:px-6">
+            <div className="flex flex-col gap-4 border-b border-border pb-4 md:flex-row md:items-center md:justify-between">
+                <div>
+                    <h1 className="text-xl font-semibold tracking-normal text-foreground">Security Policies</h1>
+                    <p className="mt-1 text-sm text-muted-foreground">Configure security settings for tenants.</p>
+                </div>
                 {editing ? (
-                    <Stack direction="row" spacing={2}>
-                        <Button
-                            variant="outlined"
-                            onClick={() => setEditing(false)}
-                            startIcon={<CloseIcon />}
-                            sx={{ borderRadius: 20 }}
-                        >
+                    <div className="flex flex-wrap gap-2">
+                        <Button variant="outline" onClick={() => setEditing(false)}>
+                            <X className="h-4 w-4" />
                             Cancel
                         </Button>
-                        <Button
-                            variant="contained"
-                            onClick={savePolicy}
-                            disabled={saving}
-                            startIcon={<SaveIcon />}
-                            sx={{ borderRadius: 20 }}
-                        >
+                        <Button onClick={savePolicy} disabled={saving}>
+                            {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
                             {saving ? "Saving..." : "Save Changes"}
                         </Button>
-                    </Stack>
+                    </div>
                 ) : (
-                    <Button
-                        variant="contained"
-                        onClick={() => setEditing(true)}
-                        startIcon={<EditIcon />}
-                        sx={{ borderRadius: 20 }}
-                    >
+                    <Button onClick={() => setEditing(true)}>
+                        <Edit className="h-4 w-4" />
                         Edit Policy
                     </Button>
                 )}
-            </Box>
-            <Divider sx={{ mb: 2 }} />
+            </div>
 
             {selectedPolicy && (
-                <Grid container spacing={2}>
-                    {/* Password Policy */}
-                    <Grid size={{ xs: 12, md: 6 }}>
-                        <Card variant="outlined" sx={{ height: '100%', borderRadius: 2 }}>
-                            <CardHeader
-                                title={
-                                    <Stack direction="row" spacing={1} alignItems="center">
-                                        <LockIcon color="primary" />
-                                        <Typography variant="h6" sx={{ fontWeight: 600 }}>Password Policy</Typography>
-                                    </Stack>
-                                }
-                                subheader="Configure password requirements and security"
+                <div className="mt-4 grid gap-4 lg:grid-cols-2">
+                    <Card className="h-full gap-4 rounded-lg py-5">
+                        <CardHeader className="gap-1 px-5">
+                            <CardTitle className="flex items-center gap-2 text-base">
+                                <Lock className="h-5 w-5 text-primary" />
+                                Password Policy
+                            </CardTitle>
+                            <CardDescription>Configure password requirements and security</CardDescription>
+                        </CardHeader>
+                        <CardContent className="space-y-4 px-5">
+                            <NumberField
+                                label="Minimum Password Length"
+                                value={selectedPolicy.minPasswordLength}
+                                onChange={(value) => updateField("minPasswordLength", value)}
+                                disabled={!editing}
                             />
-                            <Divider />
-                            <CardContent>
-                                <Stack spacing={2}>
-                                    <Grid container spacing={2}>
-                                        <Grid size={{ xs: 12 }}>
-                                            <TextField
-                                                label="Minimum Password Length"
-                                                type="number"
-                                                fullWidth
-                                                value={selectedPolicy.minPasswordLength}
-                                                onChange={(e) => updateField('minPasswordLength', parseInt(e.target.value))}
-                                                disabled={!editing}
-                                            />
-                                        </Grid>
-                                        <Grid size={{ xs: 12 }}>
-                                            <TextField
-                                                label="Password Expiry (days, 0=never)"
-                                                type="number"
-                                                fullWidth
-                                                value={selectedPolicy.passwordExpiryDays}
-                                                onChange={(e) => updateField('passwordExpiryDays', parseInt(e.target.value))}
-                                                disabled={!editing}
-                                            />
-                                        </Grid>
-                                        <Grid size={{ xs: 12 }}>
-                                            <TextField
-                                                label="Prevent Reuse (last N passwords)"
-                                                type="number"
-                                                fullWidth
-                                                value={selectedPolicy.preventPasswordReuse}
-                                                onChange={(e) => updateField('preventPasswordReuse', parseInt(e.target.value))}
-                                                disabled={!editing}
-                                            />
-                                        </Grid>
-                                    </Grid>
-
-                                    <Stack spacing={1}>
-                                        <Divider />
-                                        <FormControlLabel
-                                            control={<Switch checked={selectedPolicy.requireUppercase} onChange={(e) => updateField('requireUppercase', e.target.checked)} disabled={!editing} />}
-                                            label="Require Uppercase Letters"
-                                        />
-                                        <FormControlLabel
-                                            control={<Switch checked={selectedPolicy.requireLowercase} onChange={(e) => updateField('requireLowercase', e.target.checked)} disabled={!editing} />}
-                                            label="Require Lowercase Letters"
-                                        />
-                                        <FormControlLabel
-                                            control={<Switch checked={selectedPolicy.requireNumbers} onChange={(e) => updateField('requireNumbers', e.target.checked)} disabled={!editing} />}
-                                            label="Require Numbers"
-                                        />
-                                        <FormControlLabel
-                                            control={<Switch checked={selectedPolicy.requireSpecialChars} onChange={(e) => updateField('requireSpecialChars', e.target.checked)} disabled={!editing} />}
-                                            label="Require Special Characters"
-                                        />
-                                    </Stack>
-                                </Stack>
-                            </CardContent>
-                        </Card>
-                    </Grid>
-
-                    {/* Login & Session Policy */}
-                    <Grid size={{ xs: 12, md: 6 }}>
-                        <Card variant="outlined" sx={{ height: '100%', borderRadius: 2 }}>
-                            <CardHeader
-                                title={
-                                    <Stack direction="row" spacing={1} alignItems="center">
-                                        <ShieldIcon color="primary" />
-                                        <Typography variant="h6" sx={{ fontWeight: 600 }}>Login & Session</Typography>
-                                    </Stack>
-                                }
-                                subheader="Manage session timeouts and access controls"
+                            <NumberField
+                                label="Password Expiry (days, 0=never)"
+                                value={selectedPolicy.passwordExpiryDays}
+                                onChange={(value) => updateField("passwordExpiryDays", value)}
+                                disabled={!editing}
                             />
-                            <Divider />
-                            <CardContent>
-                                <Stack spacing={2}>
-                                    <Grid container spacing={2}>
-                                        <Grid size={{ xs: 6 }}>
-                                            <TextField
-                                                label="Session Timeout (min)"
-                                                type="number"
-                                                fullWidth
-                                                value={selectedPolicy.sessionTimeoutMinutes}
-                                                onChange={(e) => updateField('sessionTimeoutMinutes', parseInt(e.target.value))}
-                                                disabled={!editing}
-                                            />
-                                        </Grid>
-                                        <Grid size={{ xs: 6 }}>
-                                            <TextField
-                                                label="Max Concurrent Sessions"
-                                                type="number"
-                                                fullWidth
-                                                value={selectedPolicy.maxConcurrentSessions}
-                                                onChange={(e) => updateField('maxConcurrentSessions', parseInt(e.target.value))}
-                                                disabled={!editing}
-                                            />
-                                        </Grid>
-                                        <Grid size={{ xs: 6 }}>
-                                            <TextField
-                                                label="Max Login Attempts"
-                                                type="number"
-                                                fullWidth
-                                                value={selectedPolicy.maxLoginAttempts}
-                                                onChange={(e) => updateField('maxLoginAttempts', parseInt(e.target.value))}
-                                                disabled={!editing}
-                                            />
-                                        </Grid>
-                                        <Grid size={{ xs: 6 }}>
-                                            <TextField
-                                                label="Lockout Duration (min)"
-                                                type="number"
-                                                fullWidth
-                                                value={selectedPolicy.lockoutDurationMinutes}
-                                                onChange={(e) => updateField('lockoutDurationMinutes', parseInt(e.target.value))}
-                                                disabled={!editing}
-                                            />
-                                        </Grid>
-                                    </Grid>
-
-                                    <Stack spacing={1}>
-                                        <Divider />
-                                        <FormControlLabel
-                                            control={<Switch checked={selectedPolicy.enforceSessionTimeout} onChange={(e) => updateField('enforceSessionTimeout', e.target.checked)} disabled={!editing} />}
-                                            label="Enforce Session Timeout"
-                                        />
-                                        <FormControlLabel
-                                            control={<Switch checked={selectedPolicy.enableTwoFactor} onChange={(e) => updateField('enableTwoFactor', e.target.checked)} disabled={!editing} />}
-                                            label="Enable Two-Factor Authentication"
-                                        />
-                                        <FormControlLabel
-                                            control={<Switch checked={selectedPolicy.logFailedLoginAttempts} onChange={(e) => updateField('logFailedLoginAttempts', e.target.checked)} disabled={!editing} />}
-                                            label="Log Failed Login Attempts"
-                                        />
-                                        <FormControlLabel
-                                            control={<Switch checked={selectedPolicy.requireLoginNotifications} onChange={(e) => updateField('requireLoginNotifications', e.target.checked)} disabled={!editing} />}
-                                            label="Require Login Notifications"
-                                        />
-                                    </Stack>
-                                </Stack>
-                            </CardContent>
-                        </Card>
-                    </Grid>
-
-                    {/* Audit & Compliance */}
-                    <Grid size={{ xs: 12 }}>
-                        <Card variant="outlined" sx={{ borderRadius: 2 }}>
-                            <CardHeader
-                                title={<Typography variant="h6" sx={{ fontWeight: 600 }}>Audit & Compliance</Typography>}
+                            <NumberField
+                                label="Prevent Reuse (last N passwords)"
+                                value={selectedPolicy.preventPasswordReuse}
+                                onChange={(value) => updateField("preventPasswordReuse", value)}
+                                disabled={!editing}
                             />
-                            <Divider />
-                            <CardContent>
-                                <Stack direction={{ xs: 'column', md: 'row' }} spacing={4}>
-                                    <FormControlLabel
-                                        control={<Switch checked={selectedPolicy.enforceAuditLogging} onChange={(e) => updateField('enforceAuditLogging', e.target.checked)} disabled={!editing} />}
-                                        label="Enforce Audit Logging"
-                                    />
-                                    <FormControlLabel
-                                        control={<Switch checked={selectedPolicy.enforceIpRestrictions} onChange={(e) => updateField('enforceIpRestrictions', e.target.checked)} disabled={!editing} />}
-                                        label="Enforce IP Restrictions"
-                                    />
-                                </Stack>
-                            </CardContent>
-                        </Card>
-                    </Grid>
-                </Grid>
+
+                            <div className="space-y-2 border-t border-border pt-4">
+                                <PolicySwitch
+                                    label="Require Uppercase Letters"
+                                    checked={selectedPolicy.requireUppercase}
+                                    onCheckedChange={(checked) => updateField("requireUppercase", checked)}
+                                    disabled={!editing}
+                                />
+                                <PolicySwitch
+                                    label="Require Lowercase Letters"
+                                    checked={selectedPolicy.requireLowercase}
+                                    onCheckedChange={(checked) => updateField("requireLowercase", checked)}
+                                    disabled={!editing}
+                                />
+                                <PolicySwitch
+                                    label="Require Numbers"
+                                    checked={selectedPolicy.requireNumbers}
+                                    onCheckedChange={(checked) => updateField("requireNumbers", checked)}
+                                    disabled={!editing}
+                                />
+                                <PolicySwitch
+                                    label="Require Special Characters"
+                                    checked={selectedPolicy.requireSpecialChars}
+                                    onCheckedChange={(checked) => updateField("requireSpecialChars", checked)}
+                                    disabled={!editing}
+                                />
+                            </div>
+                        </CardContent>
+                    </Card>
+
+                    <Card className="h-full gap-4 rounded-lg py-5">
+                        <CardHeader className="gap-1 px-5">
+                            <CardTitle className="flex items-center gap-2 text-base">
+                                <Shield className="h-5 w-5 text-primary" />
+                                Login & Session
+                            </CardTitle>
+                            <CardDescription>Manage session timeouts and access controls</CardDescription>
+                        </CardHeader>
+                        <CardContent className="space-y-4 px-5">
+                            <div className="grid gap-4 sm:grid-cols-2">
+                                <NumberField
+                                    label="Session Timeout (min)"
+                                    value={selectedPolicy.sessionTimeoutMinutes}
+                                    onChange={(value) => updateField("sessionTimeoutMinutes", value)}
+                                    disabled={!editing}
+                                />
+                                <NumberField
+                                    label="Max Concurrent Sessions"
+                                    value={selectedPolicy.maxConcurrentSessions}
+                                    onChange={(value) => updateField("maxConcurrentSessions", value)}
+                                    disabled={!editing}
+                                />
+                                <NumberField
+                                    label="Max Login Attempts"
+                                    value={selectedPolicy.maxLoginAttempts}
+                                    onChange={(value) => updateField("maxLoginAttempts", value)}
+                                    disabled={!editing}
+                                />
+                                <NumberField
+                                    label="Lockout Duration (min)"
+                                    value={selectedPolicy.lockoutDurationMinutes}
+                                    onChange={(value) => updateField("lockoutDurationMinutes", value)}
+                                    disabled={!editing}
+                                />
+                            </div>
+
+                            <div className="space-y-2 border-t border-border pt-4">
+                                <PolicySwitch
+                                    label="Enforce Session Timeout"
+                                    checked={selectedPolicy.enforceSessionTimeout}
+                                    onCheckedChange={(checked) => updateField("enforceSessionTimeout", checked)}
+                                    disabled={!editing}
+                                />
+                                <PolicySwitch
+                                    label="Enable Two-Factor Authentication"
+                                    checked={selectedPolicy.enableTwoFactor}
+                                    onCheckedChange={(checked) => updateField("enableTwoFactor", checked)}
+                                    disabled={!editing}
+                                />
+                                <PolicySwitch
+                                    label="Log Failed Login Attempts"
+                                    checked={selectedPolicy.logFailedLoginAttempts}
+                                    onCheckedChange={(checked) => updateField("logFailedLoginAttempts", checked)}
+                                    disabled={!editing}
+                                />
+                                <PolicySwitch
+                                    label="Require Login Notifications"
+                                    checked={selectedPolicy.requireLoginNotifications}
+                                    onCheckedChange={(checked) => updateField("requireLoginNotifications", checked)}
+                                    disabled={!editing}
+                                />
+                            </div>
+                        </CardContent>
+                    </Card>
+
+                    <Card className="gap-4 rounded-lg py-5 lg:col-span-2">
+                        <CardHeader className="gap-1 px-5">
+                            <CardTitle className="text-base">Audit & Compliance</CardTitle>
+                        </CardHeader>
+                        <CardContent className="grid gap-3 px-5 md:grid-cols-2">
+                            <PolicySwitch
+                                label="Enforce Audit Logging"
+                                checked={selectedPolicy.enforceAuditLogging}
+                                onCheckedChange={(checked) => updateField("enforceAuditLogging", checked)}
+                                disabled={!editing}
+                            />
+                            <PolicySwitch
+                                label="Enforce IP Restrictions"
+                                checked={selectedPolicy.enforceIpRestrictions}
+                                onCheckedChange={(checked) => updateField("enforceIpRestrictions", checked)}
+                                disabled={!editing}
+                            />
+                        </CardContent>
+                    </Card>
+                </div>
             )}
-        </Box>
+        </div>
     );
 }

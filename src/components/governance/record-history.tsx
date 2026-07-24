@@ -1,25 +1,25 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import { History, ArrowRight, Loader2, Check, ListFilter } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import {
-    Box,
-    Typography,
-    Stack,
-    CircularProgress,
-    Paper,
-    alpha,
-    Divider,
-    Chip,
-    Autocomplete,
-    TextField
-} from '@mui/material';
+    Popover,
+    PopoverContent,
+    PopoverTrigger,
+} from '@/components/ui/popover';
 import {
-    History as HistoryIcon,
-    FiberManualRecord as DotIcon,
-    ArrowForward as ArrowIcon
-} from '@mui/icons-material';
+    Command,
+    CommandEmpty,
+    CommandGroup,
+    CommandInput,
+    CommandItem,
+    CommandList,
+} from '@/components/ui/command';
 import { apiFetch } from '@/lib/api';
 import { formatWorkspaceRelativeTime } from '@/lib/date-format';
+import { cn } from '@/lib/utils';
 
 interface HistoryItem {
     id: string;
@@ -96,6 +96,7 @@ export function RecordHistory({ entityType, entityId }: RecordHistoryProps) {
     const [history, setHistory] = useState<HistoryItem[]>([]);
     const [loading, setLoading] = useState(true);
     const [fieldFilter, setFieldFilter] = useState<string[]>([]);
+    const [filterOpen, setFilterOpen] = useState(false);
 
     useEffect(() => {
         if (entityId) {
@@ -106,7 +107,11 @@ export function RecordHistory({ entityType, entityId }: RecordHistoryProps) {
         }
     }, [entityType, entityId]);
 
-    if (loading) return <Box sx={{ display: 'flex', justifyContent: 'center', p: 4 }}><CircularProgress size={24} /></Box>;
+    if (loading) return (
+        <div className="flex justify-center p-8">
+            <Loader2 className="size-6 animate-spin text-muted-foreground" />
+        </div>
+    );
 
     const availableFields = [...new Set(history.flatMap((item) => changedFields(item).map((field) => field.field)))];
     const filteredHistory = fieldFilter.length === 0
@@ -119,106 +124,74 @@ export function RecordHistory({ entityType, entityId }: RecordHistoryProps) {
             .filter((item: any) => item.action !== "UPDATE" || item.__filteredFields.length > 0);
 
     if (history.length === 0) return (
-        <Box sx={{ p: 4, textAlign: 'center', opacity: 0.6 }}>
-            <HistoryIcon sx={{ fontSize: 40, mb: 1 }} />
-            <Typography variant="body2">No history records found for this {entityType.toLowerCase()}.</Typography>
-        </Box>
+        <div className="p-8 text-center opacity-60">
+            <History className="mx-auto mb-2 size-10" />
+            <p className="text-sm">No history records found for this {entityType.toLowerCase()}.</p>
+        </div>
     );
 
+    const toggleField = (field: string) => {
+        setFieldFilter((prev) =>
+            prev.includes(field) ? prev.filter((f) => f !== field) : [...prev, field]
+        );
+    };
+
     return (
-        <Stack spacing={1.25} sx={{ p: 0.5 }}>
+        <div className="flex flex-col gap-2.5 p-0.5">
             {availableFields.length > 0 && (
-                <Autocomplete
-                    multiple
-                    size="small"
-                    options={availableFields}
-                    value={fieldFilter}
-                    onChange={(_, value) => setFieldFilter(value)}
-                    getOptionLabel={(option) => labelForField(option)}
-                    filterSelectedOptions
-                    renderTags={(value, getTagProps) => {
-                        const { key, ...tagProps } = getTagProps({ index: 0 });
-                        return value.length > 0 ? (
-                            <Chip
-                                key={key}
-                                label={`${value.length} selected`}
-                                size="small"
-                                {...tagProps}
-                            />
-                        ) : null;
-                    }}
-                    sx={{
-                        width: { xs: "100%", sm: 320 },
-                        px: 0.5,
-                        pb: 0.5,
-                        "& .MuiInputBase-root": {
-                            minHeight: 34,
-                            borderRadius: "10px",
-                            bgcolor: "background.paper",
-                            fontSize: "0.8125rem",
-                            py: 0.25,
-                        },
-                        "& .MuiChip-root": {
-                            height: 20,
-                            borderRadius: "7px",
-                            fontSize: "0.6875rem",
-                            fontWeight: 700,
-                        },
-                    }}
-                    renderInput={(params) => (
-                        <TextField
-                            {...params}
-                            label="Filter fields"
-                            placeholder="Search fields"
-                            size="small"
-                        />
-                    )}
-                />
+                <Popover open={filterOpen} onOpenChange={setFilterOpen}>
+                    <PopoverTrigger asChild>
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-[34px] w-full justify-start rounded-[10px] font-semibold sm:w-80"
+                        >
+                            <ListFilter className="size-4" />
+                            {fieldFilter.length > 0 ? `${fieldFilter.length} selected` : "Filter fields"}
+                        </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-80 p-0" align="start">
+                        <Command>
+                            <CommandInput placeholder="Search fields" />
+                            <CommandList>
+                                <CommandEmpty>No fields found.</CommandEmpty>
+                                <CommandGroup>
+                                    {availableFields.map((field) => (
+                                        <CommandItem
+                                            key={field}
+                                            value={field}
+                                            onSelect={() => toggleField(field)}
+                                        >
+                                            <Check
+                                                className={cn(
+                                                    "size-4",
+                                                    fieldFilter.includes(field) ? "opacity-100" : "opacity-0"
+                                                )}
+                                            />
+                                            {labelForField(field)}
+                                        </CommandItem>
+                                    ))}
+                                </CommandGroup>
+                            </CommandList>
+                        </Command>
+                    </PopoverContent>
+                </Popover>
             )}
 
             {filteredHistory.map((item: any, idx) => (
-                <Box key={item.id} sx={{ position: 'relative', pl: 3 }}>
+                <div key={item.id} className="relative pl-8">
                     {/* Vertical Line */}
                     {idx < history.length - 1 && (
-                        <Box
-                            sx={{
-                                position: 'absolute',
-                                left: 11,
-                                top: 18,
-                                bottom: -14,
-                                width: 2,
-                                bgcolor: 'divider'
-                            }}
-                        />
+                        <div className="absolute bottom-[-14px] left-[11px] top-[18px] w-0.5 bg-border" />
                     )}
 
                     {/* Dot */}
-                    <Box
-                        sx={{
-                            position: 'absolute',
-                            left: 0,
-                            top: 4,
-                            width: 24,
-                            height: 24,
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            zIndex: 1
-                        }}
-                    >
-                        <DotIcon sx={{ fontSize: 12, color: 'primary.main' }} />
-                    </Box>
+                    <div className="absolute left-0 top-1 z-10 flex size-6 items-center justify-center">
+                        <span className="size-3 rounded-full bg-primary" />
+                    </div>
 
                     {/* Content */}
-                    <Paper
-                        variant="outlined"
-                        sx={{
-                            p: 1.5,
-                            borderRadius: 3,
-                            bgcolor: (theme) => alpha(theme.palette.background.paper, 0.75),
-                            borderColor: (theme) => alpha(theme.palette.divider, 0.24)
-                        }}
-                    >
+                    <div className="rounded-2xl border bg-card/75 p-3">
                         {(() => {
                             const fields = item.__filteredFields ?? changedFields(item);
                             const actor = item.user?.name || item.user?.email || "Unknown User";
@@ -229,41 +202,45 @@ export function RecordHistory({ entityType, entityId }: RecordHistoryProps) {
                                     : `${item.action} by ${actor}`;
                             return (
                                 <>
-                        <Box display="flex" justifyContent="space-between" alignItems="flex-start" mb={1}>
-                            <Typography variant="body2" component="span" sx={{ fontWeight: 800 }}>
-                                {actionLabel}
-                            </Typography>
-                            <Typography variant="caption" color="text.secondary">
-                                {formatWorkspaceRelativeTime(item.createdAt)}
-                            </Typography>
-                        </Box>
+                                    <div className="mb-1 flex items-start justify-between">
+                                        <span className="text-sm font-extrabold">
+                                            {actionLabel}
+                                        </span>
+                                        <span className="text-xs text-muted-foreground">
+                                            {formatWorkspaceRelativeTime(item.createdAt)}
+                                        </span>
+                                    </div>
 
-                        <Typography variant="caption" display="block" color="text.secondary" gutterBottom>
-                            by {item.user.name} ({item.user.email})
-                        </Typography>
+                                    <p className="mb-1 block text-xs text-muted-foreground">
+                                        by {item.user.name} ({item.user.email})
+                                    </p>
 
-                        {item.action === 'UPDATE' && fields.length > 0 && (
-                            <Stack spacing={0.75} sx={{ mt: 1 }}>
-                                {fields.map((field: { field: string; before: any; after: any }) => (
-                                    <Box key={field.field} sx={{ p: 1, borderRadius: 2, bgcolor: "surfaceContainerLowest", border: "1px solid", borderColor: "divider" }}>
-                                        <Typography variant="caption" fontWeight={800} color="text.secondary">
-                                            {labelForField(field.field)}
-                                        </Typography>
-                                        <Stack direction="row" spacing={0.75} alignItems="center" flexWrap="wrap">
-                                            <Chip label={formatValue(field.before, field.field, item)} size="small" variant="outlined" sx={{ maxWidth: 220 }} />
-                                            <ArrowIcon sx={{ fontSize: 14, color: "text.disabled" }} />
-                                            <Chip label={formatValue(field.after, field.field, item)} size="small" color="success" variant="outlined" sx={{ maxWidth: 220 }} />
-                                        </Stack>
-                                    </Box>
-                                ))}
-                            </Stack>
-                        )}
+                                    {item.action === 'UPDATE' && fields.length > 0 && (
+                                        <div className="mt-1 flex flex-col gap-1.5">
+                                            {fields.map((field: { field: string; before: any; after: any }) => (
+                                                <div key={field.field} className="rounded-lg border bg-surface-container-lowest p-2">
+                                                    <p className="text-xs font-extrabold text-muted-foreground">
+                                                        {labelForField(field.field)}
+                                                    </p>
+                                                    <div className="flex flex-wrap items-center gap-1.5">
+                                                        <Badge variant="outline" className="max-w-[220px] truncate">
+                                                            {formatValue(field.before, field.field, item)}
+                                                        </Badge>
+                                                        <ArrowRight className="size-3.5 text-muted-foreground/60" />
+                                                        <Badge variant="outline" className="max-w-[220px] truncate border-emerald-500/40 text-emerald-600">
+                                                            {formatValue(field.after, field.field, item)}
+                                                        </Badge>
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
                                 </>
                             );
                         })()}
-                    </Paper>
-                </Box>
+                    </div>
+                </div>
             ))}
-        </Stack>
+        </div>
     );
 }

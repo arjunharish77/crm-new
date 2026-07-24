@@ -1,38 +1,23 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
+import { Bookmark, Plus, Trash2, Star, Filter, Loader2 } from 'lucide-react';
 import {
-    Box,
-    Typography,
-    Stack,
-    TextField,
-    Button,
-    IconButton,
-    Tooltip,
-    Menu,
-    MenuItem as MuiMenuItem,
-    ListItemText,
-    ListItemIcon,
-    Divider,
-    Dialog,
-    DialogTitle,
-    DialogContent,
-    DialogActions,
-    Chip,
-    alpha,
-    useTheme,
-    CircularProgress,
-} from '@mui/material';
-import {
-    BookmarkBorder as BookmarkIcon,
-    Bookmark as BookmarkFilledIcon,
-    Add as AddIcon,
-    Delete as DeleteIcon,
-    Star as StarIcon,
-    FilterAlt as FilterIcon,
-} from '@mui/icons-material';
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuSeparator,
+    DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import { Button } from '@/components/ui/button';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import { StandardDialog } from '@/components/common/standard-dialog';
+import { Input } from '@/components/ui/input';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Label } from '@/components/ui/label';
 import { apiFetch } from '@/lib/api';
 import { toast } from 'sonner';
+import { cn } from '@/lib/utils';
 
 interface SavedFilter {
     id: string;
@@ -57,8 +42,7 @@ interface SavedFiltersMenuProps {
 }
 
 export function SavedFiltersMenu({ module, activeFilter, onApply, onClear }: SavedFiltersMenuProps) {
-    const theme = useTheme();
-    const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
+    const [open, setOpen] = useState(false);
     const [views, setViews] = useState<SavedFilter[]>([]);
     const [loading, setLoading] = useState(false);
     const [saveDialogOpen, setSaveDialogOpen] = useState(false);
@@ -66,8 +50,6 @@ export function SavedFiltersMenu({ module, activeFilter, onApply, onClear }: Sav
     const [saveAsDefault, setSaveAsDefault] = useState(false);
     const [saving, setSaving] = useState(false);
     const [activeViewId, setActiveViewId] = useState<string | null>(null);
-
-    const open = Boolean(anchorEl);
 
     const fetchViews = async () => {
         if (loading) return;
@@ -82,17 +64,15 @@ export function SavedFiltersMenu({ module, activeFilter, onApply, onClear }: Sav
         }
     };
 
-    const handleOpen = (event: React.MouseEvent<HTMLElement>) => {
-        setAnchorEl(event.currentTarget);
-        fetchViews();
+    const handleOpenChange = (next: boolean) => {
+        setOpen(next);
+        if (next) fetchViews();
     };
-
-    const handleClose = () => setAnchorEl(null);
 
     const handleApply = (view: SavedFilter) => {
         setActiveViewId(view.id);
         onApply(view.filters);
-        handleClose();
+        setOpen(false);
     };
 
     const handleSave = async () => {
@@ -139,154 +119,135 @@ export function SavedFiltersMenu({ module, activeFilter, onApply, onClear }: Sav
     const handleClear = () => {
         setActiveViewId(null);
         onClear?.();
-        handleClose();
+        setOpen(false);
     };
 
     const activeView = views.find(v => v.id === activeViewId);
 
     return (
         <>
-            <Tooltip title="Saved Filters">
-                <Box
-                    onClick={handleOpen}
-                    sx={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: 0.5,
-                        cursor: 'pointer',
-                        px: 1.5,
-                        py: 0.75,
-                        borderRadius: 2,
-                        border: '1px solid',
-                        borderColor: activeView ? 'primary.main' : 'divider',
-                        bgcolor: activeView ? alpha(theme.palette.primary.main, 0.06) : 'transparent',
-                        '&:hover': { bgcolor: 'action.hover' },
-                        transition: 'all 0.15s',
-                    }}
-                >
-                    <FilterIcon sx={{ fontSize: 16, color: activeView ? 'primary.main' : 'text.secondary' }} />
-                    <Typography variant="caption" fontWeight={600} color={activeView ? 'primary.main' : 'text.secondary'}>
-                        {activeView ? activeView.name : 'Saved Filters'}
-                    </Typography>
-                </Box>
-            </Tooltip>
-
-            <Menu
-                anchorEl={anchorEl}
-                open={open}
-                onClose={handleClose}
-                transformOrigin={{ horizontal: 'left', vertical: 'top' }}
-                anchorOrigin={{ horizontal: 'left', vertical: 'bottom' }}
-                PaperProps={{ sx: { minWidth: 260, borderRadius: 3, mt: 0.5 } }}
-            >
-                {/* Save current filter action */}
-                <Box sx={{ px: 2, pt: 1.5, pb: 1 }}>
-                    <Button
-                        variant="outlined"
-                        size="small"
-                        fullWidth
-                        startIcon={<AddIcon />}
-                        onClick={() => { handleClose(); setSaveDialogOpen(true); }}
-                        disabled={!activeFilter || Object.keys(activeFilter).length === 0}
-                        sx={{ borderRadius: 2, textTransform: 'none', fontWeight: 600 }}
-                    >
-                        Save current filter
-                    </Button>
-                </Box>
-
-                <Divider />
-
-                {loading ? (
-                    <Box sx={{ display: 'flex', justifyContent: 'center', py: 2 }}>
-                        <CircularProgress size={20} />
-                    </Box>
-                ) : views.length === 0 ? (
-                    <Box sx={{ px: 2, py: 2, textAlign: 'center' }}>
-                        <Typography variant="caption" color="text.disabled">No saved filters yet</Typography>
-                    </Box>
-                ) : (
-                    <>
-                        {activeViewId && (
-                            <MuiMenuItem onClick={handleClear} dense>
-                                <ListItemText
-                                    primary="Clear filter"
-                                    primaryTypographyProps={{ variant: 'caption', color: 'text.secondary' }}
-                                />
-                            </MuiMenuItem>
-                        )}
-                        {views.map(view => (
-                            <MuiMenuItem
-                                key={view.id}
-                                onClick={() => handleApply(view)}
-                                dense
-                                selected={view.id === activeViewId}
-                                sx={{ borderRadius: 1, mx: 0.5 }}
-                            >
-                                <ListItemIcon sx={{ minWidth: 28 }}>
-                                    {view.isDefault
-                                        ? <StarIcon sx={{ fontSize: 14, color: 'warning.main' }} />
-                                        : <BookmarkIcon sx={{ fontSize: 14 }} />}
-                                </ListItemIcon>
-                                <ListItemText
-                                    primary={view.name}
-                                    secondary={view.isShared ? `by ${view.user?.name}` : undefined}
-                                    primaryTypographyProps={{ variant: 'body2', fontWeight: view.isDefault ? 700 : 400 }}
-                                    secondaryTypographyProps={{ variant: 'caption' }}
-                                />
-                                {!view.isShared && (
-                                    <IconButton
-                                        size="small"
-                                        onClick={(e) => handleDelete(view.id, e)}
-                                        sx={{ opacity: 0, '.MuiMenuItem-root:hover &': { opacity: 1 } }}
-                                    >
-                                        <DeleteIcon sx={{ fontSize: 14 }} color="error" />
-                                    </IconButton>
+            <DropdownMenu open={open} onOpenChange={handleOpenChange}>
+                <Tooltip>
+                    <TooltipTrigger asChild>
+                        <DropdownMenuTrigger asChild>
+                            <button
+                                type="button"
+                                className={cn(
+                                    "flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-semibold transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                                    activeView ? "border-primary bg-primary/6 text-primary" : "border-border text-muted-foreground"
                                 )}
-                            </MuiMenuItem>
-                        ))}
-                    </>
-                )}
-            </Menu>
+                            >
+                                <Filter className="size-4" />
+                                {activeView ? activeView.name : 'Saved Filters'}
+                            </button>
+                        </DropdownMenuTrigger>
+                    </TooltipTrigger>
+                    <TooltipContent>Saved Filters</TooltipContent>
+                </Tooltip>
 
-            {/* Save dialog */}
-            <Dialog open={saveDialogOpen} onClose={() => setSaveDialogOpen(false)} maxWidth="xs" fullWidth>
-                <DialogTitle sx={{ fontWeight: 700 }}>Save Current Filter</DialogTitle>
-                <DialogContent>
-                    <TextField
-                        autoFocus
-                        fullWidth
-                        label="Filter name"
-                        placeholder="e.g. Hot leads this week"
-                        value={saveName}
-                        onChange={e => setSaveName(e.target.value)}
-                        size="small"
-                        sx={{ mt: 1 }}
-                        onKeyDown={e => e.key === 'Enter' && handleSave()}
-                    />
-                    <Box sx={{ mt: 1.5, display: 'flex', alignItems: 'center', gap: 1 }}>
-                        <input
-                            type="checkbox"
+                <DropdownMenuContent align="start" className="min-w-[260px] rounded-xl">
+                    <div className="px-2 pt-1 pb-1.5">
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            className="w-full rounded-lg font-semibold"
+                            onClick={() => { setOpen(false); setSaveDialogOpen(true); }}
+                            disabled={!activeFilter || Object.keys(activeFilter).length === 0}
+                        >
+                            <Plus className="size-4" />
+                            Save current filter
+                        </Button>
+                    </div>
+
+                    <DropdownMenuSeparator />
+
+                    {loading ? (
+                        <div className="flex justify-center py-3">
+                            <Loader2 className="size-5 animate-spin text-muted-foreground" />
+                        </div>
+                    ) : views.length === 0 ? (
+                        <div className="px-2 py-3 text-center">
+                            <span className="text-xs text-muted-foreground/60">No saved filters yet</span>
+                        </div>
+                    ) : (
+                        <>
+                            {activeViewId && (
+                                <DropdownMenuItem onClick={handleClear}>
+                                    <span className="text-xs text-muted-foreground">Clear filter</span>
+                                </DropdownMenuItem>
+                            )}
+                            {views.map(view => (
+                                <DropdownMenuItem
+                                    key={view.id}
+                                    onClick={() => handleApply(view)}
+                                    className="group justify-between"
+                                >
+                                    <div className="flex min-w-0 items-center gap-2">
+                                        {view.isDefault
+                                            ? <Star className="size-3.5 shrink-0 text-amber-500" />
+                                            : <Bookmark className="size-3.5 shrink-0" />}
+                                        <div className="min-w-0">
+                                            <p className={cn("truncate text-sm", view.isDefault ? "font-bold" : "font-normal")}>
+                                                {view.name}
+                                            </p>
+                                            {view.isShared && (
+                                                <p className="truncate text-xs text-muted-foreground">by {view.user?.name}</p>
+                                            )}
+                                        </div>
+                                    </div>
+                                    {!view.isShared && (
+                                        <button
+                                            type="button"
+                                            onClick={(e) => handleDelete(view.id, e)}
+                                            className="shrink-0 rounded p-1 opacity-0 hover:bg-destructive/10 group-hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                                            aria-label="Delete filter"
+                                        >
+                                            <Trash2 className="size-3.5 text-destructive" />
+                                        </button>
+                                    )}
+                                </DropdownMenuItem>
+                            ))}
+                        </>
+                    )}
+                </DropdownMenuContent>
+            </DropdownMenu>
+
+            <StandardDialog
+                open={saveDialogOpen}
+                onClose={() => setSaveDialogOpen(false)}
+                title="Save Current Filter"
+                maxWidth="xs"
+                actions={
+                    <>
+                        <Button variant="outline" onClick={() => setSaveDialogOpen(false)}>Cancel</Button>
+                        <Button onClick={handleSave} disabled={!saveName.trim() || saving}>
+                            {saving ? <Loader2 className="size-4 animate-spin" /> : 'Save Filter'}
+                        </Button>
+                    </>
+                }
+            >
+                <div className="flex flex-col gap-3">
+                    <div className="space-y-1.5">
+                        <Label htmlFor="save-filter-name">Filter name</Label>
+                        <Input
+                            id="save-filter-name"
+                            autoFocus
+                            placeholder="e.g. Hot leads this week"
+                            value={saveName}
+                            onChange={e => setSaveName(e.target.value)}
+                            onKeyDown={e => e.key === 'Enter' && handleSave()}
+                        />
+                    </div>
+                    <label htmlFor="save-default" className="flex items-center gap-2 text-sm">
+                        <Checkbox
                             id="save-default"
                             checked={saveAsDefault}
-                            onChange={e => setSaveAsDefault(e.target.checked)}
+                            onCheckedChange={(checked) => setSaveAsDefault(checked === true)}
                         />
-                        <label htmlFor="save-default" style={{ fontSize: '0.875rem', cursor: 'pointer' }}>
-                            Set as default view
-                        </label>
-                    </Box>
-                </DialogContent>
-                <DialogActions sx={{ pb: 2, px: 3 }}>
-                    <Button onClick={() => setSaveDialogOpen(false)} sx={{ textTransform: 'none' }}>Cancel</Button>
-                    <Button
-                        variant="contained"
-                        onClick={handleSave}
-                        disabled={!saveName.trim() || saving}
-                        sx={{ textTransform: 'none', fontWeight: 700, borderRadius: 2 }}
-                    >
-                        {saving ? <CircularProgress size={16} /> : 'Save Filter'}
-                    </Button>
-                </DialogActions>
-            </Dialog>
+                        Set as default view
+                    </label>
+                </div>
+            </StandardDialog>
         </>
     );
 }

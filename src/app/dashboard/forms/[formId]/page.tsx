@@ -3,26 +3,16 @@
 import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
-import {
-    Box,
-    Button,
-    Card,
-    CircularProgress,
-    Chip,
-    Stack,
-    Tab,
-    Tabs,
-    Typography,
-} from '@mui/material';
-import {
-    ArrowBack as ArrowBackIcon,
-    OpenInNew as OpenInNewIcon,
-} from '@mui/icons-material';
+import { ArrowLeft as ArrowBackIcon, ExternalLink as OpenInNewIcon, Loader2 } from 'lucide-react';
 import { apiFetch } from '@/lib/api';
 import { FormEditor } from '@/components/forms/form-editor';
 import { SubmissionsTable } from '@/components/forms/submissions-table';
 import { AnalyticsDashboard } from '@/components/forms/form-analytics';
 import { CrmPlacementEditor } from '@/components/forms/crm-placement-editor';
+import { Button } from '@/components/ui/button';
+import { Card } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 type BuilderTab = 'editor' | 'submissions' | 'analytics' | 'placement';
 
@@ -45,122 +35,93 @@ export default function FormBuilderPage() {
 
     if (loading) {
         return (
-            <Box sx={{ minHeight: '60vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <CircularProgress />
-            </Box>
+            <div className="flex min-h-[60vh] items-center justify-center">
+                <Loader2 className="size-8 animate-spin text-primary" />
+            </div>
         );
     }
 
     if (!form) {
         return (
-            <Box sx={{ p: 3 }}>
-                <Typography variant="h6" sx={{ fontWeight: 700, mb: 1 }}>
-                    Form not found
-                </Typography>
-                <Button onClick={() => router.push('/dashboard/forms')} variant="outlined" sx={{ borderRadius: '10px' }}>
+            <div className="p-6">
+                <h1 className="mb-1 text-lg font-bold">Form not found</h1>
+                <Button onClick={() => router.push('/dashboard/forms')} variant="outline">
                     Back to Forms
                 </Button>
-            </Box>
+            </div>
         );
     }
 
     return (
-        <Box sx={{ px: { xs: 1.5, md: 2 }, py: { xs: 1.5, md: 2 }, maxWidth: 1700, mx: 'auto' }}>
-            <Stack spacing={2}>
-                <Box>
+        <div className="mx-auto max-w-[1700px] px-3 py-3 md:px-4 md:py-4">
+            <div className="flex flex-col gap-4">
+                <div>
                     <Button
-                        startIcon={<ArrowBackIcon />}
+                        variant="ghost"
                         onClick={() => router.push('/dashboard/forms')}
-                        sx={{ mb: 1, borderRadius: '10px', color: 'text.secondary', minHeight: 34 }}
+                        className="mb-2 h-[34px] text-muted-foreground"
                     >
+                        <ArrowBackIcon className="size-4" />
                         Back
                     </Button>
-                    <Stack
-                        direction={{ xs: 'column', md: 'row' }}
-                        justifyContent="space-between"
-                        alignItems={{ xs: 'flex-start', md: 'center' }}
-                        spacing={1.5}
-                    >
-                        <Box>
-                            <Typography variant="h6" sx={{ fontWeight: 800, letterSpacing: -0.6 }}>
+                    <div className="flex flex-col justify-between gap-3 md:flex-row md:items-center">
+                        <div>
+                            <h1 className="text-lg font-extrabold tracking-tight">
                                 {form.name}
-                            </Typography>
-                            <Stack direction="row" spacing={1} alignItems="center" sx={{ mt: 0.5, flexWrap: 'wrap' }}>
-                                <Typography variant="body2" color="text.secondary">
+                            </h1>
+                            <div className="mt-0.5 flex flex-wrap items-center gap-2">
+                                <span className="text-sm text-muted-foreground">
                                     {form.isActive ? 'Active' : 'Draft'}
-                                </Typography>
-                                <Typography variant="body2" color="text.secondary">•</Typography>
-                                <Typography
-                                    component={Link}
+                                </span>
+                                <span className="text-sm text-muted-foreground">&bull;</span>
+                                <Link
                                     href={`/public-form/${form.id}`}
                                     target="_blank"
                                     rel="noreferrer"
-                                    variant="body2"
-                                    sx={{
-                                        color: 'primary.main',
-                                        textDecoration: 'none',
-                                        fontWeight: 600,
-                                        display: 'inline-flex',
-                                        alignItems: 'center',
-                                        gap: 0.5,
-                                        '&:hover': { textDecoration: 'underline' },
-                                    }}
+                                    className="inline-flex items-center gap-1 text-sm font-semibold text-primary no-underline hover:underline"
                                 >
                                     View Public Page
-                                    <OpenInNewIcon sx={{ fontSize: 16 }} />
-                                </Typography>
-                            </Stack>
-                        </Box>
-                        <Chip
-                            label={form.isActive ? 'Live Form' : 'Draft Form'}
-                            color={form.isActive ? 'success' : 'default'}
-                            sx={{ borderRadius: '8px', fontWeight: 700 }}
-                        />
-                    </Stack>
-                </Box>
+                                    <OpenInNewIcon className="size-4" />
+                                </Link>
+                            </div>
+                        </div>
+                        <Badge variant={form.isActive ? "default" : "outline"} className="rounded-md font-bold">
+                            {form.isActive ? 'Live Form' : 'Draft Form'}
+                        </Badge>
+                    </div>
+                </div>
 
-                <Card sx={{ borderRadius: '14px', border: '1px solid', borderColor: 'divider', overflow: 'hidden' }}>
-                    <Box sx={{ px: 1, py: 1, borderBottom: '1px solid', borderColor: 'divider', bgcolor: 'surfaceContainerLowest' }}>
-                        <Tabs
-                            value={activeTab}
-                            onChange={(_, value) => setActiveTab(value)}
-                            sx={{
-                                minHeight: 36,
-                                '& .MuiTabs-flexContainer': { gap: 0.5 },
-                            }}
-                        >
-                            <Tab value="editor" label="Builder" sx={{ minHeight: 36, borderRadius: '8px' }} />
-                            <Tab value="submissions" label="Submissions" sx={{ minHeight: 36, borderRadius: '8px' }} />
-                            <Tab value="analytics" label="Analytics" sx={{ minHeight: 36, borderRadius: '8px' }} />
-                            <Tab value="placement" label="CRM Placement" sx={{ minHeight: 36, borderRadius: '8px' }} />
-                        </Tabs>
-                    </Box>
+                <Card className="gap-0 overflow-hidden rounded-2xl py-0">
+                    <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as BuilderTab)}>
+                        <div className="border-b bg-muted/30 px-2 py-2">
+                            <TabsList className="h-auto bg-transparent p-0 gap-1">
+                                <TabsTrigger value="editor" className="rounded-lg data-[state=active]:bg-background data-[state=active]:shadow-sm">Builder</TabsTrigger>
+                                <TabsTrigger value="submissions" className="rounded-lg data-[state=active]:bg-background data-[state=active]:shadow-sm">Submissions</TabsTrigger>
+                                <TabsTrigger value="analytics" className="rounded-lg data-[state=active]:bg-background data-[state=active]:shadow-sm">Analytics</TabsTrigger>
+                                <TabsTrigger value="placement" className="rounded-lg data-[state=active]:bg-background data-[state=active]:shadow-sm">CRM Placement</TabsTrigger>
+                            </TabsList>
+                        </div>
 
-                    <Box sx={{ bgcolor: 'background.default' }}>
-                        {activeTab === 'editor' && (
-                            <Box sx={{ minHeight: 'calc(100vh - 240px)' }}>
+                        <div className="bg-background">
+                            <TabsContent value="editor" className="mt-0 min-h-[calc(100vh-240px)]">
                                 <FormEditor initialForm={form} />
-                            </Box>
-                        )}
+                            </TabsContent>
 
-                        {activeTab === 'submissions' && (
-                            <Box sx={{ p: { xs: 1.5, md: 2 } }}>
+                            <TabsContent value="submissions" className="mt-0 p-3 md:p-4">
                                 <SubmissionsTable formId={formId} />
-                            </Box>
-                        )}
+                            </TabsContent>
 
-                        {activeTab === 'analytics' && (
-                            <Box sx={{ p: { xs: 1.5, md: 2 } }}>
+                            <TabsContent value="analytics" className="mt-0 p-3 md:p-4">
                                 <AnalyticsDashboard formId={formId} />
-                            </Box>
-                        )}
+                            </TabsContent>
 
-                        {activeTab === 'placement' && (
-                            <CrmPlacementEditor initialForm={form} onSaved={setForm} />
-                        )}
-                    </Box>
+                            <TabsContent value="placement" className="mt-0">
+                                <CrmPlacementEditor initialForm={form} onSaved={setForm} />
+                            </TabsContent>
+                        </div>
+                    </Tabs>
                 </Card>
-            </Stack>
-        </Box>
+            </div>
+        </div>
     );
 }

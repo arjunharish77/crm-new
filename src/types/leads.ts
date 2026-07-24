@@ -14,4 +14,22 @@ export interface Lead {
     createdAt: string;
     updatedAt: string;
     assignedUserId?: string | null;
+    predictiveScore?: PredictiveRecordScore | null;
+}
+
+export interface PredictiveRecordScore {
+    id: string;
+    recordType: 'LEAD' | 'OPPORTUNITY';
+    recordId: string;
+    fitScore: number | null;
+    engagementScore: number | null;
+    conversionProbability: number | null;
+    winProbability: number | null;
+    stallRisk: number | null;
+    scoreBand: 'HOT' | 'WARM' | 'COLD' | 'RISK';
+    confidence: number;
+    reasons?: Array<{ type: 'POSITIVE' | 'NEGATIVE' | 'INFO'; label: string; value?: unknown }>;
+    source: 'PREDICTIVE_SCORING' | 'SELF_LEARNING' | 'RULE_FALLBACK' | 'MANUAL_OVERRIDE';
+    calculatedAt?: string | null;
+    updatedAt?: string | null;
 }

@@ -6,19 +6,12 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { apiFetch } from "@/lib/api";
 import { toast } from "sonner";
-import {
-    Button,
-    TextField,
-    Stack,
-    FormControlLabel,
-    Checkbox,
-    FormHelperText,
-    Typography,
-    Box,
-    Paper,
-    Divider,
-} from "@mui/material";
-import { Security as SecurityIcon } from "@mui/icons-material";
+import { ShieldCheck } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
 import { StandardDialog } from "@/components/common/standard-dialog";
 
 interface CreatePermissionTemplateDialogProps {
@@ -111,17 +104,16 @@ export function CreatePermissionTemplateDialog({
             onClose={handleClose}
             title="Create Permission Template"
             subtitle="Define a set of permissions that can be assigned to roles."
-            icon={<SecurityIcon />}
+            icon={<ShieldCheck className="size-4" />}
             maxWidth="md"
             actions={
                 <>
-                    <Button onClick={handleClose} sx={{ color: 'text.secondary' }}>
+                    <Button variant="ghost" onClick={handleClose}>
                         Cancel
                     </Button>
                     <Button
                         type="submit"
                         form="create-template-form"
-                        variant="contained"
                         disabled={loading}
                     >
                         {loading ? "Creating..." : "Create Template"}
@@ -129,79 +121,77 @@ export function CreatePermissionTemplateDialog({
                 </>
             }
         >
-            <form id="create-template-form" onSubmit={handleSubmit(onSubmit)}>
-                <Stack spacing={2}>
-                    <Controller
-                        name="name"
-                        control={control}
-                        render={({ field }) => (
-                            <TextField
+            <form id="create-template-form" onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-4 pb-1">
+                <Controller
+                    name="name"
+                    control={control}
+                    render={({ field }) => (
+                        <div className="space-y-1.5">
+                            <Label htmlFor="template-name">Template Name</Label>
+                            <Input
+                                id="template-name"
                                 {...field}
-                                label="Template Name"
                                 placeholder="e.g. Sales Manager Standard"
-                                fullWidth
-                                error={!!errors.name}
-                                helperText={errors.name?.message as string}
                                 autoFocus
+                                aria-invalid={!!errors.name}
                             />
-                        )}
-                    />
+                            {errors.name && (
+                                <p className="text-xs text-destructive">{errors.name.message as string}</p>
+                            )}
+                        </div>
+                    )}
+                />
 
-                    <Controller
-                        name="description"
-                        control={control}
-                        render={({ field }) => (
-                            <TextField
+                <Controller
+                    name="description"
+                    control={control}
+                    render={({ field }) => (
+                        <div className="space-y-1.5">
+                            <Label htmlFor="template-description">Description</Label>
+                            <Textarea
+                                id="template-description"
                                 {...field}
-                                label="Description"
                                 placeholder="Describe who this template is for"
-                                fullWidth
-                                multiline
                                 rows={2}
-                                error={!!errors.description}
-                                helperText={errors.description?.message as string}
+                                aria-invalid={!!errors.description}
                             />
-                        )}
-                    />
+                            {errors.description && (
+                                <p className="text-xs text-destructive">{errors.description.message as string}</p>
+                            )}
+                        </div>
+                    )}
+                />
 
-                    <Box>
-                        <Typography variant="subtitle2" sx={{ mb: 1.5 }}>
-                            Permissions
-                        </Typography>
-                        {errors.permissions && (
-                            <FormHelperText error sx={{ mb: 1 }}>
-                                {errors.permissions.message as string}
-                            </FormHelperText>
-                        )}
-                        <Paper variant="outlined" sx={{ maxHeight: 300, overflow: "auto", borderRadius: 2 }}>
-                            {AVAILABLE_PERMISSIONS.map((group, index) => (
-                                <Box key={group.category}>
-                                    {index > 0 && <Divider />}
-                                    <Box sx={{ p: 2 }}>
-                                        <Typography variant="caption" sx={{ fontWeight: 600, color: "text.secondary", textTransform: "uppercase", letterSpacing: 0.5 }}>
-                                            {group.category}
-                                        </Typography>
-                                        <Stack spacing={0.5} sx={{ mt: 1 }}>
-                                            {group.permissions.map((perm) => (
-                                                <FormControlLabel
-                                                    key={perm.id}
-                                                    control={
-                                                        <Checkbox
-                                                            checked={selectedPermissions.includes(perm.id)}
-                                                            onChange={() => handlePermissionToggle(perm.id)}
-                                                            size="small"
-                                                        />
-                                                    }
-                                                    label={<Typography variant="body2">{perm.label}</Typography>}
-                                                />
-                                            ))}
-                                        </Stack>
-                                    </Box>
-                                </Box>
-                            ))}
-                        </Paper>
-                    </Box>
-                </Stack>
+                <div>
+                    <p className="mb-1.5 text-sm font-medium">
+                        Permissions
+                    </p>
+                    {errors.permissions && (
+                        <p className="mb-1.5 text-xs text-destructive">
+                            {errors.permissions.message as string}
+                        </p>
+                    )}
+                    <div className="max-h-[300px] divide-y overflow-auto rounded-lg border">
+                        {AVAILABLE_PERMISSIONS.map((group) => (
+                            <div key={group.category} className="p-3">
+                                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                                    {group.category}
+                                </p>
+                                <div className="mt-1.5 flex flex-col gap-1.5">
+                                    {group.permissions.map((perm) => (
+                                        <label key={perm.id} className="flex items-center gap-2 text-sm">
+                                            <Checkbox
+                                                checked={selectedPermissions.includes(perm.id)}
+                                                onCheckedChange={() => handlePermissionToggle(perm.id)}
+                                            />
+                                            {perm.label}
+                                        </label>
+                                    ))}
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
             </form>
         </StandardDialog>
     );

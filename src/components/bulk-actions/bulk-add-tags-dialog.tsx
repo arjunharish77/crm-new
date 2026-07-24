@@ -11,7 +11,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Chip } from "@mui/material";
+import { Badge } from "@/components/ui/badge";
 import { X } from "lucide-react";
 import { toast } from "sonner";
 import { apiFetch } from "@/lib/api";
@@ -91,12 +91,17 @@ export function BulkAddTagsDialog({
                 <div className="grid gap-4 py-4">
                     <div className="flex flex-wrap gap-2 mb-2 min-h-[2.5rem] p-2 border rounded-md bg-muted/20">
                         {tags.map((tag) => (
-                            <Chip
-                                key={tag}
-                                label={tag}
-                                onDelete={() => removeTag(tag)}
-                                variant="outlined"
-                            />
+                            <Badge key={tag} variant="outline" className="gap-1 pr-1">
+                                {tag}
+                                <button
+                                    type="button"
+                                    onClick={() => removeTag(tag)}
+                                    aria-label={`Remove ${tag}`}
+                                    className="rounded-full p-0.5 hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                                >
+                                    <X className="size-3" />
+                                </button>
+                            </Badge>
                         ))}
                         {tags.length === 0 && (
                             <span className="text-muted-foreground text-sm flex items-center">No tags added</span>

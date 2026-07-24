@@ -1,35 +1,24 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { apiFetch } from "@/lib/api";
-import { CustomFieldDefinition } from "@/types/custom-fields";
+import { Trash2 } from "lucide-react";
+import { toast } from "sonner";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import {
-    Box,
-    Button,
-    Card,
-    CardContent,
-    Typography,
-    Divider,
     Table,
     TableBody,
     TableCell,
     TableHead,
+    TableHeader,
     TableRow,
-    TableContainer,
-    Tabs,
-    Tab,
-    Chip,
-    IconButton,
-    Paper,
-    useTheme,
-    alpha
-} from "@mui/material";
-import { Delete as TrashIcon, Add as AddIcon } from "@mui/icons-material";
-import { toast } from "sonner";
+} from "@/components/ui/table";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { apiFetch } from "@/lib/api";
+import { CustomFieldDefinition } from "@/types/custom-fields";
 import { CreateCustomFieldDialog } from "./create-custom-field-dialog";
 
 export default function CustomFieldsSettingsPage() {
-    const theme = useTheme();
     const [fields, setFields] = useState<CustomFieldDefinition[]>([]);
     const [loading, setLoading] = useState(false);
     const [activeTab, setActiveTab] = useState("LEAD");
@@ -50,10 +39,6 @@ export default function CustomFieldsSettingsPage() {
         fetchFields(activeTab);
     }, [activeTab]);
 
-    const handleTabChange = (event: React.SyntheticEvent, newValue: string) => {
-        setActiveTab(newValue);
-    };
-
     const handleDelete = async (id: string) => {
         if (!confirm("Are you sure? This will not delete existing data but will hide the field.")) return;
         try {
@@ -63,102 +48,94 @@ export default function CustomFieldsSettingsPage() {
         } catch (error) {
             toast.error("Failed to delete field");
         }
-    }
+    };
 
     return (
-        <Box sx={{ maxWidth: 1200, mx: 'auto', p: { xs: 1.5, md: 2 } }}>
-            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-                <Box>
-                    <Typography variant="h6" sx={{ fontWeight: 700, mb: 1 }}>Custom Fields</Typography>
-                    <Typography variant="body1" color="text.secondary">
+        <div className="mx-auto max-w-[1200px] px-4 py-4 md:px-6">
+            <div className="flex items-center justify-between gap-3">
+                <div>
+                    <h1 className="text-xl font-semibold text-foreground">Custom Fields</h1>
+                    <p className="mt-1 text-sm text-muted-foreground">
                         Manage custom fields for your CRM objects.
-                    </Typography>
-                </Box>
+                    </p>
+                </div>
                 <CreateCustomFieldDialog
                     objectType={activeTab}
                     onSuccess={() => fetchFields(activeTab)}
                 />
-            </Box>
-            <Divider sx={{ mb: 2 }} />
+            </div>
+            <div className="my-4 border-t border-border" />
 
-            <Tabs
-                value={activeTab}
-                onChange={handleTabChange}
-                sx={{
-                    mb: 3,
-                    borderBottom: 1,
-                    borderColor: 'divider',
-                    '& .MuiTab-root': { textTransform: 'none', fontWeight: 600, minWidth: 120 }
-                }}
-            >
-                <Tab label="Leads" value="LEAD" />
-                <Tab label="Opportunities" value="OPPORTUNITY" />
-                <Tab label="Activities" value="ACTIVITY" />
+            <Tabs value={activeTab} onValueChange={setActiveTab} className="mb-4">
+                <TabsList>
+                    <TabsTrigger value="LEAD">Leads</TabsTrigger>
+                    <TabsTrigger value="OPPORTUNITY">Opportunities</TabsTrigger>
+                    <TabsTrigger value="ACTIVITY">Activities</TabsTrigger>
+                </TabsList>
             </Tabs>
 
-            <Paper variant="outlined" sx={{ borderRadius: 2, overflow: 'hidden' }}>
-                <TableContainer>
-                    <Table>
-                        <TableHead sx={{ bgcolor: alpha(theme.palette.primary.main, 0.05) }}>
+            <div className="overflow-hidden rounded-xl border border-border">
+                <Table>
+                    <TableHeader>
+                        <TableRow className="bg-primary/5 hover:bg-primary/5">
+                            <TableHead>Label</TableHead>
+                            <TableHead>Key</TableHead>
+                            <TableHead>Type</TableHead>
+                            <TableHead>Required</TableHead>
+                            <TableHead className="w-[100px] text-right">Actions</TableHead>
+                        </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                        {fields.length === 0 && !loading && (
                             <TableRow>
-                                <TableCell>Label</TableCell>
-                                <TableCell>Key</TableCell>
-                                <TableCell>Type</TableCell>
-                                <TableCell>Required</TableCell>
-                                <TableCell align="right" sx={{ width: 100 }}>Actions</TableCell>
+                                <TableCell colSpan={5} className="py-12 text-center text-muted-foreground">
+                                    No custom fields defined.
+                                </TableCell>
                             </TableRow>
-                        </TableHead>
-                        <TableBody>
-                            {fields.length === 0 && !loading && (
-                                <TableRow>
-                                    <TableCell colSpan={5} align="center" sx={{ py: 6, color: 'text.secondary' }}>
-                                        No custom fields defined.
-                                    </TableCell>
-                                </TableRow>
-                            )}
-                            {fields.map((field) => (
-                                <TableRow key={field.id || field.key} hover>
-                                    <TableCell>
-                                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                                            <Typography variant="body2" sx={{ fontWeight: 600 }}>{field.label}</Typography>
-                                            {field.isSystem && (
-                                                <Chip label="System" size="small" variant="filled" sx={{ height: 20, fontSize: '0.65rem', bgcolor: 'primary.main', color: 'white' }} />
-                                            )}
-                                        </Box>
-                                    </TableCell>
-                                    <TableCell>
-                                        <Typography variant="caption" sx={{ fontFamily: 'monospace', bgcolor: 'action.hover', px: 1, py: 0.5, borderRadius: 1 }}>
-                                            {field.key}
-                                        </Typography>
-                                    </TableCell>
-                                    <TableCell>
-                                        <Chip
-                                            label={field.type}
-                                            size="small"
-                                            variant="outlined"
-                                            sx={{ borderRadius: 1, fontSize: '0.75rem' }}
-                                        />
-                                    </TableCell>
-                                    <TableCell>
-                                        {field.required ? (
-                                            <Chip label="Required" size="small" color="error" variant="outlined" />
-                                        ) : (
-                                            <Typography variant="body2" color="text.secondary">Optional</Typography>
+                        )}
+                        {fields.map((field) => (
+                            <TableRow key={field.id || field.key}>
+                                <TableCell>
+                                    <div className="flex items-center gap-2">
+                                        <span className="text-sm font-semibold">{field.label}</span>
+                                        {field.isSystem && (
+                                            <Badge className="h-5 rounded text-[10px]">System</Badge>
                                         )}
-                                    </TableCell>
-                                    <TableCell align="right">
-                                        {!field.isSystem && (
-                                            <IconButton size="small" color="error" onClick={() => handleDelete(field.id)}>
-                                                <TrashIcon fontSize="small" />
-                                            </IconButton>
-                                        )}
-                                    </TableCell>
-                                </TableRow>
-                            ))}
-                        </TableBody>
-                    </Table>
-                </TableContainer>
-            </Paper>
-        </Box>
+                                    </div>
+                                </TableCell>
+                                <TableCell>
+                                    <code className="rounded bg-muted px-2 py-1 text-xs">{field.key}</code>
+                                </TableCell>
+                                <TableCell>
+                                    <Badge variant="outline" className="rounded text-xs">{field.type}</Badge>
+                                </TableCell>
+                                <TableCell>
+                                    {field.required ? (
+                                        <Badge variant="outline" className="border-destructive/30 text-destructive">
+                                            Required
+                                        </Badge>
+                                    ) : (
+                                        <span className="text-sm text-muted-foreground">Optional</span>
+                                    )}
+                                </TableCell>
+                                <TableCell className="text-right">
+                                    {!field.isSystem && (
+                                        <Button
+                                            variant="ghost"
+                                            size="icon-sm"
+                                            className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+                                            onClick={() => handleDelete(field.id)}
+                                            aria-label={`Delete ${field.label}`}
+                                        >
+                                            <Trash2 className="size-4" />
+                                        </Button>
+                                    )}
+                                </TableCell>
+                            </TableRow>
+                        ))}
+                    </TableBody>
+                </Table>
+            </div>
+        </div>
     );
 }

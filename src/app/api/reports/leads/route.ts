@@ -10,6 +10,6 @@ export async function GET(request: Request) {
     return NextResponse.json(report);
   } catch (error) {
     if (error instanceof Error && error.message === "UNAUTHORIZED") return unauthorized();
-    return serverError("Failed to fetch leads report");
+    return serverError("Failed to fetch leads report", error);
   }
 }

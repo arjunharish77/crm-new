@@ -3,8 +3,7 @@
 
 import { useEffect, useState } from "react";
 import { StandardDialog } from "@/components/common/standard-dialog";
-import { Edit as EditIcon } from "@mui/icons-material";
-import { Box, CircularProgress, Typography } from "@mui/material";
+import { Pencil, Loader2 } from "lucide-react";
 import { LeadForm } from "./lead-form";
 import { apiFetch } from "@/lib/api";
 import { toast } from "sonner";
@@ -58,12 +57,12 @@ export function EditLeadDialog({ open, onOpenChange, lead, onSuccess }: EditLead
             onClose={() => onOpenChange(false)}
             title="Edit Lead"
             subtitle="Update lead details and classification"
-            icon={<EditIcon />}
+            icon={<Pencil className="size-5" />}
         >
             {loading && !fullLead ? (
-                <Box sx={{ minHeight: 180, display: "flex", alignItems: "center", justifyContent: "center" }}>
-                    <CircularProgress size={24} />
-                </Box>
+                <div className="flex min-h-[180px] items-center justify-center">
+                    <Loader2 className="size-6 animate-spin text-muted-foreground" />
+                </div>
             ) : fullLead ? (
                 <LeadForm
                     initialData={fullLead}
@@ -74,9 +73,9 @@ export function EditLeadDialog({ open, onOpenChange, lead, onSuccess }: EditLead
                     onCancel={() => onOpenChange(false)}
                 />
             ) : (
-                <Typography variant="body2" color="text.secondary">
+                <p className="text-sm text-muted-foreground">
                     Unable to load lead details.
-                </Typography>
+                </p>
             )}
         </StandardDialog>
     );

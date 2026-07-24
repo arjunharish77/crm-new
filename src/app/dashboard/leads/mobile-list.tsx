@@ -1,6 +1,6 @@
 import { Lead } from "@/types/leads";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
-import { Chip } from "@mui/material";
+import { Badge } from "@/components/ui/badge";
 import Link from "next/link";
 import { Phone, Mail } from "lucide-react";
 import { formatWorkspaceDate } from "@/lib/date-format";
@@ -35,12 +35,9 @@ export function LeadsMobileList({ data }: LeadsMobileListProps) {
                                     {lead.source || "No Source"} {lead.tags && lead.tags.length > 0 && `• ${lead.tags[0]}`}
                                 </div>
                             </div>
-                            <Chip
-                                label={lead.status}
-                                color={lead.status === 'NEW' ? 'primary' : 'default'}
-                                size="small"
-                                variant={lead.status === 'NEW' ? 'filled' : 'outlined'}
-                            />
+                            <Badge variant={lead.status === 'NEW' ? 'default' : 'outline'}>
+                                {lead.status}
+                            </Badge>
                         </div>
                     </CardHeader>
                     <CardContent className="p-4 pt-2 space-y-3">
@@ -62,13 +59,9 @@ export function LeadsMobileList({ data }: LeadsMobileListProps) {
                         {lead.tags && lead.tags.length > 0 && (
                             <div className="flex flex-wrap gap-1 mt-2">
                                 {lead.tags.map(tag => (
-                                    <Chip
-                                        key={tag}
-                                        label={tag}
-                                        variant="outlined"
-                                        size="small"
-                                        sx={{ height: 24, fontSize: '0.75rem' }}
-                                    />
+                                    <Badge key={tag} variant="outline" className="h-6">
+                                        {tag}
+                                    </Badge>
                                 ))}
                             </div>
                         )}

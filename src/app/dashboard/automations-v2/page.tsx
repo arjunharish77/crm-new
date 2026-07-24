@@ -1,36 +1,21 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import {
-    Box,
-    Button,
-    Typography,
-    Chip,
-    IconButton,
-    TextField,
-    Stack,
-    Menu,
-    MenuItem,
-    ListItemIcon,
-    ListItemText,
-    useTheme,
-    alpha,
-    InputAdornment,
-} from '@mui/material';
-import {
-    Add as AddIcon,
-    Search as SearchIcon,
-    FilterList as FilterListIcon,
-    MoreVert as MoreVertIcon,
-    Edit as EditIcon,
-    Delete as DeleteIcon,
-    Bolt as BoltIcon,
-    History as HistoryIcon,
-    AccountTree as TreeIcon,
-} from '@mui/icons-material';
-import { GridColDef, GridRenderCellParams } from '@mui/x-data-grid';
-import { StandardDataGrid } from '@/components/common/standard-data-grid';
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import { Plus, Search, ListFilter, Pencil, Trash2 } from 'lucide-react';
+import { ColumnDef } from '@tanstack/react-table';
+import { Bolt, GitBranch, History, MoreVertical, Workflow } from 'lucide-react';
+import { DataTable } from '@/components/ui/data-table';
+import { Badge } from '@/components/ui/badge';
+import { Button as IconButton } from '@/components/ui/button';
 import { apiFetch } from '@/lib/api';
 import { toast } from 'sonner';
 
@@ -49,11 +34,9 @@ interface Automation {
 
 export default function AutomationsV2Page() {
     const router = useRouter();
-    const theme = useTheme();
     const [automations, setAutomations] = useState<Automation[]>([]);
     const [loading, setLoading] = useState(true);
-    const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
-    const [selectedId, setSelectedId] = useState<string | null>(null);
+    const [openMenuId, setOpenMenuId] = useState<string | null>(null);
     const [searchTerm, setSearchTerm] = useState('');
 
     const fetchAutomations = useCallback(async () => {
@@ -84,18 +67,6 @@ export default function AutomationsV2Page() {
             console.error('Failed to delete automation:', error);
             toast.error("Failed to delete automation");
         }
-        handleCloseMenu();
-    };
-
-    const handleMenuClick = (event: React.MouseEvent<HTMLElement>, id: string) => {
-        event.stopPropagation();
-        setAnchorEl(event.currentTarget);
-        setSelectedId(id);
-    };
-
-    const handleCloseMenu = () => {
-        setAnchorEl(null);
-        setSelectedId(null);
     };
 
     const filteredAutomations = automations.filter(a =>
@@ -103,179 +74,152 @@ export default function AutomationsV2Page() {
         (a.description && a.description.toLowerCase().includes(searchTerm.toLowerCase()))
     );
 
-    const columns: GridColDef[] = [
+    const columns = useMemo<ColumnDef<Automation, any>[]>(() => [
         {
-            field: 'name',
-            headerName: 'Automation Name',
-            flex: 1.5,
-            minWidth: 250,
-            renderCell: (params: GridRenderCellParams<Automation>) => (
-                <Box sx={{ py: 1 }}>
-                    <Typography variant="body2" sx={{ fontWeight: 700, color: 'primary.main' }}>
-                        {params.row.name}
-                    </Typography>
-                    <Typography variant="caption" noWrap sx={{ color: 'text.secondary', display: 'block' }}>
-                        {params.row.description || "No description"}
-                    </Typography>
-                </Box>
+            accessorKey: 'name',
+            header: 'Automation Name',
+            size: 280,
+            cell: ({ row }) => (
+                <div className="py-1">
+                    <div className="text-sm font-bold text-primary">{row.original.name}</div>
+                    <div className="block max-w-[320px] truncate text-xs text-muted-foreground">
+                        {row.original.description || "No description"}
+                    </div>
+                </div>
             )
         },
         {
-            field: 'isActive',
-            headerName: 'Status',
-            width: 120,
-            renderCell: (params: GridRenderCellParams<Automation>) => (
-                <Chip
-                    label={params.value ? 'Active' : 'Inactive'}
-                    size="small"
-                    sx={{
-                        fontWeight: 700,
-                        fontSize: '0.625rem',
-                        textTransform: 'uppercase',
-                        borderRadius: '6px',
-                        bgcolor: params.value ? alpha(theme.palette.success.main, 0.08) : alpha(theme.palette.text.disabled, 0.08),
-                        color: params.value ? theme.palette.success.main : theme.palette.text.disabled,
-                        border: '1px solid',
-                        borderColor: params.value ? alpha(theme.palette.success.main, 0.2) : alpha(theme.palette.text.disabled, 0.2),
-                    }}
-                />
-            )
-        },
-        {
-            field: 'trigger',
-            headerName: 'Trigger',
-            width: 180,
-            renderCell: (params: GridRenderCellParams<Automation>) => (
-                <Stack direction="row" spacing={1} alignItems="center">
-                    <BoltIcon sx={{ fontSize: 16, color: 'secondary.main' }} />
-                    <Typography variant="body2" sx={{ fontWeight: 600 }}>
-                        {params.value?.type?.replace('_', ' ') || 'Manual'}
-                    </Typography>
-                </Stack>
-            )
-        },
-        {
-            field: 'steps',
-            headerName: 'Steps',
-            width: 100,
-            renderCell: (params: GridRenderCellParams<Automation>) => (
-                <Stack direction="row" spacing={1} alignItems="center">
-                    <TreeIcon sx={{ fontSize: 16, color: 'text.secondary' }} />
-                    <Typography variant="body2" sx={{ fontWeight: 600 }}>
-                        {params.row.workflow?.nodes?.length || 0}
-                    </Typography>
-                </Stack>
-            )
-        },
-        {
-            field: 'runs',
-            headerName: 'Runs',
-            width: 100,
-            renderCell: (params: GridRenderCellParams<Automation>) => (
-                <Stack direction="row" spacing={1} alignItems="center">
-                    <HistoryIcon sx={{ fontSize: 16, color: 'text.secondary' }} />
-                    <Typography variant="body2" sx={{ fontWeight: 600 }}>
-                        {params.row._count?.executions || 0}
-                    </Typography>
-                </Stack>
-            )
-        },
-        {
-            field: 'actions',
-            headerName: '',
-            type: 'actions',
-            width: 80,
-            renderCell: (params: GridRenderCellParams<Automation>) => (
-                <IconButton
-                    size="small"
-                    onClick={(e) => handleMenuClick(e, params.row.id)}
+            accessorKey: 'isActive',
+            header: 'Status',
+            size: 120,
+            cell: ({ row }) => (
+                <Badge
+                    variant="outline"
+                    className={
+                        row.original.isActive
+                            ? "border-primary/20 bg-primary/10 font-bold uppercase text-primary"
+                            : "border-border bg-muted font-bold uppercase text-muted-foreground"
+                    }
                 >
-                    <MoreVertIcon sx={{ fontSize: 18 }} />
-                </IconButton>
+                    {row.original.isActive ? 'Active' : 'Inactive'}
+                </Badge>
+            )
+        },
+        {
+            accessorKey: 'trigger',
+            header: 'Trigger',
+            size: 180,
+            cell: ({ row }) => (
+                <div className="flex items-center gap-2">
+                    <Bolt className="size-4 text-secondary" />
+                    <span className="text-sm font-semibold">{row.original.trigger?.type?.replace('_', ' ') || 'Manual'}</span>
+                </div>
+            )
+        },
+        {
+            id: 'steps',
+            header: 'Steps',
+            size: 100,
+            cell: ({ row }) => (
+                <div className="flex items-center gap-2">
+                    <GitBranch className="size-4 text-muted-foreground" />
+                    <span className="text-sm font-semibold">{row.original.workflow?.nodes?.length || 0}</span>
+                </div>
+            )
+        },
+        {
+            id: 'runs',
+            header: 'Runs',
+            size: 100,
+            cell: ({ row }) => (
+                <div className="flex items-center gap-2">
+                    <History className="size-4 text-muted-foreground" />
+                    <span className="text-sm font-semibold">{row.original._count?.executions || 0}</span>
+                </div>
+            )
+        },
+        {
+            id: 'actions',
+            header: '',
+            size: 80,
+            cell: ({ row }) => (
+                <DropdownMenu
+                    open={openMenuId === row.original.id}
+                    onOpenChange={(open) => setOpenMenuId(open ? row.original.id : null)}
+                >
+                    <DropdownMenuTrigger asChild>
+                        <IconButton
+                            variant="ghost"
+                            size="icon-sm"
+                            onClick={(event) => event.stopPropagation()}
+                        >
+                            <MoreVertical className="size-4" />
+                        </IconButton>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" onClick={(event) => event.stopPropagation()}>
+                        <DropdownMenuItem onClick={() => router.push(`/dashboard/automations-v2/${row.original.id}`)}>
+                            <Pencil className="size-4" />
+                            Edit Designer
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                            variant="destructive"
+                            onClick={() => deleteAutomation(row.original.id)}
+                        >
+                            <Trash2 className="size-4" />
+                            Delete
+                        </DropdownMenuItem>
+                    </DropdownMenuContent>
+                </DropdownMenu>
             )
         }
-    ];
+    ], [router]);
 
     return (
-        <Box sx={{ p: { xs: 1.5, md: 2 }, maxWidth: 1600, mx: 'auto' }}>
-            {/* Header */}
-            <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 2 }}>
-                <Box>
-                    <Typography variant="h6" sx={{ fontWeight: 700, letterSpacing: -0.5 }}>Workflow Automations</Typography>
-                    <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+        <div className="mx-auto max-w-[1600px] p-3 md:p-4">
+            <div className="mb-4 flex items-center justify-between">
+                <div>
+                    <h1 className="text-lg font-bold tracking-[-0.5px]">Workflow Automations</h1>
+                    <p className="mt-1 text-sm text-muted-foreground">
                         Build and manage visual workflows to automate your sales processes
-                    </Typography>
-                </Box>
-                <Button
-                    variant="contained"
-                    startIcon={<AddIcon />}
-                    onClick={() => router.push('/dashboard/automations-v2/new')}
-                    sx={{ borderRadius: '12px', px: 3, py: 1 }}
-                >
+                    </p>
+                </div>
+                <Button className="rounded-xl" onClick={() => router.push('/dashboard/automations-v2/new')}>
+                    <Plus className="size-4" />
                     New Automation
                 </Button>
-            </Stack>
+            </div>
 
-            {/* Filters Bar */}
-            <Stack direction="row" spacing={2} sx={{ mb: 3 }}>
-                <TextField
-                    placeholder="Search automations..."
-                    size="small"
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    InputProps={{
-                        startAdornment: (
-                            <InputAdornment position="start">
-                                <SearchIcon sx={{ color: 'text.disabled', fontSize: 20 }} />
-                            </InputAdornment>
-                        ),
-                        sx: { borderRadius: '12px', bgcolor: 'background.paper' }
-                    }}
-                    sx={{ width: 320 }}
-                />
-                <Button
-                    variant="outlined"
-                    startIcon={<FilterListIcon />}
-                    sx={{ borderRadius: '12px', borderStyle: 'dashed' }}
-                >
+            <div className="mb-6 flex gap-2">
+                <div className="relative w-80">
+                    <Search className="pointer-events-none absolute left-3 top-1/2 size-5 -translate-y-1/2 text-muted-foreground" />
+                    <Input
+                        placeholder="Search automations..."
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                        className="rounded-xl pl-10"
+                    />
+                </div>
+                <Button variant="outline" className="rounded-xl border-dashed">
+                    <ListFilter className="size-4" />
                     Filters
                 </Button>
-            </Stack>
+            </div>
 
-            <Box sx={{ height: 'calc(100vh - 280px)', minHeight: 600 }}>
-                <StandardDataGrid
-                    rows={filteredAutomations}
+            <div className="h-[calc(100vh-280px)] min-h-[600px]">
+                <DataTable
+                    storageKey="automations-v2-table"
+                    data={filteredAutomations}
                     columns={columns}
                     loading={loading}
-                    rowHeight={72}
-                    onRowClick={(params) => router.push(`/dashboard/automations-v2/${params.id}`)}
+                    getRowId={(row) => row.id}
+                    onRowClick={(row) => router.push(`/dashboard/automations-v2/${row.id}`)}
+                    emptyState={{
+                        icon: <Workflow className="size-10 text-muted-foreground opacity-50" />,
+                        title: "No automations found",
+                        description: "Create an automation to start streamlining your sales process.",
+                    }}
                 />
-            </Box>
-
-            <Menu
-                anchorEl={anchorEl}
-                open={Boolean(anchorEl)}
-                onClose={handleCloseMenu}
-                transformOrigin={{ horizontal: 'right', vertical: 'top' }}
-                anchorOrigin={{ horizontal: 'right', vertical: 'bottom' }}
-                PaperProps={{
-                    sx: { minWidth: 180, borderRadius: '12px', mt: 1, boxShadow: theme.shadows[4] }
-                }}
-            >
-                <MenuItem onClick={() => {
-                    if (selectedId) router.push(`/dashboard/automations-v2/${selectedId}`);
-                    handleCloseMenu();
-                }}>
-                    <ListItemIcon><EditIcon fontSize="small" /></ListItemIcon>
-                    <ListItemText>Edit Designer</ListItemText>
-                </MenuItem>
-                <MenuItem onClick={() => {
-                    if (selectedId) deleteAutomation(selectedId);
-                }} sx={{ color: 'error.main' }}>
-                    <ListItemIcon><DeleteIcon fontSize="small" color="error" /></ListItemIcon>
-                    <ListItemText>Delete</ListItemText>
-                </MenuItem>
-            </Menu>
-        </Box>
+            </div>
+        </div>
     );
 }
