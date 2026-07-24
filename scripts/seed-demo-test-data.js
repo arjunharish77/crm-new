@@ -8,6 +8,7 @@ require("dotenv").config({ path: "../.env" });
 
 const TENANT = process.env.DEMO_TENANT_ID || "d3b6693a-7aa2-4b91-94cf-43ab37ffed90";
 let ADMIN_USER_ID = process.env.DEMO_ADMIN_USER_ID || "82c64bde-47de-4d36-8045-45e8488a1a99";
+const ADMIN_EMAIL_FALLBACK = process.env.DEMO_ADMIN_EMAIL || "admintest@test.com";
 const BASE_DATE = new Date("2026-07-08T09:00:00.000Z");
 const PASSWORD = "Demo@12345";
 const LEAD_COUNT = Number(process.env.DEMO_LEAD_COUNT || 520);
@@ -1053,8 +1054,235 @@ async function seedDistributionAndAutomation() {
   ]);
 }
 
+async function seedLeadLists(records) {
+  const hotLeadIds = records.leads.filter((lead) => ["QUALIFIED", "CONVERTED"].includes(lead.status)).slice(0, 60).map((lead) => lead.id);
+  const engineeringLeadIds = records.leads.filter((lead) => (lead.tags || []).some((tag) => tag.startsWith("b-tech") || tag.startsWith("mca"))).slice(0, 60).map((lead) => lead.id);
+
+  await safeUpsert("LeadList", [
+    {
+      id: "demo-list-hot-leads",
+      tenantId: TENANT,
+      name: "Hot Admissions Leads",
+      description: "Qualified and converted leads ready for fast follow-up",
+      type: "STATIC",
+      filters: null,
+      isActive: true,
+      createdBy: ADMIN_USER_ID,
+      createdAt: iso(-20),
+      updatedAt: iso(0),
+    },
+    {
+      id: "demo-list-engineering-inquiries",
+      tenantId: TENANT,
+      name: "Engineering Program Inquiries",
+      description: "Static shortlist of B.Tech and MCA interested applicants",
+      type: "STATIC",
+      filters: null,
+      isActive: true,
+      createdBy: ADMIN_USER_ID,
+      createdAt: iso(-20),
+      updatedAt: iso(0),
+    },
+    {
+      id: "demo-list-partner-sourced",
+      tenantId: TENANT,
+      name: "Partner Sourced Leads (Smart)",
+      description: "Dynamically tracks every partner-referred lead",
+      type: "SMART",
+      filters: [{ logic: "AND", conditions: [{ id: "c1", field: "source", operator: "equals", value: "Partner" }] }],
+      isActive: true,
+      createdBy: ADMIN_USER_ID,
+      createdAt: iso(-18),
+      updatedAt: iso(0),
+    },
+    {
+      id: "demo-list-stale-new",
+      tenantId: TENANT,
+      name: "Stale New Leads (Smart)",
+      description: "New leads that still need a first touch",
+      type: "SMART",
+      filters: [{ logic: "AND", conditions: [{ id: "c1", field: "status", operator: "equals", value: "NEW" }] }],
+      isActive: true,
+      createdBy: ADMIN_USER_ID,
+      createdAt: iso(-18),
+      updatedAt: iso(0),
+    },
+  ]);
+
+  const members = [
+    ...hotLeadIds.map((leadId, index) => ({ id: `demo-list-member-hot-${index + 1}`, tenantId: TENANT, listId: "demo-list-hot-leads", leadId, addedBy: ADMIN_USER_ID, createdAt: iso(-15) })),
+    ...engineeringLeadIds.map((leadId, index) => ({ id: `demo-list-member-eng-${index + 1}`, tenantId: TENANT, listId: "demo-list-engineering-inquiries", leadId, addedBy: ADMIN_USER_ID, createdAt: iso(-15) })),
+  ];
+  await safeUpsert("LeadListMember", members, { onConflict: "tenantId,listId,leadId" });
+}
+
+async function seedForms(leadObjectId, records) {
+  const forms = [
+    {
+      id: "demo-form-admissions-inquiry",
+      name: "Admissions Inquiry Form",
+      description: "General website inquiry form for prospective students",
+      fields: [
+        { id: "f1", name: "name", label: "Full Name", type: "TEXT", required: true },
+        { id: "f2", name: "email", label: "Email Address", type: "EMAIL", required: true },
+        { id: "f3", name: "phone", label: "Phone Number", type: "TEXT", required: true },
+        { id: "f4", name: "utm_source", label: "How did you hear about us?", type: "SELECT", required: false, options: SOURCES },
+        { id: "f5", name: "message", label: "What would you like to know?", type: "TEXTAREA", required: false },
+      ],
+      submitButtonText: "Request Information",
+      successMessage: "Thanks! Our admissions team will reach out within one business day.",
+    },
+    {
+      id: "demo-form-campus-visit",
+      name: "Campus Visit Request Form",
+      description: "Lets prospective students book a campus tour",
+      fields: [
+        { id: "f1", name: "name", label: "Full Name", type: "TEXT", required: true },
+        { id: "f2", name: "email", label: "Email Address", type: "EMAIL", required: true },
+        { id: "f3", name: "phone", label: "Phone Number", type: "TEXT", required: true },
+        { id: "f4", name: "preferred_campus", label: "Preferred Campus", type: "SELECT", required: true, options: ["North Campus", "City Campus", "Global Campus"] },
+        { id: "f5", name: "preferred_date", label: "Preferred Visit Date", type: "DATE", required: false },
+      ],
+      submitButtonText: "Book My Visit",
+      successMessage: "Your visit request has been received — our team will confirm a slot shortly.",
+    },
+  ];
+
+  await safeUpsert("Form", forms.map((form) => ({
+    id: form.id,
+    tenantId: TENANT,
+    objectId: leadObjectId,
+    name: form.name,
+    description: form.description,
+    fields: form.fields,
+    isActive: true,
+    submitButtonText: form.submitButtonText,
+    successMessage: form.successMessage,
+    redirectUrl: null,
+    spamProtection: true,
+    captchaEnabled: false,
+    rateLimit: 20,
+    duplicateAction: "CREATE",
+    defaultOwnerId: null,
+    automationId: null,
+    theme: "default",
+    config: { sourceModules: ["lead"], layoutColumns: 1, placements: [], visibilityMode: "ALL" },
+    createdAt: iso(-25),
+    updatedAt: iso(0),
+  })));
+
+  const sampleLeads = records.leads.slice(0, 24);
+  const submissions = sampleLeads.map((lead, index) => {
+    const formId = index % 2 === 0 ? "demo-form-admissions-inquiry" : "demo-form-campus-visit";
+    const data = index % 2 === 0
+      ? { name: lead.name, email: lead.email, phone: lead.phone, utm_source: lead.source, message: "Interested in scholarship options and eligibility criteria." }
+      : { name: lead.name, email: lead.email, phone: lead.phone, preferred_campus: pick(["North Campus", "City Campus", "Global Campus"], index), preferred_date: iso(7 + (index % 10)) };
+    return {
+      id: `demo-form-submission-${index + 1}`,
+      tenantId: TENANT,
+      formId,
+      leadId: lead.id,
+      data,
+      utmParams: index % 2 === 0 ? { utm_source: lead.source } : null,
+      ipAddress: null,
+      userAgent: null,
+      referrer: "https://demouniversity.example/admissions",
+      status: "PROCESSED",
+      spamScore: 0,
+      isDuplicate: false,
+      duplicateLeadId: null,
+      errorMessage: null,
+      createdAt: lead.createdAt,
+    };
+  });
+  await safeUpsert("FormSubmission", submissions);
+}
+
+async function seedAutomationsV2() {
+  const now = iso(0);
+  const automations = [
+    {
+      id: "demo-automation-partner-routing",
+      name: "New Partner Lead - Fast Follow-up",
+      description: "When a partner-sourced lead comes in, create a same-day call task and notify the manager.",
+      isActive: true,
+      trigger: { type: "LEAD_CREATED", conditions: [{ id: "c1", field: "source", operator: "equals", value: "Partner" }] },
+      workflow: {
+        nodes: [
+          { id: "n1", type: "trigger", position: { x: 0, y: 0 }, data: { type: "LEAD_CREATED", label: "Lead Created" } },
+          { id: "n2", type: "condition", position: { x: 0, y: 150 }, data: { type: "condition", field: "source", operator: "equals", value: "Partner", label: "Is Partner Source?" } },
+          { id: "n3", type: "create_task", position: { x: 0, y: 300 }, data: { type: "create_task", title: "Call new partner lead within 1 hour", priority: "HIGH", label: "Create Follow-up Task" } },
+          { id: "n4", type: "notify_user", position: { x: 0, y: 450 }, data: { type: "notify_user", userId: "demo-user-manager-north", title: "New partner lead assigned", label: "Notify Manager" } },
+        ],
+        edges: [
+          { id: "e1", source: "n1", target: "n2" },
+          { id: "e2", source: "n2", target: "n3" },
+          { id: "e3", source: "n3", target: "n4" },
+        ],
+      },
+      createdAt: iso(-25),
+      updatedAt: now,
+    },
+    {
+      id: "demo-automation-fee-paid-finance",
+      name: "Fee Paid - Notify Finance",
+      description: "When an opportunity reaches the Fee Paid stage, notify finance and create a receipt verification task.",
+      isActive: true,
+      trigger: { type: "STAGE_CHANGED", conditions: [{ id: "c1", field: "toStageName", operator: "equals", value: "Fee Paid" }] },
+      workflow: {
+        nodes: [
+          { id: "n1", type: "trigger", position: { x: 0, y: 0 }, data: { type: "STAGE_CHANGED", label: "Stage Changed" } },
+          { id: "n2", type: "notify_user", position: { x: 0, y: 150 }, data: { type: "notify_user", userId: "demo-user-finance", title: "Fee paid - review for payout", label: "Notify Finance" } },
+          { id: "n3", type: "create_task", position: { x: 0, y: 300 }, data: { type: "create_task", title: "Verify fee receipt and enrollment kit", priority: "MEDIUM", label: "Create Verification Task" } },
+        ],
+        edges: [
+          { id: "e1", source: "n1", target: "n2" },
+          { id: "e2", source: "n2", target: "n3" },
+        ],
+      },
+      createdAt: iso(-22),
+      updatedAt: now,
+    },
+    {
+      id: "demo-automation-stale-lead-nudge",
+      name: "Stale New Lead Re-engagement (Draft)",
+      description: "Draft example: waits 3 days, then emails leads still marked NEW. Left inactive so it does not send real email.",
+      isActive: false,
+      trigger: { type: "LEAD_CREATED", conditions: [] },
+      workflow: {
+        nodes: [
+          { id: "n1", type: "trigger", position: { x: 0, y: 0 }, data: { type: "LEAD_CREATED", label: "Lead Created" } },
+          { id: "n2", type: "delay", position: { x: 0, y: 150 }, data: { type: "delay", durationMinutes: 4320, label: "Wait 3 Days" } },
+          { id: "n3", type: "condition", position: { x: 0, y: 300 }, data: { type: "condition", field: "status", operator: "equals", value: "NEW", label: "Still New?" } },
+          { id: "n4", type: "send_email", position: { x: 0, y: 450 }, data: { type: "send_email", channel: "EMAIL", subject: "Still exploring your options?", message: "We noticed you haven't heard back yet - let us help with your application.", label: "Send Nudge Email" } },
+        ],
+        edges: [
+          { id: "e1", source: "n1", target: "n2" },
+          { id: "e2", source: "n2", target: "n3" },
+          { id: "e3", source: "n3", target: "n4" },
+        ],
+      },
+      createdAt: iso(-15),
+      updatedAt: now,
+    },
+  ];
+
+  await safeUpsert("AutomationV2", automations.map((automation) => ({
+    id: automation.id,
+    tenantId: TENANT,
+    name: automation.name,
+    description: automation.description,
+    trigger: automation.trigger,
+    steps: null,
+    workflow: automation.workflow,
+    isActive: automation.isActive,
+    createdAt: automation.createdAt,
+    updatedAt: automation.updatedAt,
+  })));
+}
+
 async function summarize() {
-  const tables = ["User", "Role", "PermissionTemplate", "Team", "SalesGroup", "PartnerProfile", "Lead", "Opportunity", "Activity", "Task", "FieldDefinition", "CustomFieldValue", "GamificationRule", "GamificationPointsLedger", "CommissionRule", "CommissionLedger", "Payout", "ReportDefinition", "ReportRollup", "CustomReport"];
+  const tables = ["User", "Role", "PermissionTemplate", "Team", "SalesGroup", "PartnerProfile", "Lead", "Opportunity", "Activity", "Task", "FieldDefinition", "CustomFieldValue", "GamificationRule", "GamificationPointsLedger", "CommissionRule", "CommissionLedger", "Payout", "ReportDefinition", "ReportRollup", "CustomReport", "LeadList", "LeadListMember", "Form", "FormSubmission", "AutomationV2"];
   const summary = {};
   for (const table of tables) {
     if (!(await tableExists(table))) {
@@ -1075,7 +1303,7 @@ async function main() {
   let admin = await getOne("User", "id,email,name", (q) => q.eq("tenantId", TENANT).eq("id", ADMIN_USER_ID));
   if (!admin) {
     let fallbackAdmin = await getOne("User", "id,email,name", (q) =>
-      q.eq("tenantId", TENANT).eq("email", "admintest@test.com").limit(1)
+      q.eq("tenantId", TENANT).eq("email", ADMIN_EMAIL_FALLBACK).limit(1)
     );
     if (!fallbackAdmin) {
       fallbackAdmin = await getOne("User", "id,email,name", (q) =>
@@ -1101,6 +1329,9 @@ async function main() {
   await seedScoringAndViews(records);
   await seedReports(records);
   await seedDistributionAndAutomation();
+  await seedLeadLists(records);
+  await seedForms(leadObjectId, records);
+  await seedAutomationsV2();
   const summary = await summarize();
 
   console.log(JSON.stringify({
