@@ -104,11 +104,11 @@ vi.mock("@/lib/db/query", () => ({
         tenantId: params[1],
         modelId: params[2],
         versionNumber: params[3],
-        algorithm: "MVP_WEIGHTED_BUCKET_CALIBRATION",
+        algorithm: params[4],
         status: "DRAFT",
-        featureConfig: params[4],
-        metrics: params[5],
-        createdAt: params[6],
+        featureConfig: params[5],
+        metrics: params[6],
+        createdAt: params[7],
       });
       return [];
     }

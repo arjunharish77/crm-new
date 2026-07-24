@@ -561,6 +561,7 @@ export default function LeadScoringAdminPage() {
                                                     <TableRow>
                                                         <TableHead>Version</TableHead>
                                                         <TableHead>Status</TableHead>
+                                                        <TableHead>Algorithm</TableHead>
                                                         <TableHead>Holdout accuracy</TableHead>
                                                         <TableHead>Lift</TableHead>
                                                         <TableHead>Train / Holdout</TableHead>
@@ -576,6 +577,20 @@ export default function LeadScoringAdminPage() {
                                                                 <Badge variant={version.status === 'PROMOTED' ? 'default' : version.status === 'RETIRED' ? 'outline' : 'secondary'}>
                                                                     {version.status}
                                                                 </Badge>
+                                                            </TableCell>
+                                                            <TableCell>
+                                                                <Tooltip>
+                                                                    <TooltipTrigger asChild>
+                                                                        <Badge variant="outline" className="cursor-default">
+                                                                            {version.algorithm === 'LOGISTIC_REGRESSION_V1' ? 'Fitted (logistic)' : 'Weighted heuristic'}
+                                                                        </Badge>
+                                                                    </TooltipTrigger>
+                                                                    <TooltipContent>
+                                                                        {version.algorithm === 'LOGISTIC_REGRESSION_V1'
+                                                                            ? 'A logistic regression model was fit on this tenant\'s data and outperformed the fixed heuristic on held-out records, so it was used.'
+                                                                            : 'The fixed weighted-calibration heuristic was used -- either there wasn\'t enough contrast in the data to fit a model, or it didn\'t beat the heuristic on held-out records.'}
+                                                                    </TooltipContent>
+                                                                </Tooltip>
                                                             </TableCell>
                                                             <TableCell>
                                                                 {version.metrics?.holdout?.accuracy != null

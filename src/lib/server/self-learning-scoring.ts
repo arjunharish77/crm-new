@@ -60,6 +60,135 @@ type Calibration = {
   opportunityPriorityWinRates: Map<string, number>;
 };
 
+type LogisticModel = {
+  weights: number[];
+  bias: number;
+  featureMeans: number[];
+  featureStds: number[];
+  featureNames: string[];
+};
+
+const MIN_LOGISTIC_TRAINING_ROWS = 20;
+
+function sigmoid(z: number) {
+  if (z >= 0) {
+    const e = Math.exp(-z);
+    return 1 / (1 + e);
+  }
+  const e = Math.exp(z);
+  return e / (1 + e);
+}
+
+function standardizeMatrix(matrix: number[][]) {
+  const rowCount = matrix.length;
+  const columnCount = matrix[0]?.length ?? 0;
+  const means = new Array(columnCount).fill(0);
+  const stds = new Array(columnCount).fill(1);
+  for (let column = 0; column < columnCount; column += 1) {
+    let sum = 0;
+    for (let row = 0; row < rowCount; row += 1) sum += matrix[row][column];
+    means[column] = rowCount ? sum / rowCount : 0;
+  }
+  for (let column = 0; column < columnCount; column += 1) {
+    let sumSquares = 0;
+    for (let row = 0; row < rowCount; row += 1) sumSquares += (matrix[row][column] - means[column]) ** 2;
+    const variance = rowCount ? sumSquares / rowCount : 0;
+    stds[column] = Math.sqrt(variance) || 1;
+  }
+  const standardized = matrix.map((row) => row.map((value, column) => (value - means[column]) / stds[column]));
+  return { standardized, means, stds };
+}
+
+// Plain-JS logistic regression fit by batch gradient descent with L2 regularization. No external
+// ML library is available in this Node/Next.js stack, and the feature/record counts here (a
+// handful of engineered features, up to a few thousand rows per tenant) are comfortably within
+// what gradient descent converges on reliably in-process, without needing a native dependency.
+function trainLogisticRegression(rawFeatures: number[][], labels: number[], featureNames: string[]): LogisticModel | null {
+  const rowCount = rawFeatures.length;
+  if (rowCount < MIN_LOGISTIC_TRAINING_ROWS) return null;
+  const positives = labels.reduce((sum, label) => sum + label, 0);
+  if (positives === 0 || positives === rowCount) return null; // no contrast to learn from
+
+  const columnCount = rawFeatures[0].length;
+  const { standardized, means, stds } = standardizeMatrix(rawFeatures);
+  let weights = new Array(columnCount).fill(0);
+  let bias = 0;
+  const epochs = 300;
+  const learningRate = 0.15;
+  const l2 = 0.02;
+
+  for (let epoch = 0; epoch < epochs; epoch += 1) {
+    const gradWeights = new Array(columnCount).fill(0);
+    let gradBias = 0;
+    for (let row = 0; row < rowCount; row += 1) {
+      let z = bias;
+      for (let column = 0; column < columnCount; column += 1) z += standardized[row][column] * weights[column];
+      const error = sigmoid(z) - labels[row];
+      for (let column = 0; column < columnCount; column += 1) gradWeights[column] += error * standardized[row][column];
+      gradBias += error;
+    }
+    for (let column = 0; column < columnCount; column += 1) {
+      weights[column] -= learningRate * (gradWeights[column] / rowCount + l2 * weights[column]);
+    }
+    bias -= learningRate * (gradBias / rowCount);
+  }
+
+  if (!Number.isFinite(bias) || weights.some((weight) => !Number.isFinite(weight))) return null;
+  return { weights, bias, featureMeans: means, featureStds: stds, featureNames };
+}
+
+function predictLogisticRegression(model: LogisticModel, rawFeatures: number[]): number {
+  let z = model.bias;
+  for (let column = 0; column < rawFeatures.length; column += 1) {
+    const standardized = (rawFeatures[column] - model.featureMeans[column]) / (model.featureStds[column] || 1);
+    z += standardized * model.weights[column];
+  }
+  return sigmoid(z);
+}
+
+const LEAD_FEATURE_NAMES = ["sourceRate", "statusRate", "hasEmail", "hasPhone", "hasCompany", "activityCoverage", "completedTaskCoverage", "overdueTaskBurden", "recency", "responseSpeed"];
+const OPPORTUNITY_FEATURE_NAMES = ["stageRate", "priorityRate", "hasAmount", "activityCoverage", "completedTaskCoverage", "overdueTaskBurden", "recency"];
+
+function leadNumericFeatures(features: Record<string, unknown>, calibration: Calibration): number[] {
+  const sourceRate = rateFor(calibration.leadSourceConversionRates, features.source, calibration.leadOverallConversionRate);
+  const statusRate = rateFor(calibration.leadStatusConversionRates, features.status, calibration.leadOverallConversionRate);
+  const activityCount = Number(features.activityCount ?? 0);
+  const completedTaskCount = Number(features.completedTaskCount ?? 0);
+  const overdueTaskCount = Number(features.overdueTaskCount ?? 0);
+  const lastActivityAge = features.lastActivityAgeDays as number | null;
+  const firstResponseMinutes = features.firstResponseMinutes as number | null;
+  return [
+    sourceRate,
+    statusRate,
+    features.hasEmail ? 1 : 0,
+    features.hasPhone ? 1 : 0,
+    features.hasCompany ? 1 : 0,
+    Math.min(activityCount, 8) / 8,
+    Math.min(completedTaskCount, 5) / 5,
+    Math.min(overdueTaskCount, 5) / 5,
+    lastActivityAge === null || lastActivityAge === undefined ? 0 : 1 / (1 + lastActivityAge / 30),
+    firstResponseMinutes === null || firstResponseMinutes === undefined ? 0 : 1 / (1 + firstResponseMinutes / 60),
+  ];
+}
+
+function opportunityNumericFeatures(features: Record<string, unknown>, calibration: Calibration): number[] {
+  const stageRate = rateFor(calibration.opportunityStageWinRates, features.stageId, calibration.opportunityOverallWinRate);
+  const priorityRate = rateFor(calibration.opportunityPriorityWinRates, features.priority, calibration.opportunityOverallWinRate);
+  const activityCount = Number(features.activityCount ?? 0);
+  const completedTaskCount = Number(features.completedTaskCount ?? 0);
+  const overdueTaskCount = Number(features.overdueTaskCount ?? 0);
+  const lastActivityAge = features.lastActivityAgeDays as number | null;
+  return [
+    stageRate,
+    priorityRate,
+    Number(features.amount ?? 0) > 0 ? 1 : 0,
+    Math.min(activityCount, 8) / 8,
+    Math.min(completedTaskCount, 5) / 5,
+    Math.min(overdueTaskCount, 5) / 5,
+    lastActivityAge === null || lastActivityAge === undefined ? 0 : 1 / (1 + lastActivityAge / 30),
+  ];
+}
+
 function jsonb(value: unknown) {
   return JSON.stringify(value ?? null);
 }
@@ -260,19 +389,26 @@ async function getOrCreateScoringModel(input: { tenantId: string; targetModule: 
   return id;
 }
 
-async function loadPromotedCalibration(tenantId: string, promotedVersionId: string | null | undefined): Promise<Calibration | null> {
+async function loadPromotedScorer(
+  tenantId: string,
+  promotedVersionId: string | null | undefined,
+): Promise<{ calibration: Calibration; logisticModel: LogisticModel | null } | null> {
   if (!promotedVersionId) return null;
   const version = await pgQueryOne<any>(
     `select "featureConfig" from "ScoringModelVersion" where "tenantId" = $1 and id = $2 and status = 'PROMOTED' limit 1`,
     [tenantId, promotedVersionId],
   );
   if (!version?.featureConfig?.calibration) return null;
-  return deserializeCalibration(version.featureConfig.calibration);
+  return {
+    calibration: deserializeCalibration(version.featureConfig.calibration),
+    logisticModel: version.featureConfig.logisticModel ?? null,
+  };
 }
 
 async function createScoringModelVersion(input: {
   tenantId: string;
   modelId: string;
+  algorithm: string;
   featureConfig: Record<string, unknown>;
   metrics: Record<string, unknown>;
 }) {
@@ -286,8 +422,8 @@ async function createScoringModelVersion(input: {
   await pgQuery(
     `insert into "ScoringModelVersion"
       (id, "tenantId", "modelId", "versionNumber", algorithm, status, "featureConfig", metrics, "createdAt")
-     values ($1, $2, $3, $4, 'MVP_WEIGHTED_BUCKET_CALIBRATION', 'DRAFT', $5, $6, $7)`,
-    [id, input.tenantId, input.modelId, versionNumber, jsonb(input.featureConfig), jsonb(input.metrics), now],
+     values ($1, $2, $3, $4, $5, 'DRAFT', $6, $7, $8)`,
+    [id, input.tenantId, input.modelId, versionNumber, input.algorithm, jsonb(input.featureConfig), jsonb(input.metrics), now],
   );
   return { id, versionNumber };
 }
@@ -411,7 +547,7 @@ function valueBand(amount: unknown) {
   return "UNKNOWN";
 }
 
-function leadScoreFromFeatures(snapshot: FeatureSnapshot, lead: any, calibration: Calibration, settings: ScoringSettings): ScoreResult {
+function leadScoreFromFeatures(snapshot: FeatureSnapshot, lead: any, calibration: Calibration, settings: ScoringSettings, logisticModel?: LogisticModel | null): ScoreResult {
   const features = snapshot.features;
   const sourceRate = rateFor(calibration.leadSourceConversionRates, features.source, calibration.leadOverallConversionRate);
   const statusRate = rateFor(calibration.leadStatusConversionRates, features.status, calibration.leadOverallConversionRate);
@@ -439,7 +575,10 @@ function leadScoreFromFeatures(snapshot: FeatureSnapshot, lead: any, calibration
   );
 
   const historicalConfidence = Math.min(100, Math.round((calibration.totalLeadRecords / Math.max(1, settings.minimumHistoricalRecords)) * 100));
-  const conversionProbability = clampScore(fitScore * 0.45 + engagementScore * 0.35 + calibration.leadOverallConversionRate * 20);
+  const heuristicProbability = clampScore(fitScore * 0.45 + engagementScore * 0.35 + calibration.leadOverallConversionRate * 20);
+  const conversionProbability = logisticModel
+    ? clampScore(predictLogisticRegression(logisticModel, leadNumericFeatures(features, calibration)) * 100)
+    : heuristicProbability;
   const stallRisk = clampScore(100 - engagementScore + overdueCount * 5 + (lastActivityAge && lastActivityAge > 30 ? 15 : 0));
   const scoreBand = stallRisk >= 75 ? "RISK" : conversionProbability >= 75 ? "HOT" : conversionProbability >= 45 ? "WARM" : "COLD";
   const source = settings.isEnabled && historicalConfidence >= 40 ? "PREDICTIVE_SCORING" : "RULE_FALLBACK";
@@ -464,7 +603,7 @@ function leadScoreFromFeatures(snapshot: FeatureSnapshot, lead: any, calibration
   };
 }
 
-function opportunityScoreFromFeatures(snapshot: FeatureSnapshot, opportunity: any, calibration: Calibration, settings: ScoringSettings): ScoreResult {
+function opportunityScoreFromFeatures(snapshot: FeatureSnapshot, opportunity: any, calibration: Calibration, settings: ScoringSettings, logisticModel?: LogisticModel | null): ScoreResult {
   const features = snapshot.features;
   const stageRate = rateFor(calibration.opportunityStageWinRates, features.stageId, calibration.opportunityOverallWinRate);
   const priorityRate = rateFor(calibration.opportunityPriorityWinRates, features.priority, calibration.opportunityOverallWinRate);
@@ -481,7 +620,10 @@ function opportunityScoreFromFeatures(snapshot: FeatureSnapshot, opportunity: an
     (lastActivityAge === null ? -12 : lastActivityAge <= 7 ? 18 : lastActivityAge <= 30 ? 6 : -12)
   );
   const historicalConfidence = Math.min(100, Math.round((calibration.totalOpportunityRecords / Math.max(1, settings.minimumHistoricalRecords)) * 100));
-  const winProbability = clampScore(fitScore * 0.5 + engagementScore * 0.3 + calibration.opportunityOverallWinRate * 20);
+  const heuristicProbability = clampScore(fitScore * 0.5 + engagementScore * 0.3 + calibration.opportunityOverallWinRate * 20);
+  const winProbability = logisticModel
+    ? clampScore(predictLogisticRegression(logisticModel, opportunityNumericFeatures(features, calibration)) * 100)
+    : heuristicProbability;
   const stallRisk = clampScore(100 - engagementScore + overdueCount * 8 + (lastActivityAge && lastActivityAge > 30 ? 18 : 0));
   const scoreBand = stallRisk >= 75 ? "RISK" : winProbability >= 75 ? "HOT" : winProbability >= 45 ? "WARM" : "COLD";
   const source = settings.isEnabled && historicalConfidence >= 40 ? "PREDICTIVE_SCORING" : "RULE_FALLBACK";
@@ -649,10 +791,11 @@ export async function listScoringModelVersionsForTenant(user: TenantUser, target
 
   const versionsByModel = new Map<string, any[]>();
   for (const version of versions) {
-    // Calibration rates are only needed internally for scoring -- don't ship them to the client.
-    const { calibration, ...featureConfig } = (version.featureConfig ?? {}) as Record<string, unknown>;
+    // Calibration rates and fitted model weights are only needed internally for scoring -- don't
+    // ship them to the client, just note whether this version has them.
+    const { calibration, logisticModel, ...featureConfig } = (version.featureConfig ?? {}) as Record<string, unknown>;
     const list = versionsByModel.get(version.modelId) ?? [];
-    list.push({ ...version, featureConfig, hasCalibration: !!calibration });
+    list.push({ ...version, featureConfig, hasCalibration: !!calibration, hasLogisticModel: !!logisticModel });
     versionsByModel.set(version.modelId, list);
   }
 
@@ -797,46 +940,76 @@ export async function recomputeSelfLearningScoresForTenant(user: TenantUser, inp
       const leadConverted = (lead: any) => (opportunitiesByLeadId.get(lead.id)?.length ?? 0) > 0;
       const trainCalibration = calculateCalibration({ leads: train.length ? train : leads, opportunities, stages });
 
+      const buildLeadFeatureRow = (lead: any) => buildLeadFeatureSnapshot({
+        lead,
+        opportunities: opportunitiesByLeadId.get(lead.id) ?? [],
+        activities: activitiesByLeadId.get(lead.id) ?? [],
+        tasks: tasksByLeadId.get(lead.id) ?? [],
+      });
+
       const holdoutSamples = holdout.map((lead) => {
-        const snapshot = buildLeadFeatureSnapshot({
-          lead,
-          opportunities: opportunitiesByLeadId.get(lead.id) ?? [],
-          activities: activitiesByLeadId.get(lead.id) ?? [],
-          tasks: tasksByLeadId.get(lead.id) ?? [],
-        });
+        const snapshot = buildLeadFeatureRow(lead);
         const score = leadScoreFromFeatures(snapshot, lead, trainCalibration, { ...settings, isEnabled: true });
         return { predicted: score.conversionProbability ?? 0, actual: leadConverted(lead) };
       });
-      const holdoutMetrics = binaryClassificationMetrics(holdoutSamples);
+      const heuristicHoldoutMetrics = binaryClassificationMetrics(holdoutSamples);
+
+      // Also fit a real logistic regression on the same train split and evaluate it on the same
+      // holdout, so retraining always keeps whichever algorithm is actually more accurate/precise --
+      // never a fixed set of magic-number coefficients by default.
+      const trainRows = train.map((lead) => leadNumericFeatures(buildLeadFeatureRow(lead).features, trainCalibration));
+      const trainLabels = train.map((lead) => (leadConverted(lead) ? 1 : 0));
+      const candidateLogisticModel = trainLogisticRegression(trainRows, trainLabels, LEAD_FEATURE_NAMES);
+      let logisticHoldoutMetrics: ReturnType<typeof binaryClassificationMetrics> | null = null;
+      if (candidateLogisticModel) {
+        const logisticSamples = holdout.map((lead) => {
+          const features = leadNumericFeatures(buildLeadFeatureRow(lead).features, trainCalibration);
+          return { predicted: clampScore(predictLogisticRegression(candidateLogisticModel, features) * 100), actual: leadConverted(lead) };
+        });
+        logisticHoldoutMetrics = binaryClassificationMetrics(logisticSamples);
+      }
+
+      // Brier score is a proper scoring rule (unlike raw accuracy) so it doesn't reward a model that
+      // just always predicts the majority class under class imbalance -- lower is strictly better.
+      const logisticIsBetter = !!candidateLogisticModel && logisticHoldoutMetrics?.brierScore != null
+        && (heuristicHoldoutMetrics.brierScore == null || logisticHoldoutMetrics.brierScore <= heuristicHoldoutMetrics.brierScore);
+      const algorithm = logisticIsBetter ? "LOGISTIC_REGRESSION_V1" : "MVP_WEIGHTED_BUCKET_CALIBRATION";
+      const selectedLogisticModel = logisticIsBetter ? candidateLogisticModel : null;
 
       const modelId = await getOrCreateScoringModel({ tenantId, targetModule: "LEAD", objective: settings.objective, createdBy: user.id });
       const { id: modelVersionId, versionNumber } = await createScoringModelVersion({
         tenantId,
         modelId,
+        algorithm,
         featureConfig: {
           lookbackDays: settings.lookbackDays,
           minimumHistoricalRecords: settings.minimumHistoricalRecords,
           objective: settings.objective,
           calibration: serializeCalibration(trainCalibration),
+          logisticModel: selectedLogisticModel,
         },
-        metrics: { trainCount: train.length, holdoutCount: holdout.length, holdout: holdoutMetrics, leadOverallConversionRate: trainCalibration.leadOverallConversionRate },
+        metrics: {
+          trainCount: train.length,
+          holdoutCount: holdout.length,
+          holdout: logisticIsBetter ? logisticHoldoutMetrics : heuristicHoldoutMetrics,
+          candidates: { heuristic: heuristicHoldoutMetrics, logisticRegression: logisticHoldoutMetrics },
+          selectedAlgorithm: algorithm,
+          leadOverallConversionRate: trainCalibration.leadOverallConversionRate,
+        },
       });
 
       // Live scores use whichever version is explicitly PROMOTED, if any -- so retraining doesn't
       // silently move live scores until an admin reviews and promotes the new candidate. Falls back
-      // to this run's own fresh calibration when nothing has been promoted yet (first-time setup).
-      const promotedCalibration = await loadPromotedCalibration(tenantId, settings.promotedLeadModelVersionId);
-      const scoringCalibration = promotedCalibration ?? trainCalibration;
+      // to this run's own fresh candidate (whichever algorithm just won above) when nothing has been
+      // promoted yet, so first-time setup still works end to end with zero extra steps.
+      const promoted = await loadPromotedScorer(tenantId, settings.promotedLeadModelVersionId);
+      const scoringCalibration = promoted?.calibration ?? trainCalibration;
+      const scoringLogisticModel = promoted ? promoted.logisticModel : selectedLogisticModel;
 
       let leadProcessed = 0;
       for (const lead of leads) {
-        const snapshot = buildLeadFeatureSnapshot({
-          lead,
-          opportunities: opportunitiesByLeadId.get(lead.id) ?? [],
-          activities: activitiesByLeadId.get(lead.id) ?? [],
-          tasks: tasksByLeadId.get(lead.id) ?? [],
-        });
-        const score = leadScoreFromFeatures(snapshot, lead, scoringCalibration, settings);
+        const snapshot = buildLeadFeatureRow(lead);
+        const score = leadScoreFromFeatures(snapshot, lead, scoringCalibration, settings, scoringLogisticModel);
         await persistScore(user, snapshot, score, modelVersionId);
         if (settings.isEnabled || input.force) {
           await pgQuery('update "Lead" set score = $1, "updatedAt" = $2 where "tenantId" = $3 and id = $4', [
@@ -851,7 +1024,14 @@ export async function recomputeSelfLearningScoresForTenant(user: TenantUser, inp
       processed += leadProcessed;
 
       const completedAt = new Date().toISOString();
-      const runMetrics = { trainCount: train.length, holdoutCount: holdout.length, holdout: holdoutMetrics, versionNumber, modelVersionId };
+      const runMetrics = {
+        trainCount: train.length,
+        holdoutCount: holdout.length,
+        holdout: logisticIsBetter ? logisticHoldoutMetrics : heuristicHoldoutMetrics,
+        selectedAlgorithm: algorithm,
+        versionNumber,
+        modelVersionId,
+      };
       await pgQuery(
         `update "ScoringTrainingRun"
          set status = 'COMPLETED', "completedAt" = $1, "recordsProcessed" = $2, "recordsSkipped" = 0,
@@ -883,50 +1063,81 @@ export async function recomputeSelfLearningScoresForTenant(user: TenantUser, inp
       const { train, holdout } = splitTrainHoldout(opportunities, "id");
       const trainCalibration = calculateCalibration({ leads, opportunities: train.length ? train : opportunities, stages });
 
+      const buildOpportunityFeatureRow = (opportunity: any) => buildOpportunityFeatureSnapshot({
+        opportunity,
+        stage: stageById.get(opportunity.stageId),
+        activities: activitiesByOpportunityId.get(opportunity.id) ?? [],
+        tasks: tasksByOpportunityId.get(opportunity.id) ?? [],
+      });
+
       const holdoutSamples = holdout.map((opportunity) => {
-        const snapshot = buildOpportunityFeatureSnapshot({
-          opportunity,
-          stage: stageById.get(opportunity.stageId),
-          activities: activitiesByOpportunityId.get(opportunity.id) ?? [],
-          tasks: tasksByOpportunityId.get(opportunity.id) ?? [],
-        });
+        const snapshot = buildOpportunityFeatureRow(opportunity);
         const score = opportunityScoreFromFeatures(snapshot, opportunity, trainCalibration, { ...settings, isEnabled: true });
         return { predicted: score.winProbability ?? 0, actual: opportunityWon(opportunity) };
       });
-      const holdoutMetrics = binaryClassificationMetrics(holdoutSamples);
+      const heuristicHoldoutMetrics = binaryClassificationMetrics(holdoutSamples);
+
+      const trainRows = train.map((opportunity) => opportunityNumericFeatures(buildOpportunityFeatureRow(opportunity).features, trainCalibration));
+      const trainLabels = train.map((opportunity) => (opportunityWon(opportunity) ? 1 : 0));
+      const candidateLogisticModel = trainLogisticRegression(trainRows, trainLabels, OPPORTUNITY_FEATURE_NAMES);
+      let logisticHoldoutMetrics: ReturnType<typeof binaryClassificationMetrics> | null = null;
+      if (candidateLogisticModel) {
+        const logisticSamples = holdout.map((opportunity) => {
+          const features = opportunityNumericFeatures(buildOpportunityFeatureRow(opportunity).features, trainCalibration);
+          return { predicted: clampScore(predictLogisticRegression(candidateLogisticModel, features) * 100), actual: opportunityWon(opportunity) };
+        });
+        logisticHoldoutMetrics = binaryClassificationMetrics(logisticSamples);
+      }
+
+      const logisticIsBetter = !!candidateLogisticModel && logisticHoldoutMetrics?.brierScore != null
+        && (heuristicHoldoutMetrics.brierScore == null || logisticHoldoutMetrics.brierScore <= heuristicHoldoutMetrics.brierScore);
+      const algorithm = logisticIsBetter ? "LOGISTIC_REGRESSION_V1" : "MVP_WEIGHTED_BUCKET_CALIBRATION";
+      const selectedLogisticModel = logisticIsBetter ? candidateLogisticModel : null;
 
       const modelId = await getOrCreateScoringModel({ tenantId, targetModule: "OPPORTUNITY", objective: settings.objective, createdBy: user.id });
       const { id: modelVersionId, versionNumber } = await createScoringModelVersion({
         tenantId,
         modelId,
+        algorithm,
         featureConfig: {
           lookbackDays: settings.lookbackDays,
           minimumHistoricalRecords: settings.minimumHistoricalRecords,
           objective: settings.objective,
           calibration: serializeCalibration(trainCalibration),
+          logisticModel: selectedLogisticModel,
         },
-        metrics: { trainCount: train.length, holdoutCount: holdout.length, holdout: holdoutMetrics, opportunityOverallWinRate: trainCalibration.opportunityOverallWinRate },
+        metrics: {
+          trainCount: train.length,
+          holdoutCount: holdout.length,
+          holdout: logisticIsBetter ? logisticHoldoutMetrics : heuristicHoldoutMetrics,
+          candidates: { heuristic: heuristicHoldoutMetrics, logisticRegression: logisticHoldoutMetrics },
+          selectedAlgorithm: algorithm,
+          opportunityOverallWinRate: trainCalibration.opportunityOverallWinRate,
+        },
       });
 
-      const promotedCalibration = await loadPromotedCalibration(tenantId, settings.promotedOpportunityModelVersionId);
-      const scoringCalibration = promotedCalibration ?? trainCalibration;
+      const promoted = await loadPromotedScorer(tenantId, settings.promotedOpportunityModelVersionId);
+      const scoringCalibration = promoted?.calibration ?? trainCalibration;
+      const scoringLogisticModel = promoted ? promoted.logisticModel : selectedLogisticModel;
 
       let oppProcessed = 0;
       for (const opportunity of opportunities) {
-        const snapshot = buildOpportunityFeatureSnapshot({
-          opportunity,
-          stage: stageById.get(opportunity.stageId),
-          activities: activitiesByOpportunityId.get(opportunity.id) ?? [],
-          tasks: tasksByOpportunityId.get(opportunity.id) ?? [],
-        });
-        const score = opportunityScoreFromFeatures(snapshot, opportunity, scoringCalibration, settings);
+        const snapshot = buildOpportunityFeatureRow(opportunity);
+        const score = opportunityScoreFromFeatures(snapshot, opportunity, scoringCalibration, settings, scoringLogisticModel);
         await persistScore(user, snapshot, score, modelVersionId);
         oppProcessed += 1;
       }
       processed += oppProcessed;
 
       const completedAt = new Date().toISOString();
-      const runMetrics = { trainCount: train.length, holdoutCount: holdout.length, holdout: holdoutMetrics, versionNumber, modelVersionId };
+      const runMetrics = {
+        trainCount: train.length,
+        holdoutCount: holdout.length,
+        holdout: logisticIsBetter ? logisticHoldoutMetrics : heuristicHoldoutMetrics,
+        selectedAlgorithm: algorithm,
+        versionNumber,
+        modelVersionId,
+      };
       await pgQuery(
         `update "ScoringTrainingRun"
          set status = 'COMPLETED', "completedAt" = $1, "recordsProcessed" = $2, "recordsSkipped" = 0,
