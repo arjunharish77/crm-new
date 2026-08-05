@@ -1,8 +1,12 @@
+const path = require("path");
 const { Client } = require("pg");
 const { pbkdf2Sync, randomBytes } = require("crypto");
 const dotenv = require("dotenv");
 
-dotenv.config({ path: ".env" });
+// Resolved relative to this file, not the caller's cwd, so this behaves the same whether
+// invoked as `node scripts/create-admin.js` or `npm run unnatividya:create-admin` from the
+// repo root -- otherwise a cwd-relative ".env" can silently pick up an unrelated .env file.
+dotenv.config({ path: path.join(__dirname, "..", ".env") });
 
 const PBKDF2_ITERATIONS = 210_000;
 const PBKDF2_KEY_LENGTH = 32;
@@ -23,7 +27,7 @@ function readArg(flag, fallback) {
 
 async function main() {
   const name = readArg("--name", "Admin");
-  const email = readArg("--email", "admin@unnatify.com").toLowerCase();
+  const email = readArg("--email", "admin@unnatividya.com").toLowerCase();
   const password = readArg("--password", "UnnatiVidya@2026");
 
   if (password.length < 10) {

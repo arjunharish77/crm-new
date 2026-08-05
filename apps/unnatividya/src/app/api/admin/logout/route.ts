@@ -7,8 +7,8 @@ export async function POST() {
   if (session) {
     await query(
       `insert into cms_audit_log (user_id, action, entity_type, entity_id, metadata)
-       values ($1, 'CMS_LOGOUT', 'cms_user', $1, '{}'::jsonb)`,
-      [session.userId],
+       values ($1, 'CMS_LOGOUT', 'cms_user', $2, '{}'::jsonb)`,
+      [session.userId, session.userId],
     );
   }
 

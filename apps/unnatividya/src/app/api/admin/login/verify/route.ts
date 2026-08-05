@@ -44,8 +44,8 @@ export async function POST(request: Request) {
   await query(`update otp_request set verified_at = now() where id = $1`, [requestRow.id]);
   await query(
     `insert into cms_audit_log (user_id, action, entity_type, entity_id, metadata)
-     values ($1, 'CMS_LOGIN_SUCCESS', 'cms_user', $1, $2)`,
-    [user.id, { twoFactor: true }],
+     values ($1, 'CMS_LOGIN_SUCCESS', 'cms_user', $2, $3)`,
+    [user.id, user.id, { twoFactor: true }],
   );
 
   const response = NextResponse.json({ ok: true });

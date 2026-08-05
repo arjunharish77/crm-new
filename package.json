@@ -28,6 +28,7 @@
     "unnatividya:crm-worker": "node apps/unnatividya/scripts/crm-sync-worker.js",
     "unnatividya:sitemap:smoke": "node apps/unnatividya/scripts/sitemap-smoke.js",
     "unnatividya:lead-otp:smoke": "node apps/unnatividya/scripts/lead-otp-smoke.js",
+    "unnatividya:admin-login:smoke": "node apps/unnatividya/scripts/admin-login-smoke.js",
     "unnatividya:routes:smoke": "node apps/unnatividya/scripts/route-smoke.js",
     "unnatividya:mobile:smoke": "node apps/unnatividya/scripts/mobile-smoke.js",
     "ml-service:setup": "cd ml-service && python3 -m venv .venv && ./.venv/bin/pip install --upgrade pip && ./.venv/bin/pip install -r requirements.txt",

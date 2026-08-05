@@ -34,7 +34,6 @@ where not exists (select 1 from pg_database where datname = :'db')\gexec
 grant all privileges on database :"db" to :"app_user";
 SQL
 
-docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" exec -T postgres psql -U "$POSTGRES_USER" -d "$UNNATIVIDYA_POSTGRES_DB" \
-  -f /dev/stdin < apps/unnatividya/migrations/0001_initial.sql
+docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" run --rm unnatividya-web node scripts/db-migrate-local.js
 
 echo "Unnati Vidya database is ready: $UNNATIVIDYA_POSTGRES_DB"

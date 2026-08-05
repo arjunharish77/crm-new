@@ -43,8 +43,8 @@ export async function POST(request: Request) {
     );
     await query(
       `insert into cms_audit_log (user_id, action, entity_type, entity_id, metadata)
-       values ($1, 'CMS_LOGIN_SUCCESS', 'cms_user', $1, $2)`,
-      [user.id, { twoFactor: false }],
+       values ($1, 'CMS_LOGIN_SUCCESS', 'cms_user', $2, $3)`,
+      [user.id, user.id, { twoFactor: false }],
     );
     return response;
   }
@@ -66,8 +66,8 @@ export async function POST(request: Request) {
   );
   await query(
     `insert into cms_audit_log (user_id, action, entity_type, entity_id, metadata)
-     values ($1, 'CMS_ADMIN_OTP_SENT', 'cms_user', $1, $2)`,
-    [user.id, { provider: "zeptomail", status: result.status }],
+     values ($1, 'CMS_ADMIN_OTP_SENT', 'cms_user', $2, $3)`,
+    [user.id, user.id, { provider: "zeptomail", status: result.status }],
   );
 
   return NextResponse.json({

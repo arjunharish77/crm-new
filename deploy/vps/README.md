@@ -70,6 +70,26 @@ The worker logs job completion/failure events:
 docker compose -f deploy/vps/docker-compose.yml --env-file deploy/vps/.env logs -f worker
 ```
 
+## Unnati Vidya Website
+
+The `unnatividya-web` service is a separate Next.js app with its own Postgres database
+(`UNNATIVIDYA_POSTGRES_DB`, distinct from the CRM's `POSTGRES_DB`). After the containers
+are up, create its database/role and apply all of its migrations (tracked in a
+`schema_migration` table, so this is safe to re-run):
+
+```bash
+deploy/vps/scripts/setup-unnatividya-db.sh
+```
+
+Then create the first CMS admin (idempotent -- safe to re-run, skips if the email already exists):
+
+```bash
+docker compose -f deploy/vps/docker-compose.yml --env-file deploy/vps/.env run --rm unnatividya-web node scripts/create-admin.js --email you@example.com --password 'a-real-password'
+```
+
+Log in at `https://<UNNATIVIDYA_DOMAIN>/admin/login`. Two-factor (email OTP via ZeptoMail) is
+enabled by default for every admin this script creates.
+
 ## Backup
 
 ```bash

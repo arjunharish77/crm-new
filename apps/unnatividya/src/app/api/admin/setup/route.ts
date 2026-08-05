@@ -34,8 +34,8 @@ export async function POST(request: Request) {
   );
   await query(
     `insert into cms_audit_log (user_id, action, entity_type, entity_id, metadata)
-     values ($1, 'CMS_ADMIN_CREATED', 'cms_user', $1, '{}'::jsonb)`,
-    [created.rows[0].id],
+     values ($1, 'CMS_ADMIN_CREATED', 'cms_user', $2, '{}'::jsonb)`,
+    [created.rows[0].id, created.rows[0].id],
   );
 
   return NextResponse.json({ ok: true });
