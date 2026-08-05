@@ -157,7 +157,6 @@ export default function HomePage() {
             <Link href={`/universities/${university.slug}`} className="uv-card" style={{ display: "block", background: "#fff", border: "1px solid #CFDAE6", borderRadius: 8, overflow: "hidden", color: "inherit" }} key={university.id}>
               <div style={{ height: 140, overflow: "hidden", position: "relative" }}>
                 <Image src={universityMedia[university.id].src} alt={universityMedia[university.id].alt} fill sizes="(max-width: 900px) 100vw, 33vw" style={{ objectFit: "cover" }} />
-                <span style={{ position: "absolute", right: 6, bottom: 6, fontSize: 9, color: "#fff", background: "rgba(0,0,0,0.45)", borderRadius: 3, padding: "2px 6px" }}>via Wikimedia Commons</span>
               </div>
               <div style={{ padding: 18 }}>
                 <div style={{ fontSize: 17, fontWeight: 700, color: "#363634" }}>{universityDisplayName(university.id, university.name)}</div>
