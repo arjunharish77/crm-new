@@ -77,9 +77,11 @@ sitemap). It is completely free and there's no reason not to have it.
      blank value, ready for this).
    - Change it to `GOOGLE_SITE_VERIFICATION=SOME_LONG_RANDOM_STRING` (using your actual
      value from step 6, no quotes needed).
-   - Save the file, then have the site restarted so it picks up the change:
+   - Save the file, then have the site **rebuilt** (not just restarted) so it picks up the
+     change — this value gets baked into the page's HTML at build time, so a plain restart of
+     the existing container will not pick up a `.env` change:
      ```bash
-     docker compose -f deploy/vps/docker-compose.yml --env-file deploy/vps/.env up -d unnatividya-web
+     docker compose -f deploy/vps/docker-compose.yml --env-file deploy/vps/.env up -d --build unnatividya-web
      ```
 8. Confirm it worked before clicking Verify — visit `https://unnatividya.com` in a browser,
    right-click → **View Page Source**, and search (Ctrl/Cmd+F) for `google-site-verification`.
@@ -129,7 +131,7 @@ than Google's but real, and setup takes five minutes — there's no reason to sk
    ```
    BING_SITE_VERIFICATION=YOUR_VALUE_HERE
    ```
-7. Restart the site the same way as step 7 in Part 1, then confirm via View Page Source —
+7. Rebuild the site the same way as step 7 in Part 1 (`--build`, not just a restart), then confirm via View Page Source —
    search for `msvalidate.01` this time (that's Bing's internal tag name; the code
    automatically renders it correctly even though the env variable is called
    `BING_SITE_VERIFICATION`).
@@ -169,9 +171,10 @@ your site*. Both matter, for different questions.
     ```
     NEXT_PUBLIC_GA_ID=G-XXXXXXXXXX
     ```
-11. Restart the site (same command as before):
+11. Rebuild the site (this value is baked in at build time, so a plain restart won't pick it
+    up):
     ```bash
-    docker compose -f deploy/vps/docker-compose.yml --env-file deploy/vps/.env up -d unnatividya-web
+    docker compose -f deploy/vps/docker-compose.yml --env-file deploy/vps/.env up -d --build unnatividya-web
     ```
 12. Verify it's working: in GA4, go to **Reports → Realtime**, then in a separate browser
     tab/private window visit `https://unnatividya.com`. Within about 30 seconds you should
@@ -218,7 +221,7 @@ developer each time.
    ```
    NEXT_PUBLIC_GTM_ID=GTM-XXXXXXX
    ```
-7. Restart the site the same way as before.
+7. Rebuild the site the same way as before (`--build`, not just a restart).
 8. In the GTM dashboard, click **Preview**, enter `https://unnatividya.com`, and confirm the
    debug panel shows GTM has loaded on the live page.
 
@@ -249,7 +252,11 @@ the website already does automatically.
    INDEXNOW_ENABLED=true
    INDEXNOW_KEY=the-random-string-from-step-1
    ```
-3. Restart the site.
+3. Rebuild the site (this value is baked in at build time, so a plain restart won't pick it
+   up):
+   ```bash
+   docker compose -f deploy/vps/docker-compose.yml --env-file deploy/vps/.env up -d --build unnatividya-web
+   ```
 4. Confirm the key is being served correctly (this is the "proof of ownership" IndexNow
    checks for):
    ```bash

@@ -94,6 +94,13 @@ services:
     build:
       context: ../..
       dockerfile: apps/unnatividya/Dockerfile
+      args:
+        GOOGLE_SITE_VERIFICATION: ${GOOGLE_SITE_VERIFICATION}
+        BING_SITE_VERIFICATION: ${BING_SITE_VERIFICATION}
+        NEXT_PUBLIC_GA_ID: ${NEXT_PUBLIC_GA_ID}
+        NEXT_PUBLIC_GTM_ID: ${NEXT_PUBLIC_GTM_ID}
+        INDEXNOW_ENABLED: ${INDEXNOW_ENABLED}
+        INDEXNOW_KEY: ${INDEXNOW_KEY}
     restart: unless-stopped
     env_file:
       - .env
