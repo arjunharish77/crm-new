@@ -9,10 +9,18 @@ if [ ! -f "$ENV_FILE" ]; then
   exit 1
 fi
 
-set -a
-# shellcheck disable=SC1090
-. "$ENV_FILE"
-set +a
+# Read only the specific keys this script needs, rather than shell-sourcing the whole
+# .env file -- sourcing breaks the moment any unrelated value in the file (e.g. a
+# ZeptoMail API key formatted as "Zoho-enczapikey <token>") contains a space, since the
+# shell then tries to run whatever follows the space as a command.
+env_value() {
+  grep -m1 "^$1=" "$ENV_FILE" | cut -d= -f2-
+}
+
+POSTGRES_USER="$(env_value POSTGRES_USER)"
+UNNATIVIDYA_POSTGRES_DB="$(env_value UNNATIVIDYA_POSTGRES_DB)"
+UNNATIVIDYA_POSTGRES_USER="$(env_value UNNATIVIDYA_POSTGRES_USER)"
+UNNATIVIDYA_POSTGRES_PASSWORD="$(env_value UNNATIVIDYA_POSTGRES_PASSWORD)"
 
 : "${POSTGRES_USER:?POSTGRES_USER is required}"
 : "${UNNATIVIDYA_POSTGRES_DB:?UNNATIVIDYA_POSTGRES_DB is required}"
