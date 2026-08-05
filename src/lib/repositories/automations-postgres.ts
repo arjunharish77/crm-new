@@ -58,11 +58,15 @@ function valueAtPath(record: Record<string, unknown>, field: string) {
     stallRisk: "predictiveScore.stallRisk",
     conversionProbability: "predictiveScore.conversionProbability",
     winProbability: "predictiveScore.winProbability",
+    expectedResponseLikelihood: "predictiveScore.expectedResponseLikelihood",
+    duplicateRisk: "predictiveScore.duplicateRisk",
+    staleRisk: "predictiveScore.staleRisk",
+    expectedCloseRisk: "predictiveScore.expectedCloseRisk",
   };
   const parts = field.split(".");
   if (parts.length > 1) {
     const scoped = parts[0].toUpperCase();
-    if (!record[parts[0]] && ["LEAD", "OPPORTUNITY", "ACTIVITY"].includes(scoped)) {
+    if (!record[parts[0]] && ["LEAD", "OPPORTUNITY", "ACTIVITY", "TASK", "COMMUNICATION"].includes(scoped)) {
       return valueAtPath(record, parts.slice(1).join("."));
     }
   }

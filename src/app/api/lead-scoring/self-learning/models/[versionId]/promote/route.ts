@@ -9,7 +9,11 @@ export async function POST(request: Request, { params }: { params: Promise<{ ver
     if (!user.tenantId) return forbidden("Tenant context required");
     const { versionId } = await params;
     if (!versionId) return badRequest("versionId is required");
-    const result = await promoteScoringModelVersion(user, versionId);
+    const body = await request.json().catch(() => ({}));
+    const result = await promoteScoringModelVersion(user, versionId, {
+      reviewNotes: typeof body?.reviewNotes === "string" ? body.reviewNotes : null,
+      rollbackReason: typeof body?.rollbackReason === "string" ? body.rollbackReason : null,
+    });
     return NextResponse.json(result);
   } catch (error) {
     if (error instanceof Error && error.message === "UNAUTHORIZED") return unauthorized();

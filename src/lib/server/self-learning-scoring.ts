@@ -1,6 +1,7 @@
 import { randomUUID } from "crypto";
 import { createAuditLog } from "@/lib/server/crm";
 import { query as pgQuery, queryOne as pgQueryOne } from "@/lib/db/query";
+import { trainViaMlService, scoreViaMlService } from "@/lib/server/ml-service-client";
 
 type TenantUser = {
   id: string;
@@ -18,6 +19,16 @@ export type ScoringSettings = {
   lookbackDays: number;
   retrainCadence: "MANUAL" | "WEEKLY" | "MONTHLY";
   fallbackMode: "RULE_SCORE" | "ZERO" | "KEEP_EXISTING";
+  approvalMode: "MANUAL" | "AUTO_PROMOTE_IF_BETTER";
+  featureCatalog: { fields?: Array<Record<string, unknown>>; derivedFeatures?: Array<Record<string, unknown>> };
+  prohibitedFieldKeys: string[];
+  qualityThresholds: Record<string, unknown>;
+  nextRetrainAt?: string | null;
+  lastDriftCheckedAt?: string | null;
+  retrainLockAt?: string | null;
+  retrainLockOwner?: string | null;
+  featureRetentionDays: number;
+  lowConfidenceFallbackRules: Record<string, unknown>;
   promotedLeadModelVersionId?: string | null;
   promotedOpportunityModelVersionId?: string | null;
   lastRecomputedAt?: string | null;
@@ -39,7 +50,23 @@ type ScoreResult = {
   scoreBand: "HOT" | "WARM" | "COLD" | "RISK";
   confidence: number;
   reasons: Array<{ type: "POSITIVE" | "NEGATIVE" | "INFO"; label: string; value?: unknown }>;
-  source: "PREDICTIVE_SCORING" | "RULE_FALLBACK";
+  source: "PREDICTIVE_SCORING" | "RULE_FALLBACK" | "MANUAL_OVERRIDE";
+  expectedResponseLikelihood?: number | null;
+  duplicateRisk?: number | null;
+  staleRisk?: number | null;
+  expectedCloseRisk?: number | null;
+  suggestedCloseDate?: string | null;
+  suggestedCloseDateDeltaDays?: number | null;
+  nextBestAction?: string | null;
+  nextBestActivityType?: string | null;
+  topDrivers?: Array<{ type: "POSITIVE" | "NEGATIVE" | "INFO"; label: string; value?: unknown }>;
+  missingDataWarnings?: string[];
+  similarRecordIds?: string[];
+  suggestedDataImprovements?: string[];
+  overrideReason?: string | null;
+  overrideUntil?: string | null;
+  overrideOwnerId?: string | null;
+  overriddenAt?: string | null;
 };
 
 type FeatureSnapshot = {
@@ -111,7 +138,7 @@ function trainLogisticRegression(rawFeatures: number[][], labels: number[], feat
 
   const columnCount = rawFeatures[0].length;
   const { standardized, means, stds } = standardizeMatrix(rawFeatures);
-  let weights = new Array(columnCount).fill(0);
+  const weights = new Array(columnCount).fill(0);
   let bias = 0;
   const epochs = 300;
   const learningRate = 0.15;
@@ -201,6 +228,16 @@ const DEFAULT_SETTINGS: Omit<ScoringSettings, "id" | "tenantId"> = {
   lookbackDays: 365,
   retrainCadence: "MANUAL",
   fallbackMode: "RULE_SCORE",
+  approvalMode: "MANUAL",
+  featureCatalog: { fields: [], derivedFeatures: [] },
+  prohibitedFieldKeys: [],
+  qualityThresholds: { minimumHoldoutSampleSize: 20, maximumBrierScore: 0.35, minimumLift: 1.2 },
+  nextRetrainAt: null,
+  lastDriftCheckedAt: null,
+  retrainLockAt: null,
+  retrainLockOwner: null,
+  featureRetentionDays: 365,
+  lowConfidenceFallbackRules: {},
   promotedLeadModelVersionId: null,
   promotedOpportunityModelVersionId: null,
   lastRecomputedAt: null,
@@ -392,16 +429,35 @@ async function getOrCreateScoringModel(input: { tenantId: string; targetModule: 
 async function loadPromotedScorer(
   tenantId: string,
   promotedVersionId: string | null | undefined,
-): Promise<{ calibration: Calibration; logisticModel: LogisticModel | null } | null> {
+  targetModule: RecordType,
+  lookbackDays: number,
+): Promise<{ calibration: Calibration; logisticModel: LogisticModel | null; mlPredictions: Map<string, number> | null } | null> {
   if (!promotedVersionId) return null;
   const version = await pgQueryOne<any>(
-    `select "featureConfig" from "ScoringModelVersion" where "tenantId" = $1 and id = $2 and status = 'PROMOTED' limit 1`,
+    `select algorithm, "featureConfig" from "ScoringModelVersion" where "tenantId" = $1 and id = $2 and status = 'PROMOTED' limit 1`,
     [tenantId, promotedVersionId],
   );
   if (!version?.featureConfig?.calibration) return null;
+
+  let mlPredictions: Map<string, number> | null = null;
+  if (version.algorithm === "GRADIENT_BOOSTED_TREES_V1" && version.featureConfig?.modelStorageKey) {
+    // Reload and re-score with the promoted, already-trained Python model -- never retrains
+    // it here, mirroring how a promoted JS calibration/logistic model is reused as-is.
+    const result = await scoreViaMlService({
+      tenantId,
+      targetModule,
+      modelStorageKey: version.featureConfig.modelStorageKey,
+      lookbackDays,
+    });
+    if (result?.predictions) {
+      mlPredictions = new Map(result.predictions.map((p) => [p.recordId, p.probability]));
+    }
+  }
+
   return {
     calibration: deserializeCalibration(version.featureConfig.calibration),
     logisticModel: version.featureConfig.logisticModel ?? null,
+    mlPredictions,
   };
 }
 
@@ -547,7 +603,66 @@ function valueBand(amount: unknown) {
   return "UNKNOWN";
 }
 
-function leadScoreFromFeatures(snapshot: FeatureSnapshot, lead: any, calibration: Calibration, settings: ScoringSettings, logisticModel?: LogisticModel | null): ScoreResult {
+function addDays(date: Date, days: number) {
+  const next = new Date(date);
+  next.setDate(next.getDate() + days);
+  return next;
+}
+
+function scoreDrivers(reasons: ScoreResult["reasons"]) {
+  return reasons.slice(0, 6);
+}
+
+function leadMissingWarnings(features: Record<string, unknown>) {
+  const warnings: string[] = [];
+  if (!features.hasEmail) warnings.push("Email is missing");
+  if (!features.hasPhone) warnings.push("Phone is missing");
+  if (!features.hasCompany) warnings.push("Company is missing");
+  if (Number(features.activityCount ?? 0) === 0) warnings.push("No activity has been logged");
+  return warnings;
+}
+
+function leadAction(input: { engagementScore: number; staleRisk: number; duplicateRisk: number; expectedResponseLikelihood: number; features: Record<string, unknown> }) {
+  if (input.duplicateRisk >= 70) return { action: "Review possible duplicate before outreach", activityType: "Admin Review" };
+  if (input.staleRisk >= 70) return { action: "Revive with a priority follow-up", activityType: "Call" };
+  if (input.expectedResponseLikelihood >= 70) return { action: "Call within the next working window", activityType: "Call" };
+  if (Number(input.features.activityCount ?? 0) === 0) return { action: "Start first-touch nurture sequence", activityType: "Email" };
+  return { action: "Continue nurture and monitor engagement", activityType: "Task" };
+}
+
+function opportunityAction(input: { stallRisk: number; winProbability: number; features: Record<string, unknown> }) {
+  if (input.stallRisk >= 70) return { action: "Schedule decision-maker follow-up", activityType: "Call" };
+  if (input.winProbability >= 75) return { action: "Push closing checklist and fee/payment step", activityType: "Meeting" };
+  if (Number(input.features.activityCount ?? 0) === 0) return { action: "Log discovery activity", activityType: "Call" };
+  return { action: "Progress to the next stage action", activityType: "Task" };
+}
+
+function scoreQualityStatus(metrics: any, thresholds: Record<string, unknown>) {
+  const holdout = metrics?.holdout ?? metrics;
+  const sampleSize = Number(holdout?.sampleSize ?? 0);
+  const minimumHoldoutSampleSize = Number(thresholds.minimumHoldoutSampleSize ?? 20);
+  const brier = holdout?.brierScore == null ? null : Number(holdout.brierScore);
+  const maximumBrierScore = Number(thresholds.maximumBrierScore ?? 0.35);
+  const lift = holdout?.lift == null ? null : Number(holdout.lift);
+  const minimumLift = Number(thresholds.minimumLift ?? 1.2);
+  if (sampleSize < minimumHoldoutSampleSize || (brier !== null && brier > maximumBrierScore)) return "FAIL";
+  if (lift !== null && lift < minimumLift) return "WARN";
+  return "PASS";
+}
+
+function featureControls(settings: ScoringSettings) {
+  const fields = Array.isArray(settings.featureCatalog?.fields) ? settings.featureCatalog.fields : [];
+  const excludedFeatureKeys = fields
+    .filter((field) => field?.fieldKey && field.isIncluded === false)
+    .map((field) => String(field.fieldKey));
+  const prohibitedFeatureKeys = [
+    ...settings.prohibitedFieldKeys,
+    ...fields.filter((field) => field?.fieldKey && field.isProhibited === true).map((field) => String(field.fieldKey)),
+  ];
+  return { excludedFeatureKeys: [...new Set(excludedFeatureKeys)], prohibitedFeatureKeys: [...new Set(prohibitedFeatureKeys)] };
+}
+
+function leadScoreFromFeatures(snapshot: FeatureSnapshot, lead: any, calibration: Calibration, settings: ScoringSettings, logisticModel?: LogisticModel | null, mlPrediction?: number | null): ScoreResult {
   const features = snapshot.features;
   const sourceRate = rateFor(calibration.leadSourceConversionRates, features.source, calibration.leadOverallConversionRate);
   const statusRate = rateFor(calibration.leadStatusConversionRates, features.status, calibration.leadOverallConversionRate);
@@ -576,14 +691,21 @@ function leadScoreFromFeatures(snapshot: FeatureSnapshot, lead: any, calibration
 
   const historicalConfidence = Math.min(100, Math.round((calibration.totalLeadRecords / Math.max(1, settings.minimumHistoricalRecords)) * 100));
   const heuristicProbability = clampScore(fitScore * 0.45 + engagementScore * 0.35 + calibration.leadOverallConversionRate * 20);
-  const conversionProbability = logisticModel
-    ? clampScore(predictLogisticRegression(logisticModel, leadNumericFeatures(features, calibration)) * 100)
-    : heuristicProbability;
+  const conversionProbability = mlPrediction != null
+    ? clampScore(mlPrediction)
+    : logisticModel
+      ? clampScore(predictLogisticRegression(logisticModel, leadNumericFeatures(features, calibration)) * 100)
+      : heuristicProbability;
   const stallRisk = clampScore(100 - engagementScore + overdueCount * 5 + (lastActivityAge && lastActivityAge > 30 ? 15 : 0));
   const scoreBand = stallRisk >= 75 ? "RISK" : conversionProbability >= 75 ? "HOT" : conversionProbability >= 45 ? "WARM" : "COLD";
   const source = settings.isEnabled && historicalConfidence >= 40 ? "PREDICTIVE_SCORING" : "RULE_FALLBACK";
+  const duplicateRisk = clampScore((features.hasEmail ? 0 : 25) + (features.hasPhone ? 0 : 25) + (String(features.status ?? "").toUpperCase() === "LOST" ? 10 : 0));
+  const staleRisk = clampScore((lastActivityAge === null ? 70 : lastActivityAge > 45 ? 80 : lastActivityAge > 21 ? 55 : 20) + overdueCount * 6);
+  const expectedResponseLikelihood = clampScore(engagementScore * 0.6 + fitScore * 0.25 + (firstResponseMinutes !== null && firstResponseMinutes <= 1440 ? 15 : 0));
+  const missingDataWarnings = leadMissingWarnings(features);
+  const action = leadAction({ engagementScore, staleRisk, duplicateRisk, expectedResponseLikelihood, features });
 
-  return {
+  const result: ScoreResult = {
     recordType: "LEAD",
     recordId: lead.id,
     fitScore,
@@ -600,10 +722,23 @@ function leadScoreFromFeatures(snapshot: FeatureSnapshot, lead: any, calibration
       { type: overdueCount > 0 ? "NEGATIVE" : "POSITIVE", label: "Overdue tasks", value: overdueCount },
       { type: firstResponseMinutes !== null && firstResponseMinutes <= 60 ? "POSITIVE" : "INFO", label: "First response minutes", value: firstResponseMinutes },
     ],
+    expectedResponseLikelihood,
+    duplicateRisk,
+    staleRisk,
+    expectedCloseRisk: null,
+    suggestedCloseDate: null,
+    suggestedCloseDateDeltaDays: null,
+    nextBestAction: action.action,
+    nextBestActivityType: action.activityType,
+    missingDataWarnings,
+    similarRecordIds: [],
+    suggestedDataImprovements: missingDataWarnings.map((warning) => `Improve scoring confidence: ${warning.toLowerCase()}.`),
   };
+  result.topDrivers = scoreDrivers(result.reasons);
+  return result;
 }
 
-function opportunityScoreFromFeatures(snapshot: FeatureSnapshot, opportunity: any, calibration: Calibration, settings: ScoringSettings, logisticModel?: LogisticModel | null): ScoreResult {
+function opportunityScoreFromFeatures(snapshot: FeatureSnapshot, opportunity: any, calibration: Calibration, settings: ScoringSettings, logisticModel?: LogisticModel | null, mlPrediction?: number | null): ScoreResult {
   const features = snapshot.features;
   const stageRate = rateFor(calibration.opportunityStageWinRates, features.stageId, calibration.opportunityOverallWinRate);
   const priorityRate = rateFor(calibration.opportunityPriorityWinRates, features.priority, calibration.opportunityOverallWinRate);
@@ -621,14 +756,25 @@ function opportunityScoreFromFeatures(snapshot: FeatureSnapshot, opportunity: an
   );
   const historicalConfidence = Math.min(100, Math.round((calibration.totalOpportunityRecords / Math.max(1, settings.minimumHistoricalRecords)) * 100));
   const heuristicProbability = clampScore(fitScore * 0.5 + engagementScore * 0.3 + calibration.opportunityOverallWinRate * 20);
-  const winProbability = logisticModel
-    ? clampScore(predictLogisticRegression(logisticModel, opportunityNumericFeatures(features, calibration)) * 100)
-    : heuristicProbability;
+  const winProbability = mlPrediction != null
+    ? clampScore(mlPrediction)
+    : logisticModel
+      ? clampScore(predictLogisticRegression(logisticModel, opportunityNumericFeatures(features, calibration)) * 100)
+      : heuristicProbability;
   const stallRisk = clampScore(100 - engagementScore + overdueCount * 8 + (lastActivityAge && lastActivityAge > 30 ? 18 : 0));
   const scoreBand = stallRisk >= 75 ? "RISK" : winProbability >= 75 ? "HOT" : winProbability >= 45 ? "WARM" : "COLD";
   const source = settings.isEnabled && historicalConfidence >= 40 ? "PREDICTIVE_SCORING" : "RULE_FALLBACK";
+  const expectedCloseRisk = clampScore(stallRisk * 0.75 + (winProbability < 35 ? 20 : 0));
+  const closeDeltaDays = expectedCloseRisk >= 75 ? 30 : expectedCloseRisk >= 50 ? 14 : winProbability >= 75 ? -7 : 0;
+  const suggestedCloseDate = addDays(new Date(), Math.max(1, 21 + closeDeltaDays)).toISOString();
+  const action = opportunityAction({ stallRisk, winProbability, features });
+  const missingDataWarnings = [
+    Number(features.amount ?? 0) > 0 ? null : "Opportunity amount is missing",
+    activityCount > 0 ? null : "No opportunity activity has been logged",
+    lastActivityAge === null ? "No recent activity date is available" : null,
+  ].filter((warning): warning is string => !!warning);
 
-  return {
+  const result: ScoreResult = {
     recordType: "OPPORTUNITY",
     recordId: opportunity.id,
     fitScore,
@@ -645,15 +791,31 @@ function opportunityScoreFromFeatures(snapshot: FeatureSnapshot, opportunity: an
       { type: overdueCount > 0 ? "NEGATIVE" : "POSITIVE", label: "Overdue tasks", value: overdueCount },
       { type: lastActivityAge !== null && lastActivityAge <= 7 ? "POSITIVE" : "INFO", label: "Last activity age days", value: lastActivityAge },
     ],
+    expectedResponseLikelihood: null,
+    duplicateRisk: null,
+    staleRisk: null,
+    expectedCloseRisk,
+    suggestedCloseDate,
+    suggestedCloseDateDeltaDays: closeDeltaDays,
+    nextBestAction: action.action,
+    nextBestActivityType: action.activityType,
+    missingDataWarnings,
+    similarRecordIds: [],
+    suggestedDataImprovements: missingDataWarnings.map((warning) => `Improve forecast quality: ${warning.toLowerCase()}.`),
   };
+  result.topDrivers = scoreDrivers(result.reasons);
+  return result;
 }
 
 export async function getScoringSettingsForTenant(user: TenantUser): Promise<ScoringSettings> {
   const tenantId = requireTenantId(user);
   const data = await pgQueryOne<any>(
     `select id, "tenantId", "isEnabled", "targetModules", objective, "minimumHistoricalRecords",
-            "lookbackDays", "retrainCadence", "fallbackMode", "promotedLeadModelVersionId",
-            "promotedOpportunityModelVersionId", "lastRecomputedAt", "updatedBy", "createdAt", "updatedAt"
+            "lookbackDays", "retrainCadence", "fallbackMode", "approvalMode", "featureCatalog",
+            "prohibitedFieldKeys", "qualityThresholds", "nextRetrainAt", "lastDriftCheckedAt",
+            "retrainLockAt", "retrainLockOwner", "featureRetentionDays", "lowConfidenceFallbackRules",
+            "promotedLeadModelVersionId", "promotedOpportunityModelVersionId", "lastRecomputedAt",
+            "updatedBy", "createdAt", "updatedAt"
      from "ScoringSettings"
      where "tenantId" = $1
      limit 1`,
@@ -665,12 +827,16 @@ export async function getScoringSettingsForTenant(user: TenantUser): Promise<Sco
   const inserted = await pgQueryOne<any>(
     `insert into "ScoringSettings"
       (id, "tenantId", "isEnabled", "targetModules", objective, "minimumHistoricalRecords",
-       "lookbackDays", "retrainCadence", "fallbackMode", "promotedLeadModelVersionId",
+       "lookbackDays", "retrainCadence", "fallbackMode", "approvalMode", "featureCatalog",
+       "prohibitedFieldKeys", "qualityThresholds", "featureRetentionDays", "lowConfidenceFallbackRules", "promotedLeadModelVersionId",
        "promotedOpportunityModelVersionId", "lastRecomputedAt", "updatedBy", "createdAt", "updatedAt")
-     values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $14)
+     values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $20)
      returning id, "tenantId", "isEnabled", "targetModules", objective, "minimumHistoricalRecords",
-               "lookbackDays", "retrainCadence", "fallbackMode", "promotedLeadModelVersionId",
-               "promotedOpportunityModelVersionId", "lastRecomputedAt", "updatedBy", "createdAt", "updatedAt"`,
+               "lookbackDays", "retrainCadence", "fallbackMode", "approvalMode", "featureCatalog",
+               "prohibitedFieldKeys", "qualityThresholds", "nextRetrainAt", "lastDriftCheckedAt",
+               "retrainLockAt", "retrainLockOwner", "featureRetentionDays", "lowConfidenceFallbackRules",
+               "promotedLeadModelVersionId", "promotedOpportunityModelVersionId", "lastRecomputedAt",
+               "updatedBy", "createdAt", "updatedAt"`,
     [
       randomUUID(),
       tenantId,
@@ -681,6 +847,12 @@ export async function getScoringSettingsForTenant(user: TenantUser): Promise<Sco
       DEFAULT_SETTINGS.lookbackDays,
       DEFAULT_SETTINGS.retrainCadence,
       DEFAULT_SETTINGS.fallbackMode,
+      DEFAULT_SETTINGS.approvalMode,
+      jsonb(DEFAULT_SETTINGS.featureCatalog),
+      DEFAULT_SETTINGS.prohibitedFieldKeys,
+      jsonb(DEFAULT_SETTINGS.qualityThresholds),
+      DEFAULT_SETTINGS.featureRetentionDays,
+      jsonb(DEFAULT_SETTINGS.lowConfidenceFallbackRules),
       DEFAULT_SETTINGS.promotedLeadModelVersionId,
       DEFAULT_SETTINGS.promotedOpportunityModelVersionId,
       DEFAULT_SETTINGS.lastRecomputedAt,
@@ -706,6 +878,13 @@ export async function updateScoringSettingsForTenant(user: TenantUser, input: Pa
   if (input.lookbackDays !== undefined) payload.lookbackDays = Math.max(30, Number(input.lookbackDays));
   if (input.retrainCadence) payload.retrainCadence = input.retrainCadence;
   if (input.fallbackMode) payload.fallbackMode = input.fallbackMode;
+  if (input.approvalMode) payload.approvalMode = input.approvalMode;
+  if (input.featureCatalog) payload.featureCatalog = input.featureCatalog;
+  if (Array.isArray(input.prohibitedFieldKeys)) payload.prohibitedFieldKeys = input.prohibitedFieldKeys;
+  if (input.qualityThresholds) payload.qualityThresholds = input.qualityThresholds;
+  if (input.nextRetrainAt !== undefined) payload.nextRetrainAt = input.nextRetrainAt;
+  if (input.featureRetentionDays !== undefined) payload.featureRetentionDays = Math.max(30, Number(input.featureRetentionDays));
+  if (input.lowConfidenceFallbackRules) payload.lowConfidenceFallbackRules = input.lowConfidenceFallbackRules;
 
   const columns = Object.keys(payload);
   const values = columns.map((column) => payload[column]);
@@ -715,8 +894,11 @@ export async function updateScoringSettingsForTenant(user: TenantUser, input: Pa
      set ${assignments}
      where "tenantId" = $${columns.length + 1}
      returning id, "tenantId", "isEnabled", "targetModules", objective, "minimumHistoricalRecords",
-               "lookbackDays", "retrainCadence", "fallbackMode", "promotedLeadModelVersionId",
-               "promotedOpportunityModelVersionId", "lastRecomputedAt", "updatedBy", "createdAt", "updatedAt"`,
+               "lookbackDays", "retrainCadence", "fallbackMode", "approvalMode", "featureCatalog",
+               "prohibitedFieldKeys", "qualityThresholds", "nextRetrainAt", "lastDriftCheckedAt",
+               "retrainLockAt", "retrainLockOwner", "featureRetentionDays", "lowConfidenceFallbackRules",
+               "promotedLeadModelVersionId", "promotedOpportunityModelVersionId", "lastRecomputedAt",
+               "updatedBy", "createdAt", "updatedAt"`,
     [...values, tenantId],
   );
   if (!data) throw new Error("SCORING_SETTINGS_NOT_FOUND");
@@ -729,8 +911,13 @@ function normalizeSettings(data: any): ScoringSettings {
     ...DEFAULT_SETTINGS,
     ...data,
     targetModules: Array.isArray(data.targetModules) && data.targetModules.length ? data.targetModules : DEFAULT_SETTINGS.targetModules,
+    featureCatalog: data.featureCatalog && typeof data.featureCatalog === "object" ? data.featureCatalog : DEFAULT_SETTINGS.featureCatalog,
+    prohibitedFieldKeys: Array.isArray(data.prohibitedFieldKeys) ? data.prohibitedFieldKeys : DEFAULT_SETTINGS.prohibitedFieldKeys,
+    qualityThresholds: data.qualityThresholds && typeof data.qualityThresholds === "object" ? data.qualityThresholds : DEFAULT_SETTINGS.qualityThresholds,
+    lowConfidenceFallbackRules: data.lowConfidenceFallbackRules && typeof data.lowConfidenceFallbackRules === "object" ? data.lowConfidenceFallbackRules : DEFAULT_SETTINGS.lowConfidenceFallbackRules,
     minimumHistoricalRecords: Number(data.minimumHistoricalRecords ?? DEFAULT_SETTINGS.minimumHistoricalRecords),
     lookbackDays: Number(data.lookbackDays ?? DEFAULT_SETTINGS.lookbackDays),
+    featureRetentionDays: Number(data.featureRetentionDays ?? DEFAULT_SETTINGS.featureRetentionDays),
   };
 }
 
@@ -748,7 +935,12 @@ export async function listScoresForTenant(user: TenantUser, input: { recordType?
   }
   return pgQuery<any>(
     `select id, "recordType", "recordId", "fitScore", "engagementScore", "conversionProbability",
-            "winProbability", "stallRisk", "scoreBand", confidence, reasons, source, "calculatedAt", "updatedAt"
+            "winProbability", "stallRisk", "scoreBand", confidence, reasons, source,
+            "expectedResponseLikelihood", "duplicateRisk", "staleRisk", "expectedCloseRisk",
+            "suggestedCloseDate", "suggestedCloseDateDeltaDays", "nextBestAction", "nextBestActivityType",
+            "topDrivers", "missingDataWarnings", "similarRecordIds", "suggestedDataImprovements",
+            "overrideReason", "overrideUntil", "overrideOwnerId", "overriddenAt",
+            "calculatedAt", "updatedAt"
      from "RecordScore"
      where ${filters.join(" and ")}
      order by "calculatedAt" desc
@@ -769,6 +961,130 @@ export async function listScoreHistoryForTenant(user: TenantUser, input: { recor
   );
 }
 
+export async function listFeatureCatalogForTenant(user: TenantUser, targetModule?: RecordType | null) {
+  const tenantId = requireTenantId(user);
+  const values: unknown[] = [tenantId];
+  const clauses = ['"tenantId" = $1'];
+  if (targetModule) {
+    values.push(targetModule);
+    clauses.push(`"targetModule" = $${values.length}`);
+  }
+  return pgQuery<any>(
+    `select id, "targetModule", "fieldKey", label, source, "dataType", "isIncluded", "isSensitive",
+            "isProhibited", "coveragePercent", "nonNullCount", "distinctCount", "lastProfiledAt", "updatedAt"
+     from "ScoringFeatureCatalog"
+     where ${clauses.join(" and ")}
+     order by "targetModule", source, label`,
+    values,
+  );
+}
+
+export async function updateFeatureCatalogForTenant(user: TenantUser, items: Array<Record<string, unknown>>) {
+  const tenantId = requireTenantId(user);
+  const now = new Date().toISOString();
+  for (const item of items) {
+    const targetModule = item.targetModule === "OPPORTUNITY" ? "OPPORTUNITY" : "LEAD";
+    const fieldKey = String(item.fieldKey ?? "").trim();
+    if (!fieldKey) continue;
+    await pgQuery(
+      `insert into "ScoringFeatureCatalog"
+        (id, "tenantId", "targetModule", "fieldKey", label, source, "dataType", "isIncluded", "isSensitive", "isProhibited", "createdAt", "updatedAt")
+       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $11)
+       on conflict ("tenantId", "targetModule", "fieldKey") do update
+       set label = excluded.label,
+           source = excluded.source,
+           "dataType" = excluded."dataType",
+           "isIncluded" = excluded."isIncluded",
+           "isSensitive" = excluded."isSensitive",
+           "isProhibited" = excluded."isProhibited",
+           "updatedAt" = excluded."updatedAt"`,
+      [
+        randomUUID(),
+        tenantId,
+        targetModule,
+        fieldKey,
+        String(item.label ?? fieldKey),
+        String(item.source ?? "SYSTEM"),
+        String(item.dataType ?? "UNKNOWN"),
+        item.isIncluded !== false,
+        item.isSensitive === true,
+        item.isProhibited === true,
+        now,
+      ],
+    );
+  }
+  await syncSettingsFeatureCatalog(user);
+  return listFeatureCatalogForTenant(user, null);
+}
+
+export async function profileFeatureCatalogForTenant(user: TenantUser) {
+  const tenantId = requireTenantId(user);
+  const latest = await pgQuery<any>(
+    `select distinct on ("recordType", "recordId") "recordType", features
+     from "ScoringFeatureSnapshot"
+     where "tenantId" = $1
+     order by "recordType", "recordId", "createdAt" desc
+     limit 5000`,
+    [tenantId],
+  );
+  const byModule = new Map<RecordType, any[]>();
+  for (const row of latest) {
+    const targetModule = row.recordType as RecordType;
+    byModule.set(targetModule, [...(byModule.get(targetModule) ?? []), row.features ?? {}]);
+  }
+  const now = new Date().toISOString();
+  for (const [module, rows] of byModule.entries()) {
+    const keys = [...new Set(rows.flatMap((features) => Object.keys(features)))];
+    for (const key of keys) {
+      const values = rows.map((features) => features[key]).filter((value) => value !== null && value !== undefined && value !== "");
+      const sample = values.find((value) => value !== null && value !== undefined);
+      const source = key.startsWith("custom_") ? "CUSTOM_FIELD" : key.startsWith("emb_") ? "EMBEDDING" : "SYSTEM";
+      await pgQuery(
+        `insert into "ScoringFeatureCatalog"
+          (id, "tenantId", "targetModule", "fieldKey", label, source, "dataType", "coveragePercent", "nonNullCount", "distinctCount", "lastProfiledAt", "createdAt", "updatedAt")
+         values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $11, $11)
+         on conflict ("tenantId", "targetModule", "fieldKey") do update
+         set "coveragePercent" = excluded."coveragePercent",
+             "nonNullCount" = excluded."nonNullCount",
+             "distinctCount" = excluded."distinctCount",
+             "lastProfiledAt" = excluded."lastProfiledAt",
+             "updatedAt" = excluded."updatedAt"`,
+        [
+          randomUUID(),
+          tenantId,
+          module,
+          key,
+          key.replace(/^custom_/, "").replace(/_/g, " "),
+          source,
+          typeof sample === "number" ? "NUMBER" : typeof sample === "boolean" ? "BOOLEAN" : "TEXT",
+          rows.length ? Math.round((values.length / rows.length) * 10000) / 100 : 0,
+          values.length,
+          new Set(values.map((value) => String(value))).size,
+          now,
+        ],
+      );
+    }
+  }
+  await syncSettingsFeatureCatalog(user);
+  return listFeatureCatalogForTenant(user, null);
+}
+
+async function syncSettingsFeatureCatalog(user: TenantUser) {
+  const tenantId = requireTenantId(user);
+  const rows = await listFeatureCatalogForTenant(user, null);
+  await pgQuery(
+    `update "ScoringSettings"
+     set "featureCatalog" = $1, "prohibitedFieldKeys" = $2, "updatedAt" = $3
+     where "tenantId" = $4`,
+    [
+      jsonb({ fields: rows, derivedFeatures: [] }),
+      rows.filter((row: any) => row.isProhibited).map((row: any) => row.fieldKey),
+      new Date().toISOString(),
+      tenantId,
+    ],
+  );
+}
+
 export async function listScoringModelVersionsForTenant(user: TenantUser, targetModule?: RecordType) {
   const tenantId = requireTenantId(user);
   const models = await pgQuery<any>(
@@ -782,7 +1098,9 @@ export async function listScoringModelVersionsForTenant(user: TenantUser, target
 
   const modelIds = models.map((model) => model.id);
   const versions = await pgQuery<any>(
-    `select id, "modelId", "versionNumber", algorithm, status, "featureConfig", metrics, "promotedBy", "promotedAt", "createdAt"
+    `select id, "modelId", "versionNumber", algorithm, status, "featureConfig", metrics,
+            "promotedBy", "promotedAt", "reviewedBy", "reviewedAt", "reviewNotes",
+            "rollbackReason", "retiredBy", "retiredAt", "driftMetrics", "createdAt"
      from "ScoringModelVersion"
      where "tenantId" = $1 and "modelId" = any($2::text[])
      order by "versionNumber" desc`,
@@ -802,7 +1120,7 @@ export async function listScoringModelVersionsForTenant(user: TenantUser, target
   return models.map((model) => ({ ...model, versions: versionsByModel.get(model.id) ?? [] }));
 }
 
-export async function promoteScoringModelVersion(user: TenantUser, modelVersionId: string) {
+export async function promoteScoringModelVersion(user: TenantUser, modelVersionId: string, options: { reviewNotes?: string | null; rollbackReason?: string | null } = {}) {
   const tenantId = requireTenantId(user);
   const version = await pgQueryOne<any>(
     `select id, "modelId", status from "ScoringModelVersion" where "tenantId" = $1 and id = $2 limit 1`,
@@ -820,12 +1138,17 @@ export async function promoteScoringModelVersion(user: TenantUser, modelVersionI
   // Retire whatever was previously promoted for this model (rollback works by promoting an older
   // version again, which naturally retires whatever had been active).
   await pgQuery(
-    `update "ScoringModelVersion" set status = 'RETIRED' where "tenantId" = $1 and "modelId" = $2 and status = 'PROMOTED' and id != $3`,
-    [tenantId, version.modelId, modelVersionId],
+    `update "ScoringModelVersion"
+     set status = 'RETIRED', "retiredBy" = $1, "retiredAt" = $2
+     where "tenantId" = $3 and "modelId" = $4 and status = 'PROMOTED' and id != $5`,
+    [user.id, now, tenantId, version.modelId, modelVersionId],
   );
   await pgQuery(
-    `update "ScoringModelVersion" set status = 'PROMOTED', "promotedBy" = $1, "promotedAt" = $2 where "tenantId" = $3 and id = $4`,
-    [user.id, now, tenantId, modelVersionId],
+    `update "ScoringModelVersion"
+     set status = 'PROMOTED', "promotedBy" = $1, "promotedAt" = $2,
+         "reviewedBy" = $1, "reviewedAt" = $2, "reviewNotes" = $3, "rollbackReason" = $4
+     where "tenantId" = $5 and id = $6`,
+    [user.id, now, options.reviewNotes ?? null, options.rollbackReason ?? null, tenantId, modelVersionId],
   );
 
   const settingsColumn = model.targetModule === "LEAD" ? "promotedLeadModelVersionId" : "promotedOpportunityModelVersionId";
@@ -840,11 +1163,207 @@ export async function promoteScoringModelVersion(user: TenantUser, modelVersionI
     "SCORING_MODEL_VERSION",
     modelVersionId,
     { previousStatus: version.status },
-    { status: "PROMOTED", targetModule: model.targetModule },
+    { status: "PROMOTED", targetModule: model.targetModule, reviewNotes: options.reviewNotes, rollbackReason: options.rollbackReason },
     null,
   ).catch(() => undefined);
 
   return { modelId: version.modelId, modelVersionId, targetModule: model.targetModule as RecordType };
+}
+
+export async function applyManualScoreOverride(user: TenantUser, input: {
+  recordType: RecordType;
+  recordId: string;
+  scoreBand?: "HOT" | "WARM" | "COLD" | "RISK";
+  conversionProbability?: number | null;
+  winProbability?: number | null;
+  stallRisk?: number | null;
+  reason: string;
+  expiresAt?: string | null;
+}) {
+  const tenantId = requireTenantId(user);
+  const now = new Date().toISOString();
+  const existing = await pgQueryOne<any>(
+    `select id, "fitScore", "engagementScore", "conversionProbability", "winProbability", "stallRisk",
+            "scoreBand", confidence, reasons, source
+     from "RecordScore"
+     where "tenantId" = $1 and "recordType" = $2 and "recordId" = $3
+     limit 1`,
+    [tenantId, input.recordType, input.recordId],
+  );
+  const primary = input.recordType === "OPPORTUNITY" ? input.winProbability : input.conversionProbability;
+  const scoreBand = input.scoreBand ?? (Number(input.stallRisk ?? existing?.stallRisk ?? 0) >= 75 ? "RISK" : Number(primary ?? 0) >= 75 ? "HOT" : Number(primary ?? 0) >= 45 ? "WARM" : "COLD");
+  const overrideId = randomUUID();
+  await pgQuery(
+    `insert into "ScoringManualOverride"
+      (id, "tenantId", "recordType", "recordId", "scoreBand", "conversionProbability", "winProbability", "stallRisk",
+       reason, "expiresAt", "createdBy", "createdAt", "updatedAt")
+     values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $12)`,
+    [
+      overrideId,
+      tenantId,
+      input.recordType,
+      input.recordId,
+      scoreBand,
+      input.recordType === "LEAD" ? clampScore(Number(input.conversionProbability ?? existing?.conversionProbability ?? 0)) : null,
+      input.recordType === "OPPORTUNITY" ? clampScore(Number(input.winProbability ?? existing?.winProbability ?? 0)) : null,
+      input.stallRisk == null ? existing?.stallRisk ?? null : clampScore(Number(input.stallRisk)),
+      input.reason,
+      input.expiresAt ?? null,
+      user.id,
+      now,
+    ],
+  );
+
+  const nextPayload = {
+    fitScore: existing?.fitScore ?? null,
+    engagementScore: existing?.engagementScore ?? null,
+    conversionProbability: input.recordType === "LEAD" ? clampScore(Number(input.conversionProbability ?? existing?.conversionProbability ?? 0)) : null,
+    winProbability: input.recordType === "OPPORTUNITY" ? clampScore(Number(input.winProbability ?? existing?.winProbability ?? 0)) : null,
+    stallRisk: input.stallRisk == null ? existing?.stallRisk ?? null : clampScore(Number(input.stallRisk)),
+    scoreBand,
+    confidence: 100,
+    reasons: [{ type: "INFO", label: "Manual override", value: input.reason }],
+    source: "MANUAL_OVERRIDE",
+    overrideReason: input.reason,
+    overrideUntil: input.expiresAt ?? null,
+    overrideOwnerId: user.id,
+    overriddenAt: now,
+  };
+
+  if (existing) {
+    await pgQuery(
+      `update "RecordScore"
+       set "conversionProbability" = $1, "winProbability" = $2, "stallRisk" = $3, "scoreBand" = $4,
+           confidence = 100, reasons = $5, source = 'MANUAL_OVERRIDE',
+           "overrideReason" = $6, "overrideUntil" = $7, "overrideOwnerId" = $8, "overriddenAt" = $9,
+           "calculatedAt" = $9, "updatedAt" = $9
+       where "tenantId" = $10 and id = $11`,
+      [
+        nextPayload.conversionProbability,
+        nextPayload.winProbability,
+        nextPayload.stallRisk,
+        nextPayload.scoreBand,
+        jsonb(nextPayload.reasons),
+        input.reason,
+        input.expiresAt ?? null,
+        user.id,
+        now,
+        tenantId,
+        existing.id,
+      ],
+    );
+  } else {
+    await pgQuery(
+      `insert into "RecordScore"
+        (id, "tenantId", "recordType", "recordId", "conversionProbability", "winProbability", "stallRisk",
+         "scoreBand", confidence, reasons, source, "overrideReason", "overrideUntil", "overrideOwnerId",
+         "overriddenAt", "calculatedAt", "createdAt", "updatedAt")
+       values ($1, $2, $3, $4, $5, $6, $7, $8, 100, $9, 'MANUAL_OVERRIDE', $10, $11, $12, $13, $13, $13, $13)`,
+      [
+        randomUUID(),
+        tenantId,
+        input.recordType,
+        input.recordId,
+        nextPayload.conversionProbability,
+        nextPayload.winProbability,
+        nextPayload.stallRisk,
+        nextPayload.scoreBand,
+        jsonb(nextPayload.reasons),
+        input.reason,
+        input.expiresAt ?? null,
+        user.id,
+        now,
+      ],
+    );
+  }
+
+  const scoreRow = await pgQueryOne<any>(
+    `select id from "RecordScore" where "tenantId" = $1 and "recordType" = $2 and "recordId" = $3 limit 1`,
+    [tenantId, input.recordType, input.recordId],
+  );
+  await pgQuery(
+    `insert into "RecordScoreHistory"
+      (id, "tenantId", "recordScoreId", "recordType", "recordId", "previousScore", "nextScore", "changeReason", "createdAt")
+     values ($1, $2, $3, $4, $5, $6, $7, 'MANUAL_OVERRIDE', $8)`,
+    [randomUUID(), tenantId, scoreRow?.id ?? null, input.recordType, input.recordId, existing ? jsonb(existing) : null, jsonb(nextPayload), now],
+  );
+  await createAuditLog(user, "OVERRIDE", "RECORD_SCORE", input.recordId, existing, nextPayload, null).catch(() => undefined);
+  return nextPayload;
+}
+
+export async function clearManualScoreOverride(user: TenantUser, input: { recordType: RecordType; recordId: string; reason?: string }) {
+  const tenantId = requireTenantId(user);
+  const now = new Date().toISOString();
+  await pgQuery(
+    `update "ScoringManualOverride"
+     set "clearedBy" = $1, "clearedAt" = $2, "clearReason" = $3, "updatedAt" = $2
+     where "tenantId" = $4 and "recordType" = $5 and "recordId" = $6 and "clearedAt" is null`,
+    [user.id, now, input.reason ?? "Cleared by admin", tenantId, input.recordType, input.recordId],
+  );
+  await pgQuery(
+    `update "RecordScore"
+     set source = 'PREDICTIVE_SCORING', "overrideReason" = null, "overrideUntil" = null,
+         "overrideOwnerId" = null, "overriddenAt" = null, "updatedAt" = $1
+     where "tenantId" = $2 and "recordType" = $3 and "recordId" = $4 and source = 'MANUAL_OVERRIDE'`,
+    [now, tenantId, input.recordType, input.recordId],
+  );
+  await createAuditLog(user, "CLEAR_OVERRIDE", "RECORD_SCORE", input.recordId, null, input, null).catch(() => undefined);
+  return { cleared: true };
+}
+
+function nextRetrainDate(cadence: ScoringSettings["retrainCadence"], from = new Date()) {
+  if (cadence === "WEEKLY") return addDays(from, 7).toISOString();
+  if (cadence === "MONTHLY") return addDays(from, 30).toISOString();
+  return null;
+}
+
+export async function processDueScheduledScoringRetraining(limit = 10) {
+  const due = await pgQuery<any>(
+    `select id, "tenantId", "targetModules", "retrainCadence", "nextRetrainAt", "updatedBy"
+     from "ScoringSettings"
+     where "isEnabled" = true
+       and "retrainCadence" != 'MANUAL'
+       and ("nextRetrainAt" is null or "nextRetrainAt" <= current_timestamp)
+       and ("retrainLockAt" is null or "retrainLockAt" < current_timestamp - interval '2 hours')
+     order by "nextRetrainAt" asc nulls first
+     limit $1`,
+    [limit],
+  );
+  const results: Array<Record<string, unknown>> = [];
+  for (const setting of due) {
+    const lockOwner = randomUUID();
+    const locked = await pgQueryOne<{ id: string }>(
+      `update "ScoringSettings"
+       set "retrainLockAt" = current_timestamp, "retrainLockOwner" = $1
+       where id = $2 and ("retrainLockAt" is null or "retrainLockAt" < current_timestamp - interval '2 hours')
+       returning id`,
+      [lockOwner, setting.id],
+    );
+    if (!locked) continue;
+    const user = { id: setting.updatedBy ?? "system", tenantId: setting.tenantId };
+    try {
+      const result = await recomputeSelfLearningScoresForTenant(user, {
+        targetModules: Array.isArray(setting.targetModules) ? setting.targetModules : undefined,
+        triggeredBy: "SCHEDULED",
+      });
+      await pgQuery(
+        `update "ScoringSettings"
+         set "nextRetrainAt" = $1, "retrainLockAt" = null, "retrainLockOwner" = null, "updatedAt" = current_timestamp
+         where id = $2 and "retrainLockOwner" = $3`,
+        [nextRetrainDate(setting.retrainCadence), setting.id, lockOwner],
+      );
+      results.push({ tenantId: setting.tenantId, status: "COMPLETED", ...result });
+    } catch (error: any) {
+      await pgQuery(
+        `update "ScoringSettings"
+         set "nextRetrainAt" = $1, "retrainLockAt" = null, "retrainLockOwner" = null, "updatedAt" = current_timestamp
+         where id = $2 and "retrainLockOwner" = $3`,
+        [addDays(new Date(), 1).toISOString(), setting.id, lockOwner],
+      );
+      results.push({ tenantId: setting.tenantId, status: "FAILED", error: error?.message ?? "Unknown error" });
+    }
+  }
+  return { processed: results.length, results };
 }
 
 async function listStageDefinitionsForScoring(tenantId: string) {
@@ -872,10 +1391,19 @@ async function listStageDefinitionsForScoring(tenantId: string) {
   );
 }
 
-export async function recomputeSelfLearningScoresForTenant(user: TenantUser, input: { targetModules?: RecordType[]; force?: boolean } = {}) {
+async function getModelVersionMetrics(tenantId: string, modelVersionId: string) {
+  const row = await pgQueryOne<{ metrics: Record<string, unknown> }>(
+    `select metrics from "ScoringModelVersion" where "tenantId" = $1 and id = $2 limit 1`,
+    [tenantId, modelVersionId],
+  );
+  return row?.metrics ?? null;
+}
+
+export async function recomputeSelfLearningScoresForTenant(user: TenantUser, input: { targetModules?: RecordType[]; force?: boolean; triggeredBy?: "MANUAL" | "SCHEDULED" | "QUALITY_DRIFT" | "API" } = {}) {
   const tenantId = requireTenantId(user);
   const settings = await getScoringSettingsForTenant(user);
   const targetModules = (input.targetModules?.length ? input.targetModules : settings.targetModules).filter((module): module is RecordType => module === "LEAD" || module === "OPPORTUNITY");
+  const controls = featureControls(settings);
 
   const since = new Date();
   since.setDate(since.getDate() - settings.lookbackDays);
@@ -931,13 +1459,23 @@ export async function recomputeSelfLearningScoresForTenant(user: TenantUser, inp
     const runId = randomUUID();
     const startedAt = new Date().toISOString();
     await pgQuery(
-      `insert into "ScoringTrainingRun" (id, "tenantId", "targetModule", status, "startedAt", "createdBy", "createdAt")
-       values ($1, $2, 'LEAD', 'RUNNING', $3, $4, $3)`,
-      [runId, tenantId, startedAt, user.id],
+      `insert into "ScoringTrainingRun" (id, "tenantId", "targetModule", status, "startedAt", "createdBy", "createdAt", "triggeredBy", "inputConfig")
+       values ($1, $2, 'LEAD', 'RUNNING', $3, $4, $3, $5, $6)`,
+      [runId, tenantId, startedAt, user.id, input.triggeredBy ?? "MANUAL", jsonb({ targetModules, force: input.force === true, controls })],
     );
     try {
       const { train, holdout } = splitTrainHoldout(leads, "id");
       const leadConverted = (lead: any) => (opportunitiesByLeadId.get(lead.id)?.length ?? 0) > 0;
+      const convertedLeadCandidates = leads.filter(leadConverted);
+      const similarConvertedLeadIdsFor = (lead: any) => convertedLeadCandidates
+        .filter((candidate) => candidate.id !== lead.id)
+        .filter((candidate) =>
+          (candidate.source && candidate.source === lead.source)
+          || (candidate.status && candidate.status === lead.status)
+          || (candidate.ownerId && candidate.ownerId === lead.ownerId),
+        )
+        .slice(0, 3)
+        .map((candidate) => candidate.id);
       const trainCalibration = calculateCalibration({ leads: train.length ? train : leads, opportunities, stages });
 
       const buildLeadFeatureRow = (lead: any) => buildLeadFeatureSnapshot({
@@ -969,12 +1507,35 @@ export async function recomputeSelfLearningScoresForTenant(user: TenantUser, inp
         logisticHoldoutMetrics = binaryClassificationMetrics(logisticSamples);
       }
 
+      // Third candidate: the Python ml-service (gradient-boosted trees over the full data
+      // audit, including text embeddings). Purely additive -- unreachable/not-running just
+      // yields null and this candidate is skipped, same as "logistic regression returned null".
+      const mlResult = await trainViaMlService({
+        tenantId,
+        targetModule: "LEAD",
+        lookbackDays: settings.lookbackDays,
+        minimumHistoricalRecords: settings.minimumHistoricalRecords,
+        ...controls,
+        previousMetrics: settings.promotedLeadModelVersionId
+          ? await getModelVersionMetrics(tenantId, settings.promotedLeadModelVersionId)
+          : null,
+      });
+      const mlHoldoutMetrics = mlResult?.trained ? mlResult.holdoutMetrics ?? null : null;
+
       // Brier score is a proper scoring rule (unlike raw accuracy) so it doesn't reward a model that
       // just always predicts the majority class under class imbalance -- lower is strictly better.
-      const logisticIsBetter = !!candidateLogisticModel && logisticHoldoutMetrics?.brierScore != null
-        && (heuristicHoldoutMetrics.brierScore == null || logisticHoldoutMetrics.brierScore <= heuristicHoldoutMetrics.brierScore);
-      const algorithm = logisticIsBetter ? "LOGISTIC_REGRESSION_V1" : "MVP_WEIGHTED_BUCKET_CALIBRATION";
-      const selectedLogisticModel = logisticIsBetter ? candidateLogisticModel : null;
+      const candidates: Array<{ name: string; brierScore: number | null | undefined }> = [
+        { name: "PREDICTIVE_WEIGHTED_BUCKET_CALIBRATION", brierScore: heuristicHoldoutMetrics.brierScore },
+        { name: "LOGISTIC_REGRESSION_V1", brierScore: candidateLogisticModel ? logisticHoldoutMetrics?.brierScore : undefined },
+        { name: "GRADIENT_BOOSTED_TREES_V1", brierScore: mlHoldoutMetrics?.brierScore },
+      ].filter((candidate) => candidate.brierScore != null);
+      const winner = candidates.reduce((best, candidate) =>
+        (candidate.brierScore! < best.brierScore! ? candidate : best), candidates[0] ?? { name: "PREDICTIVE_WEIGHTED_BUCKET_CALIBRATION", brierScore: null });
+      const algorithm = winner.name;
+      const selectedLogisticModel = algorithm === "LOGISTIC_REGRESSION_V1" ? candidateLogisticModel : null;
+      const mlPredictionsByRecord = algorithm === "GRADIENT_BOOSTED_TREES_V1" && mlResult?.predictions
+        ? new Map(mlResult.predictions.map((p) => [p.recordId, p.probability]))
+        : null;
 
       const modelId = await getOrCreateScoringModel({ tenantId, targetModule: "LEAD", objective: settings.objective, createdBy: user.id });
       const { id: modelVersionId, versionNumber } = await createScoringModelVersion({
@@ -987,12 +1548,21 @@ export async function recomputeSelfLearningScoresForTenant(user: TenantUser, inp
           objective: settings.objective,
           calibration: serializeCalibration(trainCalibration),
           logisticModel: selectedLogisticModel,
+          modelStorageKey: algorithm === "GRADIENT_BOOSTED_TREES_V1" ? mlResult?.modelStorageKey : null,
+          featureNames: algorithm === "GRADIENT_BOOSTED_TREES_V1" ? mlResult?.featureNames : null,
+          excludedFeatureKeys: controls.excludedFeatureKeys,
+          prohibitedFeatureKeys: controls.prohibitedFeatureKeys,
         },
         metrics: {
           trainCount: train.length,
           holdoutCount: holdout.length,
-          holdout: logisticIsBetter ? logisticHoldoutMetrics : heuristicHoldoutMetrics,
-          candidates: { heuristic: heuristicHoldoutMetrics, logisticRegression: logisticHoldoutMetrics },
+          holdout: winner.brierScore != null
+            ? (algorithm === "GRADIENT_BOOSTED_TREES_V1" ? mlHoldoutMetrics : algorithm === "LOGISTIC_REGRESSION_V1" ? logisticHoldoutMetrics : heuristicHoldoutMetrics)
+            : heuristicHoldoutMetrics,
+          advanced: algorithm === "GRADIENT_BOOSTED_TREES_V1" ? mlResult?.advancedMetrics ?? null : null,
+          featureImportance: algorithm === "GRADIENT_BOOSTED_TREES_V1" ? mlResult?.featureImportance ?? [] : [],
+          blockedFeatureColumns: algorithm === "GRADIENT_BOOSTED_TREES_V1" ? mlResult?.blockedFeatureColumns ?? [] : [],
+          candidates: { heuristic: heuristicHoldoutMetrics, logisticRegression: logisticHoldoutMetrics, gradientBoostedTrees: mlHoldoutMetrics },
           selectedAlgorithm: algorithm,
           leadOverallConversionRate: trainCalibration.leadOverallConversionRate,
         },
@@ -1002,16 +1572,19 @@ export async function recomputeSelfLearningScoresForTenant(user: TenantUser, inp
       // silently move live scores until an admin reviews and promotes the new candidate. Falls back
       // to this run's own fresh candidate (whichever algorithm just won above) when nothing has been
       // promoted yet, so first-time setup still works end to end with zero extra steps.
-      const promoted = await loadPromotedScorer(tenantId, settings.promotedLeadModelVersionId);
+      const promoted = await loadPromotedScorer(tenantId, settings.promotedLeadModelVersionId, "LEAD", settings.lookbackDays);
       const scoringCalibration = promoted?.calibration ?? trainCalibration;
       const scoringLogisticModel = promoted ? promoted.logisticModel : selectedLogisticModel;
+      const scoringMlPredictions = promoted ? promoted.mlPredictions : mlPredictionsByRecord;
 
       let leadProcessed = 0;
       for (const lead of leads) {
         const snapshot = buildLeadFeatureRow(lead);
-        const score = leadScoreFromFeatures(snapshot, lead, scoringCalibration, settings, scoringLogisticModel);
-        await persistScore(user, snapshot, score, modelVersionId);
-        if (settings.isEnabled || input.force) {
+        const mlPrediction = scoringMlPredictions?.get(lead.id) ?? null;
+        const score = leadScoreFromFeatures(snapshot, lead, scoringCalibration, settings, scoringLogisticModel, mlPrediction);
+        score.similarRecordIds = similarConvertedLeadIdsFor(lead);
+        const persisted = await persistScore(user, snapshot, score, modelVersionId);
+        if (persisted && (settings.isEnabled || input.force)) {
           await pgQuery('update "Lead" set score = $1, "updatedAt" = $2 where "tenantId" = $3 and id = $4', [
             score.conversionProbability ?? 0,
             new Date().toISOString(),
@@ -1027,17 +1600,21 @@ export async function recomputeSelfLearningScoresForTenant(user: TenantUser, inp
       const runMetrics = {
         trainCount: train.length,
         holdoutCount: holdout.length,
-        holdout: logisticIsBetter ? logisticHoldoutMetrics : heuristicHoldoutMetrics,
+        holdout: algorithm === "GRADIENT_BOOSTED_TREES_V1" ? mlHoldoutMetrics : algorithm === "LOGISTIC_REGRESSION_V1" ? logisticHoldoutMetrics : heuristicHoldoutMetrics,
         selectedAlgorithm: algorithm,
+        qualityStatus: scoreQualityStatus(
+          { holdout: algorithm === "GRADIENT_BOOSTED_TREES_V1" ? mlHoldoutMetrics : algorithm === "LOGISTIC_REGRESSION_V1" ? logisticHoldoutMetrics : heuristicHoldoutMetrics },
+          settings.qualityThresholds,
+        ),
         versionNumber,
         modelVersionId,
       };
       await pgQuery(
         `update "ScoringTrainingRun"
          set status = 'COMPLETED', "completedAt" = $1, "recordsProcessed" = $2, "recordsSkipped" = 0,
-             metrics = $3, "modelId" = $4, "modelVersionId" = $5
-         where "tenantId" = $6 and id = $7`,
-        [completedAt, leadProcessed, jsonb(runMetrics), modelId, modelVersionId, tenantId, runId],
+             metrics = $3, "qualityStatus" = $4, "modelId" = $5, "modelVersionId" = $6
+         where "tenantId" = $7 and id = $8`,
+        [completedAt, leadProcessed, jsonb(runMetrics), runMetrics.qualityStatus, modelId, modelVersionId, tenantId, runId],
       );
       runs.push({ runId, targetModule: "LEAD", modelId, modelVersionId, versionNumber, metrics: runMetrics });
     } catch (error: any) {
@@ -1055,13 +1632,23 @@ export async function recomputeSelfLearningScoresForTenant(user: TenantUser, inp
     const runId = randomUUID();
     const startedAt = new Date().toISOString();
     await pgQuery(
-      `insert into "ScoringTrainingRun" (id, "tenantId", "targetModule", status, "startedAt", "createdBy", "createdAt")
-       values ($1, $2, 'OPPORTUNITY', 'RUNNING', $3, $4, $3)`,
-      [runId, tenantId, startedAt, user.id],
+      `insert into "ScoringTrainingRun" (id, "tenantId", "targetModule", status, "startedAt", "createdBy", "createdAt", "triggeredBy", "inputConfig")
+       values ($1, $2, 'OPPORTUNITY', 'RUNNING', $3, $4, $3, $5, $6)`,
+      [runId, tenantId, startedAt, user.id, input.triggeredBy ?? "MANUAL", jsonb({ targetModules, force: input.force === true, controls })],
     );
     try {
       const { train, holdout } = splitTrainHoldout(opportunities, "id");
       const trainCalibration = calculateCalibration({ leads, opportunities: train.length ? train : opportunities, stages });
+      const wonOpportunityCandidates = opportunities.filter(opportunityWon);
+      const similarWonOpportunityIdsFor = (opportunity: any) => wonOpportunityCandidates
+        .filter((candidate) => candidate.id !== opportunity.id)
+        .filter((candidate) =>
+          (candidate.stageId && candidate.stageId === opportunity.stageId)
+          || (candidate.priority && candidate.priority === opportunity.priority)
+          || (candidate.ownerId && candidate.ownerId === opportunity.ownerId),
+        )
+        .slice(0, 3)
+        .map((candidate) => candidate.id);
 
       const buildOpportunityFeatureRow = (opportunity: any) => buildOpportunityFeatureSnapshot({
         opportunity,
@@ -1089,10 +1676,31 @@ export async function recomputeSelfLearningScoresForTenant(user: TenantUser, inp
         logisticHoldoutMetrics = binaryClassificationMetrics(logisticSamples);
       }
 
-      const logisticIsBetter = !!candidateLogisticModel && logisticHoldoutMetrics?.brierScore != null
-        && (heuristicHoldoutMetrics.brierScore == null || logisticHoldoutMetrics.brierScore <= heuristicHoldoutMetrics.brierScore);
-      const algorithm = logisticIsBetter ? "LOGISTIC_REGRESSION_V1" : "MVP_WEIGHTED_BUCKET_CALIBRATION";
-      const selectedLogisticModel = logisticIsBetter ? candidateLogisticModel : null;
+      // Third candidate: the Python ml-service, same as the LEAD block above.
+      const mlResult = await trainViaMlService({
+        tenantId,
+        targetModule: "OPPORTUNITY",
+        lookbackDays: settings.lookbackDays,
+        minimumHistoricalRecords: settings.minimumHistoricalRecords,
+        ...controls,
+        previousMetrics: settings.promotedOpportunityModelVersionId
+          ? await getModelVersionMetrics(tenantId, settings.promotedOpportunityModelVersionId)
+          : null,
+      });
+      const mlHoldoutMetrics = mlResult?.trained ? mlResult.holdoutMetrics ?? null : null;
+
+      const candidates: Array<{ name: string; brierScore: number | null | undefined }> = [
+        { name: "PREDICTIVE_WEIGHTED_BUCKET_CALIBRATION", brierScore: heuristicHoldoutMetrics.brierScore },
+        { name: "LOGISTIC_REGRESSION_V1", brierScore: candidateLogisticModel ? logisticHoldoutMetrics?.brierScore : undefined },
+        { name: "GRADIENT_BOOSTED_TREES_V1", brierScore: mlHoldoutMetrics?.brierScore },
+      ].filter((candidate) => candidate.brierScore != null);
+      const winner = candidates.reduce((best, candidate) =>
+        (candidate.brierScore! < best.brierScore! ? candidate : best), candidates[0] ?? { name: "PREDICTIVE_WEIGHTED_BUCKET_CALIBRATION", brierScore: null });
+      const algorithm = winner.name;
+      const selectedLogisticModel = algorithm === "LOGISTIC_REGRESSION_V1" ? candidateLogisticModel : null;
+      const mlPredictionsByRecord = algorithm === "GRADIENT_BOOSTED_TREES_V1" && mlResult?.predictions
+        ? new Map(mlResult.predictions.map((p) => [p.recordId, p.probability]))
+        : null;
 
       const modelId = await getOrCreateScoringModel({ tenantId, targetModule: "OPPORTUNITY", objective: settings.objective, createdBy: user.id });
       const { id: modelVersionId, versionNumber } = await createScoringModelVersion({
@@ -1105,25 +1713,35 @@ export async function recomputeSelfLearningScoresForTenant(user: TenantUser, inp
           objective: settings.objective,
           calibration: serializeCalibration(trainCalibration),
           logisticModel: selectedLogisticModel,
+          modelStorageKey: algorithm === "GRADIENT_BOOSTED_TREES_V1" ? mlResult?.modelStorageKey : null,
+          featureNames: algorithm === "GRADIENT_BOOSTED_TREES_V1" ? mlResult?.featureNames : null,
+          excludedFeatureKeys: controls.excludedFeatureKeys,
+          prohibitedFeatureKeys: controls.prohibitedFeatureKeys,
         },
         metrics: {
           trainCount: train.length,
           holdoutCount: holdout.length,
-          holdout: logisticIsBetter ? logisticHoldoutMetrics : heuristicHoldoutMetrics,
-          candidates: { heuristic: heuristicHoldoutMetrics, logisticRegression: logisticHoldoutMetrics },
+          holdout: algorithm === "GRADIENT_BOOSTED_TREES_V1" ? mlHoldoutMetrics : algorithm === "LOGISTIC_REGRESSION_V1" ? logisticHoldoutMetrics : heuristicHoldoutMetrics,
+          advanced: algorithm === "GRADIENT_BOOSTED_TREES_V1" ? mlResult?.advancedMetrics ?? null : null,
+          featureImportance: algorithm === "GRADIENT_BOOSTED_TREES_V1" ? mlResult?.featureImportance ?? [] : [],
+          blockedFeatureColumns: algorithm === "GRADIENT_BOOSTED_TREES_V1" ? mlResult?.blockedFeatureColumns ?? [] : [],
+          candidates: { heuristic: heuristicHoldoutMetrics, logisticRegression: logisticHoldoutMetrics, gradientBoostedTrees: mlHoldoutMetrics },
           selectedAlgorithm: algorithm,
           opportunityOverallWinRate: trainCalibration.opportunityOverallWinRate,
         },
       });
 
-      const promoted = await loadPromotedScorer(tenantId, settings.promotedOpportunityModelVersionId);
+      const promoted = await loadPromotedScorer(tenantId, settings.promotedOpportunityModelVersionId, "OPPORTUNITY", settings.lookbackDays);
       const scoringCalibration = promoted?.calibration ?? trainCalibration;
       const scoringLogisticModel = promoted ? promoted.logisticModel : selectedLogisticModel;
+      const scoringMlPredictions = promoted ? promoted.mlPredictions : mlPredictionsByRecord;
 
       let oppProcessed = 0;
       for (const opportunity of opportunities) {
         const snapshot = buildOpportunityFeatureRow(opportunity);
-        const score = opportunityScoreFromFeatures(snapshot, opportunity, scoringCalibration, settings, scoringLogisticModel);
+        const mlPrediction = scoringMlPredictions?.get(opportunity.id) ?? null;
+        const score = opportunityScoreFromFeatures(snapshot, opportunity, scoringCalibration, settings, scoringLogisticModel, mlPrediction);
+        score.similarRecordIds = similarWonOpportunityIdsFor(opportunity);
         await persistScore(user, snapshot, score, modelVersionId);
         oppProcessed += 1;
       }
@@ -1133,17 +1751,21 @@ export async function recomputeSelfLearningScoresForTenant(user: TenantUser, inp
       const runMetrics = {
         trainCount: train.length,
         holdoutCount: holdout.length,
-        holdout: logisticIsBetter ? logisticHoldoutMetrics : heuristicHoldoutMetrics,
+        holdout: algorithm === "GRADIENT_BOOSTED_TREES_V1" ? mlHoldoutMetrics : algorithm === "LOGISTIC_REGRESSION_V1" ? logisticHoldoutMetrics : heuristicHoldoutMetrics,
         selectedAlgorithm: algorithm,
+        qualityStatus: scoreQualityStatus(
+          { holdout: algorithm === "GRADIENT_BOOSTED_TREES_V1" ? mlHoldoutMetrics : algorithm === "LOGISTIC_REGRESSION_V1" ? logisticHoldoutMetrics : heuristicHoldoutMetrics },
+          settings.qualityThresholds,
+        ),
         versionNumber,
         modelVersionId,
       };
       await pgQuery(
         `update "ScoringTrainingRun"
          set status = 'COMPLETED', "completedAt" = $1, "recordsProcessed" = $2, "recordsSkipped" = 0,
-             metrics = $3, "modelId" = $4, "modelVersionId" = $5
-         where "tenantId" = $6 and id = $7`,
-        [completedAt, oppProcessed, jsonb(runMetrics), modelId, modelVersionId, tenantId, runId],
+             metrics = $3, "qualityStatus" = $4, "modelId" = $5, "modelVersionId" = $6
+         where "tenantId" = $7 and id = $8`,
+        [completedAt, oppProcessed, jsonb(runMetrics), runMetrics.qualityStatus, modelId, modelVersionId, tenantId, runId],
       );
       runs.push({ runId, targetModule: "OPPORTUNITY", modelId, modelVersionId, versionNumber, metrics: runMetrics });
     } catch (error: any) {
@@ -1162,8 +1784,23 @@ export async function recomputeSelfLearningScoresForTenant(user: TenantUser, inp
     completedAt,
     tenantId,
   ]);
+  await cleanupOldFeatureSnapshots(tenantId, settings.featureRetentionDays);
   await createAuditLog(user, "RECOMPUTE", "SCORING", tenantId, null, { processed, skipped, runs }, null).catch(() => undefined);
   return { runs, processed, skipped };
+}
+
+async function cleanupOldFeatureSnapshots(tenantId: string, retentionDays: number) {
+  const cutoff = new Date();
+  cutoff.setDate(cutoff.getDate() - Math.max(30, retentionDays));
+  await pgQuery(
+    `delete from "ScoringFeatureSnapshot"
+     where "tenantId" = $1 and "createdAt" < $2
+       and id not in (
+         select "featureSnapshotId" from "RecordScore"
+         where "tenantId" = $1 and "featureSnapshotId" is not null
+       )`,
+    [tenantId, cutoff.toISOString()],
+  ).catch(() => undefined);
 }
 
 async function persistScore(user: TenantUser, snapshot: FeatureSnapshot, score: ScoreResult, modelVersionId: string | null = null) {
@@ -1180,12 +1817,27 @@ async function persistScore(user: TenantUser, snapshot: FeatureSnapshot, score: 
 
   const existing = await pgQueryOne<any>(
     `select id, "fitScore", "engagementScore", "conversionProbability", "winProbability", "stallRisk",
-            "scoreBand", confidence, reasons, source, "calculatedAt"
+            "scoreBand", confidence, reasons, source, "overrideReason", "overrideUntil", "overrideOwnerId", "overriddenAt",
+            "calculatedAt"
      from "RecordScore"
      where "tenantId" = $1 and "recordType" = $2 and "recordId" = $3
      limit 1`,
     [tenantId, score.recordType, score.recordId],
   );
+
+  if (existing?.source === "MANUAL_OVERRIDE") {
+    const overrideUntil = existing.overrideUntil ? new Date(existing.overrideUntil) : null;
+    if (!overrideUntil || overrideUntil.getTime() > Date.now()) {
+      await pgQuery(
+        `insert into "RecordScoreHistory"
+          (id, "tenantId", "recordScoreId", "recordType", "recordId", "previousScore", "nextScore",
+           "changeReason", "createdAt")
+         values ($1, $2, $3, $4, $5, $6, $7, 'RECOMPUTE_SKIPPED_ACTIVE_OVERRIDE', $8)`,
+        [randomUUID(), tenantId, existing.id, score.recordType, score.recordId, jsonb(existing), jsonb(score), now],
+      );
+      return false;
+    }
+  }
 
   const payload = {
     fitScore: score.fitScore,
@@ -1197,6 +1849,18 @@ async function persistScore(user: TenantUser, snapshot: FeatureSnapshot, score: 
     confidence: score.confidence,
     reasons: score.reasons,
     source: score.source,
+    expectedResponseLikelihood: score.expectedResponseLikelihood ?? null,
+    duplicateRisk: score.duplicateRisk ?? null,
+    staleRisk: score.staleRisk ?? null,
+    expectedCloseRisk: score.expectedCloseRisk ?? null,
+    suggestedCloseDate: score.suggestedCloseDate ?? null,
+    suggestedCloseDateDeltaDays: score.suggestedCloseDateDeltaDays ?? null,
+    nextBestAction: score.nextBestAction ?? null,
+    nextBestActivityType: score.nextBestActivityType ?? null,
+    topDrivers: score.topDrivers ?? score.reasons,
+    missingDataWarnings: score.missingDataWarnings ?? [],
+    similarRecordIds: score.similarRecordIds ?? [],
+    suggestedDataImprovements: score.suggestedDataImprovements ?? [],
     featureSnapshotId: featureSnapshot.id,
     calculatedAt: now,
     updatedAt: now,
@@ -1208,8 +1872,13 @@ async function persistScore(user: TenantUser, snapshot: FeatureSnapshot, score: 
       `update "RecordScore"
        set "fitScore" = $1, "engagementScore" = $2, "conversionProbability" = $3, "winProbability" = $4,
            "stallRisk" = $5, "scoreBand" = $6, confidence = $7, reasons = $8, source = $9,
-           "featureSnapshotId" = $10, "modelVersionId" = $11, "calculatedAt" = $12, "updatedAt" = $13
-       where "tenantId" = $14 and id = $15`,
+           "expectedResponseLikelihood" = $10, "duplicateRisk" = $11, "staleRisk" = $12, "expectedCloseRisk" = $13,
+           "suggestedCloseDate" = $14, "suggestedCloseDateDeltaDays" = $15, "nextBestAction" = $16,
+           "nextBestActivityType" = $17, "topDrivers" = $18, "missingDataWarnings" = $19,
+           "similarRecordIds" = $20, "suggestedDataImprovements" = $21,
+           "overrideReason" = null, "overrideUntil" = null, "overrideOwnerId" = null, "overriddenAt" = null,
+           "featureSnapshotId" = $22, "modelVersionId" = $23, "calculatedAt" = $24, "updatedAt" = $25
+       where "tenantId" = $26 and id = $27`,
       [
         payload.fitScore,
         payload.engagementScore,
@@ -1220,6 +1889,18 @@ async function persistScore(user: TenantUser, snapshot: FeatureSnapshot, score: 
         payload.confidence,
         jsonb(payload.reasons),
         payload.source,
+        payload.expectedResponseLikelihood,
+        payload.duplicateRisk,
+        payload.staleRisk,
+        payload.expectedCloseRisk,
+        payload.suggestedCloseDate,
+        payload.suggestedCloseDateDeltaDays,
+        payload.nextBestAction,
+        payload.nextBestActivityType,
+        jsonb(payload.topDrivers),
+        jsonb(payload.missingDataWarnings),
+        jsonb(payload.similarRecordIds),
+        jsonb(payload.suggestedDataImprovements),
         payload.featureSnapshotId,
         modelVersionId,
         payload.calculatedAt,
@@ -1233,9 +1914,13 @@ async function persistScore(user: TenantUser, snapshot: FeatureSnapshot, score: 
     await pgQuery(
       `insert into "RecordScore"
         (id, "tenantId", "modelVersionId", "recordType", "recordId", "fitScore", "engagementScore", "conversionProbability",
-         "winProbability", "stallRisk", "scoreBand", confidence, reasons, source, "featureSnapshotId",
+         "winProbability", "stallRisk", "scoreBand", confidence, reasons, source, "expectedResponseLikelihood",
+         "duplicateRisk", "staleRisk", "expectedCloseRisk", "suggestedCloseDate", "suggestedCloseDateDeltaDays",
+         "nextBestAction", "nextBestActivityType", "topDrivers", "missingDataWarnings", "similarRecordIds",
+         "suggestedDataImprovements", "featureSnapshotId",
          "calculatedAt", "updatedAt", "createdAt")
-       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $16, $16)`,
+       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17,
+               $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $28, $28)`,
       [
         scoreId,
         tenantId,
@@ -1251,6 +1936,18 @@ async function persistScore(user: TenantUser, snapshot: FeatureSnapshot, score: 
         payload.confidence,
         jsonb(payload.reasons),
         payload.source,
+        payload.expectedResponseLikelihood,
+        payload.duplicateRisk,
+        payload.staleRisk,
+        payload.expectedCloseRisk,
+        payload.suggestedCloseDate,
+        payload.suggestedCloseDateDeltaDays,
+        payload.nextBestAction,
+        payload.nextBestActivityType,
+        jsonb(payload.topDrivers),
+        jsonb(payload.missingDataWarnings),
+        jsonb(payload.similarRecordIds),
+        jsonb(payload.suggestedDataImprovements),
         payload.featureSnapshotId,
         now,
       ],
@@ -1264,4 +1961,5 @@ async function persistScore(user: TenantUser, snapshot: FeatureSnapshot, score: 
      values ($1, $2, $3, $4, $5, $6, $7, 'RECOMPUTE', $8)`,
     [randomUUID(), tenantId, scoreId, score.recordType, score.recordId, existing ? jsonb(existing) : null, jsonb(payload), now],
   );
+  return true;
 }

@@ -16,8 +16,17 @@ if [ -f "$VPS_DIR/.env" ]; then
   set +a
 fi
 
-OUT="/backups/${POSTGRES_DB:-crm}-${STAMP}.dump"
-docker compose -f "$COMPOSE_FILE" exec -T postgres \
-  pg_dump -U "${POSTGRES_USER:-crm_app}" -d "${POSTGRES_DB:-crm}" -Fc -f "$OUT"
+backup_db() {
+  db_name="$1"
+  db_user="$2"
+  out="/backups/${db_name}-${STAMP}.dump"
+  docker compose -f "$COMPOSE_FILE" exec -T postgres \
+    pg_dump -U "$db_user" -d "$db_name" -Fc -f "$out"
+  echo "$BACKUP_DIR/${db_name}-${STAMP}.dump"
+}
 
-echo "$BACKUP_DIR/${POSTGRES_DB:-crm}-${STAMP}.dump"
+backup_db "${POSTGRES_DB:-crm}" "${POSTGRES_USER:-crm_app}"
+
+if [ -n "${UNNATIVIDYA_POSTGRES_DB:-}" ]; then
+  backup_db "$UNNATIVIDYA_POSTGRES_DB" "${POSTGRES_USER:-crm_app}"
+fi

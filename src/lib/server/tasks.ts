@@ -46,10 +46,18 @@ export async function updateTaskForTenant(user: TenantUser, id: string, input: T
   return pgTasks.updateTaskForTenant(user, id, input);
 }
 
+export async function bulkUpdateTasksForTenant(user: TenantUser, input: pgTasks.BulkTaskInput) {
+  return pgTasks.bulkUpdateTasksForTenant(user, input);
+}
+
 export async function deleteTaskForTenant(user: TenantUser, id: string) {
   return pgTasks.deleteTaskForTenant(user, id);
 }
 
 export async function processDueTaskReminders(now = new Date()) {
   return pgTasks.processDueTaskReminders(now);
+}
+
+export async function processOverdueTaskAutomations(now = new Date()) {
+  return pgTasks.processOverdueTaskAutomations(now);
 }

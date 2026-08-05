@@ -26,7 +26,7 @@ const eslintConfig = defineConfig([
     },
   },
   {
-    files: ["scripts/**/*.js", "tests/**/*.{ts,tsx,js,jsx}"],
+    files: ["scripts/**/*.js", "**/scripts/**/*.js", "tests/**/*.{ts,tsx,js,jsx}"],
     rules: {
       "@typescript-eslint/no-require-imports": "off",
     },
@@ -35,9 +35,17 @@ const eslintConfig = defineConfig([
   globalIgnores([
     // Default ignores of eslint-config-next:
     ".next/**",
+    "**/.next/**",
     "out/**",
+    "**/out/**",
     "build/**",
+    "**/build/**",
+    "**/.venv/**",
+    "ml-service/.venv/**",
+    "ml-service/__pycache__/**",
     "next-env.d.ts",
+    "**/next-env.d.ts",
+    "**/tsconfig.tsbuildinfo",
   ]),
 ]);
 

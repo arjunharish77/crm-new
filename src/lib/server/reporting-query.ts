@@ -25,6 +25,7 @@ export type ReportOperator =
 
 export type ReportQueryDefinition = {
   root: "lead" | "opportunity" | "activity";
+  savedViewId?: string | null;
   fields: Array<{
     object: ReportObject;
     field: string;
@@ -123,7 +124,7 @@ export async function executeReportQueryForTenant(
   user: TenantUser,
   definition: ReportQueryDefinition
 ): Promise<ReportExecutionResult> {
-  const normalized = normalizeDefinition(definition);
+  const normalized = normalizeDefinition(await applySavedViewSource(user, definition));
   const neededObjects = collectNeededObjects(normalized);
   const dataSets = await fetchDataSets(user, normalized.root, neededObjects);
   const contexts = buildJoinContexts(normalized.root, dataSets)
@@ -158,6 +159,47 @@ export async function executeReportQueryForTenant(
   };
 }
 
+async function applySavedViewSource(user: TenantUser, definition: ReportQueryDefinition): Promise<ReportQueryDefinition> {
+  if (!definition.savedViewId || !user.tenantId) return definition;
+  const row = await query<any>(
+    `select config from "CustomReport"
+     where id = $1 and "tenantId" = $2 and "chartType" = 'SAVED_VIEW'
+     limit 1`,
+    [definition.savedViewId, user.tenantId],
+  );
+  const config = row[0]?.config ?? null;
+  const tabs = Array.isArray(config?.tabs) ? config.tabs : [];
+  const rootModule = definition.root === "lead" ? "LEADS" : definition.root === "opportunity" ? "OPPORTUNITIES" : "ACTIVITIES";
+  const tab = tabs.find((item: any) => String(item.module).toUpperCase() === rootModule) ?? tabs[0];
+  const conditions = Array.isArray(tab?.filters?.conditions) ? tab.filters.conditions : [];
+  const convertedFilters = conditions.flatMap((condition: any) => {
+    const field = String(condition.field ?? "");
+    if (!FIELD_CATALOG[definition.root].has(field)) return [];
+    const operator = normalizeViewOperator(condition.operator);
+    if (!operator) return [];
+    return [{
+      object: definition.root,
+      field,
+      operator,
+      value: condition.value ?? null,
+    }];
+  });
+  if (!convertedFilters.length) return definition;
+  return {
+    ...definition,
+    filters: [...(definition.filters ?? []), ...convertedFilters],
+  };
+}
+
+function normalizeViewOperator(operator: string): ReportOperator | null {
+  if (operator === "greater_than_or_equal") return "gte";
+  if (operator === "less_than_or_equal") return "lte";
+  if (["equals", "not_equals", "contains", "greater_than", "less_than", "is_empty", "is_not_empty"].includes(operator)) {
+    return operator as ReportOperator;
+  }
+  return null;
+}
+
 function normalizeDefinition(definition: ReportQueryDefinition): Required<ReportQueryDefinition> {
   if (!definition || typeof definition !== "object") {
     throw new Error("Report query definition is required");
@@ -188,6 +230,7 @@ function normalizeDefinition(definition: ReportQueryDefinition): Required<Report
 
   return {
     root: definition.root,
+    savedViewId: definition.savedViewId ?? null,
     fields,
     filters,
     orderBy,

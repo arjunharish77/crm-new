@@ -3,11 +3,13 @@
 import { useEffect, useState } from "react";
 import { BrainCircuit, TrendingDown, TrendingUp } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { apiFetch } from "@/lib/api";
 import { formatWorkspaceDateTime } from "@/lib/date-format";
 import { cn } from "@/lib/utils";
 import { PredictiveRecordScore } from "@/types/leads";
+import { toast } from "sonner";
 
 const BAND_CLASSNAMES: Record<string, string> = {
     HOT: "border-destructive/25 bg-destructive/10 text-destructive",
@@ -56,6 +58,7 @@ export function PredictiveScorePanel({
     score?: PredictiveRecordScore | null;
 }) {
     const [history, setHistory] = useState<ScoreHistoryRow[]>([]);
+    const [overrideBusy, setOverrideBusy] = useState(false);
 
     useEffect(() => {
         let mounted = true;
@@ -92,6 +95,48 @@ export function PredictiveScorePanel({
     const delta = typeof primaryValue === "number" && typeof previousPrimary === "number" ? primaryValue - previousPrimary : null;
     const positiveReasons = (score.reasons ?? []).filter((reason) => reason.type === "POSITIVE").slice(0, 3);
     const negativeReasons = (score.reasons ?? []).filter((reason) => reason.type === "NEGATIVE").slice(0, 3);
+    const warnings = score.missingDataWarnings ?? [];
+    const improvements = score.suggestedDataImprovements ?? [];
+    const similarRecordCount = score.similarRecordIds?.length ?? 0;
+
+    const applyOverride = async () => {
+        const value = window.prompt(`Override ${primaryLabel.toLowerCase()} (0-100)`, String(primaryValue ?? 0));
+        if (value === null) return;
+        const reason = window.prompt("Reason for override");
+        if (!reason) return;
+        setOverrideBusy(true);
+        try {
+            await apiFetch("/lead-scoring/self-learning/overrides", {
+                method: "POST",
+                body: JSON.stringify({
+                    recordType,
+                    recordId,
+                    reason,
+                    scoreBand: score.scoreBand,
+                    conversionProbability: recordType === "LEAD" ? Number(value) : undefined,
+                    winProbability: recordType === "OPPORTUNITY" ? Number(value) : undefined,
+                    stallRisk: score.stallRisk,
+                }),
+            });
+            toast.success("Score override applied");
+        } catch {
+            toast.error("Failed to apply score override");
+        } finally {
+            setOverrideBusy(false);
+        }
+    };
+
+    const clearOverride = async () => {
+        setOverrideBusy(true);
+        try {
+            await apiFetch(`/lead-scoring/self-learning/overrides?recordType=${recordType}&recordId=${recordId}`, { method: "DELETE" });
+            toast.success("Score override cleared");
+        } catch {
+            toast.error("Failed to clear score override");
+        } finally {
+            setOverrideBusy(false);
+        }
+    };
 
     return (
         <Card className="rounded-xl p-3">
@@ -119,12 +164,53 @@ export function PredictiveScorePanel({
                 <ScoreMetric label="Fit" value={`${score.fitScore ?? 0}`} />
                 <ScoreMetric label="Engagement" value={`${score.engagementScore ?? 0}`} />
                 <ScoreMetric label="Stall risk" value={`${score.stallRisk ?? 0}%`} />
-                <ScoreMetric label="Source" value={score.source === "PREDICTIVE_SCORING" ? "Predictive" : "Rule fallback"} />
+                <ScoreMetric label="Source" value={score.source === "MANUAL_OVERRIDE" ? "Manual override" : score.source === "PREDICTIVE_SCORING" ? "Predictive" : "Rule fallback"} />
+                {recordType === "LEAD" ? (
+                    <>
+                        <ScoreMetric label="Response likelihood" value={`${score.expectedResponseLikelihood ?? 0}%`} />
+                        <ScoreMetric label="Stale risk" value={`${score.staleRisk ?? 0}%`} />
+                    </>
+                ) : (
+                    <>
+                        <ScoreMetric label="Close risk" value={`${score.expectedCloseRisk ?? 0}%`} />
+                        <ScoreMetric label="Close movement" value={`${score.suggestedCloseDateDeltaDays ?? 0} days`} />
+                    </>
+                )}
+            </div>
+
+            <div className="mt-3 rounded-lg border bg-surface-container-lowest p-2">
+                <p className="text-xs font-bold uppercase tracking-wide text-muted-foreground">Recommended next action</p>
+                <p className="mt-1 text-sm font-semibold">{score.nextBestAction ?? "No recommendation yet."}</p>
+                {score.nextBestActivityType ? <p className="text-xs text-muted-foreground">{score.nextBestActivityType}</p> : null}
+                {score.suggestedCloseDate ? (
+                    <p className="text-xs text-muted-foreground">Suggested close date {formatWorkspaceDateTime(score.suggestedCloseDate)}</p>
+                ) : null}
             </div>
 
             <div className="mt-3 space-y-2">
                 <ReasonList title="Positive drivers" reasons={positiveReasons} empty="No positive drivers yet." />
                 <ReasonList title="Risk drivers" reasons={negativeReasons} empty="No risk drivers yet." />
+                <TextList title="Missing data warnings" items={warnings} empty="No missing-data warnings." />
+                <TextList title="Suggested data improvements" items={improvements} empty="No suggested improvements." />
+                <div>
+                    <p className="text-xs font-bold text-muted-foreground">Similar converted records</p>
+                    <p className="text-xs text-muted-foreground">
+                        {similarRecordCount > 0
+                            ? `${similarRecordCount} similar ${recordType === "OPPORTUNITY" ? "won opportunities" : "converted leads"} found.`
+                            : "No similar converted records yet."}
+                    </p>
+                </div>
+            </div>
+
+            <div className="mt-3 flex flex-wrap gap-2 border-t pt-3">
+                <Button type="button" variant="outline" size="sm" onClick={applyOverride} disabled={overrideBusy}>
+                    Override Score
+                </Button>
+                {score.source === "MANUAL_OVERRIDE" ? (
+                    <Button type="button" variant="ghost" size="sm" onClick={clearOverride} disabled={overrideBusy}>
+                        Clear Override
+                    </Button>
+                ) : null}
             </div>
 
             <div className="mt-3 border-t pt-3">
@@ -146,6 +232,23 @@ export function PredictiveScorePanel({
                 ) : null}
             </div>
         </Card>
+    );
+}
+
+function TextList({ title, items, empty }: { title: string; items: string[]; empty: string }) {
+    return (
+        <div>
+            <p className="text-xs font-bold text-muted-foreground">{title}</p>
+            {items.length === 0 ? (
+                <p className="text-xs text-muted-foreground">{empty}</p>
+            ) : (
+                <ul className="mt-1 space-y-1">
+                    {items.slice(0, 4).map((item) => (
+                        <li key={item} className="text-xs">{item}</li>
+                    ))}
+                </ul>
+            )}
+        </div>
     );
 }
 

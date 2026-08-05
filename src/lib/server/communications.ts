@@ -3,6 +3,7 @@ import net from "net";
 import tls from "tls";
 import { query, queryOne } from "@/lib/db/query";
 import { createAuditLog } from "@/lib/server/crm";
+import { runAutomationsForEvent } from "@/lib/repositories/automations-postgres";
 
 type TenantUser = {
   id: string;
@@ -33,6 +34,31 @@ type TemplateInput = {
   isActive?: boolean;
 };
 
+type SenderIdentityInput = {
+  id?: string;
+  channel: Channel;
+  name: string;
+  address: string;
+  providerConfigId?: string | null;
+  isDefault?: boolean;
+  isVerified?: boolean;
+  metadata?: Record<string, unknown>;
+};
+
+type ConsentInput = {
+  entityType: string;
+  entityId: string;
+  channel: Channel;
+  status: "OPTED_IN" | "OPTED_OUT";
+  source?: string | null;
+};
+
+type SuppressionInput = {
+  channel: Channel;
+  address: string;
+  reason?: string | null;
+};
+
 type OutboxInput = {
   channel: Channel;
   recipient: string;
@@ -47,6 +73,11 @@ type OutboxInput = {
   entityType?: string | null;
   entityId?: string | null;
   payload?: Record<string, unknown>;
+};
+
+type DeliveryControls = {
+  throttlePerMinute: number;
+  quietHours: Record<string, unknown>;
 };
 
 function requireTenantId(user: TenantUser) {
@@ -140,6 +171,125 @@ export async function listCommunicationTemplatesForTenant(user: TenantUser) {
      order by channel asc, name asc`,
     [tenantId],
   );
+}
+
+export async function listSenderIdentitiesForTenant(user: TenantUser) {
+  const tenantId = requireTenantId(user);
+  return query<any>(
+    `select id, "tenantId", channel, name, address, "providerConfigId", "isDefault", "isVerified", metadata, "createdAt", "updatedAt"
+     from "SenderIdentity"
+     where "tenantId" = $1
+     order by channel asc, "isDefault" desc, name asc`,
+    [tenantId],
+  );
+}
+
+export async function upsertSenderIdentityForTenant(user: TenantUser, input: SenderIdentityInput) {
+  const tenantId = requireTenantId(user);
+  const channel = normalizeChannel(input.channel);
+  const name = String(input.name ?? "").trim();
+  const address = normalizeAddress(channel, input.address);
+  if (!name) throw new Error("SENDER_IDENTITY_NAME_REQUIRED");
+  const now = new Date().toISOString();
+  const id = input.id || randomUUID();
+  if (input.isDefault !== false) {
+    await query(
+      `update "SenderIdentity"
+       set "isDefault" = false, "updatedAt" = $1
+       where "tenantId" = $2 and channel = $3`,
+      [now, tenantId, channel],
+    );
+  }
+  const existing = await queryOne<any>(
+    `select id
+     from "SenderIdentity"
+     where "tenantId" = $1 and channel = $2 and address = $3
+     limit 1`,
+    [tenantId, channel, address],
+  );
+  const row = await queryOne<any>(
+    `insert into "SenderIdentity"
+      (id, "tenantId", channel, name, address, "providerConfigId", "isDefault", "isVerified", metadata, "createdBy", "createdAt", "updatedAt")
+     values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $11)
+     on conflict (id) do update set
+       name = excluded.name,
+       address = excluded.address,
+       "providerConfigId" = excluded."providerConfigId",
+       "isDefault" = excluded."isDefault",
+       "isVerified" = excluded."isVerified",
+       metadata = excluded.metadata,
+       "updatedAt" = excluded."updatedAt"
+     returning id, "tenantId", channel, name, address, "providerConfigId", "isDefault", "isVerified", metadata, "createdAt", "updatedAt"`,
+    [
+      existing?.id ?? id,
+      tenantId,
+      channel,
+      name,
+      address,
+      input.providerConfigId || null,
+      input.isDefault !== false,
+      input.isVerified === true,
+      input.metadata ?? {},
+      user.id,
+      now,
+    ],
+  );
+  if (!row) throw new Error("SENDER_IDENTITY_UPSERT_FAILED");
+  await createAuditLog(user as any, "UPDATE", "SENDER_IDENTITY", row.id, null, row, { channel }).catch(() => undefined);
+  return row;
+}
+
+export async function listCommunicationSuppressionsForTenant(user: TenantUser) {
+  const tenantId = requireTenantId(user);
+  return query<any>(
+    `select id, "tenantId", channel, address, reason, "createdAt"
+     from "CommunicationSuppression"
+     where "tenantId" = $1
+     order by "createdAt" desc
+     limit 500`,
+    [tenantId],
+  );
+}
+
+export async function upsertCommunicationConsentForTenant(user: TenantUser, input: ConsentInput) {
+  const tenantId = requireTenantId(user);
+  const channel = normalizeChannel(input.channel);
+  const entityType = String(input.entityType ?? "").trim().toUpperCase();
+  const entityId = String(input.entityId ?? "").trim();
+  if (!entityType || !entityId) throw new Error("CONSENT_ENTITY_REQUIRED");
+  const status = input.status === "OPTED_OUT" ? "OPTED_OUT" : "OPTED_IN";
+  const now = new Date().toISOString();
+  const row = await queryOne<any>(
+    `insert into "CommunicationConsent"
+      (id, "tenantId", "entityType", "entityId", channel, status, source, "capturedAt", "updatedAt")
+     values ($1, $2, $3, $4, $5, $6, $7, $8, $8)
+     on conflict ("tenantId", "entityType", "entityId", channel) do update set
+       status = excluded.status,
+       source = excluded.source,
+       "updatedAt" = excluded."updatedAt"
+     returning id, "tenantId", "entityType", "entityId", channel, status, source, "capturedAt", "updatedAt"`,
+    [randomUUID(), tenantId, entityType, entityId, channel, status, input.source || "MANUAL", now],
+  );
+  if (!row) throw new Error("COMMUNICATION_CONSENT_UPSERT_FAILED");
+  await createAuditLog(user as any, "UPDATE", "COMMUNICATION_CONSENT", row.id, null, row, { channel, entityType, entityId }).catch(() => undefined);
+  return row;
+}
+
+export async function suppressCommunicationAddressForTenant(user: TenantUser, input: SuppressionInput) {
+  const tenantId = requireTenantId(user);
+  const channel = normalizeChannel(input.channel);
+  const address = normalizeAddress(channel, input.address);
+  const now = new Date().toISOString();
+  const row = await queryOne<any>(
+    `insert into "CommunicationSuppression" (id, "tenantId", channel, address, reason, "createdAt")
+     values ($1, $2, $3, $4, $5, $6)
+     on conflict ("tenantId", channel, address) do update set reason = excluded.reason
+     returning id, "tenantId", channel, address, reason, "createdAt"`,
+    [randomUUID(), tenantId, channel, address, input.reason || "MANUAL", now],
+  );
+  if (!row) throw new Error("COMMUNICATION_SUPPRESSION_UPSERT_FAILED");
+  await createAuditLog(user as any, "CREATE", "COMMUNICATION_SUPPRESSION", row.id, null, row, { channel }).catch(() => undefined);
+  return row;
 }
 
 export async function upsertCommunicationTemplateForTenant(user: TenantUser, input: TemplateInput) {
@@ -268,6 +418,24 @@ export async function listCommunicationOutboxForTenant(user: TenantUser, limit =
      order by "createdAt" desc
      limit $2`,
     [tenantId, limit],
+  );
+}
+
+export async function listCommunicationEventsForTenant(user: TenantUser, input: { entityType?: string | null; entityId?: string | null; limit?: number }) {
+  const tenantId = requireTenantId(user);
+  const entityType = String(input.entityType ?? "").trim().toUpperCase();
+  const entityId = String(input.entityId ?? "").trim();
+  if (!entityType || !entityId) throw new Error("COMMUNICATION_EVENT_ENTITY_REQUIRED");
+  return query<any>(
+    `select e.id, e."tenantId", e."outboxId", e.channel, e."eventType", e."providerMessageId", e."providerPayload",
+            e."entityType", e."entityId", e."occurredAt", e."createdAt",
+            o.recipient, o.subject, o.body, o.status, o."sourceType", o."sourceId"
+     from "CommunicationDeliveryEvent" e
+     left join "CommunicationOutbox" o on o.id = e."outboxId" and o."tenantId" = e."tenantId"
+     where e."tenantId" = $1 and upper(e."entityType") = $2 and e."entityId" = $3
+     order by e."occurredAt" desc
+     limit $4`,
+    [tenantId, entityType, entityId, Math.max(1, Math.min(200, Number(input.limit ?? 50)))],
   );
 }
 
@@ -444,11 +612,11 @@ async function recordDeliveryEvent(
   entityType?: string | null,
   entityId?: string | null,
 ) {
-  return queryOne<any>(
+  const event = await queryOne<any>(
     `insert into "CommunicationDeliveryEvent"
       (id, "tenantId", "outboxId", channel, "eventType", "providerMessageId", "providerPayload", "entityType", "entityId", "occurredAt", "createdAt")
      values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $10)
-     returning id`,
+     returning id, "tenantId", "outboxId", channel, "eventType", "providerMessageId", "providerPayload", "entityType", "entityId", "occurredAt"`,
     [
       randomUUID(),
       tenantId,
@@ -462,13 +630,30 @@ async function recordDeliveryEvent(
       new Date().toISOString(),
     ],
   );
+  if (event?.entityType && event.entityId) {
+    runAutomationsForEvent(
+      { id: "system", tenantId, name: "System", email: "system@local" },
+      `COMMUNICATION_${String(eventType).toUpperCase()}`,
+      String(event.entityType).toUpperCase(),
+      String(event.entityId),
+      {
+        communication: event,
+        channel,
+        eventType,
+        providerPayload,
+        entityType: event.entityType,
+        entityId: event.entityId,
+      },
+    ).catch(() => undefined);
+  }
+  return event;
 }
 
 export async function processCommunicationOutbox(limit = 50, now = new Date()) {
   await queuePendingReportEmailDeliveries(now);
   const messages = await query<any>(
     `select id, "tenantId", channel, "providerConfigId", "senderIdentityId", recipient, subject, body, payload,
-            attempts, "entityType", "entityId"
+            attempts, "entityType", "entityId", "sourceType", "sourceId"
      from "CommunicationOutbox"
      where status = 'QUEUED' and "nextAttemptAt" <= $1
      order by "nextAttemptAt" asc
@@ -478,6 +663,17 @@ export async function processCommunicationOutbox(limit = 50, now = new Date()) {
 
   const processed = [];
   for (const message of messages) {
+    const deferral = await marketingDeliveryDeferral(message, now);
+    if (deferral) {
+      await query(
+        `update "CommunicationOutbox"
+         set "nextAttemptAt" = $1, "updatedAt" = $2
+         where id = $3`,
+        [deferral.nextAttemptAt, now.toISOString(), message.id],
+      );
+      processed.push({ id: message.id, status: "DEFERRED", reason: deferral.reason, nextAttemptAt: deferral.nextAttemptAt });
+      continue;
+    }
     await query('update "CommunicationOutbox" set status = $1, attempts = attempts + 1, "lastAttemptAt" = $2, "updatedAt" = $2 where id = $3', [
       "SENDING",
       now.toISOString(),
@@ -510,6 +706,65 @@ export async function processCommunicationOutbox(limit = 50, now = new Date()) {
     }
   }
   return { processed };
+}
+
+async function marketingDeliveryDeferral(message: any, now: Date) {
+  if (message.sourceType !== "MARKETING_CAMPAIGN" || !message.sourceId) return null;
+  const controls = await getMarketingDeliveryControls(message.tenantId, message.sourceId);
+  if (!controls) return null;
+
+  const quietUntil = nextQuietHoursExit(now, controls.quietHours);
+  if (quietUntil) return { reason: "QUIET_HOURS", nextAttemptAt: quietUntil.toISOString() };
+
+  const throttlePerMinute = Math.max(1, Number(controls.throttlePerMinute || 60));
+  const sentInWindow = await queryOne<{ count: number }>(
+    `select count(*)::int as count
+     from "CommunicationOutbox"
+     where "tenantId" = $1
+       and "sourceType" = 'MARKETING_CAMPAIGN'
+       and "sourceId" = $2
+       and "lastAttemptAt" >= $3`,
+    [message.tenantId, message.sourceId, new Date(now.getTime() - 60000).toISOString()],
+  );
+  if ((sentInWindow?.count ?? 0) >= throttlePerMinute) {
+    return { reason: "THROTTLE", nextAttemptAt: new Date(now.getTime() + 60000).toISOString() };
+  }
+  return null;
+}
+
+async function getMarketingDeliveryControls(tenantId: string, campaignId: string): Promise<DeliveryControls | null> {
+  return queryOne<DeliveryControls>(
+    `select "throttlePerMinute", "quietHours"
+     from "MarketingCampaign"
+     where "tenantId" = $1 and id = $2
+     limit 1`,
+    [tenantId, campaignId],
+  );
+}
+
+function nextQuietHoursExit(now: Date, quietHours: Record<string, unknown>) {
+  if (quietHours?.enabled === false) return null;
+  const start = parseTimeOfDay(quietHours?.start, "21:00");
+  const end = parseTimeOfDay(quietHours?.end, "09:00");
+  const minutesNow = now.getHours() * 60 + now.getMinutes();
+  const startMinutes = start.hours * 60 + start.minutes;
+  const endMinutes = end.hours * 60 + end.minutes;
+  const crossesMidnight = startMinutes > endMinutes;
+  const inQuietHours = crossesMidnight
+    ? minutesNow >= startMinutes || minutesNow < endMinutes
+    : minutesNow >= startMinutes && minutesNow < endMinutes;
+  if (!inQuietHours) return null;
+  const next = new Date(now);
+  next.setHours(end.hours, end.minutes, 0, 0);
+  if (crossesMidnight && minutesNow >= startMinutes) next.setDate(next.getDate() + 1);
+  return next;
+}
+
+function parseTimeOfDay(value: unknown, fallback: string) {
+  const [hoursRaw, minutesRaw] = String(value || fallback).split(":");
+  const hours = Math.max(0, Math.min(23, Number(hoursRaw || 0)));
+  const minutes = Math.max(0, Math.min(59, Number(minutesRaw || 0)));
+  return { hours, minutes };
 }
 
 async function queuePendingReportEmailDeliveries(now: Date) {

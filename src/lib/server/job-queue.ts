@@ -10,7 +10,8 @@ export type CrmJobName =
   | "communications.processDue"
   | "exports.process"
   | "scoring.recomputeRules"
-  | "scoring.recomputeSelfLearning";
+  | "scoring.recomputeSelfLearning"
+  | "scoring.processScheduledRetraining";
 
 let queue: Queue | null = null;
 

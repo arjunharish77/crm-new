@@ -63,7 +63,25 @@ interface SelfLearningSettings {
     lookbackDays: number;
     retrainCadence: 'MANUAL' | 'WEEKLY' | 'MONTHLY';
     fallbackMode: 'RULE_SCORE' | 'ZERO' | 'KEEP_EXISTING';
+    approvalMode?: 'MANUAL' | 'AUTO_PROMOTE_IF_BETTER';
+    featureRetentionDays?: number;
     lastRecomputedAt?: string | null;
+}
+
+interface FeatureCatalogItem {
+    id: string;
+    targetModule: 'LEAD' | 'OPPORTUNITY';
+    fieldKey: string;
+    label: string;
+    source: string;
+    dataType: string;
+    isIncluded: boolean;
+    isSensitive: boolean;
+    isProhibited: boolean;
+    coveragePercent?: number | null;
+    nonNullCount?: number;
+    distinctCount?: number;
+    lastProfiledAt?: string | null;
 }
 
 interface ScoringModelVersionSummary {
@@ -82,6 +100,11 @@ interface ScoringModelVersionSummary {
             recall?: number | null;
             lift?: number | null;
         };
+        advanced?: {
+            driftFromPrevious?: { brierScoreDelta?: number | null };
+            safeguards?: Array<{ code: string; severity: string; message: string }>;
+        } | null;
+        featureImportance?: Array<{ feature: string; importance: number }>;
     } | null;
     promotedBy?: string | null;
     promotedAt?: string | null;
@@ -135,6 +158,8 @@ const DEFAULT_SELF_LEARNING_SETTINGS: SelfLearningSettings = {
     lookbackDays: 365,
     retrainCadence: 'MANUAL',
     fallbackMode: 'RULE_SCORE',
+    approvalMode: 'MANUAL',
+    featureRetentionDays: 365,
     lastRecomputedAt: null,
 };
 
@@ -153,6 +178,9 @@ export default function LeadScoringAdminPage() {
     const [modelSummaries, setModelSummaries] = useState<ScoringModelSummary[]>([]);
     const [loadingModels, setLoadingModels] = useState(true);
     const [promotingVersionId, setPromotingVersionId] = useState<string | null>(null);
+    const [featureCatalog, setFeatureCatalog] = useState<FeatureCatalogItem[]>([]);
+    const [loadingFeatureCatalog, setLoadingFeatureCatalog] = useState(true);
+    const [profilingFeatures, setProfilingFeatures] = useState(false);
 
     const fetchModelVersions = async () => {
         try {
@@ -165,11 +193,54 @@ export default function LeadScoringAdminPage() {
         }
     };
 
+    const fetchFeatureCatalog = async () => {
+        try {
+            const data = await apiFetch<FeatureCatalogItem[]>('/lead-scoring/self-learning/feature-catalog');
+            setFeatureCatalog(Array.isArray(data) ? data : []);
+        } catch {
+            toast.error('Failed to load scoring feature catalog');
+        } finally {
+            setLoadingFeatureCatalog(false);
+        }
+    };
+
+    const handleProfileFeatures = async () => {
+        setProfilingFeatures(true);
+        try {
+            const data = await apiFetch<FeatureCatalogItem[]>('/lead-scoring/self-learning/feature-catalog', { method: 'POST' });
+            setFeatureCatalog(Array.isArray(data) ? data : []);
+            toast.success('Feature coverage refreshed from latest score snapshots');
+        } catch {
+            toast.error('Failed to profile features');
+        } finally {
+            setProfilingFeatures(false);
+        }
+    };
+
+    const updateFeatureFlag = async (item: FeatureCatalogItem, patch: Partial<FeatureCatalogItem>) => {
+        const nextItem = { ...item, ...patch };
+        setFeatureCatalog((current) => current.map((row) => row.id === item.id ? nextItem : row));
+        try {
+            const data = await apiFetch<FeatureCatalogItem[]>('/lead-scoring/self-learning/feature-catalog', {
+                method: 'PUT',
+                body: JSON.stringify({ items: [nextItem] }),
+            });
+            setFeatureCatalog(Array.isArray(data) ? data : []);
+        } catch {
+            toast.error('Failed to update feature setting');
+            await fetchFeatureCatalog();
+        }
+    };
+
     const handlePromoteVersion = async (versionId: string) => {
         if (!confirm('Promote this version? It will immediately become the calibration used for live predictive scores, and the currently promoted version (if any) will be retired.')) return;
+        const reviewNotes = window.prompt('Review notes for this promotion', '') ?? '';
         setPromotingVersionId(versionId);
         try {
-            await apiFetch(`/lead-scoring/self-learning/models/${versionId}/promote`, { method: 'POST' });
+            await apiFetch(`/lead-scoring/self-learning/models/${versionId}/promote`, {
+                method: 'POST',
+                body: JSON.stringify({ reviewNotes }),
+            });
             toast.success('Model version promoted. Live scores will use it from the next recompute onward.');
             await fetchModelVersions();
         } catch {
@@ -205,6 +276,7 @@ export default function LeadScoringAdminPage() {
         fetchRules();
         fetchSelfLearningSettings();
         fetchModelVersions();
+        fetchFeatureCatalog();
     }, []);
 
     const handleAdd = () => {
@@ -374,6 +446,7 @@ export default function LeadScoringAdminPage() {
             <Tabs defaultValue="self-learning" className="space-y-4">
                 <TabsList>
                     <TabsTrigger value="self-learning">Predictive Scoring</TabsTrigger>
+                    <TabsTrigger value="features">Features</TabsTrigger>
                     <TabsTrigger value="rules">Rule Fallback</TabsTrigger>
                 </TabsList>
 
@@ -493,6 +566,28 @@ export default function LeadScoringAdminPage() {
                                             </SelectContent>
                                         </Select>
                                     </div>
+                                    <div className="space-y-2">
+                                        <Label>Promotion Approval</Label>
+                                        <Select
+                                            value={selfLearningSettings.approvalMode ?? 'MANUAL'}
+                                            onValueChange={(value) => setSelfLearningSettings((current) => ({ ...current, approvalMode: value as SelfLearningSettings['approvalMode'] }))}
+                                        >
+                                            <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                                            <SelectContent>
+                                                <SelectItem value="MANUAL">Manual review</SelectItem>
+                                                <SelectItem value="AUTO_PROMOTE_IF_BETTER">Auto-promote if better</SelectItem>
+                                            </SelectContent>
+                                        </Select>
+                                    </div>
+                                    <div className="space-y-2">
+                                        <Label>Feature Retention Days</Label>
+                                        <Input
+                                            type="number"
+                                            min={30}
+                                            value={selfLearningSettings.featureRetentionDays ?? 365}
+                                            onChange={(event) => setSelfLearningSettings((current) => ({ ...current, featureRetentionDays: Number(event.target.value || 365) }))}
+                                        />
+                                    </div>
                                 </div>
 
                                 <div className="mt-4 flex flex-wrap gap-2">
@@ -562,7 +657,9 @@ export default function LeadScoringAdminPage() {
                                                         <TableHead>Version</TableHead>
                                                         <TableHead>Status</TableHead>
                                                         <TableHead>Algorithm</TableHead>
+                                                        <TableHead>Brier</TableHead>
                                                         <TableHead>Holdout accuracy</TableHead>
+                                                        <TableHead>Precision / Recall</TableHead>
                                                         <TableHead>Lift</TableHead>
                                                         <TableHead>Train / Holdout</TableHead>
                                                         <TableHead>Created</TableHead>
@@ -582,19 +679,33 @@ export default function LeadScoringAdminPage() {
                                                                 <Tooltip>
                                                                     <TooltipTrigger asChild>
                                                                         <Badge variant="outline" className="cursor-default">
-                                                                            {version.algorithm === 'LOGISTIC_REGRESSION_V1' ? 'Fitted (logistic)' : 'Weighted heuristic'}
+                                                                            {version.algorithm === 'GRADIENT_BOOSTED_TREES_V1'
+                                                                                ? 'ML service GBT'
+                                                                                : version.algorithm === 'LOGISTIC_REGRESSION_V1'
+                                                                                    ? 'Fitted logistic'
+                                                                                    : 'Weighted calibration'}
                                                                         </Badge>
                                                                     </TooltipTrigger>
                                                                     <TooltipContent>
-                                                                        {version.algorithm === 'LOGISTIC_REGRESSION_V1'
+                                                                        {version.algorithm === 'GRADIENT_BOOSTED_TREES_V1'
+                                                                            ? 'Gradient-boosted trees from the dedicated ML service won model comparison on held-out records.'
+                                                                            : version.algorithm === 'LOGISTIC_REGRESSION_V1'
                                                                             ? 'A logistic regression model was fit on this tenant\'s data and outperformed the fixed heuristic on held-out records, so it was used.'
                                                                             : 'The fixed weighted-calibration heuristic was used -- either there wasn\'t enough contrast in the data to fit a model, or it didn\'t beat the heuristic on held-out records.'}
                                                                     </TooltipContent>
                                                                 </Tooltip>
                                                             </TableCell>
                                                             <TableCell>
+                                                                {version.metrics?.holdout?.brierScore != null ? version.metrics.holdout.brierScore.toFixed(3) : '—'}
+                                                            </TableCell>
+                                                            <TableCell>
                                                                 {version.metrics?.holdout?.accuracy != null
                                                                     ? `${Math.round(version.metrics.holdout.accuracy * 100)}%`
+                                                                    : '—'}
+                                                            </TableCell>
+                                                            <TableCell>
+                                                                {version.metrics?.holdout?.precision != null || version.metrics?.holdout?.recall != null
+                                                                    ? `${Math.round((version.metrics.holdout.precision ?? 0) * 100)}% / ${Math.round((version.metrics.holdout.recall ?? 0) * 100)}%`
                                                                     : '—'}
                                                             </TableCell>
                                                             <TableCell>
@@ -626,6 +737,85 @@ export default function LeadScoringAdminPage() {
                                         </div>
                                     </div>
                                 ))}
+                            </div>
+                        )}
+                    </div>
+                </TabsContent>
+
+                <TabsContent value="features" className="space-y-4">
+                    <div className="rounded-xl border bg-card p-4">
+                        <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+                            <div>
+                                <h2 className="text-sm font-bold">Feature Catalog</h2>
+                                <p className="mt-1 text-xs text-muted-foreground">
+                                    Include or exclude scoring inputs, mark sensitive fields, prohibit restricted fields, and preview coverage before training.
+                                </p>
+                            </div>
+                            <Button variant="outline" onClick={handleProfileFeatures} disabled={profilingFeatures}>
+                                {profilingFeatures ? <Loader2 className="size-4 animate-spin" /> : <Gauge className="size-4" />}
+                                Profile Coverage
+                            </Button>
+                        </div>
+
+                        {loadingFeatureCatalog ? (
+                            <div className="flex justify-center py-8">
+                                <Loader2 className="size-5 animate-spin text-muted-foreground" />
+                            </div>
+                        ) : featureCatalog.length === 0 ? (
+                            <div className="rounded-lg border border-dashed p-6 text-center">
+                                <p className="text-sm font-semibold">No profiled features yet</p>
+                                <p className="mt-1 text-xs text-muted-foreground">Run a predictive recompute, then profile coverage to inspect available model inputs.</p>
+                            </div>
+                        ) : (
+                            <div className="overflow-x-auto rounded-lg border">
+                                <Table>
+                                    <TableHeader>
+                                        <TableRow>
+                                            <TableHead>Feature</TableHead>
+                                            <TableHead>Module</TableHead>
+                                            <TableHead>Source</TableHead>
+                                            <TableHead>Coverage</TableHead>
+                                            <TableHead>Use</TableHead>
+                                            <TableHead>Sensitive</TableHead>
+                                            <TableHead>Prohibited</TableHead>
+                                        </TableRow>
+                                    </TableHeader>
+                                    <TableBody>
+                                        {featureCatalog.map((item) => (
+                                            <TableRow key={item.id}>
+                                                <TableCell>
+                                                    <p className="text-sm font-semibold">{item.label}</p>
+                                                    <p className="text-xs text-muted-foreground">{item.fieldKey}</p>
+                                                </TableCell>
+                                                <TableCell><Badge variant="outline">{item.targetModule}</Badge></TableCell>
+                                                <TableCell className="text-xs text-muted-foreground">{item.source}</TableCell>
+                                                <TableCell className="text-sm">
+                                                    {item.coveragePercent == null ? '—' : `${item.coveragePercent}%`}
+                                                    <p className="text-xs text-muted-foreground">{item.nonNullCount ?? 0} values</p>
+                                                </TableCell>
+                                                <TableCell>
+                                                    <Switch
+                                                        checked={item.isIncluded && !item.isProhibited}
+                                                        disabled={item.isProhibited}
+                                                        onCheckedChange={(checked) => updateFeatureFlag(item, { isIncluded: checked })}
+                                                    />
+                                                </TableCell>
+                                                <TableCell>
+                                                    <Switch
+                                                        checked={item.isSensitive}
+                                                        onCheckedChange={(checked) => updateFeatureFlag(item, { isSensitive: checked })}
+                                                    />
+                                                </TableCell>
+                                                <TableCell>
+                                                    <Switch
+                                                        checked={item.isProhibited}
+                                                        onCheckedChange={(checked) => updateFeatureFlag(item, { isProhibited: checked, isIncluded: checked ? false : item.isIncluded })}
+                                                    />
+                                                </TableCell>
+                                            </TableRow>
+                                        ))}
+                                    </TableBody>
+                                </Table>
                             </div>
                         )}
                     </div>

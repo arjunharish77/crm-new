@@ -13,7 +13,7 @@ import { EmptyState } from "@/components/common/empty-state";
 import { TableSkeleton } from "@/components/common/skeletons";
 import { formatWorkspaceDateTime, formatWorkspaceDateTimeInput, workspaceDateTimeInputToIso } from "@/lib/date-format";
 import { cn } from "@/lib/utils";
-import { CalendarDays, CheckCircle2, ChevronLeft, ChevronRight, Clock, Edit3, Plus, RefreshCw, Trash2 } from "lucide-react";
+import { CalendarDays, CheckCircle2, ChevronLeft, ChevronRight, Clock, Edit3, ListChecks, Plus, RefreshCw, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { QueueExportButton } from "@/components/exports/queue-export-button";
 
@@ -30,6 +30,7 @@ type Task = {
     dueAt: string | null;
     reminderAt: string | null;
     completedAt: string | null;
+    metadata?: { comments?: Array<{ body: string; createdAt: string }> } | null;
     owner?: { name?: string | null; email?: string | null } | null;
     lead?: { name?: string | null; email?: string | null; company?: string | null } | null;
     opportunity?: { title?: string | null } | null;
@@ -63,6 +64,7 @@ const EMPTY_FORM = {
     activityId: "",
     dueAt: "",
     reminderAt: "",
+    comment: "",
 };
 
 const STATUS_OPTIONS = [
@@ -111,6 +113,10 @@ export default function TasksPage() {
     const [form, setForm] = useState(EMPTY_FORM);
     const [paginationModel, setPaginationModel] = useState({ page: 0, pageSize: 10 });
     const [selectedTaskIds, setSelectedTaskIds] = useState<string[]>([]);
+    const [viewMode, setViewMode] = useState<"list" | "calendar">("list");
+    const [calendarMode, setCalendarMode] = useState<"day" | "week" | "month">("week");
+    const [bulkOwnerId, setBulkOwnerId] = useState("");
+    const [bulkDueAt, setBulkDueAt] = useState("");
 
     const fetchTasks = useCallback(async () => {
         setLoading(true);
@@ -210,6 +216,7 @@ export default function TasksPage() {
             activityId: task.activityId ?? "",
             dueAt: toLocalInputValue(task.dueAt),
             reminderAt: toLocalInputValue(task.reminderAt),
+            comment: "",
         });
         setDialogOpen(true);
     };
@@ -224,6 +231,15 @@ export default function TasksPage() {
                 activityId: form.activityId || null,
                 dueAt: fromLocalInputValue(form.dueAt),
                 reminderAt: fromLocalInputValue(form.reminderAt),
+                metadata: form.comment.trim()
+                    ? {
+                        ...(editingTask?.metadata ?? {}),
+                        comments: [
+                            ...(editingTask?.metadata?.comments ?? []),
+                            { body: form.comment.trim(), createdAt: new Date().toISOString() },
+                        ],
+                    }
+                    : editingTask?.metadata,
             };
             await apiFetch(editingTask ? `/tasks/${editingTask.id}` : "/tasks", {
                 method: editingTask ? "PATCH" : "POST",
@@ -244,6 +260,33 @@ export default function TasksPage() {
             fetchTasks();
         } catch (error: any) {
             toast.error(error.message || "Failed to update task");
+        }
+    };
+
+    const updateTaskDueAt = async (task: Task, dueAt: string | null) => {
+        try {
+            await apiFetch(`/tasks/${task.id}`, { method: "PATCH", body: JSON.stringify({ dueAt }) });
+            toast.success("Task rescheduled");
+            fetchTasks();
+        } catch (error: any) {
+            toast.error(error.message || "Failed to reschedule task");
+        }
+    };
+
+    const bulkUpdateTasks = async (patch: { status?: Task["status"]; ownerId?: string | null; dueAt?: string | null }) => {
+        if (!selectedTaskIds.length) return;
+        try {
+            const result = await apiFetch<{ updated?: Task[]; skipped?: number }>("/tasks", {
+                method: "PATCH",
+                body: JSON.stringify({ ids: selectedTaskIds, ...patch }),
+            });
+            toast.success(`${result.updated?.length ?? 0} task${(result.updated?.length ?? 0) === 1 ? "" : "s"} updated`);
+            setSelectedTaskIds([]);
+            setBulkOwnerId("");
+            setBulkDueAt("");
+            fetchTasks();
+        } catch (error: any) {
+            toast.error(error.message || "Failed to update selected tasks");
         }
     };
 
@@ -305,6 +348,26 @@ export default function TasksPage() {
             </div>
 
             <div className="mt-4 flex flex-wrap items-center gap-2 rounded-xl border bg-card p-3">
+                <div className="flex rounded-md border bg-background p-1">
+                    <Button
+                        type="button"
+                        size="sm"
+                        variant={viewMode === "list" ? "secondary" : "ghost"}
+                        onClick={() => setViewMode("list")}
+                    >
+                        <ListChecks className="size-4" />
+                        List
+                    </Button>
+                    <Button
+                        type="button"
+                        size="sm"
+                        variant={viewMode === "calendar" ? "secondary" : "ghost"}
+                        onClick={() => setViewMode("calendar")}
+                    >
+                        <CalendarDays className="size-4" />
+                        Calendar
+                    </Button>
+                </div>
                 <Select value={quickFilter} onValueChange={setQuickFilter}>
                     <SelectTrigger className="w-[160px]"><SelectValue /></SelectTrigger>
                     <SelectContent>
@@ -336,6 +399,34 @@ export default function TasksPage() {
                 </Select>
             </div>
 
+            {selectedTaskIds.length > 0 ? (
+                <div className="mt-3 flex flex-col gap-3 rounded-xl border border-primary/30 bg-primary/5 p-3 lg:flex-row lg:items-center lg:justify-between">
+                    <div className="text-sm">
+                        <span className="font-extrabold">{selectedTaskIds.length}</span>
+                        <span className="text-muted-foreground"> selected</span>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2">
+                        <Button size="sm" onClick={() => bulkUpdateTasks({ status: "COMPLETED" })}>
+                            <CheckCircle2 className="size-4" />
+                            Complete
+                        </Button>
+                        <Select value={bulkOwnerId || "__none__"} onValueChange={(value) => setBulkOwnerId(value === "__none__" ? "" : value)}>
+                            <SelectTrigger className="h-9 w-[220px]"><SelectValue placeholder="Reassign owner" /></SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="__none__">Choose owner</SelectItem>
+                                {users.map((user) => (
+                                    <SelectItem key={user.id} value={user.id}>{user.name || user.email || "User"}</SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                        <Button size="sm" variant="outline" disabled={!bulkOwnerId} onClick={() => bulkUpdateTasks({ ownerId: bulkOwnerId })}>Reassign</Button>
+                        <Input className="h-9 w-[210px]" type="datetime-local" value={bulkDueAt} onChange={(event) => setBulkDueAt(event.target.value)} />
+                        <Button size="sm" variant="outline" disabled={!bulkDueAt} onClick={() => bulkUpdateTasks({ dueAt: fromLocalInputValue(bulkDueAt) })}>Reschedule</Button>
+                        <Button size="sm" variant="ghost" onClick={() => setSelectedTaskIds([])}>Clear</Button>
+                    </div>
+                </div>
+            ) : null}
+
             <div className="mt-4">
                 {loading ? (
                     <TableSkeleton rows={5} columns={4} />
@@ -345,6 +436,15 @@ export default function TasksPage() {
                         title="No tasks found"
                         description="Create a task or adjust filters to see upcoming work."
                         action={<Button onClick={openCreate}><Plus className="size-4" />New Task</Button>}
+                    />
+                ) : viewMode === "calendar" ? (
+                    <TaskCalendar
+                        tasks={tasks}
+                        mode={calendarMode}
+                        onModeChange={setCalendarMode}
+                        onEdit={openEdit}
+                        onComplete={(task) => updateTaskStatus(task, "COMPLETED")}
+                        onReschedule={updateTaskDueAt}
                     />
                 ) : (
                     <div className="space-y-2">
@@ -561,8 +661,188 @@ export default function TasksPage() {
                             </SelectContent>
                         </Select>
                     </div>
+                    {editingTask ? (
+                        <div className="rounded-xl border bg-surface-container-low p-3">
+                            <p className="text-sm font-extrabold">Related Record Preview</p>
+                            <div className="mt-2 grid gap-2 text-xs text-muted-foreground sm:grid-cols-3">
+                                <span>Lead: {editingTask.lead?.name || editingTask.lead?.email || "None"}</span>
+                                <span>Opportunity: {editingTask.opportunity?.title || "None"}</span>
+                                <span>Activity: {editingTask.activity?.notes || editingTask.activity?.outcome || "None"}</span>
+                            </div>
+                            {editingTask.completedAt ? (
+                                <p className="mt-2 text-xs text-muted-foreground">Completed {formatWorkspaceDateTime(editingTask.completedAt)}</p>
+                            ) : null}
+                            {editingTask.metadata?.comments?.length ? (
+                                <div className="mt-3 space-y-1">
+                                    <p className="text-xs font-bold uppercase text-muted-foreground">Comments</p>
+                                    {editingTask.metadata.comments.slice(-3).map((comment, index) => (
+                                        <p key={`${comment.createdAt}-${index}`} className="rounded-md bg-background px-2 py-1 text-xs">
+                                            {comment.body}
+                                        </p>
+                                    ))}
+                                </div>
+                            ) : null}
+                        </div>
+                    ) : null}
+                    <div className="space-y-2">
+                        <Label>{editingTask ? "Add Comment" : "Initial Comment"}</Label>
+                        <Input value={form.comment} onChange={(e) => setForm((current) => ({ ...current, comment: e.target.value }))} />
+                    </div>
                 </div>
             </StandardDialog>
         </div>
     );
+}
+
+function TaskCalendar({
+    tasks,
+    mode,
+    onModeChange,
+    onEdit,
+    onComplete,
+    onReschedule,
+}: {
+    tasks: Task[];
+    mode: "day" | "week" | "month";
+    onModeChange: (mode: "day" | "week" | "month") => void;
+    onEdit: (task: Task) => void;
+    onComplete: (task: Task) => void;
+    onReschedule: (task: Task, dueAt: string | null) => void;
+}) {
+    const [draggingTaskId, setDraggingTaskId] = useState<string | null>(null);
+    const lanes = useMemo(() => calendarLanes(tasks, mode), [mode, tasks]);
+    const draggingTask = draggingTaskId ? tasks.find((task) => task.id === draggingTaskId) ?? null : null;
+    return (
+        <div className="space-y-3">
+            <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border bg-card p-3">
+                <div>
+                    <p className="text-sm font-extrabold">Calendar</p>
+                    <p className="text-xs text-muted-foreground">Overdue tasks stay visible while current due work is grouped by the selected period.</p>
+                </div>
+                <div className="flex rounded-md border bg-background p-1">
+                    {(["day", "week", "month"] as const).map((item) => (
+                        <Button
+                            key={item}
+                            type="button"
+                            size="sm"
+                            variant={mode === item ? "secondary" : "ghost"}
+                            onClick={() => onModeChange(item)}
+                        >
+                            {item[0].toUpperCase() + item.slice(1)}
+                        </Button>
+                    ))}
+                </div>
+            </div>
+            <div className="grid gap-3 xl:grid-cols-4">
+                {lanes.map((lane) => (
+                    <div
+                        key={lane.key}
+                        className={cn("min-h-[220px] rounded-xl border bg-card p-3", lane.key === "overdue" && "border-destructive/35 bg-destructive/5")}
+                        onDragOver={(event) => {
+                            if (lane.startAt && draggingTask) event.preventDefault();
+                        }}
+                        onDrop={(event) => {
+                            event.preventDefault();
+                            if (!lane.startAt || !draggingTask) return;
+                            onReschedule(draggingTask, lane.startAt);
+                            setDraggingTaskId(null);
+                        }}
+                    >
+                        <div className="mb-3 flex items-center justify-between gap-2">
+                            <div>
+                                <p className="text-sm font-extrabold">{lane.label}</p>
+                                <p className="text-xs text-muted-foreground">{lane.tasks.length} task{lane.tasks.length === 1 ? "" : "s"}</p>
+                            </div>
+                            {lane.key === "overdue" ? <Badge variant="destructive" className="rounded-md">Overdue</Badge> : null}
+                        </div>
+                        <div className="space-y-2">
+                            {lane.tasks.length === 0 ? (
+                                <div className="rounded-lg border border-dashed p-3 text-xs text-muted-foreground">No tasks in this lane.</div>
+                            ) : lane.tasks.map((task) => (
+                                <button
+                                    key={task.id}
+                                    type="button"
+                                    draggable={task.status !== "COMPLETED"}
+                                    onDragStart={() => setDraggingTaskId(task.id)}
+                                    onDragEnd={() => setDraggingTaskId(null)}
+                                    onClick={() => onEdit(task)}
+                                    className="w-full rounded-lg border bg-background p-3 text-left transition-colors hover:bg-surface-container-low"
+                                >
+                                    <div className="flex items-start justify-between gap-2">
+                                        <p className={cn("text-sm font-bold", task.status === "COMPLETED" && "line-through text-muted-foreground")}>{task.title}</p>
+                                        <Badge variant={task.priority === "URGENT" || task.priority === "HIGH" ? "destructive" : "secondary"} className="rounded-md text-[0.65rem]">
+                                            {task.priority}
+                                        </Badge>
+                                    </div>
+                                    <p className="mt-1 text-xs text-muted-foreground">{task.owner?.name || task.owner?.email || "Unassigned"}</p>
+                                    {task.dueAt ? <p className="mt-1 text-xs text-muted-foreground">{formatWorkspaceDateTime(task.dueAt)}</p> : null}
+                                    {task.status !== "COMPLETED" ? (
+                                        <span
+                                            role="button"
+                                            tabIndex={0}
+                                            className="mt-2 inline-flex h-8 items-center rounded-md border px-2 text-xs font-semibold"
+                                            onClick={(event) => {
+                                                event.stopPropagation();
+                                                onComplete(task);
+                                            }}
+                                            onKeyDown={(event) => {
+                                                if (event.key === "Enter" || event.key === " ") {
+                                                    event.preventDefault();
+                                                    event.stopPropagation();
+                                                    onComplete(task);
+                                                }
+                                            }}
+                                        >
+                                            Complete
+                                        </span>
+                                    ) : null}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+                ))}
+            </div>
+        </div>
+    );
+}
+
+function calendarLanes(tasks: Task[], mode: "day" | "week" | "month") {
+    const now = new Date();
+    const startToday = new Date(now);
+    startToday.setHours(0, 0, 0, 0);
+    const activeTasks = tasks.filter((task) => task.status !== "CANCELLED");
+    const overdue = activeTasks.filter((task) => task.dueAt && new Date(task.dueAt).getTime() < startToday.getTime() && task.status !== "COMPLETED");
+    const upcoming = activeTasks.filter((task) => !overdue.some((item) => item.id === task.id));
+    const periods = mode === "day" ? 3 : mode === "week" ? 4 : 4;
+    const lanes = [{
+        key: "overdue",
+        label: "Overdue",
+        tasks: overdue,
+        startAt: null as string | null,
+    }];
+    for (let index = 0; index < periods; index += 1) {
+        const start = new Date(startToday);
+        if (mode === "day") start.setDate(start.getDate() + index);
+        if (mode === "week") start.setDate(start.getDate() + index * 7);
+        if (mode === "month") start.setMonth(start.getMonth() + index, 1);
+        const end = new Date(start);
+        if (mode === "day") end.setDate(end.getDate() + 1);
+        if (mode === "week") end.setDate(end.getDate() + 7);
+        if (mode === "month") end.setMonth(end.getMonth() + 1, 1);
+        lanes.push({
+            key: `${mode}-${index}`,
+            label: mode === "day"
+                ? start.toLocaleDateString(undefined, { weekday: "short", day: "2-digit", month: "short" })
+                : mode === "week"
+                    ? `${start.toLocaleDateString(undefined, { day: "2-digit", month: "short" })} - ${new Date(end.getTime() - 1).toLocaleDateString(undefined, { day: "2-digit", month: "short" })}`
+                    : start.toLocaleDateString(undefined, { month: "long", year: "numeric" }),
+            tasks: upcoming.filter((task) => {
+                if (!task.dueAt) return index === periods - 1;
+                const due = new Date(task.dueAt).getTime();
+                return due >= start.getTime() && due < end.getTime();
+            }),
+            startAt: start.toISOString(),
+        });
+    }
+    return lanes;
 }

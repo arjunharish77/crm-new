@@ -564,6 +564,8 @@ function CustomReportBuilder() {
     const [users, setUsers] = useState<any[]>([]);
     const [opportunityTypes, setOpportunityTypes] = useState<any[]>([]);
     const [activityTypes, setActivityTypes] = useState<any[]>([]);
+    const [savedViews, setSavedViews] = useState<any[]>([]);
+    const [savedViewId, setSavedViewId] = useState("__all__");
 
     useEffect(() => {
         apiFetch<{ objects: Record<string, string[]> }>("/reports/query")
@@ -573,6 +575,7 @@ function CustomReportBuilder() {
         apiFetch<any[]>("/users").then((data) => setUsers(Array.isArray(data) ? data : [])).catch(() => setUsers([]));
         apiFetch<any[]>("/opportunity-types").then((data) => setOpportunityTypes(Array.isArray(data) ? data : [])).catch(() => setOpportunityTypes([]));
         apiFetch<any[]>("/activity-types").then((data) => setActivityTypes(Array.isArray(data) ? data : [])).catch(() => setActivityTypes([]));
+        apiFetch<any[]>("/saved-views?module=ALL").then((data) => setSavedViews(Array.isArray(data) ? data : [])).catch(() => setSavedViews([]));
     }, []);
 
     useEffect(() => {
@@ -586,6 +589,7 @@ function CustomReportBuilder() {
             setFields(queryDefinition.fields);
             setFilters(queryDefinition.filters ?? []);
             setOrderBy(queryDefinition.orderBy ?? { object: queryDefinition.root, field: queryDefinition.fields[0]?.field ?? "id", direction: "desc" });
+            setSavedViewId(queryDefinition.savedViewId || "__all__");
             setLimit(queryDefinition.limit ?? 100);
             setPreview(null);
             document.getElementById("custom-report-builder")?.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -629,6 +633,7 @@ function CustomReportBuilder() {
     };
     const definition = {
         root,
+        savedViewId: savedViewId === "__all__" ? null : savedViewId,
         fields,
         filters: filters.map((filter) => ({
             ...filter,
@@ -643,6 +648,7 @@ function CustomReportBuilder() {
         const firstField = defaultFieldForObject(nextRoot);
         setFields([{ object: nextRoot, field: firstField, label: `${OBJECT_LABELS[nextRoot]} ${formatFieldLabel(firstField)}` }]);
         setFilters([]);
+        setSavedViewId("__all__");
         setOrderBy({ object: nextRoot, field: reportFieldOptions(nextRoot).includes("createdAt") ? "createdAt" : firstField, direction: "desc" });
     };
 
@@ -744,7 +750,7 @@ function CustomReportBuilder() {
                     </div>
 
                     <TabsContent value="setup">
-                <div className="grid gap-4 md:grid-cols-[1.2fr_0.8fr_0.6fr]">
+                <div className="grid gap-4 md:grid-cols-[1.2fr_0.8fr_0.8fr_0.6fr]">
                     <div className="space-y-2">
                         <Label>Report Name</Label>
                         <Input value={name} onChange={(event) => setName(event.target.value)} />
@@ -759,6 +765,22 @@ function CustomReportBuilder() {
                                 {ROOT_OPTIONS.map((option) => (
                                     <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
                                 ))}
+                            </SelectContent>
+                        </Select>
+                    </div>
+                    <div className="space-y-2">
+                        <Label>Record Source</Label>
+                        <Select value={savedViewId} onValueChange={setSavedViewId}>
+                            <SelectTrigger className="w-full">
+                                <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="__all__">All permitted records</SelectItem>
+                                {savedViews
+                                    .filter((view) => view.tabs?.some((tab: any) => smartViewModuleForReportRoot(root) === tab.module))
+                                    .map((view) => (
+                                        <SelectItem key={view.id} value={view.id}>{view.name}</SelectItem>
+                                    ))}
                             </SelectContent>
                         </Select>
                     </div>
@@ -1321,6 +1343,12 @@ function reportScheduleLabel(schedule: any, customReports: any[]) {
         return customReports.find((report) => report.id === id)?.name ?? "Saved custom report";
     }
     return INBUILT_REPORT_OPTIONS.find((option) => option.value === reportKey)?.label ?? reportKey;
+}
+
+function smartViewModuleForReportRoot(root: ReportRoot) {
+    if (root === "lead") return "LEADS";
+    if (root === "opportunity") return "OPPORTUNITIES";
+    return "ACTIVITIES";
 }
 
 function CustomReportsSection() {

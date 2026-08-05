@@ -180,7 +180,7 @@ nano deploy/vps/.env
 Set these carefully:
 
 ```env
-DOMAIN=crm.yourdomain.com
+DOMAIN=app.yourdomain.com
 ACME_EMAIL=admin@yourdomain.com
 
 POSTGRES_DB=crm
@@ -224,10 +224,20 @@ Before cutover, lower DNS TTL for your CRM domain to 300 seconds.
 Point an `A` record to the VPS IP:
 
 ```text
-crm.yourdomain.com -> <VPS_PUBLIC_IP>
+app.yourdomain.com -> <VPS_PUBLIC_IP>
 ```
 
 Do this before starting the final HTTPS/cutover flow so Caddy can issue certificates.
+
+For the Unnati Vidya public website on the same VPS, point these records to the same VPS IP:
+
+```text
+unnatividya.com     -> <VPS_PUBLIC_IP>
+www.unnatividya.com -> <VPS_PUBLIC_IP>
+```
+
+The website runs as a separate Next.js service, uses the same Postgres server, and uses a separate
+database/user configured through `UNNATIVIDYA_DATABASE_URL`.
 
 ## 6. Validate Docker Compose
 
@@ -237,6 +247,90 @@ On the VPS:
 cd /opt/crm
 docker compose -f deploy/vps/docker-compose.yml --env-file deploy/vps/.env config
 ```
+
+## Unnati Vidya Website on the Same VPS
+
+After copying `deploy/vps/.env.example` to `deploy/vps/.env`, set these website values:
+
+```env
+UNNATIVIDYA_DOMAIN=unnatividya.com
+UNNATIVIDYA_POSTGRES_DB=unnatividya
+UNNATIVIDYA_POSTGRES_USER=unnatividya_app
+UNNATIVIDYA_POSTGRES_PASSWORD=<strong-password>
+UNNATIVIDYA_DATABASE_URL=postgresql://unnatividya_app:<strong-password>@postgres:5432/unnatividya
+UNNATIVIDYA_SESSION_SECRET=<long-random-secret>
+NEXT_PUBLIC_UNNATIVIDYA_SITE_URL=https://unnatividya.com
+ZEPTOMAIL_API_URL=https://api.zeptomail.in/v1.1/email
+ZEPTOMAIL_API_KEY=<Zoho-enczapikey ...>
+ZEPTOMAIL_FROM_EMAIL=info@unnatividya.com
+ZEPTOMAIL_FROM_NAME=Unnati Vidya
+```
+
+Create the website database/user and apply the website migration:
+
+```bash
+cd /opt/crm
+sh deploy/vps/scripts/setup-unnatividya-db.sh
+```
+
+Seed the initial website catalog, if needed:
+
+```bash
+docker compose -f deploy/vps/docker-compose.yml --env-file deploy/vps/.env run --rm unnatividya-web node scripts/seed.js
+```
+
+Run the source importer manually when you want to refresh captured source snapshots:
+
+```bash
+docker compose -f deploy/vps/docker-compose.yml --env-file deploy/vps/.env run --rm unnatividya-web node scripts/source-import.js
+```
+
+Start the CRM and website stack:
+
+```bash
+docker compose -f deploy/vps/docker-compose.yml --env-file deploy/vps/.env up -d --build
+```
+
+The website CRM sync worker is intentionally not started by default. Start it only after CRM/API
+handoff is configured and `UNNATIVIDYA_CRM_SYNC_WORKER_ENABLED=true`:
+
+```bash
+docker compose -f deploy/vps/docker-compose.yml --env-file deploy/vps/.env --profile unnatividya-crm-sync up -d unnatividya-crm-worker
+```
+
+After first deployment:
+
+```bash
+curl -I https://unnatividya.com
+curl -s https://unnatividya.com/api/health
+curl -s https://unnatividya.com/robots.txt
+curl -s https://unnatividya.com/sitemap.xml
+curl -s https://unnatividya.com/sitemap-index.xml
+curl -s https://unnatividya.com/sitemaps/courses.xml
+curl -s https://unnatividya.com/sitemaps/universities.xml
+```
+
+Then open `https://unnatividya.com/admin/setup` once, create the first independent website CMS admin,
+and set `UNNATIVIDYA_CMS_SETUP_ENABLED=false` in `deploy/vps/.env` before restarting the website.
+
+Local website verification status before VPS push, last checked 04/08/2026:
+
+```bash
+cd /Users/arjunh/Documents/crm/crm
+npx tsc --noEmit --project apps/unnatividya/tsconfig.json
+npm run unnatividya:routes:smoke
+npm run unnatividya:sitemap:smoke
+npm run unnatividya:mobile:smoke
+npm run unnatividya:lead-otp:smoke
+npm run unnatividya:build
+```
+
+Current Unnati Vidya caveats:
+
+- Docker Compose config validation must be done on the VPS or another Docker-enabled machine.
+- Final image optimization/Lighthouse checks should be done after production assets from `14_UNNATIVIDYA_ASSET_CHECKLIST.md` are added.
+- The website CRM sync worker stays disabled unless the CMS CRM/API sync settings are configured and explicitly enabled.
+- The public lead wizard stores leads locally first and verifies email OTP; it does not auto-push to CRM by default.
 
 Expected: Compose prints the rendered config without errors.
 

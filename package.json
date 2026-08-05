@@ -16,7 +16,22 @@
     "db:import:local-data": "node scripts/db-import-local-data.js",
     "db:seed:local": "node scripts/db-seed-local.js",
     "api:smoke": "node scripts/api-regression-smoke.js",
-    "db:backfill:invoice-files": "node scripts/db-backfill-invoice-file-objects.js"
+    "db:backfill:invoice-files": "node scripts/db-backfill-invoice-file-objects.js",
+    "unnatividya:dev": "npm --prefix apps/unnatividya run dev",
+    "unnatividya:build": "npm --prefix apps/unnatividya run build",
+    "unnatividya:start": "npm --prefix apps/unnatividya run start",
+    "unnatividya:db:setup:local": "node apps/unnatividya/scripts/db-setup-local.js",
+    "unnatividya:db:migrate:local": "node apps/unnatividya/scripts/db-migrate-local.js",
+    "unnatividya:seed": "node apps/unnatividya/scripts/seed.js",
+    "unnatividya:create-admin": "node apps/unnatividya/scripts/create-admin.js",
+    "unnatividya:source-import": "node apps/unnatividya/scripts/source-import.js",
+    "unnatividya:crm-worker": "node apps/unnatividya/scripts/crm-sync-worker.js",
+    "unnatividya:sitemap:smoke": "node apps/unnatividya/scripts/sitemap-smoke.js",
+    "unnatividya:lead-otp:smoke": "node apps/unnatividya/scripts/lead-otp-smoke.js",
+    "unnatividya:routes:smoke": "node apps/unnatividya/scripts/route-smoke.js",
+    "unnatividya:mobile:smoke": "node apps/unnatividya/scripts/mobile-smoke.js",
+    "ml-service:setup": "cd ml-service && python3 -m venv .venv && ./.venv/bin/pip install --upgrade pip && ./.venv/bin/pip install -r requirements.txt",
+    "ml-service:dev": "cd ml-service && ./.venv/bin/uvicorn app.main:app --reload --port 8000"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

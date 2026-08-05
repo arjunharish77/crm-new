@@ -136,6 +136,9 @@ const LEAD_FIELDS = [
     { key: "predictiveScore.conversionProbability", label: "Conversion Probability", type: "NUMBER" },
     { key: "predictiveScore.confidence", label: "Score Confidence", type: "NUMBER" },
     { key: "predictiveScore.stallRisk", label: "Stall Risk", type: "NUMBER" },
+    { key: "predictiveScore.expectedResponseLikelihood", label: "Response Likelihood", type: "NUMBER" },
+    { key: "predictiveScore.duplicateRisk", label: "Duplicate Risk", type: "NUMBER" },
+    { key: "predictiveScore.staleRisk", label: "Stale Risk", type: "NUMBER" },
 ];
 
 const OPPORTUNITY_FIELDS = [
@@ -149,6 +152,7 @@ const OPPORTUNITY_FIELDS = [
     { key: "predictiveScore.winProbability", label: "Win Probability", type: "NUMBER" },
     { key: "predictiveScore.confidence", label: "Score Confidence", type: "NUMBER" },
     { key: "predictiveScore.stallRisk", label: "Stall Risk", type: "NUMBER" },
+    { key: "predictiveScore.expectedCloseRisk", label: "Expected Close Risk", type: "NUMBER" },
 ];
 
 const ACTIVITY_FIELDS = [
@@ -169,6 +173,14 @@ const TASK_FIELDS = [
     { key: "reminderAt", label: "Reminder", type: "DATE" },
 ];
 
+const COMMUNICATION_FIELDS = [
+    { key: "channel", label: "Channel", type: "SELECT", options: ["EMAIL", "WHATSAPP", "SMS"] },
+    { key: "eventType", label: "Event Type", type: "SELECT", options: ["SENT", "DELIVERED", "OPENED", "CLICKED", "REPLIED", "BOUNCED", "FAILED", "UNSUBSCRIBED", "SUPPRESSED"] },
+    { key: "providerMessageId", label: "Provider Message ID" },
+    { key: "entityType", label: "Related Module", type: "SELECT", options: ["LEAD", "OPPORTUNITY"] },
+    { key: "entityId", label: "Related Record" },
+];
+
 const TRIGGER_TYPES = [
     { value: "LEAD_CREATED", label: "New Lead", scope: "lead" },
     { value: "LEAD_UPDATED", label: "Lead Update", scope: "lead" },
@@ -187,10 +199,20 @@ const TRIGGER_TYPES = [
     { value: "TASK_UPDATED_ON_LEAD", label: "Task Updated on Lead", scope: "task_lead" },
     { value: "TASK_COMPLETED_ON_LEAD", label: "Task Completed on Lead", scope: "task_lead" },
     { value: "TASK_REMINDER_ON_LEAD", label: "Task Reminder on Lead", scope: "task_lead" },
+    { value: "TASK_OVERDUE_ON_LEAD", label: "Task Overdue on Lead", scope: "task_lead" },
     { value: "TASK_CREATED_ON_OPPORTUNITY", label: "Task Created on Opportunity", scope: "task_opportunity" },
     { value: "TASK_UPDATED_ON_OPPORTUNITY", label: "Task Updated on Opportunity", scope: "task_opportunity" },
     { value: "TASK_COMPLETED_ON_OPPORTUNITY", label: "Task Completed on Opportunity", scope: "task_opportunity" },
     { value: "TASK_REMINDER_ON_OPPORTUNITY", label: "Task Reminder on Opportunity", scope: "task_opportunity" },
+    { value: "TASK_OVERDUE_ON_OPPORTUNITY", label: "Task Overdue on Opportunity", scope: "task_opportunity" },
+    { value: "COMMUNICATION_SENT", label: "Communication Sent", scope: "communication" },
+    { value: "COMMUNICATION_DELIVERED", label: "Communication Delivered", scope: "communication" },
+    { value: "COMMUNICATION_OPENED", label: "Email Opened", scope: "communication" },
+    { value: "COMMUNICATION_CLICKED", label: "Link Clicked", scope: "communication" },
+    { value: "COMMUNICATION_REPLIED", label: "Reply Received", scope: "communication" },
+    { value: "COMMUNICATION_BOUNCED", label: "Message Bounced", scope: "communication" },
+    { value: "COMMUNICATION_FAILED", label: "Message Failed", scope: "communication" },
+    { value: "COMMUNICATION_UNSUBSCRIBED", label: "Unsubscribed", scope: "communication" },
     { value: "REGULAR_INTERVAL", label: "At Regular Intervals", scope: "lead" },
     { value: "MANUAL", label: "Manual Trigger", scope: "lead" },
 ];
@@ -1061,10 +1083,17 @@ function AutomationBuilderContent() {
         label: `Task: ${field.label}`,
         options: field.key === "ownerId" ? users.map((user) => ({ label: user.name || user.email, value: user.id })) : field.options,
     }));
+    const communicationConditionFields = COMMUNICATION_FIELDS.map((field) => ({
+        ...field,
+        key: `communication.${field.key}`,
+        label: `Communication: ${field.label}`,
+    }));
 
     const isOpportunityScopedTrigger = triggerScope === "opportunity" || triggerScope === "activity_opportunity" || triggerScope === "task_opportunity";
     const isActivityScopedTrigger = triggerScope === "activity_lead" || triggerScope === "activity_opportunity" || triggerScope === "activity_activity";
-    const allConditionFields = triggerScope === "opportunity" || triggerScope === "task_opportunity"
+    const allConditionFields = triggerScope === "communication"
+        ? [...communicationConditionFields, ...leadConditionFields, ...opportunityConditionFields]
+        : triggerScope === "opportunity" || triggerScope === "task_opportunity"
         ? [...(triggerScope === "task_opportunity" ? taskConditionFields : []), ...leadConditionFields, ...opportunityConditionFields]
         : triggerScope === "activity_opportunity"
             ? [...activityConditionFields, ...opportunityConditionFields, ...leadConditionFields]
@@ -1075,7 +1104,7 @@ function AutomationBuilderContent() {
             : leadConditionFields;
     const defaultConditionField = allConditionFields[0]?.key ?? "lead.source";
 
-    const fieldMetaForValue = (fieldKey: string, source = allConditionFields) => source.find((field) => field.key === fieldKey || field.key.replace(/^(lead|opportunity|activity)\./, "") === fieldKey);
+    const fieldMetaForValue = (fieldKey: string, source = allConditionFields) => source.find((field) => field.key === fieldKey || field.key.replace(/^(lead|opportunity|activity|task|communication)\./, "") === fieldKey);
     const fieldOptionsForValue = (fieldKey: string, source = allConditionFields) =>
         (fieldMetaForValue(fieldKey, source)?.options ?? []).map((option: any) =>
             typeof option === "string" ? { label: option, value: option } : { label: option.label ?? option.value, value: option.value ?? option.label }

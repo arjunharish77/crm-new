@@ -77,6 +77,7 @@ deploy/vps/scripts/backup-postgres.sh
 ```
 
 Backups are written to `deploy/vps/backups` on the host and mounted at `/backups` in the Postgres container.
+When `UNNATIVIDYA_POSTGRES_DB` is configured, this creates both CRM and Unnati Vidya website dumps.
 
 ## Restore Rehearsal
 
@@ -85,6 +86,12 @@ Always test restore on a staging VPS or temporary database before production cut
 ```bash
 deploy/vps/scripts/restore-postgres.sh /opt/crm/deploy/vps/backups/example.dump
 deploy/vps/scripts/healthcheck.sh
+```
+
+To restore the website database specifically:
+
+```bash
+deploy/vps/scripts/restore-postgres.sh /opt/crm/deploy/vps/backups/unnatividya-example.dump unnatividya
 ```
 
 ## Local Development

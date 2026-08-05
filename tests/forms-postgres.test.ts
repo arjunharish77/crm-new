@@ -96,6 +96,7 @@ describe("direct Postgres forms repository", () => {
           { id: "email", label: "Email", mapping: "lead.email" },
           { id: "course", label: "Course", mapping: "opportunity.title", sourceModule: "opportunity" },
           { id: "notes", label: "Notes", mapping: "activity.notes", sourceModule: "activity" },
+          { id: "task", label: "Task", mapping: "task.title", sourceModule: "task" },
         ],
         config: { duplicateAction: "CREATE", fields: [] },
         isActive: true,
@@ -117,6 +118,8 @@ describe("direct Postgres forms repository", () => {
       .mockResolvedValueOnce({ id: "object-activity" })
       .mockResolvedValueOnce({ id: "activity-type-1" })
       .mockResolvedValueOnce({ id: "activity-1" })
+      .mockResolvedValueOnce({ ownerId: "user-1" })
+      .mockResolvedValueOnce({ id: "task-1" })
       .mockResolvedValueOnce({ id: "submission-1" });
     queryMock.mockResolvedValueOnce([{ id: "type-1", stages: [{ id: "stage-1", name: "New" }] }]);
 
@@ -125,6 +128,7 @@ describe("direct Postgres forms repository", () => {
       "lead.email": "student@example.com",
       "opportunity.title": "MBA Application",
       "activity.notes": "Requested counselling",
+      "task.title": "Call student",
       utm_campaign: "summer-intake",
     });
 
@@ -132,6 +136,7 @@ describe("direct Postgres forms repository", () => {
     expect(queryOneMock.mock.calls.some((call) => String(call[0]).includes('insert into "Lead"'))).toBe(true);
     expect(queryOneMock.mock.calls.some((call) => String(call[0]).includes('insert into "Opportunity"'))).toBe(true);
     expect(queryOneMock.mock.calls.some((call) => String(call[0]).includes('insert into "Activity"'))).toBe(true);
+    expect(queryOneMock.mock.calls.some((call) => String(call[0]).includes('insert into "Task"'))).toBe(true);
     expect(queryOneMock.mock.calls.some((call) => String(call[0]).includes('insert into "FormSubmission"'))).toBe(true);
   });
 });

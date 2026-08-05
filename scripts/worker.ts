@@ -3,13 +3,13 @@
 import { Queue, Worker } from "bullmq";
 import dotenv from "dotenv";
 import { processDueAutomationJobs } from "@/lib/server/crm";
-import { processDueTaskReminders } from "@/lib/server/tasks";
+import { processDueTaskReminders, processOverdueTaskAutomations } from "@/lib/server/tasks";
 import { processPendingReportRefreshJobs } from "@/lib/server/report-rollups";
 import { processDueReportSchedules } from "@/lib/server/report-schedules";
 import { processCommunicationOutbox } from "@/lib/server/communications";
 import { processExportRequest } from "@/lib/server/exports";
 import { recomputeLeadScoresForTenant } from "@/lib/server/admin-modules";
-import { recomputeSelfLearningScoresForTenant } from "@/lib/server/self-learning-scoring";
+import { processDueScheduledScoringRetraining, recomputeSelfLearningScoresForTenant } from "@/lib/server/self-learning-scoring";
 import { createUserNotification } from "@/lib/server/notifications";
 
 const QUEUE_NAME = "crm-jobs";
@@ -22,9 +22,11 @@ dotenv.config({ path: "../.env", override: false });
 const recurringJobs = [
   { name: "automation.processDue", processor: () => processDueAutomationJobs(50) },
   { name: "tasks.processReminders", processor: () => processDueTaskReminders() },
+  { name: "tasks.processOverdue", processor: () => processOverdueTaskAutomations() },
   { name: "reports.processRollups", processor: () => processPendingReportRefreshJobs(25) },
   { name: "reports.processSchedules", processor: () => processDueReportSchedules() },
   { name: "communications.processDue", processor: () => processCommunicationOutbox(50) },
+  { name: "scoring.processScheduledRetraining", processor: () => processDueScheduledScoringRetraining(10) },
 ] as const;
 
 type RecurringJobName = (typeof recurringJobs)[number]["name"];

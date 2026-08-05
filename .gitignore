@@ -2,6 +2,7 @@
 
 # dependencies
 /node_modules
+apps/**/node_modules
 /.pnp
 .pnp.*
 .yarn/*
@@ -15,7 +16,11 @@
 
 # next.js
 /.next/
+apps/**/.next/
 /out/
+
+# turborepo / monorepo tooling
+/.turbo/
 
 # production
 /build
@@ -23,6 +28,7 @@
 # local database/storage artifacts
 /db-dumps/
 /storage/
+ml-service/storage/
 
 # misc
 .DS_Store
@@ -44,3 +50,8 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# ml-service (Python)
+ml-service/.venv/
+ml-service/**/__pycache__/
+ml-service/.cache/

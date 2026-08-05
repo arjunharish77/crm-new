@@ -19,6 +19,7 @@ import { OpportunityStageHistoryList } from "@/components/opportunities/opportun
 import { NotesPanel } from "@/components/common/notes-panel";
 import { ContextualFormsPanel } from "@/components/forms/contextual-forms-panel";
 import { RelatedTasksPanel } from "@/components/tasks/related-tasks-panel";
+import { CommunicationEventsPanel } from "@/components/communications/communication-events-panel";
 import { formatCurrency, cn } from "@/lib/utils";
 import { fadeInUp } from "@/lib/motion";
 import { useAuth } from "@/providers/auth-provider";
@@ -49,7 +50,7 @@ export default function OpportunityDetailPage() {
     const [taskCount, setTaskCount] = useState(0);
     const [loading, setLoading] = useState(true);
     const [showEditDialog, setShowEditDialog] = useState(false);
-    const [tabValue, setTabValue] = useState<"activity" | "details" | "scoring" | "stage" | "tasks" | "notes" | "audit">("activity");
+    const [tabValue, setTabValue] = useState<"activity" | "details" | "scoring" | "stage" | "tasks" | "communications" | "notes" | "audit">("activity");
     const [activityTypeFilter, setActivityTypeFilter] = useState<string>("ALL");
     const [activityTimeFilter, setActivityTimeFilter] = useState<ActivityTimeFilter>("ALL");
 
@@ -331,6 +332,7 @@ export default function OpportunityDetailPage() {
                                 onClick={() => setTabValue("stage")}
                             />
                             <WorkspaceTab label={`Tasks (${taskCount})`} active={tabValue === "tasks"} onClick={() => setTabValue("tasks")} />
+                            <WorkspaceTab label="Communications" active={tabValue === "communications"} onClick={() => setTabValue("communications")} />
                             <WorkspaceTab label="Notes" active={tabValue === "notes"} onClick={() => setTabValue("notes")} />
                             <WorkspaceTab label="Audit" active={tabValue === "audit"} onClick={() => setTabValue("audit")} />
                         </div>
@@ -415,6 +417,12 @@ export default function OpportunityDetailPage() {
                         {tabValue === "notes" && (
                             <div className="rounded-lg bg-surface-container-lowest p-2.5">
                                 <NotesPanel entityType="opportunity" entityId={opportunity.id} currentUserId={user?.id} />
+                            </div>
+                        )}
+
+                        {tabValue === "communications" && (
+                            <div className="rounded-lg bg-surface-container-lowest p-2.5">
+                                <CommunicationEventsPanel entityType="OPPORTUNITY" entityId={opportunity.id} />
                             </div>
                         )}
 

@@ -39,7 +39,17 @@ export function getSmartViewFields(module: SmartViewModule, references: SmartVie
             { key: "status", label: "Status", type: "select", options: STATUS_OPTIONS },
             { key: "source", label: "Source", type: "select", options: sourceOptions() },
             { key: "score", label: "Score", type: "number" },
+            { key: "predictiveScoreBand", label: "Predictive score band", type: "select", options: scoreBandOptions() },
+            { key: "predictiveConversionProbability", label: "Conversion probability", type: "number" },
+            { key: "predictiveConfidence", label: "Score confidence", type: "number" },
+            { key: "predictiveStallRisk", label: "Stall risk", type: "number" },
+            { key: "predictiveExpectedResponseLikelihood", label: "Response likelihood", type: "number" },
+            { key: "predictiveDuplicateRisk", label: "Duplicate risk", type: "number" },
+            { key: "predictiveStaleRisk", label: "Stale risk", type: "number" },
             { key: "ownerId", label: "Owner", type: "select", options: references.users ?? [] },
+            { key: "ownerSegment", label: "Owner segment", type: "select", options: dynamicOwnerOptions() },
+            { key: "teamSegment", label: "Team segment", type: "select", options: dynamicTeamOptions() },
+            { key: "activitySegment", label: "Activity touch state", type: "select", options: touchStateOptions() },
             { key: "createdAt", label: "Created date", type: "date" },
         ];
     }
@@ -49,8 +59,15 @@ export function getSmartViewFields(module: SmartViewModule, references: SmartVie
             { key: "title", label: "Opportunity", type: "text" },
             { key: "amount", label: "Amount", type: "number" },
             { key: "stageId", label: "Stage", type: "select", options: references.stages ?? [] },
+            { key: "predictiveScoreBand", label: "Predictive score band", type: "select", options: scoreBandOptions() },
+            { key: "predictiveWinProbability", label: "Win probability", type: "number" },
+            { key: "predictiveConfidence", label: "Score confidence", type: "number" },
+            { key: "predictiveStallRisk", label: "Stall risk", type: "number" },
+            { key: "predictiveExpectedCloseRisk", label: "Expected close risk", type: "number" },
             { key: "priority", label: "Priority", type: "select", options: priorityOptions() },
             { key: "ownerId", label: "Owner", type: "select", options: references.users ?? [] },
+            { key: "ownerSegment", label: "Owner segment", type: "select", options: dynamicOwnerOptions() },
+            { key: "teamSegment", label: "Team segment", type: "select", options: dynamicTeamOptions() },
             { key: "expectedCloseDate", label: "Expected close", type: "date" },
             { key: "createdAt", label: "Created date", type: "date" },
         ];
@@ -64,6 +81,8 @@ export function getSmartViewFields(module: SmartViewModule, references: SmartVie
             { key: "dueAt", label: "Due date", type: "date" },
             { key: "slaStatus", label: "SLA status", type: "select", options: slaStatusOptions() },
             { key: "createdBy", label: "Created by", type: "select", options: references.users ?? [] },
+            { key: "ownerSegment", label: "Owner segment", type: "select", options: dynamicOwnerOptions() },
+            { key: "teamSegment", label: "Team segment", type: "select", options: dynamicTeamOptions() },
         ];
     }
 
@@ -74,6 +93,8 @@ export function getSmartViewFields(module: SmartViewModule, references: SmartVie
             { key: "status", label: "Status", type: "select", options: taskStatusOptions() },
             { key: "priority", label: "Priority", type: "select", options: priorityOptions() },
             { key: "ownerId", label: "Owner", type: "select", options: references.users ?? [] },
+            { key: "ownerSegment", label: "Owner segment", type: "select", options: dynamicOwnerOptions() },
+            { key: "teamSegment", label: "Team segment", type: "select", options: dynamicTeamOptions() },
             { key: "leadId", label: "Lead", type: "select", options: references.leads ?? [] },
             { key: "opportunityId", label: "Opportunity", type: "select", options: references.opportunities ?? [] },
             { key: "dueAt", label: "Due date", type: "date" },
@@ -85,6 +106,8 @@ export function getSmartViewFields(module: SmartViewModule, references: SmartVie
             { key: "status", label: "Status", type: "select", options: [{ label: "Active", value: "ACTIVE" }, { label: "Suspended", value: "SUSPENDED" }] },
             { key: "partnerLoginRole", label: "Partner login role", type: "select", options: partnerLoginRoleOptions() },
             { key: "canAccessPayouts", label: "Can access payouts", type: "boolean" },
+            { key: "ownerSegment", label: "Owner segment", type: "select", options: dynamicOwnerOptions() },
+            { key: "teamSegment", label: "Team segment", type: "select", options: dynamicTeamOptions() },
             { key: "partnerOrganizationId", label: "Partner organization", type: "select", options: references.partnerOrganizations ?? [] },
             { key: "createdAt", label: "Created date", type: "date" },
         ];
@@ -96,6 +119,8 @@ export function getSmartViewFields(module: SmartViewModule, references: SmartVie
             { key: "isHeld", label: "Held", type: "boolean" },
             { key: "partnerId", label: "Partner", type: "select", options: references.partners ?? [] },
             { key: "partnerOrganizationId", label: "Partner organization", type: "select", options: references.partnerOrganizations ?? [] },
+            { key: "ownerSegment", label: "Owner segment", type: "select", options: dynamicOwnerOptions() },
+            { key: "teamSegment", label: "Team segment", type: "select", options: dynamicTeamOptions() },
             { key: "amount", label: "Amount", type: "number" },
             { key: "createdAt", label: "Created date", type: "date" },
         ];
@@ -107,6 +132,36 @@ export function getSmartViewFields(module: SmartViewModule, references: SmartVie
         { key: "module", label: "Report module", type: "select", options: SMART_VIEW_MODULE_OPTIONS.map((option) => ({ label: option.label, value: option.value })) },
         { key: "createdBy", label: "Created by", type: "select", options: references.users ?? [] },
         { key: "createdAt", label: "Created date", type: "date" },
+    ];
+}
+
+function scoreBandOptions() {
+    return [
+        { label: "Hot", value: "HOT" },
+        { label: "Warm", value: "WARM" },
+        { label: "Cold", value: "COLD" },
+        { label: "Risk", value: "RISK" },
+    ];
+}
+
+function dynamicOwnerOptions() {
+    return [
+        { label: "Current user", value: "CURRENT_USER" },
+        { label: "Other users", value: "OTHER" },
+    ];
+}
+
+function dynamicTeamOptions() {
+    return [
+        { label: "Current team", value: "CURRENT_TEAM" },
+        { label: "Other teams", value: "OTHER" },
+    ];
+}
+
+function touchStateOptions() {
+    return [
+        { label: "Touched", value: "TOUCHED" },
+        { label: "Untouched", value: "UNTOUCHED" },
     ];
 }
 

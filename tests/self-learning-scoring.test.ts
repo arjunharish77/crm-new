@@ -60,7 +60,7 @@ vi.mock("@/lib/db/query", () => ({
       return [];
     }
     if (sql.includes('update "ScoringTrainingRun"') && sql.includes("COMPLETED")) {
-      const row = rows("ScoringTrainingRun").find((run) => run.tenantId === params[5] && run.id === params[6]);
+      const row = rows("ScoringTrainingRun").find((run) => run.tenantId === params[6] && run.id === params[7]);
       if (row) {
         Object.assign(row, {
           status: "COMPLETED",
@@ -68,8 +68,9 @@ vi.mock("@/lib/db/query", () => ({
           recordsProcessed: params[1],
           recordsSkipped: 0,
           metrics: params[2],
-          modelId: params[3],
-          modelVersionId: params[4],
+          qualityStatus: params[3],
+          modelId: params[4],
+          modelVersionId: params[5],
         });
       }
       return [];
@@ -113,7 +114,7 @@ vi.mock("@/lib/db/query", () => ({
       return [];
     }
     if (sql.includes('update "RecordScore"')) {
-      const row = rows("RecordScore").find((score) => score.tenantId === params[13] && score.id === params[14]);
+      const row = rows("RecordScore").find((score) => score.tenantId === params[25] && score.id === params[26]);
       if (row) {
         Object.assign(row, {
           fitScore: params[0],
@@ -125,10 +126,22 @@ vi.mock("@/lib/db/query", () => ({
           confidence: params[6],
           reasons: params[7],
           source: params[8],
-          featureSnapshotId: params[9],
-          modelVersionId: params[10],
-          calculatedAt: params[11],
-          updatedAt: params[12],
+          expectedResponseLikelihood: params[9],
+          duplicateRisk: params[10],
+          staleRisk: params[11],
+          expectedCloseRisk: params[12],
+          suggestedCloseDate: params[13],
+          suggestedCloseDateDeltaDays: params[14],
+          nextBestAction: params[15],
+          nextBestActivityType: params[16],
+          topDrivers: params[17],
+          missingDataWarnings: params[18],
+          similarRecordIds: params[19],
+          suggestedDataImprovements: params[20],
+          featureSnapshotId: params[21],
+          modelVersionId: params[22],
+          calculatedAt: params[23],
+          updatedAt: params[24],
         });
       }
       return [];
@@ -149,10 +162,22 @@ vi.mock("@/lib/db/query", () => ({
         confidence: params[11],
         reasons: params[12],
         source: params[13],
-        featureSnapshotId: params[14],
-        calculatedAt: params[15],
-        updatedAt: params[15],
-        createdAt: params[15],
+        expectedResponseLikelihood: params[14],
+        duplicateRisk: params[15],
+        staleRisk: params[16],
+        expectedCloseRisk: params[17],
+        suggestedCloseDate: params[18],
+        suggestedCloseDateDeltaDays: params[19],
+        nextBestAction: params[20],
+        nextBestActivityType: params[21],
+        topDrivers: params[22],
+        missingDataWarnings: params[23],
+        similarRecordIds: params[24],
+        suggestedDataImprovements: params[25],
+        featureSnapshotId: params[26],
+        calculatedAt: params[27],
+        updatedAt: params[27],
+        createdAt: params[27],
       });
       return [];
     }
@@ -165,7 +190,7 @@ vi.mock("@/lib/db/query", () => ({
         recordId: params[4],
         previousScore: params[5],
         nextScore: params[6],
-        changeReason: "RECOMPUTE",
+        changeReason: sql.includes("RECOMPUTE_SKIPPED_ACTIVE_OVERRIDE") ? "RECOMPUTE_SKIPPED_ACTIVE_OVERRIDE" : "RECOMPUTE",
         createdAt: params[7],
       });
       return [];
@@ -187,12 +212,18 @@ vi.mock("@/lib/db/query", () => ({
         lookbackDays: params[6],
         retrainCadence: params[7],
         fallbackMode: params[8],
-        promotedLeadModelVersionId: params[9],
-        promotedOpportunityModelVersionId: params[10],
-        lastRecomputedAt: params[11],
-        updatedBy: params[12],
-        createdAt: params[13],
-        updatedAt: params[13],
+        approvalMode: params[9],
+        featureCatalog: params[10],
+        prohibitedFieldKeys: params[11],
+        qualityThresholds: params[12],
+        featureRetentionDays: params[13],
+        lowConfidenceFallbackRules: params[14],
+        promotedLeadModelVersionId: params[15],
+        promotedOpportunityModelVersionId: params[16],
+        lastRecomputedAt: params[17],
+        updatedBy: params[18],
+        createdAt: params[19],
+        updatedAt: params[19],
       };
       rows("ScoringSettings").push(row);
       return row;
@@ -363,7 +394,61 @@ describe("Predictive scoring", () => {
     expect(getActiveDb().RecordScore).toHaveLength(3);
     expect(getActiveDb().RecordScoreHistory).toHaveLength(3);
     expect(getActiveDb().Lead[0].score).toBeGreaterThan(0);
+    expect(getActiveDb().RecordScore[0].expectedResponseLikelihood).toEqual(expect.any(Number));
+    expect(getActiveDb().RecordScore[0].nextBestAction).toEqual(expect.any(String));
+    expect(JSON.parse(getActiveDb().RecordScore[0].topDrivers)).toEqual(expect.any(Array));
     expect(getActiveDb().ScoringTrainingRun[0].status).toBe("COMPLETED");
+  });
+
+  it("keeps active manual overrides ahead of recomputed predictive scores", async () => {
+    setFixtureDb({
+      ScoringSettings: [
+        {
+          id: "settings-override",
+          tenantId: TENANT,
+          isEnabled: true,
+          targetModules: ["LEAD"],
+          objective: "CONVERSION",
+          minimumHistoricalRecords: 1,
+          lookbackDays: 365,
+          retrainCadence: "MANUAL",
+          fallbackMode: "RULE_SCORE",
+        },
+      ],
+      Lead: [
+        { id: "lead-override", tenantId: TENANT, email: "override@example.com", phone: "999", company: "Acme", source: "Website", status: "NEW", score: 91, createdAt: "2026-01-01T00:00:00.000Z", updatedAt: "2026-01-01T00:00:00.000Z" },
+      ],
+      Opportunity: [],
+      StageDefinition: [],
+      Activity: [],
+      Task: [],
+      RecordScore: [
+        {
+          id: "score-override",
+          tenantId: TENANT,
+          recordType: "LEAD",
+          recordId: "lead-override",
+          fitScore: 91,
+          engagementScore: 91,
+          conversionProbability: 91,
+          stallRisk: 0,
+          scoreBand: "HOT",
+          confidence: 100,
+          reasons: [],
+          source: "MANUAL_OVERRIDE",
+          overrideReason: "Sales leader override",
+          overrideUntil: "2099-01-01T00:00:00.000Z",
+        },
+      ],
+    });
+
+    await recomputeSelfLearningScoresForTenant(adminUser, { force: true, targetModules: ["LEAD"] });
+
+    expect(getActiveDb().RecordScore).toHaveLength(1);
+    expect(getActiveDb().RecordScore[0].source).toBe("MANUAL_OVERRIDE");
+    expect(getActiveDb().RecordScore[0].conversionProbability).toBe(91);
+    expect(getActiveDb().Lead[0].score).toBe(91);
+    expect(getActiveDb().RecordScoreHistory[0].changeReason).toBe("RECOMPUTE_SKIPPED_ACTIVE_OVERRIDE");
   });
 
   it("handles an empty tenant without failing", async () => {

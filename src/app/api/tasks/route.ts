@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireCurrentUser } from "@/lib/server/auth";
-import { createTaskForTenant, listTasksForTenant } from "@/lib/server/tasks";
+import { bulkUpdateTasksForTenant, createTaskForTenant, listTasksForTenant } from "@/lib/server/tasks";
 import { badRequest, serverError, unauthorized } from "@/lib/server/http";
 
 export async function GET(request: Request) {
@@ -33,5 +33,17 @@ export async function POST(request: Request) {
     if (error instanceof Error && error.message === "UNAUTHORIZED") return unauthorized();
     if (error instanceof Error && error.message === "TASK_TITLE_REQUIRED") return badRequest("Task title is required");
     return serverError("Failed to create task", error);
+  }
+}
+
+export async function PATCH(request: Request) {
+  try {
+    const user = await requireCurrentUser(request);
+    const body = await request.json().catch(() => ({}));
+    const result = await bulkUpdateTasksForTenant(user, body);
+    return NextResponse.json(result);
+  } catch (error) {
+    if (error instanceof Error && error.message === "UNAUTHORIZED") return unauthorized();
+    return serverError("Failed to update tasks", error);
   }
 }

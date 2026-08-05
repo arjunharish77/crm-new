@@ -33,6 +33,14 @@ type TaskFilters = {
   due?: "overdue" | "today" | "upcoming" | "completed" | null;
 };
 
+export type BulkTaskInput = {
+  ids?: string[];
+  status?: TaskInput["status"];
+  ownerId?: string | null;
+  dueAt?: string | null;
+  reminderAt?: string | null;
+};
+
 const TASK_COLUMNS =
   'id, "tenantId", title, description, status, priority, "ownerId", "createdBy", "leadId", "opportunityId", "activityId", "dueAt", "reminderAt", "completedAt", "completedBy", metadata, "createdAt", "updatedAt"';
 
@@ -152,7 +160,7 @@ async function audit(user: TenantUser, action: string, taskId: string, before: u
   );
 }
 
-async function emitTaskAutomation(user: TenantUser, action: "CREATED" | "UPDATED" | "COMPLETED" | "REMINDER", task: Record<string, any>) {
+async function emitTaskAutomation(user: TenantUser, action: "CREATED" | "UPDATED" | "COMPLETED" | "REMINDER" | "OVERDUE", task: Record<string, any>) {
   const baseRecord = {
     ...task,
     taskId: task.id,
@@ -160,7 +168,7 @@ async function emitTaskAutomation(user: TenantUser, action: "CREATED" | "UPDATED
     opportunityId: task.opportunityId ?? null,
     activityId: task.activityId ?? null,
   };
-  const suffix = action === "CREATED" ? "CREATED" : action === "COMPLETED" ? "COMPLETED" : action === "REMINDER" ? "REMINDER" : "UPDATED";
+  const suffix = action === "CREATED" ? "CREATED" : action === "COMPLETED" ? "COMPLETED" : action === "REMINDER" ? "REMINDER" : action === "OVERDUE" ? "OVERDUE" : "UPDATED";
   if (task.opportunityId) {
     await runAutomationsForEvent(user, `TASK_${suffix}_ON_OPPORTUNITY`, "TASK", task.id, baseRecord).catch(() => undefined);
   }
@@ -258,6 +266,23 @@ export async function updateTaskForTenant(user: TenantUser, id: string, input: T
   return task;
 }
 
+export async function bulkUpdateTasksForTenant(user: TenantUser, input: BulkTaskInput) {
+  const ids = Array.isArray(input.ids) ? [...new Set(input.ids.filter(Boolean))] : [];
+  if (!ids.length) return { updated: [], skipped: 0 };
+
+  const updated = [];
+  for (const id of ids) {
+    const task = await updateTaskForTenant(user, id, {
+      status: input.status,
+      ownerId: input.ownerId,
+      dueAt: input.dueAt,
+      reminderAt: input.reminderAt,
+    });
+    if (task) updated.push(task);
+  }
+  return { updated: await hydrate(user, updated), skipped: ids.length - updated.length };
+}
+
 export async function deleteTaskForTenant(user: TenantUser, id: string) {
   const existing = await rawTask(user, id);
   if (!existing) return null;
@@ -277,6 +302,28 @@ export async function processDueTaskReminders(now = new Date()) {
   for (const task of tasks) {
     await execute('update "Task" set "reminderAt" = null, "updatedAt" = $1 where id = $2', [now.toISOString(), task.id]);
     await emitTaskAutomation({ id: task.ownerId, tenantId: task.tenantId }, "REMINDER", task);
+    processed.push({ taskId: task.id });
+  }
+  return { processed };
+}
+
+export async function processOverdueTaskAutomations(now = new Date()) {
+  const tasks = await query<any>(
+    `select ${TASK_COLUMNS} from "Task"
+     where status not in ('COMPLETED', 'CANCELLED')
+       and "dueAt" <= $1
+       and coalesce(metadata->>'overdueAutomationEmittedAt', '') = ''
+     limit 100`,
+    [now.toISOString()],
+  );
+  const processed = [];
+  for (const task of tasks) {
+    const metadata = {
+      ...(task.metadata ?? {}),
+      overdueAutomationEmittedAt: now.toISOString(),
+    };
+    await execute('update "Task" set metadata = $1, "updatedAt" = $2 where id = $3', [metadata, now.toISOString(), task.id]);
+    await emitTaskAutomation({ id: task.ownerId, tenantId: task.tenantId }, "OVERDUE", { ...task, metadata, overdue: true });
     processed.push({ taskId: task.id });
   }
   return { processed };

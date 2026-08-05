@@ -68,7 +68,7 @@ interface FormField {
     placeholder?: string;
     required: boolean;
     options?: string[]; // for select, radio, checkbox
-    sourceModule?: 'lead' | 'opportunity' | 'activity';
+    sourceModule?: 'lead' | 'opportunity' | 'activity' | 'task';
     mapping?: string;
     tabId?: string;
     sectionId?: string;
@@ -127,6 +127,14 @@ const MODULE_FIELDS = {
         { key: "notes", label: "Activity Notes", type: "TEXTAREA" },
         { key: "dueAt", label: "Due Date", type: "DATE" },
     ],
+    task: [
+        { key: "title", label: "Task Title", type: "TEXT" },
+        { key: "description", label: "Task Description", type: "TEXTAREA" },
+        { key: "status", label: "Task Status", type: "SELECT", options: ["OPEN", "IN_PROGRESS", "COMPLETED", "CANCELLED"] },
+        { key: "priority", label: "Task Priority", type: "SELECT", options: ["LOW", "MEDIUM", "HIGH", "URGENT"] },
+        { key: "dueAt", label: "Task Due Date", type: "DATE" },
+        { key: "reminderAt", label: "Task Reminder", type: "DATE" },
+    ],
 } as const;
 
 type SourceModule = keyof typeof MODULE_FIELDS;
@@ -159,7 +167,7 @@ export function FormEditor({ initialForm }: EditorProps) {
     const [selectedOpportunityTypeId, setSelectedOpportunityTypeId] = useState<string>("");
     const [selectedActivityTypeId, setSelectedActivityTypeId] = useState<string>("");
     const [activeCanvasTabId, setActiveCanvasTabId] = useState<string>(initialForm.config?.tabs?.[0]?.id || "tab_1");
-    const [moduleCustomFields, setModuleCustomFields] = useState<Record<SourceModule, any[]>>({ lead: [], opportunity: [], activity: [] });
+    const [moduleCustomFields, setModuleCustomFields] = useState<Record<SourceModule, any[]>>({ lead: [], opportunity: [], activity: [], task: [] });
     const [opportunityTypeCustomFields, setOpportunityTypeCustomFields] = useState<any[]>([]);
     const [activityTypeCustomFields, setActivityTypeCustomFields] = useState<any[]>([]);
     const [users, setUsers] = useState<any[]>([]);
@@ -202,7 +210,8 @@ export function FormEditor({ initialForm }: EditorProps) {
             apiFetch("/custom-fields?objectType=LEAD").catch(() => []),
             apiFetch("/custom-fields?objectType=OPPORTUNITY").catch(() => []),
             apiFetch("/custom-fields?objectType=ACTIVITY").catch(() => []),
-        ]).then(([oppTypes, actTypes, userList, groupList, leadFields, oppFields, actFields]) => {
+            apiFetch("/custom-fields?objectType=TASK").catch(() => []),
+        ]).then(([oppTypes, actTypes, userList, groupList, leadFields, oppFields, actFields, taskFields]) => {
             const opportunities = Array.isArray(oppTypes) ? oppTypes : [];
             const activities = Array.isArray(actTypes) ? actTypes : [];
             setOpportunityTypes(opportunities);
@@ -213,6 +222,7 @@ export function FormEditor({ initialForm }: EditorProps) {
                 lead: Array.isArray(leadFields) ? leadFields : [],
                 opportunity: Array.isArray(oppFields) ? oppFields : [],
                 activity: Array.isArray(actFields) ? actFields : [],
+                task: Array.isArray(taskFields) ? taskFields : [],
             });
             setSelectedOpportunityTypeId((current) => current || opportunities[0]?.id || "");
             setSelectedActivityTypeId((current) => current || activities[0]?.id || "");
@@ -527,6 +537,7 @@ export function FormEditor({ initialForm }: EditorProps) {
                                     <SelectItem value="lead">Lead</SelectItem>
                                     <SelectItem value="opportunity">Opportunity</SelectItem>
                                     <SelectItem value="activity">Activity</SelectItem>
+                                    <SelectItem value="task">Task</SelectItem>
                                 </SelectContent>
                             </Select>
                         </div>
@@ -793,6 +804,7 @@ export function FormEditor({ initialForm }: EditorProps) {
                                                         <SelectItem value="lead">Lead</SelectItem>
                                                         <SelectItem value="opportunity">Opportunity</SelectItem>
                                                         <SelectItem value="activity">Activity</SelectItem>
+                                                        <SelectItem value="task">Task</SelectItem>
                                                     </SelectContent>
                                                 </Select>
                                             </div>

@@ -463,7 +463,7 @@ looks correct, *then* do the real cutover restore.
 
 ```bash
 docker compose -f deploy/vps/docker-compose.yml --env-file deploy/vps/.env run --rm \
-  -e PLATFORM_ADMIN_EMAIL="you@yourcompany.com" \
+  -e PLATFORM_ADMIN_EMAIL="arjukannu@gmail.com" \
   -e PLATFORM_ADMIN_NAME="Your Name" \
   -e PLATFORM_ADMIN_PASSWORD="$(openssl rand -base64 18)" \
   web node scripts/ensure-platform-admin.js

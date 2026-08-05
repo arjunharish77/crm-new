@@ -135,4 +135,67 @@ describe("communications connectors", () => {
     expect(queryMock.mock.calls[1][0]).toContain('insert into "CommunicationOutbox"');
     expect(queryMock.mock.calls[2][0]).toContain('update "ReportEmailDelivery" set status');
   });
+
+  it("defers marketing campaign messages during quiet hours", async () => {
+    queryMock
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([
+        {
+          id: "outbox-quiet",
+          tenantId: "tenant-1",
+          channel: "EMAIL",
+          recipient: "lead@example.com",
+          subject: "Admissions update",
+          body: "Hello",
+          payload: {},
+          attempts: 0,
+          sourceType: "MARKETING_CAMPAIGN",
+          sourceId: "campaign-1",
+        },
+      ])
+      .mockResolvedValueOnce(1);
+    queryOneMock.mockResolvedValueOnce({
+      throttlePerMinute: 60,
+      quietHours: { enabled: true, start: "21:00", end: "09:00" },
+    });
+
+    const { processCommunicationOutbox } = await import("@/lib/server/communications");
+    const result = await processCommunicationOutbox(10, new Date("2026-07-18T22:15:00.000Z"));
+
+    expect(result.processed[0]).toMatchObject({ id: "outbox-quiet", status: "DEFERRED", reason: "QUIET_HOURS" });
+    expect(queryMock.mock.calls[2][0]).toContain('update "CommunicationOutbox"');
+    expect(queryMock.mock.calls[2][1][0]).toBe("2026-07-19T03:30:00.000Z");
+  });
+
+  it("defers marketing campaign messages when throttle is exhausted", async () => {
+    queryMock
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([
+        {
+          id: "outbox-throttle",
+          tenantId: "tenant-1",
+          channel: "SMS",
+          recipient: "+919999999999",
+          subject: null,
+          body: "Hello",
+          payload: {},
+          attempts: 0,
+          sourceType: "MARKETING_CAMPAIGN",
+          sourceId: "campaign-1",
+        },
+      ])
+      .mockResolvedValueOnce(1);
+    queryOneMock
+      .mockResolvedValueOnce({
+        throttlePerMinute: 1,
+        quietHours: { enabled: false, start: "21:00", end: "09:00" },
+      })
+      .mockResolvedValueOnce({ count: 1 });
+
+    const { processCommunicationOutbox } = await import("@/lib/server/communications");
+    const result = await processCommunicationOutbox(10, new Date("2026-07-18T10:00:00.000Z"));
+
+    expect(result.processed[0]).toMatchObject({ id: "outbox-throttle", status: "DEFERRED", reason: "THROTTLE" });
+    expect(queryMock.mock.calls[2][1][0]).toBe("2026-07-18T10:01:00.000Z");
+  });
 });

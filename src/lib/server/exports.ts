@@ -245,6 +245,13 @@ async function fetchExportRows(user: TenantUser, moduleName: ExportModuleName, f
       ["source", "l.source"],
       ["status", "l.status"],
       ["score", "l.score"],
+      ["predictiveScoreBand", `rs."scoreBand"`],
+      ["predictiveConversionProbability", `rs."conversionProbability"`],
+      ["predictiveConfidence", "rs.confidence"],
+      ["predictiveStallRisk", `rs."stallRisk"`],
+      ["predictiveExpectedResponseLikelihood", `rs."expectedResponseLikelihood"`],
+      ["predictiveDuplicateRisk", `rs."duplicateRisk"`],
+      ["predictiveStaleRisk", `rs."staleRisk"`],
       ["ownerId", `l."ownerId"`],
       ["createdAt", `l."createdAt"`],
       ["updatedAt", `l."updatedAt"`],
@@ -257,9 +264,14 @@ async function fetchExportRows(user: TenantUser, moduleName: ExportModuleName, f
     return query<Record<string, unknown>>(
       `select l.name as "Lead Name", l.email as "Email", l.phone as "Phone", l.company as "Company",
               l.status as "Status", l.source as "Source", owner.name as "Owner", l.score as "Score",
+              rs."scoreBand" as "Predictive Score Band", rs."conversionProbability" as "Conversion Probability",
+              rs.confidence as "Score Confidence", rs."stallRisk" as "Stall Risk",
+              rs."expectedResponseLikelihood" as "Response Likelihood", rs."duplicateRisk" as "Duplicate Risk",
+              rs."staleRisk" as "Stale Risk", rs."nextBestAction" as "Recommended Next Action",
               l."createdAt" as "Created At"
        from "Lead" l
        left join "User" owner on owner.id = l."ownerId"
+       left join "RecordScore" rs on rs."tenantId" = l."tenantId" and rs."recordType" = 'LEAD' and rs."recordId" = l.id
        where ${clauses.join(" and ")}
        order by l."createdAt" desc
        limit $${values.length}`,
@@ -285,6 +297,11 @@ async function fetchExportRows(user: TenantUser, moduleName: ExportModuleName, f
       ["createdAt", `o."createdAt"`],
       ["updatedAt", `o."updatedAt"`],
       ["expectedCloseDate", `o."expectedCloseDate"`],
+      ["predictiveScoreBand", `rs."scoreBand"`],
+      ["predictiveWinProbability", `rs."winProbability"`],
+      ["predictiveConfidence", "rs.confidence"],
+      ["predictiveStallRisk", `rs."stallRisk"`],
+      ["predictiveExpectedCloseRisk", `rs."expectedCloseRisk"`],
     ]));
     if (own) {
       values.push(user.id);
@@ -294,12 +311,17 @@ async function fetchExportRows(user: TenantUser, moduleName: ExportModuleName, f
     return query<Record<string, unknown>>(
       `select o.title as "Opportunity", l.name as "Lead", ot.name as "Opportunity Type",
               sd.name as "Stage", o.amount as "Amount", o.priority as "Priority",
-              owner.name as "Owner", o."expectedCloseDate" as "Expected Close Date", o."createdAt" as "Created At"
+              owner.name as "Owner", o."expectedCloseDate" as "Expected Close Date",
+              rs."scoreBand" as "Predictive Score Band", rs."winProbability" as "Win Probability",
+              rs.confidence as "Score Confidence", rs."stallRisk" as "Stall Risk",
+              rs."expectedCloseRisk" as "Expected Close Risk", rs."nextBestAction" as "Recommended Next Action",
+              rs."suggestedCloseDate" as "Suggested Close Date", o."createdAt" as "Created At"
        from "Opportunity" o
        left join "Lead" l on l.id = o."leadId"
        left join "OpportunityType" ot on ot.id = o."opportunityTypeId"
        left join "StageDefinition" sd on sd.id = o."stageId"
        left join "User" owner on owner.id = o."ownerId"
+       left join "RecordScore" rs on rs."tenantId" = o."tenantId" and rs."recordType" = 'OPPORTUNITY' and rs."recordId" = o.id
        where ${clauses.join(" and ")}
        order by o."createdAt" desc
        limit $${values.length}`,

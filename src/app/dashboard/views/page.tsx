@@ -16,7 +16,7 @@ import { formatWorkspaceDateTime } from "@/lib/date-format";
 import { cn } from "@/lib/utils";
 import { FilterConfig } from "@/types/filters";
 import { SmartViewModule, SmartViewTab } from "@/types/smart-views";
-import { Copy, LayoutList, MoreHorizontal, Pencil, Plus, RefreshCw, Search, SlidersHorizontal, Star, Trash2 } from "lucide-react";
+import { ChevronLeft, ChevronRight, Copy, LayoutList, MoreHorizontal, Pencil, Plus, RefreshCw, Search, SlidersHorizontal, Star, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 type ViewRecord = {
@@ -32,9 +32,14 @@ type ViewRecord = {
     sharedTeamIds?: string[];
     sharedSalesGroupIds?: string[];
     sharedRoleIds?: string[];
+    displayOrder?: number;
+    defaultModule?: string | null;
+    defaultPersona?: "ADMIN" | "MANAGER" | "REP" | "PARTNER" | null;
 };
 
 type CurrentUser = {
+    id?: string;
+    teamId?: string | null;
     isTenantAdmin?: boolean;
     isPlatformAdmin?: boolean;
 };
@@ -110,7 +115,7 @@ export default function ViewsPage() {
 
         await Promise.all(nextTabs.map(async (tab) => {
             try {
-                const records = await fetchRecordsForTab(tab);
+                const records = await fetchRecordsForTab(tab, currentUser);
                 nextRecords[tab.id] = applySmartViewFilters(records, tab.filters ?? EMPTY_FILTERS);
             } catch (error: any) {
                 nextRecords[tab.id] = [];
@@ -122,7 +127,7 @@ export default function ViewsPage() {
         setTabErrors(nextErrors);
         setLastUpdatedAt(new Date().toISOString());
         setLoadingRecords(false);
-    }, []);
+    }, [currentUser]);
 
     useEffect(() => {
         loadRecords(selectedView, tabs);
@@ -147,6 +152,56 @@ export default function ViewsPage() {
         } catch {
             toast.error("Failed to delete Smart View");
         }
+    };
+
+    const updateView = async (view: ViewRecord, patch: Partial<ViewRecord>) => {
+        try {
+            const updated = await apiFetch<ViewRecord>(`/saved-views/${view.id}`, {
+                method: "PATCH",
+                body: JSON.stringify(patch),
+            });
+            setViews((current) => current.map((item) => item.id === view.id ? updated : item));
+            setSelectedViewId(updated.id);
+            toast.success("Smart View updated");
+            fetchViews();
+        } catch {
+            toast.error("Failed to update Smart View");
+        }
+    };
+
+    const renameView = async (view: ViewRecord) => {
+        const name = window.prompt("Rename Smart View", view.name);
+        if (!name?.trim() || name.trim() === view.name) return;
+        await updateView(view, { name: name.trim() });
+    };
+
+    const moveView = async (view: ViewRecord, direction: -1 | 1) => {
+        const ordered = [...views].sort((first, second) =>
+            Number(first.displayOrder ?? 1000) - Number(second.displayOrder ?? 1000) || first.name.localeCompare(second.name),
+        );
+        const index = ordered.findIndex((item) => item.id === view.id);
+        const swap = ordered[index + direction];
+        if (!swap) return;
+        await Promise.all([
+            apiFetch(`/saved-views/${view.id}`, {
+                method: "PATCH",
+                body: JSON.stringify({ displayOrder: swap.displayOrder ?? (index + direction + 1) * 10 }),
+            }),
+            apiFetch(`/saved-views/${swap.id}`, {
+                method: "PATCH",
+                body: JSON.stringify({ displayOrder: view.displayOrder ?? (index + 1) * 10 }),
+            }),
+        ]);
+        toast.success("Smart View order updated");
+        fetchViews();
+    };
+
+    const setPersonaDefault = async (view: ViewRecord, persona: ViewRecord["defaultPersona"]) => {
+        await updateView(view, {
+            isDefault: true,
+            defaultModule: activeTab?.module ?? view.module ?? "LEADS",
+            defaultPersona: persona,
+        });
     };
 
     const activeRecords = recordsByTab[activeTab?.id ?? ""] ?? [];
@@ -207,6 +262,30 @@ export default function ViewsPage() {
                                         <Pencil className="size-4" />
                                         Edit
                                     </DropdownMenuItem>
+                                    <DropdownMenuItem onClick={() => renameView(selectedView)}>
+                                        <Pencil className="size-4" />
+                                        Rename
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem onClick={() => moveView(selectedView, -1)}>
+                                        <ChevronLeft className="size-4" />
+                                        Move up
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem onClick={() => moveView(selectedView, 1)}>
+                                        <ChevronRight className="size-4" />
+                                        Move down
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem onClick={() => setPersonaDefault(selectedView, null)}>
+                                        <Star className="size-4" />
+                                        Default for module
+                                    </DropdownMenuItem>
+                                    {canShareViews ? (
+                                        <>
+                                            <DropdownMenuItem onClick={() => setPersonaDefault(selectedView, "ADMIN")}>Default for Admin</DropdownMenuItem>
+                                            <DropdownMenuItem onClick={() => setPersonaDefault(selectedView, "MANAGER")}>Default for Manager</DropdownMenuItem>
+                                            <DropdownMenuItem onClick={() => setPersonaDefault(selectedView, "REP")}>Default for Rep</DropdownMenuItem>
+                                            <DropdownMenuItem onClick={() => setPersonaDefault(selectedView, "PARTNER")}>Default for Partner</DropdownMenuItem>
+                                        </>
+                                    ) : null}
                                     <DropdownMenuItem onClick={() => cloneView(selectedView)}>
                                         <Copy className="size-4" />
                                         Clone
@@ -357,10 +436,10 @@ function normalizeTabs(view: ViewRecord | null): SmartViewTab[] {
     }];
 }
 
-async function fetchRecordsForTab(tab: SmartViewTab) {
+async function fetchRecordsForTab(tab: SmartViewTab, currentUser: CurrentUser | null) {
     const response = await fetchModuleData(tab.module);
     const records = Array.isArray(response) ? response : Array.isArray(response?.data) ? response.data : [];
-    return records.map((record: any) => decorateRecord(tab.module, record));
+    return records.map((record: any) => decorateRecord(tab.module, record, currentUser));
 }
 
 async function fetchModuleData(module: SmartViewModule) {
@@ -378,16 +457,21 @@ async function fetchModuleData(module: SmartViewModule) {
     return [];
 }
 
-function decorateRecord(module: SmartViewModule, record: any) {
+function decorateRecord(module: SmartViewModule, record: any, currentUser: CurrentUser | null) {
+    const ownerId = record.ownerId ?? record.owner?.id ?? record.partner?.userId ?? null;
+    const ownerSegment = ownerId && currentUser?.id && ownerId === currentUser.id ? "CURRENT_USER" : "OTHER";
+    const teamSegment = record.teamId && currentUser?.teamId && record.teamId === currentUser.teamId ? "CURRENT_TEAM" : "OTHER";
     if (module === "TASKS") {
-        return { ...record, due: dueSegment(record), ownerName: record.owner?.name || record.owner?.email || "Unknown user" };
+        return { ...record, due: dueSegment(record), ownerSegment, teamSegment, ownerName: record.owner?.name || record.owner?.email || "Unknown user" };
     }
     if (module === "OPPORTUNITIES") {
-        return { ...record, stageName: record.stage?.name || "Unknown stage", leadName: record.lead?.name || record.lead?.email || "Unknown lead" };
+        return { ...record, ownerSegment, teamSegment, stageName: record.stage?.name || "Unknown stage", leadName: record.lead?.name || record.lead?.email || "Unknown lead" };
     }
     if (module === "ACTIVITIES") {
         return {
             ...record,
+            ownerSegment,
+            teamSegment,
             activityTypeName: record.type?.name || "Unknown activity type",
             leadName: record.lead?.name || record.lead?.email || "Unknown lead",
             opportunityTitle: record.opportunity?.title || "Unknown opportunity",
@@ -397,6 +481,8 @@ function decorateRecord(module: SmartViewModule, record: any) {
     if (module === "PARTNERS") {
         return {
             ...record,
+            ownerSegment,
+            teamSegment,
             name: record.user?.name || record.legalBusinessName || "Unnamed partner",
             email: record.user?.email,
             partnerOrganizationName: record.organization?.name || record.partnerOrganization?.name || "No organization",
@@ -405,12 +491,20 @@ function decorateRecord(module: SmartViewModule, record: any) {
     if (module === "PAYOUTS") {
         return {
             ...record,
+            ownerSegment,
+            teamSegment,
             amount: record.totalCommissionAmount ?? record.amount,
             partnerName: record.partner?.legalBusinessName || record.partner?.name || record.partner?.user?.name || "Unknown partner",
             partnerOrganizationName: record.partnerOrganization?.name || record.partner?.organization?.name || "No organization",
         };
     }
-    return record;
+    const lastActivityAt = record.lastActivityAt ?? record.lastActivity?.createdAt ?? null;
+    return {
+        ...record,
+        ownerSegment,
+        teamSegment,
+        activitySegment: lastActivityAt ? "TOUCHED" : "UNTOUCHED",
+    };
 }
 
 function dueSegment(record: any) {

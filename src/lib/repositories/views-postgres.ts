@@ -27,6 +27,9 @@ type SavedViewInput = {
   sharedTeamIds?: string[];
   sharedSalesGroupIds?: string[];
   sharedRoleIds?: string[];
+  displayOrder?: number;
+  defaultModule?: string | null;
+  defaultPersona?: "ADMIN" | "MANAGER" | "REP" | "PARTNER" | null;
 };
 
 function normalizeSavedViewConfig(config: any = {}) {
@@ -83,6 +86,9 @@ function normalizeSavedViewConfig(config: any = {}) {
     sharedTeamIds: Array.isArray(config.sharedTeamIds) ? config.sharedTeamIds : [],
     sharedSalesGroupIds: Array.isArray(config.sharedSalesGroupIds) ? config.sharedSalesGroupIds : [],
     sharedRoleIds: Array.isArray(config.sharedRoleIds) ? config.sharedRoleIds : [],
+    displayOrder: Number.isFinite(Number(config.displayOrder)) ? Number(config.displayOrder) : 1000,
+    defaultModule: typeof config.defaultModule === "string" ? config.defaultModule : null,
+    defaultPersona: typeof config.defaultPersona === "string" ? config.defaultPersona : null,
   };
 }
 
@@ -121,6 +127,9 @@ function buildSavedViewConfig(input: Partial<SavedViewInput>, existing: any = {}
     sharedTeamIds: input.sharedTeamIds ?? normalized.sharedTeamIds,
     sharedSalesGroupIds: input.sharedSalesGroupIds ?? normalized.sharedSalesGroupIds,
     sharedRoleIds: input.sharedRoleIds ?? normalized.sharedRoleIds,
+    displayOrder: input.displayOrder ?? normalized.displayOrder,
+    defaultModule: input.defaultModule === undefined ? normalized.defaultModule : input.defaultModule,
+    defaultPersona: input.defaultPersona === undefined ? normalized.defaultPersona : input.defaultPersona,
   };
 }
 
@@ -188,9 +197,26 @@ function serializeSavedView(item: any) {
     sharedTeamIds: config.sharedTeamIds,
     sharedSalesGroupIds: config.sharedSalesGroupIds,
     sharedRoleIds: config.sharedRoleIds,
+    displayOrder: config.displayOrder,
+    defaultModule: config.defaultModule,
+    defaultPersona: config.defaultPersona,
     createdAt: item.createdAt,
     updatedAt: item.updatedAt,
   };
+}
+
+async function auditSavedView(user: TenantUser, action: string, viewId: string, before: unknown, after: unknown, client?: Queryable) {
+  if (!user.tenantId) return;
+  try {
+    await query(
+      `insert into "AuditLog" (id, "tenantId", "userId", action, "entityType", "entityId", before, after, diff, metadata, "createdAt")
+       values ($1, $2, $3, $4, 'SAVED_VIEW', $5, $6, $7, null, null, $8)`,
+      [randomUUID(), user.tenantId, user.id, action, viewId, before, after, new Date().toISOString()],
+      client,
+    );
+  } catch {
+    // Saved Views should not fail user-facing mutations if the audit append is unavailable.
+  }
 }
 
 async function clearOtherDefaultSavedViews(user: TenantUser, module: string, exceptId?: string, client?: Queryable) {
@@ -232,7 +258,11 @@ export async function listSavedViewsForTenant(user: TenantUser, module: string) 
       return String(item.module).toUpperCase() === requestedModule || config.tabs.some((tab: SmartViewTab) => tab.module === requestedModule);
     })
     .map(serializeSavedView)
-    .sort((first: any, second: any) => Number(second.isPinned) - Number(first.isPinned) || first.name.localeCompare(second.name));
+    .sort((first: any, second: any) =>
+      Number(second.isPinned) - Number(first.isPinned)
+      || Number(first.displayOrder ?? 1000) - Number(second.displayOrder ?? 1000)
+      || first.name.localeCompare(second.name),
+    );
 }
 
 export async function createSavedViewForTenant(user: TenantUser, input: SavedViewInput) {
@@ -261,6 +291,7 @@ export async function createSavedViewForTenant(user: TenantUser, input: SavedVie
       client,
     );
     if (!row) throw new Error("SAVED_VIEW_INSERT_FAILED");
+    await auditSavedView(user, "CREATE", row.id, null, row, client);
     return serializeSavedView(row);
   });
 }
@@ -300,6 +331,7 @@ export async function updateSavedViewForTenant(user: TenantUser, id: string, inp
       client,
     );
     if (!row) throw new Error("SAVED_VIEW_NOT_FOUND");
+    await auditSavedView(user, "UPDATE", row.id, existing, row, client);
     return serializeSavedView(row);
   });
 }
@@ -337,5 +369,13 @@ export async function cloneSavedViewForTenant(user: TenantUser, id: string) {
 export async function deleteSavedViewForTenant(user: TenantUser, id: string) {
   const tenantClause = user.tenantId ? '"tenantId" = $2' : '"tenantId" is null';
   const values = user.tenantId ? [id, user.tenantId] : [id];
+  const existing = await queryOne<any>(
+    `select id, name, module, "isPublic", config, "createdBy", "createdAt", "updatedAt"
+     from "CustomReport"
+     where id = $1 and "chartType" = 'SAVED_VIEW' and ${tenantClause}
+     limit 1`,
+    values,
+  );
   await query(`delete from "CustomReport" where id = $1 and "chartType" = 'SAVED_VIEW' and ${tenantClause}`, values);
+  if (existing) await auditSavedView(user, "DELETE", id, existing, null);
 }

@@ -21,6 +21,7 @@ function conditionMatches(record: Record<string, any>, condition: FilterConditio
     const actualNumber = Number(actual);
     const expectedNumber = Number(expected);
 
+    if (condition.operator === "equals" && typeof expected === "string" && expected.startsWith("__DATE_")) return inRelativeDateWindow(actual, expected);
     if (condition.operator === "equals") {
         if (typeof actual === "boolean") return actual === expected || String(actual) === String(expected);
         return actualString === expectedString;
@@ -38,6 +39,11 @@ function conditionMatches(record: Record<string, any>, condition: FilterConditio
     if (condition.operator === "not_in") return Array.isArray(expected) ? !expected.map(String).includes(String(actual)) : true;
     if (condition.operator === "before") return compareDate(actual, expected) < 0;
     if (condition.operator === "after") return compareDate(actual, expected) > 0;
+    if (condition.operator === "between" && Array.isArray(expected)) {
+        const actualTime = actual ? new Date(String(actual)).getTime() : Number.NaN;
+        const [start, end] = expected.map((value) => new Date(String(value)).getTime());
+        return !Number.isNaN(actualTime) && actualTime >= start && actualTime <= end;
+    }
     return true;
 }
 
@@ -51,4 +57,31 @@ function compareDate(actual: unknown, expected: unknown) {
 function readValue(record: Record<string, any>, path: string) {
     if (path in record) return record[path];
     return path.split(".").reduce((value, key) => value?.[key], record);
+}
+
+function inRelativeDateWindow(actual: unknown, token: string) {
+    const actualTime = actual ? new Date(String(actual)).getTime() : Number.NaN;
+    if (Number.isNaN(actualTime)) return false;
+    const now = new Date();
+    const start = new Date(now);
+    start.setHours(0, 0, 0, 0);
+    const end = new Date(start);
+    if (token === "__DATE_TODAY__") end.setDate(end.getDate() + 1);
+    else if (token === "__DATE_TOMORROW__") {
+        start.setDate(start.getDate() + 1);
+        end.setDate(end.getDate() + 2);
+    } else if (token === "__DATE_THIS_WEEK__") {
+        const day = start.getDay();
+        start.setDate(start.getDate() - day);
+        end.setTime(start.getTime());
+        end.setDate(end.getDate() + 7);
+    } else if (token === "__DATE_LAST_7_DAYS__") {
+        start.setDate(start.getDate() - 7);
+        end.setTime(now.getTime());
+    } else if (token === "__DATE_NEXT_7_DAYS__") {
+        end.setDate(end.getDate() + 7);
+    } else {
+        return false;
+    }
+    return actualTime >= start.getTime() && actualTime < end.getTime();
 }

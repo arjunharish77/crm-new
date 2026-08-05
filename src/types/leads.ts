@@ -30,6 +30,22 @@ export interface PredictiveRecordScore {
     confidence: number;
     reasons?: Array<{ type: 'POSITIVE' | 'NEGATIVE' | 'INFO'; label: string; value?: unknown }>;
     source: 'PREDICTIVE_SCORING' | 'SELF_LEARNING' | 'RULE_FALLBACK' | 'MANUAL_OVERRIDE';
+    expectedResponseLikelihood?: number | null;
+    duplicateRisk?: number | null;
+    staleRisk?: number | null;
+    expectedCloseRisk?: number | null;
+    suggestedCloseDate?: string | null;
+    suggestedCloseDateDeltaDays?: number | null;
+    nextBestAction?: string | null;
+    nextBestActivityType?: string | null;
+    topDrivers?: Array<{ type: 'POSITIVE' | 'NEGATIVE' | 'INFO'; label: string; value?: unknown }>;
+    missingDataWarnings?: string[];
+    similarRecordIds?: string[];
+    suggestedDataImprovements?: string[];
+    overrideReason?: string | null;
+    overrideUntil?: string | null;
+    overrideOwnerId?: string | null;
+    overriddenAt?: string | null;
     calculatedAt?: string | null;
     updatedAt?: string | null;
 }

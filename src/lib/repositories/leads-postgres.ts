@@ -43,6 +43,9 @@ const PREDICTIVE_SCORE_FILTER_FIELDS = new Set([
   "predictiveConversionProbability",
   "predictiveWinProbability",
   "predictiveStallRisk",
+  "predictiveExpectedResponseLikelihood",
+  "predictiveDuplicateRisk",
+  "predictiveStaleRisk",
 ]);
 
 const SCORE_FIELD_TO_COLUMN = new Map([
@@ -51,6 +54,9 @@ const SCORE_FIELD_TO_COLUMN = new Map([
   ["predictiveConversionProbability", "conversionProbability"],
   ["predictiveWinProbability", "winProbability"],
   ["predictiveStallRisk", "stallRisk"],
+  ["predictiveExpectedResponseLikelihood", "expectedResponseLikelihood"],
+  ["predictiveDuplicateRisk", "duplicateRisk"],
+  ["predictiveStaleRisk", "staleRisk"],
 ]);
 
 function isOwnerScoped(user: TenantUser) {
@@ -200,7 +206,12 @@ async function getPredictiveScoreMap(tenantId: string | null, recordIds: string[
   if (!recordIds.length) return new Map<string, any>();
   const rows = await query<any>(
     `select id, "recordType", "recordId", "fitScore", "engagementScore", "conversionProbability",
-            "winProbability", "stallRisk", "scoreBand", confidence, reasons, source, "calculatedAt", "updatedAt"
+            "winProbability", "stallRisk", "scoreBand", confidence, reasons, source,
+            "expectedResponseLikelihood", "duplicateRisk", "staleRisk", "expectedCloseRisk",
+            "suggestedCloseDate", "suggestedCloseDateDeltaDays", "nextBestAction", "nextBestActivityType",
+            "topDrivers", "missingDataWarnings", "similarRecordIds", "suggestedDataImprovements",
+            "overrideReason", "overrideUntil", "overrideOwnerId", "overriddenAt",
+            "calculatedAt", "updatedAt"
      from "RecordScore"
      where "recordType" = 'LEAD'
        and "recordId" = any($1::text[])

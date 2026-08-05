@@ -32,6 +32,7 @@ import { NotesPanel } from "@/components/common/notes-panel";
 import { ContextualFormsPanel } from "@/components/forms/contextual-forms-panel";
 import { RecordHistory } from "@/components/governance/record-history";
 import { RelatedTasksPanel } from "@/components/tasks/related-tasks-panel";
+import { CommunicationEventsPanel } from "@/components/communications/communication-events-panel";
 import { formatCurrency, cn } from "@/lib/utils";
 import { fadeInUp } from "@/lib/motion";
 import { useAuth } from "@/providers/auth-provider";
@@ -65,7 +66,7 @@ export default function LeadDetailPage() {
     const [taskCount, setTaskCount] = useState(0);
     const [loading, setLoading] = useState(true);
     const [showEditDialog, setShowEditDialog] = useState(false);
-    const [tabValue, setTabValue] = useState<"activity" | "details" | "scoring" | "opportunities" | "tasks" | "notes" | "audit">("activity");
+    const [tabValue, setTabValue] = useState<"activity" | "details" | "scoring" | "opportunities" | "tasks" | "communications" | "notes" | "audit">("activity");
     const [activityTypeFilter, setActivityTypeFilter] = useState<string>("ALL");
     const [activityTimeFilter, setActivityTimeFilter] = useState<ActivityTimeFilter>("ALL");
 
@@ -314,6 +315,7 @@ export default function LeadDetailPage() {
                                     <WorkspaceTab label="Scoring" active={tabValue === "scoring"} onClick={() => setTabValue("scoring")} />
                                     <WorkspaceTab label={`Opportunities (${opportunities.length})`} active={tabValue === "opportunities"} onClick={() => setTabValue("opportunities")} />
                                     <WorkspaceTab label={`Tasks (${taskCount})`} active={tabValue === "tasks"} onClick={() => setTabValue("tasks")} />
+                                    <WorkspaceTab label="Communications" active={tabValue === "communications"} onClick={() => setTabValue("communications")} />
                                     <WorkspaceTab label="Notes" active={tabValue === "notes"} onClick={() => setTabValue("notes")} />
                                     <WorkspaceTab label="Audit" active={tabValue === "audit"} onClick={() => setTabValue("audit")} />
                                 </div>
@@ -433,6 +435,12 @@ export default function LeadDetailPage() {
                             {tabValue === "tasks" && (
                                 <div className="rounded-[10px] bg-surface-container-lowest p-[10px]">
                                     <RelatedTasksPanel leadId={lead.id} currentUserId={user?.id} />
+                                </div>
+                            )}
+
+                            {tabValue === "communications" && (
+                                <div className="rounded-[10px] bg-surface-container-lowest p-[10px]">
+                                    <CommunicationEventsPanel entityType="LEAD" entityId={lead.id} />
                                 </div>
                             )}
 

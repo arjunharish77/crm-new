@@ -66,6 +66,7 @@ async function getObjectId(user: TenantUser, objectName: string, client?: Querya
     ["lead", "Lead"],
     ["opportunity", "Opportunity"],
     ["activity", "Activity"],
+    ["task", "Task"],
   ]);
   const label = supportedObjects.get(objectName);
   if (!label) throw new Error(`Missing object definition for ${objectName}`);
@@ -311,7 +312,7 @@ export async function submitPublicForm(identifier: string, payload: Record<strin
     const email = typeof leadData.email === "string" ? leadData.email : typeof leadData.Email === "string" ? leadData.Email : null;
     if (!leadId && email) {
       const existingLead = await queryOne<any>(
-        'select id, name, email from "Lead" where "tenantId" = $1 and email = $2 limit 1',
+        'select id, name, email, "ownerId" from "Lead" where "tenantId" = $1 and email = $2 limit 1',
         [tenantId, email],
         client,
       );
@@ -361,6 +362,15 @@ export async function submitPublicForm(identifier: string, payload: Record<strin
       data: moduleData.activity,
       client,
     });
+    await upsertTaskFromFormModule({
+      tenantId,
+      leadId,
+      opportunityId,
+      activityId: typeof context.activityId === "string" ? context.activityId : null,
+      ownerId: typeof context.ownerId === "string" ? context.ownerId : await resolveLeadOwnerId(tenantId, leadId, client),
+      data: moduleData.task,
+      client,
+    });
 
     const utmParams = Object.fromEntries(Object.entries(payload).filter(([key]) => key.startsWith("utm_")));
     await insertReturning("FormSubmission", {
@@ -385,10 +395,11 @@ export async function submitPublicForm(identifier: string, payload: Record<strin
 }
 
 function splitFormPayloadByModule(form: any, payload: Record<string, unknown>) {
-  const output: Record<"lead" | "opportunity" | "activity", Record<string, unknown>> = {
+  const output: Record<"lead" | "opportunity" | "activity" | "task", Record<string, unknown>> = {
     lead: {},
     opportunity: {},
     activity: {},
+    task: {},
   };
 
   for (const field of form.config?.fields ?? []) {
@@ -399,7 +410,7 @@ function splitFormPayloadByModule(form: any, payload: Record<string, unknown>) {
     const [moduleFromMapping, fieldFromMapping] = mapping.includes(".") ? mapping.split(".", 2) : ["", mapping];
     const moduleName = (sourceModule || moduleFromMapping || "lead").toLowerCase();
     const fieldName = fieldFromMapping || mapping || field.label;
-    if (moduleName === "opportunity" || moduleName === "activity" || moduleName === "lead") {
+    if (moduleName === "opportunity" || moduleName === "activity" || moduleName === "lead" || moduleName === "task") {
       output[moduleName][fieldName] = rawValue;
       if (moduleName === "opportunity" && field.opportunityTypeId) output.opportunity.opportunityTypeId = field.opportunityTypeId;
       if (moduleName === "activity" && field.activityTypeId) output.activity.typeId = field.activityTypeId;
@@ -409,10 +420,16 @@ function splitFormPayloadByModule(form: any, payload: Record<string, unknown>) {
   for (const [key, value] of Object.entries(payload)) {
     if (!key.includes(".") || value === undefined || value === "") continue;
     const [moduleName, fieldName] = key.split(".", 2);
-    if ((moduleName === "lead" || moduleName === "opportunity" || moduleName === "activity") && fieldName) output[moduleName][fieldName] = value;
+    if ((moduleName === "lead" || moduleName === "opportunity" || moduleName === "activity" || moduleName === "task") && fieldName) output[moduleName][fieldName] = value;
   }
 
   return output;
+}
+
+async function resolveLeadOwnerId(tenantId: string, leadId: string | null, client?: Queryable) {
+  if (!leadId) return null;
+  const lead = await queryOne<any>('select "ownerId" from "Lead" where "tenantId" = $1 and id = $2 limit 1', [tenantId, leadId], client);
+  return lead?.ownerId ?? null;
 }
 
 async function upsertOpportunityFromFormModule(input: {
@@ -523,6 +540,40 @@ async function upsertActivityFromFormModule(input: {
     updatedAt: now,
   }, "id", input.client);
   return activity.id as string;
+}
+
+async function upsertTaskFromFormModule(input: {
+  tenantId: string;
+  leadId: string | null;
+  opportunityId: string | null;
+  activityId: string | null;
+  ownerId: string | null;
+  data: Record<string, unknown>;
+  client?: Queryable;
+}) {
+  if (!input.ownerId || Object.keys(input.data).length === 0) return null;
+  const now = new Date().toISOString();
+  const task = await insertReturning<any>("Task", {
+    id: randomUUID(),
+    tenantId: input.tenantId,
+    title: String(input.data.title ?? "Form follow-up task"),
+    description: input.data.description ?? null,
+    status: input.data.status ?? "OPEN",
+    priority: input.data.priority ?? "MEDIUM",
+    ownerId: input.ownerId,
+    createdBy: null,
+    leadId: input.leadId,
+    opportunityId: input.opportunityId,
+    activityId: input.activityId,
+    dueAt: input.data.dueAt ?? null,
+    reminderAt: input.data.reminderAt ?? null,
+    completedAt: input.data.status === "COMPLETED" ? now : null,
+    completedBy: null,
+    metadata: { source: "FORM" },
+    createdAt: now,
+    updatedAt: now,
+  }, "id", input.client);
+  return task.id;
 }
 
 export async function getFormStatsForTenant(user: TenantUser, formId: string) {
