@@ -8,9 +8,14 @@ This file is the quicker reference for someone who's already done it once.
 
 ## First Setup
 
+`cp -n` (no-clobber) is used deliberately here — this must never overwrite an existing
+`deploy/vps/.env`, since it holds real secrets for both the CRM and the Unnati Vidya
+website once either has been deployed. Safe to run even if you're unsure whether the file
+already exists:
+
 ```bash
-cd /opt/crm
-cp deploy/vps/.env.example deploy/vps/.env
+cd /opt/unnatify-crm
+cp -n deploy/vps/.env.example deploy/vps/.env
 ```
 
 Edit `deploy/vps/.env` and set:
@@ -104,14 +109,14 @@ When `UNNATIVIDYA_POSTGRES_DB` is configured, this creates both CRM and Unnati V
 Always test restore on a staging VPS or temporary database before production cutover:
 
 ```bash
-deploy/vps/scripts/restore-postgres.sh /opt/crm/deploy/vps/backups/example.dump
+deploy/vps/scripts/restore-postgres.sh /opt/unnatify-crm/deploy/vps/backups/example.dump
 deploy/vps/scripts/healthcheck.sh
 ```
 
 To restore the website database specifically:
 
 ```bash
-deploy/vps/scripts/restore-postgres.sh /opt/crm/deploy/vps/backups/unnatividya-example.dump unnatividya
+deploy/vps/scripts/restore-postgres.sh /opt/unnatify-crm/deploy/vps/backups/unnatividya-example.dump unnatividya
 ```
 
 ## Local Development

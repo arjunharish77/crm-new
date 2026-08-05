@@ -338,10 +338,12 @@ in the rest of this doc are relative to that directory, with no `/crm` suffix. A
 
 ```bash
 cd /opt/unnatify-crm
-cp deploy/vps/.env.example deploy/vps/.env
+cp -n deploy/vps/.env.example deploy/vps/.env
 chmod 600 deploy/vps/.env
 nano deploy/vps/.env
 ```
+
+(`-n` is no-clobber — belt-and-suspenders so this can never overwrite a `.env` that already has real secrets in it, even if this section is ever re-run out of order.)
 
 Generate strong random secrets for every `replace-with-a-long-random-*` placeholder:
 ```bash
