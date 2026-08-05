@@ -196,7 +196,7 @@ deploy/vps/scripts/setup-unnatividya-db.sh
 Create the first CMS admin (idempotent — skips if the email already exists):
 ```bash
 docker compose -f deploy/vps/docker-compose.yml --env-file deploy/vps/.env run --rm unnatividya-web \
-  node scripts/create-admin.js --email you@example.com --password 'a-real-strong-password'
+  node scripts/create-admin.js --email admin@unnatividya.com --password 'UnnatiVidya@2026'
 ```
 
 Lock down the setup endpoint now that the first admin exists — edit `deploy/vps/.env`:

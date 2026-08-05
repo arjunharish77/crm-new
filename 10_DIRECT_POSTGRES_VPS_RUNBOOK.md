@@ -154,21 +154,21 @@ Use whichever deployment method you prefer.
 Example:
 
 ```bash
-sudo mkdir -p /opt/crm
-sudo chown "$USER":"$USER" /opt/crm
-cd /opt/crm
+sudo mkdir -p /opt/unnatify-crm
+sudo chown "$USER":"$USER" /opt/unnatify-crm
+cd /opt/unnatify-crm
 git clone <your-repo-url> .
 ```
 
-If you are copying from local instead of Git, copy the whole `crm/` folder contents to `/opt/crm`.
+If you are copying from local instead of Git, copy the whole `crm/` folder contents to `/opt/unnatify-crm`.
 
 ## 4. Configure VPS Environment
 
 Create the VPS env file:
 
 ```bash
-cd /opt/crm
-cp deploy/vps/.env.example deploy/vps/.env
+cd /opt/unnatify-crm
+cp -n deploy/vps/.env.example deploy/vps/.env
 ```
 
 Edit:
@@ -244,7 +244,7 @@ database/user configured through `UNNATIVIDYA_DATABASE_URL`.
 On the VPS:
 
 ```bash
-cd /opt/crm
+cd /opt/unnatify-crm
 docker compose -f deploy/vps/docker-compose.yml --env-file deploy/vps/.env config
 ```
 
@@ -269,7 +269,7 @@ ZEPTOMAIL_FROM_NAME=Unnati Vidya
 Create the website database/user and apply the website migration:
 
 ```bash
-cd /opt/crm
+cd /opt/unnatify-crm
 sh deploy/vps/scripts/setup-unnatividya-db.sh
 ```
 
@@ -390,7 +390,7 @@ deploy/vps/scripts/migrate-postgres.sh
 ## 8. Start VPS Stack
 
 ```bash
-cd /opt/crm
+cd /opt/unnatify-crm
 docker compose -f deploy/vps/docker-compose.yml --env-file deploy/vps/.env up -d --build
 docker compose -f deploy/vps/docker-compose.yml --env-file deploy/vps/.env ps
 ```

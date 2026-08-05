@@ -2226,7 +2226,7 @@ After implementation, VPS setup should be:
 
 ```bash
 cd /opt/crm
-cp deploy/vps/.env.example deploy/vps/.env
+cp -n deploy/vps/.env.example deploy/vps/.env
 # edit deploy/vps/.env
 docker compose -f deploy/vps/docker-compose.yml --env-file deploy/vps/.env up -d --build
 docker compose -f deploy/vps/docker-compose.yml --env-file deploy/vps/.env ps
