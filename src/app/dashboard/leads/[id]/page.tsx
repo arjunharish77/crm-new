@@ -16,6 +16,7 @@ import {
     Plus,
     Pencil,
     Tag,
+    Share2,
 } from "lucide-react";
 import { toast } from "sonner";
 import { formatWorkspaceDate, formatWorkspaceDateTime, parseWorkspaceDate } from "@/lib/date-format";
@@ -30,6 +31,8 @@ import { EditLeadDialog } from "../edit-lead-dialog";
 import { Timeline } from "@/components/timeline/timeline";
 import { NotesPanel } from "@/components/common/notes-panel";
 import { ContextualFormsPanel } from "@/components/forms/contextual-forms-panel";
+import { ExternalPushDialog } from "@/components/integrations/external-push-dialog";
+import { ExternalPushBadge } from "@/components/integrations/external-push-badge";
 import { RecordHistory } from "@/components/governance/record-history";
 import { RelatedTasksPanel } from "@/components/tasks/related-tasks-panel";
 import { CommunicationEventsPanel } from "@/components/communications/communication-events-panel";
@@ -54,6 +57,11 @@ type ActivityTimeFilter = "ALL" | "TODAY" | "7D" | "30D";
 
 const ALL_TYPES_VALUE = "ALL";
 
+function hasIntegrationsPermission(user: any) {
+    const rolePermissions = typeof user?.role === "object" && user?.role ? user.role.permissions : null;
+    return Boolean(user?.isTenantAdmin || user?.isPlatformAdmin || rolePermissions?.modules?.integrations === "full");
+}
+
 export default function LeadDetailPage() {
     const params = useParams();
     const router = useRouter();
@@ -69,6 +77,8 @@ export default function LeadDetailPage() {
     const [tabValue, setTabValue] = useState<"activity" | "details" | "scoring" | "opportunities" | "tasks" | "communications" | "notes" | "audit">("activity");
     const [activityTypeFilter, setActivityTypeFilter] = useState<string>("ALL");
     const [activityTimeFilter, setActivityTimeFilter] = useState<ActivityTimeFilter>("ALL");
+    const [showPushDialog, setShowPushDialog] = useState(false);
+    const [pushRefreshKey, setPushRefreshKey] = useState(0);
 
     const loadData = useCallback(async () => {
         setLoading(true);
@@ -230,6 +240,16 @@ export default function LeadDetailPage() {
                         entityData={lead}
                         onSaved={loadData}
                     />
+                    {hasIntegrationsPermission(user) && (
+                        <Button
+                            variant="outline"
+                            className="h-9 rounded-[10px] px-3.5"
+                            onClick={() => setShowPushDialog(true)}
+                        >
+                            <Share2 className="size-4" />
+                            Push to External
+                        </Button>
+                    )}
                     <Button
                         onClick={() => setShowEditDialog(true)}
                         className="h-9 rounded-[10px] px-4"
@@ -238,6 +258,10 @@ export default function LeadDetailPage() {
                         Edit
                     </Button>
                 </div>
+            </div>
+
+            <div className="mb-3 flex justify-end">
+                <ExternalPushBadge leadId={leadId} refreshKey={pushRefreshKey} />
             </div>
 
             <div className="grid grid-cols-1 gap-3 lg:grid-cols-[3.8fr_8.2fr]">
@@ -455,6 +479,13 @@ export default function LeadDetailPage() {
             </div>
 
             <EditLeadDialog lead={lead} open={showEditDialog} onOpenChange={setShowEditDialog} onSuccess={loadData} />
+            <ExternalPushDialog
+                open={showPushDialog}
+                onClose={() => setShowPushDialog(false)}
+                leadId={leadId}
+                linkedOpportunities={opportunities}
+                onPushed={() => setPushRefreshKey((key) => key + 1)}
+            />
         </motion.div>
     );
 }

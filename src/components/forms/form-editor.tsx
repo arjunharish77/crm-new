@@ -61,13 +61,20 @@ import { StyleEditor } from "./style-editor";
 import { ConditionalLogicBuilder } from "./logic-builder";
 
 // --- Types ---
+// Options normally used to be plain strings (the same string served as both the stored
+// value and the displayed label -- fine for enum-like values such as LOW/MEDIUM/HIGH).
+// The Opportunity Type selector needs an opaque id as the value and a real name as the
+// label, so options can now also be {value, label} pairs. Existing string-array options
+// keep working as-is; normalizeOptions() below is the single place that reads either shape.
+type FieldOption = string | { value: string; label: string };
+
 interface FormField {
     id: string;
     type: string;
     label: string;
     placeholder?: string;
     required: boolean;
-    options?: string[]; // for select, radio, checkbox
+    options?: FieldOption[]; // for select, radio, checkbox
     sourceModule?: 'lead' | 'opportunity' | 'activity' | 'task';
     mapping?: string;
     tabId?: string;
@@ -138,6 +145,28 @@ const MODULE_FIELDS = {
 } as const;
 
 type SourceModule = keyof typeof MODULE_FIELDS;
+
+// The one real field that lets an end user pick which Opportunity Type to create --
+// as opposed to `opportunityTypeId` on FormField, which is an authoring-time tag scoping
+// a field to the builder canvas context it was dragged in under. Same name, different job.
+const OPPORTUNITY_TYPE_FIELD_KEY = "opportunityTypeId";
+const OPPORTUNITY_TYPE_MAPPING = "opportunity.opportunityTypeId";
+
+// Sentinel for the builder's "which type am I currently editing fields for" context menu --
+// fields added while this is selected get no opportunityTypeId tag at all, so they stay
+// visible regardless of which type the end user later picks (a shared field like Amount).
+const ALL_OPPORTUNITY_TYPES = "__all_types__";
+
+function normalizeOptions(options: FieldOption[] | undefined): Array<{ value: string; label: string }> {
+    if (!Array.isArray(options)) return [];
+    return options.map((option) =>
+        typeof option === "string" ? { value: option, label: option } : { value: String(option.value ?? ""), label: String(option.label ?? option.value ?? "") }
+    );
+}
+
+function isOpportunityTypeField(field: Pick<FormField, "mapping"> | null | undefined) {
+    return field?.mapping === OPPORTUNITY_TYPE_MAPPING;
+}
 
 const CRM_PLACEMENTS = [
     { value: "LEAD_DETAIL", label: "Lead detail" },
@@ -230,7 +259,7 @@ export function FormEditor({ initialForm }: EditorProps) {
     }, []);
 
     useEffect(() => {
-        if (!selectedOpportunityTypeId) {
+        if (!selectedOpportunityTypeId || selectedOpportunityTypeId === ALL_OPPORTUNITY_TYPES) {
             setOpportunityTypeCustomFields([]);
             return;
         }
@@ -265,8 +294,18 @@ export function FormEditor({ initialForm }: EditorProps) {
 
     const fieldsForModule = (module: SourceModule) => {
         const typeFields = module === "opportunity" ? opportunityTypeCustomFields : module === "activity" ? activityTypeCustomFields : [];
+        // The real, end-user-facing Opportunity Type selector -- options come from the
+        // tenant's actual OpportunityType rows (id as value, name as label), not a static
+        // MODULE_FIELDS entry, since it needs live state.
+        const opportunityTypeSelector = module === "opportunity" ? [{
+            key: OPPORTUNITY_TYPE_FIELD_KEY,
+            label: "Opportunity Type",
+            type: "SELECT",
+            options: opportunityTypes.map((type) => ({ value: type.id, label: type.name })),
+        }] : [];
         const seen = new Set<string>();
         return [
+            ...opportunityTypeSelector,
             ...MODULE_FIELDS[module],
             ...moduleCustomFields[module].filter((field) => field.isActive !== false).map(customFieldToModuleField),
             ...typeFields.filter((field) => field.isActive !== false).map(customFieldToModuleField),
@@ -290,7 +329,13 @@ export function FormEditor({ initialForm }: EditorProps) {
     }, [fields]);
 
     const isModuleFieldAlreadyUsed = (sourceModule: SourceModule, key: string) => {
-        const scopeId = sourceModule === "opportunity" ? selectedOpportunityTypeId : sourceModule === "activity" ? selectedActivityTypeId : "";
+        // The Opportunity Type selector itself is never tagged with a type (it can't be --
+        // that would make its own visibility circular), and neither is any field added while
+        // "All types" is the active builder context, so both resolve to the empty scope.
+        const opportunityScope = key === OPPORTUNITY_TYPE_FIELD_KEY || selectedOpportunityTypeId === ALL_OPPORTUNITY_TYPES
+            ? ""
+            : selectedOpportunityTypeId;
+        const scopeId = sourceModule === "opportunity" ? opportunityScope : sourceModule === "activity" ? selectedActivityTypeId : "";
         return usedFieldKeys.has(`${sourceModule}.${key}|${sourceModule === "opportunity" ? scopeId : ""}|${sourceModule === "activity" ? scopeId : ""}`);
     };
 
@@ -332,16 +377,22 @@ export function FormEditor({ initialForm }: EditorProps) {
                 toast.error("This module field is already on the form");
                 return;
             }
+            const isOpportunityTypeSelector = tool.sourceModule === "opportunity" && tool.key === OPPORTUNITY_TYPE_FIELD_KEY;
+            // The selector itself never gets tagged (it can't be scoped to the type it selects),
+            // and nothing gets tagged while "All types" is the active builder context.
+            const opportunityTypeTag = tool.sourceModule === "opportunity" && !isOpportunityTypeSelector && selectedOpportunityTypeId !== ALL_OPPORTUNITY_TYPES
+                ? selectedOpportunityTypeId
+                : undefined;
             const newField: FormField = {
                 id: nanoid(),
                 type: tool.type,
                 label: tool.label,
-                required: false,
+                required: isOpportunityTypeSelector ? true : false,
                 sourceModule: tool.sourceModule,
                 mapping: `${tool.sourceModule}.${tool.key}`,
                 tabId: activeCanvasTabId,
                 sectionId: settings.sections.find((section: any) => section.tabId === activeCanvasTabId)?.id || "section_1",
-                opportunityTypeId: tool.sourceModule === "opportunity" ? selectedOpportunityTypeId : undefined,
+                opportunityTypeId: opportunityTypeTag,
                 activityTypeId: tool.sourceModule === "activity" ? selectedActivityTypeId : undefined,
                 options: tool.options,
             };
@@ -549,6 +600,7 @@ export function FormEditor({ initialForm }: EditorProps) {
                                         <SelectValue />
                                     </SelectTrigger>
                                     <SelectContent>
+                                        <SelectItem value={ALL_OPPORTUNITY_TYPES}>All types</SelectItem>
                                         {opportunityTypes.map((type) => (
                                             <SelectItem key={type.id} value={type.id}>{type.name}</SelectItem>
                                         ))}
@@ -760,7 +812,7 @@ export function FormEditor({ initialForm }: EditorProps) {
                                         </div>
                                     </div>
 
-                                    {['SELECT', 'CHECKBOX', 'RADIO'].includes(selectedField.type) && (
+                                    {['SELECT', 'CHECKBOX', 'RADIO'].includes(selectedField.type) && !isOpportunityTypeField(selectedField) && (
                                         <div>
                                             <p className="mb-2 text-sm font-semibold">Options</p>
                                             <div className="space-y-1.5">
@@ -768,12 +820,20 @@ export function FormEditor({ initialForm }: EditorProps) {
                                                 <Textarea
                                                     id="field-editor-options-input"
                                                     rows={3}
-                                                    value={selectedField.options?.join(', ') || ''}
+                                                    value={normalizeOptions(selectedField.options).map(option => option.label).join(', ')}
                                                     onChange={e => updateField(selectedField.id, {
                                                         options: e.target.value.split(',').map(s => s.trim()).filter((option) => option.length > 0)
                                                     })}
                                                 />
                                             </div>
+                                        </div>
+                                    )}
+                                    {['SELECT', 'CHECKBOX', 'RADIO'].includes(selectedField.type) && isOpportunityTypeField(selectedField) && (
+                                        <div>
+                                            <p className="mb-2 text-sm font-semibold">Options</p>
+                                            <p className="text-xs text-muted-foreground">
+                                                Options are derived automatically from this tenant&apos;s Opportunity Types.
+                                            </p>
                                         </div>
                                     )}
 
@@ -789,10 +849,16 @@ export function FormEditor({ initialForm }: EditorProps) {
                                                     onValueChange={value => {
                                                         const sourceModule = value as SourceModule;
                                                         const fieldKey = selectedField.mapping?.split(".").pop() || "";
+                                                        // The selector field itself never gets tagged with a type, and
+                                                        // nothing gets tagged while "All types" is the active context.
+                                                        const isSelector = sourceModule === "opportunity" && fieldKey === OPPORTUNITY_TYPE_FIELD_KEY;
+                                                        const opportunityTypeTag = sourceModule === "opportunity" && !isSelector && selectedOpportunityTypeId !== ALL_OPPORTUNITY_TYPES
+                                                            ? selectedOpportunityTypeId
+                                                            : undefined;
                                                         updateField(selectedField.id, {
                                                             sourceModule,
                                                             mapping: fieldKey ? `${sourceModule}.${fieldKey}` : "",
-                                                            opportunityTypeId: sourceModule === "opportunity" ? selectedOpportunityTypeId : undefined,
+                                                            opportunityTypeId: opportunityTypeTag,
                                                             activityTypeId: sourceModule === "activity" ? selectedActivityTypeId : undefined,
                                                         });
                                                     }}
@@ -831,6 +897,13 @@ export function FormEditor({ initialForm }: EditorProps) {
                                                         ))}
                                                     </SelectContent>
                                                 </Select>
+                                                {selectedField.mapping === "opportunity.amount" && selectedField.type !== "NUMBER" && (
+                                                    <p className="text-xs text-destructive">
+                                                        Amount expects a numeric value. A {selectedField.type.toLowerCase()} field lets visitors
+                                                        enter text (e.g. &quot;1,00,000&quot;) that will fail to save as an Opportunity amount.
+                                                        Change this field&apos;s type to Number.
+                                                    </p>
+                                                )}
                                             </div>
                                             <div className="space-y-1.5">
                                                 <Label htmlFor="field-editor-default-value-input">Default Value</Label>
@@ -1294,10 +1367,10 @@ function SortableField({ field, columns, isSelected, onSelect, onRemove, onToggl
             case 'RADIO':
                 return (
                     <div className="space-y-1">
-                        {(field.options?.length ? field.options : ["Option 1"]).map((option: string, index: number) => (
+                        {(field.options?.length ? normalizeOptions(field.options) : [{ value: "Option 1", label: "Option 1" }]).map((option, index: number) => (
                             <label key={index} className="flex items-center gap-2 text-sm">
                                 <Switch size="sm" disabled />
-                                {option}
+                                {option.label}
                             </label>
                         ))}
                     </div>

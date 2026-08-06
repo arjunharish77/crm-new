@@ -3,6 +3,7 @@ import { execute, query, queryOne } from "@/lib/db/query";
 import { withTransaction } from "@/lib/db/transaction";
 import { listLeadsForTenant } from "@/lib/repositories/leads-postgres";
 import { runAutomationsForEvent } from "@/lib/repositories/automations-postgres";
+import { distributeRecord } from "@/lib/server/distribution-engine";
 
 type TenantUser = {
   id: string;
@@ -360,8 +361,10 @@ export async function createOpportunityForTenant(user: TenantUser, payload: Reco
   });
 
   await createAuditLog(user, "CREATE", created.id, null, created, null);
-  await runAutomationsForEvent(user, "OPPORTUNITY_CREATED", "OPPORTUNITY", created.id, created).catch(() => undefined);
-  return { ...(await decorateOpportunities(user, [created]))[0], distribution: null };
+  const distribution = await distributeRecord(user, "OPPORTUNITY", created.id, created).catch(() => null);
+  const createdWithOwner = distribution?.assignedUserId ? { ...created, ownerId: distribution.assignedUserId } : created;
+  await runAutomationsForEvent(user, "OPPORTUNITY_CREATED", "OPPORTUNITY", createdWithOwner.id, createdWithOwner).catch(() => undefined);
+  return { ...(await decorateOpportunities(user, [createdWithOwner]))[0], distribution };
 }
 
 export async function updateOpportunityForTenant(user: TenantUser, id: string, payload: Record<string, unknown>) {

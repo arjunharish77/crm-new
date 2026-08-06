@@ -3,13 +3,15 @@ import { execute, query, queryOne, type Queryable } from "@/lib/db/query";
 import { withTransaction } from "@/lib/db/transaction";
 import { formatExportDateValue, getTenantTimeZone } from "@/lib/server/date-format";
 import { checkRateLimit } from "@/lib/server/rate-limit";
+import { runAutomationsForEvent } from "@/lib/repositories/automations-postgres";
+import { distributeRecord } from "@/lib/server/distribution-engine";
 
 type TenantUser = {
   id: string;
   tenantId: string | null;
 };
 
-const FORM_COLUMNS = 'id, name, description, fields, config, "isActive", "submitButtonText", "successMessage", "redirectUrl", "spamProtection", "rateLimit", "duplicateAction", theme, "createdAt", "updatedAt"';
+const FORM_COLUMNS = 'id, name, description, fields, config, "isActive", "submitButtonText", "successMessage", "redirectUrl", "spamProtection", "rateLimit", "duplicateAction", "defaultOwnerId", theme, "createdAt", "updatedAt"';
 
 function tenantWhere(user: TenantUser, startIndex = 1) {
   return user.tenantId ? { sql: `"tenantId" = $${startIndex}`, values: [user.tenantId] } : { sql: '"tenantId" is null', values: [] };
@@ -81,6 +83,41 @@ async function getObjectId(user: TenantUser, objectName: string, client?: Querya
   );
   if (!created?.id) throw new Error(`Missing object definition for ${objectName}`);
   return created.id;
+}
+
+// A public form submission has no real logged-in user, but `AuditLog.userId` (and
+// `Activity.createdBy`) are NOT NULL columns with a foreign key to a real "User" row --
+// there is no "public-form" user to attribute these writes to. Resolve the form's own
+// (currently unused) `defaultOwnerId` column first, since it's the tenant admin's explicit
+// choice of who should own form-originated activity; fall back to the tenant's oldest
+// active user (same fallback query automations-postgres.ts already uses for its own
+// synthetic-user case) so this only comes back null for a tenant with zero active users.
+async function resolveFormActorId(tenantId: string, formRow: any, client?: Queryable): Promise<string | null> {
+  if (typeof formRow?.defaultOwnerId === "string" && formRow.defaultOwnerId) return formRow.defaultOwnerId;
+  const fallback = await queryOne<{ id: string }>(
+    `select id from "User" where "tenantId" = $1 and status = 'ACTIVE' limit 1`,
+    [tenantId],
+    client,
+  );
+  return fallback?.id ?? null;
+}
+
+async function createFormAuditLog(
+  tenantId: string,
+  actorId: string | null,
+  action: string,
+  entityType: string,
+  entityId: string,
+  after: unknown,
+  client?: Queryable,
+) {
+  if (!actorId) return;
+  await execute(
+    `insert into "AuditLog" (id, "tenantId", "userId", action, "entityType", "entityId", before, after, diff, metadata, "createdAt")
+     values ($1, $2, $3, $4, $5, $6, null, $7, null, $8, $9)`,
+    [randomUUID(), tenantId, actorId, action, entityType, entityId, after, { source: "FORM" }, new Date().toISOString()],
+    client,
+  ).catch(() => undefined);
 }
 
 async function insertReturning<T>(table: string, row: Record<string, unknown>, returning: string, client?: Queryable) {
@@ -304,9 +341,14 @@ export async function submitPublicForm(identifier: string, payload: Record<strin
     if (!rateLimitResult.allowed) throw new Error("RATE_LIMITED");
     const tenantId = formRow.tenantId as string;
     const user = { id: "public-form", tenantId };
+    // No real logged-in user submits a public form; resolve a real actor once so the
+    // AuditLog/Activity writes below (which require a real "User" row, see
+    // resolveFormActorId's comment) have someone real to attribute to.
+    const actorId = await resolveFormActorId(tenantId, formRow, client);
     const context = payload._context && typeof payload._context === "object" ? (payload._context as Record<string, unknown>) : {};
     const moduleData = splitFormPayloadByModule(form, payload);
     const leadData = { ...payload, ...moduleData.lead };
+    const warnings: string[] = [];
 
     let leadId: string | null = typeof context.leadId === "string" ? context.leadId : null;
     const email = typeof leadData.email === "string" ? leadData.email : typeof leadData.Email === "string" ? leadData.Email : null;
@@ -339,6 +381,11 @@ export async function submitPublicForm(identifier: string, payload: Record<strin
         updatedAt: now,
       }, 'id, name, email, phone, company, source, status, score, tags, "createdBy", "createdAt", "updatedAt", "ownerId"', client);
       leadId = createdLead.id;
+
+      await createFormAuditLog(tenantId, actorId, "CREATE", "LEAD", createdLead.id, createdLead, client);
+      const leadDistribution = await distributeRecord(user, "LEAD", createdLead.id, createdLead).catch(() => null);
+      const leadWithOwner = leadDistribution?.assignedUserId ? { ...createdLead, ownerId: leadDistribution.assignedUserId } : createdLead;
+      await runAutomationsForEvent({ id: actorId ?? "public-form", tenantId }, "LEAD_CREATED", "LEAD", createdLead.id, leadWithOwner).catch(() => undefined);
     } else if (form.config?.duplicateAction === "UPDATE") {
       const updatePayload: Record<string, unknown> = { updatedAt: now };
       for (const key of ["name", "email", "phone", "company", "source", "status"]) {
@@ -347,27 +394,35 @@ export async function submitPublicForm(identifier: string, payload: Record<strin
       await updateReturning("Lead", updatePayload, 'where "tenantId" = $1 and id = $2', [tenantId, leadId], "id", client);
     }
 
-    const opportunityId = await upsertOpportunityFromFormModule({
+    const opportunityResult = await upsertOpportunityFromFormModule({
       tenantId,
       leadId,
       opportunityId: typeof context.opportunityId === "string" ? context.opportunityId : null,
+      actorId,
       data: moduleData.opportunity,
       client,
     });
-    await upsertActivityFromFormModule({
+    const opportunityId = opportunityResult.id;
+    if (opportunityResult.warning) warnings.push(opportunityResult.warning);
+
+    const activityResult = await upsertActivityFromFormModule({
       tenantId,
       leadId,
       activityId: typeof context.activityId === "string" ? context.activityId : null,
       opportunityId,
+      actorId,
       data: moduleData.activity,
       client,
     });
+    if (activityResult.warning) warnings.push(activityResult.warning);
+
     await upsertTaskFromFormModule({
       tenantId,
       leadId,
       opportunityId,
       activityId: typeof context.activityId === "string" ? context.activityId : null,
       ownerId: typeof context.ownerId === "string" ? context.ownerId : await resolveLeadOwnerId(tenantId, leadId, client),
+      actorId,
       data: moduleData.task,
       client,
     });
@@ -378,6 +433,7 @@ export async function submitPublicForm(identifier: string, payload: Record<strin
       tenantId,
       formId: form.id,
       leadId,
+      opportunityId,
       data: { ...payload, _modules: moduleData, leadId, opportunityId },
       utmParams: Object.keys(utmParams).length ? utmParams : null,
       ipAddress: null,
@@ -390,7 +446,7 @@ export async function submitPublicForm(identifier: string, payload: Record<strin
       errorMessage: null,
     }, "id", client);
 
-    return { success: true, leadId, opportunityId };
+    return { success: true, leadId, opportunityId, warnings };
   });
 }
 
@@ -412,7 +468,10 @@ function splitFormPayloadByModule(form: any, payload: Record<string, unknown>) {
     const fieldName = fieldFromMapping || mapping || field.label;
     if (moduleName === "opportunity" || moduleName === "activity" || moduleName === "lead" || moduleName === "task") {
       output[moduleName][fieldName] = rawValue;
-      if (moduleName === "opportunity" && field.opportunityTypeId) output.opportunity.opportunityTypeId = field.opportunityTypeId;
+      // Opportunity Type is now resolved purely from the real, end-user-facing selector field's
+      // submitted value (mapping "opportunity.opportunityTypeId", handled by the basic mapping
+      // resolution above) -- authoring-time `field.opportunityTypeId` tags are scoped to the
+      // builder canvas only and must never leak into the runtime-selected type.
       if (moduleName === "activity" && field.activityTypeId) output.activity.typeId = field.activityTypeId;
     }
   }
@@ -436,17 +495,18 @@ async function upsertOpportunityFromFormModule(input: {
   tenantId: string;
   leadId: string | null;
   opportunityId: string | null;
+  actorId: string | null;
   data: Record<string, unknown>;
   client?: Queryable;
-}) {
-  if (!input.leadId || Object.keys(input.data).length === 0) return null;
+}): Promise<{ id: string | null; warning?: string }> {
+  if (!input.leadId || Object.keys(input.data).length === 0) return { id: null };
   if (input.opportunityId) {
     const updatePayload: Record<string, unknown> = { updatedAt: new Date().toISOString() };
     for (const key of ["title", "amount", "expectedCloseDate", "priority", "stageId", "opportunityTypeId"]) {
       if (input.data[key] !== undefined && input.data[key] !== "") updatePayload[key] = key === "amount" ? Number(input.data[key]) : input.data[key];
     }
     await updateReturning("Opportunity", updatePayload, 'where "tenantId" = $1 and id = $2', [input.tenantId, input.opportunityId], "id", input.client);
-    return input.opportunityId;
+    return { id: input.opportunityId };
   }
 
   const user = { id: "public-form", tenantId: input.tenantId };
@@ -464,8 +524,13 @@ async function upsertOpportunityFromFormModule(input: {
       input.client,
     ),
   ]);
+  if (types.length === 0) {
+    return { id: null, warning: "The Lead was created, but no Opportunity could be added: this tenant has no active Opportunity Type configured." };
+  }
   const selectedType = input.data.opportunityTypeId ? types.find((type: any) => type.id === input.data.opportunityTypeId) : types[0];
-  if (!selectedType?.id) return null;
+  if (!selectedType?.id) {
+    return { id: null, warning: "The Lead was created, but no Opportunity could be added: the selected Opportunity Type is no longer active." };
+  }
 
   const now = new Date().toISOString();
   const opportunity = await insertReturning<any>("Opportunity", {
@@ -484,8 +549,14 @@ async function upsertOpportunityFromFormModule(input: {
     createdBy: null,
     createdAt: now,
     updatedAt: now,
-  }, "id", input.client);
-  return opportunity.id as string;
+  }, "*", input.client);
+
+  await createFormAuditLog(input.tenantId, input.actorId, "CREATE", "OPPORTUNITY", opportunity.id, opportunity, input.client);
+  const distribution = await distributeRecord(user, "OPPORTUNITY", opportunity.id, opportunity).catch(() => null);
+  const opportunityWithOwner = distribution?.assignedUserId ? { ...opportunity, ownerId: distribution.assignedUserId } : opportunity;
+  await runAutomationsForEvent({ id: input.actorId ?? "public-form", tenantId: input.tenantId }, "OPPORTUNITY_CREATED", "OPPORTUNITY", opportunity.id, opportunityWithOwner).catch(() => undefined);
+
+  return { id: opportunity.id as string };
 }
 
 async function upsertActivityFromFormModule(input: {
@@ -493,10 +564,11 @@ async function upsertActivityFromFormModule(input: {
   leadId: string | null;
   activityId: string | null;
   opportunityId: string | null;
+  actorId: string | null;
   data: Record<string, unknown>;
   client?: Queryable;
-}) {
-  if (!input.leadId || Object.keys(input.data).length === 0) return null;
+}): Promise<{ id: string | null; warning?: string }> {
+  if (!input.leadId || Object.keys(input.data).length === 0) return { id: null };
   if (input.activityId) {
     const updatePayload: Record<string, unknown> = { updatedAt: new Date().toISOString() };
     for (const key of ["typeId", "outcome", "notes", "dueAt", "opportunityId"]) {
@@ -504,7 +576,7 @@ async function upsertActivityFromFormModule(input: {
       if (value !== undefined && value !== "") updatePayload[key] = value;
     }
     await updateReturning("Activity", updatePayload, 'where "tenantId" = $1 and id = $2', [input.tenantId, input.activityId], "id", input.client);
-    return input.activityId;
+    return { id: input.activityId };
   }
 
   const user = { id: "public-form", tenantId: input.tenantId };
@@ -516,7 +588,14 @@ async function upsertActivityFromFormModule(input: {
         [input.tenantId],
         input.client,
       );
-  if (!type?.id) return null;
+  if (!type?.id) return { id: null };
+
+  // "Activity"."createdBy" is NOT NULL with a foreign key to a real "User" row -- unlike
+  // Lead/Opportunity/Task, it cannot be left null for a public submission with no resolvable
+  // actor (see resolveFormActorId). Skip creating the Activity rather than violate the constraint.
+  if (!input.actorId) {
+    return { id: null, warning: "Could not create an Activity from this submission: this tenant has no active user to attribute it to." };
+  }
 
   const now = new Date().toISOString();
   const activity = await insertReturning<any>("Activity", {
@@ -535,11 +614,19 @@ async function upsertActivityFromFormModule(input: {
     isRecurring: false,
     recurrenceRule: null,
     seriesId: null,
-    createdBy: null,
+    createdBy: input.actorId,
     createdAt: now,
     updatedAt: now,
-  }, "id", input.client);
-  return activity.id as string;
+  }, "*", input.client);
+
+  await createFormAuditLog(input.tenantId, input.actorId, "CREATE", "ACTIVITY", activity.id, activity, input.client);
+  const automationUser = { id: input.actorId, tenantId: input.tenantId };
+  await runAutomationsForEvent(automationUser, "ACTIVITY_CREATED", "ACTIVITY", activity.id, activity).catch(() => undefined);
+  if (activity.opportunityId) {
+    await runAutomationsForEvent(automationUser, "ACTIVITY_CREATED_ON_OPPORTUNITY", "ACTIVITY", activity.id, activity).catch(() => undefined);
+  }
+
+  return { id: activity.id as string };
 }
 
 async function upsertTaskFromFormModule(input: {
@@ -548,6 +635,7 @@ async function upsertTaskFromFormModule(input: {
   opportunityId: string | null;
   activityId: string | null;
   ownerId: string | null;
+  actorId: string | null;
   data: Record<string, unknown>;
   client?: Queryable;
 }) {
@@ -561,7 +649,7 @@ async function upsertTaskFromFormModule(input: {
     status: input.data.status ?? "OPEN",
     priority: input.data.priority ?? "MEDIUM",
     ownerId: input.ownerId,
-    createdBy: null,
+    createdBy: input.actorId,
     leadId: input.leadId,
     opportunityId: input.opportunityId,
     activityId: input.activityId,
@@ -572,7 +660,20 @@ async function upsertTaskFromFormModule(input: {
     metadata: { source: "FORM" },
     createdAt: now,
     updatedAt: now,
-  }, "id", input.client);
+  }, "*", input.client);
+
+  await createFormAuditLog(input.tenantId, input.actorId, "CREATE", "TASK", task.id, task, input.client);
+  // Mirrors emitTaskAutomation's exact naming/behavior (tasks-postgres.ts): both events fire
+  // independently when a Task is linked to both an Opportunity and its parent Lead.
+  const automationUser = { id: input.actorId ?? "public-form", tenantId: input.tenantId };
+  const baseRecord = { ...task, taskId: task.id, leadId: task.leadId ?? null, opportunityId: task.opportunityId ?? null, activityId: task.activityId ?? null };
+  if (task.opportunityId) {
+    await runAutomationsForEvent(automationUser, "TASK_CREATED_ON_OPPORTUNITY", "TASK", task.id, baseRecord).catch(() => undefined);
+  }
+  if (task.leadId) {
+    await runAutomationsForEvent(automationUser, "TASK_CREATED_ON_LEAD", "TASK", task.id, baseRecord).catch(() => undefined);
+  }
+
   return task.id;
 }
 

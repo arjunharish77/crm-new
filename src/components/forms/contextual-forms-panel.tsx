@@ -42,10 +42,37 @@ type ContextualFormsPanelProps = {
     /** Callback after save so page can reload data */
     onSaved?: () => void;
     showEmpty?: boolean;
+    /** Only show forms that have at least one field from EACH of these modules, e.g. ["lead", "opportunity"] */
+    requireModules?: Array<"lead" | "opportunity" | "activity" | "task">;
+    /** Overrides the trigger button's label (default "Forms") */
+    triggerLabel?: string;
+    /** When exactly one form qualifies, open it directly instead of showing a one-item dropdown */
+    autoOpenSingle?: boolean;
 };
+
+function fieldModule(field: any): string {
+    if (field?.sourceModule) return String(field.sourceModule).toLowerCase();
+    const mapping = String(field?.mapping ?? "");
+    return mapping.includes(".") ? mapping.split(".")[0].toLowerCase() : "";
+}
+
+function formHasModules(form: any, modules: string[]) {
+    const fields = Array.isArray(form?.config?.fields) ? form.config.fields : [];
+    return modules.every((module) => fields.some((field: any) => fieldModule(field) === module));
+}
 
 const formsCache = new Map<string, any[]>();
 const formsRequests = new Map<string, Promise<any[]>>();
+
+// Options are usually plain strings (the string serves as both value and label), but the
+// Opportunity Type selector stores {value, label} pairs (a real id plus a human-readable name).
+// This normalizes either shape to a common {value, label} form for rendering.
+function normalizeOptions(options: Array<string | { value: string; label: string }> | undefined) {
+    if (!Array.isArray(options)) return [];
+    return options.map((option) =>
+        typeof option === "string" ? { value: option, label: option } : { value: String(option.value ?? ""), label: String(option.label ?? option.value ?? "") }
+    );
+}
 
 function loadAvailableForms(placement: ContextualFormsPanelProps["placement"]) {
     const key = placement;
@@ -73,7 +100,7 @@ function loadAvailableForms(placement: ContextualFormsPanelProps["placement"]) {
  * Picking a form opens a dialog with entity data prefilled.
  * Saving calls PATCH on the entity (update, not new submission).
  */
-export function ContextualFormsPanel({ placement, context, entityData, onSaved, showEmpty = false }: ContextualFormsPanelProps) {
+export function ContextualFormsPanel({ placement, context, entityData, onSaved, showEmpty = false, requireModules, triggerLabel, autoOpenSingle }: ContextualFormsPanelProps) {
     const [forms, setForms] = useState<any[]>([]);
     const [openFormId, setOpenFormId] = useState<string | null>(null);
 
@@ -92,8 +119,9 @@ export function ContextualFormsPanel({ placement, context, entityData, onSaved, 
     const availableForms = useMemo(() => {
         return forms
             .filter((form) => placementRuleMatches(form, placement, entityData))
+            .filter((form) => !requireModules || requireModules.length === 0 || formHasModules(form, requireModules))
             .sort((a, b) => placementRuleOrder(a, placement) - placementRuleOrder(b, placement));
-    }, [entityData, forms, placement]);
+    }, [entityData, forms, placement, requireModules]);
 
     if (availableForms.length === 0) {
         if (!showEmpty) return null;
@@ -106,35 +134,46 @@ export function ContextualFormsPanel({ placement, context, entityData, onSaved, 
 
     return (
         <>
-            <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                    <Button
-                        variant="secondary"
-                        className="min-h-9 rounded-[10px] px-3.5"
-                    >
-                        <DescriptionIcon className="size-4" />
-                        Forms
-                        <KeyboardArrowDownIcon className="size-4" />
-                    </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="start" className="w-52">
-                    {availableForms.map((form) => {
-                        const rule = placementRuleFor(form, placement);
-                        return (
-                            <DropdownMenuItem
-                                key={form.id}
-                                onClick={() => setOpenFormId(form.id)}
-                                className="flex-col items-start gap-0 py-2"
-                            >
-                                <span className="text-sm font-semibold">{rule?.label || form.name}</span>
-                                {rule?.label && (
-                                    <span className="text-xs text-muted-foreground">{form.name}</span>
-                                )}
-                            </DropdownMenuItem>
-                        );
-                    })}
-                </DropdownMenuContent>
-            </DropdownMenu>
+            {autoOpenSingle && availableForms.length === 1 ? (
+                <Button
+                    variant="secondary"
+                    className="min-h-9 rounded-[10px] px-3.5"
+                    onClick={() => setOpenFormId(availableForms[0].id)}
+                >
+                    <DescriptionIcon className="size-4" />
+                    {triggerLabel || "Forms"}
+                </Button>
+            ) : (
+                <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                        <Button
+                            variant="secondary"
+                            className="min-h-9 rounded-[10px] px-3.5"
+                        >
+                            <DescriptionIcon className="size-4" />
+                            {triggerLabel || "Forms"}
+                            <KeyboardArrowDownIcon className="size-4" />
+                        </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="start" className="w-52">
+                        {availableForms.map((form) => {
+                            const rule = placementRuleFor(form, placement);
+                            return (
+                                <DropdownMenuItem
+                                    key={form.id}
+                                    onClick={() => setOpenFormId(form.id)}
+                                    className="flex-col items-start gap-0 py-2"
+                                >
+                                    <span className="text-sm font-semibold">{rule?.label || form.name}</span>
+                                    {rule?.label && (
+                                        <span className="text-xs text-muted-foreground">{form.name}</span>
+                                    )}
+                                </DropdownMenuItem>
+                            );
+                        })}
+                    </DropdownMenuContent>
+                </DropdownMenu>
+            )}
 
             {openFormId && (
                 <FormDialog
@@ -341,7 +380,16 @@ function FormRenderer({
 
     // Conditional logic (same as public form)
     const visibleFields = useMemo(() => {
+        const opportunityTypeSelector = fields.find((f) => f.mapping === "opportunity.opportunityTypeId");
+        const selectedOpportunityTypeId = opportunityTypeSelector ? formData[opportunityTypeSelector.id] : undefined;
         return fields.filter((field) => {
+            // Type-driven visibility: an opportunity-module field tagged with an authoring-time
+            // opportunityTypeId is only shown once the real selector field matches that tag.
+            // Fields added under "All types" carry no tag and stay always-visible.
+            if (field.sourceModule === "opportunity" && field.opportunityTypeId && field.opportunityTypeId !== selectedOpportunityTypeId) {
+                return false;
+            }
+
             if (!field.logic || !field.logic.fieldId) return true;
             const sourceValue = formData[field.logic.fieldId];
             const targetValue = field.logic.value;
@@ -381,7 +429,7 @@ function FormRenderer({
             const activityPayload: Record<string, any> = {};
             const publicPayload: Record<string, any> = {};
 
-            fields.forEach((f) => {
+            visibleFields.forEach((f) => {
                 if (formData[f.id] !== undefined) {
                     const mappingStr = f.mapping || f.label || "";
                     const parts = mappingStr.split('.');
@@ -510,19 +558,25 @@ function FormRenderer({
                         ) : field.type === "SELECT" ? (
                             <div className="space-y-1.5">
                                 <Label htmlFor={`ctx-field-${field.id}`}>{field.label}{field.required && " *"}</Label>
-                                <Select value={formData[field.id] || undefined} onValueChange={(v) => handleChange(field.id, v)}>
+                                <Select
+                                    value={formData[field.id] || undefined}
+                                    onValueChange={(v) => handleChange(field.id, v)}
+                                    disabled={field.mapping === "opportunity.opportunityTypeId" && placement === "OPPORTUNITY_DETAIL" && Boolean(context.opportunityId)}
+                                >
                                     <SelectTrigger id={`ctx-field-${field.id}`} className="w-full">
                                         <SelectValue />
                                     </SelectTrigger>
                                     <SelectContent>
-                                        {field.options?.map((opt: string) => (
-                                            <SelectItem key={opt} value={opt}>
-                                                {opt}
+                                        {normalizeOptions(field.options).map((opt) => (
+                                            <SelectItem key={opt.value} value={opt.value}>
+                                                {opt.label}
                                             </SelectItem>
                                         ))}
                                     </SelectContent>
                                 </Select>
-                                {field.helpText && (
+                                {field.mapping === "opportunity.opportunityTypeId" && placement === "OPPORTUNITY_DETAIL" && Boolean(context.opportunityId) ? (
+                                    <p className="text-xs text-muted-foreground">Opportunity Type can&apos;t be changed here.</p>
+                                ) : field.helpText && (
                                     <p className="text-xs text-muted-foreground">{field.helpText}</p>
                                 )}
                             </div>
@@ -533,21 +587,21 @@ function FormRenderer({
                                     {field.required && <span className="ml-0.5 text-destructive">*</span>}
                                 </p>
                                 <div className="space-y-1.5">
-                                    {field.options?.map((opt: string) => (
-                                        <label key={opt} className="flex items-center gap-2 text-sm">
+                                    {normalizeOptions(field.options).map((opt) => (
+                                        <label key={opt.value} className="flex items-center gap-2 text-sm">
                                             <Checkbox
-                                                checked={(formData[field.id] || []).includes(opt)}
+                                                checked={(formData[field.id] || []).includes(opt.value)}
                                                 onCheckedChange={(checked) => {
                                                     const current = formData[field.id] || [];
                                                     handleChange(
                                                         field.id,
                                                         checked
-                                                            ? [...current, opt]
-                                                            : current.filter((v: string) => v !== opt)
+                                                            ? [...current, opt.value]
+                                                            : current.filter((v: string) => v !== opt.value)
                                                     );
                                                 }}
                                             />
-                                            {opt}
+                                            {opt.label}
                                         </label>
                                     ))}
                                 </div>
@@ -565,10 +619,10 @@ function FormRenderer({
                                     value={formData[field.id] || ""}
                                     onValueChange={(v) => handleChange(field.id, v)}
                                 >
-                                    {field.options?.map((opt: string) => (
-                                        <label key={opt} className="flex items-center gap-2 text-sm">
-                                            <RadioGroupItem value={opt} />
-                                            {opt}
+                                    {normalizeOptions(field.options).map((opt) => (
+                                        <label key={opt.value} className="flex items-center gap-2 text-sm">
+                                            <RadioGroupItem value={opt.value} />
+                                            {opt.label}
                                         </label>
                                     ))}
                                 </RadioGroup>

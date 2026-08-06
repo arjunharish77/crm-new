@@ -28,6 +28,7 @@ import { FilterBuilder } from "@/components/filters/filter-builder";
 import { FilterConfig, FilterField } from "@/types/filters";
 import { PredictiveScoreBadge } from "@/components/scoring/predictive-score";
 import { QueueExportButton } from "@/components/exports/queue-export-button";
+import { ContextualFormsPanel } from "@/components/forms/contextual-forms-panel";
 
 const EMPTY_FILTERS: FilterConfig = { conditions: [], logic: "AND" };
 const SELECTED_TYPE_STORAGE_KEY = "unnatify.opportunities.selectedTypeId";
@@ -416,6 +417,14 @@ export default function OpportunitiesPage() {
                                 </span>
                             ) : null}
                         </Button>
+                        <ContextualFormsPanel
+                            placement="OPPORTUNITY_CREATE"
+                            context={{}}
+                            requireModules={["lead", "opportunity"]}
+                            triggerLabel="Create Lead + Opportunity"
+                            autoOpenSingle
+                            onSaved={fetchData}
+                        />
                         <CreateOpportunityDialog onSuccess={fetchData} />
                     </div>
                 </div>

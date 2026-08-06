@@ -1,6 +1,7 @@
 import { randomUUID } from "crypto";
 import { execute, query, queryOne } from "@/lib/db/query";
 import { runAutomationsForEvent } from "@/lib/repositories/automations-postgres";
+import { distributeRecord } from "@/lib/server/distribution-engine";
 
 type TenantUser = {
   id: string;
@@ -333,8 +334,10 @@ export async function createLeadForTenant(user: TenantUser, payload: Record<stri
   if (!lead) throw new Error("LEAD_INSERT_FAILED");
   const formatted = formatLead(lead);
   await createAuditLog(user, "CREATE", "LEAD", formatted.id, null, formatted, null);
-  await runAutomationsForEvent(user, "LEAD_CREATED", "LEAD", formatted.id, formatted).catch(() => undefined);
-  return formatted;
+  const distribution = await distributeRecord(user, "LEAD", formatted.id, formatted).catch(() => null);
+  const formattedWithOwner = distribution?.assignedUserId ? { ...formatted, ownerId: distribution.assignedUserId } : formatted;
+  await runAutomationsForEvent(user, "LEAD_CREATED", "LEAD", formattedWithOwner.id, formattedWithOwner).catch(() => undefined);
+  return formattedWithOwner;
 }
 
 export async function getLeadForTenant(user: TenantUser, id: string) {

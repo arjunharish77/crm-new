@@ -23,6 +23,7 @@ import { EditLeadDialog } from "./edit-lead-dialog";
 import { AdvancedFilterModal, FilterGroup } from "@/components/filters/advanced-filter-modal";
 import { FilterConfig } from "@/types/filters";
 import { QueueExportButton } from "@/components/exports/queue-export-button";
+import { ContextualFormsPanel } from "@/components/forms/contextual-forms-panel";
 
 const EMPTY_FILTERS: FilterConfig = { conditions: [], logic: "AND" };
 
@@ -226,6 +227,14 @@ export default function LeadsPage() {
                         <FilterIconLucide className="size-4" />
                         Filters
                     </Button>
+                    <ContextualFormsPanel
+                        placement="LEAD_CREATE"
+                        context={{}}
+                        requireModules={["lead", "opportunity"]}
+                        triggerLabel="Create Lead + Opportunity"
+                        autoOpenSingle
+                        onSaved={fetchData}
+                    />
                     <CreateLeadDialog onSuccess={fetchData} />
                 </div>
             </div>

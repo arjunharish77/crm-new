@@ -50,6 +50,7 @@ const formSchema = z.object({
     opportunitiesPermission: z.enum(["none", "read", "write", "full"]),
     activitiesPermission: z.enum(["none", "read", "write", "full"]),
     adminPermission: z.enum(["none", "read", "write", "full"]),
+    integrationsPermission: z.enum(["none", "read", "write", "full"]),
     permissionTemplateId: z.string().optional(),
     isPartnerRole: z.boolean(),
 });
@@ -61,6 +62,7 @@ const modules: { key: keyof RoleFormValues; label: string }[] = [
     { key: "opportunitiesPermission", label: "Opportunities" },
     { key: "activitiesPermission", label: "Activities" },
     { key: "adminPermission", label: "Admin & Settings" },
+    { key: "integrationsPermission", label: "Integrations" },
 ];
 
 const permissionLevels = [
@@ -95,6 +97,7 @@ export function RoleDialog({
             opportunitiesPermission: "none",
             activitiesPermission: "none",
             adminPermission: "none",
+            integrationsPermission: "none",
             permissionTemplateId: "",
             isPartnerRole: false,
         },
@@ -113,6 +116,7 @@ export function RoleDialog({
                 opportunitiesPermission: (role.permissions.modules.opportunities as any) || "none",
                 activitiesPermission: (role.permissions.modules.activities as any) || "none",
                 adminPermission: (role.permissions.modules.admin as any) || "none",
+                integrationsPermission: (role.permissions.modules.integrations as any) || "none",
                 permissionTemplateId: role.permissionTemplateId ?? "",
                 isPartnerRole: !!role.permissions.isPartnerRole,
             });
@@ -125,6 +129,7 @@ export function RoleDialog({
                 opportunitiesPermission: "none",
                 activitiesPermission: "none",
                 adminPermission: "none",
+                integrationsPermission: "none",
                 permissionTemplateId: "",
                 isPartnerRole: false,
             });
@@ -148,6 +153,7 @@ export function RoleDialog({
                         opportunities: values.opportunitiesPermission,
                         activities: values.activitiesPermission,
                         admin: values.adminPermission,
+                        integrations: values.integrationsPermission,
                     },
                     recordAccess: values.recordAccess,
                     isPartnerRole: values.isPartnerRole,

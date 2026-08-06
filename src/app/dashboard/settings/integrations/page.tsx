@@ -17,6 +17,8 @@ import {
     Mail,
     MessageSquareText,
     Send,
+    Share2,
+    Pencil,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -159,6 +161,38 @@ const IMPORT_FIELDS = {
         { key: 'notes', label: 'Notes' },
         { key: 'dueAt', label: 'Due At' },
     ],
+};
+
+interface ExternalIntegration {
+    id?: string;
+    name: string;
+    targetSystem: string;
+    endpointUrl: string;
+    httpMethod: string;
+    authType: 'NONE' | 'API_KEY_HEADER' | 'API_KEY_QUERY' | 'BEARER' | 'BASIC';
+    config: {
+        payloadTemplate: string;
+        apiKeyHeaderName?: string;
+        apiKeyQueryParamName?: string;
+    };
+    secretConfig?: {
+        apiKey?: string;
+        bearerToken?: string;
+        basicUsername?: string;
+        basicPassword?: string;
+    };
+    isActive: boolean;
+}
+
+const DEFAULT_EXTERNAL_INTEGRATION: ExternalIntegration = {
+    name: '',
+    targetSystem: '',
+    endpointUrl: '',
+    httpMethod: 'POST',
+    authType: 'NONE',
+    config: { payloadTemplate: '{\n  "name": "{{lead.name}}",\n  "email": "{{lead.email}}",\n  "phone": "{{lead.phone}}"\n}' },
+    secretConfig: {},
+    isActive: true,
 };
 
 // Radix Select rejects an empty-string item value, so "no selection" is
@@ -333,6 +367,10 @@ export default function IntegrationsSettingsPage() {
     const [telephonySection, setTelephonySection] = useState('click2call');
     const [callLogs, setCallLogs] = useState<CallLog[]>([]);
     const [testCall, setTestCall] = useState({ phoneNumber: '', leadId: '' });
+    const [externalIntegrations, setExternalIntegrations] = useState<ExternalIntegration[]>([]);
+    const [externalIntegrationDraft, setExternalIntegrationDraft] = useState<ExternalIntegration>(DEFAULT_EXTERNAL_INTEGRATION);
+    const [editingExternalIntegrationId, setEditingExternalIntegrationId] = useState<string | null>(null);
+    const [savingExternalIntegration, setSavingExternalIntegration] = useState(false);
 
     useEffect(() => {
         fetchData();
@@ -391,6 +429,9 @@ export default function IntegrationsSettingsPage() {
                     setCommunicationTemplates(Array.isArray(templates) ? templates : []);
                     setCommunicationOutbox(Array.isArray(outbox) ? outbox : []);
                 })
+                .catch(() => undefined);
+            apiFetch('/settings/integrations/external')
+                .then((data) => setExternalIntegrations(Array.isArray(data) ? data : []))
                 .catch(() => undefined);
         } catch (err) {
             console.error('Failed to fetch integrations', err);
@@ -581,6 +622,59 @@ export default function IntegrationsSettingsPage() {
         }
     };
 
+    const startEditingExternalIntegration = (integration: ExternalIntegration) => {
+        setEditingExternalIntegrationId(integration.id ?? null);
+        setExternalIntegrationDraft({
+            ...integration,
+            targetSystem: integration.targetSystem ?? '',
+            config: integration.config ?? { payloadTemplate: '{}' },
+            secretConfig: {},
+        });
+    };
+
+    const startNewExternalIntegration = () => {
+        setEditingExternalIntegrationId(null);
+        setExternalIntegrationDraft(DEFAULT_EXTERNAL_INTEGRATION);
+    };
+
+    const handleSaveExternalIntegration = async () => {
+        if (!externalIntegrationDraft.name.trim() || !externalIntegrationDraft.endpointUrl.trim()) {
+            toast.error('Name and endpoint URL are required');
+            return;
+        }
+        setSavingExternalIntegration(true);
+        try {
+            const saved = editingExternalIntegrationId
+                ? await apiFetch(`/settings/integrations/external/${editingExternalIntegrationId}`, {
+                    method: 'PATCH',
+                    body: JSON.stringify(externalIntegrationDraft),
+                })
+                : await apiFetch('/settings/integrations/external', {
+                    method: 'POST',
+                    body: JSON.stringify(externalIntegrationDraft),
+                });
+            setExternalIntegrations((current) => [saved, ...current.filter((item) => item.id !== saved.id)]);
+            startEditingExternalIntegration(saved);
+            toast.success('Integration saved');
+        } catch (error: any) {
+            toast.error(error?.message || 'Failed to save integration');
+        } finally {
+            setSavingExternalIntegration(false);
+        }
+    };
+
+    const handleDeleteExternalIntegration = async (id: string) => {
+        if (!confirm('Delete this integration? Past push history is kept for audit purposes.')) return;
+        try {
+            await apiFetch(`/settings/integrations/external/${id}`, { method: 'DELETE' });
+            setExternalIntegrations((current) => current.filter((item) => item.id !== id));
+            if (editingExternalIntegrationId === id) startNewExternalIntegration();
+            toast.success('Integration deleted');
+        } catch {
+            toast.error('Failed to delete integration');
+        }
+    };
+
     const handleSaveCommunicationTemplate = async () => {
         setSavingCommunication(true);
         try {
@@ -629,6 +723,10 @@ export default function IntegrationsSettingsPage() {
                     <TabsTrigger value="4">
                         <MessageSquareText className="size-4" />
                         Messaging
+                    </TabsTrigger>
+                    <TabsTrigger value="5">
+                        <Share2 className="size-4" />
+                        External Push
                     </TabsTrigger>
                 </TabsList>
 
@@ -1361,6 +1459,211 @@ export default function IntegrationsSettingsPage() {
                                             ))}
                                         </TableBody>
                                     </Table>
+                                )}
+                            </CardContent>
+                        </Card>
+                    </div>
+                </TabsContent>
+
+                <TabsContent value="5" className="space-y-4">
+                    <div>
+                        <h2 className="text-lg font-semibold">External System Push</h2>
+                        <p className="text-sm text-muted-foreground">
+                            Push a Lead/Opportunity&apos;s data to an external system (e.g. LeadSquared) from its detail page.
+                        </p>
+                    </div>
+
+                    <Alert variant="info">
+                        <Info />
+                        <AlertDescription>
+                            Secret keys/tokens below are stored in plaintext -- there is no secret encryption anywhere
+                            in this app today. Treat this tab like any other place credentials are typed in.
+                        </AlertDescription>
+                    </Alert>
+
+                    <div className="grid gap-4 xl:grid-cols-[minmax(0,1.1fr)_minmax(320px,0.9fr)]">
+                        <Card>
+                            <CardHeader>
+                                <CardTitle>{editingExternalIntegrationId ? 'Edit Integration' : 'New Integration'}</CardTitle>
+                                <CardDescription>
+                                    Use {'{{lead.field}}'} / {'{{opportunity.field}}'} tokens in the payload template -- they&apos;re
+                                    substituted with real, typed values (e.g. {'{{lead.name}}'}, {'{{opportunity.amount}}'}).
+                                </CardDescription>
+                            </CardHeader>
+                            <CardContent className="space-y-4">
+                                <div className="grid gap-3 md:grid-cols-2">
+                                    <FieldInput
+                                        label="Integration Name"
+                                        value={externalIntegrationDraft.name}
+                                        onChange={(value) => setExternalIntegrationDraft({ ...externalIntegrationDraft, name: value })}
+                                    />
+                                    <FieldInput
+                                        label="Target System (optional)"
+                                        value={externalIntegrationDraft.targetSystem}
+                                        onChange={(value) => setExternalIntegrationDraft({ ...externalIntegrationDraft, targetSystem: value })}
+                                    />
+                                    <FieldInput
+                                        label="Endpoint URL"
+                                        className="md:col-span-2"
+                                        value={externalIntegrationDraft.endpointUrl}
+                                        onChange={(value) => setExternalIntegrationDraft({ ...externalIntegrationDraft, endpointUrl: value })}
+                                    />
+                                    <div className="space-y-1.5">
+                                        <Label>HTTP Method</Label>
+                                        <Select
+                                            value={externalIntegrationDraft.httpMethod}
+                                            onValueChange={(value) => setExternalIntegrationDraft({ ...externalIntegrationDraft, httpMethod: value })}
+                                        >
+                                            <SelectTrigger className="w-full">
+                                                <SelectValue />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                <SelectItem value="POST">POST</SelectItem>
+                                                <SelectItem value="PUT">PUT</SelectItem>
+                                                <SelectItem value="PATCH">PATCH</SelectItem>
+                                                <SelectItem value="GET">GET</SelectItem>
+                                            </SelectContent>
+                                        </Select>
+                                    </div>
+                                    <div className="space-y-1.5">
+                                        <Label>Auth Type</Label>
+                                        <Select
+                                            value={externalIntegrationDraft.authType}
+                                            onValueChange={(value) => setExternalIntegrationDraft({ ...externalIntegrationDraft, authType: value as ExternalIntegration['authType'] })}
+                                        >
+                                            <SelectTrigger className="w-full">
+                                                <SelectValue />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                <SelectItem value="NONE">None</SelectItem>
+                                                <SelectItem value="API_KEY_HEADER">API Key (Header)</SelectItem>
+                                                <SelectItem value="API_KEY_QUERY">API Key (Query Param)</SelectItem>
+                                                <SelectItem value="BEARER">Bearer Token</SelectItem>
+                                                <SelectItem value="BASIC">Basic Auth</SelectItem>
+                                            </SelectContent>
+                                        </Select>
+                                    </div>
+                                </div>
+
+                                {externalIntegrationDraft.authType === 'API_KEY_HEADER' && (
+                                    <div className="grid gap-3 md:grid-cols-2">
+                                        <FieldInput
+                                            label="Header Name"
+                                            value={externalIntegrationDraft.config.apiKeyHeaderName ?? 'X-API-Key'}
+                                            onChange={(value) => setExternalIntegrationDraft({ ...externalIntegrationDraft, config: { ...externalIntegrationDraft.config, apiKeyHeaderName: value } })}
+                                        />
+                                        <FieldInput
+                                            label="API Key"
+                                            type="password"
+                                            value={externalIntegrationDraft.secretConfig?.apiKey ?? ''}
+                                            onChange={(value) => setExternalIntegrationDraft({ ...externalIntegrationDraft, secretConfig: { ...externalIntegrationDraft.secretConfig, apiKey: value } })}
+                                        />
+                                    </div>
+                                )}
+                                {externalIntegrationDraft.authType === 'API_KEY_QUERY' && (
+                                    <div className="grid gap-3 md:grid-cols-2">
+                                        <FieldInput
+                                            label="Query Param Name"
+                                            value={externalIntegrationDraft.config.apiKeyQueryParamName ?? 'api_key'}
+                                            onChange={(value) => setExternalIntegrationDraft({ ...externalIntegrationDraft, config: { ...externalIntegrationDraft.config, apiKeyQueryParamName: value } })}
+                                        />
+                                        <FieldInput
+                                            label="API Key"
+                                            type="password"
+                                            value={externalIntegrationDraft.secretConfig?.apiKey ?? ''}
+                                            onChange={(value) => setExternalIntegrationDraft({ ...externalIntegrationDraft, secretConfig: { ...externalIntegrationDraft.secretConfig, apiKey: value } })}
+                                        />
+                                    </div>
+                                )}
+                                {externalIntegrationDraft.authType === 'BEARER' && (
+                                    <FieldInput
+                                        label="Bearer Token"
+                                        type="password"
+                                        value={externalIntegrationDraft.secretConfig?.bearerToken ?? ''}
+                                        onChange={(value) => setExternalIntegrationDraft({ ...externalIntegrationDraft, secretConfig: { ...externalIntegrationDraft.secretConfig, bearerToken: value } })}
+                                    />
+                                )}
+                                {externalIntegrationDraft.authType === 'BASIC' && (
+                                    <div className="grid gap-3 md:grid-cols-2">
+                                        <FieldInput
+                                            label="Username"
+                                            value={externalIntegrationDraft.secretConfig?.basicUsername ?? ''}
+                                            onChange={(value) => setExternalIntegrationDraft({ ...externalIntegrationDraft, secretConfig: { ...externalIntegrationDraft.secretConfig, basicUsername: value } })}
+                                        />
+                                        <FieldInput
+                                            label="Password"
+                                            type="password"
+                                            value={externalIntegrationDraft.secretConfig?.basicPassword ?? ''}
+                                            onChange={(value) => setExternalIntegrationDraft({ ...externalIntegrationDraft, secretConfig: { ...externalIntegrationDraft.secretConfig, basicPassword: value } })}
+                                        />
+                                    </div>
+                                )}
+                                {editingExternalIntegrationId && (
+                                    <p className="text-xs text-muted-foreground">
+                                        Secret fields are write-only and shown blank here -- leave blank to keep the saved value.
+                                    </p>
+                                )}
+
+                                <FieldTextarea
+                                    label="Payload Template (JSON)"
+                                    rows={8}
+                                    value={externalIntegrationDraft.config.payloadTemplate}
+                                    onChange={(value) => setExternalIntegrationDraft({ ...externalIntegrationDraft, config: { ...externalIntegrationDraft.config, payloadTemplate: value } })}
+                                />
+
+                                <div className="flex items-center justify-between">
+                                    <div className="flex items-center gap-2">
+                                        <Switch
+                                            checked={externalIntegrationDraft.isActive}
+                                            onCheckedChange={(checked) => setExternalIntegrationDraft({ ...externalIntegrationDraft, isActive: checked })}
+                                        />
+                                        <Label>Integration enabled</Label>
+                                    </div>
+                                    <div className="flex gap-2">
+                                        {editingExternalIntegrationId && (
+                                            <Button variant="outline" onClick={startNewExternalIntegration}>New</Button>
+                                        )}
+                                        <Button disabled={savingExternalIntegration} onClick={handleSaveExternalIntegration}>
+                                            {savingExternalIntegration ? 'Saving...' : editingExternalIntegrationId ? 'Update Integration' : 'Create Integration'}
+                                        </Button>
+                                    </div>
+                                </div>
+                            </CardContent>
+                        </Card>
+
+                        <Card>
+                            <CardHeader>
+                                <CardTitle>Configured Integrations</CardTitle>
+                                <CardDescription>Shown as a &quot;Push to...&quot; action on Lead and Opportunity detail pages.</CardDescription>
+                            </CardHeader>
+                            <CardContent className="space-y-2">
+                                {externalIntegrations.length === 0 ? (
+                                    <Alert variant="info">
+                                        <Info />
+                                        <AlertDescription>No external integrations configured yet.</AlertDescription>
+                                    </Alert>
+                                ) : (
+                                    externalIntegrations.map((integration) => (
+                                        <div key={integration.id} className="flex items-center justify-between gap-2 rounded-md border p-3">
+                                            <div>
+                                                <div className="font-medium">{integration.name}</div>
+                                                <div className="text-xs text-muted-foreground">
+                                                    {integration.httpMethod} {integration.endpointUrl}
+                                                </div>
+                                            </div>
+                                            <div className="flex items-center gap-1">
+                                                <Badge variant={integration.isActive ? 'default' : 'outline'}>
+                                                    {integration.isActive ? 'Active' : 'Off'}
+                                                </Badge>
+                                                <Button variant="ghost" size="icon" onClick={() => startEditingExternalIntegration(integration)}>
+                                                    <Pencil className="size-4" />
+                                                </Button>
+                                                <Button variant="ghost" size="icon" onClick={() => handleDeleteExternalIntegration(integration.id!)}>
+                                                    <Trash2 className="size-4 text-destructive" />
+                                                </Button>
+                                            </div>
+                                        </div>
+                                    ))
                                 )}
                             </CardContent>
                         </Card>

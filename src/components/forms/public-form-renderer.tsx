@@ -29,6 +29,16 @@ interface RendererProps {
     config: FormConfig;
 }
 
+// Options are usually plain strings (the string serves as both value and label), but the
+// Opportunity Type selector stores {value, label} pairs (a real id plus a human-readable name).
+// This normalizes either shape to a common {value, label} form for rendering.
+function normalizeOptions(options: Array<string | { value: string; label: string }> | undefined) {
+    if (!Array.isArray(options)) return [];
+    return options.map((option) =>
+        typeof option === "string" ? { value: option, label: option } : { value: String(option.value ?? ""), label: String(option.label ?? option.value ?? "") }
+    );
+}
+
 export function PublicFormRenderer({ slug, config }: RendererProps) {
     const searchParams = useSearchParams();
     const [formData, setFormData] = useState<Record<string, any>>({});
@@ -69,7 +79,16 @@ export function PublicFormRenderer({ slug, config }: RendererProps) {
 
     // Conditional Logic Evaluation
     const visibleFields = useMemo(() => {
+        const opportunityTypeSelector = fields.find(f => f.mapping === "opportunity.opportunityTypeId");
+        const selectedOpportunityTypeId = opportunityTypeSelector ? formData[opportunityTypeSelector.id] : undefined;
         return fields.filter(field => {
+            // Type-driven visibility: an opportunity-module field tagged with an authoring-time
+            // opportunityTypeId is only shown once the real selector field matches that tag.
+            // Fields added under "All types" carry no tag and stay always-visible.
+            if (field.sourceModule === "opportunity" && field.opportunityTypeId && field.opportunityTypeId !== selectedOpportunityTypeId) {
+                return false;
+            }
+
             if (!field.logic || !field.logic.fieldId) return true;
 
             const sourceValue = formData[field.logic.fieldId];
@@ -109,8 +128,10 @@ export function PublicFormRenderer({ slug, config }: RendererProps) {
         try {
             const payload: Record<string, any> = {};
 
-            // Map form fields
-            fields.forEach(f => {
+            // Map form fields -- only currently-visible ones, so a value entered for a field
+            // that's since become hidden (e.g. switching the Opportunity Type selector) doesn't
+            // leak into the submission.
+            visibleFields.forEach(f => {
                 const key = f.mapping || f.label;
                 if (formData[f.id] !== undefined) {
                     payload[key] = formData[f.id];
@@ -238,30 +259,30 @@ export function PublicFormRenderer({ slug, config }: RendererProps) {
                                         <SelectValue placeholder={field.placeholder || "Select option..."} />
                                     </SelectTrigger>
                                     <SelectContent>
-                                        {field.options?.map((opt: string) => (
-                                            <SelectItem key={opt} value={opt}>{opt}</SelectItem>
+                                        {normalizeOptions(field.options).map((opt) => (
+                                            <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
                                         ))}
                                     </SelectContent>
                                 </Select>
                             ) : field.type === 'CHECKBOX' ? (
                                 <div className="space-y-2 pt-1">
                                     {field.options && field.options.length > 0 ? (
-                                        field.options.map((opt: string) => (
-                                            <div key={opt} className="flex items-center space-x-2">
+                                        normalizeOptions(field.options).map((opt) => (
+                                            <div key={opt.value} className="flex items-center space-x-2">
                                                 <Checkbox
-                                                    id={`${field.id}-${opt}`}
-                                                    checked={(formData[field.id] || []).includes(opt)}
+                                                    id={`${field.id}-${opt.value}`}
+                                                    checked={(formData[field.id] || []).includes(opt.value)}
                                                     onCheckedChange={(checked) => {
                                                         const current = formData[field.id] || [];
                                                         if (checked) {
-                                                            handleChange(field.id, [...current, opt]);
+                                                            handleChange(field.id, [...current, opt.value]);
                                                         } else {
-                                                            handleChange(field.id, current.filter((v: string) => v !== opt));
+                                                            handleChange(field.id, current.filter((v: string) => v !== opt.value));
                                                         }
                                                     }}
                                                 />
-                                                <label htmlFor={`${field.id}-${opt}`} className="text-sm font-medium leading-none cursor-pointer">
-                                                    {opt}
+                                                <label htmlFor={`${field.id}-${opt.value}`} className="text-sm font-medium leading-none cursor-pointer">
+                                                    {opt.label}
                                                 </label>
                                             </div>
                                         ))
@@ -280,19 +301,19 @@ export function PublicFormRenderer({ slug, config }: RendererProps) {
                                 </div>
                             ) : field.type === 'RADIO' ? (
                                 <div className="space-y-2 pt-1">
-                                    {field.options?.map((opt: string) => (
-                                        <div key={opt} className="flex items-center space-x-2">
+                                    {normalizeOptions(field.options).map((opt) => (
+                                        <div key={opt.value} className="flex items-center space-x-2">
                                             <input
                                                 type="radio"
-                                                id={`${field.id}-${opt}`}
+                                                id={`${field.id}-${opt.value}`}
                                                 name={field.id}
-                                                value={opt}
-                                                checked={formData[field.id] === opt}
+                                                value={opt.value}
+                                                checked={formData[field.id] === opt.value}
                                                 onChange={e => handleChange(field.id, e.target.value)}
                                                 className="h-4 w-4 border-gray-300 text-primary focus:ring-primary"
                                             />
-                                            <label htmlFor={`${field.id}-${opt}`} className="text-sm font-medium leading-none cursor-pointer text-gray-700">
-                                                {opt}
+                                            <label htmlFor={`${field.id}-${opt.value}`} className="text-sm font-medium leading-none cursor-pointer text-gray-700">
+                                                {opt.label}
                                             </label>
                                         </div>
                                     ))}

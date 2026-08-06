@@ -4,7 +4,7 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { motion } from "framer-motion";
-import { ArrowLeft, Loader2, Pencil, Plus } from "lucide-react";
+import { ArrowLeft, Loader2, Pencil, Plus, Share2 } from "lucide-react";
 import { toast } from "sonner";
 import { formatWorkspaceDate, formatWorkspaceDateTime, parseWorkspaceDate } from "@/lib/date-format";
 import { apiFetch } from "@/lib/api";
@@ -18,6 +18,8 @@ import { CreateActivityDialog } from "../../activities/create-activity-dialog";
 import { OpportunityStageHistoryList } from "@/components/opportunities/opportunity-stage-history";
 import { NotesPanel } from "@/components/common/notes-panel";
 import { ContextualFormsPanel } from "@/components/forms/contextual-forms-panel";
+import { ExternalPushDialog } from "@/components/integrations/external-push-dialog";
+import { ExternalPushBadge } from "@/components/integrations/external-push-badge";
 import { RelatedTasksPanel } from "@/components/tasks/related-tasks-panel";
 import { CommunicationEventsPanel } from "@/components/communications/communication-events-panel";
 import { formatCurrency, cn } from "@/lib/utils";
@@ -37,6 +39,11 @@ import { PredictiveScorePanel } from "@/components/scoring/predictive-score";
 
 type ActivityTimeFilter = "ALL" | "TODAY" | "7D" | "30D";
 
+function hasIntegrationsPermission(user: any) {
+    const rolePermissions = typeof user?.role === "object" && user?.role ? user.role.permissions : null;
+    return Boolean(user?.isTenantAdmin || user?.isPlatformAdmin || rolePermissions?.modules?.integrations === "full");
+}
+
 export default function OpportunityDetailPage() {
     const params = useParams();
     const router = useRouter();
@@ -53,6 +60,8 @@ export default function OpportunityDetailPage() {
     const [tabValue, setTabValue] = useState<"activity" | "details" | "scoring" | "stage" | "tasks" | "communications" | "notes" | "audit">("activity");
     const [activityTypeFilter, setActivityTypeFilter] = useState<string>("ALL");
     const [activityTimeFilter, setActivityTimeFilter] = useState<ActivityTimeFilter>("ALL");
+    const [showPushDialog, setShowPushDialog] = useState(false);
+    const [pushRefreshKey, setPushRefreshKey] = useState(0);
 
     const loadData = useCallback(async () => {
         try {
@@ -196,11 +205,26 @@ export default function OpportunityDetailPage() {
                         entityData={opportunity}
                         onSaved={loadData}
                     />
+                    {hasIntegrationsPermission(user) && (
+                        <Button
+                            size="sm"
+                            variant="outline"
+                            className="min-h-9 px-3.5"
+                            onClick={() => setShowPushDialog(true)}
+                        >
+                            <Share2 className="size-4" />
+                            Push to External
+                        </Button>
+                    )}
                     <Button size="sm" className="min-h-9 px-4" onClick={() => setShowEditDialog(true)}>
                         <Pencil className="size-4" />
                         Edit
                     </Button>
                 </div>
+            </div>
+
+            <div className="mb-3 flex justify-end">
+                <ExternalPushBadge opportunityId={opportunityId} refreshKey={pushRefreshKey} />
             </div>
 
             <div className="grid grid-cols-1 gap-4 lg:grid-cols-[380px_1fr]">
@@ -436,6 +460,13 @@ export default function OpportunityDetailPage() {
             </div>
 
             <EditOpportunityDialog opportunity={opportunity} open={showEditDialog} onOpenChange={setShowEditDialog} onSuccess={loadData} />
+            <ExternalPushDialog
+                open={showPushDialog}
+                onClose={() => setShowPushDialog(false)}
+                leadId={opportunity.leadId}
+                opportunityId={opportunity.id}
+                onPushed={() => setPushRefreshKey((key) => key + 1)}
+            />
         </motion.div>
     );
 }
