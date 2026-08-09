@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
+import { trackEvent } from "@/components/analytics";
 import { courseWithUniversity, formatFee, type Course, type University } from "@/data/catalog";
 
 type CourseItem = Course & { university: University };
@@ -107,18 +108,23 @@ export function RecommenderQuiz({ courses }: { courses: Course[] }) {
   const [chat, setChat] = useState<Message[]>([]);
   const [draft, setDraft] = useState("");
 
-  const results = useMemo(() => {
-    return courseItems
-      .map((course) => ({ course, score: scoreCourse(course, answers) }))
-      .sort((a, b) => b.score - a.score)
-      .slice(0, 3);
-  }, [answers, courseItems]);
+  const topMatches = useCallback(
+    (answersToScore: Answers) =>
+      courseItems
+        .map((course) => ({ course, score: scoreCourse(course, answersToScore) }))
+        .sort((a, b) => b.score - a.score)
+        .slice(0, 3),
+    [courseItems],
+  );
+
+  const results = useMemo(() => topMatches(answers), [answers, topMatches]);
 
   const question = questions[index];
 
   function pick(label: string) {
     const nextAnswers = { ...answers, [question.key]: label };
     setAnswers(nextAnswers);
+    trackEvent("recommender_step_answered", { step_index: index, question: question.key, answer: label });
     if (index < questions.length - 1) {
       setIndex(index + 1);
       return;
@@ -127,6 +133,7 @@ export function RecommenderQuiz({ courses }: { courses: Course[] }) {
     window.setTimeout(() => {
       setChat([{ who: "bot", text: "I shortlisted these 3 from our catalog. Ask me anything — cheaper alternatives, placements, EMI, or whether the degree is valid for government jobs." }]);
       setPhase("results");
+      trackEvent("recommender_completed", { course_ids: topMatches(nextAnswers).map((item) => item.course.id) });
     }, 1400);
   }
 

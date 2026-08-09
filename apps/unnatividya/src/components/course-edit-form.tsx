@@ -84,6 +84,10 @@ export function CourseEditForm({
 
   return (
     <form action={save} className="admin-form-grid">
+      <div style={{ gridColumn: "1 / -1", background: "#FFF4E5", border: "1px solid #F0C36D", borderRadius: 6, padding: "10px 14px", fontSize: 13, color: "#7A5B12", marginBottom: 8 }}>
+        This data is sourced from <code>src/data/catalog.ts</code> and will be overwritten the next time that file is
+        deployed and synced. To make a permanent change, edit the file directly rather than saving here.
+      </div>
       {mode === "create" ? (
         <div className="field">
           <label htmlFor="id">Course ID</label>

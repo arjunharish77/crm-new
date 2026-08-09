@@ -1,7 +1,9 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { CompareGate } from "@/components/compare-gate";
+import { TrackOnMount } from "@/components/track-on-mount";
 import { courses, courseWithUniversity, formatFee } from "@/data/catalog";
+import { allComparisonPairs, buildComparisonRows } from "@/lib/comparisons";
 
 export const metadata: Metadata = {
   title: "Compare Online Degrees",
@@ -17,6 +19,7 @@ export default async function ComparePage({ searchParams }: { searchParams?: Pro
   // not silently repopulate with the default pair (that made the empty state unreachable).
   const selectedIds = params?.add !== undefined ? params.add.split(",").filter(Boolean).slice(0, 3) : ["mba-muj", "mba-amity"];
   const selected = courses.filter((course) => selectedIds.includes(course.id)).map(courseWithUniversity);
+  const comparisonPairs = allComparisonPairs();
   const presets = [
     ["MBA: MUJ vs Amity", "mba-muj,mba-amity"],
     ["MBA: MUJ vs SMU", "mba-muj,mba-smu"],
@@ -28,6 +31,7 @@ export default async function ComparePage({ searchParams }: { searchParams?: Pro
 
   return (
     <>
+      {selected.length >= 2 ? <TrackOnMount event="compare_view" params={{ course_ids: selected.map((course) => course.id) }} /> : null}
       <div style={{ background: "#F7F8F9", flex: 1, display: "flex", flexDirection: "column" }}>
         <div style={{ background: "#fff", borderBottom: "1px solid #EAEAEA" }}>
           <div style={{ ...shell, paddingTop: 28, paddingBottom: 28 }}>
@@ -97,38 +101,38 @@ export default async function ComparePage({ searchParams }: { searchParams?: Pro
                     <small>{course.university.name}</small>
                   </div>
                 ))}
-                {(() => {
-                  const bestFee = Math.min(...selected.map((course) => course.fee));
-                  const bestRating = Math.max(...selected.map((course) => course.rating));
-                  const bestPlacement = Math.max(...selected.map((course) => course.university.placement));
-                  const rows: Array<{ label: string; cells: Array<{ value: string; best?: boolean }> }> = [
-                    { label: "Total fee", cells: selected.map((course) => ({ value: formatFee(course.fee), best: selected.length > 1 && course.fee === bestFee })) },
-                    { label: "EMI from", cells: selected.map((course) => ({ value: course.emi })) },
-                    { label: "Duration", cells: selected.map((course) => ({ value: course.duration })) },
-                    { label: "Level", cells: selected.map((course) => ({ value: `${course.level} degree` })) },
-                    { label: "Rating", cells: selected.map((course) => ({ value: `${course.rating} ★ (${course.reviews.toLocaleString("en-IN")} reviews)`, best: selected.length > 1 && course.rating === bestRating })) },
-                    { label: "Approvals", cells: selected.map((course) => ({ value: course.university.approvals.join(", ") })) },
-                    { label: "Placement rate", cells: selected.map((course) => ({ value: `${course.university.placement}%`, best: selected.length > 1 && course.university.placement === bestPlacement })) },
-                    { label: "Average package", cells: selected.map((course) => ({ value: course.university.avgPackage })) },
-                    { label: "Hiring partners", cells: selected.map((course) => ({ value: `${course.university.partners}+` })) },
-                    { label: "Specialisations", cells: selected.map((course) => ({ value: `${course.specializations.length} tracks` })) },
-                  ];
-                  return rows.flatMap((row) => [
-                    <div className="compare-cell compare-row-label" key={`${row.label}-label`}>{row.label}</div>,
-                    ...row.cells.map((cell, index) => (
-                      <div
-                        className="compare-cell"
-                        style={cell.best ? { fontWeight: 700, background: "rgba(46,125,50,0.08)" } : undefined}
-                        key={`${row.label}-${index}`}
-                      >
-                        {cell.value}
-                      </div>
-                    )),
-                  ]);
-                })()}
+                {buildComparisonRows(selected).flatMap((row) => [
+                  <div className="compare-cell compare-row-label" key={`${row.label}-label`}>{row.label}</div>,
+                  ...row.cells.map((cell, index) => (
+                    <div
+                      className="compare-cell"
+                      style={cell.best ? { fontWeight: 700, background: "rgba(46,125,50,0.08)" } : undefined}
+                      key={`${row.label}-${index}`}
+                    >
+                      {cell.value}
+                    </div>
+                  )),
+                ])}
               </div>
             </div>
           </CompareGate>
+
+          {comparisonPairs.length ? (
+            <div style={{ marginTop: 40 }}>
+              <div style={{ fontSize: 12, fontWeight: 700, color: "#696868", letterSpacing: 0.4, marginBottom: 8 }}>PUBLISHED COMPARISON PAGES</div>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                {comparisonPairs.map((pair) => (
+                  <Link
+                    href={`/compare/${pair.key}/${pair.slug}`}
+                    style={{ border: "1px solid #CFDAE6", background: "#fff", borderRadius: 6, padding: "10px 14px", fontSize: 13, fontWeight: 600, color: "#363634" }}
+                    key={`${pair.key}/${pair.slug}`}
+                  >
+                    {pair.label}: {pair.left.university.shortName} vs {pair.right.university.shortName}
+                  </Link>
+                ))}
+              </div>
+            </div>
+          ) : null}
         </div>
       </div>
     </>

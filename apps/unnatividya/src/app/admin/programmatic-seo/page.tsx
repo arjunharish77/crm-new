@@ -19,7 +19,7 @@ export default function ProgrammaticSeoPage() {
           <div>
             <span className="eyebrow">SEO Controls</span>
             <h1>Programmatic SEO generator</h1>
-            <p>Generate route candidates for course, university, fee, eligibility, career, UGC, and comparison search intent without indexing thin pages.</p>
+            <p>Generate route candidates for course, university, fee, eligibility, career, UGC, comparison, and specialization search intent without indexing thin pages.</p>
           </div>
           <div className="course-actions" style={{ marginTop: 0 }}>
             <div className="admin-count">{live.length} live</div>

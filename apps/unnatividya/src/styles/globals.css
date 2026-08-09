@@ -25,6 +25,87 @@
   --uv-max: 1200px;
 }
 
+/* Site header — mobile navigation (site-header.tsx) */
+.uv-header-toggle {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border: none;
+  background: none;
+  color: var(--uv-ink);
+  cursor: pointer;
+  padding: 0;
+  flex-shrink: 0;
+}
+
+.uv-header-mobile-panel {
+  display: none;
+  flex-direction: column;
+  background: #fff;
+  border-top: 1px solid var(--uv-hairline);
+  padding: 8px 24px 20px;
+}
+
+.uv-header-mobile-panel a {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 14px 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--uv-body);
+  border-bottom: 1px solid var(--uv-hairline);
+}
+
+.uv-header-mobile-panel .uv-header-mobile-cta {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 44px;
+  margin-top: 16px;
+  background: var(--uv-primary);
+  color: #fff;
+  border-radius: var(--uv-radius-control);
+  border-bottom: none;
+  padding: 0;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+/* Course explorer — mobile filter panel (course-explorer.tsx) */
+.uv-filter-toggle {
+  display: none;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  height: 44px;
+  padding: 0 16px;
+  margin-bottom: 16px;
+  border: 1px solid var(--uv-border);
+  border-radius: var(--uv-radius-control);
+  background: #fff;
+  color: var(--uv-ink);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.uv-filter-apply {
+  display: none;
+  width: 100%;
+  height: 44px;
+  margin-top: 18px;
+  border: none;
+  border-radius: var(--uv-radius-control);
+  background: var(--uv-primary);
+  color: #fff;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
 .stream-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -87,6 +168,11 @@
 
   .uv-home-factor-grid {
     grid-template-columns: repeat(2, 1fr) !important;
+  }
+
+  .uv-footer-grid {
+    grid-template-columns: 1fr !important;
+    gap: 28px !important;
   }
 
   .uv-courses-layout,
@@ -1303,6 +1389,12 @@ button {
   font-size: 11px;
 }
 
+.overview-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 260px;
+  gap: 20px;
+}
+
 .detail-hero-media,
 .overview-media {
   overflow: hidden;
@@ -2078,13 +2170,26 @@ button {
   .detail-layout,
   .certificate-block,
   .uni-row,
-  .article-layout {
-    grid-template-columns: 1fr;
+  .article-layout,
+  .overview-grid {
+    /* minmax(0, 1fr), not bare 1fr -- a bare 1fr track still respects its content's automatic
+       minimum size, so a wide unshrinkable descendant (e.g. compare-grid's min-width: 760px,
+       or a long fact-grid value) blows the whole track past the viewport instead of staying at
+       1fr and letting that descendant's own overflow-x: auto handle it internally. */
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .stats-band-grid,
   .fact-grid {
-    grid-template-columns: repeat(2, 1fr);
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  /* Companion to the classes above, for grids that keep their exact desktop column widths as an
+     inline style (irregular per-column widths like "1.6fr 1fr 1fr 1fr auto" or "300px 1fr" can't
+     be expressed as a shared class) -- !important is required here specifically because it's
+     overriding that inline style, which a normal-specificity rule cannot do. */
+  .grid-mobile-stack {
+    grid-template-columns: 1fr !important;
   }
 
   .right-rail {
@@ -3220,6 +3325,35 @@ button {
 @media (max-width: 900px) {
   .nav {
     display: none;
+  }
+
+  .uv-header-nav,
+  .uv-header-cta {
+    display: none !important;
+  }
+
+  .uv-header-toggle {
+    display: inline-flex;
+  }
+
+  .uv-header-mobile-panel {
+    display: flex;
+  }
+
+  .uv-filter-toggle {
+    display: flex;
+  }
+
+  .uv-course-filter-panel {
+    display: none;
+  }
+
+  .uv-course-filter-panel.uv-open {
+    display: block;
+  }
+
+  .uv-filter-apply {
+    display: block;
   }
 
   .hero-grid,

@@ -1,9 +1,11 @@
 import { courses, universities } from "@/data/catalog";
+import { eligibilityGuides, careerScopeGuides, ugcApprovalGuides } from "@/data/guide-content";
+import { allSpecializationPages } from "@/lib/specializations";
 
 export type ProgrammaticSeoCandidate = {
   slug: string;
   title: string;
-  intent: "COURSE" | "UNIVERSITY" | "FEE" | "ELIGIBILITY" | "CAREER" | "UGC" | "COMPARISON";
+  intent: "COURSE" | "UNIVERSITY" | "FEE" | "ELIGIBILITY" | "CAREER" | "UGC" | "COMPARISON" | "SPECIALIZATION";
   entity: string;
   routeType: "LIVE" | "CANDIDATE";
   indexable: boolean;
@@ -47,6 +49,9 @@ export function generateProgrammaticSeoCandidates(): ProgrammaticSeoCandidate[] 
     const key = courseKey(name);
     const label = courseLabel(name);
     const relatedCourses = courses.filter((course) => course.name === name).map((course) => `/courses/${course.slug}`);
+    const eligibilityLive = Boolean(eligibilityGuides[key]);
+    const careerLive = Boolean(careerScopeGuides[key]);
+    const ugcLive = Boolean(ugcApprovalGuides[key]);
     return [
       {
         slug: `/online-degree-guides/${key}-fees`,
@@ -63,57 +68,81 @@ export function generateProgrammaticSeoCandidates(): ProgrammaticSeoCandidate[] 
         title: `${label} eligibility and admission process`,
         intent: "ELIGIBILITY" as const,
         entity: key,
-        routeType: "CANDIDATE" as const,
-        indexable: false,
-        reason: "Needs source-reviewed eligibility differences and admission notes before indexing.",
-        sourceUrls: relatedCourses,
+        routeType: eligibilityLive ? ("LIVE" as const) : ("CANDIDATE" as const),
+        indexable: eligibilityLive,
+        reason: eligibilityLive
+          ? "Live — real per-university eligibility differences researched and published (Phase 0/1 pilot)."
+          : "Needs source-reviewed eligibility differences and admission notes before indexing.",
+        sourceUrls: eligibilityLive ? [`/online-degree-guides/${key}-eligibility`] : relatedCourses,
       },
       {
         slug: `/online-degree-guides/${key}-career-scope`,
         title: `${label} career scope, roles, and outcomes`,
         intent: "CAREER" as const,
         entity: key,
-        routeType: "CANDIDATE" as const,
-        indexable: false,
-        reason: "Needs original career guidance, role data, and internal links before indexing.",
-        sourceUrls: relatedCourses,
+        routeType: careerLive ? ("LIVE" as const) : ("CANDIDATE" as const),
+        indexable: careerLive,
+        reason: careerLive
+          ? "Live — real roles/industries per university published, with unverified claims explicitly flagged (Phase 0/1 pilot)."
+          : "Needs original career guidance, role data, and internal links before indexing.",
+        sourceUrls: careerLive ? [`/online-degree-guides/${key}-career-scope`] : relatedCourses,
       },
       {
-        slug: `/online-degree-guides/ugc-approved-${key}`,
-        title: `UGC-approved ${label} programs`,
+        slug: `/online-degree-guides/${key}-ugc-approval`,
+        title: `Is ${label} UGC approved?`,
         intent: "UGC" as const,
         entity: key,
-        routeType: "CANDIDATE" as const,
-        indexable: false,
-        reason: "Needs approval evidence and source-reviewed university list before indexing.",
-        sourceUrls: relatedCourses,
+        routeType: ugcLive ? ("LIVE" as const) : ("CANDIDATE" as const),
+        indexable: ugcLive,
+        reason: ugcLive
+          ? "Live — verified against the primary UGC-DEB entitlement list, not just university marketing claims (Phase 0/1 pilot)."
+          : "Needs approval evidence and source-reviewed university list before indexing.",
+        sourceUrls: ugcLive ? [`/online-degree-guides/${key}-ugc-approval`] : relatedCourses,
       },
     ];
   });
 
   const comparisonCandidates = uniqueCourseNames.flatMap((name) => {
+    const key = courseKey(name);
     const matching = courses.filter((course) => course.name === name);
     const pairs: ProgrammaticSeoCandidate[] = [];
     matching.forEach((left, leftIndex) => {
       matching.slice(leftIndex + 1).forEach((right) => {
+        const [a, b] = [left, right].sort((x, y) => x.universityId.localeCompare(y.universityId));
+        const pairSlug = `${universitySlug(a.universityId)}-vs-${universitySlug(b.universityId)}`;
         pairs.push({
-          slug: `/compare/${left.slug}-vs-${right.slug}`,
+          slug: `/compare/${key}/${pairSlug}`,
           title: `${left.name}: ${universityShortName(left.universityId)} vs ${universityShortName(right.universityId)}`,
           intent: "COMPARISON",
           entity: `${left.id}:${right.id}`,
-          routeType: "CANDIDATE",
-          indexable: false,
-          reason: "Needs a public comparison route with meaningful fee, eligibility, approval, and outcome differences.",
-          sourceUrls: [`/courses/${left.slug}`, `/courses/${right.slug}`],
+          routeType: "LIVE",
+          indexable: true,
+          reason: "Live comparison route built from verified catalog fee/placement/approval data.",
+          sourceUrls: [`/compare/${key}/${pairSlug}`],
         });
       });
     });
     return pairs;
   });
 
-  return [...liveCoursePages, ...liveUniversityPages, ...guideCandidates, ...comparisonCandidates];
+  const specializationCandidates = allSpecializationPages().map((page) => ({
+    slug: `/specializations/${page.slug}`,
+    title: `${page.courseLabel} in ${page.specialization}`,
+    intent: "SPECIALIZATION" as const,
+    entity: page.slug,
+    routeType: "LIVE" as const,
+    indexable: true,
+    reason: "Live specialization route built from verified catalog specialization/fee data.",
+    sourceUrls: [`/specializations/${page.slug}`],
+  }));
+
+  return [...liveCoursePages, ...liveUniversityPages, ...guideCandidates, ...comparisonCandidates, ...specializationCandidates];
 }
 
 function universityShortName(id: string) {
   return universities.find((university) => university.id === id)?.shortName || id.toUpperCase();
+}
+
+function universitySlug(id: string) {
+  return universities.find((university) => university.id === id)?.slug || id;
 }

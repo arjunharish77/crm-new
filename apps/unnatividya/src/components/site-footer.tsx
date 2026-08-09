@@ -4,7 +4,7 @@ import Image from "next/image";
 export function SiteFooter() {
   return (
     <footer style={{ background: "#263238", color: "#B8C4CA", marginTop: "auto" }}>
-      <div style={{ maxWidth: 1200, margin: "0 auto", padding: "48px 24px 32px", display: "grid", gridTemplateColumns: "1.4fr 1fr 1fr 1fr", gap: 32 }}>
+      <div className="uv-footer-grid" style={{ maxWidth: 1200, margin: "0 auto", padding: "48px 24px 32px", display: "grid", gridTemplateColumns: "1.4fr 1fr 1fr 1fr", gap: 32 }}>
           <div>
             <Image
               src="/brand/unnatividya-logo-white.svg"
@@ -19,24 +19,27 @@ export function SiteFooter() {
             </p>
           </div>
           <div style={{ display: "flex", flexDirection: "column", gap: 8, fontSize: 13 }}>
-            <h4 style={{ fontWeight: 700, color: "#fff", fontSize: 14, margin: "0 0 4px" }}>Explore</h4>
+            <p style={{ fontWeight: 700, color: "#fff", fontSize: 14, margin: "0 0 4px" }}>Explore</p>
             <Link href="/courses" style={{ color: "#B8C4CA" }}>All courses</Link>
             <Link href="/universities" style={{ color: "#B8C4CA" }}>Universities</Link>
             <Link href="/compare" style={{ color: "#B8C4CA" }}>Compare programs</Link>
             <Link href="/recommender" style={{ color: "#B8C4CA" }}>AI recommender</Link>
-            <Link href="/online-degree-guides" style={{ color: "#B8C4CA" }}>Fee guides</Link>
+            <Link href="/online-degree-guides" style={{ color: "#B8C4CA" }}>Degree guides</Link>
+            <Link href="/specializations" style={{ color: "#B8C4CA" }}>Specializations</Link>
+            <Link href="/tools/emi-calculator" style={{ color: "#B8C4CA" }}>EMI calculator</Link>
           </div>
           <div style={{ display: "flex", flexDirection: "column", gap: 8, fontSize: 13 }}>
-            <h4 style={{ fontWeight: 700, color: "#fff", fontSize: 14, margin: "0 0 4px" }}>Top courses</h4>
+            <p style={{ fontWeight: 700, color: "#fff", fontSize: 14, margin: "0 0 4px" }}>Top courses</p>
             <Link href="/courses/online-mba-manipal-university-jaipur" style={{ color: "#B8C4CA" }}>Online MBA</Link>
             <Link href="/courses/online-bca-manipal-university-jaipur" style={{ color: "#B8C4CA" }}>Online BCA</Link>
             <Link href="/courses/online-mca-manipal-university-jaipur" style={{ color: "#B8C4CA" }}>Online MCA</Link>
             <Link href="/courses/online-bcom-manipal-university-jaipur" style={{ color: "#B8C4CA" }}>Online B.Com</Link>
           </div>
           <div style={{ display: "flex", flexDirection: "column", gap: 8, fontSize: 13 }}>
-            <h4 style={{ fontWeight: 700, color: "#fff", fontSize: 14, margin: "0 0 4px" }}>Company</h4>
+            <p style={{ fontWeight: 700, color: "#fff", fontSize: 14, margin: "0 0 4px" }}>Company</p>
             <Link href="/blog" style={{ color: "#B8C4CA" }}>Blog & guides</Link>
             <Link href="/about" style={{ color: "#B8C4CA" }}>About us</Link>
+            <Link href="/how-we-verify" style={{ color: "#B8C4CA" }}>How we verify our data</Link>
             <span>Contact: 1800-120-4050</span>
           </div>
       </div>

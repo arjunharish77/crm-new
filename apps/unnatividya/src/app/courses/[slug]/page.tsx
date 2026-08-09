@@ -4,11 +4,17 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ApprovalBadge } from "@/components/approval-badge";
 import { JsonLd } from "@/components/json-ld";
+import { SaveButton } from "@/components/save-button";
 import { SectionPillNav } from "@/components/section-pill-nav";
 import { careerRoleSalary, courseWithUniversity, courses, formatFee, getCourseBySlug } from "@/data/catalog";
 import { certificateImagePath, learningMedia, universityMedia } from "@/data/media";
 import { publicAssetExists } from "@/lib/asset-exists";
+import { buildCourseFaqs } from "@/lib/course-faqs";
 import { feeGuideSlugForCourseName, getFeeGuideBySlug } from "@/lib/fee-guides";
+import { courseKey } from "@/lib/programmatic-seo";
+import { allComparisonPairs } from "@/lib/comparisons";
+import { specializationKey } from "@/lib/specializations";
+import { getCareerScopeGuideBySlug, getEligibilityGuideBySlug, getUgcApprovalGuideBySlug } from "@/data/guide-content";
 
 export function generateStaticParams() {
   return courses.map((course) => ({ slug: course.slug }));
@@ -37,6 +43,11 @@ export default async function CourseDetailPage({ params }: { params: Promise<{ s
     .map(courseWithUniversity)
     .slice(0, 3);
   const feeGuide = getFeeGuideBySlug(feeGuideSlugForCourseName(course.name));
+  const key = courseKey(course.name);
+  const eligibilityGuide = getEligibilityGuideBySlug(`${key}-eligibility`);
+  const careerScopeGuide = getCareerScopeGuideBySlug(`${key}-career-scope`);
+  const ugcApprovalGuide = getUgcApprovalGuideBySlug(`${key}-ugc-approval`);
+  const comparisonPairs = allComparisonPairs().filter((pair) => pair.left.id === course.id || pair.right.id === course.id);
   const certificatePath = certificateImagePath(course.id);
   const hasCertificateImage = publicAssetExists(certificatePath);
   const siteUrl = process.env.NEXT_PUBLIC_UNNATIVIDYA_SITE_URL || "https://unnatividya.com";
@@ -76,17 +87,16 @@ export default async function CourseDetailPage({ params }: { params: Promise<{ s
       { "@type": "ListItem", position: 3, name: course.name, item: `${siteUrl}/courses/${course.slug}` },
     ],
   };
-  const faqJsonLd = course.faqs?.length
-    ? {
-        "@context": "https://schema.org",
-        "@type": "FAQPage",
-        mainEntity: course.faqs.map(([question, answer]) => ({
-          "@type": "Question",
-          name: question,
-          acceptedAnswer: { "@type": "Answer", text: answer },
-        })),
-      }
-    : null;
+  const courseFaqs = buildCourseFaqs(course);
+  const faqJsonLd = {
+    "@context": "https://schema.org",
+    "@type": "FAQPage",
+    mainEntity: courseFaqs.map(([question, answer]) => ({
+      "@type": "Question",
+      name: question,
+      acceptedAnswer: { "@type": "Answer", text: answer },
+    })),
+  };
 
   return (
     <>
@@ -102,19 +112,22 @@ export default async function CourseDetailPage({ params }: { params: Promise<{ s
                 <ApprovalBadge label={approval} className="gold-badge" key={approval} />
               ))}
             </div>
-            <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
-              <div style={{ width: 60, height: 60, background: "#fff", borderRadius: 8, flex: "none", display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden" }}>
-                <Image src={universityMedia[course.universityId].logo} alt={`${course.university.shortName} logo`} width={48} height={48} style={{ objectFit: "contain" }} />
-              </div>
-              <div>
-                <h1>{course.name}</h1>
-                <div className="detail-sub" style={{ fontSize: 16 }}>
-                  <Link href={`/universities/${course.university.slug}`} style={{ color: "#fff", textDecoration: "underline" }}>
-                    {course.university.name}
-                  </Link>{" "}
-                  · {course.university.city}
+            <div style={{ display: "flex", alignItems: "center", gap: 16, justifyContent: "space-between" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+                <div style={{ width: 60, height: 60, background: "#fff", borderRadius: 8, flex: "none", display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden" }}>
+                  <Image src={universityMedia[course.universityId].logo} alt={`${course.university.shortName} logo`} width={48} height={48} style={{ objectFit: "contain" }} />
+                </div>
+                <div>
+                  <h1>{course.name}</h1>
+                  <div className="detail-sub" style={{ fontSize: 16 }}>
+                    <Link href={`/universities/${course.university.slug}`} style={{ color: "#fff", textDecoration: "underline" }}>
+                      {course.university.name}
+                    </Link>{" "}
+                    · {course.university.city}
+                  </div>
                 </div>
               </div>
+              <SaveButton courseId={course.id} />
             </div>
             <div style={{ display: "flex", gap: 14, flexWrap: "wrap", marginTop: 14, fontSize: 14 }}>
               <span><span style={{ color: "#FDB515" }}>★</span> <b>{course.rating}</b> ({course.reviews} reviews)</span>
@@ -127,7 +140,7 @@ export default async function CourseDetailPage({ params }: { params: Promise<{ s
 
       <div style={{ background: "#fff", borderBottom: "1px solid #EAEAEA" }}>
         <div className="container">
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 24, padding: "18px 0" }}>
+          <div className="stats-band-grid">
             {[
               ["Duration", course.duration],
               ["Total fee", formatFee(course.fee)],
@@ -161,7 +174,7 @@ export default async function CourseDetailPage({ params }: { params: Promise<{ s
         <div className="detail-stack">
           <section className="detail-section" id="sec-overview">
             <h2>About this program</h2>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 260px", gap: 20 }}>
+            <div className="overview-grid">
               <p style={{ margin: 0, color: "#555", fontSize: 15, lineHeight: 1.65 }}>
                 {course.overview}
               </p>
@@ -183,13 +196,24 @@ export default async function CourseDetailPage({ params }: { params: Promise<{ s
           <section className="detail-section" id="sec-specialisations">
             <h2>Specialisations offered</h2>
             <div style={{ fontSize: 13, color: "#707070", marginBottom: 14 }}>Chosen in semester 3 — same fee, same duration</div>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12 }}>
-              {course.specializations.map((spec) => (
-                <div style={{ border: "1px solid #CFDAE6", borderRadius: 8, padding: 14 }} key={spec}>
-                  <div style={{ color: "#363634", fontSize: 14, fontWeight: 700 }}>{spec}</div>
-                  <div style={{ color: "#707070", fontSize: 12, marginTop: 4 }}>Elective track · semesters 3–4</div>
-                </div>
-              ))}
+            <div className="grid three">
+              {course.specializations.map((spec) => {
+                const isGeneral = spec.toLowerCase() === "general";
+                const specSlug = `${key}-${specializationKey(spec)}`;
+                const card = (
+                  <div style={{ border: "1px solid #CFDAE6", borderRadius: 8, padding: 14, height: "100%" }}>
+                    <div style={{ color: "#363634", fontSize: 14, fontWeight: 700 }}>{spec}</div>
+                    <div style={{ color: "#707070", fontSize: 12, marginTop: 4 }}>Elective track · semesters 3–4</div>
+                  </div>
+                );
+                return isGeneral ? (
+                  <div key={spec}>{card}</div>
+                ) : (
+                  <Link key={spec} href={`/specializations/${specSlug}`} style={{ color: "inherit" }}>
+                    {card}
+                  </Link>
+                );
+              })}
             </div>
           </section>
 
@@ -215,12 +239,12 @@ export default async function CourseDetailPage({ params }: { params: Promise<{ s
 
           <section className="detail-section" id="sec-fees">
             <h2>Fees & EMI options</h2>
-            <div style={{ border: "1px solid #CFDAE6", borderRadius: 8, overflow: "hidden" }}>
-              <div style={{ display: "grid", gridTemplateColumns: "1.4fr 1fr 1fr", background: "#F5F5F5", fontSize: 12, fontWeight: 700, color: "#696868", padding: "12px 18px", letterSpacing: 0.3 }}>
+            <div style={{ border: "1px solid #CFDAE6", borderRadius: 8, overflowX: "auto" }}>
+              <div style={{ display: "grid", gridTemplateColumns: "1.4fr 1fr 1fr", background: "#F5F5F5", fontSize: 12, fontWeight: 700, color: "#696868", padding: "12px 18px", letterSpacing: 0.3, minWidth: 420 }}>
                 <span>PLAN</span><span>YOU PAY</span><span>PER MONTH</span>
               </div>
               {(course.feePlans || []).map((row, index) => (
-                <div style={{ display: "grid", gridTemplateColumns: "1.4fr 1fr 1fr", padding: "14px 18px", borderTop: "1px solid #EAEAEA", fontSize: 14, alignItems: "center" }} key={row[0]}>
+                <div style={{ display: "grid", gridTemplateColumns: "1.4fr 1fr 1fr", padding: "14px 18px", borderTop: "1px solid #EAEAEA", fontSize: 14, alignItems: "center", minWidth: 420 }} key={row[0]}>
                   <span style={{ fontWeight: 600, color: "#363634" }}>{row[0]}</span>
                   <span>{row[1]}</span>
                   <span style={{ fontWeight: 700, color: index === 2 ? "#544CC8" : "#363634" }}>{row[2]}</span>
@@ -228,18 +252,25 @@ export default async function CourseDetailPage({ params }: { params: Promise<{ s
               ))}
             </div>
             <div style={{ fontSize: 13, color: "#707070", marginTop: 10 }}>No-cost EMI via education loan partners. Scholarship up to 20% for defence, govt employees and merit.</div>
-            {feeGuide ? (
-              <Link href={`/online-degree-guides/${feeGuide.slug}`} style={{ display: "inline-block", marginTop: 12, color: "#544CC8", fontWeight: 700, fontSize: 13 }}>
-                {feeGuide.isComparison
-                  ? `See ${course.name} fees compared across ${feeGuide.courses.length} universities →`
-                  : `See the full ${course.name} fee & scholarship guide →`}
-              </Link>
-            ) : null}
+            <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 12 }}>
+              {feeGuide ? (
+                <Link href={`/online-degree-guides/${feeGuide.slug}`} style={{ display: "inline-block", color: "#544CC8", fontWeight: 700, fontSize: 13 }}>
+                  {feeGuide.isComparison
+                    ? `See ${course.name} fees compared across ${feeGuide.courses.length} universities →`
+                    : `See the full ${course.name} fee & scholarship guide →`}
+                </Link>
+              ) : null}
+              {eligibilityGuide ? (
+                <Link href={`/online-degree-guides/${eligibilityGuide.slug}`} style={{ display: "inline-block", color: "#544CC8", fontWeight: 700, fontSize: 13 }}>
+                  {course.name} eligibility across universities →
+                </Link>
+              ) : null}
+            </div>
           </section>
 
           <section className="detail-section" id="sec-careers">
             <h2>Career outcomes</h2>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12 }}>
+            <div className="grid four">
               {course.careerRoles.map((role) => (
                 <div style={{ border: "1px solid #CFDAE6", borderRadius: 8, padding: 16 }} key={role}>
                   <div style={{ fontSize: 14, fontWeight: 700, color: "#363634" }}>{role}</div>
@@ -248,17 +279,43 @@ export default async function CourseDetailPage({ params }: { params: Promise<{ s
               ))}
             </div>
             <div style={{ fontSize: 13, color: "#707070", marginTop: 10 }}>{course.university.placement}% placement assistance rate at {course.university.shortName} · average package {course.university.avgPackage} · {course.university.partners}+ hiring partners</div>
+            {careerScopeGuide ? (
+              <Link href={`/online-degree-guides/${careerScopeGuide.slug}`} style={{ display: "inline-block", marginTop: 12, color: "#544CC8", fontWeight: 700, fontSize: 13 }}>
+                Full {course.name} career scope, by university →
+              </Link>
+            ) : null}
           </section>
+
+          {ugcApprovalGuide || comparisonPairs.length ? (
+            <section className="detail-section" id="sec-related-guides">
+              <h2>Related guides</h2>
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                {ugcApprovalGuide ? (
+                  <Link href={`/online-degree-guides/${ugcApprovalGuide.slug}`} style={{ color: "#544CC8", fontWeight: 600, fontSize: 14 }}>
+                    Is {course.name} UGC approved? →
+                  </Link>
+                ) : null}
+                {comparisonPairs.map((pair) => {
+                  const other = pair.left.id === course.id ? pair.right : pair.left;
+                  return (
+                    <Link key={`${pair.key}/${pair.slug}`} href={`/compare/${pair.key}/${pair.slug}`} style={{ color: "#544CC8", fontWeight: 600, fontSize: 14 }}>
+                      {course.name}: {course.university.shortName} vs {other.university.shortName} →
+                    </Link>
+                  );
+                })}
+              </div>
+            </section>
+          ) : null}
 
           <section className="detail-section" id="sec-certificate">
             <h2>Sample degree certificate</h2>
-            <div style={{ display: "grid", gridTemplateColumns: "300px 1fr", gap: 24, alignItems: "center" }}>
+            <div className="grid-mobile-stack" style={{ display: "grid", gridTemplateColumns: "300px 1fr", gap: 24, alignItems: "center" }}>
               {hasCertificateImage ? (
                 <div style={{ height: 210, borderRadius: 8, overflow: "hidden", position: "relative" }}>
                   <Image src={certificatePath} alt={`${course.name} sample degree certificate`} fill sizes="300px" style={{ objectFit: "cover" }} />
                 </div>
               ) : (
-                <div style={{ height: 210, border: "1px dashed #CFDAE6", borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, color: "#AAAAAA", fontFamily: "monospace", background: "repeating-linear-gradient(45deg,#FAFAFA,#FAFAFA 12px,#F4F3FC 12px,#F4F3FC 24px)" }}>
+                <div style={{ height: 210, border: "1px dashed #CFDAE6", borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, color: "#707070", fontFamily: "monospace", background: "repeating-linear-gradient(45deg,#FAFAFA,#FAFAFA 12px,#F4F3FC 12px,#F4F3FC 24px)" }}>
                   Sample certificate scan
                 </div>
               )}
@@ -294,7 +351,7 @@ export default async function CourseDetailPage({ params }: { params: Promise<{ s
           {similarCourses.length ? (
             <section className="detail-section">
               <h2>Similar programs to consider</h2>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12 }}>
+              <div className="grid three">
                 {similarCourses.map((candidate) => (
                   <Link href={`/courses/${candidate.slug}`} className="uv-card" style={{ display: "block", border: "1px solid #CFDAE6", borderRadius: 8, padding: 16, color: "inherit" }} key={candidate.id}>
                     <div style={{ fontSize: 15, fontWeight: 700, color: "#363634" }}>{candidate.name} — {candidate.university.shortName}</div>
@@ -308,7 +365,7 @@ export default async function CourseDetailPage({ params }: { params: Promise<{ s
           <section className="detail-section" id="sec-faq">
             <h2>Frequently asked questions</h2>
             <div className="faq-list">
-              {(course.faqs || []).map(([question, answer]) => (
+              {courseFaqs.map(([question, answer]) => (
                 <details className="faq-item" name="course-faq" key={question}>
                   <summary>{question}</summary>
                   <p>{answer}</p>
@@ -327,7 +384,7 @@ export default async function CourseDetailPage({ params }: { params: Promise<{ s
               <input placeholder="Mobile number" style={{ height: 42, padding: "0 14px", border: "1px solid #CFDAE6", borderRadius: 4, fontSize: 14, color: "#555", outlineColor: "#544CC8" }} />
               <Link href={`/lead?course=${course.id}&intent=enquire`} className="btn primary" style={{ width: "100%", height: 44, fontSize: 15 }} data-open-lead>Enquire now</Link>
             </div>
-            <div style={{ fontSize: 11, color: "#AAAAAA", marginTop: 10 }}>Free service · no spam · unbiased advice</div>
+            <div style={{ fontSize: 11, color: "#707070", marginTop: 10 }}>Free service · no spam · unbiased advice</div>
           </div>
           <Link href={`/compare?add=${course.id}`} style={{ display: "block", textAlign: "center", border: "1.5px solid #555", borderRadius: 4, height: 44, lineHeight: "44px", fontSize: 14, fontWeight: 700, color: "#555", background: "#fff" }}>Compare with similar programs</Link>
           <div style={{ border: "1px solid #CFDAE6", borderRadius: 8, padding: 18, background: "#F4F3FC" }}>

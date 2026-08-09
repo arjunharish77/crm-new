@@ -24,6 +24,11 @@ ENV INDEXNOW_KEY=$INDEXNOW_KEY
 COPY --from=deps /repo/node_modules ./node_modules
 COPY . .
 RUN npm run unnatividya:build
+# Dumps src/data/catalog.ts (the public site's real source of truth) to scripts/catalog-export.json
+# so scripts/sync-catalog-to-db.js -- run separately, after this image is deployed -- can mirror
+# it into Postgres without needing src/ at runtime (the runner stage below never gets src/, only
+# compiled Next.js output plus scripts/ and migrations/). See 22_UNNATIVIDYA_PLATFORM_ENHANCEMENTS_PLAN.md §4.
+RUN npm run unnatividya:export-catalog
 
 FROM node:20-bookworm-slim AS runner
 WORKDIR /app

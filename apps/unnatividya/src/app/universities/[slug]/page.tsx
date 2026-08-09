@@ -4,6 +4,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ApprovalBadge } from "@/components/approval-badge";
 import { JsonLd } from "@/components/json-ld";
+import { SaveButton } from "@/components/save-button";
 import { SectionPillNav } from "@/components/section-pill-nav";
 import { courses, formatFee, getUniversityBySlug, universities, universityEnrichmentById } from "@/data/catalog";
 import { universityMedia } from "@/data/media";
@@ -91,7 +92,7 @@ export default async function UniversityDetailPage({ params }: { params: Promise
     <>
       <JsonLd data={[universityJsonLd, breadcrumbJsonLd, faqJsonLd]} />
       <section className="detail-hero">
-        <div className="container detail-hero-inner" style={{ paddingTop: 36, paddingBottom: 36, gridTemplateColumns: "1fr 300px", gap: 40 }}>
+        <div className="container detail-hero-inner">
           <div>
             <div className="breadcrumb" style={{ marginBottom: 12, color: "#B8C4CA" }}>
               <Link href="/">Home</Link> &gt; <Link href="/universities">Universities</Link> &gt; {university.name}
@@ -158,14 +159,14 @@ export default async function UniversityDetailPage({ params }: { params: Promise
         ]}
       />
 
-      <div style={{ maxWidth: 1200, margin: "0 auto", padding: "36px 24px 64px", width: "100%", boxSizing: "border-box", display: "grid", gridTemplateColumns: "1fr 340px", gap: 40, alignItems: "start", flex: 1 }}>
+      <div className="container detail-layout" style={{ flex: 1 }}>
           <div className="detail-stack">
             <section className="detail-section" id="sec-about">
               <h2>About {university.shortName} online</h2>
               {(enrichment.overview || [university.about]).map((paragraph) => (
                 <p style={{ fontSize: 15, lineHeight: 1.65, color: "#555", margin: "0 0 12px" }} key={paragraph}>{paragraph}</p>
               ))}
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12, marginTop: 18 }}>
+              <div className="grid three" style={{ marginTop: 18 }}>
                 {(enrichment.factTiles || [
                   ["Established", String(university.established)],
                   ["Location", university.city],
@@ -184,7 +185,7 @@ export default async function UniversityDetailPage({ params }: { params: Promise
 
             <section className="detail-section" id="sec-rankings">
               <h2>Rankings & recognitions</h2>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12 }}>
+              <div className="grid four">
                 {(enrichment.rankings || university.approvals.slice(0, 4).map((approval) => ({ title: approval, note: "institutional recognition" }))).map((ranking) => (
                   <div style={{ border: "1px solid #CFDAE6", borderRadius: 8, padding: 16, textAlign: "center" }} key={ranking.title}>
                     <div style={{ fontSize: 16, fontWeight: 700, color: "#544CC8" }}>{ranking.title}</div>
@@ -196,20 +197,23 @@ export default async function UniversityDetailPage({ params }: { params: Promise
 
             <section className="detail-section" id="sec-programs">
               <h2>Online programs offered</h2>
-              <div style={{ border: "1px solid #CFDAE6", borderRadius: 8, overflow: "hidden" }}>
-                <div style={{ display: "grid", gridTemplateColumns: "1.6fr 1fr 1fr 1fr auto", background: "#F5F5F5", fontSize: 12, fontWeight: 700, color: "#696868", padding: "12px 18px", letterSpacing: 0.3, gap: 12 }}>
+              <div style={{ border: "1px solid #CFDAE6", borderRadius: 8, overflowX: "auto" }}>
+                <div style={{ display: "grid", gridTemplateColumns: "1.6fr 1fr 1fr 1fr auto", background: "#F5F5F5", fontSize: 12, fontWeight: 700, color: "#696868", padding: "12px 18px", letterSpacing: 0.3, gap: 12, minWidth: 640 }}>
                   <span>PROGRAM</span><span>DURATION</span><span>TOTAL FEE</span><span>EMI FROM</span><span />
                 </div>
                 {universityCourses.map((course) => (
-                  <div style={{ display: "grid", gridTemplateColumns: "1.6fr 1fr 1fr 1fr auto", padding: "14px 18px", borderTop: "1px solid #EAEAEA", fontSize: 14, alignItems: "center", gap: 12 }} key={course.id}>
+                  <div style={{ display: "grid", gridTemplateColumns: "1.6fr 1fr 1fr 1fr auto", padding: "14px 18px", borderTop: "1px solid #EAEAEA", fontSize: 14, alignItems: "center", gap: 12, minWidth: 640 }} key={course.id}>
                     <span>
                       <Link href={`/courses/${course.slug}`} style={{ fontWeight: 700, color: "#363634" }}>{course.name}</Link>
-                      <span style={{ fontSize: 11, fontWeight: 700, color: course.level === "PG" ? "#4D00FF" : "#4FA8FF", background: course.level === "PG" ? "rgba(77,0,255,0.10)" : "rgba(79,168,255,0.12)", borderRadius: 999, whiteSpace: "nowrap", padding: "2px 8px", marginLeft: 8 }}>{course.level}</span>
+                      <span style={{ fontSize: 11, fontWeight: 700, color: course.level === "PG" ? "#4D00FF" : "#0F5BB8", background: course.level === "PG" ? "rgba(77,0,255,0.10)" : "rgba(79,168,255,0.12)", borderRadius: 999, whiteSpace: "nowrap", padding: "2px 8px", marginLeft: 8 }}>{course.level}</span>
                     </span>
                     <span>{course.duration}</span>
                     <span style={{ fontWeight: 600, color: "#363634" }}>{formatFee(course.fee)}</span>
                     <span>{course.emi}</span>
-                    <Link href={`/courses/${course.slug}`} style={{ fontSize: 13, fontWeight: 700 }}>View →</Link>
+                    <div style={{ display: "flex", alignItems: "center", gap: 10, justifyContent: "flex-end" }}>
+                      <Link href={`/courses/${course.slug}`} style={{ fontSize: 13, fontWeight: 700 }}>View →</Link>
+                      <SaveButton courseId={course.id} size={26} />
+                    </div>
                   </div>
                 ))}
               </div>
@@ -217,14 +221,14 @@ export default async function UniversityDetailPage({ params }: { params: Promise
 
             <section className="detail-section" id="sec-placements">
               <h2>Placements & hiring partners</h2>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(6, 1fr)", gap: 12 }}>
+              <div className="grid-mobile-stack" style={{ display: "grid", gridTemplateColumns: "repeat(6, 1fr)", gap: 12 }}>
                 {media.partnerLogos.map((logo, index) =>
                   availablePartnerLogos.includes(logo) ? (
                     <div style={{ height: 72, border: "1px solid #EAEAEA", borderRadius: 4, display: "flex", alignItems: "center", justifyContent: "center", padding: 10, position: "relative" }} key={logo}>
                       <Image src={logo} alt={`${university.shortName} hiring partner`} fill sizes="120px" style={{ objectFit: "contain", padding: 10 }} />
                     </div>
                   ) : (
-                    <div style={{ height: 72, border: "1px dashed #EAEAEA", borderRadius: 4, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, color: "#AAAAAA", fontFamily: "monospace" }} key={index}>logo</div>
+                    <div style={{ height: 72, border: "1px dashed #EAEAEA", borderRadius: 4, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, color: "#707070", fontFamily: "monospace" }} key={index}>logo</div>
                   ),
                 )}
               </div>
@@ -233,7 +237,7 @@ export default async function UniversityDetailPage({ params }: { params: Promise
 
             <section className="detail-section">
               <h2>Campus & learner moments</h2>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 14 }}>
+              <div className="grid three">
                 {media.moments.map((moment, index) => {
                   const fallback = [
                     ["https://commons.wikimedia.org/wiki/Special:FilePath/Online%20class%20shooting%20during%20covid.jpg?width=900", "Campus moment 1"],
@@ -254,7 +258,7 @@ export default async function UniversityDetailPage({ params }: { params: Promise
 
             <section className="detail-section" id="sec-admission">
               <h2>Admission process</h2>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12 }}>
+              <div className="grid four">
                 {(enrichment.admissionSteps || [
                   { title: "Apply online", copy: "Fill the application on the university portal - 10 minutes." },
                   { title: "Upload documents", copy: "Mark sheets, ID proof and a photo. We check them first." },
@@ -272,8 +276,8 @@ export default async function UniversityDetailPage({ params }: { params: Promise
 
             <section className="detail-section" id="sec-scholarships">
               <h2>Scholarships & fee concessions</h2>
-              <div style={{ border: "1px solid #CFDAE6", borderRadius: 8, overflow: "hidden" }}>
-                <div style={{ display: "grid", gridTemplateColumns: "1.4fr 1fr 1.4fr", background: "#F5F5F5", fontSize: 12, fontWeight: 700, color: "#696868", padding: "12px 18px", letterSpacing: 0.3, gap: 12 }}>
+              <div style={{ border: "1px solid #CFDAE6", borderRadius: 8, overflowX: "auto" }}>
+                <div style={{ display: "grid", gridTemplateColumns: "1.4fr 1fr 1.4fr", background: "#F5F5F5", fontSize: 12, fontWeight: 700, color: "#696868", padding: "12px 18px", letterSpacing: 0.3, gap: 12, minWidth: 480 }}>
                   <span>CATEGORY</span><span>CONCESSION</span><span>PROOF REQUIRED</span>
                 </div>
                 {(enrichment.scholarships || [
@@ -283,7 +287,7 @@ export default async function UniversityDetailPage({ params }: { params: Promise
                   ["Divyaang (PwD)", "20%", "Disability certificate"],
                   ["Alumni of the university", "15%", "Previous degree certificate"],
                 ]).map((row) => (
-                  <div style={{ display: "grid", gridTemplateColumns: "1.4fr 1fr 1.4fr", padding: "13px 18px", borderTop: "1px solid #EAEAEA", fontSize: 14, gap: 12 }} key={row[0]}>
+                  <div style={{ display: "grid", gridTemplateColumns: "1.4fr 1fr 1.4fr", padding: "13px 18px", borderTop: "1px solid #EAEAEA", fontSize: 14, gap: 12, minWidth: 480 }} key={row[0]}>
                     <span style={{ fontWeight: 600, color: "#363634" }}>{row[0]}</span>
                     <span style={{ fontWeight: 700, color: "#2E7D32" }}>{row[1]}</span>
                     <span>{row[2]}</span>
@@ -308,7 +312,7 @@ export default async function UniversityDetailPage({ params }: { params: Promise
             {otherUniversities.length ? (
               <section className="detail-section">
                 <h2>Other universities to consider</h2>
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 12 }}>
+                <div className="grid-mobile-stack" style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 12 }}>
                   {otherUniversities.map((other) => (
                     <Link href={`/universities/${other.slug}`} className="uv-card" style={{ display: "block", border: "1px solid #CFDAE6", borderRadius: 8, padding: 16, color: "inherit" }} key={other.id}>
                       <div style={{ fontSize: 15, fontWeight: 700, color: "#363634" }}>{other.name}</div>

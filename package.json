@@ -19,6 +19,8 @@
     "db:backfill:invoice-files": "node scripts/db-backfill-invoice-file-objects.js",
     "unnatividya:dev": "npm --prefix apps/unnatividya run dev",
     "unnatividya:build": "npm --prefix apps/unnatividya run build",
+    "unnatividya:export-catalog": "npm --prefix apps/unnatividya run export-catalog",
+    "unnatividya:sync-catalog": "node apps/unnatividya/scripts/sync-catalog-to-db.js",
     "unnatividya:start": "npm --prefix apps/unnatividya run start",
     "unnatividya:db:setup:local": "node apps/unnatividya/scripts/db-setup-local.js",
     "unnatividya:db:migrate:local": "node apps/unnatividya/scripts/db-migrate-local.js",

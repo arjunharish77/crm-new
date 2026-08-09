@@ -1,8 +1,30 @@
 import type { MetadataRoute } from "next";
-import { blogSitemapUrls, courseSitemapUrls, feeGuideSitemapUrls, staticSitemapUrls, universitySitemapUrls } from "@/lib/sitemap";
+import {
+  blogSitemapUrls,
+  careerScopeGuideSitemapUrls,
+  comparisonSitemapUrls,
+  courseSitemapUrls,
+  eligibilityGuideSitemapUrls,
+  feeGuideSitemapUrls,
+  specializationSitemapUrls,
+  staticSitemapUrls,
+  ugcApprovalGuideSitemapUrls,
+  universitySitemapUrls,
+} from "@/lib/sitemap";
 
 export default function sitemap(): MetadataRoute.Sitemap {
-  return [...staticSitemapUrls(), ...courseSitemapUrls(), ...universitySitemapUrls(), ...blogSitemapUrls(), ...feeGuideSitemapUrls()].map((entry) => ({
+  return [
+    ...staticSitemapUrls(),
+    ...courseSitemapUrls(),
+    ...universitySitemapUrls(),
+    ...blogSitemapUrls(),
+    ...feeGuideSitemapUrls(),
+    ...eligibilityGuideSitemapUrls(),
+    ...careerScopeGuideSitemapUrls(),
+    ...ugcApprovalGuideSitemapUrls(),
+    ...comparisonSitemapUrls(),
+    ...specializationSitemapUrls(),
+  ].map((entry) => ({
     url: entry.loc,
     lastModified: entry.lastmod ? new Date(entry.lastmod) : new Date(),
     changeFrequency: entry.changefreq,

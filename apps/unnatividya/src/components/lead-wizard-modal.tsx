@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { trackEvent } from "@/components/analytics";
 import { LeadFormLoader, type LeadFormContext } from "@/components/lead-form-loader";
 import { getCourseBySlug, getUniversityBySlug } from "@/data/catalog";
 
@@ -27,6 +28,11 @@ export function LeadWizardModal() {
       event.preventDefault();
       const href = target.getAttribute("href");
       const params = href ? new URL(href, window.location.origin).searchParams : new URLSearchParams();
+      trackEvent("lead_cta_click", {
+        intent: params.get("intent") || undefined,
+        course_id: params.get("course") || undefined,
+        university_id: params.get("university") || undefined,
+      });
       setContext({
         course: params.get("course") || undefined,
         university: params.get("university") || undefined,

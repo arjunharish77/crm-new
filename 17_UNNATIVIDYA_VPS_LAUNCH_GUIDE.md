@@ -193,6 +193,12 @@ just the first one):
 deploy/vps/scripts/setup-unnatividya-db.sh
 ```
 
+Populate `course`/`university` from `src/data/catalog.ts` (idempotent — safe to re-run any time):
+```bash
+docker compose -f deploy/vps/docker-compose.yml --env-file deploy/vps/.env run --rm unnatividya-web \
+  node scripts/sync-catalog-to-db.js
+```
+
 Create the first CMS admin (idempotent — skips if the email already exists):
 ```bash
 docker compose -f deploy/vps/docker-compose.yml --env-file deploy/vps/.env run --rm unnatividya-web \
@@ -236,7 +242,14 @@ Finally, submit the sitemap:
   ```bash
   git pull origin main
   docker compose -f deploy/vps/docker-compose.yml --env-file deploy/vps/.env up -d --build unnatividya-web
+  docker compose -f deploy/vps/docker-compose.yml --env-file deploy/vps/.env run --rm unnatividya-web \
+    node scripts/sync-catalog-to-db.js
   ```
+  The sync step mirrors `src/data/catalog.ts` (the public site's real source of truth) into
+  Postgres, so the `/admin/courses` and `/admin/universities` browsers stay accurate instead of
+  drifting out of sync with the live site. It's safe to re-run any time — it's an idempotent
+  upsert keyed by course/university id, and anything catalog.ts no longer lists gets archived,
+  never deleted. See `22_UNNATIVIDYA_PLATFORM_ENHANCEMENTS_PLAN.md` §4 for why this exists.
 - **New migration added later:** re-run `deploy/vps/scripts/setup-unnatividya-db.sh` — it's
   safe to re-run any time, it only applies migrations that haven't been tracked yet.
 - **Backups:** `deploy/vps/scripts/backup-postgres.sh` already dumps both the CRM and

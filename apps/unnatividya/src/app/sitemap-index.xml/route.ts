@@ -10,6 +10,11 @@ export function GET() {
       "/sitemaps/universities.xml",
       "/sitemaps/blog.xml",
       "/sitemaps/guides.xml",
+      "/sitemaps/eligibility-guides.xml",
+      "/sitemaps/career-guides.xml",
+      "/sitemaps/ugc-guides.xml",
+      "/sitemaps/comparisons.xml",
+      "/sitemaps/specializations.xml",
     ]),
   );
 }

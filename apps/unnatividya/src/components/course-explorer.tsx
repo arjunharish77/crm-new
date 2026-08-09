@@ -3,6 +3,9 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useMemo, useState } from "react";
+import { SlidersHorizontal } from "lucide-react";
+import { trackEvent } from "@/components/analytics";
+import { SaveButton } from "@/components/save-button";
 import { formatFee, type Course, type University } from "@/data/catalog";
 import { universityMedia } from "@/data/media";
 
@@ -17,7 +20,7 @@ function levelStyle(level: CourseItem["level"]) {
   return {
     fontSize: 11,
     fontWeight: 700,
-    color: level === "PG" ? "#4D00FF" : "#4FA8FF",
+    color: level === "PG" ? "#4D00FF" : "#0F5BB8",
     background: level === "PG" ? "rgba(77,0,255,0.10)" : "rgba(79,168,255,0.12)",
     borderRadius: 999,
     whiteSpace: "nowrap" as const,
@@ -36,6 +39,27 @@ export function CourseExplorer({ courses: initialCourses, initialQuery = "" }: {
   const [universities, setUniversities] = useState<string[]>([]);
   const [maxFee, setMaxFee] = useState(feeCeiling);
   const [sort, setSort] = useState<SortKey>("popular");
+  const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
+
+  const activeFilterCount = levels.length + streams.length + universities.length + (maxFee < feeCeiling ? 1 : 0);
+
+  function countMatches(overrides: { levels?: string[]; streams?: string[]; universities?: string[]; maxFee?: number } = {}) {
+    const activeLevels = overrides.levels ?? levels;
+    const activeStreams = overrides.streams ?? streams;
+    const activeUniversities = overrides.universities ?? universities;
+    const activeMaxFee = overrides.maxFee ?? maxFee;
+    const text = query.trim().toLowerCase();
+    return initialCourses.filter((course) => {
+      const search = [course.name, course.shortName, course.stream, course.university.name, course.university.shortName, ...course.specializations].join(" ").toLowerCase();
+      return (
+        (!text || search.includes(text)) &&
+        (!activeLevels.length || activeLevels.includes(course.level)) &&
+        (!activeStreams.length || activeStreams.includes(course.stream)) &&
+        (!activeUniversities.length || activeUniversities.includes(course.university.shortName)) &&
+        course.fee <= activeMaxFee
+      );
+    }).length;
+  }
 
   const filtered = useMemo(() => {
     const text = query.trim().toLowerCase();
@@ -68,8 +92,23 @@ export function CourseExplorer({ courses: initialCourses, initialQuery = "" }: {
   }
 
   return (
-    <div className="uv-courses-layout" style={{ display: "grid", gridTemplateColumns: "250px 1fr", gap: 24, alignItems: "start" }}>
-      <aside style={{ background: "#fff", border: "1px solid #CFDAE6", borderRadius: 8, padding: 20, position: "sticky", top: 88 }}>
+    <>
+      <button
+        type="button"
+        className="uv-filter-toggle"
+        aria-expanded={mobileFiltersOpen}
+        aria-controls="uv-course-filters"
+        onClick={() => setMobileFiltersOpen((open) => !open)}
+      >
+        <SlidersHorizontal size={16} />
+        Filters{activeFilterCount ? ` (${activeFilterCount})` : ""}
+      </button>
+      <div className="uv-courses-layout" style={{ display: "grid", gridTemplateColumns: "250px 1fr", gap: 24, alignItems: "start" }}>
+      <aside
+        id="uv-course-filters"
+        className={mobileFiltersOpen ? "uv-course-filter-panel uv-open" : "uv-course-filter-panel"}
+        style={{ background: "#fff", border: "1px solid #CFDAE6", borderRadius: 8, padding: 20, position: "sticky", top: 88 }}
+      >
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
           <span style={{ fontSize: 15, fontWeight: 700, color: "#363634" }}>Filters</span>
           <button type="button" onClick={clearFilters} style={{ border: "none", background: "none", fontSize: 12, fontWeight: 600, color: "#544CC8", cursor: "pointer", padding: 0 }}>
@@ -88,7 +127,17 @@ export function CourseExplorer({ courses: initialCourses, initialQuery = "" }: {
                 <label key={value} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 14, color: "#555", cursor: "pointer" }}>
                   <input
                     checked={(selected as string[]).includes(value)}
-                    onChange={() => (setter as (next: string[]) => void)(toggleValue(selected as string[], value))}
+                    onChange={() => {
+                      const headingText = heading as string;
+                      const next = toggleValue(selected as string[], value);
+                      (setter as (next: string[]) => void)(next);
+                      const overrideKey = headingText === "Degree level" ? "levels" : headingText === "Stream" ? "streams" : "universities";
+                      trackEvent("course_filter_applied", {
+                        filter_type: headingText,
+                        value,
+                        result_count: countMatches({ [overrideKey]: next }),
+                      });
+                    }}
                     type="checkbox"
                     style={{ accentColor: "#544CC8", width: 16, height: 16 }}
                   />
@@ -99,13 +148,32 @@ export function CourseExplorer({ courses: initialCourses, initialQuery = "" }: {
           </div>
         ))}
         <div style={{ fontSize: 13, fontWeight: 700, color: "#363634", marginBottom: 8 }}>Total fee under</div>
-        <input type="range" min="50000" max={feeCeiling} step="10000" value={maxFee} onChange={(event) => setMaxFee(Number(event.target.value))} style={{ width: "100%", accentColor: "#544CC8" }} />
+        <input
+          type="range"
+          min="50000"
+          max={feeCeiling}
+          step="10000"
+          value={maxFee}
+          onChange={(event) => setMaxFee(Number(event.target.value))}
+          onMouseUp={() => trackEvent("course_filter_applied", { filter_type: "Total fee under", value: maxFee, result_count: countMatches() })}
+          onTouchEnd={() => trackEvent("course_filter_applied", { filter_type: "Total fee under", value: maxFee, result_count: countMatches() })}
+          style={{ width: "100%", accentColor: "#544CC8" }}
+        />
         <div style={{ fontSize: 13, color: "#696868", marginTop: 4 }}>Up to {formatFee(maxFee)}</div>
+        <button type="button" className="uv-filter-apply" onClick={() => setMobileFiltersOpen(false)}>
+          Show {filtered.length} results
+        </button>
       </aside>
 
       <div>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8, gap: 12, flexWrap: "wrap" }}>
-          <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search courses…" style={{ height: 40, width: 280, padding: "0 14px", border: "1px solid #CFDAE6", borderRadius: 4, fontSize: 14, color: "#555", outlineColor: "#544CC8", background: "#fff" }} />
+          <input
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            onBlur={() => query.trim() && trackEvent("course_search", { query: query.trim(), result_count: filtered.length })}
+            placeholder="Search courses…"
+            style={{ height: 40, width: 280, padding: "0 14px", border: "1px solid #CFDAE6", borderRadius: 4, fontSize: 14, color: "#555", outlineColor: "#544CC8", background: "#fff" }}
+          />
           <select value={sort} onChange={(event) => setSort(event.target.value as SortKey)} style={{ height: 40, padding: "0 12px", border: "1px solid #CFDAE6", borderRadius: 4, fontSize: 13, color: "#555", background: "#fff" }}>
             <option value="popular">Sort: most popular</option>
             <option value="feeAsc">Fee: low to high</option>
@@ -136,9 +204,12 @@ export function CourseExplorer({ courses: initialCourses, initialQuery = "" }: {
                 <Image src={universityMedia[item.universityId].logo} alt={`${item.university.shortName} logo`} width={44} height={44} style={{ objectFit: "contain" }} />
               </div>
               <div>
-                <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6 }}>
-                  <span style={levelStyle(item.level)}>{item.level}</span>
-                  <span style={{ fontSize: 12, color: "#707070" }}>{item.stream}</span>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: 6 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                    <span style={levelStyle(item.level)}>{item.level}</span>
+                    <span style={{ fontSize: 12, color: "#707070" }}>{item.stream}</span>
+                  </div>
+                  <SaveButton courseId={item.id} size={28} />
                 </div>
                 <Link href={`/courses/${item.slug}`} style={{ fontSize: 18, fontWeight: 700, color: "#363634" }}>
                   {item.name} — {item.university.name}
@@ -158,11 +229,25 @@ export function CourseExplorer({ courses: initialCourses, initialQuery = "" }: {
                 </div>
               </div>
               <div style={{ display: "flex", flexDirection: "column", gap: 8, justifyContent: "center", minWidth: 150 }}>
-                <Link href={`/courses/${item.slug}`} style={{ textAlign: "center", height: 38, lineHeight: "38px", background: "#544CC8", color: "#fff", borderRadius: 4, fontSize: 13, fontWeight: 700 }}>View details</Link>
+                <Link
+                  href={`/courses/${item.slug}`}
+                  data-track-event="course_card_click"
+                  data-track-params={JSON.stringify({ course_id: item.id, action: "view" })}
+                  style={{ textAlign: "center", height: 38, lineHeight: "38px", background: "#544CC8", color: "#fff", borderRadius: 4, fontSize: 13, fontWeight: 700 }}
+                >
+                  View details
+                </Link>
                 <Link href={`/lead?course=${item.id}&intent=enquire`} data-open-lead style={{ textAlign: "center", height: 38, lineHeight: "38px", background: "#fff", border: "1.5px solid #555", borderRadius: 4, fontSize: 13, fontWeight: 700, color: "#555" }}>
                   Enquire now
                 </Link>
-                <Link href={`/compare?add=${item.id}`} style={{ textAlign: "center", fontSize: 12, fontWeight: 600 }}>+ Add to compare</Link>
+                <Link
+                  href={`/compare?add=${item.id}`}
+                  data-track-event="compare_course_added"
+                  data-track-params={JSON.stringify({ course_id: item.id })}
+                  style={{ textAlign: "center", fontSize: 12, fontWeight: 600 }}
+                >
+                  + Add to compare
+                </Link>
               </div>
             </article>
           ))}
@@ -173,6 +258,7 @@ export function CourseExplorer({ courses: initialCourses, initialQuery = "" }: {
           </div>
         ) : null}
       </div>
-    </div>
+      </div>
+    </>
   );
 }

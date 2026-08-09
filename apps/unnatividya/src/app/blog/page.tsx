@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { BlogExplorer } from "@/components/blog-explorer";
-import { blogPosts } from "@/data/blog";
+import { blogPosts, resolveBlogCover } from "@/data/blog";
+import { publicAssetExists } from "@/lib/asset-exists";
 
 export const metadata: Metadata = {
   title: "Online Degree Guides",
@@ -11,6 +12,7 @@ export const metadata: Metadata = {
 
 export default function BlogPage() {
   const shell = { maxWidth: 1200, margin: "0 auto", paddingLeft: 24, paddingRight: 24, width: "100%", boxSizing: "border-box" as const };
+  const posts = blogPosts.map((post) => ({ ...post, cover: resolveBlogCover(post, publicAssetExists) }));
 
   return (
     <div style={{ background: "#F7F8F9", flex: 1, display: "flex", flexDirection: "column" }}>
@@ -25,7 +27,7 @@ export default function BlogPage() {
       </div>
 
       <div style={{ ...shell, paddingTop: 28, paddingBottom: 64, flex: 1 }}>
-        <BlogExplorer posts={blogPosts} />
+        <BlogExplorer posts={posts} />
 
         <div style={{ marginTop: 32, background: "#263238", borderRadius: 8, padding: 28, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 24, flexWrap: "wrap" }}>
           <div>

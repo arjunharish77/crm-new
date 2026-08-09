@@ -3,7 +3,8 @@ import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { JsonLd } from "@/components/json-ld";
-import { blogPosts, getBlogPostBySlug } from "@/data/blog";
+import { blogPosts, getBlogPostBySlug, resolveBlogCover } from "@/data/blog";
+import { publicAssetExists } from "@/lib/asset-exists";
 
 export function generateStaticParams() {
   return blogPosts.map((post) => ({ slug: post.slug }));
@@ -17,7 +18,7 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
     title: post.title,
     description: post.excerpt,
     alternates: { canonical: `/blog/${slug}` },
-    openGraph: { title: post.title, description: post.excerpt, images: [post.cover], type: "article" },
+    openGraph: { title: post.title, description: post.excerpt, images: [resolveBlogCover(post, publicAssetExists)], type: "article" },
   };
 }
 
@@ -26,6 +27,7 @@ export default async function ArticlePage({ params }: { params: Promise<{ slug: 
   const post = getBlogPostBySlug(slug);
   if (!post) notFound();
   const related = blogPosts.filter((item) => item.slug !== post.slug).slice(0, 3);
+  const cover = resolveBlogCover(post, publicAssetExists);
   const siteUrl = process.env.NEXT_PUBLIC_UNNATIVIDYA_SITE_URL || "https://unnatividya.com";
   const articleJsonLd = {
     "@context": "https://schema.org",
@@ -58,18 +60,26 @@ export default async function ArticlePage({ params }: { params: Promise<{ slug: 
       { "@type": "ListItem", position: 3, name: post.category, item: `${siteUrl}/blog/${post.slug}` },
     ],
   };
+  const faqJsonLd = {
+    "@context": "https://schema.org",
+    "@type": "FAQPage",
+    mainEntity: post.faqs.map(([question, answer]) => ({ "@type": "Question", name: question, acceptedAnswer: { "@type": "Answer", text: answer } })),
+  };
 
   return (
     <>
-      <JsonLd data={[articleJsonLd, breadcrumbJsonLd]} />
-      <div className="article-layout" style={{ maxWidth: 1080, paddingTop: 40, paddingBottom: 64, gridTemplateColumns: "1fr 300px", gap: 48 }}>
+      <JsonLd data={[articleJsonLd, breadcrumbJsonLd, faqJsonLd]} />
+      <div className="article-layout">
         <article className="article-main">
         <div className="breadcrumb" style={{ marginBottom: 12 }}>
           <Link href="/">Home</Link> &gt; <Link href="/blog">Blog</Link> &gt; {post.category}
         </div>
         <div className="course-meta" style={{ marginBottom: 12 }}>
-          <span style={{ fontSize: 11, fontWeight: 700, color: "#4FA8FF", background: "rgba(79,168,255,0.12)", borderRadius: 999, whiteSpace: "nowrap", padding: "3px 9px" }}>{post.category}</span>
-          <span style={{ color: "#AAAAAA", fontSize: 12 }}>{post.read} · Updated 14 July 2026</span>
+          <span style={{ fontSize: 11, fontWeight: 700, color: "#0F5BB8", background: "rgba(79,168,255,0.12)", borderRadius: 999, whiteSpace: "nowrap", padding: "3px 9px" }}>{post.category}</span>
+          <span style={{ color: "#707070", fontSize: 12 }}>
+            {post.read} · Updated{" "}
+            {new Date(post.publishedDate).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" })}
+          </span>
         </div>
         <h1 style={{ fontSize: 34, fontWeight: 700, color: "#363634", margin: "0 0 16px", lineHeight: 1.2, textWrap: "pretty" }}>{post.title}</h1>
         <div className="author-row">
@@ -81,7 +91,7 @@ export default async function ArticlePage({ params }: { params: Promise<{ slug: 
         </div>
         <div className="article-cover" style={{ height: 280, borderRadius: 8, overflow: "hidden", marginBottom: 28 }}>
           <Image
-            src={post.cover}
+            src={cover}
             alt={post.title}
             width={900}
             height={480}
@@ -103,9 +113,31 @@ export default async function ArticlePage({ params }: { params: Promise<{ slug: 
                 <Image src={block.src} alt={block.alt} fill sizes="(max-width: 980px) 100vw, 760px" style={{ objectFit: "cover" }} />
               </div>
             );
+            if (block.type === "links") return (
+              <div key={index} style={{ border: "1px solid #CFDAE6", borderRadius: 8, padding: 18, margin: "20px 0" }}>
+                <div style={{ fontSize: 13, fontWeight: 700, color: "#363634", marginBottom: 10 }}>{block.heading}</div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                  {block.items.map((item) => (
+                    <Link key={item.href} href={item.href} style={{ color: "#544CC8", fontWeight: 600, fontSize: 14 }}>{item.label} →</Link>
+                  ))}
+                </div>
+              </div>
+            );
             return <p key={index}>{block.text}</p>;
           })}
         </div>
+
+        <section className="detail-section">
+          <h2>Frequently asked questions</h2>
+          <div className="faq-list">
+            {post.faqs.map(([question, answer]) => (
+              <details className="faq-item" name="blog-faq" key={question}>
+                <summary>{question}</summary>
+                <p>{answer}</p>
+              </details>
+            ))}
+          </div>
+        </section>
 
         <div className="newsletter-band article-cta">
           <div>

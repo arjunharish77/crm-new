@@ -2,8 +2,17 @@ import type { CSSProperties } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { ApprovalBadge } from "@/components/approval-badge";
+import { JsonLd } from "@/components/json-ld";
+import { SaveButton } from "@/components/save-button";
 import { courses, courseWithUniversity, formatFee, universities } from "@/data/catalog";
 import { recommenderPreviewMedia, universityMedia } from "@/data/media";
+
+const homeFaqs: Array<[string, string]> = [
+  ["Are online degrees valid for government jobs?", "Yes. UGC-entitled online degrees are legally equivalent to on-campus degrees for government jobs, PSU recruitment and higher studies."],
+  ["Is counselling really free?", "Yes — universities compensate us equally, so counselling costs you nothing and our advice carries no commission bias."],
+  ["Can I pay via EMI?", "Every listed program offers no-cost EMI through education loan partners, plus semester-wise payment options."],
+  ["How do I choose between universities?", "Use the compare tool for a side-by-side of fees, approvals and placements — or take the 2-minute AI quiz for a personalised shortlist."],
+];
 
 const pageWidth: CSSProperties = {
   maxWidth: 1200,
@@ -55,8 +64,15 @@ export default function HomePage() {
     .filter((course): course is (typeof courses)[number] => Boolean(course))
     .map(courseWithUniversity);
 
+  const faqJsonLd = {
+    "@context": "https://schema.org",
+    "@type": "FAQPage",
+    mainEntity: homeFaqs.map(([question, answer]) => ({ "@type": "Question", name: question, acceptedAnswer: { "@type": "Answer", text: answer } })),
+  };
+
   return (
     <>
+      <JsonLd data={faqJsonLd} />
       <section style={{ background: "linear-gradient(180deg,#F4F3FC 0%,#fff 100%)", borderBottom: "1px solid #F5F5F5" }}>
         <div
           className="uv-home-hero-grid"
@@ -82,7 +98,12 @@ export default function HomePage() {
             </p>
             <form action="/courses" method="get" style={{ display: "flex", gap: 0, maxWidth: 520, border: "1.5px solid #CFDAE6", borderRadius: 6, overflow: "hidden", background: "#fff" }}>
               <input name="q" aria-label="Search courses" placeholder="Search a course, e.g. Online MBA" style={{ flex: 1, height: 52, border: "none", padding: "0 18px", fontSize: 15, color: "#555", outline: "none", minWidth: 0 }} />
-              <button type="submit" style={{ display: "flex", alignItems: "center", padding: "0 26px", background: "#544CC8", color: "#fff", fontSize: 15, fontWeight: 700, border: "none", cursor: "pointer" }}>
+              <button
+                type="submit"
+                data-track-event="course_search"
+                data-track-params={JSON.stringify({ source: "homepage_hero" })}
+                style={{ display: "flex", alignItems: "center", padding: "0 26px", background: "#544CC8", color: "#fff", fontSize: 15, fontWeight: 700, border: "none", cursor: "pointer" }}
+              >
                 Search
               </button>
             </form>
@@ -116,7 +137,7 @@ export default function HomePage() {
 
           <div style={{ background: "#fff", border: "1px solid #CFDAE6", borderRadius: 8, padding: 24, boxShadow: "0 1px 3px rgba(0,0,0,0.06)" }}>
             <div style={{ height: 130, borderRadius: 6, overflow: "hidden", marginBottom: 16, position: "relative" }}>
-              <Image src={recommenderPreviewMedia.src} alt={recommenderPreviewMedia.alt} fill sizes="(max-width: 900px) 100vw, 360px" style={{ objectFit: "cover" }} priority />
+              <Image src={recommenderPreviewMedia.src} alt={recommenderPreviewMedia.alt} fill sizes="(max-width: 900px) calc(100vw - 98px), 360px" style={{ objectFit: "cover" }} priority />
             </div>
             <div style={{ fontSize: 17, fontWeight: 700, color: "#363634" }}>Not sure which degree fits?</div>
             <div style={{ fontSize: 13, color: "#696868", margin: "6px 0 16px", lineHeight: 1.5 }}>
@@ -127,7 +148,7 @@ export default function HomePage() {
             </Link>
             <div style={{ display: "flex", alignItems: "center", gap: 10, margin: "16px 0" }}>
               <div style={{ flex: 1, height: 1, background: "#EAEAEA" }} />
-              <span style={{ fontSize: 12, color: "#AAAAAA" }}>or</span>
+              <span style={{ fontSize: 12, color: "#707070" }}>or</span>
               <div style={{ flex: 1, height: 1, background: "#EAEAEA" }} />
             </div>
             <Link href="/lead?intent=request-callback" data-open-lead style={{ ...secondaryButton, width: "100%", height: 44, fontSize: 15 }}>
@@ -140,7 +161,7 @@ export default function HomePage() {
 
       <div style={{ borderBottom: "1px solid #F5F5F5", background: "#fff" }}>
         <div style={{ ...pageWidth, paddingTop: 16, paddingBottom: 16, display: "flex", gap: 32, alignItems: "center", justifyContent: "center", flexWrap: "wrap" }}>
-          <span style={{ fontSize: 12, color: "#AAAAAA", fontWeight: 600, letterSpacing: 0.5 }}>APPROVALS THAT MATTER</span>
+          <span style={{ fontSize: 12, color: "#707070", fontWeight: 600, letterSpacing: 0.5 }}>APPROVALS THAT MATTER</span>
           {["UGC", "NAAC A+", "AICTE", "WES", "AIU"].map((approval) => (
             <span style={{ fontSize: 14, fontWeight: 700, color: "#696868" }} key={approval}>{approval}</span>
           ))}
@@ -154,9 +175,16 @@ export default function HomePage() {
         </div>
         <div className="uv-home-three-grid" style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 20 }}>
           {universities.map((university) => (
-            <Link href={`/universities/${university.slug}`} className="uv-card" style={{ display: "block", background: "#fff", border: "1px solid #CFDAE6", borderRadius: 8, overflow: "hidden", color: "inherit" }} key={university.id}>
+            <Link
+              href={`/universities/${university.slug}`}
+              className="uv-card"
+              data-track-event="university_card_click"
+              data-track-params={JSON.stringify({ university_id: university.id })}
+              style={{ display: "block", background: "#fff", border: "1px solid #CFDAE6", borderRadius: 8, overflow: "hidden", color: "inherit" }}
+              key={university.id}
+            >
               <div style={{ height: 140, overflow: "hidden", position: "relative" }}>
-                <Image src={universityMedia[university.id].src} alt={universityMedia[university.id].alt} fill sizes="(max-width: 900px) 100vw, 33vw" style={{ objectFit: "cover" }} />
+                <Image src={universityMedia[university.id].src} alt={universityMedia[university.id].alt} fill sizes="(max-width: 900px) calc(100vw - 50px), 33vw" style={{ objectFit: "cover" }} />
               </div>
               <div style={{ padding: 18 }}>
                 <div style={{ fontSize: 17, fontWeight: 700, color: "#363634" }}>{universityDisplayName(university.id, university.name)}</div>
@@ -165,7 +193,7 @@ export default function HomePage() {
                   {university.approvals.slice(0, 3).map((approval) => (
                     <ApprovalBadge
                       label={approval}
-                      style={{ fontSize: 11, fontWeight: 700, color: "#4FA8FF", background: "rgba(79,168,255,0.12)", borderRadius: 999, whiteSpace: "nowrap", padding: "3px 9px" }}
+                      style={{ fontSize: 11, fontWeight: 700, color: "#0F5BB8", background: "rgba(79,168,255,0.12)", borderRadius: 999, whiteSpace: "nowrap", padding: "3px 9px" }}
                       key={approval}
                     />
                   ))}
@@ -190,8 +218,11 @@ export default function HomePage() {
             {popular.map((course) => (
               <article style={{ background: "#fff", border: "1px solid #CFDAE6", borderRadius: 8, padding: 18, display: "flex", flexDirection: "column", gap: 10 }} key={course.id}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                  <span style={{ fontSize: 11, fontWeight: 700, color: course.level === "PG" ? "#4D00FF" : "#4FA8FF", background: course.level === "PG" ? "rgba(77,0,255,0.10)" : "rgba(79,168,255,0.12)", borderRadius: 999, whiteSpace: "nowrap", padding: "3px 9px" }}>{course.level}</span>
-                  <span style={{ fontSize: 13, color: "#555" }}><span style={{ color: "#FDB515" }}>★</span> {course.rating}</span>
+                  <span style={{ fontSize: 11, fontWeight: 700, color: course.level === "PG" ? "#4D00FF" : "#0F5BB8", background: course.level === "PG" ? "rgba(77,0,255,0.10)" : "rgba(79,168,255,0.12)", borderRadius: 999, whiteSpace: "nowrap", padding: "3px 9px" }}>{course.level}</span>
+                  <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                    <span style={{ fontSize: 13, color: "#555" }}><span style={{ color: "#FDB515" }}>★</span> {course.rating}</span>
+                    <SaveButton courseId={course.id} size={28} />
+                  </div>
                 </div>
                 <div>
                   <div style={{ fontSize: 17, fontWeight: 700, color: "#363634" }}>{course.name}</div>
@@ -203,7 +234,14 @@ export default function HomePage() {
                   <span>EMI {course.emi}</span>
                 </div>
                 <div style={{ display: "flex", gap: 10, marginTop: "auto" }}>
-                  <Link href={`/courses/${course.slug}`} style={{ ...primaryButton, flex: 1 }}>View course</Link>
+                  <Link
+                    href={`/courses/${course.slug}`}
+                    data-track-event="course_card_click"
+                    data-track-params={JSON.stringify({ course_id: course.id, action: "view" })}
+                    style={{ ...primaryButton, flex: 1 }}
+                  >
+                    View course
+                  </Link>
                   <Link href={`/lead?course=${course.id}&intent=enquire`} data-open-lead style={{ ...secondaryButton, flex: 1 }}>Enquire</Link>
                 </div>
               </article>
@@ -302,12 +340,7 @@ export default function HomePage() {
       <section style={{ maxWidth: 800, margin: "0 auto", padding: "0 24px 64px", width: "100%", boxSizing: "border-box" }}>
         <h2 style={{ ...sectionTitle, marginBottom: 20 }}>Frequently asked questions</h2>
         <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-          {[
-            ["Are online degrees valid for government jobs?", "Yes. UGC-entitled online degrees are legally equivalent to on-campus degrees for government jobs, PSU recruitment and higher studies."],
-            ["Is counselling really free?", "Yes — universities compensate us equally, so counselling costs you nothing and our advice carries no commission bias."],
-            ["Can I pay via EMI?", "Every listed program offers no-cost EMI through education loan partners, plus semester-wise payment options."],
-            ["How do I choose between universities?", "Use the compare tool for a side-by-side of fees, approvals and placements — or take the 2-minute AI quiz for a personalised shortlist."],
-          ].map(([question, answer]) => (
+          {homeFaqs.map(([question, answer]) => (
             <details className="faq-item" name="home-faq" key={question}>
               <summary>{question}</summary>
               <p>{answer}</p>

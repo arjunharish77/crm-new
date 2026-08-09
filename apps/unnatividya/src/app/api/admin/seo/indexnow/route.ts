@@ -1,6 +1,17 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { courseSitemapUrls, staticSitemapUrls, universitySitemapUrls } from "@/lib/sitemap";
+import {
+  blogSitemapUrls,
+  careerScopeGuideSitemapUrls,
+  comparisonSitemapUrls,
+  courseSitemapUrls,
+  eligibilityGuideSitemapUrls,
+  feeGuideSitemapUrls,
+  specializationSitemapUrls,
+  staticSitemapUrls,
+  ugcApprovalGuideSitemapUrls,
+  universitySitemapUrls,
+} from "@/lib/sitemap";
 import { indexNowConfig, siteUrl } from "@/lib/seo-config";
 
 const schema = z.object({
@@ -8,7 +19,18 @@ const schema = z.object({
 });
 
 function defaultUrls() {
-  return [...staticSitemapUrls(), ...courseSitemapUrls(), ...universitySitemapUrls()].map((entry) => entry.loc);
+  return [
+    ...staticSitemapUrls(),
+    ...courseSitemapUrls(),
+    ...universitySitemapUrls(),
+    ...blogSitemapUrls(),
+    ...feeGuideSitemapUrls(),
+    ...eligibilityGuideSitemapUrls(),
+    ...careerScopeGuideSitemapUrls(),
+    ...ugcApprovalGuideSitemapUrls(),
+    ...comparisonSitemapUrls(),
+    ...specializationSitemapUrls(),
+  ].map((entry) => entry.loc);
 }
 
 export async function POST(request: Request) {

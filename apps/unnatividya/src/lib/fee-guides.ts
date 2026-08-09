@@ -60,10 +60,16 @@ export function feeGuideIntro(guide: FeeGuide): string {
   return `${guide.label} is currently listed on Unnati Vidya through ${only.university.name}, with a total program fee of ${formatFee(only.fee)} for the full ${only.duration} program. Here is exactly how that fee breaks down, and what scholarship and EMI options are available.`;
 }
 
+function durationMonths(duration: string): number {
+  const match = duration.match(/\d+/);
+  return match ? Number(match[0]) : 0;
+}
+
 export function feeGuideFaqs(guide: FeeGuide): Array<[string, string]> {
   const cheapest = guide.courses[0];
   const priciest = guide.courses[guide.courses.length - 1];
   if (guide.isComparison) {
+    const shortest = [...guide.courses].sort((a, b) => durationMonths(a.duration) - durationMonths(b.duration))[0];
     return [
       [
         `Which university offers the cheapest ${guide.label}?`,
@@ -80,6 +86,14 @@ export function feeGuideFaqs(guide: FeeGuide): Array<[string, string]> {
       [
         "Are there hidden costs beyond the listed program fee?",
         "A separate application fee applies at most universities, and exam or re-evaluation fees can apply in specific cases. Confirm the full cost breakdown with a counsellor before you pay.",
+      ],
+      [
+        `Which university offers the shortest ${guide.label} program?`,
+        `${shortest.university.name} lists the shortest duration at ${shortest.duration}. A shorter duration isn't automatically better — check the curriculum and your own pace before choosing on duration alone.`,
+      ],
+      [
+        "Does choosing a specialization change the total fee?",
+        "No. The total fee is for the base program regardless of which specialization you pick within it — specializations change the curriculum focus, not the price.",
       ],
     ];
   }
@@ -102,6 +116,18 @@ export function feeGuideFaqs(guide: FeeGuide): Array<[string, string]> {
     [
       `Is the ${guide.label} fee refundable if I discontinue?`,
       "Refund eligibility follows the university's published refund policy and admission-cycle rules. See our refund policy summary or ask a counsellor before you pay.",
+    ],
+    [
+      `How many specializations can I choose from in ${guide.label}?`,
+      only.specializations.length
+        ? `${only.university.name} offers ${only.specializations.length} specialization${only.specializations.length > 1 ? "s" : ""} within this program, including ${only.specializations.slice(0, 2).join(" and ")}. Choosing one doesn't change the total fee.`
+        : `${only.university.name} runs this as a general program without separate specialization tracks.`,
+    ],
+    [
+      `What career roles does ${guide.label} prepare me for?`,
+      only.careerRoles.length
+        ? `Graduates commonly move into roles such as ${only.careerRoles.slice(0, 3).join(", ")}, per ${only.university.name}'s own program pages — actual outcomes depend on your experience and specialization.`
+        : `${only.university.name}'s program page outlines the career paths this degree supports — a counsellor can walk you through them.`,
     ],
   ];
 }

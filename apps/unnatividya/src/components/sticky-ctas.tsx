@@ -19,6 +19,7 @@ export function StickyCtas() {
         rel="noopener noreferrer"
         aria-label="WhatsApp enquiry"
         title="Chat on WhatsApp"
+        data-track-event="whatsapp_click"
         style={{ width: 48, height: 48, borderRadius: "50%", background: "#25D366", boxShadow: "0 4px 8px rgba(36,36,36,0.16)", display: "flex", alignItems: "center", justifyContent: "center" }}
       >
         <svg aria-hidden="true" width="22" height="22" viewBox="0 0 448 512" fill="#fff">

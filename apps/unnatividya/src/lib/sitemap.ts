@@ -1,6 +1,9 @@
 import { courses, universities } from "@/data/catalog";
 import { blogPosts } from "@/data/blog";
 import { feeGuides } from "@/lib/fee-guides";
+import { allComparisonPairs } from "@/lib/comparisons";
+import { allCareerScopeGuides, allEligibilityGuides, allUgcApprovalGuides } from "@/data/guide-content";
+import { allSpecializationPages } from "@/lib/specializations";
 import { siteUrl } from "@/lib/seo-config";
 
 export const staticSitemapRoutes = [
@@ -11,6 +14,9 @@ export const staticSitemapRoutes = [
   "/recommender",
   "/blog",
   "/online-degree-guides",
+  "/specializations",
+  "/tools/emi-calculator",
+  "/how-we-verify",
   "/about",
   "/privacy",
   "/terms",
@@ -99,6 +105,61 @@ export function feeGuideSitemapUrls() {
     lastmod: now,
     changefreq: "monthly" as const,
     priority: 0.75,
+  }));
+}
+
+export function eligibilityGuideSitemapUrls() {
+  const host = siteUrl();
+  const now = new Date().toISOString();
+  return allEligibilityGuides().map((guide) => ({
+    loc: `${host}/online-degree-guides/${guide.slug}`,
+    lastmod: now,
+    changefreq: "monthly" as const,
+    priority: 0.75,
+  }));
+}
+
+export function careerScopeGuideSitemapUrls() {
+  const host = siteUrl();
+  const now = new Date().toISOString();
+  return allCareerScopeGuides().map((guide) => ({
+    loc: `${host}/online-degree-guides/${guide.slug}`,
+    lastmod: now,
+    changefreq: "monthly" as const,
+    priority: 0.7,
+  }));
+}
+
+export function ugcApprovalGuideSitemapUrls() {
+  const host = siteUrl();
+  const now = new Date().toISOString();
+  return allUgcApprovalGuides().map((guide) => ({
+    loc: `${host}/online-degree-guides/${guide.slug}`,
+    lastmod: now,
+    changefreq: "monthly" as const,
+    priority: 0.7,
+  }));
+}
+
+export function comparisonSitemapUrls() {
+  const host = siteUrl();
+  const now = new Date().toISOString();
+  return allComparisonPairs().map((pair) => ({
+    loc: `${host}/compare/${pair.key}/${pair.slug}`,
+    lastmod: now,
+    changefreq: "monthly" as const,
+    priority: 0.7,
+  }));
+}
+
+export function specializationSitemapUrls() {
+  const host = siteUrl();
+  const now = new Date().toISOString();
+  return allSpecializationPages().map((page) => ({
+    loc: `${host}/specializations/${page.slug}`,
+    lastmod: now,
+    changefreq: "monthly" as const,
+    priority: 0.6,
   }));
 }
 

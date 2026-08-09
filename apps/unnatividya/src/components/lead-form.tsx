@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { trackEvent } from "@/components/analytics";
 import type { LeadFormContext } from "@/components/lead-form-loader";
 
 type Status = "idle" | "saving" | "otp" | "verifying" | "done" | "error";
@@ -54,6 +55,7 @@ export function LeadForm({ context = {} }: { context?: LeadFormContext }) {
     }
     const data = (await response.json()) as { leadId: string };
     setLeadId(data.leadId);
+    trackEvent("lead_form_submit", { intent: context.intent || "lead_wizard" });
     const otpResponse = await fetch("/api/otp/send", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -82,6 +84,7 @@ export function LeadForm({ context = {} }: { context?: LeadFormContext }) {
       return;
     }
     unlockCompare();
+    trackEvent("lead_verified", { intent: context.intent || "lead_wizard" });
     setStatus("done");
     setMessage("Your email is verified. Compare access is unlocked and our counsellor can now guide you with better context.");
   }

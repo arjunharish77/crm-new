@@ -47,8 +47,8 @@ export function BlogExplorer({ posts }: { posts: BlogPost[] }) {
             </div>
             <div style={{ padding: 18, display: "flex", flexDirection: "column", gap: 8, flex: 1 }}>
               <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                <span style={{ fontSize: 11, fontWeight: 700, color: "#4FA8FF", background: "rgba(79,168,255,0.12)", borderRadius: 999, whiteSpace: "nowrap", padding: "3px 9px" }}>{post.category}</span>
-                <span style={{ fontSize: 12, color: "#AAAAAA" }}>{post.read}</span>
+                <span style={{ fontSize: 11, fontWeight: 700, color: "#0F5BB8", background: "rgba(79,168,255,0.12)", borderRadius: 999, whiteSpace: "nowrap", padding: "3px 9px" }}>{post.category}</span>
+                <span style={{ fontSize: 12, color: "#707070" }}>{post.read}</span>
               </div>
               <div style={{ fontSize: 16, fontWeight: 700, color: "#363634", lineHeight: 1.35 }}>{post.title}</div>
               <div style={{ fontSize: 13, color: "#696868", lineHeight: 1.55 }}>{post.excerpt}</div>
