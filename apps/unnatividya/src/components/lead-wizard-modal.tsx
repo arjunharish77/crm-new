@@ -5,6 +5,22 @@ import { trackEvent } from "@/components/analytics";
 import { LeadFormLoader, type LeadFormContext } from "@/components/lead-form-loader";
 import { getCourseBySlug, getUniversityBySlug } from "@/data/catalog";
 
+// Fallback labels for entry points with no course/university id attached — e.g. the EMI
+// calculator or a fee guide — so the wizard title still reflects why the visitor opened it
+// instead of always falling back to the fully generic title.
+const INTENT_LABELS: Record<string, string> = {
+  "emi-calculator": "your EMI plan",
+  "fee-guide": "fees",
+  "eligibility-guide": "eligibility",
+  "career-scope-guide": "career scope",
+  "ugc-approval-guide": "UGC approval",
+  recommender: "your shortlist",
+  comparison: "your comparison",
+  "compare-unlock": "your comparison",
+  specialization: "this specialization",
+  "article-help": "this article",
+};
+
 function contextLabel(context: LeadFormContext): string | null {
   if (context.course) {
     const course = getCourseBySlug(context.course);
@@ -14,6 +30,7 @@ function contextLabel(context: LeadFormContext): string | null {
     const university = getUniversityBySlug(context.university);
     if (university) return university.name;
   }
+  if (context.intent && INTENT_LABELS[context.intent]) return INTENT_LABELS[context.intent];
   return null;
 }
 
@@ -38,6 +55,9 @@ export function LeadWizardModal() {
         university: params.get("university") || undefined,
         intent: params.get("intent") || undefined,
         goal: params.get("goal") || undefined,
+        name: params.get("name") || undefined,
+        email: params.get("email") || undefined,
+        phone: params.get("phone") || undefined,
       });
       setOpen(true);
     }

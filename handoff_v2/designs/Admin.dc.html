@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&display=swap" rel="stylesheet">
+<style>body{margin:0;font-family:'DM Sans',sans-serif;color:#555;background:#F7F8F9}a{color:#544CC8;text-decoration:none}a:hover{color:#453DB8}button,input{font-family:'DM Sans',sans-serif}</style>
+</helmet>
+<div style="min-height:100vh;display:flex;background:#F7F8F9">
+  <div style="width:236px;background:#263238;color:#B8C4CA;display:flex;flex-direction:column;flex:none;min-height:100vh">
+    <div style="padding:20px 20px 18px;border-bottom:1px solid rgba(255,255,255,0.10)">
+      <img src="assets/logo-white.svg" alt="Unnati Vidya" style="height:20px;width:auto;display:block" />
+      <div style="font-size:11px;color:#78909C;margin-top:7px;letter-spacing:0.6px">ADMIN CONSOLE</div>
+    </div>
+    <div style="padding:14px 12px;display:flex;flex-direction:column;gap:3px">
+      <sc-for list="{{ nav }}" as="n" hint-placeholder-count="7">
+        <button onClick="{{ n.pick }}" style="{{ n.style }}">{{ n.label }}<span style="{{ n.badgeStyle }}">{{ n.badge }}</span></button>
+      </sc-for>
+    </div>
+    <div style="margin-top:auto;padding:18px 20px;border-top:1px solid rgba(255,255,255,0.10);font-size:12px">
+      <div style="color:#fff;font-weight:700">Ritika Desai</div>
+      <div style="color:#78909C;margin-top:2px">Admissions lead</div>
+      <a href="Home.dc.html" style="color:#B8C4CA;display:inline-block;margin-top:10px">← Back to site</a>
+    </div>
+  </div>
+
+  <div style="flex:1;min-width:0">
+    <div style="background:#fff;border-bottom:1px solid #EAEAEA;padding:18px 28px;display:flex;align-items:center;justify-content:space-between;gap:20px">
+      <div>
+        <div style="font-size:20px;font-weight:700;color:#363634">{{ activeLabel }}</div>
+        <div style="font-size:13px;color:#707070;margin-top:2px">{{ activeSub }}</div>
+      </div>
+      <div style="display:flex;gap:10px">
+        <input placeholder="Search leads, courses…" style="height:40px;width:250px;padding:0 14px;border:1px solid #CFDAE6;border-radius:4px;font-size:13px;color:#555;outline-color:#544CC8" />
+        <button style="height:40px;padding:0 18px;background:#544CC8;color:#fff;border:none;border-radius:4px;font-size:13px;font-weight:700;cursor:pointer">Export CSV</button>
+      </div>
+    </div>
+
+    <div style="padding:24px 28px 48px">
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:22px">
+        <sc-for list="{{ stats }}" as="s" hint-placeholder-count="4">
+          <div style="background:#fff;border:1px solid #CFDAE6;border-radius:8px;padding:20px">
+            <div style="font-size:12px;color:#707070">{{ s.label }}</div>
+            <div style="font-size:27px;font-weight:700;color:#363634;margin-top:5px;letter-spacing:-0.5px">{{ s.value }}</div>
+            <div style="{{ s.deltaStyle }}">{{ s.delta }}</div>
+          </div>
+        </sc-for>
+      </div>
+
+      <div style="display:grid;grid-template-columns:1.6fr 1fr;gap:16px">
+        <div style="background:#fff;border:1px solid #CFDAE6;border-radius:8px;overflow:hidden">
+          <div style="padding:16px 20px;border-bottom:1px solid #EAEAEA;display:flex;justify-content:space-between;align-items:center">
+            <span style="font-size:15px;font-weight:700;color:#363634">Recent leads</span>
+            <a href="#" style="font-size:13px;font-weight:700">View all</a>
+          </div>
+          <div style="display:grid;grid-template-columns:1.3fr 1.5fr 1fr 0.9fr;background:#F5F5F5;font-size:11px;font-weight:700;color:#696868;padding:11px 20px;letter-spacing:0.6px;gap:12px"><span>LEARNER</span><span>INTEREST</span><span>SOURCE</span><span>STATUS</span></div>
+          <sc-for list="{{ leads }}" as="l" hint-placeholder-count="6">
+            <div style="display:grid;grid-template-columns:1.3fr 1.5fr 1fr 0.9fr;padding:13px 20px;border-top:1px solid #EAEAEA;font-size:13px;gap:12px;align-items:center">
+              <div><div style="font-weight:700;color:#363634">{{ l.name }}</div><div style="font-size:12px;color:#707070">{{ l.phone }}</div></div>
+              <span>{{ l.interest }}</span>
+              <span style="color:#707070">{{ l.source }}</span>
+              <span style="{{ l.statusStyle }}">{{ l.status }}</span>
+            </div>
+          </sc-for>
+        </div>
+
+        <div style="display:flex;flex-direction:column;gap:16px">
+          <div style="background:#fff;border:1px solid #CFDAE6;border-radius:8px;padding:20px">
+            <div style="font-size:15px;font-weight:700;color:#363634;margin-bottom:14px">Leads by program</div>
+            <div style="display:flex;flex-direction:column;gap:11px">
+              <sc-for list="{{ bars }}" as="b" hint-placeholder-count="5">
+                <div>
+                  <div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:5px"><span>{{ b.label }}</span><b style="color:#363634">{{ b.count }}</b></div>
+                  <div style="height:7px;background:#EAEAEA;border-radius:999px;overflow:hidden"><div style="height:100%;background:#544CC8;width:{{ b.pct }}"></div></div>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+          <div style="background:#fff;border:1px solid #CFDAE6;border-radius:8px;padding:20px">
+            <div style="font-size:15px;font-weight:700;color:#363634;margin-bottom:12px">Content quality</div>
+            <div style="display:flex;flex-direction:column;gap:10px;font-size:13px">
+              <div style="display:flex;justify-content:space-between"><span>Courses source-verified</span><b style="color:#2E7D32">26 / 30</b></div>
+              <div style="display:flex;justify-content:space-between"><span>Eligibility verified</span><b style="color:#2E7D32">18 / 30</b></div>
+              <div style="display:flex;justify-content:space-between"><span>Awaiting re-check</span><b style="color:#FDB515">4</b></div>
+              <div style="display:flex;justify-content:space-between"><span>CRM sync</span><b style="color:#2E7D32">Healthy</b></div>
+            </div>
+            <a href="#" style="display:block;margin-top:14px;font-size:13px;font-weight:700">Open content audit →</a>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{}">
+class Component extends DCLogic {
+  state = { tab: 'Dashboard' };
+
+  renderVals() {
+    const NAV = [
+      ['Dashboard', '', 'Lead volume, conversion and content health'],
+      ['Leads', '128', 'Every enquiry, with page context and CRM status'],
+      ['Courses', '30', 'Fees, eligibility and specialisations per program'],
+      ['Universities', '3', 'Approvals, placement data and campus media'],
+      ['Content quality', '4', 'Which fields are source-verified vs inherited'],
+      ['CRM sync', '', 'Field mapping and push history'],
+      ['Redirects & SEO', '', 'Programmatic pages, sitemaps and redirects']
+    ];
+    const active = NAV.find(n => n[0] === this.state.tab) || NAV[0];
+
+    return {
+      activeLabel: active[0],
+      activeSub: active[2],
+      nav: NAV.map(([label, badge]) => {
+        const on = this.state.tab === label;
+        return {
+          label, badge,
+          style: 'display:flex;align-items:center;justify-content:space-between;gap:10px;width:100%;text-align:left;border:none;border-radius:6px;padding:11px 14px;font-size:14px;font-weight:600;cursor:pointer;background:' + (on ? 'rgba(255,255,255,0.10)' : 'transparent') + ';color:' + (on ? '#fff' : '#B8C4CA'),
+          badgeStyle: badge ? 'font-size:11px;font-weight:700;background:#544CC8;color:#fff;border-radius:999px;padding:2px 8px' : 'display:none',
+          pick: () => this.setState({ tab: label })
+        };
+      }),
+      stats: [
+        { label: 'Leads this week', value: '128', delta: '+18% vs last week', deltaStyle: 'font-size:12px;color:#2E7D32;font-weight:700;margin-top:4px' },
+        { label: 'OTP verified', value: '96', delta: '75% completion', deltaStyle: 'font-size:12px;color:#707070;margin-top:4px' },
+        { label: 'Counselled', value: '61', delta: '+9% vs last week', deltaStyle: 'font-size:12px;color:#2E7D32;font-weight:700;margin-top:4px' },
+        { label: 'Enrolled', value: '14', delta: '11% of verified', deltaStyle: 'font-size:12px;color:#707070;margin-top:4px' }
+      ],
+      leads: [
+        ['Priya Sharma', '+91 98••• ••231', 'Online MBA · MUJ', 'Course page', 'Counselled', '#2E7D32'],
+        ['Arjun Mehta', '+91 99••• ••804', 'Online BCA · MUJ', 'AI recommender', 'New', '#544CC8'],
+        ['Farhan Khan', '+91 90••• ••117', 'Online MCA · Amity', 'Compare gate', 'Counselled', '#2E7D32'],
+        ['Neha Raut', '+91 88••• ••640', 'Online B.Com · SMU', 'Home hero', 'New', '#544CC8'],
+        ['Vikram Iyer', '+91 97••• ••355', 'Online MBA · SMU', 'Blog article', 'Follow-up', '#FDB515'],
+        ['Sana Qureshi', '+91 93••• ••082', 'MSc Data Science · Amity', 'EMI calculator', 'Enrolled', '#2E7D32']
+      ].map(([name, phone, interest, source, status, color]) => ({
+        name, phone, interest, source, status,
+        statusStyle: 'font-size:11px;font-weight:700;color:' + color + ';background:' + color + '1A;border-radius:999px;white-space:nowrap;padding:4px 10px;justify-self:start'
+      })),
+      bars: [
+        ['Online MBA', 52, '100%'],
+        ['Online BCA', 24, '46%'],
+        ['Online MCA', 21, '40%'],
+        ['Online B.Com', 17, '33%'],
+        ['MSc Data Science', 14, '27%']
+      ].map(([label, count, pct]) => ({ label, count, pct }))
+    };
+  }
+}
+</script>
+</body>
+</html>

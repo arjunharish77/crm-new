@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&display=swap" rel="stylesheet">
+<style>body{margin:0;font-family:'DM Sans',sans-serif;color:#555;background:#F7F8F9}a{color:#544CC8;text-decoration:none}a:hover{color:#453DB8}button,input{font-family:'DM Sans',sans-serif}</style>
+</helmet>
+<div style="min-height:100vh;display:flex;flex-direction:column;background:#F7F8F9">
+<dc-import name="SiteHeader" active="" hint-size="100%,110px"></dc-import>
+
+<div style="max-width:1060px;margin:0 auto;padding:44px 24px 64px;width:100%;box-sizing:border-box;display:grid;grid-template-columns:1fr 380px;gap:40px;align-items:start;flex:1" class="uv-2col">
+  <div>
+    <h1 style="font-size:34px;font-weight:700;color:#363634;margin:0 0 12px;letter-spacing:-0.4px;text-wrap:pretty">Talk to a counsellor who has no reason to oversell</h1>
+    <p style="font-size:16px;color:#696868;line-height:1.65;margin:0 0 28px;max-width:520px">Every university on UnnatiVidya compensates us on the same terms. That is the whole reason a counsellor here can tell you to pick the ₹1,20,000 program over the ₹2,25,000 one.</p>
+
+    <div style="display:flex;flex-direction:column;gap:14px;margin-bottom:32px">
+      <div style="display:flex;gap:14px;align-items:flex-start"><div style="width:28px;height:28px;border-radius:50%;background:rgba(46,125,50,0.10);color:#2E7D32;font-size:14px;display:flex;align-items:center;justify-content:center;flex:none">✓</div><div><div style="font-size:15px;font-weight:700;color:#363634">Fee and scholarship check</div><div style="font-size:14px;color:#696868;line-height:1.55">Exact current-cycle fee, eligible concessions and what the EMI works out to.</div></div></div>
+      <div style="display:flex;gap:14px;align-items:flex-start"><div style="width:28px;height:28px;border-radius:50%;background:rgba(46,125,50,0.10);color:#2E7D32;font-size:14px;display:flex;align-items:center;justify-content:center;flex:none">✓</div><div><div style="font-size:15px;font-weight:700;color:#363634">Entitlement verification</div><div style="font-size:14px;color:#696868;line-height:1.55">We confirm the program against the UGC-DEB notification before you pay anything.</div></div></div>
+      <div style="display:flex;gap:14px;align-items:flex-start"><div style="width:28px;height:28px;border-radius:50%;background:rgba(46,125,50,0.10);color:#2E7D32;font-size:14px;display:flex;align-items:center;justify-content:center;flex:none">✓</div><div><div style="font-size:15px;font-weight:700;color:#363634">Documents and loan paperwork</div><div style="font-size:14px;color:#696868;line-height:1.55">Pre-checked uploads and loan partner introductions, right up to your LMS login.</div></div></div>
+    </div>
+
+    <div class="uv-3col" style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px">
+      <div style="background:#fff;border:1px solid #CFDAE6;border-radius:8px;padding:18px"><div style="font-size:22px;font-weight:700;color:#363634">1.75L</div><div style="font-size:13px;color:#707070">learners guided</div></div>
+      <div style="background:#fff;border:1px solid #CFDAE6;border-radius:8px;padding:18px"><div style="font-size:22px;font-weight:700;color:#363634">&lt; 24 hrs</div><div style="font-size:13px;color:#707070">callback time</div></div>
+      <div style="background:#fff;border:1px solid #CFDAE6;border-radius:8px;padding:18px"><div style="font-size:22px;font-weight:700;color:#363634">₹0</div><div style="font-size:13px;color:#707070">you pay us</div></div>
+    </div>
+  </div>
+
+  <div class="uv-side-rail" style="background:#fff;border:1px solid #CFDAE6;border-radius:8px;padding:28px;box-shadow:0 1px 3px rgba(0,0,0,0.06);position:sticky;top:88px">
+    <div style="display:flex;gap:6px;margin-bottom:20px">
+      <sc-for list="{{ dots }}" as="d" hint-placeholder-count="3">
+        <div style="{{ d.style }}"></div>
+      </sc-for>
+    </div>
+
+    <div style="{{ s1 }}">
+      <div style="font-size:18px;font-weight:700;color:#363634;margin-bottom:4px">What do you want to study?</div>
+      <div style="font-size:13px;color:#696868;margin-bottom:16px">Free counselling · no spam, ever</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+        <sc-for list="{{ interests }}" as="i" hint-placeholder-count="6">
+          <button onClick="{{ i.pick }}" style="{{ i.style }}">{{ i.label }}</button>
+        </sc-for>
+      </div>
+      <button onClick="{{ next1 }}" style="margin-top:18px;width:100%;height:48px;background:#544CC8;color:#fff;border:none;border-radius:4px;font-size:15px;font-weight:700;cursor:pointer">Continue</button>
+    </div>
+
+    <div style="{{ s2 }}">
+      <div style="font-size:18px;font-weight:700;color:#363634;margin-bottom:16px">Tell us about yourself</div>
+      <div style="display:flex;flex-direction:column;gap:12px">
+        <input placeholder="Full name" value="{{ name }}" onChange="{{ setName }}" onInput="{{ setName }}" style="height:48px;padding:0 14px;border:1px solid #CFDAE6;border-radius:4px;font-size:14px;color:#555;outline-color:#544CC8" />
+        <input placeholder="Email address" value="{{ email }}" onChange="{{ setEmail }}" onInput="{{ setEmail }}" style="height:48px;padding:0 14px;border:1px solid #CFDAE6;border-radius:4px;font-size:14px;color:#555;outline-color:#544CC8" />
+        <input placeholder="City" value="{{ city }}" onChange="{{ setCity }}" onInput="{{ setCity }}" style="height:48px;padding:0 14px;border:1px solid #CFDAE6;border-radius:4px;font-size:14px;color:#555;outline-color:#544CC8" />
+        <button onClick="{{ next2 }}" style="{{ next2Style }}">Continue</button>
+        <button onClick="{{ back }}" style="border:none;background:none;font-size:13px;font-weight:700;color:#707070;cursor:pointer;padding:2px">← Back</button>
+      </div>
+    </div>
+
+    <div style="{{ s3 }}">
+      <div style="font-size:18px;font-weight:700;color:#363634;margin-bottom:16px">Verify your phone number</div>
+      <div style="display:flex;gap:8px;margin-bottom:12px">
+        <div style="height:48px;display:flex;align-items:center;padding:0 14px;border:1px solid #CFDAE6;border-radius:4px;font-size:14px;color:#555;background:#F7F8F9">+91</div>
+        <input placeholder="10-digit mobile number" value="{{ phone }}" onChange="{{ setPhone }}" onInput="{{ setPhone }}" style="flex:1;height:48px;padding:0 14px;border:1px solid #CFDAE6;border-radius:4px;font-size:14px;color:#555;outline-color:#544CC8" />
+      </div>
+      <div style="{{ otpStyle }}">
+        <div style="font-size:13px;color:#2E7D32;background:rgba(46,125,50,0.10);padding:9px 13px;border-radius:4px;margin-bottom:12px">OTP sent · any 4 digits work in this demo</div>
+        <input placeholder="Enter 4-digit OTP" value="{{ otp }}" onChange="{{ setOtp }}" onInput="{{ setOtp }}" style="width:100%;box-sizing:border-box;height:48px;padding:0 14px;border:1px solid #CFDAE6;border-radius:4px;font-size:18px;letter-spacing:8px;color:#363634;outline-color:#544CC8;margin-bottom:12px" />
+      </div>
+      <button onClick="{{ otpAction }}" style="{{ otpBtnStyle }}">{{ otpLabel }}</button>
+      <div style="font-size:12px;color:#707070;margin-top:12px;line-height:1.5">By continuing you agree to receive counselling calls and WhatsApp updates. We never share your number with third parties.</div>
+      <button onClick="{{ back }}" style="border:none;background:none;font-size:13px;font-weight:700;color:#707070;cursor:pointer;padding:8px 2px 0">← Back</button>
+    </div>
+
+    <div style="{{ s4 }}">
+      <div style="text-align:center;padding:20px 0">
+        <div style="width:60px;height:60px;border-radius:50%;background:rgba(46,125,50,0.10);color:#2E7D32;font-size:28px;line-height:60px;margin:0 auto 16px">✓</div>
+        <div style="font-size:20px;font-weight:700;color:#363634">{{ doneTitle }}</div>
+        <div style="font-size:14px;color:#696868;margin-top:10px;line-height:1.6">A counsellor will call within 24 hours. Compare access is now unlocked across the site.</div>
+        <a href="Compare.dc.html" style="display:block;margin-top:22px;height:46px;line-height:46px;background:#544CC8;color:#fff;border-radius:4px;font-size:15px;font-weight:700">Open compare</a>
+        <a href="Courses.dc.html" style="display:block;margin-top:10px;font-size:13px;font-weight:700">Keep browsing courses</a>
+      </div>
+    </div>
+  </div>
+</div>
+
+<dc-import name="SiteFooter" hint-size="100%,360px"></dc-import>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{}">
+class Component extends DCLogic {
+  state = { step: 1, interest: 'Online MBA', name: '', email: '', city: '', phone: '', otp: '', otpSent: false };
+
+  renderVals() {
+    const s = this.state;
+    const show = n => s.step === n ? '' : 'display:none';
+    const canNext2 = s.name.trim() && s.email.trim();
+    const first = s.name.trim().split(' ')[0];
+
+    return {
+      dots: [1, 2, 3].map(i => ({ style: 'height:4px;flex:1;border-radius:999px;background:' + (i <= Math.min(s.step, 3) ? '#544CC8' : '#EAEAEA') })),
+      s1: show(1), s2: show(2), s3: show(3), s4: show(4),
+      interests: ['Online MBA', 'Online BBA', 'Online BCA', 'Online MCA', 'Online B.Com / M.Com', 'Online BA / MA'].map(label => {
+        const on = s.interest === label;
+        return {
+          label,
+          style: 'padding:13px;border:1.5px solid ' + (on ? '#544CC8' : '#CFDAE6') + ';background:' + (on ? 'rgba(84,76,200,0.06)' : '#fff') + ';border-radius:4px;font-size:14px;font-weight:600;color:' + (on ? '#544CC8' : '#555') + ';cursor:pointer;text-align:left',
+          pick: () => this.setState({ interest: label })
+        };
+      }),
+      name: s.name, email: s.email, city: s.city, phone: s.phone, otp: s.otp,
+      setName: e => this.setState({ name: e.target.value }),
+      setEmail: e => this.setState({ email: e.target.value }),
+      setCity: e => this.setState({ city: e.target.value }),
+      setPhone: e => this.setState({ phone: e.target.value.replace(/\D/g, '').slice(0, 10) }),
+      setOtp: e => this.setState({ otp: e.target.value.replace(/\D/g, '').slice(0, 4) }),
+      next1: () => this.setState({ step: 2 }),
+      next2: () => { if (canNext2) this.setState({ step: 3 }); },
+      next2Style: 'height:48px;background:' + (canNext2 ? '#544CC8' : '#D8D7D6') + ';color:#fff;border:none;border-radius:4px;font-size:15px;font-weight:700;cursor:' + (canNext2 ? 'pointer' : 'not-allowed'),
+      back: () => this.setState(st => ({ step: Math.max(1, st.step - 1) })),
+      otpStyle: s.otpSent ? '' : 'display:none',
+      otpLabel: s.otpSent ? 'Verify & submit' : 'Send OTP',
+      otpBtnStyle: 'width:100%;height:48px;background:' + ((s.otpSent ? s.otp.length === 4 : s.phone.length === 10) ? '#544CC8' : '#D8D7D6') + ';color:#fff;border:none;border-radius:4px;font-size:15px;font-weight:700;cursor:pointer',
+      otpAction: () => {
+        if (!s.otpSent) { if (s.phone.length === 10) this.setState({ otpSent: true }); }
+        else if (s.otp.length === 4) {
+          try { localStorage.setItem('uv_lead_unlocked', '1'); } catch (e) {}
+          this.setState({ step: 4 });
+        }
+      },
+      doneTitle: first ? "You're all set, " + first : "You're all set"
+    };
+  }
+}
+</script>
+</body>
+</html>

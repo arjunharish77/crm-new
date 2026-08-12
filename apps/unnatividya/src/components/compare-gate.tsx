@@ -38,13 +38,15 @@ export function CompareGate({ children, selectedCount }: { children: ReactNode; 
       {!unlocked ? (
         <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(247,248,249,0.55)" }}>
           <div style={{ background: "#fff", border: "1px solid #CFDAE6", borderRadius: 8, padding: 28, boxShadow: "var(--uv-shadow-lg)", textAlign: "center", maxWidth: 380 }}>
+            <div style={{ width: 46, height: 46, borderRadius: "50%", background: "#F4F3FC", fontSize: 20, lineHeight: "46px", margin: "0 auto 12px" }}>🔒</div>
             <div style={{ fontSize: 17, fontWeight: 700, color: "#363634" }}>Unlock the full comparison</div>
             <div style={{ fontSize: 13, color: "#696868", margin: "8px 0 16px", lineHeight: 1.5 }}>
-              Verify your number once and every comparison on UnnatiVidya unlocks — plus a counsellor&rsquo;s honest take, free.
+              Verify your number once and every comparison on UnnatiVidya unlocks — plus a counsellor&rsquo;s honest read on which one actually fits.
             </div>
-            <Link href="/lead?intent=compare-unlock" data-open-lead className="btn primary" style={{ width: "100%", height: 44, fontSize: 15 }}>
+            <Link href="/lead?intent=compare-unlock" data-open-lead className="btn primary" style={{ width: "100%", height: 48, fontSize: 15 }}>
               Unlock with OTP
             </Link>
+            <div style={{ fontSize: 12, color: "#707070", marginTop: 10 }}>Free · takes 30 seconds · no spam</div>
           </div>
         </div>
       ) : (

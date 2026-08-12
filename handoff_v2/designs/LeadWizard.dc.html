@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<sc-if value="{{ isOpen }}" hint-placeholder-val="{{ false }}">
+<div style="position:fixed;inset:0;z-index:200;background:rgba(38,50,56,0.55);display:flex;align-items:center;justify-content:center;padding:24px" onClick="{{ onBackdrop }}">
+<div style="width:520px;max-width:100%;background:#fff;border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,0.16);overflow:hidden;font-family:'DM Sans',sans-serif" onClick="{{ stopClick }}">
+  <div style="display:flex;align-items:center;justify-content:space-between;padding:20px 24px;border-bottom:1px solid #D3D9EA">
+    <div>
+      <div style="font-size:18px;font-weight:700;color:#363634">{{ headerTitle }}</div>
+      <div style="font-size:13px;color:#696868;margin-top:2px">Free counselling · No spam, ever</div>
+    </div>
+    <button onClick="{{ close }}" style="width:32px;height:32px;border:none;background:#F5F5F5;border-radius:4px;color:#555;font-size:16px;cursor:pointer" aria-label="Close">✕</button>
+  </div>
+  <div style="display:flex;gap:6px;padding:16px 24px 0">
+    <sc-for list="{{ stepDots }}" as="d" hint-placeholder-count="3">
+      <div style="height:4px;flex:1;border-radius:999px;background:{{ d.color }}"></div>
+    </sc-for>
+  </div>
+  <sc-if value="{{ isStep1 }}" hint-placeholder-val="{{ true }}">
+    <div style="padding:20px 24px 24px">
+      <div style="font-size:15px;font-weight:700;color:#363634;margin-bottom:12px">What do you want to study?</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+        <sc-for list="{{ interestOptions }}" as="opt" hint-placeholder-count="6">
+          <button onClick="{{ opt.pick }}" style="padding:12px;border:1.5px solid {{ opt.border }};background:{{ opt.bg }};border-radius:4px;font-family:'DM Sans',sans-serif;font-size:14px;font-weight:600;color:{{ opt.color }};cursor:pointer;text-align:left">{{ opt.label }}</button>
+        </sc-for>
+      </div>
+      <button onClick="{{ next }}" style="margin-top:18px;width:100%;height:44px;background:{{ nextBg }};color:#fff;border:none;border-radius:4px;font-family:'DM Sans',sans-serif;font-size:15px;font-weight:700;cursor:pointer">Continue</button>
+    </div>
+  </sc-if>
+  <sc-if value="{{ isStep2 }}" hint-placeholder-val="{{ false }}">
+    <div style="padding:20px 24px 24px;display:flex;flex-direction:column;gap:12px">
+      <div style="font-size:15px;font-weight:700;color:#363634">Tell us about yourself</div>
+      <input value="{{ name }}" onChange="{{ setName }}" placeholder="Full name" style="height:44px;padding:0 14px;border:1px solid #CFDAE6;border-radius:4px;font-family:'DM Sans',sans-serif;font-size:14px;color:#555;outline-color:#544CC8" />
+      <input value="{{ email }}" onChange="{{ setEmail }}" placeholder="Email address" style="height:44px;padding:0 14px;border:1px solid #CFDAE6;border-radius:4px;font-family:'DM Sans',sans-serif;font-size:14px;color:#555;outline-color:#544CC8" />
+      <input value="{{ city }}" onChange="{{ setCity }}" placeholder="City" style="height:44px;padding:0 14px;border:1px solid #CFDAE6;border-radius:4px;font-family:'DM Sans',sans-serif;font-size:14px;color:#555;outline-color:#544CC8" />
+      <button onClick="{{ next }}" style="width:100%;height:44px;background:{{ nextBg }};color:#fff;border:none;border-radius:4px;font-family:'DM Sans',sans-serif;font-size:15px;font-weight:700;cursor:pointer">Continue</button>
+    </div>
+  </sc-if>
+  <sc-if value="{{ isStep3 }}" hint-placeholder-val="{{ false }}">
+    <div style="padding:20px 24px 24px;display:flex;flex-direction:column;gap:12px">
+      <div style="font-size:15px;font-weight:700;color:#363634">Verify your phone number</div>
+      <div style="display:flex;gap:8px">
+        <div style="height:44px;display:flex;align-items:center;padding:0 12px;border:1px solid #CFDAE6;border-radius:4px;font-size:14px;color:#555;background:#F7F8F9">+91</div>
+        <input value="{{ phone }}" onChange="{{ setPhone }}" placeholder="10-digit mobile number" style="flex:1;height:44px;padding:0 14px;border:1px solid #CFDAE6;border-radius:4px;font-family:'DM Sans',sans-serif;font-size:14px;color:#555;outline-color:#544CC8" />
+      </div>
+      <sc-if value="{{ otpSent }}" hint-placeholder-val="{{ false }}">
+        <div style="font-size:13px;color:#2E7D32;background:rgba(46,125,50,0.10);padding:8px 12px;border-radius:4px">OTP sent to +91 {{ phone }} · use any 4 digits in this demo</div>
+        <input value="{{ otp }}" onChange="{{ setOtp }}" placeholder="Enter 4-digit OTP" maxLength="4" style="height:44px;padding:0 14px;border:1px solid #CFDAE6;border-radius:4px;font-family:'DM Sans',sans-serif;font-size:18px;letter-spacing:8px;color:#363634;outline-color:#544CC8" />
+      </sc-if>
+      <button onClick="{{ otpAction }}" style="width:100%;height:44px;background:{{ nextBg }};color:#fff;border:none;border-radius:4px;font-family:'DM Sans',sans-serif;font-size:15px;font-weight:700;cursor:pointer">{{ otpBtnLabel }}</button>
+      <div style="font-size:12px;color:#707070">By continuing you agree to receive counselling calls and WhatsApp updates. We never share your number with third parties.</div>
+    </div>
+  </sc-if>
+  <sc-if value="{{ isStep4 }}" hint-placeholder-val="{{ false }}">
+    <div style="padding:32px 24px;text-align:center">
+      <div style="width:56px;height:56px;border-radius:50%;background:rgba(46,125,50,0.10);color:#2E7D32;font-size:26px;line-height:56px;margin:0 auto 14px">✓</div>
+      <div style="font-size:19px;font-weight:700;color:#363634">You're all set, {{ nameOrThere }}</div>
+      <div style="font-size:14px;color:#696868;margin-top:8px;line-height:1.5">A dedicated counsellor will call you within 24 hours. Compare access is now unlocked across the site.</div>
+      <button onClick="{{ finish }}" style="margin-top:20px;height:44px;padding:0 28px;background:#544CC8;color:#fff;border:none;border-radius:4px;font-family:'DM Sans',sans-serif;font-size:15px;font-weight:700;cursor:pointer">Done</button>
+    </div>
+  </sc-if>
+</div>
+</div>
+</sc-if>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:&quot;640px&quot;,&quot;height&quot;:&quot;560px&quot;},&quot;open&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;},&quot;context&quot;:{&quot;editor&quot;:&quot;text&quot;,&quot;default&quot;:&quot;Online MBA&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;onClose&quot;:{&quot;editor&quot;:null,&quot;tsType&quot;:&quot;() =&gt; void&quot;},&quot;onDone&quot;:{&quot;editor&quot;:null,&quot;tsType&quot;:&quot;() =&gt; void&quot;}}">
+class Component extends DCLogic {
+  state = { step: 1, interest: 'Online MBA', name: '', email: '', city: '', phone: '', otp: '', otpSent: false };
+  renderVals() {
+    const s = this.state, set = k => e => this.setState({ [k]: e.target.value });
+    const interests = ['Online MBA', 'Online BBA', 'Online BCA', 'Online MCA', 'Online B.Com / M.Com', 'Online BA / MA'];
+    const canNext = s.step === 1 ? !!s.interest : s.step === 2 ? (s.name.trim() && s.email.trim()) : true;
+    return {
+      isOpen: !!this.props.open,
+      headerTitle: this.props.context ? 'Talk to an expert about ' + this.props.context : 'Get free expert counselling',
+      stepDots: [1, 2, 3].map(i => ({ color: i <= s.step ? '#544CC8' : '#EAEAEA' })),
+      isStep1: s.step === 1, isStep2: s.step === 2, isStep3: s.step === 3, isStep4: s.step === 4,
+      interestOptions: interests.map(label => ({
+        label,
+        border: s.interest === label ? '#544CC8' : '#CFDAE6',
+        bg: s.interest === label ? 'rgba(84,76,200,0.06)' : '#fff',
+        color: s.interest === label ? '#544CC8' : '#555555',
+        pick: () => this.setState({ interest: label })
+      })),
+      nextBg: canNext ? '#544CC8' : '#AAAAAA',
+      next: () => { if (canNext) this.setState({ step: s.step + 1 }); },
+      name: s.name, email: s.email, city: s.city, phone: s.phone, otp: s.otp,
+      setName: set('name'), setEmail: set('email'), setCity: set('city'),
+      setPhone: e => this.setState({ phone: e.target.value.replace(/\D/g, '').slice(0, 10) }),
+      setOtp: e => this.setState({ otp: e.target.value.replace(/\D/g, '').slice(0, 4) }),
+      otpSent: s.otpSent,
+      otpBtnLabel: s.otpSent ? 'Verify & submit' : 'Send OTP',
+      otpAction: () => {
+        if (!s.otpSent) { if (s.phone.length === 10) this.setState({ otpSent: true }); }
+        else if (s.otp.length === 4) {
+          try { localStorage.setItem('uv_lead_unlocked', '1'); } catch (e) {}
+          this.setState({ step: 4 });
+        }
+      },
+      nameOrThere: s.name.trim() ? s.name.trim().split(' ')[0] : 'there',
+      close: () => this.close(),
+      finish: () => { if (this.props.onDone) this.props.onDone(); this.close(); },
+      onBackdrop: () => this.close(),
+      stopClick: e => e.stopPropagation()
+    };
+  }
+  close() {
+    this.setState({ step: 1, otpSent: false, otp: '' });
+    if (this.props.onClose) this.props.onClose();
+  }
+}
+</script>
+</body>
+</html>

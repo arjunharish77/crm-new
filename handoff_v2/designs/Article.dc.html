@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&display=swap" rel="stylesheet">
+<style>body{margin:0;font-family:'DM Sans',sans-serif;color:#555;background:#fff}a{color:#544CC8;text-decoration:none}a:hover{color:#453DB8}button{font-family:'DM Sans',sans-serif}</style>
+</helmet>
+<div style="min-height:100vh;display:flex;flex-direction:column">
+<dc-import name="SiteHeader" active="blog" hint-size="100%,110px"></dc-import>
+
+<div style="max-width:1100px;margin:0 auto;padding:40px 24px 64px;width:100%;box-sizing:border-box;display:grid;grid-template-columns:1fr 310px;gap:52px;align-items:start;flex:1" class="uv-2col">
+  <article>
+    <div style="font-size:12px;color:#707070;margin-bottom:14px"><a href="Home.dc.html" style="color:#707070">Home</a> &gt; <a href="Blog.dc.html" style="color:#707070">Blog</a> &gt; Validity</div>
+    <div style="display:flex;gap:10px;align-items:center;margin-bottom:14px">
+      <span style="font-size:11px;font-weight:700;color:#4FA8FF;background:rgba(79,168,255,0.12);border-radius:999px;white-space:nowrap;padding:4px 10px">Validity</span>
+      <span style="font-size:12px;color:#AAAAAA">6 min read · Updated 14 July 2026</span>
+    </div>
+    <h1 style="font-size:38px;font-weight:700;color:#363634;margin:0 0 18px;line-height:1.15;letter-spacing:-0.5px;text-wrap:pretty">Is an online MBA valid for government jobs?</h1>
+    <div style="display:flex;align-items:center;gap:11px;margin-bottom:26px">
+      <div style="width:40px;height:40px;border-radius:50%;background:#EBF2F6;color:#555;font-size:13px;font-weight:700;display:flex;align-items:center;justify-content:center">RD</div>
+      <div><div style="font-size:13px;font-weight:700;color:#363634">Ritika Desai</div><div style="font-size:12px;color:#707070">Senior education counsellor, UnnatiVidya</div></div>
+    </div>
+    <div style="height:320px;border-radius:8px;overflow:hidden;margin-bottom:30px"><img src="assets/blog-govt-jobs.webp" alt="Learner preparing for a government job" style="width:100%;height:100%;object-fit:cover;display:block" /></div>
+    <div style="font-size:17px;line-height:1.8;display:flex;flex-direction:column;gap:20px">
+      <p style="margin:0">Short answer: yes — if the degree is <b style="color:#363634">UGC-entitled</b>. Under the UGC (Online Degrees) Regulations, a degree earned fully online from an entitled university is legally equivalent to the same degree earned on campus, for every purpose: government recruitment, PSU jobs, higher studies and state services.</p>
+      <h2 style="font-size:25px;font-weight:700;color:#363634;margin:12px 0 0;letter-spacing:-0.2px">The one check that matters</h2>
+      <p style="margin:0">Before enrolling, open the UGC-DEB portal and confirm the university is entitled to offer that specific program online for the current academic year. Entitlement is per-program and per-year — a university can be entitled for its MBA but not its MCA.</p>
+      <div style="background:#F4F3FC;border:1px solid #CFDAE6;border-radius:8px;padding:20px;font-size:15px;line-height:1.65"><b style="color:#544CC8">UnnatiVidya check:</b> every program on this site is re-verified against the UGC-DEB notification each admission cycle, and the source link sits at the bottom of every course page.</div>
+      <div style="height:260px;border-radius:8px;overflow:hidden"><img src="assets/blog-documents.webp" alt="Admission documents" style="width:100%;height:100%;object-fit:cover;display:block" /></div>
+      <h2 style="font-size:25px;font-weight:700;color:#363634;margin:12px 0 0;letter-spacing:-0.2px">What the certificate looks like</h2>
+      <p style="margin:0">Entitled universities issue the same certificate to online and on-campus learners — same seal, same signatures, no mention of the mode. Recruiters cannot distinguish delivery mode from the document, and legally may not treat it differently.</p>
+      <h2 style="font-size:25px;font-weight:700;color:#363634;margin:12px 0 0;letter-spacing:-0.2px">Where candidates still get rejected</h2>
+      <p style="margin:0">Rejections almost always trace back to non-entitled institutions, lapsed entitlements, or "degrees" that were actually diplomas. If the price looks impossible and the institution is not on the UGC-DEB list, walk away.</p>
+    </div>
+    <div style="margin-top:36px;background:#263238;border-radius:8px;padding:28px;display:flex;justify-content:space-between;align-items:center;gap:22px;flex-wrap:wrap">
+      <div>
+        <div style="font-size:18px;font-weight:700;color:#fff">Want us to verify a program for you?</div>
+        <div style="font-size:13px;color:#B8C4CA;margin-top:5px">Free check against the UGC-DEB notification, plus fee and placement data.</div>
+      </div>
+      <button onClick="{{ openLead }}" style="height:46px;padding:0 24px;background:#544CC8;color:#fff;border:none;border-radius:4px;font-size:14px;font-weight:700;cursor:pointer">Ask a counsellor</button>
+    </div>
+  </article>
+
+  <div class="uv-side-rail" style="position:sticky;top:88px;display:flex;flex-direction:column;gap:16px">
+    <div style="border:1px solid #CFDAE6;border-radius:8px;padding:20px">
+      <div style="font-size:14px;font-weight:700;color:#363634;margin-bottom:14px">More from the blog</div>
+      <div style="display:flex;flex-direction:column;gap:14px">
+        <sc-for list="{{ related }}" as="r" hint-placeholder-count="3">
+          <a href="Article.dc.html" style="display:flex;gap:11px;align-items:center;color:inherit">
+            <div style="width:56px;height:44px;border-radius:5px;overflow:hidden;flex:none"><img src="{{ r.img }}" alt="" style="width:100%;height:100%;object-fit:cover;display:block" /></div>
+            <span style="font-size:13px;font-weight:600;color:#544CC8;line-height:1.4">{{ r.title }}</span>
+          </a>
+        </sc-for>
+      </div>
+    </div>
+    <div style="border:1px solid #CFDAE6;border-radius:8px;padding:20px;background:#F4F3FC">
+      <div style="font-size:14px;font-weight:700;color:#363634">Compare entitled programs</div>
+      <div style="font-size:13px;color:#696868;margin:7px 0 14px;line-height:1.55">Every course here is pre-verified. Compare fees and placements side by side.</div>
+      <a href="Compare.dc.html" style="display:block;text-align:center;height:42px;line-height:42px;background:#544CC8;color:#fff;border-radius:4px;font-size:13px;font-weight:700">Open compare</a>
+    </div>
+    <div style="border:1px solid #CFDAE6;border-radius:8px;padding:20px">
+      <div style="font-size:14px;font-weight:700;color:#363634;margin-bottom:8px">Sources</div>
+      <div style="display:flex;flex-direction:column;gap:6px;font-size:13px">
+        <a href="https://deb.ugc.ac.in/" target="_blank" rel="noopener">UGC-DEB entitlement notification</a>
+        <a href="HowWeVerify.dc.html">How we verify our data</a>
+      </div>
+    </div>
+  </div>
+</div>
+
+<dc-import name="SiteFooter" hint-size="100%,360px"></dc-import>
+</div>
+<dc-import name="LeadWizard" open="{{ leadOpen }}" on-close="{{ closeLead }}" context="degree validity" hint-size="0px,0px"></dc-import>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{}">
+class Component extends DCLogic {
+  state = { data: null, leadOpen: false };
+  componentDidMount() { import('./uv-data.js').then(d => this.setState({ data: d })); }
+  renderVals() {
+    const d = this.state.data;
+    return {
+      related: d ? d.blogPosts.slice(1, 4) : [],
+      leadOpen: this.state.leadOpen,
+      openLead: () => this.setState({ leadOpen: true }),
+      closeLead: () => this.setState({ leadOpen: false })
+    };
+  }
+}
+</script>
+</body>
+</html>

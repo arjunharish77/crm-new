@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&display=swap" rel="stylesheet">
+<style>body{margin:0;font-family:'DM Sans',sans-serif;color:#555;background:#F7F8F9}a{color:#544CC8;text-decoration:none}a:hover{color:#453DB8}button,input{font-family:'DM Sans',sans-serif}</style>
+</helmet>
+<div style="min-height:100vh;display:flex;flex-direction:column;background:#F7F8F9">
+<dc-import name="SiteHeader" active="" hint-size="100%,110px"></dc-import>
+
+<div style="background:#fff;border-bottom:1px solid #EAEAEA">
+  <div style="max-width:1200px;margin:0 auto;padding:30px 24px 26px">
+    <div style="font-size:12px;color:#707070;margin-bottom:10px"><a href="Home.dc.html" style="color:#707070">Home</a> &gt; Specializations</div>
+    <h1 style="font-size:32px;font-weight:700;color:#363634;margin:0 0 6px;letter-spacing:-0.4px">Every specialisation on offer</h1>
+    <p style="font-size:15px;color:#696868;margin:0">{{ countLine }}</p>
+  </div>
+</div>
+
+<div style="max-width:1200px;margin:0 auto;padding:26px 24px 64px;width:100%;box-sizing:border-box;flex:1">
+  <input placeholder="Search a specialisation, e.g. Cybersecurity" value="{{ query }}" onChange="{{ setQuery }}" onInput="{{ setQuery }}" style="height:48px;width:100%;max-width:460px;padding:0 18px;border:1px solid #CFDAE6;border-radius:4px;font-size:15px;color:#555;outline-color:#544CC8;background:#fff;box-sizing:border-box;margin-bottom:24px" />
+
+  <div style="display:flex;flex-direction:column;gap:26px">
+    <sc-for list="{{ groups }}" as="g" hint-placeholder-count="4">
+      <div>
+        <div style="display:flex;align-items:baseline;gap:12px;margin-bottom:14px">
+          <h2 style="font-size:20px;font-weight:700;color:#363634;margin:0">{{ g.stream }}</h2>
+          <span style="font-size:13px;color:#707070">{{ g.count }} specialisations</span>
+        </div>
+        <div class="uv-4col" style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px">
+          <sc-for list="{{ g.items }}" as="s" hint-placeholder-count="8">
+            <a href="Courses.dc.html" style="display:block;background:#fff;border:1px solid #CFDAE6;border-radius:8px;padding:16px;color:inherit" style-hover="border-color:#544CC8;box-shadow:0 4px 8px rgba(36,36,36,0.12)">
+              <div style="font-size:14px;font-weight:700;color:#363634;line-height:1.35">{{ s.name }}</div>
+              <div style="font-size:12px;color:#707070;margin-top:6px">{{ s.offered }}</div>
+            </a>
+          </sc-for>
+        </div>
+      </div>
+    </sc-for>
+  </div>
+
+  <div style="{{ emptyStyle }}">
+    <div style="background:#fff;border:1px dashed #CFDAE6;border-radius:8px;padding:44px;text-align:center;color:#707070;font-size:14px">No specialisation matches that search. Try a broader term like "data" or "finance".</div>
+  </div>
+</div>
+
+<dc-import name="SiteFooter" hint-size="100%,360px"></dc-import>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{}">
+class Component extends DCLogic {
+  state = { data: null, query: '' };
+  componentDidMount() { import('./uv-data.js').then(d => this.setState({ data: d })); }
+  renderVals() {
+    const d = this.state.data;
+    const base = {
+      countLine: 'Loading…', groups: [], emptyStyle: 'display:none',
+      query: this.state.query,
+      setQuery: e => this.setState({ query: e.target.value })
+    };
+    if (!d) return base;
+
+    const q = this.state.query.trim().toLowerCase();
+    const index = {};
+    d.courses.forEach(c => {
+      c.specializations.forEach(name => {
+        if (name === 'General') return;
+        const key = c.stream + '||' + name;
+        if (!index[key]) index[key] = { stream: c.stream, name, courses: [] };
+        index[key].courses.push(c.shortName + ' · ' + d.universityById[c.universityId].shortName);
+      });
+    });
+    const all = Object.keys(index).map(k => index[k]).filter(s => !q || s.name.toLowerCase().indexOf(q) > -1);
+    const groups = d.streams.map(stream => {
+      const items = all.filter(s => s.stream === stream)
+        .sort((a, b) => a.name.localeCompare(b.name))
+        .map(s => ({ name: s.name, offered: s.courses.slice(0, 2).join(' · ') + (s.courses.length > 2 ? ' +' + (s.courses.length - 2) : '') }));
+      return { stream, items, count: items.length };
+    }).filter(g => g.count);
+
+    return Object.assign(base, {
+      countLine: all.length + ' elective tracks across ' + d.courses.length + ' UGC-entitled programs',
+      groups,
+      emptyStyle: groups.length ? 'display:none' : 'display:block'
+    });
+  }
+}
+</script>
+</body>
+</html>

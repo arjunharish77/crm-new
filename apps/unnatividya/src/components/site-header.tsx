@@ -13,6 +13,7 @@ const nav = [
   { href: "/compare", label: "Compare" },
   { href: "/recommender", label: "AI Recommender", ai: true },
   { href: "/blog", label: "Blog" },
+  { href: "/online-degree-guides", label: "Guides" },
 ];
 
 export function SiteHeader() {
@@ -25,21 +26,25 @@ export function SiteHeader() {
     setMobileNavOpen(false);
   }, [pathname]);
 
+  // The admin CMS has its own dark sidebar shell (see admin/layout.tsx) -- the public marketing
+  // header/nav has no business wrapping around it.
+  if (pathname?.startsWith("/admin")) return null;
+
   return (
     <>
       <header style={{ position: "sticky", top: 0, zIndex: 100, background: "#fff", boxShadow: "0 3px 6px rgba(194,194,194,0.16)" }}>
-        <div style={{ maxWidth: 1200, margin: "0 auto", height: 64, display: "flex", alignItems: "center", gap: 28, padding: "0 24px" }}>
+        <div style={{ maxWidth: 1200, margin: "0 auto", minHeight: 68, display: "flex", alignItems: "center", gap: 30, padding: "0 24px" }}>
           <Link href="/" aria-label="Unnati Vidya home">
             <Image
               src="/brand/unnatividya-logo-gradient.svg"
               alt="Unnati Vidya"
               width={174}
               height={32}
-              style={{ height: 22, width: "auto", display: "block" }}
+              style={{ height: 24, width: "auto", display: "block" }}
               priority
             />
           </Link>
-          <nav className="uv-header-nav" aria-label="Main navigation" style={{ display: "flex", gap: 22, fontSize: 14, fontWeight: 600, flex: 1 }}>
+          <nav className="uv-header-nav" aria-label="Main navigation" style={{ display: "flex", gap: 24, fontSize: 14, fontWeight: 600, flex: 1 }}>
             {nav.map((item) => (
               <Link
                 href={item.href}
@@ -60,38 +65,30 @@ export function SiteHeader() {
           </nav>
           <Link
             href="/shortlist"
+            className="uv-header-shortlist"
             aria-label={`Shortlist${shortlistCount ? `, ${shortlistCount} saved` : ""}`}
-            style={{ position: "relative", display: "inline-flex", alignItems: "center", color: isActive("/shortlist") ? "#544CC8" : "#555" }}
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 7,
+              border: `1px solid ${isActive("/shortlist") ? "#544CC8" : "#CFDAE6"}`,
+              borderRadius: 999,
+              padding: "7px 13px",
+              fontSize: 13,
+              fontWeight: 600,
+              color: isActive("/shortlist") ? "#544CC8" : "#555",
+            }}
           >
-            <Heart size={20} strokeWidth={2} aria-hidden="true" />
-            {shortlistCount ? (
-              <span
-                style={{
-                  position: "absolute",
-                  top: -6,
-                  right: -8,
-                  minWidth: 16,
-                  height: 16,
-                  borderRadius: 999,
-                  background: "#544CC8",
-                  color: "#fff",
-                  fontSize: 10,
-                  fontWeight: 700,
-                  lineHeight: "16px",
-                  textAlign: "center",
-                  padding: "0 3px",
-                }}
-              >
-                {shortlistCount}
-              </span>
-            ) : null}
+            <Heart size={14} strokeWidth={2.5} fill={shortlistCount ? "currentColor" : "none"} aria-hidden="true" />
+            Shortlist
+            {shortlistCount ? <span style={{ color: "#707070", fontWeight: 700 }}>{shortlistCount}</span> : null}
           </Link>
           <Link
             href="/lead?intent=talk-to-expert"
             data-open-lead
             className="uv-header-cta"
             style={{
-              height: 40,
+              height: 42,
               display: "inline-flex",
               alignItems: "center",
               padding: "0 18px",

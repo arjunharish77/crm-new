@@ -6,9 +6,11 @@ import { ApprovalBadge } from "@/components/approval-badge";
 import { JsonLd } from "@/components/json-ld";
 import { SaveButton } from "@/components/save-button";
 import { SectionPillNav } from "@/components/section-pill-nav";
+import { StickyMobileBar } from "@/components/sticky-mobile-bar";
 import { courses, formatFee, getUniversityBySlug, universities, universityEnrichmentById } from "@/data/catalog";
 import { universityMedia } from "@/data/media";
 import { publicAssetExists } from "@/lib/asset-exists";
+import { getApprovalIcon } from "@/lib/approval-icons";
 
 export function generateStaticParams() {
   return universities.map((university) => ({ slug: university.slug }));
@@ -103,18 +105,23 @@ export default async function UniversityDetailPage({ params }: { params: Promise
               </div>
               <div>
                 <h1>{university.name}</h1>
-                <div className="detail-sub">{university.city} · Established {university.established}</div>
+                <div className="detail-sub">{university.city} · Established {university.established} · {university.learners} online learners</div>
               </div>
             </div>
-            <div className="gold-badges" style={{ marginTop: 14, marginBottom: 0 }}>
-              {university.approvals.map((approval) => (
-                <ApprovalBadge label={approval} className="gold-badge" key={approval} />
-              ))}
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 14, marginBottom: 0 }}>
+              {university.approvals.map((approval) => {
+                const icon = getApprovalIcon(approval);
+                return icon ? (
+                  <span key={approval} style={{ background: "#fff", borderRadius: 6, height: 36, minWidth: 56, padding: "4px 10px", display: "inline-flex", alignItems: "center", justifyContent: "center", position: "relative" }}>
+                    <Image src={icon} alt={approval} fill sizes="72px" style={{ objectFit: "contain", padding: 4 }} />
+                  </span>
+                ) : (
+                  <ApprovalBadge label={approval} className="gold-badge" key={approval} />
+                );
+              })}
             </div>
             <div style={{ display: "flex", gap: 14, marginTop: 14, fontSize: 14, alignItems: "center", flexWrap: "wrap" }}>
               <span><span style={{ color: "#FDB515" }}>★</span> <b>{university.rating}</b> ({university.reviews.toLocaleString("en-IN")} reviews)</span>
-              <span style={{ color: "#546E7A" }}>|</span>
-              <span>{university.learners} online learners</span>
             </div>
           </div>
           <div className="detail-hero-media" style={{ height: 180 }}>
@@ -137,6 +144,7 @@ export default async function UniversityDetailPage({ params }: { params: Promise
             ["average package", university.avgPackage],
             ["highest package", university.highestPackage],
             ["hiring partners", `${university.partners}+`],
+            ["annual fee from", university.feeFrom],
           ].map(([label, value]) => (
             <div key={label}>
               <strong>{value}</strong>
@@ -184,14 +192,24 @@ export default async function UniversityDetailPage({ params }: { params: Promise
             </section>
 
             <section className="detail-section" id="sec-rankings">
-              <h2>Rankings & recognitions</h2>
-              <div className="grid four">
-                {(enrichment.rankings || university.approvals.slice(0, 4).map((approval) => ({ title: approval, note: "institutional recognition" }))).map((ranking) => (
-                  <div style={{ border: "1px solid #CFDAE6", borderRadius: 8, padding: 16, textAlign: "center" }} key={ranking.title}>
-                    <div style={{ fontSize: 16, fontWeight: 700, color: "#544CC8" }}>{ranking.title}</div>
-                    <div style={{ fontSize: 12, color: "#696868", marginTop: 4, lineHeight: 1.4 }}>{ranking.note}</div>
-                  </div>
-                ))}
+              <h2>Recognitions</h2>
+              <div className="grid two">
+                {(enrichment.rankings || university.approvals.slice(0, 4).map((approval) => ({ title: approval, note: "institutional recognition" }))).map((ranking) => {
+                  const icon = getApprovalIcon(ranking.title);
+                  return (
+                    <div style={{ display: "flex", gap: 14, alignItems: "flex-start", border: "1px solid #CFDAE6", borderRadius: 8, padding: 16 }} key={ranking.title}>
+                      {icon ? (
+                        <span style={{ position: "relative", width: 44, height: 36, flexShrink: 0 }}>
+                          <Image src={icon} alt="" fill sizes="44px" style={{ objectFit: "contain" }} />
+                        </span>
+                      ) : null}
+                      <div>
+                        <div style={{ fontSize: 15, fontWeight: 700, color: "#363634" }}>{ranking.title}</div>
+                        <div style={{ fontSize: 12, color: "#696868", marginTop: 4, lineHeight: 1.4 }}>{ranking.note}</div>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             </section>
 
@@ -232,7 +250,14 @@ export default async function UniversityDetailPage({ params }: { params: Promise
                   ),
                 )}
               </div>
-              <div style={{ fontSize: 13, color: "#707070", marginTop: 10 }}>{(enrichment.placementSupport || ["Resume clinics", "Mock interviews", "Job board access"]).join(" · ")}</div>
+              <div className="grid four" style={{ marginTop: 16 }}>
+                {(enrichment.placementSupport || ["Resume clinics", "Mock interviews", "Job board access"]).map((support) => (
+                  <div style={{ border: "1px solid #CFDAE6", borderRadius: 8, padding: 14, fontSize: 13, fontWeight: 600, color: "#363634", textAlign: "center" }} key={support}>
+                    {support}
+                  </div>
+                ))}
+              </div>
+              <div style={{ fontSize: 12, color: "#707070", marginTop: 10 }}>Placement assistance, not a guaranteed offer — as stated on the university&apos;s own pages.</div>
             </section>
 
             <section className="detail-section">
@@ -342,8 +367,22 @@ export default async function UniversityDetailPage({ params }: { params: Promise
                 <span>Alumni status equal to on-campus</span>
               </div>
             </div>
+            {enrichment.sourceUrls?.length ? (
+              <div style={{ border: "1px solid #CFDAE6", borderRadius: 8, padding: 18 }}>
+                <div style={{ fontSize: 14, fontWeight: 700, color: "#363634", marginBottom: 8 }}>Sources</div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 6, fontSize: 13 }}>
+                  {enrichment.sourceUrls.map((url) => (
+                    <a href={url} target="_blank" rel="noopener noreferrer" key={url} style={{ color: "#544CC8", wordBreak: "break-all" }}>
+                      {new URL(url).hostname.replace(/^www\./, "")}
+                    </a>
+                  ))}
+                  <Link href="/how-we-verify" style={{ color: "#544CC8", fontWeight: 600 }}>How we verify our data →</Link>
+                </div>
+              </div>
+            ) : null}
           </aside>
       </div>
+      <StickyMobileBar primary={{ label: `Get ${university.shortName} brochure`, href: `/lead?university=${university.id}`, openLead: true }} />
     </>
   );
 }

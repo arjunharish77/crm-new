@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&display=swap" rel="stylesheet">
+<style>
+body{margin:0;font-family:'DM Sans',sans-serif;color:#555;background:#F7F8F9}
+a{color:#544CC8;text-decoration:none}a:hover{color:#453DB8}
+button,input{font-family:'DM Sans',sans-serif}
+@keyframes uvspin{to{transform:rotate(360deg)}}
+</style>
+</helmet>
+<div style="min-height:100vh;display:flex;flex-direction:column;background:#F7F8F9">
+<dc-import name="SiteHeader" active="recommender" hint-size="100%,110px"></dc-import>
+
+<div style="max-width:900px;margin:0 auto;padding:44px 24px 64px;width:100%;box-sizing:border-box;flex:1">
+  <div style="text-align:center;margin-bottom:30px">
+    <div style="display:inline-flex;align-items:center;gap:9px;background:#fff;border:1px solid #CFDAE6;border-radius:999px;padding:7px 15px;font-size:12px;font-weight:700;color:#696868">
+      <span style="width:9px;height:9px;border-radius:50%;background:linear-gradient(135deg,#4F46E5,#7C3AED);display:inline-block"></span>UnnatiAI course recommender
+    </div>
+    <h1 style="font-size:34px;font-weight:700;color:#363634;margin:16px 0 8px;letter-spacing:-0.4px">{{ title }}</h1>
+    <p style="font-size:15px;color:#696868;margin:0">{{ subtitle }}</p>
+  </div>
+
+  <div style="{{ quizStyle }}">
+    <div style="background:#fff;border:1px solid #CFDAE6;border-radius:8px;padding:32px;max-width:640px;margin:0 auto;box-shadow:0 1px 3px rgba(0,0,0,0.06)">
+      <div style="display:flex;gap:6px;margin-bottom:24px">
+        <sc-for list="{{ progress }}" as="p" hint-placeholder-count="5">
+          <div style="{{ p.style }}"></div>
+        </sc-for>
+      </div>
+      <div style="font-size:13px;font-weight:700;color:#544CC8;margin-bottom:8px">{{ stepLabel }}</div>
+      <div style="font-size:22px;font-weight:700;color:#363634;margin-bottom:20px;letter-spacing:-0.2px">{{ question }}</div>
+      <div style="display:flex;flex-direction:column;gap:10px">
+        <sc-for list="{{ options }}" as="o" hint-placeholder-count="4">
+          <button onClick="{{ o.pick }}" style="{{ o.style }}">{{ o.label }}</button>
+        </sc-for>
+      </div>
+      <button onClick="{{ back }}" style="{{ backStyle }}">← Back</button>
+    </div>
+  </div>
+
+  <div style="{{ thinkingStyle }}">
+    <div style="background:#fff;border:1px solid #CFDAE6;border-radius:8px;padding:56px;max-width:640px;margin:0 auto;text-align:center">
+      <div style="width:48px;height:48px;margin:0 auto 18px;border-radius:50%;border:4px solid #EAEAEA;border-top-color:#544CC8;animation:uvspin 0.9s linear infinite"></div>
+      <div style="font-size:17px;font-weight:700;color:#363634">Scoring all 30 programs against your answers…</div>
+      <div style="font-size:13px;color:#707070;margin-top:7px">Checking fees, eligibility, approvals, placement records and schedule fit</div>
+    </div>
+  </div>
+
+  <div style="{{ resultsStyle }}">
+    <div style="display:flex;flex-direction:column;gap:14px">
+      <sc-for list="{{ results }}" as="r" hint-placeholder-count="3">
+        <div style="{{ r.cardStyle }}">
+          <div style="{{ r.ringStyle }}">
+            <span style="font-size:19px;font-weight:700;line-height:1">{{ r.score }}%</span>
+            <span style="font-size:9px;font-weight:700;letter-spacing:0.6px">MATCH</span>
+          </div>
+          <div>
+            <span style="{{ r.badgeStyle }}">{{ r.badge }}</span>
+            <div style="font-size:19px;font-weight:700;color:#363634;margin-top:6px">{{ r.name }} — {{ r.uniName }}</div>
+            <div style="font-size:13px;color:#555;margin-top:5px">{{ r.meta }}</div>
+            <div style="font-size:13px;color:#696868;margin-top:10px;line-height:1.6"><b style="color:#363634">Why:</b> {{ r.why }}</div>
+            <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:10px">
+              <sc-for list="{{ r.tags }}" as="t" hint-placeholder-count="3">
+                <span style="font-size:11px;color:#696868;background:#F5F5F5;border-radius:999px;padding:4px 10px">{{ t }}</span>
+              </sc-for>
+            </div>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:9px;min-width:140px;justify-content:center">
+            <a href="Course.dc.html" style="text-align:center;height:40px;line-height:40px;background:#544CC8;color:#fff;border-radius:4px;font-size:13px;font-weight:700">View course</a>
+            <button onClick="{{ openLead }}" style="height:40px;background:#fff;border:1.5px solid #555;color:#555;border-radius:4px;font-size:13px;font-weight:700;cursor:pointer">Enquire</button>
+          </div>
+        </div>
+      </sc-for>
+
+      <div style="display:flex;gap:14px;align-items:center;justify-content:center;margin:4px 0">
+        <button onClick="{{ retake }}" style="border:none;background:none;font-size:13px;font-weight:700;color:#707070;cursor:pointer;padding:6px">↺ Retake the quiz</button>
+        <span style="color:#EAEAEA">|</span>
+        <a href="Compare.dc.html" style="font-size:13px;font-weight:700">Compare these three →</a>
+      </div>
+
+      <div style="background:#fff;border:1px solid #CFDAE6;border-radius:8px;overflow:hidden">
+        <div style="padding:18px 22px;border-bottom:1px solid #EAEAEA;display:flex;align-items:center;gap:10px">
+          <span style="width:10px;height:10px;border-radius:50%;background:linear-gradient(135deg,#4F46E5,#7C3AED);display:inline-block"></span>
+          <span style="font-size:16px;font-weight:700;color:#363634">Refine with UnnatiAI</span>
+          <span style="font-size:12px;color:#AAAAAA">demo — scripted responses</span>
+        </div>
+        <div style="padding:22px;display:flex;flex-direction:column;gap:12px;max-height:360px;overflow-y:auto">
+          <sc-for list="{{ chat }}" as="m" hint-placeholder-count="1">
+            <div style="{{ m.rowStyle }}"><div style="{{ m.bubbleStyle }}">{{ m.text }}</div></div>
+          </sc-for>
+        </div>
+        <div style="padding:0 22px 14px;display:flex;gap:8px;flex-wrap:wrap">
+          <sc-for list="{{ suggestions }}" as="s" hint-placeholder-count="3">
+            <button onClick="{{ s.send }}" style="border:1px solid #CFDAE6;background:#fff;border-radius:999px;padding:8px 15px;font-size:13px;font-weight:600;color:#555;cursor:pointer">{{ s.label }}</button>
+          </sc-for>
+        </div>
+        <div style="padding:0 22px 20px;display:flex;gap:8px">
+          <input placeholder="Ask anything, e.g. 'cheapest option with good placements'" value="{{ draft }}" onChange="{{ setDraft }}" onInput="{{ setDraft }}" onKeyDown="{{ onKey }}" style="flex:1;height:46px;padding:0 16px;border:1px solid #CFDAE6;border-radius:4px;font-size:14px;color:#555;outline-color:#544CC8" />
+          <button onClick="{{ sendDraft }}" style="height:46px;padding:0 22px;background:#544CC8;color:#fff;border:none;border-radius:4px;font-size:14px;font-weight:700;cursor:pointer">Send</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<dc-import name="SiteFooter" hint-size="100%,360px"></dc-import>
+</div>
+<dc-import name="LeadWizard" open="{{ leadOpen }}" on-close="{{ closeLead }}" context="AI shortlist" hint-size="0px,0px"></dc-import>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{}">
+class Component extends DCLogic {
+  state = { data: null, step: 0, answers: {}, phase: 'quiz', chat: [], draft: '', leadOpen: false };
+
+  componentDidMount() { import('./uv-data.js').then(d => this.setState({ data: d })); }
+
+  get questions() {
+    return [
+      { key: 'goal', text: 'What are you trying to achieve?', opts: ['Get promoted or switch to a better role', 'Start my first degree after 12th', 'Move into tech or IT', 'Add a PG degree to my profile'] },
+      { key: 'level', text: 'Which level are you looking at?', opts: ['Undergraduate (UG)', 'Postgraduate (PG)', 'Not sure — advise me'] },
+      { key: 'stream', text: 'Which area interests you most?', opts: ['Management & business', 'IT & computer applications', 'Commerce & finance', 'Arts, media & humanities'] },
+      { key: 'budget', text: 'What total budget are you comfortable with?', opts: ['Under ₹1,00,000', '₹1,00,000 – ₹1,80,000', 'Above ₹1,80,000 — brand matters more'] },
+      { key: 'work', text: 'Are you working right now?', opts: ['Yes, full-time', 'Yes, part-time or freelancing', 'No, studying or on a break'] }
+    ];
+  }
+
+  score(c, u, a) {
+    let s = 60;
+    const wantPG = a.level === 'Postgraduate (PG)', wantUG = a.level === 'Undergraduate (UG)';
+    if (wantPG && c.level === 'PG') s += 12;
+    if (wantUG && c.level === 'UG') s += 12;
+    if ((wantPG && c.level === 'UG') || (wantUG && c.level === 'PG')) s -= 30;
+    const map = { 'Management & business': 'Management', 'IT & computer applications': 'IT & Computers', 'Commerce & finance': 'Commerce', 'Arts, media & humanities': 'Arts & Humanities' };
+    s += map[a.stream] === c.stream ? 16 : -18;
+    if (a.budget === 'Under ₹1,00,000') s += c.fee <= 100000 ? 10 : -14;
+    if (a.budget === '₹1,00,000 – ₹1,80,000') s += (c.fee > 100000 && c.fee <= 180000) ? 10 : -6;
+    if (a.budget && a.budget.indexOf('Above') === 0) s += c.fee > 180000 ? 8 : 0;
+    if (a.goal === 'Move into tech or IT' && c.stream === 'IT & Computers') s += 6;
+    if (a.goal && a.goal.indexOf('Get promoted') === 0 && c.level === 'PG') s += 5;
+    s += Math.round((c.rating - 4.3) * 10) + Math.round(u.placement / 30);
+    return Math.max(41, Math.min(98, s));
+  }
+
+  reply(text) {
+    const d = this.state.data, t = text.toLowerCase();
+    const cheapest = d.courses.slice().sort((a, b) => a.fee - b.fee)[0];
+    if (/cheap|afford|budget|low fee/.test(t)) return cheapest.name + ' from ' + d.universityById[cheapest.universityId].name + ' at ' + d.fmtFee(cheapest.fee) + ' total (EMI ' + cheapest.emi + ') is the strongest value in the catalog. It is UGC-entitled, so validity is identical to costlier options.';
+    if (/placement|job|salary|package/.test(t)) return 'Manipal University Jaipur leads on placements — an 88% assistance rate and ₹7.2 LPA average, with 320+ hiring partners. Amity has the largest partner network at 400+, but a lower average package at ₹6.5 LPA.';
+    if (/mba/.test(t)) return 'Across the three MBAs: MUJ at ₹1,80,000 balances brand and outcomes, SMU at ₹1,20,000 is the value pick with dual specialisation, and Amity at ₹2,25,000 offers 14 specialisations plus QS ranking. Want them side by side in compare?';
+    if (/emi|loan|instal/.test(t)) return 'Every program offers no-cost EMI through education loan partners, plus semester-wise payment. Paying in full usually carries a 2% discount. The EMI calculator can model your exact monthly outgo.';
+    if (/valid|ugc|government|govt|abroad|wes/.test(t)) return 'Everything I recommend is UGC-entitled, so it is legally equivalent to an on-campus degree for government jobs and higher studies. MUJ and Amity additionally list WES recognition for credential evaluation abroad.';
+    if (/specialis|specializ/.test(t)) return 'Amity MBA has the widest choice at 14 specialisations, MUJ has 13 including Analytics & Data Science and BFSI, and SMU offers 6 with a dual-specialisation option. Depth matters more than count — tell me your target role and I will narrow it.';
+    return 'Based on your answers I would still start with your top match above. For a nuanced read, tap Enquire on any card and a counsellor will call you free.';
+  }
+
+  send(text) {
+    if (!text || !text.trim()) return;
+    this.setState(s => ({ chat: s.chat.concat([{ who: 'user', text }]), draft: '' }));
+    setTimeout(() => this.setState(s => ({ chat: s.chat.concat([{ who: 'bot', text: this.reply(text) }]) })), 420);
+  }
+
+  finish() {
+    this.setState({ phase: 'thinking' });
+    setTimeout(() => this.setState({
+      phase: 'results',
+      chat: [{ who: 'bot', text: 'I scored all 30 programs and shortlisted these three. Ask me anything — cheaper alternatives, placements, EMI, or whether the degree holds up for government jobs.' }]
+    }), 1400);
+  }
+
+  renderVals() {
+    const d = this.state.data;
+    const phase = this.state.phase;
+    const qs = this.questions;
+    const q = qs[this.state.step];
+
+    const chat = this.state.chat.map(m => {
+      const user = m.who === 'user';
+      return {
+        text: m.text,
+        rowStyle: 'display:flex;justify-content:' + (user ? 'flex-end' : 'flex-start'),
+        bubbleStyle: 'max-width:78%;padding:13px 17px;border-radius:' + (user ? '10px 10px 2px 10px' : '10px 10px 10px 2px') + ';background:' + (user ? '#544CC8' : '#F5F5F5') + ';color:' + (user ? '#fff' : '#555') + ';font-size:14px;line-height:1.6'
+      };
+    });
+
+    const base = {
+      title: phase === 'results' ? 'Your personalised shortlist' : 'Find your degree in two minutes',
+      subtitle: phase === 'results' ? 'Ranked by fit with your goal, budget, eligibility and schedule' : 'Five questions, no sign-up needed to see results',
+      quizStyle: phase === 'quiz' ? '' : 'display:none',
+      thinkingStyle: phase === 'thinking' ? '' : 'display:none',
+      resultsStyle: phase === 'results' ? '' : 'display:none',
+      progress: qs.map((_, i) => ({ style: 'height:4px;flex:1;border-radius:999px;background:' + (i <= this.state.step ? '#544CC8' : '#EAEAEA') })),
+      stepLabel: 'Question ' + (this.state.step + 1) + ' of ' + qs.length,
+      question: q.text,
+      options: q.opts.map(label => {
+        const on = this.state.answers[q.key] === label;
+        return {
+          label,
+          style: 'padding:15px 18px;border:1.5px solid ' + (on ? '#544CC8' : '#CFDAE6') + ';background:' + (on ? 'rgba(84,76,200,0.06)' : '#fff') + ';border-radius:4px;font-size:15px;font-weight:600;color:' + (on ? '#544CC8' : '#555') + ';cursor:pointer;text-align:left',
+          pick: () => {
+            const answers = Object.assign({}, this.state.answers, { [q.key]: label });
+            if (this.state.step < qs.length - 1) this.setState({ answers, step: this.state.step + 1 });
+            else { this.setState({ answers }); this.finish(); }
+          }
+        };
+      }),
+      backStyle: this.state.step > 0 ? 'margin-top:18px;border:none;background:none;font-size:13px;font-weight:700;color:#707070;cursor:pointer;padding:0' : 'display:none',
+      back: () => this.setState(s => ({ step: Math.max(0, s.step - 1) })),
+      retake: () => this.setState({ phase: 'quiz', step: 0, answers: {}, chat: [] }),
+      results: [],
+      chat,
+      suggestions: ['Cheapest good option?', 'Which has the best placements?', 'Is it valid for government jobs?'].map(label => ({ label, send: () => this.send(label) })),
+      draft: this.state.draft,
+      setDraft: e => this.setState({ draft: e.target.value }),
+      onKey: e => { if (e.key === 'Enter') this.send(this.state.draft); },
+      sendDraft: () => this.send(this.state.draft),
+      leadOpen: this.state.leadOpen,
+      openLead: () => this.setState({ leadOpen: true }),
+      closeLead: () => this.setState({ leadOpen: false })
+    };
+    if (!d || phase !== 'results') return base;
+
+    const a = this.state.answers;
+    const ranked = d.courses.map(c => ({ c, score: this.score(c, d.universityById[c.universityId], a) }))
+      .sort((x, y) => y.score - x.score).slice(0, 3);
+
+    base.results = ranked.map((r, i) => {
+      const u = d.universityById[r.c.universityId];
+      const top = i === 0;
+      const bits = [];
+      if (a.stream) bits.push('matches your interest in ' + a.stream.toLowerCase());
+      if (a.budget && a.budget.indexOf('Under') === 0 && r.c.fee <= 100000) bits.push('sits inside your budget');
+      if (a.budget && a.budget.indexOf('₹1,00,000') === 0 && r.c.fee <= 180000) bits.push('sits inside your budget');
+      if (a.work && a.work.indexOf('Yes') === 0) bits.push('weekend live classes suit working learners');
+      bits.push(u.placement + '% placement assistance at ' + u.shortName);
+      return {
+        score: r.score,
+        name: r.c.name, uniName: u.name,
+        meta: r.c.duration + ' · ' + d.fmtFee(r.c.fee) + ' total · EMI ' + r.c.emi + ' · ★ ' + r.c.rating,
+        why: bits.slice(0, 3).join('; ') + '.',
+        tags: r.c.specializations.slice(0, 3),
+        badge: top ? 'BEST MATCH' : (r.score + '% MATCH'),
+        badgeStyle: top
+          ? 'font-size:10px;font-weight:700;color:#fff;background:linear-gradient(135deg,#4F46E5,#7C3AED);border-radius:999px;padding:4px 11px;letter-spacing:0.6px'
+          : 'font-size:10px;font-weight:700;color:#544CC8;background:rgba(84,76,200,0.08);border-radius:999px;padding:4px 11px;letter-spacing:0.6px',
+        cardStyle: 'background:#fff;border:1.5px solid ' + (top ? '#544CC8' : '#CFDAE6') + ';border-radius:8px;padding:24px;display:grid;grid-template-columns:72px 1fr auto;gap:20px;align-items:center',
+        ringStyle: 'width:72px;height:72px;border-radius:50%;display:flex;flex-direction:column;align-items:center;justify-content:center;background:' + (top ? 'linear-gradient(135deg,#4F46E5,#7C3AED)' : '#F5F5F5') + ';color:' + (top ? '#fff' : '#555')
+      };
+    });
+    return base;
+  }
+}
+</script>
+</body>
+</html>

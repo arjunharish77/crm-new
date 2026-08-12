@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&display=swap" rel="stylesheet">
+<style>body{margin:0;font-family:'DM Sans',sans-serif;color:#555;background:#F7F8F9}a{color:#544CC8;text-decoration:none}a:hover{color:#453DB8}</style>
+</helmet>
+<div style="min-height:100vh;display:flex;flex-direction:column;background:#F7F8F9">
+<dc-import name="SiteHeader" active="guides" hint-size="100%,110px"></dc-import>
+
+<div style="background:#fff;border-bottom:1px solid #EAEAEA">
+  <div style="max-width:1200px;margin:0 auto;padding:30px 24px 26px">
+    <div style="font-size:12px;color:#707070;margin-bottom:10px"><a href="Home.dc.html" style="color:#707070">Home</a> &gt; Degree guides</div>
+    <h1 style="font-size:32px;font-weight:700;color:#363634;margin:0 0 6px;letter-spacing:-0.4px">Online degree guides</h1>
+    <p style="font-size:15px;color:#696868;margin:0;max-width:660px">One deep guide per degree — eligibility, fee bands across universities, specialisation choices, career outcomes and the questions worth asking a counsellor.</p>
+  </div>
+</div>
+
+<div style="max-width:1200px;margin:0 auto;padding:26px 24px 64px;width:100%;box-sizing:border-box;flex:1">
+  <div class="uv-2col" style="background:#fff;border:1px solid #CFDAE6;border-radius:8px;overflow:hidden;display:grid;grid-template-columns:1.1fr 0.9fr;margin-bottom:26px">
+    <div style="padding:36px">
+      <span style="font-size:11px;font-weight:700;color:#544CC8;background:rgba(84,76,200,0.08);border-radius:999px;padding:5px 12px">MOST READ GUIDE</span>
+      <h2 style="font-size:28px;font-weight:700;color:#363634;margin:16px 0 12px;line-height:1.2;letter-spacing:-0.3px">The complete guide to an online MBA in India</h2>
+      <p style="font-size:15px;color:#696868;line-height:1.65;margin:0 0 20px">Three universities, ₹1.2L to ₹2.25L, 6 to 14 specialisations. What actually separates them, what the fee buys, and who should pick which.</p>
+      <div style="display:flex;gap:22px;font-size:13px;color:#555;margin-bottom:22px;flex-wrap:wrap">
+        <span><b style="color:#363634">18 min</b> read</span>
+        <span><b style="color:#363634">3</b> universities compared</span>
+        <span>Updated <b style="color:#363634">July 2026</b></span>
+      </div>
+      <a href="Article.dc.html" style="height:46px;line-height:46px;padding:0 24px;background:#544CC8;color:#fff;border-radius:4px;font-size:15px;font-weight:700;display:inline-block">Read the guide</a>
+    </div>
+    <div style="overflow:hidden;min-height:280px"><img src="assets/blog-best-mba.webp" alt="Online MBA guide" style="width:100%;height:100%;object-fit:cover;display:block" /></div>
+  </div>
+
+  <div class="uv-3col" style="display:grid;grid-template-columns:repeat(3,1fr);gap:18px">
+    <sc-for list="{{ guides }}" as="g" hint-placeholder-count="9">
+      <a href="Article.dc.html" style="display:block;background:#fff;border:1px solid #CFDAE6;border-radius:8px;padding:22px;color:inherit" style-hover="border-color:#544CC8;box-shadow:0 4px 8px rgba(36,36,36,0.12)">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+          <span style="font-size:11px;font-weight:700;border-radius:999px;white-space:nowrap;padding:4px 10px;{{ g.levelStyle }}">{{ g.level }}</span>
+          <span style="font-size:12px;color:#AAAAAA">{{ g.count }} programs</span>
+        </div>
+        <div style="font-size:18px;font-weight:700;color:#363634">{{ g.title }}</div>
+        <div style="font-size:13px;color:#696868;line-height:1.6;margin-top:8px">{{ g.blurb }}</div>
+        <div style="display:flex;justify-content:space-between;align-items:center;border-top:1px solid #EAEAEA;margin-top:16px;padding-top:14px">
+          <span style="font-size:13px;color:#555">from <b style="color:#363634">{{ g.fromFee }}</b></span>
+          <span style="font-size:13px;font-weight:700;color:#544CC8">Read →</span>
+        </div>
+      </a>
+    </sc-for>
+  </div>
+</div>
+
+<dc-import name="SiteFooter" hint-size="100%,360px"></dc-import>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{}">
+class Component extends DCLogic {
+  state = { data: null };
+  componentDidMount() { import('./uv-data.js').then(d => this.setState({ data: d })); }
+  renderVals() {
+    const d = this.state.data;
+    if (!d) return { guides: [] };
+    const BLURBS = {
+      'MBA': 'Fee bands, dual specialisation, and whether the brand premium is worth ₹1 lakh.',
+      'BBA': 'The UG management route: eligibility straight after 12th and where it leads.',
+      'BCA': 'Developer-track specialisations, and why Mathematics is not a blocker.',
+      'MCA': 'Bridge courses, AI and cloud tracks, and how recruiters read an online MCA.',
+      'B.Com': 'The cheapest UGC-entitled degrees in the catalog, and what they qualify you for.',
+      'M.Com': 'Fintech and financial management tracks compared across three universities.',
+      'BA': 'Nine language and subject options, and the civil-services angle.',
+      'MA English': 'Curriculum depth, teaching eligibility and editorial career paths.',
+      'MSc Data Science': 'The priciest program here at ₹2.75L — who it actually pays off for.',
+      'MSc Mathematics': 'The value pick for analytics and actuarial routes at ₹80,000.',
+      'MA JMC': 'Journalism and mass communication online, at UG and PG level.'
+    };
+    const byShort = {};
+    d.courses.forEach(c => {
+      const k = c.shortName;
+      if (!byShort[k]) byShort[k] = [];
+      byShort[k].push(c);
+    });
+    const guides = Object.keys(byShort).filter(k => BLURBS[k]).map(k => {
+      const list = byShort[k];
+      return {
+        title: 'Online ' + k + ' guide',
+        level: list[0].level,
+        levelStyle: list[0].level === 'PG' ? 'color:#4D00FF;background:rgba(77,0,255,0.10)' : 'color:#4FA8FF;background:rgba(79,168,255,0.12)',
+        count: list.length,
+        blurb: BLURBS[k],
+        fromFee: d.fmtFee(Math.min.apply(null, list.map(c => c.fee)))
+      };
+    });
+    return { guides };
+  }
+}
+</script>
+</body>
+</html>

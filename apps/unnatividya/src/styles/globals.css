@@ -25,6 +25,52 @@
   --uv-max: 1200px;
 }
 
+/* Shared 2/3-column layout + sticky-rail utilities, used by the Lead page hero and the Legal
+   pages' content+sidebar layout. Generic on purpose so both can share one collapse rule instead
+   of each page hand-rolling its own breakpoint. */
+.uv-2col {
+  display: grid;
+  grid-template-columns: 1fr 340px;
+  gap: 40px;
+  align-items: start;
+}
+
+.uv-3col {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 24px;
+}
+
+.uv-rail,
+.uv-side-rail {
+  position: sticky;
+  top: 88px;
+  align-self: start;
+}
+
+@media (max-width: 1100px) {
+  .uv-2col {
+    grid-template-columns: 1fr;
+    gap: 28px;
+  }
+
+  .uv-3col {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .uv-rail,
+  .uv-side-rail {
+    position: static;
+    top: auto;
+  }
+}
+
+@media (max-width: 640px) {
+  .uv-3col {
+    grid-template-columns: 1fr;
+  }
+}
+
 /* Site header — mobile navigation (site-header.tsx) */
 .uv-header-toggle {
   display: none;
@@ -45,26 +91,26 @@
   flex-direction: column;
   background: #fff;
   border-top: 1px solid var(--uv-hairline);
-  padding: 8px 24px 20px;
+  padding: 10px 20px 18px;
 }
 
 .uv-header-mobile-panel a {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 14px 0;
+  padding: 13px 0;
   font-size: 15px;
   font-weight: 600;
   color: var(--uv-body);
-  border-bottom: 1px solid var(--uv-hairline);
+  border-bottom: 1px solid #f5f5f5;
 }
 
 .uv-header-mobile-panel .uv-header-mobile-cta {
   display: flex;
   align-items: center;
   justify-content: center;
-  height: 44px;
-  margin-top: 16px;
+  height: 48px;
+  margin-top: 14px;
   background: var(--uv-primary);
   color: #fff;
   border-radius: var(--uv-radius-control);
@@ -72,6 +118,11 @@
   padding: 0;
   font-size: 14px;
   font-weight: 700;
+}
+
+.uv-header-shortlist:hover {
+  border-color: var(--uv-primary) !important;
+  color: var(--uv-primary) !important;
 }
 
 /* Course explorer — mobile filter panel (course-explorer.tsx) */
@@ -162,17 +213,13 @@
     gap: 24px !important;
   }
 
-  .uv-home-three-grid {
+  .uv-home-three-grid,
+  .uv-home-ai-grid {
     grid-template-columns: 1fr !important;
   }
 
   .uv-home-factor-grid {
     grid-template-columns: repeat(2, 1fr) !important;
-  }
-
-  .uv-footer-grid {
-    grid-template-columns: 1fr !important;
-    gap: 28px !important;
   }
 
   .uv-courses-layout,
@@ -188,7 +235,7 @@
 .quiz-progress {
   display: flex;
   gap: 6px;
-  margin-bottom: 22px;
+  margin-bottom: 24px;
 }
 
 .quiz-progress span {
@@ -214,7 +261,7 @@
   border-radius: 4px;
   background: #fff;
   color: #555;
-  padding: 14px 16px;
+  padding: 15px 18px;
   font: inherit;
   font-size: 15px;
   font-weight: 600;
@@ -230,7 +277,7 @@
 }
 
 .quiz-back {
-  margin-top: 16px;
+  margin-top: 18px;
   border: 0;
   background: transparent;
   color: #707070;
@@ -280,13 +327,13 @@
 
 .match-card {
   display: grid;
-  grid-template-columns: 64px 1fr auto;
-  gap: 18px;
+  grid-template-columns: 72px 1fr auto;
+  gap: 20px;
   align-items: center;
   border: 1.5px solid var(--uv-border);
   border-radius: 8px;
   background: #fff;
-  padding: 22px;
+  padding: 24px;
 }
 
 .match-card.best {
@@ -295,8 +342,8 @@
 
 .match-score {
   display: flex;
-  width: 64px;
-  height: 64px;
+  width: 72px;
+  height: 72px;
   flex-direction: column;
   align-items: center;
   justify-content: center;
@@ -306,12 +353,12 @@
 }
 
 .best .match-score {
-  background: linear-gradient(180deg, #453db8, #8b7cf0);
+  background: var(--uv-gradient);
   color: #fff;
 }
 
 .match-score strong {
-  font-size: 18px;
+  font-size: 19px;
   line-height: 1;
 }
 
@@ -322,15 +369,24 @@
   letter-spacing: 0.5px;
 }
 
-.best-match-badge {
+.best-match-badge,
+.match-badge {
   display: inline-flex;
   border-radius: 999px;
-  background: linear-gradient(90deg, #453db8, #8b7cf0);
-  color: #fff;
-  padding: 3px 9px;
+  padding: 4px 11px;
   font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.5px;
+}
+
+.best-match-badge {
+  background: var(--uv-gradient);
+  color: #fff;
+}
+
+.match-badge {
+  background: rgba(84, 76, 200, 0.08);
+  color: var(--uv-primary);
 }
 
 .match-card h2 {
@@ -348,7 +404,7 @@
 }
 
 .match-card .match-why {
-  margin-top: 8px;
+  margin-top: 10px;
   color: #696868;
 }
 
@@ -358,9 +414,9 @@
 
 .match-actions {
   display: flex;
-  min-width: 130px;
+  min-width: 140px;
   flex-direction: column;
-  gap: 8px;
+  gap: 9px;
 }
 
 .recommender-chat {
@@ -375,14 +431,14 @@
   align-items: center;
   gap: 10px;
   border-bottom: 1px solid var(--uv-hairline);
-  padding: 16px 20px;
+  padding: 18px 22px;
 }
 
 .chat-head span {
   width: 10px;
   height: 10px;
   border-radius: 50%;
-  background: linear-gradient(180deg, #453db8, #8b7cf0);
+  background: var(--uv-gradient);
 }
 
 .chat-head strong {
@@ -391,17 +447,19 @@
 }
 
 .chat-head small {
-  color: var(--uv-faint);
+  /* Not var(--uv-faint) (#AAAAAA) -- fails WCAG AA contrast, same reasoning as everywhere else
+     this was fixed sitewide. */
+  color: #707070;
   font-size: 12px;
 }
 
 .chat-body {
   display: flex;
-  max-height: 340px;
+  max-height: 360px;
   flex-direction: column;
   gap: 12px;
   overflow-y: auto;
-  padding: 20px;
+  padding: 22px;
 }
 
 .chat-row {
@@ -413,14 +471,14 @@
 }
 
 .chat-row p {
-  max-width: 80%;
+  max-width: 78%;
   margin: 0;
   border-radius: 10px 10px 10px 2px;
   background: #f5f5f5;
   color: #555;
-  padding: 12px 16px;
+  padding: 13px 17px;
   font-size: 14px;
-  line-height: 1.55;
+  line-height: 1.6;
 }
 
 .chat-row.user p {
@@ -446,7 +504,7 @@
   border-radius: 999px;
   background: #fff;
   color: #555;
-  padding: 7px 14px;
+  padding: 8px 15px;
   font: inherit;
   font-size: 13px;
   font-weight: 600;
@@ -465,21 +523,21 @@
 
 .chat-form input {
   flex: 1;
-  height: 44px;
+  height: 46px;
   border: 1px solid var(--uv-border);
   border-radius: 4px;
-  padding: 0 14px;
+  padding: 0 16px;
   font: inherit;
   font-size: 14px;
 }
 
 .chat-form button {
-  height: 44px;
+  height: 46px;
   border: 0;
   border-radius: 4px;
   background: var(--uv-primary);
   color: #fff;
-  padding: 0 20px;
+  padding: 0 22px;
   font: inherit;
   font-size: 14px;
   font-weight: 700;
@@ -601,7 +659,7 @@ button {
 }
 
 .gradient-btn {
-  background: linear-gradient(90deg, #453db8 0%, #8b7cf0 100%);
+  background: var(--uv-gradient);
 }
 
 .btn.primary {
@@ -614,7 +672,7 @@ button {
 }
 
 .btn.primary.gradient-btn {
-  background: linear-gradient(90deg, #453db8 0%, #8b7cf0 100%);
+  background: var(--uv-gradient);
 }
 
 .btn.primary.gradient-btn:hover {
@@ -696,6 +754,10 @@ button {
 .grid {
   display: grid;
   gap: 20px;
+}
+
+.grid.two {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
 .grid.three {
@@ -1425,7 +1487,7 @@ button {
 
 .stats-band-grid {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(5, 1fr);
   gap: 24px;
   padding-top: 22px;
   padding-bottom: 22px;
@@ -1478,9 +1540,26 @@ button {
   color: #fff;
 }
 
+.emi-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 380px;
+  gap: 26px;
+  align-items: start;
+  max-width: 1060px;
+  margin: 0 auto;
+  padding: 26px 24px 64px;
+  width: 100%;
+  box-sizing: border-box;
+  flex: 1;
+}
+
 .detail-layout {
   display: grid;
-  grid-template-columns: 1fr 340px;
+  /* minmax(0, 1fr), not bare 1fr -- see the note on the shared mobile-collapse group below for
+     why: a bare 1fr track still respects its content's unshrinkable minimum width, so a rich
+     right rail (Sources card, long URLs) can force the main column past its fair share at
+     in-between desktop widths, before the mobile collapse breakpoint ever kicks in. */
+  grid-template-columns: minmax(0, 1fr) 340px;
   gap: 40px;
   align-items: start;
   padding-top: 32px;
@@ -1588,7 +1667,7 @@ button {
 
 .uni-row {
   display: grid;
-  grid-template-columns: 220px 1fr 180px;
+  grid-template-columns: 280px 1fr 210px;
   gap: 24px;
   align-items: center;
   padding: 24px;
@@ -1815,102 +1894,6 @@ button {
   font-size: 14px;
   padding: 48px;
   text-align: center;
-}
-
-.recommender-wrap {
-  width: min(100% - 48px, 840px);
-  margin: 0 auto;
-  padding: 40px 0 64px;
-}
-
-.recommender-page {
-  min-height: 680px;
-  background: var(--uv-page);
-}
-
-.recommender-head {
-  margin-bottom: 28px;
-  text-align: center;
-}
-
-.recommender-pill {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  border: 1px solid var(--uv-border);
-  border-radius: 999px;
-  background: #fff;
-  color: #696868;
-  padding: 6px 14px;
-  font-size: 12px;
-  font-weight: 700;
-}
-
-.recommender-pill span {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: linear-gradient(180deg, #453db8, #8b7cf0);
-}
-
-.recommender-head h1 {
-  margin: 14px 0 6px;
-  color: var(--uv-ink);
-  font-size: 30px;
-  font-weight: 700;
-}
-
-.recommender-head p {
-  margin: 0;
-  color: #696868;
-  font-size: 15px;
-}
-
-.recommender-card {
-  max-width: 620px;
-  margin: 0 auto;
-  border: 1px solid var(--uv-border);
-  border-radius: 8px;
-  background: #fff;
-  padding: 28px;
-}
-
-.recommender-card h2 {
-  margin: 8px 0;
-  color: var(--uv-ink);
-  font-size: 28px;
-  line-height: 1.2;
-}
-
-.recommender-card p {
-  margin: 0;
-  color: #696868;
-}
-
-.quiz-options {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
-  margin: 24px 0;
-}
-
-.quiz-chip {
-  display: flex;
-  align-items: center;
-  min-height: 44px;
-  border: 1px solid var(--uv-border);
-  border-radius: 6px;
-  background: #fff;
-  color: var(--uv-ink);
-  padding: 0 14px;
-  text-align: left;
-  font-weight: 700;
-}
-
-.quiz-chip:hover {
-  border-color: var(--uv-primary);
-  background: var(--uv-primary-soft);
-  color: var(--uv-primary);
 }
 
 .blog-chips {
@@ -2171,7 +2154,8 @@ button {
   .certificate-block,
   .uni-row,
   .article-layout,
-  .overview-grid {
+  .overview-grid,
+  .emi-layout {
     /* minmax(0, 1fr), not bare 1fr -- a bare 1fr track still respects its content's automatic
        minimum size, so a wide unshrinkable descendant (e.g. compare-grid's min-width: 760px,
        or a long fact-grid value) blows the whole track past the viewport instead of staying at
@@ -2982,6 +2966,54 @@ button {
   padding: 0 24px 24px;
 }
 
+/* Below 640px the centered dialog becomes a bottom sheet: full-width, anchored to the bottom
+   edge, rounded top corners only, with a grab-handle bar -- matches the pattern used across every
+   mobile mockup in Mobile.dc.html for the lead wizard, course filters, and compare picker. */
+@media (max-width: 640px) {
+  .lead-modal-backdrop {
+    align-items: flex-end;
+    padding: 0;
+  }
+
+  .lead-modal {
+    width: 100%;
+    max-width: 100%;
+    max-height: calc(100vh - 24px);
+    border-radius: 14px 14px 0 0;
+    padding-top: 16px;
+    position: relative;
+    animation: uvSheetIn 200ms ease both;
+  }
+
+  .lead-modal::before {
+    content: "";
+    position: absolute;
+    top: 8px;
+    left: 50%;
+    width: 38px;
+    height: 4px;
+    border-radius: 999px;
+    background: #d8d7d6;
+    transform: translateX(-50%);
+  }
+
+  .lead-modal-body {
+    max-height: calc(100vh - 162px);
+  }
+}
+
+@keyframes uvSheetIn {
+  from {
+    opacity: 0;
+    transform: translateY(100%);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
 .lead-interest-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -3322,13 +3354,14 @@ button {
   padding: 10px 12px;
 }
 
-@media (max-width: 900px) {
-  .nav {
-    display: none;
-  }
-
+/* Header collapse is its own breakpoint, separate from the 900px block below: with 6 nav items
+   (added "Guides"), the nav + CTA + shortlist pill overflow the header between roughly 900px and
+   1100px otherwise. !important is required because these three carry inline/component display
+   styles that a normal-specificity rule can't override. */
+@media (max-width: 1100px) {
   .uv-header-nav,
-  .uv-header-cta {
+  .uv-header-cta,
+  .uv-header-shortlist {
     display: none !important;
   }
 
@@ -3338,6 +3371,87 @@ button {
 
   .uv-header-mobile-panel {
     display: flex;
+  }
+
+  .uv-footer-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 28px !important;
+  }
+}
+
+/* Full-width sticky bottom action bar (sticky-mobile-bar.tsx), shown only on the handful of
+   conversion pages that render one -- Home, Course detail, University detail, EMI calculator --
+   matching Mobile.dc.html's per-page pattern instead of the generic floating FAB pair. */
+.uv-mobile-action-bar {
+  display: none;
+}
+
+@media (max-width: 640px) {
+  .uv-hide-on-mobile {
+    display: none !important;
+  }
+
+  .uv-mobile-action-bar {
+    display: flex;
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 150;
+    gap: 10px;
+    padding: 10px 16px calc(10px + env(safe-area-inset-bottom, 0px));
+    background: #fff;
+    border-top: 1px solid #eaeaea;
+    box-shadow: 0 -4px 12px rgba(0, 0, 0, 0.08);
+  }
+
+  .uv-mobile-action-bar > a,
+  .uv-mobile-action-bar > button {
+    flex: 1;
+    height: 48px;
+    min-height: 48px;
+  }
+
+  .uv-footer-grid {
+    grid-template-columns: 1fr !important;
+    gap: 28px !important;
+  }
+
+  /* Below 640px the filter panel becomes a bottom sheet instead of an inline block that pushes
+     page content down -- same pattern as .lead-modal. !important is required to beat the
+     position:sticky/top:88 inline styles course-explorer.tsx applies for the desktop sidebar
+     layout. */
+  .uv-course-filter-panel.uv-open {
+    position: fixed !important;
+    top: auto !important;
+    left: 0 !important;
+    right: 0 !important;
+    bottom: 0 !important;
+    max-height: 80vh !important;
+    overflow-y: auto;
+    z-index: 200;
+    border-radius: 14px 14px 0 0;
+    padding-top: 28px;
+    box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.16);
+    animation: uvSheetIn 200ms ease both;
+  }
+
+  .uv-course-filter-panel.uv-open::before {
+    content: "";
+    position: absolute;
+    top: 10px;
+    left: 50%;
+    width: 38px;
+    height: 4px;
+    border-radius: 999px;
+    background: #d8d7d6;
+    transform: translateX(-50%);
+  }
+}
+
+@media (max-width: 900px) {
+  .nav {
+    display: none;
   }
 
   .uv-filter-toggle {
@@ -3356,11 +3470,25 @@ button {
     display: block;
   }
 
+  .uv-filter-backdrop {
+    display: none;
+  }
+
+  .uv-filter-backdrop.uv-open {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 190;
+    background: rgba(38, 50, 56, 0.55);
+    animation: uvModalIn 160ms ease both;
+  }
+
   .hero-grid,
   .footer-grid,
   .trust-band-grid,
   .compare-cta-inner,
   .home-degree-grid,
+  .grid.two,
   .grid.three,
   .grid.four {
     grid-template-columns: 1fr;

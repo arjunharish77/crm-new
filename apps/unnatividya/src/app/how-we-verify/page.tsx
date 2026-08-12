@@ -36,6 +36,11 @@ const PRINCIPLES: Array<{ title: string; copy: string }> = [
     copy:
       "Every comparison, eligibility, career-scope, and UGC-approval page on this site exists because we found a genuine, source-verified difference worth explaining — not because we swapped a variable in a template. Where two universities' programs don't differ in any meaningful way, we don't build a page pretending otherwise.",
   },
+  {
+    title: "How our star ratings work",
+    copy:
+      "The star ratings and review counts shown on course and university cards reflect learner feedback collected through our own counselling process, not an independent third-party audit. We show them because they're a real, if informal, signal — not because they've been externally verified. Treat them the same way you'd treat any other unaudited review count, and rely on the checks above (fees, eligibility, approvals, placement sourcing) for anything that needs to be exact.",
+  },
 ];
 
 const FAQS: Array<[string, string]> = [
@@ -80,14 +85,14 @@ export default function HowWeVerifyPage() {
     <>
       <JsonLd data={[breadcrumbJsonLd, faqJsonLd]} />
       <div style={{ background: "#F7F8F9" }}>
-        <div style={{ background: "#fff", borderBottom: "1px solid #EAEAEA" }}>
-          <div className="container" style={{ paddingTop: 28, paddingBottom: 28 }}>
-            <div className="breadcrumb" style={{ marginBottom: 8 }}>
-              <Link href="/">Home</Link> &gt; How We Verify Our Data
+        <div style={{ background: "#263238" }}>
+          <div className="container" style={{ paddingTop: 36, paddingBottom: 32 }}>
+            <div className="breadcrumb" style={{ marginBottom: 8, color: "#B8C4CA" }}>
+              <Link href="/" style={{ color: "#B8C4CA" }}>Home</Link> &gt; How We Verify Our Data
             </div>
-            <h1 style={{ color: "#363634", fontSize: 28, fontWeight: 700, margin: 0 }}>How we verify our data</h1>
-            <div style={{ color: "#696868", fontSize: 14, marginTop: 6 }}>
-              Unnati Vidya is an aggregator, not a university — every fact we publish about a program has to earn its place.
+            <h1 style={{ color: "#fff", fontSize: 30, fontWeight: 700, margin: 0 }}>How we verify every number on this site</h1>
+            <div style={{ color: "#B8C4CA", fontSize: 15, marginTop: 8, maxWidth: 600 }}>
+              Fees, approvals and placement claims are copied from official sources, dated, and re-checked each admission cycle — not written from memory.
             </div>
           </div>
         </div>
@@ -98,6 +103,36 @@ export default function HowWeVerifyPage() {
             University Online. Because a wrong fee, eligibility rule, or approval claim can cost you real money and time,
             we hold ourselves to a specific, checkable process rather than just promising to &quot;do our best.&quot;
           </p>
+
+          <h2 style={{ marginBottom: 4 }}>The four checks</h2>
+          <div className="grid two" style={{ marginBottom: 32 }}>
+            {[
+              ["UGC-DEB entitlement", "Checked directly against the official UGC-DEB \"Entitled Online\" list. Entitlement is per program and per academic year, so last year's approval is not evidence."],
+              ["Fee from the university's own page", "The total fee, EMI figure and scholarship categories we show are copied from the university's own current program page, not a marketing brochure or a third-party aggregator."],
+              ["Eligibility and specialisation audit", "Minimum-percentage eligibility rules and the real elective list for each program are checked against the university's own admission page, not assumed from a generic template."],
+              ["Placement claims kept honest", "Placement rates, average packages and hiring-partner counts are attributed to their actual source and never presented as independently audited unless they are."],
+            ].map(([title, copy]) => (
+              <div style={{ border: "1px solid #CFDAE6", borderRadius: 8, padding: 18 }} key={title}>
+                <div style={{ fontSize: 15, fontWeight: 700, color: "#363634" }}>{title}</div>
+                <div style={{ fontSize: 14, color: "#555", lineHeight: 1.55, marginTop: 6 }}>{copy}</div>
+              </div>
+            ))}
+          </div>
+
+          <h2 style={{ marginBottom: 4 }}>What we will not publish</h2>
+          <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 32 }}>
+            {[
+              "Salary figures with no stated source, presented as if they were independently verified.",
+              "“Starting from” fees that quietly exclude exam or convocation charges.",
+              "Programs from institutions absent from the UGC-DEB list, at any commission.",
+              "Rankings we cannot trace to a published methodology.",
+            ].map((item) => (
+              <div key={item} style={{ display: "flex", alignItems: "flex-start", gap: 10, fontSize: 14, color: "#555", lineHeight: 1.55 }}>
+                <span style={{ color: "#B00020", fontWeight: 700, flexShrink: 0 }}>✕</span>
+                {item}
+              </div>
+            ))}
+          </div>
 
           <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
             {PRINCIPLES.map((principle) => (
@@ -133,8 +168,14 @@ export default function HowWeVerifyPage() {
             </div>
           </section>
 
-          <div style={{ fontSize: 13, color: "#707070", marginTop: 28, paddingTop: 20, borderTop: "1px solid #EAEAEA" }}>
-            Found something on this site that looks wrong or outdated? <Link href="/lead?intent=data-correction" data-open-lead style={{ color: "#544CC8", fontWeight: 600 }}>Tell us</Link> — we&apos;d rather fix it than leave it.
+          <div style={{ background: "#F4F3FC", border: "1px solid #CFDAE6", borderRadius: 8, padding: 22, marginTop: 28 }}>
+            <div style={{ fontSize: 16, fontWeight: 700, color: "#363634" }}>Found something wrong?</div>
+            <div style={{ fontSize: 14, color: "#555", lineHeight: 1.6, margin: "8px 0 14px" }}>
+              If a fee has changed or an entitlement has lapsed, tell us and we will correct it within one working day — and credit the correction on the page.
+            </div>
+            <Link href="/lead?intent=data-correction" data-open-lead className="btn primary" style={{ height: 42, padding: "0 20px", display: "inline-flex", alignItems: "center", fontSize: 14 }}>
+              Report a correction
+            </Link>
           </div>
         </div>
       </div>

@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&display=swap" rel="stylesheet">
+<style>body{margin:0;font-family:'DM Sans',sans-serif;color:#555;background:#fff}a{color:#544CC8;text-decoration:none}a:hover{color:#453DB8}button{font-family:'DM Sans',sans-serif}</style>
+</helmet>
+<div style="min-height:100vh;display:flex;flex-direction:column">
+<dc-import name="SiteHeader" active="" hint-size="100%,110px"></dc-import>
+
+<div style="background:#F7F8F9;border-bottom:1px solid #EAEAEA">
+  <div style="max-width:1000px;margin:0 auto;padding:30px 24px 0">
+    <div style="font-size:12px;color:#707070;margin-bottom:10px"><a href="Home.dc.html" style="color:#707070">Home</a> &gt; {{ activeLabel }}</div>
+    <h1 style="font-size:32px;font-weight:700;color:#363634;margin:0 0 18px;letter-spacing:-0.4px">{{ activeLabel }}</h1>
+    <div style="display:flex;gap:6px">
+      <sc-for list="{{ tabs }}" as="t" hint-placeholder-count="4">
+        <button onClick="{{ t.pick }}" style="{{ t.style }}">{{ t.label }}</button>
+      </sc-for>
+    </div>
+  </div>
+</div>
+
+<div style="max-width:1000px;margin:0 auto;padding:40px 24px 64px;width:100%;box-sizing:border-box;display:grid;grid-template-columns:1fr 280px;gap:44px;align-items:start;flex:1" class="uv-2col">
+  <div style="display:flex;flex-direction:column;gap:26px">
+    <sc-for list="{{ blocks }}" as="b" hint-placeholder-count="4">
+      <div>
+        <h2 style="font-size:21px;font-weight:700;color:#363634;margin:0 0 10px;letter-spacing:-0.2px">{{ b.h }}</h2>
+        <p style="font-size:15px;line-height:1.75;margin:0">{{ b.p }}</p>
+      </div>
+    </sc-for>
+    <div style="font-size:13px;color:#AAAAAA;border-top:1px solid #EAEAEA;padding-top:16px">Last updated 14 July 2026 · UnnatiVidya Edutech Pvt Ltd, Bengaluru</div>
+  </div>
+
+  <div class="uv-side-rail" style="position:sticky;top:88px;display:flex;flex-direction:column;gap:16px">
+    <div style="border:1px solid #CFDAE6;border-radius:8px;padding:20px;background:#F4F3FC">
+      <div style="font-size:15px;font-weight:700;color:#363634">Questions about any of this?</div>
+      <div style="font-size:13px;color:#696868;margin:7px 0 14px;line-height:1.55">Call 1800-120-4050, 9 am to 9 pm, or ask a counsellor to call you back.</div>
+      <a href="Lead.dc.html" style="display:block;text-align:center;height:44px;line-height:44px;background:#544CC8;color:#fff;border-radius:4px;font-size:14px;font-weight:700">Request a callback</a>
+    </div>
+    <div style="border:1px solid #CFDAE6;border-radius:8px;padding:20px">
+      <div style="font-size:14px;font-weight:700;color:#363634;margin-bottom:10px">Related</div>
+      <div style="display:flex;flex-direction:column;gap:8px;font-size:13px">
+        <a href="HowWeVerify.dc.html">How we verify our data</a>
+        <a href="Blog.dc.html">Guides &amp; resources</a>
+        <a href="Courses.dc.html">Browse all courses</a>
+      </div>
+    </div>
+  </div>
+</div>
+
+<dc-import name="SiteFooter" hint-size="100%,360px"></dc-import>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{}">
+class Component extends DCLogic {
+  state = { tab: 'about' };
+
+  get content() {
+    return {
+      about: {
+        label: 'About UnnatiVidya',
+        blocks: [
+          ['Who we are', 'UnnatiVidya is an independent marketplace for UGC-entitled online degrees. We list programs from accredited universities, publish verified fees and placement data, and provide free counselling to learners choosing between them.'],
+          ['Why we can be unbiased', 'Universities compensate us on identical terms regardless of which program a learner picks. There is no commission ladder, so a counsellor is free to recommend the cheapest suitable option — and often does.'],
+          ['What we do not do', 'We do not run admissions, collect university fees, or promise placements. Fees are paid directly to the university, and placement support is described in the university\u2019s own words.'],
+          ['Contact', 'UnnatiVidya Edutech Pvt Ltd · 1800-120-4050 (toll-free, 9 am to 9 pm) · hello@unnativigya.example']
+        ]
+      },
+      privacy: {
+        label: 'Privacy policy',
+        blocks: [
+          ['What we collect', 'Name, email, city, phone number, and the programs you enquire about or shortlist. We also record which pages led to an enquiry so counsellors arrive at the call with context.'],
+          ['How we use it', 'Only to provide counselling and admission support for programs you enquired about. With your consent we share your details with the specific university you choose to apply to, and no one else.'],
+          ['What we never do', 'We do not sell contact data, rent it to advertisers, or pass it to universities you did not ask about.'],
+          ['Your rights', 'You can request a copy or deletion of your data at any time by writing to privacy@unnativigya.example. Deletion is completed within seven working days, except where a university admission is already in progress.']
+        ]
+      },
+      terms: {
+        label: 'Terms of use',
+        blocks: [
+          ['Using this site', 'The catalog is published for personal, non-commercial research. Fees, eligibility and approval status change by admission cycle; always confirm the current position with the university before paying.'],
+          ['Accuracy', 'We verify data against official sources and date every page, but we are not the issuing authority. Where our page and the university\u2019s page disagree, the university\u2019s page governs.'],
+          ['Counselling', 'Counselling is advisory. The admission decision rests with the university, and enrolment is a contract between you and that university.'],
+          ['Liability', 'We are not liable for university decisions, fee revisions, or changes to entitlement made after the date shown on a page.']
+        ]
+      },
+      refund: {
+        label: 'Refund policy',
+        blocks: [
+          ['Our service is free', 'Counselling, comparisons and admission support cost you nothing, so there is nothing for us to refund.'],
+          ['University fees', 'Program fees are paid directly to the university and governed by its refund rules — typically a full refund before the batch starts and a pro-rata refund within the first two weeks.'],
+          ['What we do for you', 'We share the applicable refund clause in writing before you pay, and if you decide to withdraw we help you file the request with the university and follow it up.'],
+          ['Loan-funded fees', 'If the fee was paid through an education loan, refunds are routed back to the lender. Processing usually takes 15 to 30 working days depending on the partner.']
+        ]
+      }
+    };
+  }
+
+  renderVals() {
+    const c = this.content;
+    const active = c[this.state.tab];
+    return {
+      activeLabel: active.label,
+      blocks: active.blocks.map(([h, p]) => ({ h, p })),
+      tabs: Object.keys(c).map(key => {
+        const on = this.state.tab === key;
+        return {
+          label: c[key].label,
+          style: 'border:none;border-bottom:2px solid ' + (on ? '#544CC8' : 'transparent') + ';background:none;color:' + (on ? '#544CC8' : '#555') + ';padding:12px 16px;font-size:14px;font-weight:600;cursor:pointer',
+          pick: () => this.setState({ tab: key })
+        };
+      })
+    };
+  }
+}
+</script>
+</body>
+</html>

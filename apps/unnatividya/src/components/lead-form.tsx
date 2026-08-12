@@ -1,20 +1,14 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { trackEvent } from "@/components/analytics";
 import type { LeadFormContext } from "@/components/lead-form-loader";
+import { COUNTRY_CODES, DEFAULT_COUNTRY, countryFromTimezone, flagEmoji } from "@/lib/country-codes";
+import { leadCourseOptions } from "@/lib/lead-course-options";
 
 type Status = "idle" | "saving" | "otp" | "verifying" | "done" | "error";
 type Step = 1 | 2 | 3;
-
-const interests = [
-  "Online MBA",
-  "Online BBA",
-  "Online BCA",
-  "Online MCA",
-  "Online B.Com / M.Com",
-  "Online BA / MA",
-];
 
 function unlockCompare() {
   try {
@@ -25,23 +19,64 @@ function unlockCompare() {
   }
 }
 
+function ProgressDots({ step }: { step: Step }) {
+  return (
+    <div style={{ display: "flex", gap: 6, paddingBottom: 20 }}>
+      {[1, 2, 3].map((item) => (
+        <div key={item} style={{ flex: 1, height: 4, borderRadius: 999, background: item <= step ? "#544CC8" : "#EAEAEA", transition: "background 200ms ease" }} />
+      ))}
+    </div>
+  );
+}
+
 export function LeadForm({ context = {} }: { context?: LeadFormContext }) {
-  const [step, setStep] = useState<Step>(1);
-  const [interest, setInterest] = useState(interests[0]);
+  const courseOptions = useMemo(() => leadCourseOptions(), []);
+  const groupedByStream = useMemo(() => {
+    const map = new Map<string, typeof courseOptions>();
+    for (const option of courseOptions) {
+      const list = map.get(option.stream) || [];
+      list.push(option);
+      map.set(option.stream, list);
+    }
+    return [...map.entries()];
+  }, [courseOptions]);
+
+  // A course is already known from where the wizard was opened (e.g. "Enquire" on a specific
+  // course page) -- asking "which course?" again would be redundant, so skip straight to the
+  // contact step.
+  const hasCourseContext = Boolean(context.course);
+  const [step, setStep] = useState<Step>(hasCourseContext ? 2 : 1);
+  const [selectedLabel, setSelectedLabel] = useState("");
+  const [selectedUniversityId, setSelectedUniversityId] = useState("");
   const [status, setStatus] = useState<Status>("idle");
   const [leadId, setLeadId] = useState<string | null>(null);
   const [message, setMessage] = useState("");
-  const [contact, setContact] = useState({ name: "", email: "", phone: "" });
+  const [contact, setContact] = useState({ name: context.name || "", email: context.email || "", phone: context.phone || "" });
+  const [dial, setDial] = useState(DEFAULT_COUNTRY.dial);
+
+  useEffect(() => {
+    // The device's configured timezone tracks real physical location far more reliably than the
+    // browser's UI language does -- see countryFromTimezone's own comment for why.
+    setDial(countryFromTimezone(Intl.DateTimeFormat().resolvedOptions().timeZone).dial);
+  }, []);
+
+  const selectedOption = courseOptions.find((option) => option.label === selectedLabel);
+  const universityChoices = selectedOption?.universities || [];
 
   async function submitLead(formData: FormData) {
     setStatus("saving");
     setMessage("");
+    const phoneDigits = String(formData.get("phone") || "").replace(/\D/g, "").slice(0, 14);
+    const resolvedCourseId = context.course || universityChoices.find((uni) => uni.id === selectedUniversityId)?.courseId;
     const payload = {
-      ...Object.fromEntries(formData.entries()),
-      ...context,
-      interest,
+      name: formData.get("name"),
+      email: formData.get("email"),
+      phone: `${dial}${phoneDigits}`,
+      course: resolvedCourseId || undefined,
+      university: context.university || (resolvedCourseId ? undefined : selectedUniversityId || undefined),
       intent: context.intent || "lead_wizard",
-      phone: String(formData.get("phone") || "").replace(/\D/g, "").slice(0, 10),
+      interest: selectedLabel || context.goal || "General enquiry",
+      goal: context.goal,
     };
     const response = await fetch("/api/leads", {
       method: "POST",
@@ -91,39 +126,79 @@ export function LeadForm({ context = {} }: { context?: LeadFormContext }) {
 
   if (status === "done") {
     return (
-      <div className="lead-step-enter" style={{ padding: "32px 24px", textAlign: "center" }}>
-        <div style={{ width: 56, height: 56, borderRadius: "50%", background: "rgba(46,125,50,0.10)", color: "#2E7D32", fontSize: 26, lineHeight: "56px", margin: "0 auto 14px" }}>
-          ✓
+      <div className="lead-step-enter" style={{ padding: "32px 24px" }}>
+        <ProgressDots step={3} />
+        <div style={{ textAlign: "center" }}>
+          <div style={{ width: 56, height: 56, borderRadius: "50%", background: "rgba(46,125,50,0.10)", color: "#2E7D32", fontSize: 26, lineHeight: "56px", margin: "0 auto 14px" }}>
+            ✓
+          </div>
+          <div style={{ color: "#363634", fontSize: 19, fontWeight: 700 }}>
+            You&apos;re all set{contact.name.trim() ? `, ${contact.name.trim().split(" ")[0]}` : ""}
+          </div>
+          <div style={{ color: "#696868", fontSize: 14, marginTop: 8 }}>{message}</div>
+          <div style={{ display: "flex", gap: 10, marginTop: 20, justifyContent: "center" }}>
+            <Link href="/compare" className="btn primary">Open compare</Link>
+            <Link href="/courses" className="btn ghost">Keep browsing courses</Link>
+          </div>
         </div>
-        <div style={{ color: "#363634", fontSize: 19, fontWeight: 700 }}>
-          You&apos;re all set{contact.name.trim() ? `, ${contact.name.trim().split(" ")[0]}` : ""}
-        </div>
-        <div style={{ color: "#696868", fontSize: 14, marginTop: 8 }}>{message}</div>
       </div>
     );
   }
 
+  const canContinueStep2 = Boolean(contact.name.trim() && contact.email.trim() && contact.phone.trim()) && status !== "saving";
+
   return (
     <div style={{ marginTop: 22 }}>
-      <div style={{ display: "flex", gap: 6, paddingBottom: 20 }}>
-        {[1, 2, 3].map((item) => (
-          <div key={item} style={{ flex: 1, height: 4, borderRadius: 999, background: item <= step ? "#544CC8" : "#EAEAEA", transition: "background 200ms ease" }} />
-        ))}
-      </div>
+      <ProgressDots step={step} />
 
       {step === 1 ? (
         <div className="lead-step lead-step-enter">
           <div style={{ color: "#363634", fontSize: 15, fontWeight: 700, marginBottom: 12 }}>
-            What do you want to study?
+            Which course are you interested in?
           </div>
-          <div className="lead-interest-grid">
-            {interests.map((item) => (
-              <button className={interest === item ? "lead-interest active" : "lead-interest"} key={item} type="button" onClick={() => setInterest(item)}>
-                {item}
-              </button>
-            ))}
-          </div>
-          <button className="btn primary" type="button" style={{ marginTop: 18, width: "100%" }} onClick={() => setStep(2)}>
+          {groupedByStream.map(([stream, options]) => (
+            <div key={stream} style={{ marginBottom: 14 }}>
+              <div style={{ fontSize: 12, fontWeight: 700, color: "#707070", letterSpacing: 0.4, marginBottom: 8 }}>{stream.toUpperCase()}</div>
+              <div className="lead-interest-grid">
+                {options.map((option) => (
+                  <button
+                    className={selectedLabel === option.label ? "lead-interest active" : "lead-interest"}
+                    type="button"
+                    key={option.label}
+                    onClick={() => {
+                      setSelectedLabel(option.label);
+                      setSelectedUniversityId("");
+                    }}
+                  >
+                    {option.label.replace(/^Online /, "")}
+                  </button>
+                ))}
+              </div>
+            </div>
+          ))}
+
+          {selectedOption && universityChoices.length > 1 ? (
+            <div style={{ marginTop: 4, marginBottom: 4 }}>
+              <div style={{ fontSize: 13, fontWeight: 700, color: "#363634", marginBottom: 8 }}>
+                Which university? <span style={{ color: "#707070", fontWeight: 400 }}>(optional)</span>
+              </div>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                {universityChoices.map((uni) => (
+                  <button
+                    key={uni.id}
+                    type="button"
+                    className={selectedUniversityId === uni.id ? "lead-interest active" : "lead-interest"}
+                    style={{ flex: "0 0 auto", padding: "8px 16px" }}
+                    onClick={() => setSelectedUniversityId((current) => (current === uni.id ? "" : uni.id))}
+                  >
+                    {uni.shortName}
+                  </button>
+                ))}
+              </div>
+            </div>
+          ) : null}
+
+          <button className="btn primary" type="button" disabled={!selectedLabel} style={{ marginTop: 18, width: "100%" }} onClick={() => setStep(2)}>
             Continue
           </button>
         </div>
@@ -134,7 +209,6 @@ export function LeadForm({ context = {} }: { context?: LeadFormContext }) {
           <div style={{ color: "#363634", fontSize: 15, fontWeight: 700 }}>
             Tell us about yourself
           </div>
-          <input type="hidden" name="interest" value={interest} />
           <div className="field">
             <label htmlFor="name">Name</label>
             <input id="name" name="name" required value={contact.name} onChange={(event) => setContact((current) => ({ ...current, name: event.target.value }))} />
@@ -145,22 +219,44 @@ export function LeadForm({ context = {} }: { context?: LeadFormContext }) {
           </div>
           <div className="field">
             <label htmlFor="phone">Mobile number</label>
-            <input
-              id="phone"
-              name="phone"
-              inputMode="tel"
-              minLength={10}
-              maxLength={10}
-              required
-              value={contact.phone}
-              onChange={(event) => setContact((current) => ({ ...current, phone: event.target.value.replace(/\D/g, "").slice(0, 10) }))}
-            />
+            <div style={{ display: "flex", gap: 8 }}>
+              <select
+                aria-label="Country code"
+                value={dial}
+                onChange={(event) => setDial(event.target.value)}
+                style={{ width: 110, flexShrink: 0, border: "1px solid var(--uv-border)", borderRadius: "var(--uv-radius-control)", background: "#fff", padding: "0 6px", fontSize: 13 }}
+              >
+                {COUNTRY_CODES.map((country) => (
+                  <option key={country.iso2} value={country.dial}>
+                    {flagEmoji(country.iso2)} {country.dial}
+                  </option>
+                ))}
+              </select>
+              <input
+                id="phone"
+                name="phone"
+                inputMode="tel"
+                minLength={dial === "+91" ? 10 : 4}
+                maxLength={dial === "+91" ? 10 : 14}
+                required
+                style={{ flex: 1 }}
+                value={contact.phone}
+                onChange={(event) => setContact((current) => ({ ...current, phone: event.target.value.replace(/\D/g, "").slice(0, 14) }))}
+              />
+            </div>
           </div>
           <div className="lead-form-actions">
-            <button className="btn ghost" type="button" onClick={() => setStep(1)}>
-              Back
-            </button>
-            <button className="btn primary" type="submit" disabled={status === "saving"}>
+            {hasCourseContext ? null : (
+              <button className="btn ghost" type="button" onClick={() => setStep(1)}>
+                Back
+              </button>
+            )}
+            <button
+              className="btn primary"
+              type="submit"
+              disabled={!canContinueStep2}
+              style={canContinueStep2 ? undefined : { background: "#D8D7D6", borderColor: "#D8D7D6", cursor: "not-allowed" }}
+            >
               {status === "saving" ? "Saving..." : "Save and send OTP"}
             </button>
           </div>
@@ -176,9 +272,22 @@ export function LeadForm({ context = {} }: { context?: LeadFormContext }) {
             <label htmlFor="otp">Email OTP</label>
             <input id="otp" name="otp" inputMode="numeric" minLength={4} maxLength={6} required style={{ fontSize: 18, letterSpacing: 8 }} />
           </div>
-          <button className="btn primary" type="submit" disabled={status === "verifying"}>
-            {status === "verifying" ? "Verifying..." : "Verify email"}
-          </button>
+          <div className="lead-form-actions">
+            <button
+              className="btn ghost"
+              type="button"
+              onClick={() => {
+                setStep(2);
+                setStatus("idle");
+                setMessage("");
+              }}
+            >
+              Back
+            </button>
+            <button className="btn primary" type="submit" disabled={status === "verifying"}>
+              {status === "verifying" ? "Verifying..." : "Verify email"}
+            </button>
+          </div>
         </form>
       ) : null}
 

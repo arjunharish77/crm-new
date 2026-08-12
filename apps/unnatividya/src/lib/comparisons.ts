@@ -48,10 +48,11 @@ export type ComparisonRow = { label: string; cells: Array<{ value: string; best?
 
 // Shared with the interactive /compare (query-param) tool so both surfaces show identical
 // comparison criteria — don't let them drift into two different definitions of "compare."
-export function buildComparisonRows(selected: Array<Pick<EnrichedCourse, "fee" | "emi" | "duration" | "level" | "rating" | "reviews" | "specializations" | "university">>): ComparisonRow[] {
+export function buildComparisonRows(selected: Array<Pick<EnrichedCourse, "fee" | "emi" | "duration" | "level" | "rating" | "reviews" | "specializations" | "university" | "eligibility">>): ComparisonRow[] {
   const bestFee = Math.min(...selected.map((course) => course.fee));
   const bestRating = Math.max(...selected.map((course) => course.rating));
   const bestPlacement = Math.max(...selected.map((course) => course.university.placement));
+  const mostSpecializations = Math.max(...selected.map((course) => course.specializations.length));
   return [
     { label: "Total fee", cells: selected.map((course) => ({ value: formatFee(course.fee), best: selected.length > 1 && course.fee === bestFee })) },
     { label: "EMI from", cells: selected.map((course) => ({ value: course.emi })) },
@@ -62,7 +63,8 @@ export function buildComparisonRows(selected: Array<Pick<EnrichedCourse, "fee" |
     { label: "Placement rate", cells: selected.map((course) => ({ value: `${course.university.placement}%`, best: selected.length > 1 && course.university.placement === bestPlacement })) },
     { label: "Average package", cells: selected.map((course) => ({ value: course.university.avgPackage })) },
     { label: "Hiring partners", cells: selected.map((course) => ({ value: `${course.university.partners}+` })) },
-    { label: "Specialisations", cells: selected.map((course) => ({ value: `${course.specializations.length} tracks` })) },
+    { label: "Specialisations", cells: selected.map((course) => ({ value: `${course.specializations.length} tracks`, best: selected.length > 1 && course.specializations.length === mostSpecializations })) },
+    { label: "Eligibility", cells: selected.map((course) => ({ value: course.eligibility })) },
   ];
 }
 

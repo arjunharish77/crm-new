@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&display=swap" rel="stylesheet">
+<style>body{margin:0;font-family:'DM Sans',sans-serif;color:#555;background:#F7F8F9}a{color:#544CC8;text-decoration:none}a:hover{color:#453DB8}button{font-family:'DM Sans',sans-serif}</style>
+</helmet>
+<div style="min-height:100vh;display:flex;flex-direction:column;background:#F7F8F9">
+<dc-import name="SiteHeader" active="compare" hint-size="100%,110px"></dc-import>
+
+<div style="background:#fff;border-bottom:1px solid #EAEAEA">
+  <div style="max-width:1200px;margin:0 auto;padding:30px 24px 26px">
+    <div style="font-size:12px;color:#707070;margin-bottom:10px"><a href="Home.dc.html" style="color:#707070">Home</a> &gt; Compare</div>
+    <h1 style="font-size:32px;font-weight:700;color:#363634;margin:0 0 6px;letter-spacing:-0.4px">Compare programs side by side</h1>
+    <p style="font-size:15px;color:#696868;margin:0">Up to three programs. Total fee, EMI, approvals and placement records — the best value in each row is highlighted.</p>
+  </div>
+</div>
+
+<div style="max-width:1200px;margin:0 auto;padding:26px 24px 64px;width:100%;box-sizing:border-box;flex:1">
+  <div style="margin-bottom:20px">
+    <div style="font-size:11px;font-weight:700;color:#696868;letter-spacing:0.8px;margin-bottom:10px">TOP COMPARISONS THIS WEEK</div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap">
+      <sc-for list="{{ presets }}" as="p" hint-placeholder-count="5">
+        <button onClick="{{ p.pick }}" style="border:1px solid #CFDAE6;background:#fff;border-radius:6px;padding:11px 16px;font-size:13px;font-weight:600;color:#363634;cursor:pointer" style-hover="border-color:#544CC8;color:#544CC8">{{ p.label }}</button>
+      </sc-for>
+    </div>
+  </div>
+
+  <div style="font-size:11px;font-weight:700;color:#696868;letter-spacing:0.8px;margin-bottom:10px">OR BUILD YOUR OWN ({{ selectedCount }} of 3)</div>
+  <div class="uv-3col" style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:14px">
+    <sc-for list="{{ slots }}" as="s" hint-placeholder-count="3">
+      <div style="{{ s.style }}">
+        <div style="{{ s.filledStyle }}">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px">
+            <img src="{{ s.uniLogo }}" alt="{{ s.uniName }}" style="height:28px;width:auto;max-width:110px;object-fit:contain;object-position:left" />
+            <button onClick="{{ s.remove }}" style="border:none;background:none;color:#707070;font-size:15px;line-height:1;cursor:pointer;padding:2px 4px" aria-label="Remove program">✕</button>
+          </div>
+          <div style="font-size:16px;font-weight:700;color:#363634;margin-top:9px">{{ s.name }}</div>
+          <div style="font-size:12px;color:#707070;margin-top:3px">{{ s.uniName }}</div>
+          <div style="font-size:13px;color:#555;margin-top:8px">{{ s.meta }}</div>
+        </div>
+        <button onClick="{{ s.openPicker }}" style="{{ s.emptyStyle }}">
+          <span style="font-size:22px;color:#544CC8;line-height:1">+</span>
+          <span style="font-size:14px;font-weight:700;color:#544CC8">Add a program</span>
+          <span style="font-size:12px;color:#707070">Search 30 UGC-entitled degrees</span>
+        </button>
+      </div>
+    </sc-for>
+  </div>
+
+  <div style="{{ pickerStyle }}">
+    <div style="background:#fff;border:1px solid #CFDAE6;border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,0.16);overflow:hidden;margin-bottom:24px">
+      <div style="padding:16px 18px;border-bottom:1px solid #EAEAEA;display:flex;gap:12px;align-items:center">
+        <input placeholder="Search a program or university…" value="{{ pickQuery }}" onChange="{{ setPickQuery }}" onInput="{{ setPickQuery }}" style="flex:1;height:44px;padding:0 14px;border:1px solid #CFDAE6;border-radius:4px;font-size:14px;color:#555;outline-color:#544CC8" />
+        <button onClick="{{ closePicker }}" style="height:44px;padding:0 16px;border:1px solid #CFDAE6;background:#fff;color:#555;border-radius:4px;font-size:13px;font-weight:700;cursor:pointer">Close</button>
+      </div>
+      <div style="padding:12px 18px;display:flex;gap:8px;flex-wrap:wrap;border-bottom:1px solid #EAEAEA">
+        <sc-for list="{{ pickFilters }}" as="f" hint-placeholder-count="6">
+          <button onClick="{{ f.toggle }}" style="{{ f.style }}">{{ f.label }}</button>
+        </sc-for>
+      </div>
+      <div style="max-height:330px;overflow-y:auto">
+        <sc-for list="{{ pickResults }}" as="p" hint-placeholder-count="8">
+          <button onClick="{{ p.add }}" style="{{ p.style }}">
+            <img src="{{ p.uniLogo }}" alt="{{ p.uniName }}" style="height:26px;width:52px;object-fit:contain;object-position:left;flex:none" />
+            <span style="flex:1;text-align:left">
+              <span style="display:block;font-size:15px;font-weight:700;color:#363634">{{ p.name }}</span>
+              <span style="display:block;font-size:12px;color:#707070;margin-top:2px">{{ p.uniName }} · {{ p.stream }}</span>
+            </span>
+            <span style="text-align:right;flex:none">
+              <span style="display:block;font-size:14px;font-weight:700;color:#363634">{{ p.feeText }}</span>
+              <span style="display:block;font-size:12px;color:#707070">{{ p.duration }}</span>
+            </span>
+            <span style="{{ p.tagStyle }}">{{ p.tag }}</span>
+          </button>
+        </sc-for>
+        <div style="{{ pickEmptyStyle }}">
+          <div style="padding:34px;text-align:center;font-size:14px;color:#707070">Nothing matches that search.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div style="position:relative">
+    <div style="{{ tableWrapStyle }}">
+      <div style="background:#fff;border:1px solid #CFDAE6;border-radius:8px;overflow:hidden">
+        <div style="display:grid;grid-template-columns:{{ gridCols }}">
+          <div style="padding:18px 20px;background:#F5F5F5;font-size:11px;font-weight:700;color:#696868;letter-spacing:0.8px">CRITERIA</div>
+          <sc-for list="{{ columns }}" as="col" hint-placeholder-count="2">
+            <div style="padding:18px 20px;background:#F5F5F5;border-left:1px solid #EAEAEA">
+              <img src="{{ col.uniLogo }}" alt="{{ col.uniName }}" style="height:26px;width:auto;max-width:100px;object-fit:contain;object-position:left;margin-bottom:8px" />
+              <div style="font-size:16px;font-weight:700;color:#363634">{{ col.name }}</div>
+              <div style="font-size:12px;color:#707070;margin-top:2px">{{ col.uniName }}</div>
+            </div>
+          </sc-for>
+        </div>
+        <sc-for list="{{ rows }}" as="r" hint-placeholder-count="10">
+          <div style="display:grid;grid-template-columns:{{ gridCols }};border-top:1px solid #EAEAEA">
+            <div style="padding:14px 20px;font-size:13px;font-weight:700;color:#696868">{{ r.label }}</div>
+            <sc-for list="{{ r.cells }}" as="cell" hint-placeholder-count="2">
+              <div style="{{ cell.style }}">{{ cell.text }}</div>
+            </sc-for>
+          </div>
+        </sc-for>
+        <div style="display:grid;grid-template-columns:{{ gridCols }};border-top:1px solid #EAEAEA">
+          <div style="padding:16px 20px"></div>
+          <sc-for list="{{ columns }}" as="col" hint-placeholder-count="2">
+            <div style="padding:16px 20px;border-left:1px solid #EAEAEA;display:flex;gap:8px">
+              <a href="Course.dc.html" style="flex:1;text-align:center;height:40px;line-height:40px;background:#544CC8;color:#fff;border-radius:4px;font-size:13px;font-weight:700">View</a>
+              <button onClick="{{ openLead }}" style="flex:1;height:40px;border:1.5px solid #555;background:#fff;color:#555;border-radius:4px;font-size:13px;font-weight:700;cursor:pointer">Enquire</button>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+    </div>
+
+    <div style="{{ lockStyle }}">
+      <div style="background:#fff;border:1px solid #CFDAE6;border-radius:8px;padding:32px;box-shadow:0 8px 24px rgba(0,0,0,0.16);text-align:center;max-width:420px">
+        <div style="width:46px;height:46px;border-radius:50%;background:#F4F3FC;color:#544CC8;font-size:20px;line-height:46px;margin:0 auto 14px">🔒</div>
+        <div style="font-size:19px;font-weight:700;color:#363634">Unlock the full comparison</div>
+        <div style="font-size:14px;color:#696868;margin:10px 0 20px;line-height:1.6">Verify your number once and every comparison on UnnatiVidya unlocks — plus a counsellor's honest read on which one actually fits.</div>
+        <button onClick="{{ openLead }}" style="width:100%;height:48px;background:#544CC8;color:#fff;border:none;border-radius:4px;font-size:15px;font-weight:700;cursor:pointer">Unlock with OTP</button>
+        <div style="font-size:12px;color:#AAAAAA;margin-top:12px">Free · takes 30 seconds · no spam</div>
+      </div>
+    </div>
+  </div>
+
+  <div style="{{ unlockedNoteStyle }}">
+    <span style="font-size:13px;color:#2E7D32;background:rgba(46,125,50,0.10);border-radius:4px;padding:10px 15px;display:inline-block;font-weight:600">Compare access unlocked · a counsellor will call to walk you through this table</span>
+  </div>
+
+  <div style="{{ emptyStyle }}">
+    <div style="background:#fff;border:1px dashed #CFDAE6;border-radius:8px;padding:48px;text-align:center;color:#707070;font-size:14px">Select at least one program above to start comparing.</div>
+  </div>
+</div>
+
+<dc-import name="SiteFooter" hint-size="100%,360px"></dc-import>
+</div>
+<dc-import name="LeadWizard" open="{{ leadOpen }}" on-close="{{ closeLead }}" context="unlocking compare" hint-size="0px,0px"></dc-import>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{}">
+class Component extends DCLogic {
+  state = { data: null, sel: ['mba-muj', 'mba-amity'], unlocked: false, leadOpen: false, picking: false, pickQuery: '', pickFilters: [] };
+
+  componentDidMount() {
+    import('./uv-data.js').then(d => this.setState({ data: d }));
+    try { if (localStorage.getItem('uv_lead_unlocked') === '1') this.setState({ unlocked: true }); } catch (e) {}
+  }
+
+  unlock() {
+    try { localStorage.setItem('uv_lead_unlocked', '1'); } catch (e) {}
+    this.setState({ unlocked: true, leadOpen: false });
+  }
+
+  renderVals() {
+    const d = this.state.data;
+    const sel = this.state.sel;
+    const base = {
+      presets: [], slots: [], columns: [], rows: [],
+      pickerStyle: this.state.picking ? '' : 'display:none',
+      pickQuery: this.state.pickQuery,
+      pickFilters: [], pickResults: [], pickEmptyStyle: 'display:none',
+      setPickQuery: e => this.setState({ pickQuery: e.target.value }),
+      closePicker: () => this.setState({ picking: false, pickQuery: '' }),
+      selectedCount: sel.length,
+      gridCols: '190px 1fr 1fr',
+      tableWrapStyle: 'filter:blur(5px);pointer-events:none',
+      lockStyle: 'display:none',
+      unlockedNoteStyle: 'display:none',
+      emptyStyle: 'display:none',
+      leadOpen: this.state.leadOpen,
+      openLead: () => this.setState({ leadOpen: true }),
+      closeLead: () => this.unlock()
+    };
+    if (!d) return base;
+
+    const PRESETS = [
+      ['mba-muj,mba-amity', 'MBA: MUJ vs Amity'],
+      ['mba-muj,mba-smu', 'MBA: MUJ vs SMU'],
+      ['bca-muj,bca-amity', 'BCA: MUJ vs Amity'],
+      ['mca-muj,mca-smu,mca-amity', 'MCA: all three'],
+      ['bcom-muj,bcom-smu,bcom-amity', 'B.Com: all three']
+    ];
+    const presets = PRESETS.map(([ids, label]) => ({ label, pick: () => this.setState({ sel: ids.split(',') }) }));
+
+    const slotBase = 'background:#fff;border-radius:8px;min-height:132px';
+    const slots = [0, 1, 2].map(i => {
+      const c = sel[i] ? d.courseById[sel[i]] : null;
+      const u = c ? d.universityById[c.universityId] : null;
+      return {
+        style: slotBase + (c ? ';border:1px solid #CFDAE6;padding:18px' : ';border:1.5px dashed #CFDAE6;background:#FCFCFD'),
+        filledStyle: c ? '' : 'display:none',
+        emptyStyle: c ? 'display:none' : 'width:100%;height:132px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;background:transparent;border:none;cursor:pointer',
+        name: c ? c.name : '',
+        uniName: u ? u.name : '',
+        uniLogo: u ? u.logo : 'assets/logo-violet.svg',
+        meta: c ? d.fmtFee(c.fee) + ' · ' + c.duration : '',
+        remove: () => this.setState(s => ({ sel: s.sel.filter(x => x !== (c && c.id)) })),
+        openPicker: () => this.setState({ picking: true, pickQuery: '' })
+      };
+    });
+
+    const FILTERS = [['UG', 'level'], ['PG', 'level'], ['Management', 'stream'], ['IT & Computers', 'stream'], ['Commerce', 'stream'], ['Arts & Humanities', 'stream'], ['MUJ', 'uni'], ['SMU', 'uni'], ['Amity', 'uni']];
+    const active = this.state.pickFilters;
+    const pickFilters = FILTERS.map(([label]) => {
+      const on = active.indexOf(label) > -1;
+      return {
+        label,
+        style: 'border:1px solid ' + (on ? '#544CC8' : '#CFDAE6') + ';background:' + (on ? 'rgba(84,76,200,0.08)' : '#fff') + ';color:' + (on ? '#544CC8' : '#555') + ';border-radius:999px;padding:7px 14px;font-size:12px;font-weight:600;cursor:pointer',
+        toggle: () => this.setState(s => ({
+          pickFilters: s.pickFilters.indexOf(label) > -1 ? s.pickFilters.filter(x => x !== label) : s.pickFilters.concat([label])
+        }))
+      };
+    });
+
+    const q = this.state.pickQuery.trim().toLowerCase();
+    const groups = { level: [], stream: [], uni: [] };
+    FILTERS.forEach(([label, kind]) => { if (active.indexOf(label) > -1) groups[kind].push(label); });
+    const pickResults = d.courses.filter(c => {
+      const u = d.universityById[c.universityId];
+      if (groups.level.length && groups.level.indexOf(c.level) < 0) return false;
+      if (groups.stream.length && groups.stream.indexOf(c.stream) < 0) return false;
+      if (groups.uni.length && groups.uni.indexOf(u.shortName) < 0) return false;
+      if (q && (c.name + ' ' + u.name + ' ' + u.shortName + ' ' + c.stream).toLowerCase().indexOf(q) < 0) return false;
+      return true;
+    }).map(c => {
+      const u = d.universityById[c.universityId];
+      const chosen = sel.indexOf(c.id) > -1;
+      const full = sel.length >= 3 && !chosen;
+      return {
+        name: c.name, uniName: u.name, uniLogo: u.logo, stream: c.stream,
+        feeText: d.fmtFee(c.fee), duration: c.duration,
+        tag: chosen ? 'Selected' : (full ? 'Slots full' : 'Add'),
+        tagStyle: 'flex:none;font-size:11px;font-weight:700;border-radius:999px;padding:5px 11px;white-space:nowrap;' + (chosen
+          ? 'color:#2E7D32;background:rgba(46,125,50,0.10)'
+          : (full ? 'color:#AAAAAA;background:#F5F5F5' : 'color:#544CC8;background:rgba(84,76,200,0.08)')),
+        style: 'width:100%;display:flex;align-items:center;gap:14px;padding:13px 18px;border:none;border-top:1px solid #EAEAEA;background:' + (chosen ? '#F7F8F9' : '#fff') + ';cursor:' + (chosen || full ? 'default' : 'pointer') + ';font-family:inherit;text-align:left',
+        add: () => {
+          if (chosen || full) return;
+          this.setState(s => ({ sel: s.sel.concat([c.id]), picking: s.sel.length + 1 < 3, pickQuery: '' }));
+        }
+      };
+    });
+
+    Object.assign(base, {
+      slots, pickFilters, pickResults,
+      pickEmptyStyle: pickResults.length ? 'display:none' : 'display:block'
+    });
+
+    if (!sel.length) {
+      return Object.assign(base, { presets, tableWrapStyle: 'display:none', emptyStyle: 'display:block' });
+    }
+
+    const cs = sel.map(id => d.courseById[id]).filter(Boolean);
+    const uni = c => d.universityById[c.universityId];
+    const cell = (text, best) => ({
+      text,
+      style: 'padding:14px 20px;border-left:1px solid #EAEAEA;font-size:14px;color:#555;font-weight:' + (best ? '700' : '400') + ';background:' + (best ? 'rgba(46,125,50,0.08)' : 'transparent')
+    });
+    const minFee = Math.min.apply(null, cs.map(c => c.fee));
+    const maxRating = Math.max.apply(null, cs.map(c => c.rating));
+    const maxPlace = Math.max.apply(null, cs.map(c => uni(c).placement));
+    const maxSpecs = Math.max.apply(null, cs.map(c => c.specializations.length));
+    const many = cs.length > 1;
+
+    const rows = [
+      { label: 'Total fee', cells: cs.map(c => cell(d.fmtFee(c.fee), many && c.fee === minFee)) },
+      { label: 'EMI from', cells: cs.map(c => cell(c.emi, false)) },
+      { label: 'Duration', cells: cs.map(c => cell(c.duration, false)) },
+      { label: 'Level', cells: cs.map(c => cell(c.level + ' degree', false)) },
+      { label: 'Rating', cells: cs.map(c => cell(c.rating + ' ★ (' + c.reviews.toLocaleString('en-IN') + ')', many && c.rating === maxRating)) },
+      { label: 'Approvals', cells: cs.map(c => cell(uni(c).approvals.join(', '), false)) },
+      { label: 'Placement rate', cells: cs.map(c => cell(uni(c).placement + '%', many && uni(c).placement === maxPlace)) },
+      { label: 'Average package', cells: cs.map(c => cell(uni(c).avgPackage, false)) },
+      { label: 'Hiring partners', cells: cs.map(c => cell(uni(c).partners + '+', false)) },
+      { label: 'Specialisations', cells: cs.map(c => cell(c.specializations.length + ' tracks', many && c.specializations.length === maxSpecs)) },
+      { label: 'Eligibility', cells: cs.map(c => cell(c.eligibility, false)) }
+    ];
+
+    return Object.assign(base, {
+      presets,
+      gridCols: '190px ' + cs.map(() => '1fr').join(' '),
+      columns: cs.map(c => ({ name: c.name, uniName: uni(c).name, uniLogo: uni(c).logo })),
+      rows,
+      tableWrapStyle: this.state.unlocked ? '' : 'filter:blur(5px);pointer-events:none',
+      lockStyle: this.state.unlocked ? 'display:none' : 'position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(247,248,249,0.55)',
+      unlockedNoteStyle: this.state.unlocked ? 'margin-top:16px' : 'display:none'
+    });
+  }
+}
+</script>
+</body>
+</html>

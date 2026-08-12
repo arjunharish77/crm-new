@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&display=swap" rel="stylesheet">
+<style>body{margin:0;font-family:'DM Sans',sans-serif;color:#555;background:#F7F8F9}a{color:#544CC8;text-decoration:none}a:hover{color:#453DB8}</style>
+</helmet>
+<div style="min-height:100vh;padding:56px 24px">
+  <div style="max-width:1000px;margin:0 auto">
+    <img src="assets/logo-gradient.svg" alt="Unnati Vidya" style="height:26px;display:block" />
+    <h1 style="font-size:32px;font-weight:700;color:#363634;margin:20px 0 8px;letter-spacing:-0.4px">Redesign — clickable prototype</h1>
+    <p style="font-size:15px;color:#696868;margin:0 0 32px;max-width:620px">Visual refresh of the live Next.js app, same design tokens, real catalog data and assets from <code style="font-size:13px;background:#EAEAEA;padding:2px 6px;border-radius:3px">apps/unnatividya</code>. Every page links to the others — start anywhere.</p>
+
+    <div class="uv-3col" style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px">
+      <sc-for list="{{ pages }}" as="p" hint-placeholder-count="15">
+        <a href="{{ p.href }}" style="display:block;background:#fff;border:1px solid #CFDAE6;border-radius:8px;padding:20px;color:inherit" style-hover="border-color:#544CC8;box-shadow:0 4px 8px rgba(36,36,36,0.12)">
+          <div style="font-size:11px;font-weight:700;color:#544CC8;letter-spacing:0.6px">{{ p.tag }}</div>
+          <div style="font-size:17px;font-weight:700;color:#363634;margin:8px 0 5px">{{ p.title }}</div>
+          <div style="font-size:13px;color:#696868;line-height:1.55">{{ p.desc }}</div>
+        </a>
+      </sc-for>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{}">
+class Component extends DCLogic {
+  renderVals() {
+    return {
+      pages: [
+        ['MARKETING', 'Home', 'Hero, popular degrees, universities, AI teaser, streams, FAQ', 'Home.dc.html'],
+        ['CATALOG', 'Courses listing', 'Live filters, sort, search across all 30 programs', 'Courses.dc.html'],
+        ['CATALOG', 'Course detail', 'Online MBA — MUJ, with sticky section nav and enquiry rail', 'Course.dc.html'],
+        ['CATALOG', 'Universities listing', 'Three institutions with campus photos and stats', 'Universities.dc.html'],
+        ['CATALOG', 'University detail', 'MUJ — programs table, placements, scholarships, FAQ', 'University.dc.html'],
+        ['CONVERSION', 'Compare', 'Up to three programs, lead-gated with best-value highlighting', 'Compare.dc.html'],
+        ['CONVERSION', 'AI recommender', 'Five-question quiz, scored shortlist, chat refinement', 'Recommender.dc.html'],
+        ['CONVERSION', 'Lead capture', 'Multi-step wizard with OTP verification', 'Lead.dc.html'],
+        ['TOOLS', 'EMI calculator', 'Real program fees, tenure and rate modelling', 'EmiCalculator.dc.html'],
+        ['TOOLS', 'Shortlist', 'Saved programs with fee spread and rating stats', 'Shortlist.dc.html'],
+        ['TOOLS', 'Specializations', 'Every elective track, grouped by stream and searchable', 'Specializations.dc.html'],
+        ['CONTENT', 'Blog listing', 'Category filter over the real blog set', 'Blog.dc.html'],
+        ['CONTENT', 'Article', 'Long-form layout with sidebar and end-of-article CTA', 'Article.dc.html'],
+        ['CONTENT', 'Degree guides', 'Featured guide plus one guide per degree', 'Guides.dc.html'],
+        ['TRUST', 'How we verify', 'The four checks and what we refuse to publish', 'HowWeVerify.dc.html'],
+        ['TRUST', 'Legal', 'About, privacy, terms and refund in one tabbed page', 'Legal.dc.html'],
+        ['INTERNAL', 'Admin console', 'Lead pipeline, program stats and content quality', 'Admin.dc.html'],
+        ['MOBILE', 'Mobile board', 'Eight mobile-web screens at 390px', 'Mobile.dc.html']
+      ].map(([tag, title, desc, href]) => ({ tag, title, desc, href }))
+    };
+  }
+}
+</script>
+</body>
+</html>

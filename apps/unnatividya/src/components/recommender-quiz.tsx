@@ -14,8 +14,8 @@ type Message = { who: "user" | "bot"; text: string };
 const questions: { key: AnswerKey; text: string; options: string[] }[] = [
   {
     key: "goal",
-    text: "What is your main goal?",
-    options: ["Get promoted / switch to a better role", "Start my first degree after 12th", "Move into tech / IT", "Add a PG degree to my profile"],
+    text: "What are you trying to achieve?",
+    options: ["Get promoted or switch to a better role", "Start my first degree after 12th", "Move into tech or IT", "Add a PG degree to my profile"],
   },
   {
     key: "level",
@@ -30,12 +30,12 @@ const questions: { key: AnswerKey; text: string; options: string[] }[] = [
   {
     key: "budget",
     text: "What total budget are you comfortable with?",
-    options: ["Under ₹1,00,000", "₹1,00,000 – ₹1,60,000", "Above ₹1,60,000 — brand matters more"],
+    options: ["Under ₹1,00,000", "₹1,00,000 – ₹1,80,000", "Above ₹1,80,000 — brand matters more"],
   },
   {
     key: "work",
-    text: "Are you currently working?",
-    options: ["Yes, full-time", "Yes, part-time / freelancing", "No, studying or on a break"],
+    text: "Are you working right now?",
+    options: ["Yes, full-time", "Yes, part-time or freelancing", "No, studying or on a break"],
   },
 ];
 
@@ -57,9 +57,9 @@ function scoreCourse(course: CourseItem, answers: Answers) {
   else if (answers.stream) score -= 18;
 
   if (answers.budget === "Under ₹1,00,000") score += course.fee <= 100000 ? 10 : -14;
-  if (answers.budget === "₹1,00,000 – ₹1,60,000") score += course.fee > 100000 && course.fee <= 160000 ? 10 : -6;
-  if (answers.budget?.startsWith("Above")) score += course.fee > 160000 ? 8 : 0;
-  if (answers.goal === "Move into tech / IT" && course.stream === "IT & Computers") score += 6;
+  if (answers.budget === "₹1,00,000 – ₹1,80,000") score += course.fee > 100000 && course.fee <= 180000 ? 10 : -6;
+  if (answers.budget?.startsWith("Above")) score += course.fee > 180000 ? 8 : 0;
+  if (answers.goal === "Move into tech or IT" && course.stream === "IT & Computers") score += 6;
   if (answers.goal?.startsWith("Get promoted") && course.level === "PG") score += 5;
 
   score += Math.round((course.rating - 4.3) * 10) + Math.round(course.university.placement / 30);
@@ -69,10 +69,10 @@ function scoreCourse(course: CourseItem, answers: Answers) {
 function why(course: CourseItem, answers: Answers) {
   const bits: string[] = [];
   if (answers.stream) bits.push(`matches your interest in ${answers.stream.toLowerCase()}`);
-  if (answers.budget === "Under ₹1,00,000" && course.fee <= 100000) bits.push("fits your budget");
-  if (answers.budget === "₹1,00,000 – ₹1,60,000" && course.fee <= 160000) bits.push("fits your budget");
-  if (answers.work?.startsWith("Yes")) bits.push("weekend live classes suit working professionals");
-  bits.push(`${course.university.placement}% placement rate at ${course.university.shortName}`);
+  if (answers.budget === "Under ₹1,00,000" && course.fee <= 100000) bits.push("sits inside your budget");
+  if (answers.budget === "₹1,00,000 – ₹1,80,000" && course.fee <= 180000) bits.push("sits inside your budget");
+  if (answers.work?.startsWith("Yes")) bits.push("weekend live classes suit working learners");
+  bits.push(`${course.university.placement}% placement assistance at ${course.university.shortName}`);
   return `${bits.slice(0, 3).join("; ")}.`;
 }
 
@@ -82,19 +82,23 @@ function botReply(text: string, courses: CourseItem[]) {
   const bestPlacement = [...courses].sort((a, b) => b.university.placement - a.university.placement)[0];
   const bestPartners = [...courses].sort((a, b) => b.university.partners - a.university.partners)[0];
 
-  if (query.includes("cheap") || query.includes("afford") || query.includes("budget")) {
+  if (query.includes("cheap") || query.includes("afford") || query.includes("budget") || query.includes("low fee")) {
     return `On a tight budget, ${cheapest.name} from ${cheapest.university.name} at ${formatFee(cheapest.fee)} total (EMI ${cheapest.emi}) is the strongest value. It is UGC-entitled, so validity is identical to costlier options.`;
   }
-  if (query.includes("placement") || query.includes("job") || query.includes("salary")) {
+  if (query.includes("placement") || query.includes("job") || query.includes("salary") || query.includes("package")) {
     return `For placements, ${bestPlacement.university.name} leads here with a ${bestPlacement.university.placement}% assistance rate and ${bestPlacement.university.avgPackage} average package. ${bestPartners.university.name} has the largest partner network (${bestPartners.university.partners}+). I would weight ${bestPlacement.university.shortName} if placement support is your top criterion.`;
+  }
+  if (query.includes("specialis") || query.includes("specializ")) {
+    const mostSpecializations = [...courses].sort((a, b) => b.specializations.length - a.specializations.length)[0];
+    return `Among your matches, ${mostSpecializations.name} from ${mostSpecializations.university.name} has the most elective depth — ${mostSpecializations.specializations.length} specialisation tracks. Ask me about a specific one if you want the exact list.`;
   }
   if (query.includes("mba")) {
     return "Between the three MBAs: MUJ balances brand and outcomes best, SMU is the value pick, and Amity has the strongest international recognition (WES + QS ranked). Want to open them in the compare tool?";
   }
-  if (query.includes("emi") || query.includes("loan")) {
+  if (query.includes("emi") || query.includes("loan") || query.includes("instal")) {
     return "Every program here offers no-cost EMI via education loan partners — your top match works out to roughly the EMI shown on its card, with zero processing fee for salaried applicants.";
   }
-  if (query.includes("valid") || query.includes("ugc") || query.includes("government")) {
+  if (query.includes("valid") || query.includes("ugc") || query.includes("government") || query.includes("govt") || query.includes("abroad") || query.includes("wes")) {
     return "All programs I recommend are UGC-entitled — legally equivalent to on-campus degrees for government jobs, PSU roles and higher studies, including WES evaluation abroad.";
   }
   return 'Good question — based on your quiz answers I would still start with your top match above. For a nuanced take, tap "Enquire" on any card and a counsellor will call you free.';
@@ -131,7 +135,7 @@ export function RecommenderQuiz({ courses }: { courses: Course[] }) {
     }
     setPhase("thinking");
     window.setTimeout(() => {
-      setChat([{ who: "bot", text: "I shortlisted these 3 from our catalog. Ask me anything — cheaper alternatives, placements, EMI, or whether the degree is valid for government jobs." }]);
+      setChat([{ who: "bot", text: `I scored all ${courseItems.length} programs and shortlisted these three. Ask me anything — cheaper alternatives, placements, EMI, or whether the degree is valid for government jobs.` }]);
       setPhase("results");
       trackEvent("recommender_completed", { course_ids: topMatches(nextAnswers).map((item) => item.course.id) });
     }, 1400);
@@ -154,23 +158,23 @@ export function RecommenderQuiz({ courses }: { courses: Course[] }) {
 
   return (
     <section style={{ background: "#F7F8F9", flex: 1, display: "flex", flexDirection: "column" }}>
-      <div style={{ maxWidth: 840, margin: "0 auto", padding: "40px 24px 64px", width: "100%", boxSizing: "border-box", flex: 1 }}>
+      <div style={{ maxWidth: 900, margin: "0 auto", padding: "44px 24px 64px", width: "100%", boxSizing: "border-box", flex: 1 }}>
         <div style={{ textAlign: "center", marginBottom: 28 }}>
-          <div style={{ display: "inline-flex", alignItems: "center", gap: 8, background: "#fff", border: "1px solid #CFDAE6", borderRadius: 999, padding: "6px 14px", fontSize: 12, fontWeight: 700, color: "#696868" }}>
-            <span style={{ width: 8, height: 8, borderRadius: "50%", background: "linear-gradient(180deg,#453DB8,#8B7CF0)", display: "inline-block" }} />
+          <div style={{ display: "inline-flex", alignItems: "center", gap: 9, background: "#fff", border: "1px solid #CFDAE6", borderRadius: 999, padding: "7px 15px", fontSize: 12, fontWeight: 700, color: "#696868" }}>
+            <span style={{ width: 9, height: 9, borderRadius: "50%", background: "linear-gradient(135deg,#4F46E5,#7C3AED)", display: "inline-block" }} />
             UnnatiAI course recommender
           </div>
-          <h1 style={{ fontSize: 30, fontWeight: 700, color: "#363634", margin: "14px 0 6px" }}>{phase === "results" ? "Your personalised shortlist" : "Find your degree in 2 minutes"}</h1>
-          <p style={{ fontSize: 15, color: "#696868", margin: 0 }}>{phase === "results" ? "Ranked by fit with your goals, budget and schedule" : "Five quick questions — no sign-up needed to see results"}</p>
+          <h1 style={{ fontSize: 34, fontWeight: 700, color: "#363634", margin: "16px 0 8px", letterSpacing: "-0.4px" }}>{phase === "results" ? "Your personalised shortlist" : "Find your degree in two minutes"}</h1>
+          <p style={{ fontSize: 15, color: "#696868", margin: 0 }}>{phase === "results" ? "Ranked by fit with your goal, budget, eligibility and schedule" : "Five questions, no sign-up needed to see results"}</p>
         </div>
 
         {phase === "quiz" ? (
-          <div style={{ background: "#fff", border: "1px solid #CFDAE6", borderRadius: 8, padding: 28, maxWidth: 620, margin: "0 auto" }}>
+          <div style={{ background: "#fff", border: "1px solid #CFDAE6", borderRadius: 8, padding: 32, maxWidth: 640, margin: "0 auto" }}>
             <div className="quiz-progress">
               {questions.map((item, itemIndex) => <span className={itemIndex <= index ? "active" : undefined} key={item.key} />)}
             </div>
-            <span style={{ display: "block", fontSize: 13, fontWeight: 700, color: "#544CC8", marginBottom: 6 }}>Question {index + 1} of 5</span>
-            <h2 style={{ fontSize: 20, fontWeight: 700, color: "#363634", margin: 0 }}>{question.text}</h2>
+            <span style={{ display: "block", fontSize: 13, fontWeight: 700, color: "#544CC8", marginBottom: 8 }}>Question {index + 1} of 5</span>
+            <h2 style={{ fontSize: 22, fontWeight: 700, color: "#363634", margin: 0, marginBottom: 20, letterSpacing: "-0.2px" }}>{question.text}</h2>
             <div className="quiz-option-list">
               {question.options.map((option) => (
                 <button
@@ -188,10 +192,10 @@ export function RecommenderQuiz({ courses }: { courses: Course[] }) {
         ) : null}
 
         {phase === "thinking" ? (
-          <div style={{ background: "#fff", border: "1px solid #CFDAE6", borderRadius: 8, padding: 48, maxWidth: 620, margin: "0 auto", textAlign: "center" }}>
+          <div style={{ background: "#fff", border: "1px solid #CFDAE6", borderRadius: 8, padding: 56, maxWidth: 640, margin: "0 auto", textAlign: "center" }}>
             <div className="uv-spinner" aria-hidden="true" />
-            <h2 style={{ fontSize: 16, fontWeight: 700, color: "#363634", margin: 0 }}>Matching your answers against our programs…</h2>
-            <p style={{ fontSize: 13, color: "#707070", margin: "6px 0 0" }}>Checking fees, approvals, placement records and flexibility</p>
+            <h2 style={{ fontSize: 17, fontWeight: 700, color: "#363634", margin: 0 }}>Scoring all {courseItems.length} programs against your answers…</h2>
+            <p style={{ fontSize: 13, color: "#707070", margin: "7px 0 0" }}>Checking fees, eligibility, approvals, placement records and schedule fit</p>
           </div>
         ) : null}
 
@@ -204,9 +208,18 @@ export function RecommenderQuiz({ courses }: { courses: Course[] }) {
                   <span>MATCH</span>
                 </div>
                 <div>
-                  {resultIndex === 0 ? <span className="best-match-badge">BEST MATCH</span> : null}
+                  {resultIndex === 0 ? (
+                    <span className="best-match-badge">BEST MATCH</span>
+                  ) : (
+                    <span className="match-badge">{score}% MATCH</span>
+                  )}
                   <h2>{course.name} — {course.university.name}</h2>
-                  <p>{course.duration} · {formatFee(course.fee)} total · EMI {course.emi}</p>
+                  <p>{course.duration} · {formatFee(course.fee)} total · EMI {course.emi} · ★ {course.rating}</p>
+                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 10 }}>
+                    {course.specializations.slice(0, 3).map((spec) => (
+                      <span key={spec} style={{ fontSize: 11, color: "#696868", background: "#F5F5F5", borderRadius: 999, padding: "2px 8px" }}>{spec}</span>
+                    ))}
+                  </div>
                   <p className="match-why"><b>Why:</b> {why(course, answers)}</p>
                 </div>
                 <div className="match-actions">
@@ -215,13 +228,19 @@ export function RecommenderQuiz({ courses }: { courses: Course[] }) {
                 </div>
               </article>
             ))}
-            <button className="quiz-back centered" type="button" onClick={restart}>↺ Retake the quiz</button>
+            <div style={{ display: "flex", gap: 14, justifyContent: "center", alignItems: "center" }}>
+              <button className="quiz-back centered" type="button" onClick={restart}>↺ Retake the quiz</button>
+              <span style={{ color: "#EAEAEA" }}>|</span>
+              <Link href={`/compare?add=${results.map(({ course }) => course.id).join(",")}`} style={{ fontSize: 13, fontWeight: 600, color: "#544CC8" }}>
+                Compare these three →
+              </Link>
+            </div>
 
             <div className="recommender-chat">
               <div className="chat-head">
                 <span />
                 <strong>Refine with UnnatiAI</strong>
-                <small>demo — responses are scripted</small>
+                <small>demo — scripted responses</small>
               </div>
               <div className="chat-body">
                 {chat.map((message, messageIndex) => (
@@ -231,7 +250,7 @@ export function RecommenderQuiz({ courses }: { courses: Course[] }) {
                 ))}
               </div>
               <div className="chat-chips">
-                {["Cheapest good option?", "Which has best placements?", "Is it valid for govt jobs?"].map((chip) => (
+                {["Cheapest good option?", "Which has the best placements?", "Is it valid for government jobs?"].map((chip) => (
                   <button type="button" onClick={() => send(chip)} key={chip}>{chip}</button>
                 ))}
               </div>

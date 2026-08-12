@@ -21,12 +21,22 @@ type LeadRow = {
   created_at: string;
 };
 
-export default async function AdminLeadsPage() {
+export default async function AdminLeadsPage({ searchParams }: { searchParams?: Promise<{ q?: string }> }) {
+  const params = await searchParams;
+  const q = params?.q?.trim() || "";
+
   const leads = await query<LeadRow>(
-    `select id, name, email, phone, city, email_otp_verified, phone_otp_verified, crm_sync_status, created_at
-     from lead_capture
-     order by created_at desc
-     limit 50`,
+    q
+      ? `select id, name, email, phone, city, email_otp_verified, phone_otp_verified, crm_sync_status, created_at
+         from lead_capture
+         where name ilike $1 or email ilike $1
+         order by created_at desc
+         limit 50`
+      : `select id, name, email, phone, city, email_otp_verified, phone_otp_verified, crm_sync_status, created_at
+         from lead_capture
+         order by created_at desc
+         limit 50`,
+    q ? [`%${q}%`] : [],
   ).catch(() => ({ rows: [] as LeadRow[] }));
 
   return (
@@ -38,7 +48,7 @@ export default async function AdminLeadsPage() {
             <h1>Lead inbox</h1>
             <p>Captured leads are saved before verification and marked email/phone verified independently.</p>
           </div>
-          <div className="admin-count">{leads.rows.length} latest</div>
+          <div className="admin-count">{leads.rows.length}{q ? ` matching "${q}"` : " latest"}</div>
         </div>
 
         <div className="admin-table-card">

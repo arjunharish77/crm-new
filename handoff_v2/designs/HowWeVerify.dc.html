@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&display=swap" rel="stylesheet">
+<style>body{margin:0;font-family:'DM Sans',sans-serif;color:#555;background:#fff}a{color:#544CC8;text-decoration:none}a:hover{color:#453DB8}</style>
+</helmet>
+<div style="min-height:100vh;display:flex;flex-direction:column">
+<dc-import name="SiteHeader" active="" hint-size="100%,110px"></dc-import>
+
+<div style="background:#263238;color:#fff">
+  <div style="max-width:1200px;margin:0 auto;padding:44px 24px">
+    <div style="font-size:12px;color:#B8C4CA;margin-bottom:14px"><a href="Home.dc.html" style="color:#B8C4CA">Home</a> &gt; How we verify</div>
+    <h1 style="font-size:38px;font-weight:700;margin:0 0 14px;letter-spacing:-0.5px;max-width:720px;line-height:1.15">How we verify every number on this site</h1>
+    <p style="font-size:16px;color:#B8C4CA;line-height:1.65;margin:0;max-width:680px">Fees, approvals and placement claims are copied from official sources, dated, and re-checked each admission cycle. Where a figure is indicative rather than official, we say so on the page.</p>
+  </div>
+</div>
+
+<div style="max-width:1000px;margin:0 auto;padding:48px 24px 64px;width:100%;box-sizing:border-box;flex:1;display:flex;flex-direction:column;gap:44px">
+  <div>
+    <h2 style="font-size:24px;font-weight:700;color:#363634;margin:0 0 18px;letter-spacing:-0.2px">The four checks</h2>
+    <div class="uv-2col" style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
+      <div style="border:1px solid #CFDAE6;border-radius:8px;padding:22px">
+        <div style="width:30px;height:30px;border-radius:4px;background:rgba(84,76,200,0.10);color:#544CC8;font-weight:700;font-size:14px;display:flex;align-items:center;justify-content:center">1</div>
+        <div style="font-size:17px;font-weight:700;color:#363634;margin:14px 0 6px">UGC-DEB entitlement</div>
+        <div style="font-size:14px;color:#696868;line-height:1.6">Every program is matched by name against the current UGC-DEB entitlement notification. Entitlement is per program and per academic year, so last year's approval is not evidence.</div>
+      </div>
+      <div style="border:1px solid #CFDAE6;border-radius:8px;padding:22px">
+        <div style="width:30px;height:30px;border-radius:4px;background:rgba(84,76,200,0.10);color:#544CC8;font-weight:700;font-size:14px;display:flex;align-items:center;justify-content:center">2</div>
+        <div style="font-size:17px;font-weight:700;color:#363634;margin:14px 0 6px">Fee from the university's own page</div>
+        <div style="font-size:14px;color:#696868;line-height:1.6">Total fee, semester fee and EMI come from the official program page, not from aggregator listings. The source URL sits at the bottom of every course page.</div>
+      </div>
+      <div style="border:1px solid #CFDAE6;border-radius:8px;padding:22px">
+        <div style="width:30px;height:30px;border-radius:4px;background:rgba(84,76,200,0.10);color:#544CC8;font-weight:700;font-size:14px;display:flex;align-items:center;justify-content:center">3</div>
+        <div style="font-size:17px;font-weight:700;color:#363634;margin:14px 0 6px">Eligibility and specialisation audit</div>
+        <div style="font-size:14px;color:#696868;line-height:1.6">Each course is tagged as source-verified or inherited from a stream-level default. Verified fields carry a badge on the page so you know which is which.</div>
+      </div>
+      <div style="border:1px solid #CFDAE6;border-radius:8px;padding:22px">
+        <div style="width:30px;height:30px;border-radius:4px;background:rgba(84,76,200,0.10);color:#544CC8;font-weight:700;font-size:14px;display:flex;align-items:center;justify-content:center">4</div>
+        <div style="font-size:17px;font-weight:700;color:#363634;margin:14px 0 6px">Placement claims kept honest</div>
+        <div style="font-size:14px;color:#696868;line-height:1.6">Universities offer placement <i>assistance</i>, not guaranteed jobs. We repeat their wording and never convert an assistance rate into a placement guarantee.</div>
+      </div>
+    </div>
+  </div>
+
+  <div>
+    <h2 style="font-size:24px;font-weight:700;color:#363634;margin:0 0 18px;letter-spacing:-0.2px">What we will not publish</h2>
+    <div style="display:flex;flex-direction:column;gap:10px">
+      <div style="display:flex;gap:12px;align-items:flex-start;border:1px solid #CFDAE6;border-radius:8px;padding:16px 18px"><span style="color:#707070;font-weight:700;flex:none">✕</span><span style="font-size:14px;line-height:1.6">Salary figures with no stated source. Career bands on this site are labelled indicative.</span></div>
+      <div style="display:flex;gap:12px;align-items:flex-start;border:1px solid #CFDAE6;border-radius:8px;padding:16px 18px"><span style="color:#707070;font-weight:700;flex:none">✕</span><span style="font-size:14px;line-height:1.6">"Starting from" fees that exclude exam or convocation charges.</span></div>
+      <div style="display:flex;gap:12px;align-items:flex-start;border:1px solid #CFDAE6;border-radius:8px;padding:16px 18px"><span style="color:#707070;font-weight:700;flex:none">✕</span><span style="font-size:14px;line-height:1.6">Programs from institutions absent from the UGC-DEB list, at any commission.</span></div>
+      <div style="display:flex;gap:12px;align-items:flex-start;border:1px solid #CFDAE6;border-radius:8px;padding:16px 18px"><span style="color:#707070;font-weight:700;flex:none">✕</span><span style="font-size:14px;line-height:1.6">Rankings we cannot trace to a published methodology.</span></div>
+    </div>
+  </div>
+
+  <div style="background:#F4F3FC;border:1px solid #CFDAE6;border-radius:8px;padding:28px">
+    <div style="font-size:19px;font-weight:700;color:#363634;margin-bottom:8px">Found something wrong?</div>
+    <div style="font-size:15px;color:#696868;line-height:1.65;margin-bottom:18px;max-width:620px">If a fee has changed or an entitlement has lapsed, tell us and we will correct it within one working day — and credit the correction on the page.</div>
+    <a href="Lead.dc.html" style="height:46px;line-height:46px;padding:0 24px;background:#544CC8;color:#fff;border-radius:4px;font-size:15px;font-weight:700;display:inline-block">Report a correction</a>
+  </div>
+</div>
+
+<dc-import name="SiteFooter" hint-size="100%,360px"></dc-import>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{}"></script>
+</body>
+</html>

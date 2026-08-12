@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&display=swap" rel="stylesheet">
+<style>body{margin:0;font-family:'DM Sans',sans-serif;color:#555;background:#F7F8F9}a{color:#544CC8;text-decoration:none}a:hover{color:#453DB8}button{font-family:'DM Sans',sans-serif}</style>
+</helmet>
+<div style="min-height:100vh;display:flex;flex-direction:column;background:#F7F8F9">
+<dc-import name="SiteHeader" active="" hint-size="100%,110px"></dc-import>
+
+<div style="background:#fff;border-bottom:1px solid #EAEAEA">
+  <div style="max-width:1200px;margin:0 auto;padding:30px 24px 26px">
+    <div style="font-size:12px;color:#707070;margin-bottom:10px"><a href="Home.dc.html" style="color:#707070">Home</a> &gt; Shortlist</div>
+    <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:24px;flex-wrap:wrap">
+      <div>
+        <h1 style="font-size:32px;font-weight:700;color:#363634;margin:0 0 6px;letter-spacing:-0.4px">My shortlist</h1>
+        <p style="font-size:15px;color:#696868;margin:0">{{ summary }}</p>
+      </div>
+      <div style="display:flex;gap:10px">
+        <a href="Compare.dc.html" style="height:44px;line-height:44px;padding:0 20px;background:#544CC8;color:#fff;border-radius:4px;font-size:14px;font-weight:700">Compare all</a>
+        <button onClick="{{ openLead }}" style="height:44px;padding:0 20px;border:1.5px solid #555;background:#fff;color:#555;border-radius:4px;font-size:14px;font-weight:700;cursor:pointer">Get all brochures</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div style="max-width:1200px;margin:0 auto;padding:26px 24px 64px;width:100%;box-sizing:border-box;flex:1">
+  <div class="uv-3col" style="display:grid;grid-template-columns:repeat(3,1fr);gap:18px">
+    <sc-for list="{{ saved }}" as="c" hint-placeholder-count="3">
+      <div style="background:#fff;border:1px solid #CFDAE6;border-radius:8px;padding:20px;display:flex;flex-direction:column;gap:12px">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <img src="{{ c.uniLogo }}" alt="{{ c.uniName }}" style="height:30px;width:auto;max-width:110px;object-fit:contain;object-position:left" />
+          <button onClick="{{ c.remove }}" style="border:none;background:none;font-size:12px;font-weight:700;color:#707070;cursor:pointer;padding:4px">Remove</button>
+        </div>
+        <div>
+          <a href="Course.dc.html" style="font-size:17px;font-weight:700;color:#363634;display:block">{{ c.name }}</a>
+          <div style="font-size:13px;color:#707070;margin-top:3px">{{ c.uniName }}</div>
+        </div>
+        <div style="display:flex;gap:14px;font-size:13px;color:#555;flex-wrap:wrap"><span>{{ c.duration }}</span><span><b style="color:#363634">{{ c.feeText }}</b></span><span>EMI {{ c.emi }}</span></div>
+        <div style="display:flex;gap:8px;margin-top:auto;border-top:1px solid #EAEAEA;padding-top:12px">
+          <a href="Course.dc.html" style="flex:1;text-align:center;height:38px;line-height:38px;background:#544CC8;color:#fff;border-radius:4px;font-size:13px;font-weight:700">View</a>
+          <button onClick="{{ openLead }}" style="flex:1;height:38px;border:1.5px solid #555;background:#fff;color:#555;border-radius:4px;font-size:13px;font-weight:700;cursor:pointer">Enquire</button>
+        </div>
+      </div>
+    </sc-for>
+  </div>
+
+  <div style="{{ emptyStyle }}">
+    <div style="background:#fff;border:1px dashed #CFDAE6;border-radius:8px;padding:56px;text-align:center">
+      <div style="font-size:18px;font-weight:700;color:#363634">Nothing saved yet</div>
+      <div style="font-size:14px;color:#707070;margin:8px 0 20px">Tap the heart on any course to keep it here while you decide.</div>
+      <a href="Courses.dc.html" style="height:46px;line-height:46px;padding:0 24px;background:#544CC8;color:#fff;border-radius:4px;font-size:15px;font-weight:700;display:inline-block">Browse courses</a>
+    </div>
+  </div>
+
+  <div style="{{ statsStyle }}">
+    <div style="background:#fff;border:1px solid #CFDAE6;border-radius:8px;padding:24px;margin-top:22px;display:grid;grid-template-columns:repeat(4,1fr);gap:24px" class="uv-4col">
+      <div><div style="font-size:12px;color:#707070">Cheapest saved</div><div style="font-size:20px;font-weight:700;color:#363634;margin-top:3px">{{ statCheapest }}</div></div>
+      <div><div style="font-size:12px;color:#707070">Fee spread</div><div style="font-size:20px;font-weight:700;color:#363634;margin-top:3px">{{ statSpread }}</div></div>
+      <div><div style="font-size:12px;color:#707070">Highest rated</div><div style="font-size:20px;font-weight:700;color:#363634;margin-top:3px">{{ statRated }}</div></div>
+      <div><div style="font-size:12px;color:#707070">Best placement rate</div><div style="font-size:20px;font-weight:700;color:#363634;margin-top:3px">{{ statPlacement }}</div></div>
+    </div>
+  </div>
+</div>
+
+<dc-import name="SiteFooter" hint-size="100%,360px"></dc-import>
+</div>
+<dc-import name="LeadWizard" open="{{ leadOpen }}" on-close="{{ closeLead }}" context="my shortlist" hint-size="0px,0px"></dc-import>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{}">
+class Component extends DCLogic {
+  state = { data: null, ids: ['mba-muj', 'mba-smu', 'mca-muj'], leadOpen: false };
+  componentDidMount() { import('./uv-data.js').then(d => this.setState({ data: d })); }
+
+  renderVals() {
+    const d = this.state.data;
+    const base = {
+      saved: [], summary: 'Loading…',
+      emptyStyle: 'display:none', statsStyle: 'display:none',
+      statCheapest: '', statSpread: '', statRated: '', statPlacement: '',
+      leadOpen: this.state.leadOpen,
+      openLead: () => this.setState({ leadOpen: true }),
+      closeLead: () => this.setState({ leadOpen: false })
+    };
+    if (!d) return base;
+
+    const cs = this.state.ids.map(id => d.courseById[id]).filter(Boolean);
+    if (!cs.length) {
+      return Object.assign(base, { summary: 'No programs saved yet', emptyStyle: 'display:block' });
+    }
+    const fees = cs.map(c => c.fee);
+    const best = cs.slice().sort((a, b) => b.rating - a.rating)[0];
+    const bestPlace = cs.slice().sort((a, b) => d.universityById[b.universityId].placement - d.universityById[a.universityId].placement)[0];
+
+    return Object.assign(base, {
+      summary: cs.length + ' programs saved · fees from ' + d.fmtFee(Math.min.apply(null, fees)) + ' to ' + d.fmtFee(Math.max.apply(null, fees)),
+      statsStyle: '',
+      statCheapest: d.fmtFee(Math.min.apply(null, fees)),
+      statSpread: d.fmtFee(Math.max.apply(null, fees) - Math.min.apply(null, fees)),
+      statRated: best.rating + ' ★ ' + d.universityById[best.universityId].shortName,
+      statPlacement: d.universityById[bestPlace.universityId].placement + '% ' + d.universityById[bestPlace.universityId].shortName,
+      saved: cs.map(c => {
+        const u = d.universityById[c.universityId];
+        return {
+          name: c.name, uniName: u.name, uniLogo: u.logo,
+          duration: c.duration, feeText: d.fmtFee(c.fee), emi: c.emi,
+          remove: () => this.setState(s => ({ ids: s.ids.filter(x => x !== c.id) }))
+        };
+      })
+    });
+  }
+}
+</script>
+</body>
+</html>

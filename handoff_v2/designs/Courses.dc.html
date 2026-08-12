@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&display=swap" rel="stylesheet">
+<style>body{margin:0;font-family:'DM Sans',sans-serif;color:#555;background:#F7F8F9}a{color:#544CC8;text-decoration:none}a:hover{color:#453DB8}input,select{font-family:'DM Sans',sans-serif}</style>
+</helmet>
+<div style="min-height:100vh;display:flex;flex-direction:column;background:#F7F8F9">
+<dc-import name="SiteHeader" active="courses" hint-size="100%,110px"></dc-import>
+
+<div style="background:#fff;border-bottom:1px solid #EAEAEA">
+  <div style="max-width:1200px;margin:0 auto;padding:30px 24px 26px">
+    <div style="font-size:12px;color:#707070;margin-bottom:10px"><a href="Home.dc.html" style="color:#707070">Home</a> &gt; Courses</div>
+    <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:24px;flex-wrap:wrap">
+      <div>
+        <h1 style="font-size:32px;font-weight:700;color:#363634;margin:0 0 6px;letter-spacing:-0.4px">Online degree courses</h1>
+        <p style="font-size:15px;color:#696868;margin:0">{{ countLine }}</p>
+      </div>
+      <a href="Recommender.dc.html" style="display:inline-flex;align-items:center;gap:9px;height:44px;padding:0 20px;border:1.5px solid #544CC8;color:#544CC8;border-radius:4px;font-size:14px;font-weight:700;box-sizing:border-box">
+        <span style="width:8px;height:8px;border-radius:50%;background:linear-gradient(135deg,#4F46E5,#7C3AED);display:inline-block"></span>Not sure? Ask UnnatiAI
+      </a>
+    </div>
+  </div>
+</div>
+
+<div style="background:#F4F3FC;border-bottom:1px solid #EAEAEA">
+  <div style="max-width:1200px;margin:0 auto;padding:14px 24px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+    <span style="font-size:11px;font-weight:700;color:#696868;letter-spacing:0.8px">TRENDING COMPARISONS</span>
+    <a href="Compare.dc.html" style="font-size:13px;font-weight:600;border:1px solid #CFDAE6;background:#fff;border-radius:999px;padding:7px 14px;color:#363634">MBA: MUJ vs Amity</a>
+    <a href="Compare.dc.html" style="font-size:13px;font-weight:600;border:1px solid #CFDAE6;background:#fff;border-radius:999px;padding:7px 14px;color:#363634">MBA: SMU vs MUJ</a>
+    <a href="Compare.dc.html" style="font-size:13px;font-weight:600;border:1px solid #CFDAE6;background:#fff;border-radius:999px;padding:7px 14px;color:#363634">BCA: MUJ vs Amity</a>
+    <a href="Compare.dc.html" style="font-size:13px;font-weight:600;border:1px solid #CFDAE6;background:#fff;border-radius:999px;padding:7px 14px;color:#363634">MCA: MUJ vs SMU</a>
+  </div>
+</div>
+
+<div style="max-width:1200px;margin:0 auto;padding:26px 24px 64px;width:100%;box-sizing:border-box;display:grid;grid-template-columns:262px 1fr;gap:24px;align-items:start;flex:1" class="uv-2col">
+  <div class="uv-rail" style="background:#fff;border:1px solid #CFDAE6;border-radius:8px;padding:20px;position:sticky;top:88px">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:18px">
+      <span style="font-size:15px;font-weight:700;color:#363634">Filters</span>
+      <button onClick="{{ clearAll }}" style="border:none;background:none;font-size:12px;font-weight:700;color:#544CC8;cursor:pointer;padding:0;font-family:'DM Sans',sans-serif">Clear all</button>
+    </div>
+    <div style="font-size:12px;font-weight:700;color:#363634;letter-spacing:0.4px;margin-bottom:10px">DEGREE LEVEL</div>
+    <div style="display:flex;flex-direction:column;gap:9px;margin-bottom:20px">
+      <sc-for list="{{ levelOpts }}" as="o" hint-placeholder-count="2">
+        <label style="display:flex;align-items:center;gap:9px;font-size:14px;color:#555;cursor:pointer">
+          <input type="checkbox" checked="{{ o.checked }}" onChange="{{ o.toggle }}" style="accent-color:#544CC8;width:16px;height:16px" />{{ o.label }}<span style="color:#AAAAAA;font-size:12px">{{ o.count }}</span>
+        </label>
+      </sc-for>
+    </div>
+    <div style="font-size:12px;font-weight:700;color:#363634;letter-spacing:0.4px;margin-bottom:10px">STREAM</div>
+    <div style="display:flex;flex-direction:column;gap:9px;margin-bottom:20px">
+      <sc-for list="{{ streamOpts }}" as="o" hint-placeholder-count="4">
+        <label style="display:flex;align-items:center;gap:9px;font-size:14px;color:#555;cursor:pointer">
+          <input type="checkbox" checked="{{ o.checked }}" onChange="{{ o.toggle }}" style="accent-color:#544CC8;width:16px;height:16px" />{{ o.label }}<span style="color:#AAAAAA;font-size:12px">{{ o.count }}</span>
+        </label>
+      </sc-for>
+    </div>
+    <div style="font-size:12px;font-weight:700;color:#363634;letter-spacing:0.4px;margin-bottom:10px">UNIVERSITY</div>
+    <div style="display:flex;flex-direction:column;gap:9px;margin-bottom:20px">
+      <sc-for list="{{ uniOpts }}" as="o" hint-placeholder-count="3">
+        <label style="display:flex;align-items:center;gap:9px;font-size:14px;color:#555;cursor:pointer">
+          <input type="checkbox" checked="{{ o.checked }}" onChange="{{ o.toggle }}" style="accent-color:#544CC8;width:16px;height:16px" />{{ o.label }}<span style="color:#AAAAAA;font-size:12px">{{ o.count }}</span>
+        </label>
+      </sc-for>
+    </div>
+    <div style="font-size:12px;font-weight:700;color:#363634;letter-spacing:0.4px;margin-bottom:10px">TOTAL FEE UNDER</div>
+    <input type="range" min="75000" max="275000" step="5000" value="{{ maxFee }}" onChange="{{ setFee }}" onInput="{{ setFee }}" style="width:100%;accent-color:#544CC8" />
+    <div style="font-size:13px;color:#696868;margin-top:6px">{{ feeLabel }}</div>
+  </div>
+
+  <div>
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:16px;margin-bottom:16px;flex-wrap:wrap">
+      <input placeholder="Search courses, universities or streams…" value="{{ query }}" onChange="{{ setQuery }}" onInput="{{ setQuery }}" style="height:44px;flex:1;min-width:260px;padding:0 16px;border:1px solid #CFDAE6;border-radius:4px;font-size:14px;color:#555;outline-color:#544CC8;background:#fff" />
+      <select value="{{ sort }}" onChange="{{ setSort }}" style="height:44px;padding:0 14px;border:1px solid #CFDAE6;border-radius:4px;font-size:13px;color:#555;background:#fff">
+        <option value="pop">Sort: most reviewed</option>
+        <option value="feeAsc">Fee: low to high</option>
+        <option value="feeDesc">Fee: high to low</option>
+        <option value="rating">Highest rated</option>
+      </select>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:14px">
+      <sc-for list="{{ results }}" as="c" hint-placeholder-count="6">
+        <div class="uv-2col" style="background:#fff;border:1px solid #CFDAE6;border-radius:8px;padding:20px;display:grid;grid-template-columns:1fr 190px;gap:22px" style-hover="box-shadow:0 4px 8px rgba(36,36,36,0.12)">
+          <div>
+            <div style="display:flex;align-items:center;gap:12px;margin-bottom:10px">
+              <img src="{{ c.uniLogo }}" alt="{{ c.uniName }}" style="height:32px;width:auto;max-width:120px;object-fit:contain;object-position:left;flex:none" />
+              <span style="font-size:11px;font-weight:700;border-radius:999px;white-space:nowrap;padding:4px 10px;{{ c.levelStyle }}">{{ c.level }}</span>
+              <span style="font-size:12px;color:#707070">{{ c.stream }}</span>
+            </div>
+            <a href="Course.dc.html" style="font-size:19px;font-weight:700;color:#363634;display:block">{{ c.name }} — {{ c.uniName }}</a>
+            <div style="display:flex;gap:20px;font-size:13px;color:#555;margin-top:10px;flex-wrap:wrap;align-items:center">
+              <span><span style="color:#FDB515">★</span> <b style="color:#363634">{{ c.rating }}</b> ({{ c.reviews }} reviews)</span>
+              <span>{{ c.duration }}</span>
+              <span><b style="color:#363634">{{ c.feeText }}</b> total</span>
+              <span>EMI {{ c.emi }}</span>
+            </div>
+            <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:12px">
+              <sc-for list="{{ c.specs }}" as="s" hint-placeholder-count="4">
+                <span style="font-size:11px;color:#696868;background:#F5F5F5;border-radius:999px;padding:4px 10px">{{ s }}</span>
+              </sc-for>
+              <span style="font-size:11px;color:#544CC8;font-weight:700;padding:4px 4px">{{ c.moreSpecs }}</span>
+            </div>
+            <div style="display:flex;gap:6px;align-items:center;margin-top:12px;flex-wrap:wrap">
+              <sc-for list="{{ c.icons }}" as="ic" hint-placeholder-count="3">
+                <img src="{{ ic }}" alt="Approval" style="height:28px;width:auto" />
+              </sc-for>
+            </div>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:9px;justify-content:center">
+            <a href="Course.dc.html" style="text-align:center;height:42px;line-height:42px;background:#544CC8;color:#fff;border-radius:4px;font-size:13px;font-weight:700" style-hover="background:#453DB8">View details</a>
+            <a href="Lead.dc.html" style="text-align:center;height:42px;line-height:42px;border:1.5px solid #555;color:#555;border-radius:4px;font-size:13px;font-weight:700;box-sizing:border-box" style-hover="border-color:#544CC8;color:#544CC8">Enquire now</a>
+            <a href="Compare.dc.html" style="text-align:center;font-size:12px;font-weight:700">+ Add to compare</a>
+          </div>
+        </div>
+      </sc-for>
+    </div>
+    <div style="{{ emptyStyle }}">
+      <div style="background:#fff;border:1px dashed #CFDAE6;border-radius:8px;padding:48px;text-align:center">
+        <div style="font-size:16px;font-weight:700;color:#363634">No courses match these filters</div>
+        <div style="font-size:14px;color:#707070;margin:8px 0 18px">Try widening the fee range or clearing a stream filter.</div>
+        <button onClick="{{ clearAll }}" style="height:42px;padding:0 22px;background:#544CC8;color:#fff;border:none;border-radius:4px;font-size:14px;font-weight:700;cursor:pointer;font-family:'DM Sans',sans-serif">Clear all filters</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<dc-import name="SiteFooter" hint-size="100%,360px"></dc-import>
+</div>
+
+<div style="position:fixed;right:22px;bottom:22px;z-index:150;display:flex;flex-direction:column;gap:10px;align-items:flex-end">
+  <a href="Lead.dc.html" style="height:46px;line-height:46px;padding:0 22px;background:#fff;border:1.5px solid #544CC8;color:#544CC8;border-radius:999px;font-size:13px;font-weight:700;box-shadow:0 4px 8px rgba(36,36,36,0.12)">Request a callback</a>
+  <a href="https://wa.me/911800120405" target="_blank" rel="noopener" aria-label="Chat on WhatsApp" style="width:52px;height:52px;border-radius:50%;background:#25D366;box-shadow:0 4px 8px rgba(36,36,36,0.16);display:flex;align-items:center;justify-content:center">
+    <span style="width:24px;height:24px;border:2.5px solid #fff;border-radius:50% 50% 50% 4px;display:block"></span>
+  </a>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{}">
+class Component extends DCLogic {
+  state = { data: null, levels: [], streams: [], unis: [], maxFee: 275000, query: '', sort: 'pop' };
+
+  componentDidMount() {
+    import('./uv-data.js').then(d => this.setState({ data: d }));
+  }
+
+  toggle(key, value) {
+    this.setState(s => {
+      const list = s[key];
+      return { [key]: list.indexOf(value) > -1 ? list.filter(v => v !== value) : list.concat([value]) };
+    });
+  }
+
+  filtered(d) {
+    const { levels, streams, unis, maxFee, query, sort } = this.state;
+    const q = query.trim().toLowerCase();
+    const out = d.courses.filter(c => {
+      const u = d.universityById[c.universityId];
+      if (levels.length && levels.indexOf(c.level) < 0) return false;
+      if (streams.length && streams.indexOf(c.stream) < 0) return false;
+      if (unis.length && unis.indexOf(c.universityId) < 0) return false;
+      if (c.fee > maxFee) return false;
+      if (q && (c.name + ' ' + u.name + ' ' + u.shortName + ' ' + c.stream).toLowerCase().indexOf(q) < 0) return false;
+      return true;
+    });
+    out.sort((a, b) => {
+      if (sort === 'feeAsc') return a.fee - b.fee;
+      if (sort === 'feeDesc') return b.fee - a.fee;
+      if (sort === 'rating') return b.rating - a.rating;
+      return b.reviews - a.reviews;
+    });
+    return out;
+  }
+
+  renderVals() {
+    const d = this.state.data;
+    const base = {
+      countLine: 'Loading the catalog…',
+      feeLabel: 'Up to \u20B92,75,000',
+      maxFee: this.state.maxFee,
+      query: this.state.query,
+      sort: this.state.sort,
+      emptyStyle: 'display:none',
+      results: [], levelOpts: [], streamOpts: [], uniOpts: [],
+      setFee: e => this.setState({ maxFee: +e.target.value }),
+      setQuery: e => this.setState({ query: e.target.value }),
+      setSort: e => this.setState({ sort: e.target.value }),
+      clearAll: () => this.setState({ levels: [], streams: [], unis: [], maxFee: 275000, query: '', sort: 'pop' })
+    };
+    if (!d) return base;
+
+    const results = this.filtered(d);
+    const lvlStyle = c => c.level === 'PG'
+      ? 'color:#4D00FF;background:rgba(77,0,255,0.10)'
+      : 'color:#4FA8FF;background:rgba(79,168,255,0.12)';
+
+    return Object.assign(base, {
+      countLine: results.length + ' of ' + d.courses.length + ' UGC-entitled programs · fees verified for the July 2026 cycle',
+      feeLabel: 'Up to ' + d.fmtFee(this.state.maxFee),
+      emptyStyle: results.length ? 'display:none' : 'display:block;margin-top:14px',
+      levelOpts: [['UG', 'Undergraduate'], ['PG', 'Postgraduate']].map(([v, label]) => ({
+        label, checked: this.state.levels.indexOf(v) > -1,
+        count: d.courses.filter(c => c.level === v).length,
+        toggle: () => this.toggle('levels', v)
+      })),
+      streamOpts: d.streams.map(v => ({
+        label: v, checked: this.state.streams.indexOf(v) > -1,
+        count: d.courses.filter(c => c.stream === v).length,
+        toggle: () => this.toggle('streams', v)
+      })),
+      uniOpts: d.universities.map(u => ({
+        label: u.shortName, checked: this.state.unis.indexOf(u.id) > -1,
+        count: d.courses.filter(c => c.universityId === u.id).length,
+        toggle: () => this.toggle('unis', u.id)
+      })),
+      results: results.map(c => {
+        const u = d.universityById[c.universityId];
+        const extra = c.specializations.length - 4;
+        return {
+          name: c.name, level: c.level, levelStyle: lvlStyle(c), stream: c.stream,
+          uniName: u.name, uniLogo: u.logo,
+          rating: c.rating, reviews: c.reviews.toLocaleString('en-IN'),
+          duration: c.duration, emi: c.emi, feeText: d.fmtFee(c.fee),
+          specs: c.specializations.slice(0, 4),
+          moreSpecs: extra > 0 ? '+' + extra + ' more' : '',
+          icons: u.approvals.map(d.approvalIcon).filter(Boolean).slice(0, 4)
+        };
+      })
+    });
+  }
+}
+</script>
+</body>
+</html>

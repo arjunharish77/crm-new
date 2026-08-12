@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+.uv-header-toggle{display:none;background:none;border:none;cursor:pointer;padding:6px;color:#363634}
+.uv-header-mobile-panel{display:none;flex-direction:column;gap:2px;padding:10px 20px 18px;border-top:1px solid #EAEAEA;background:#fff}
+.uv-header-mobile-panel a{display:flex;align-items:center;gap:8px;padding:13px 0;font-size:15px;font-weight:600;border-bottom:1px solid #F5F5F5}
+.uv-header-mobile-panel .uv-header-mobile-cta{margin-top:14px;justify-content:center;background:#544CC8;color:#fff;border-radius:4px;height:48px;padding:0;border-bottom:none}
+@media (max-width:1100px){
+  .uv-header-nav,.uv-header-cta,.uv-header-shortlist{display:none!important}
+  .uv-header-toggle{display:block!important;margin-left:auto}
+  .uv-header-mobile-panel[data-open="1"]{display:flex}
+  .uv-footer-grid{grid-template-columns:1fr 1fr!important}
+  .uv-2col{grid-template-columns:1fr!important}
+  .uv-3col{grid-template-columns:1fr 1fr!important}
+  .uv-4col{grid-template-columns:1fr 1fr!important}
+  .uv-rail{position:static!important}
+  .uv-side-rail{position:static!important}
+}
+@media (max-width:640px){
+  .uv-footer-grid{grid-template-columns:1fr!important}
+  .uv-3col,.uv-4col,.uv-5col{grid-template-columns:1fr!important}
+}
+</style>
+</helmet>
+<div style="position:sticky;top:0;z-index:100;background:#fff;box-shadow:0 3px 6px rgba(194,194,194,0.16)">
+  <div style="max-width:1200px;margin:0 auto;min-height:68px;display:flex;align-items:center;gap:30px;padding:0 24px">
+    <a href="Home.dc.html" aria-label="Unnati Vidya home"><img src="assets/logo-gradient.svg" alt="Unnati Vidya" style="height:24px;width:auto;display:block" /></a>
+    <nav class="uv-header-nav" style="display:flex;gap:24px;font-size:14px;font-weight:600;flex:1" aria-label="Main navigation">
+      <sc-for list="{{ nav }}" as="item" hint-placeholder-count="6">
+        <a href="{{ item.href }}" style="{{ item.style }}">{{ item.label }}</a>
+      </sc-for>
+    </nav>
+    <a href="Shortlist.dc.html" class="uv-header-shortlist" style="display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:600;color:#555;border:1px solid #CFDAE6;border-radius:999px;padding:7px 13px" style-hover="border-color:#544CC8;color:#544CC8">
+      <span style="width:8px;height:8px;border-radius:2px;background:#544CC8;display:inline-block"></span>Shortlist<span style="color:#AAAAAA">3</span>
+    </a>
+    <a href="Lead.dc.html" class="uv-header-cta" style="height:42px;display:inline-flex;align-items:center;padding:0 20px;background:#544CC8;color:#fff;border-radius:4px;font-size:14px;font-weight:700" style-hover="background:#453DB8">Talk to an expert</a>
+    <button type="button" class="uv-header-toggle" onClick="{{ toggleMenu }}" aria-label="{{ menuLabel }}">
+      <span style="display:block;width:22px;height:2px;background:#363634;margin:5px 0"></span>
+      <span style="display:block;width:22px;height:2px;background:#363634;margin:5px 0"></span>
+      <span style="display:block;width:16px;height:2px;background:#363634;margin:5px 0"></span>
+    </button>
+  </div>
+  <nav class="uv-header-mobile-panel" data-open="{{ menuOpen }}" aria-label="Mobile navigation">
+    <sc-for list="{{ nav }}" as="item" hint-placeholder-count="6">
+      <a href="{{ item.href }}" style="{{ item.mobileStyle }}">{{ item.label }}</a>
+    </sc-for>
+    <a href="Shortlist.dc.html" style="color:#555">Shortlist (3)</a>
+    <a href="Lead.dc.html" class="uv-header-mobile-cta">Talk to an expert</a>
+  </nav>
+</div>
+<div style="background:#263238;color:#fff;font-size:12px;text-align:center;padding:8px 16px">Admissions open for the July 2026 batch · Last date to apply: 20 August · <a href="Courses.dc.html" style="color:#FDB515;font-weight:600">Explore courses</a></div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1200,&quot;height&quot;:110},&quot;active&quot;:{&quot;editor&quot;:&quot;text&quot;,&quot;default&quot;:&quot;&quot;,&quot;tsType&quot;:&quot;string&quot;}}">
+class Component extends DCLogic {
+  state = { open: false };
+  renderVals() {
+    const active = this.props.active || '';
+    const items = [
+      ['Courses', 'Courses.dc.html', 'courses'],
+      ['Universities', 'Universities.dc.html', 'universities'],
+      ['Compare', 'Compare.dc.html', 'compare'],
+      ['AI Recommender', 'Recommender.dc.html', 'recommender'],
+      ['Blog', 'Blog.dc.html', 'blog'],
+      ['Guides', 'Guides.dc.html', 'guides']
+    ];
+    return {
+      menuOpen: this.state.open ? '1' : '0',
+      menuLabel: this.state.open ? 'Close menu' : 'Open menu',
+      toggleMenu: () => this.setState(s => ({ open: !s.open })),
+      nav: items.map(([label, href, key]) => ({
+        label, href,
+        style: key === active
+          ? 'color:#544CC8;border-bottom:2px solid #544CC8;padding-bottom:3px;white-space:nowrap'
+          : 'color:#555;white-space:nowrap',
+        mobileStyle: key === active ? 'color:#544CC8' : 'color:#555'
+      }))
+    };
+  }
+}
+</script>
+</body>
+</html>

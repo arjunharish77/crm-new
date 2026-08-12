@@ -50,18 +50,3 @@ export const recommenderPreviewMedia = {
   src: "/hero/recommender-preview.webp",
   alt: "AI course recommender preview",
 };
-
-export const counselorGuidanceMedia = {
-  src: "/hero/counselor-guidance.webp",
-  alt: "Counsellor guiding a learner",
-};
-
-export const compareIllustration = {
-  src: "/illustrations/compare-programs.webp",
-  alt: "Comparing online degree programs side by side",
-};
-
-export const leadWizardSuccessIllustration = {
-  src: "/illustrations/lead-wizard-success.webp",
-  alt: "Enquiry submitted successfully",
-};

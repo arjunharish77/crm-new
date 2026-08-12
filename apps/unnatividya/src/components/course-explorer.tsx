@@ -28,15 +28,26 @@ function levelStyle(level: CourseItem["level"]) {
   };
 }
 
-export function CourseExplorer({ courses: initialCourses, initialQuery = "" }: { courses: CourseItem[]; initialQuery?: string }) {
-  const feeCeiling = useMemo(
-    () => Math.max(200000, ...initialCourses.map((course) => Math.ceil(course.fee / 10000) * 10000)),
-    [initialCourses],
-  );
+const FEE_SLIDER_MIN = 75000;
+const FEE_SLIDER_MAX = 275000;
+const FEE_SLIDER_STEP = 5000;
+
+export function CourseExplorer({
+  courses: initialCourses,
+  initialQuery = "",
+  initialStream,
+  initialUniversity,
+}: {
+  courses: CourseItem[];
+  initialQuery?: string;
+  initialStream?: string;
+  initialUniversity?: string;
+}) {
+  const feeCeiling = FEE_SLIDER_MAX;
   const [query, setQuery] = useState(initialQuery);
   const [levels, setLevels] = useState<string[]>([]);
-  const [streams, setStreams] = useState<string[]>([]);
-  const [universities, setUniversities] = useState<string[]>([]);
+  const [streams, setStreams] = useState<string[]>(initialStream ? [initialStream] : []);
+  const [universities, setUniversities] = useState<string[]>(initialUniversity ? [initialUniversity] : []);
   const [maxFee, setMaxFee] = useState(feeCeiling);
   const [sort, setSort] = useState<SortKey>("popular");
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
@@ -93,6 +104,11 @@ export function CourseExplorer({ courses: initialCourses, initialQuery = "" }: {
 
   return (
     <>
+      <div
+        className={mobileFiltersOpen ? "uv-filter-backdrop uv-open" : "uv-filter-backdrop"}
+        onClick={() => setMobileFiltersOpen(false)}
+        aria-hidden="true"
+      />
       <button
         type="button"
         className="uv-filter-toggle"
@@ -123,36 +139,42 @@ export function CourseExplorer({ courses: initialCourses, initialQuery = "" }: {
           <div key={heading as string}>
             <div style={{ fontSize: 13, fontWeight: 700, color: "#363634", marginBottom: 8 }}>{heading as string}</div>
             <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 18 }}>
-              {(values as string[][]).map(([value, label]) => (
-                <label key={value} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 14, color: "#555", cursor: "pointer" }}>
-                  <input
-                    checked={(selected as string[]).includes(value)}
-                    onChange={() => {
-                      const headingText = heading as string;
-                      const next = toggleValue(selected as string[], value);
-                      (setter as (next: string[]) => void)(next);
-                      const overrideKey = headingText === "Degree level" ? "levels" : headingText === "Stream" ? "streams" : "universities";
-                      trackEvent("course_filter_applied", {
-                        filter_type: headingText,
-                        value,
-                        result_count: countMatches({ [overrideKey]: next }),
-                      });
-                    }}
-                    type="checkbox"
-                    style={{ accentColor: "#544CC8", width: 16, height: 16 }}
-                  />
-                  {label}
-                </label>
-              ))}
+              {(values as string[][]).map(([value, label]) => {
+                const headingText = heading as string;
+                const overrideKey = headingText === "Degree level" ? "levels" : headingText === "Stream" ? "streams" : "universities";
+                const optionCount = countMatches({ [overrideKey]: [value] });
+                return (
+                  <label key={value} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, fontSize: 14, color: "#555", cursor: "pointer" }}>
+                    <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                      <input
+                        checked={(selected as string[]).includes(value)}
+                        onChange={() => {
+                          const next = toggleValue(selected as string[], value);
+                          (setter as (next: string[]) => void)(next);
+                          trackEvent("course_filter_applied", {
+                            filter_type: headingText,
+                            value,
+                            result_count: countMatches({ [overrideKey]: next }),
+                          });
+                        }}
+                        type="checkbox"
+                        style={{ accentColor: "#544CC8", width: 16, height: 16 }}
+                      />
+                      {label}
+                    </span>
+                    <span style={{ color: "#707070", fontSize: 12 }}>{optionCount}</span>
+                  </label>
+                );
+              })}
             </div>
           </div>
         ))}
         <div style={{ fontSize: 13, fontWeight: 700, color: "#363634", marginBottom: 8 }}>Total fee under</div>
         <input
           type="range"
-          min="50000"
-          max={feeCeiling}
-          step="10000"
+          min={FEE_SLIDER_MIN}
+          max={FEE_SLIDER_MAX}
+          step={FEE_SLIDER_STEP}
           value={maxFee}
           onChange={(event) => setMaxFee(Number(event.target.value))}
           onMouseUp={() => trackEvent("course_filter_applied", { filter_type: "Total fee under", value: maxFee, result_count: countMatches() })}
@@ -171,18 +193,18 @@ export function CourseExplorer({ courses: initialCourses, initialQuery = "" }: {
             value={query}
             onChange={(event) => setQuery(event.target.value)}
             onBlur={() => query.trim() && trackEvent("course_search", { query: query.trim(), result_count: filtered.length })}
-            placeholder="Search courses…"
+            placeholder="Search courses, universities or streams…"
             style={{ height: 40, width: 280, padding: "0 14px", border: "1px solid #CFDAE6", borderRadius: 4, fontSize: 14, color: "#555", outlineColor: "#544CC8", background: "#fff" }}
           />
           <select value={sort} onChange={(event) => setSort(event.target.value as SortKey)} style={{ height: 40, padding: "0 12px", border: "1px solid #CFDAE6", borderRadius: 4, fontSize: 13, color: "#555", background: "#fff" }}>
-            <option value="popular">Sort: most popular</option>
+            <option value="popular">Sort: most reviewed</option>
             <option value="feeAsc">Fee: low to high</option>
             <option value="feeDesc">Fee: high to low</option>
             <option value="rating">Highest rated</option>
           </select>
         </div>
         <div style={{ fontSize: 13, color: "#696868", marginBottom: 16 }}>
-          Showing {filtered.length} of {initialCourses.length} programs
+          {filtered.length} of {initialCourses.length} UGC-entitled programs · fees verified for the July 2026 cycle
         </div>
 
         <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>

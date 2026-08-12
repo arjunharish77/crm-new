@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import Link from "next/link";
+import { LegalPageLayout } from "@/components/legal-page-layout";
 
 export const metadata: Metadata = {
   title: "Privacy Policy",
@@ -38,7 +38,8 @@ const sections = [
     title: "Retention and control",
     items: [
       "Lead and verification records are retained for counselling, audit, and compliance purposes unless deletion is requested or legally required.",
-      "You can request correction or deletion of your enquiry data by contacting Unnati Vidya through the published contact channels.",
+      "You can request correction or deletion of your enquiry data by emailing admin@unnatividya.com.",
+      "Deletion is completed within seven working days, except where a university admission is already in progress and the record must be retained to support it.",
       "Administrative access to CMS data is restricted and audited.",
     ],
   },
@@ -46,14 +47,10 @@ const sections = [
 
 export default function PrivacyPage() {
   return (
-    <main style={{ maxWidth: 760, margin: "0 auto", padding: "48px 24px 64px", flex: 1 }}>
-      <div style={{ fontSize: 12, color: "#707070", marginBottom: 8 }}>
-        <Link href="/" style={{ color: "#707070" }}>Home</Link> &gt; Privacy policy
-      </div>
-      <h1 style={{ fontSize: 30, fontWeight: 700, color: "#363634", margin: "0 0 24px" }}>Privacy Policy</h1>
+    <LegalPageLayout crumb="Privacy policy" title="Privacy Policy" lastUpdated="12 August 2026">
       <p style={{ fontSize: 15, lineHeight: 1.7, margin: 0 }}>
-          This policy explains how Unnati Vidya collects, uses, stores, and protects information
-          submitted through this website.
+        This policy explains how Unnati Vidya collects, uses, stores, and protects information
+        submitted through this website.
       </p>
       {sections.map((section) => (
         <section key={section.title}>
@@ -63,9 +60,6 @@ export default function PrivacyPage() {
           </ul>
         </section>
       ))}
-      <div style={{ marginTop: 36, background: "#F4F3FC", border: "1px solid #CFDAE6", borderRadius: 8, padding: 20, fontSize: 14 }}>
-        Questions? Call <b style={{ color: "#363634" }}>1800-120-4050</b> (toll-free, 9 am – 9 pm) or use the callback button on any page.
-      </div>
-    </main>
+    </LegalPageLayout>
   );
 }

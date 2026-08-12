@@ -1,0 +1,368 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&display=swap" rel="stylesheet">
+<style>body{margin:0;font-family:'DM Sans',sans-serif;color:#555;background:#fff}a{color:#544CC8;text-decoration:none}a:hover{color:#453DB8}input{font-family:'DM Sans',sans-serif}</style>
+</helmet>
+<div style="min-height:100vh;display:flex;flex-direction:column">
+<dc-import name="SiteHeader" active="courses" hint-size="100%,110px"></dc-import>
+
+<div style="background:#263238;color:#fff">
+  <div style="max-width:1200px;margin:0 auto;padding:34px 24px 30px">
+    <div style="font-size:12px;color:#B8C4CA;margin-bottom:16px"><a href="Home.dc.html" style="color:#B8C4CA">Home</a> &gt; <a href="Courses.dc.html" style="color:#B8C4CA">Courses</a> &gt; Online MBA — Manipal University Jaipur</div>
+    <div class="uv-2col" style="display:grid;grid-template-columns:1fr auto;gap:32px;align-items:center">
+      <div>
+        <div style="display:flex;align-items:center;gap:18px">
+          <div style="background:#fff;border-radius:8px;padding:9px 12px;flex:none"><img src="assets/muj-logo.svg" alt="Manipal University Jaipur" style="height:40px;width:auto;display:block" /></div>
+          <div>
+            <h1 style="font-size:36px;font-weight:700;margin:0;line-height:1.1;letter-spacing:-0.5px">Online MBA</h1>
+            <div style="font-size:15px;color:#B8C4CA;margin-top:6px"><a href="University.dc.html" style="color:#fff;text-decoration:underline">Manipal University Jaipur</a> · Jaipur, Rajasthan</div>
+          </div>
+        </div>
+        <div style="display:flex;gap:18px;margin-top:18px;align-items:center;flex-wrap:wrap;font-size:14px">
+          <span><span style="color:#FDB515">★</span> <b>4.7</b> <span style="color:#B8C4CA">(1,420 reviews)</span></span>
+          <span style="color:#546E7A">|</span>
+          <span style="color:#B8C4CA">52,000+ learners across MUJ online programs</span>
+          <span style="color:#546E7A">|</span>
+          <span style="color:#B8C4CA">13 specialisations</span>
+        </div>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;max-width:280px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.14);border-radius:8px;padding:16px 18px">
+        <img src="assets/ap-ugc.svg" alt="UGC entitled" style="height:38px;width:auto;background:#fff;border-radius:4px;padding:4px 7px" />
+        <img src="assets/ap-naac.svg" alt="NAAC A+" style="height:38px;width:auto;background:#fff;border-radius:4px;padding:4px 7px" />
+        <img src="assets/ap-aicte.svg" alt="AICTE" style="height:38px;width:auto;background:#fff;border-radius:4px;padding:4px 7px" />
+        <img src="assets/ap-wes.svg" alt="WES recognised" style="height:38px;width:auto;background:#fff;border-radius:4px;padding:4px 7px" />
+      </div>
+    </div>
+  </div>
+</div>
+
+<div style="background:#fff;border-bottom:1px solid #EAEAEA">
+  <div style="max-width:1200px;margin:0 auto;padding:20px 24px;display:grid;grid-template-columns:repeat(5,1fr);gap:24px" class="uv-5col">
+    <div><div style="font-size:12px;color:#707070">Duration</div><div style="font-size:17px;font-weight:700;color:#363634;margin-top:3px">24 months</div></div>
+    <div><div style="font-size:12px;color:#707070">Total fee</div><div style="font-size:17px;font-weight:700;color:#363634;margin-top:3px">₹1,80,000</div></div>
+    <div><div style="font-size:12px;color:#707070">EMI from</div><div style="font-size:17px;font-weight:700;color:#363634;margin-top:3px">₹7,500/mo</div></div>
+    <div><div style="font-size:12px;color:#707070">Level</div><div style="font-size:17px;font-weight:700;color:#363634;margin-top:3px">PG degree</div></div>
+    <div><div style="font-size:12px;color:#707070">Weekly effort</div><div style="font-size:17px;font-weight:700;color:#363634;margin-top:3px">15–20 hrs</div></div>
+  </div>
+</div>
+
+<div style="position:sticky;top:68px;z-index:90;background:#fff;border-bottom:1px solid #EAEAEA;box-shadow:0 3px 6px rgba(194,194,194,0.10)">
+  <div style="max-width:1200px;margin:0 auto;padding:11px 24px;display:flex;gap:8px;font-size:13px;font-weight:600;overflow-x:auto">
+    <sc-for list="{{ sections }}" as="s" hint-placeholder-count="9">
+      <a href="{{ s.href }}" onClick="{{ s.select }}" style="{{ s.style }}">{{ s.label }}</a>
+    </sc-for>
+  </div>
+</div>
+
+<div style="max-width:1200px;margin:0 auto;padding:36px 24px 64px;width:100%;box-sizing:border-box;display:grid;grid-template-columns:1fr 350px;gap:44px;align-items:start;flex:1" class="uv-2col">
+  <div style="display:flex;flex-direction:column;gap:44px">
+
+    <div id="overview" style="scroll-margin-top:140px">
+      <h2 style="font-size:24px;font-weight:700;color:#363634;margin:0 0 14px;letter-spacing:-0.2px">About this program</h2>
+      <p style="font-size:15px;line-height:1.7;color:#555;margin:0 0 18px">Online MBA from Manipal University Jaipur is a 24-month, UGC-entitled online degree designed for graduates and working professionals who want flexible learning, online proctored assessments, and career-focused support without relocating. Live weekend classes are backed by recorded lectures, a digital library and faculty office hours.</p>
+      <div class="uv-3col" style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px">
+        <div style="border:1px solid #EAEAEA;border-radius:8px;padding:14px 16px;background:#F7F8F9"><div style="font-size:11px;color:#707070">Mode</div><div style="font-size:15px;font-weight:700;color:#363634">100% online</div></div>
+        <div style="border:1px solid #EAEAEA;border-radius:8px;padding:14px 16px;background:#F7F8F9"><div style="font-size:11px;color:#707070">Semesters</div><div style="font-size:15px;font-weight:700;color:#363634">4</div></div>
+        <div style="border:1px solid #EAEAEA;border-radius:8px;padding:14px 16px;background:#F7F8F9"><div style="font-size:11px;color:#707070">Credits</div><div style="font-size:15px;font-weight:700;color:#363634">80–90</div></div>
+        <div style="border:1px solid #EAEAEA;border-radius:8px;padding:14px 16px;background:#F7F8F9"><div style="font-size:11px;color:#707070">Exams</div><div style="font-size:15px;font-weight:700;color:#363634">Online proctored</div></div>
+        <div style="border:1px solid #EAEAEA;border-radius:8px;padding:14px 16px;background:#F7F8F9"><div style="font-size:11px;color:#707070">Application fee</div><div style="font-size:15px;font-weight:700;color:#363634">₹500</div></div>
+        <div style="border:1px solid #EAEAEA;border-radius:8px;padding:14px 16px;background:#F7F8F9"><div style="font-size:11px;color:#707070">Batches</div><div style="font-size:15px;font-weight:700;color:#363634">January &amp; July</div></div>
+      </div>
+    </div>
+
+    <div id="eligibility" style="scroll-margin-top:140px">
+      <h2 style="font-size:24px;font-weight:700;color:#363634;margin:0 0 14px;letter-spacing:-0.2px">Eligibility</h2>
+      <div style="border:1px solid #CFDAE6;border-radius:8px;padding:20px;display:flex;gap:16px;align-items:flex-start">
+        <span style="font-size:11px;font-weight:700;color:#2E7D32;background:rgba(46,125,50,0.10);border-radius:999px;white-space:nowrap;padding:5px 11px;flex:none">SOURCE VERIFIED</span>
+        <p style="font-size:15px;line-height:1.7;color:#555;margin:0">Bachelor's degree (10+2+3) in any discipline with a minimum of 50% marks (45% for reserved categories). No work experience or entrance test required.</p>
+      </div>
+    </div>
+
+    <div id="specialisations" style="scroll-margin-top:140px">
+      <h2 style="font-size:24px;font-weight:700;color:#363634;margin:0 0 4px;letter-spacing:-0.2px">13 specialisations</h2>
+      <p style="font-size:14px;color:#707070;margin:0 0 16px">Chosen in semester 3 — same fee, same duration.</p>
+      <div class="uv-3col" style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px">
+        <sc-for list="{{ specs }}" as="s" hint-placeholder-count="12">
+          <div style="border:1px solid #CFDAE6;border-radius:8px;padding:14px 16px">
+            <div style="font-size:14px;font-weight:700;color:#363634">{{ s }}</div>
+            <div style="font-size:12px;color:#707070;margin-top:4px">Elective track · sem 3–4</div>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+
+    <div id="curriculum" style="scroll-margin-top:140px">
+      <h2 style="font-size:24px;font-weight:700;color:#363634;margin:0 0 4px;letter-spacing:-0.2px">Curriculum</h2>
+      <p style="font-size:14px;color:#707070;margin:0 0 16px">Four semesters, 80–90 credits.</p>
+      <div style="display:flex;flex-direction:column;gap:10px">
+        <sc-for list="{{ semesters }}" as="s" hint-placeholder-count="4">
+          <div style="border:1px solid #CFDAE6;border-radius:8px;overflow:hidden">
+            <button onClick="{{ s.toggle }}" style="width:100%;display:flex;justify-content:space-between;align-items:center;padding:15px 20px;background:{{ s.headBg }};border:none;cursor:pointer;text-align:left;font-family:'DM Sans',sans-serif">
+              <span style="font-size:15px;font-weight:700;color:#363634">{{ s.term }}</span>
+              <span style="font-size:14px;color:#707070">{{ s.mark }}</span>
+            </button>
+            <div style="{{ s.bodyStyle }}">
+              <sc-for list="{{ s.subjects }}" as="sub" hint-placeholder-count="4">
+                <div style="display:flex;align-items:center;gap:10px;font-size:14px;color:#555;padding:5px 0"><span style="width:5px;height:5px;border-radius:50%;background:#544CC8;flex:none"></span>{{ sub }}</div>
+              </sc-for>
+            </div>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+
+    <div id="fees" style="scroll-margin-top:140px">
+      <h2 style="font-size:24px;font-weight:700;color:#363634;margin:0 0 14px;letter-spacing:-0.2px">Fees &amp; payment plans</h2>
+      <div style="border:1px solid #CFDAE6;border-radius:8px;overflow:hidden">
+        <div style="display:grid;grid-template-columns:1.4fr 1fr 1fr;background:#F5F5F5;font-size:11px;font-weight:700;color:#696868;padding:13px 20px;letter-spacing:0.6px"><span>PLAN</span><span>YOU PAY</span><span>PER INSTALMENT</span></div>
+        <div style="display:grid;grid-template-columns:1.4fr 1fr 1fr;padding:15px 20px;border-top:1px solid #EAEAEA;font-size:14px;align-items:center"><span style="font-weight:600;color:#363634">Full payment (2% off)</span><span>₹1,76,400</span><span>one-time</span></div>
+        <div style="display:grid;grid-template-columns:1.4fr 1fr 1fr;padding:15px 20px;border-top:1px solid #EAEAEA;font-size:14px;align-items:center"><span style="font-weight:600;color:#363634">Semester-wise</span><span>₹1,80,000</span><span>₹45,000 /sem</span></div>
+        <div style="display:grid;grid-template-columns:1.4fr 1fr 1fr;padding:15px 20px;border-top:1px solid #EAEAEA;font-size:14px;align-items:center;background:#F4F3FC"><span style="font-weight:600;color:#363634">No-cost EMI</span><span>₹1,80,000</span><span style="font-weight:700;color:#544CC8">₹7,500/mo × 24</span></div>
+      </div>
+      <div style="display:flex;gap:12px;align-items:center;margin-top:14px;flex-wrap:wrap">
+        <a href="EmiCalculator.dc.html" style="font-size:13px;font-weight:700">Open EMI calculator →</a>
+        <span style="color:#EAEAEA">|</span>
+        <span style="font-size:13px;color:#707070">Scholarships up to 20% for merit, defence and differently-abled learners</span>
+      </div>
+    </div>
+
+    <div id="admission" style="scroll-margin-top:140px">
+      <h2 style="font-size:24px;font-weight:700;color:#363634;margin:0 0 16px;letter-spacing:-0.2px">Admission process</h2>
+      <div class="uv-4col" style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px">
+        <div style="border:1px solid #CFDAE6;border-radius:8px;padding:18px"><div style="width:30px;height:30px;border-radius:4px;background:rgba(84,76,200,0.10);color:#544CC8;font-weight:700;font-size:14px;display:flex;align-items:center;justify-content:center">1</div><div style="font-size:15px;font-weight:700;color:#363634;margin:12px 0 5px">Application</div><div style="font-size:13px;color:#696868;line-height:1.55">Fill basic, education and work-experience details, pay the ₹500 application fee.</div></div>
+        <div style="border:1px solid #CFDAE6;border-radius:8px;padding:18px"><div style="width:30px;height:30px;border-radius:4px;background:rgba(84,76,200,0.10);color:#544CC8;font-weight:700;font-size:14px;display:flex;align-items:center;justify-content:center">2</div><div style="font-size:15px;font-weight:700;color:#363634;margin:12px 0 5px">Fee payment</div><div style="font-size:13px;color:#696868;line-height:1.55">Pay first semester or full program fee via card, net-banking or no-cost EMI.</div></div>
+        <div style="border:1px solid #CFDAE6;border-radius:8px;padding:18px"><div style="width:30px;height:30px;border-radius:4px;background:rgba(84,76,200,0.10);color:#544CC8;font-weight:700;font-size:14px;display:flex;align-items:center;justify-content:center">3</div><div style="font-size:15px;font-weight:700;color:#363634;margin:12px 0 5px">Document upload</div><div style="font-size:13px;color:#696868;line-height:1.55">Upload mark sheets, ID proof and photo. We pre-check them to avoid rejection.</div></div>
+        <div style="border:1px solid #CFDAE6;border-radius:8px;padding:18px"><div style="width:30px;height:30px;border-radius:4px;background:rgba(84,76,200,0.10);color:#544CC8;font-weight:700;font-size:14px;display:flex;align-items:center;justify-content:center">4</div><div style="font-size:15px;font-weight:700;color:#363634;margin:12px 0 5px">University approval</div><div style="font-size:13px;color:#696868;line-height:1.55">MUJ evaluates documents and confirms admission. LMS access follows.</div></div>
+      </div>
+    </div>
+
+    <div id="careers" style="scroll-margin-top:140px">
+      <h2 style="font-size:24px;font-weight:700;color:#363634;margin:0 0 4px;letter-spacing:-0.2px">Career outcomes</h2>
+      <p style="font-size:14px;color:#707070;margin:0 0 16px">Indicative entry-to-mid salary bands for roles this degree feeds into.</p>
+      <div class="uv-4col" style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px">
+        <sc-for list="{{ roles }}" as="r" hint-placeholder-count="4">
+          <div style="border:1px solid #CFDAE6;border-radius:8px;padding:18px">
+            <div style="font-size:15px;font-weight:700;color:#363634">{{ r.role }}</div>
+            <div style="font-size:14px;color:#2E7D32;font-weight:700;margin-top:5px">{{ r.pay }}</div>
+          </div>
+        </sc-for>
+      </div>
+      <div style="display:flex;gap:22px;margin-top:18px;padding:18px 20px;border:1px solid #CFDAE6;border-radius:8px;background:#F7F8F9;flex-wrap:wrap">
+        <div><div style="font-size:20px;font-weight:700;color:#363634">88%</div><div style="font-size:12px;color:#707070">placement assistance rate</div></div>
+        <div><div style="font-size:20px;font-weight:700;color:#363634">₹7.2 LPA</div><div style="font-size:12px;color:#707070">average package</div></div>
+        <div><div style="font-size:20px;font-weight:700;color:#363634">₹24 LPA</div><div style="font-size:12px;color:#707070">highest package</div></div>
+        <div><div style="font-size:20px;font-weight:700;color:#363634">320+</div><div style="font-size:12px;color:#707070">hiring partners</div></div>
+      </div>
+      <div class="uv-4col" style="display:grid;grid-template-columns:repeat(6,1fr);gap:12px;margin-top:14px;align-items:center">
+        <div style="height:46px;border:1px solid #EAEAEA;border-radius:6px;background:#F7F8F9;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;color:#AAAAAA">Partner 1</div>
+        <div style="height:46px;border:1px solid #EAEAEA;border-radius:6px;background:#F7F8F9;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;color:#AAAAAA">Partner 2</div>
+        <div style="height:46px;border:1px solid #EAEAEA;border-radius:6px;background:#F7F8F9;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;color:#AAAAAA">Partner 3</div>
+        <div style="height:46px;border:1px solid #EAEAEA;border-radius:6px;background:#F7F8F9;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;color:#AAAAAA">Partner 4</div>
+        <div style="height:46px;border:1px solid #EAEAEA;border-radius:6px;background:#F7F8F9;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;color:#AAAAAA">Partner 5</div>
+        <div style="height:46px;border:1px solid #EAEAEA;border-radius:6px;background:#F7F8F9;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;color:#AAAAAA">Partner 6</div>
+      </div>
+    </div>
+
+    <div id="certificate" style="scroll-margin-top:140px">
+      <h2 style="font-size:24px;font-weight:700;color:#363634;margin:0 0 14px;letter-spacing:-0.2px">Sample certificate</h2>
+      <div class="uv-2col" style="display:grid;grid-template-columns:340px 1fr;gap:26px;align-items:center">
+        <div style="border:1px solid #CFDAE6;border-radius:8px;overflow:hidden"><img src="assets/certificate-mba-muj.webp" alt="Sample MUJ Online MBA degree certificate" style="width:100%;display:block" /></div>
+        <div style="font-size:15px;line-height:1.7;color:#555">The certificate issued to online learners is identical to the on-campus award — same seal, same signatures, and no mention of the delivery mode. It is UGC-entitled, valid for government recruitment and higher studies, and accepted by WES for credential evaluation abroad.</div>
+      </div>
+    </div>
+
+    <div id="reviews" style="scroll-margin-top:140px">
+      <h2 style="font-size:24px;font-weight:700;color:#363634;margin:0 0 16px;letter-spacing:-0.2px">Student reviews</h2>
+      <div style="display:flex;gap:22px;align-items:center;border:1px solid #CFDAE6;border-radius:8px;padding:20px;margin-bottom:14px">
+        <div style="text-align:center;padding-right:22px;border-right:1px solid #EAEAEA">
+          <div style="font-size:34px;font-weight:700;color:#363634;line-height:1">4.7</div>
+          <div style="color:#FDB515;font-size:13px;letter-spacing:2px;margin-top:4px">★★★★★</div>
+          <div style="font-size:12px;color:#707070;margin-top:4px">1,420 reviews</div>
+        </div>
+        <div style="flex:1;display:flex;flex-direction:column;gap:7px">
+          <sc-for list="{{ ratingBars }}" as="b" hint-placeholder-count="5">
+            <div style="display:flex;align-items:center;gap:10px;font-size:12px;color:#707070">
+              <span style="width:34px">{{ b.label }}</span>
+              <span style="flex:1;height:7px;background:#EAEAEA;border-radius:999px;overflow:hidden;display:block"><span style="display:block;height:100%;background:#FDB515;width:{{ b.pct }}"></span></span>
+              <span style="width:34px;text-align:right">{{ b.pct }}</span>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+        <div style="border:1px solid #CFDAE6;border-radius:8px;padding:18px">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+            <div style="display:flex;align-items:center;gap:10px"><div style="width:34px;height:34px;border-radius:50%;background:#EBF2F6;color:#555;font-size:12px;font-weight:700;display:flex;align-items:center;justify-content:center">SI</div><span style="font-size:14px;font-weight:700;color:#363634">Sneha Iyer</span></div>
+            <span style="color:#FDB515;font-size:13px;letter-spacing:1px">★★★★★</span>
+          </div>
+          <div style="font-size:14px;color:#555;line-height:1.65">Classes are genuinely live, not just recordings. Faculty replies on the forum within a day, and the proctored exams ran without a hitch.</div>
+        </div>
+        <div style="border:1px solid #CFDAE6;border-radius:8px;padding:18px">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+            <div style="display:flex;align-items:center;gap:10px"><div style="width:34px;height:34px;border-radius:50%;background:#EBF2F6;color:#555;font-size:12px;font-weight:700;display:flex;align-items:center;justify-content:center">RV</div><span style="font-size:14px;font-weight:700;color:#363634">Rohit Verma</span></div>
+            <span style="color:#FDB515;font-size:13px;letter-spacing:1px">★★★★</span>
+          </div>
+          <div style="font-size:14px;color:#555;line-height:1.65">Curriculum is solid and the EMI made it affordable. The placement cell helps, but you have to be proactive with applications.</div>
+        </div>
+      </div>
+    </div>
+
+    <div id="faq" style="scroll-margin-top:140px">
+      <h2 style="font-size:24px;font-weight:700;color:#363634;margin:0 0 16px;letter-spacing:-0.2px">Frequently asked questions</h2>
+      <div style="display:flex;flex-direction:column;gap:10px">
+        <sc-for list="{{ faqs }}" as="f" hint-placeholder-count="5">
+          <div style="border:1px solid #CFDAE6;border-radius:8px;overflow:hidden">
+            <button onClick="{{ f.toggle }}" style="width:100%;display:flex;justify-content:space-between;align-items:center;gap:16px;padding:15px 20px;background:transparent;border:none;cursor:pointer;text-align:left;font-family:'DM Sans',sans-serif">
+              <span style="font-size:15px;font-weight:600;color:#363634">{{ f.q }}</span>
+              <span style="font-size:15px;color:#707070">{{ f.mark }}</span>
+            </button>
+            <div style="{{ f.bodyStyle }}">{{ f.a }}</div>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+
+    <div>
+      <h2 style="font-size:24px;font-weight:700;color:#363634;margin:0 0 16px;letter-spacing:-0.2px">Similar programs</h2>
+      <div class="uv-3col" style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px">
+        <sc-for list="{{ similar }}" as="s" hint-placeholder-count="3">
+          <a href="Course.dc.html" style="display:block;border:1px solid #CFDAE6;border-radius:8px;padding:18px;color:inherit" style-hover="box-shadow:0 4px 8px rgba(36,36,36,0.12);border-color:#544CC8">
+            <img src="{{ s.logo }}" alt="{{ s.uniName }}" style="height:28px;width:auto;max-width:110px;object-fit:contain;object-position:left" />
+            <div style="font-size:16px;font-weight:700;color:#363634;margin-top:10px">{{ s.name }}</div>
+            <div style="font-size:13px;color:#707070;margin-top:3px">{{ s.uniName }}</div>
+            <div style="font-size:13px;color:#555;margin-top:10px">{{ s.feeText }} · {{ s.duration }} · <span style="color:#FDB515">★</span> {{ s.rating }}</div>
+          </a>
+        </sc-for>
+      </div>
+    </div>
+
+    <div style="border:1px solid #CFDAE6;border-radius:8px;padding:18px 20px;background:#F7F8F9">
+      <div style="font-size:13px;font-weight:700;color:#363634;margin-bottom:8px">Sources for this page</div>
+      <div style="display:flex;flex-direction:column;gap:5px;font-size:13px">
+        <a href="https://www.onlinemanipal.com/online-mba-manipal-university-jaipur" target="_blank" rel="noopener">onlinemanipal.com — Online MBA, Manipal University Jaipur</a>
+        <a href="https://deb.ugc.ac.in/" target="_blank" rel="noopener">UGC-DEB entitlement notification (current academic year)</a>
+      </div>
+      <div style="font-size:12px;color:#707070;margin-top:10px">Last verified for the July 2026 admission cycle. <a href="HowWeVerify.dc.html">How we verify →</a></div>
+    </div>
+  </div>
+
+  <div class="uv-side-rail" style="position:sticky;top:130px;display:flex;flex-direction:column;gap:16px">
+    <div style="background:#fff;border:1px solid #CFDAE6;border-radius:8px;padding:22px;box-shadow:0 1px 3px rgba(0,0,0,0.06)">
+      <div style="font-size:17px;font-weight:700;color:#363634">Get the fee breakup &amp; brochure</div>
+      <div style="font-size:13px;color:#696868;margin:7px 0 16px;line-height:1.55">A counsellor shares the brochure, scholarship eligibility and next batch dates — free.</div>
+      <div style="display:flex;flex-direction:column;gap:10px">
+        <input placeholder="Full name" style="height:44px;padding:0 14px;border:1px solid #CFDAE6;border-radius:4px;font-size:14px;color:#555;outline-color:#544CC8" />
+        <input placeholder="Mobile number" style="height:44px;padding:0 14px;border:1px solid #CFDAE6;border-radius:4px;font-size:14px;color:#555;outline-color:#544CC8" />
+        <button onClick="{{ openLead }}" style="height:46px;background:#544CC8;color:#fff;border:none;border-radius:4px;font-size:15px;font-weight:700;cursor:pointer;font-family:'DM Sans',sans-serif">Enquire now</button>
+      </div>
+      <div style="font-size:11px;color:#AAAAAA;margin-top:12px">Free · no spam · unbiased advice</div>
+    </div>
+    <a href="Compare.dc.html" style="display:block;text-align:center;border:1.5px solid #555;border-radius:4px;height:46px;line-height:46px;font-size:14px;font-weight:700;color:#555;background:#fff">Compare with similar programs</a>
+    <div style="border:1px solid #CFDAE6;border-radius:8px;padding:20px;background:#F4F3FC">
+      <div style="font-size:14px;font-weight:700;color:#363634;margin-bottom:10px">Why learners pick MUJ</div>
+      <div style="display:flex;flex-direction:column;gap:8px;font-size:13px;color:#555;line-height:1.5">
+        <span>NAAC A+ and UGC-entitled for online degrees</span>
+        <span>88% placement assistance rate</span>
+        <span>Weekend live classes + recordings</span>
+        <span>No-cost EMI from ₹7,500/mo</span>
+      </div>
+    </div>
+    <div style="border:1px solid #CFDAE6;border-radius:8px;padding:20px">
+      <div style="font-size:14px;font-weight:700;color:#363634;margin-bottom:6px">Not sure this is the one?</div>
+      <div style="font-size:13px;color:#696868;line-height:1.55;margin-bottom:14px">Answer five questions and UnnatiAI scores all 30 programs against your goals.</div>
+      <a href="Recommender.dc.html" style="display:block;text-align:center;height:42px;line-height:42px;background:linear-gradient(135deg,#4F46E5,#7C3AED);color:#fff;border-radius:4px;font-size:14px;font-weight:700">Get my shortlist</a>
+    </div>
+  </div>
+</div>
+
+<dc-import name="SiteFooter" hint-size="100%,360px"></dc-import>
+</div>
+
+<div style="position:fixed;right:22px;bottom:22px;z-index:150;display:flex;flex-direction:column;gap:10px;align-items:flex-end">
+  <button onClick="{{ openLead }}" style="height:46px;padding:0 22px;background:#fff;border:1.5px solid #544CC8;color:#544CC8;border-radius:999px;font-size:13px;font-weight:700;box-shadow:0 4px 8px rgba(36,36,36,0.12);cursor:pointer;font-family:'DM Sans',sans-serif">Request a callback</button>
+  <a href="https://wa.me/911800120405" target="_blank" rel="noopener" aria-label="Chat on WhatsApp" style="width:52px;height:52px;border-radius:50%;background:#25D366;box-shadow:0 4px 8px rgba(36,36,36,0.16);display:flex;align-items:center;justify-content:center">
+    <span style="width:24px;height:24px;border:2.5px solid #fff;border-radius:50% 50% 50% 4px;display:block"></span>
+  </a>
+</div>
+<dc-import name="LeadWizard" open="{{ leadOpen }}" on-close="{{ closeLead }}" context="Online MBA — MUJ" hint-size="0px,0px"></dc-import>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{}">
+class Component extends DCLogic {
+  state = { data: null, openSem: 0, openFaq: 0, active: 'overview', leadOpen: false };
+
+  componentDidMount() {
+    import('./uv-data.js').then(d => this.setState({ data: d }));
+  }
+
+  renderVals() {
+    const d = this.state.data;
+    const SECTIONS = [
+      ['overview', 'Overview'], ['eligibility', 'Eligibility'], ['specialisations', 'Specialisations'],
+      ['curriculum', 'Curriculum'], ['fees', 'Fees & EMI'], ['admission', 'Admission'],
+      ['careers', 'Careers'], ['certificate', 'Certificate'], ['reviews', 'Reviews'], ['faq', 'FAQ']
+    ];
+    const sections = SECTIONS.map(([id, label]) => ({
+      label, href: '#' + id,
+      select: () => this.setState({ active: id }),
+      style: this.state.active === id
+        ? 'color:#fff;background:#544CC8;padding:8px 15px;border-radius:999px;white-space:nowrap'
+        : 'color:#555;background:#fff;border:1px solid #CFDAE6;padding:7px 14px;border-radius:999px;white-space:nowrap'
+    }));
+
+    const FAQS = [
+      ['Is this degree valid for government jobs?', 'Yes. It is a UGC-entitled online degree, which is legally equivalent to the on-campus MBA for government recruitment, PSU roles and higher studies.'],
+      ['Are classes live or recorded?', 'Both. Live weekend sessions with faculty, plus recordings, e-books and discussion forums available 24×7 in the LMS.'],
+      ['How are exams conducted?', 'Semester exams are online with AI and human proctoring. You can take them from home with a webcam and a stable connection.'],
+      ['Do I need work experience or an entrance test?', 'No. A bachelor\u2019s degree with 50% marks (45% for reserved categories) is the only requirement.'],
+      ['Can I switch specialisation later?', 'Specialisation is chosen in semester 3. Changes before that are usually allowed; a counsellor can confirm for your batch.']
+    ];
+    const faqs = FAQS.map(([q, a], i) => ({
+      q, a,
+      mark: this.state.openFaq === i ? '\u2212' : '+',
+      bodyStyle: this.state.openFaq === i ? 'padding:0 20px 18px;font-size:14px;color:#555;line-height:1.65;display:block' : 'display:none',
+      toggle: () => this.setState(s => ({ openFaq: s.openFaq === i ? -1 : i }))
+    }));
+
+    const ratingBars = [['5★', '74%'], ['4★', '18%'], ['3★', '5%'], ['2★', '2%'], ['1★', '1%']]
+      .map(([label, pct]) => ({ label, pct }));
+
+    const base = {
+      sections, faqs, ratingBars,
+      specs: [], semesters: [], roles: [], similar: [],
+      leadOpen: this.state.leadOpen,
+      openLead: () => this.setState({ leadOpen: true }),
+      closeLead: () => this.setState({ leadOpen: false })
+    };
+    if (!d) return base;
+
+    const c = d.courseById['mba-muj'];
+    const semesters = d.curriculumByStream['Management'].map(([term, subjects], i) => ({
+      term, subjects,
+      mark: this.state.openSem === i ? '\u2212' : '+',
+      headBg: this.state.openSem === i ? '#F5F5F5' : '#fff',
+      bodyStyle: this.state.openSem === i ? 'padding:6px 20px 16px;display:block' : 'display:none',
+      toggle: () => this.setState(s => ({ openSem: s.openSem === i ? -1 : i }))
+    }));
+
+    return Object.assign(base, {
+      specs: c.specializations,
+      semesters,
+      roles: c.careerRoles.map(role => ({ role, pay: d.roleSalary[role] || '—' })),
+      similar: d.courses.filter(x => x.stream === 'Management' && x.id !== c.id).slice(0, 3).map(x => {
+        const u = d.universityById[x.universityId];
+        return { name: x.name, uniName: u.name, logo: u.logo, feeText: d.fmtFee(x.fee), duration: x.duration, rating: x.rating };
+      })
+    });
+  }
+}
+</script>
+</body>
+</html>

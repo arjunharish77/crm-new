@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import Link from "next/link";
+import { LegalPageLayout } from "@/components/legal-page-layout";
 
 export const metadata: Metadata = {
   title: "Refund and Cancellation Policy",
@@ -16,7 +16,12 @@ const sections = [
   {
     title: "University program fees",
     copy:
-      "Admission, registration, semester, examination, and program fees are governed by the respective university's latest policy. Refund eligibility, deductions, timelines, and cancellation rules must be verified from the university before payment.",
+      "Admission, registration, semester, examination, and program fees are governed by the respective university's latest policy. As a general pattern across our listed universities, learners can typically expect a full refund before the batch starts and a pro-rata refund within the first two weeks after — but the exact refund eligibility, deductions, timelines, and cancellation rules must be verified from the university before payment, since they can vary by admission cycle.",
+  },
+  {
+    title: "Fees paid through an education loan",
+    copy:
+      "If the fee was paid through an education loan, any refund is routed back to the lender, not to you directly. Processing usually takes 15 to 30 working days depending on the lending partner.",
   },
   {
     title: "Enquiry cancellation",
@@ -32,14 +37,10 @@ const sections = [
 
 export default function RefundPolicyPage() {
   return (
-    <main style={{ maxWidth: 760, margin: "0 auto", padding: "48px 24px 64px", flex: 1 }}>
-      <div style={{ fontSize: 12, color: "#707070", marginBottom: 8 }}>
-        <Link href="/" style={{ color: "#707070" }}>Home</Link> &gt; Refund policy
-      </div>
-      <h1 style={{ fontSize: 30, fontWeight: 700, color: "#363634", margin: "0 0 24px" }}>Refund and Cancellation Policy</h1>
+    <LegalPageLayout crumb="Refund policy" title="Refund and Cancellation Policy" lastUpdated="12 August 2026">
       <p style={{ fontSize: 15, lineHeight: 1.7, margin: 0 }}>
-          This page explains how refunds and cancellations are handled for enquiries and admissions
-          support arranged through Unnati Vidya.
+        This page explains how refunds and cancellations are handled for enquiries and admissions
+        support arranged through Unnati Vidya.
       </p>
       {sections.map((section) => (
         <section key={section.title}>
@@ -47,9 +48,6 @@ export default function RefundPolicyPage() {
           <p style={{ fontSize: 15, lineHeight: 1.7, margin: 0 }}>{section.copy}</p>
         </section>
       ))}
-      <div style={{ marginTop: 36, background: "#F4F3FC", border: "1px solid #CFDAE6", borderRadius: 8, padding: 20, fontSize: 14 }}>
-        Questions? Call <b style={{ color: "#363634" }}>1800-120-4050</b> (toll-free, 9 am – 9 pm) or use the callback button on any page.
-      </div>
-    </main>
+    </LegalPageLayout>
   );
 }

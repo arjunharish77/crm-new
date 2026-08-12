@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import Link from "next/link";
+import { LegalPageLayout } from "@/components/legal-page-layout";
 
 export const metadata: Metadata = {
   title: "Terms of Use",
@@ -16,7 +16,7 @@ const sections = [
   {
     title: "Course and university information",
     copy:
-      "Fees, eligibility, approvals, curriculum, and admission details are collected from source pages and CMS review. Learners should verify final admission, fee, refund, and eligibility details directly with the relevant university before making payment or enrollment decisions.",
+      "Fees, eligibility, approvals, curriculum, and admission details are collected from source pages and CMS review. Where our page and the university's own page disagree, the university's page governs. Learners should verify final admission, fee, refund, and eligibility details directly with the relevant university before making payment or enrollment decisions.",
   },
   {
     title: "Enquiries and counselling",
@@ -37,14 +37,10 @@ const sections = [
 
 export default function TermsPage() {
   return (
-    <main style={{ maxWidth: 760, margin: "0 auto", padding: "48px 24px 64px", flex: 1 }}>
-      <div style={{ fontSize: 12, color: "#707070", marginBottom: 8 }}>
-        <Link href="/" style={{ color: "#707070" }}>Home</Link> &gt; Terms
-      </div>
-      <h1 style={{ fontSize: 30, fontWeight: 700, color: "#363634", margin: "0 0 24px" }}>Terms of Use</h1>
+    <LegalPageLayout crumb="Terms" title="Terms of Use" lastUpdated="12 August 2026">
       <p style={{ fontSize: 15, lineHeight: 1.7, margin: 0 }}>
-          These terms describe the basic rules for using the Unnati Vidya website and its
-          counselling and comparison services.
+        These terms describe the basic rules for using the Unnati Vidya website and its
+        counselling and comparison services.
       </p>
       {sections.map((section) => (
         <section key={section.title}>
@@ -52,9 +48,6 @@ export default function TermsPage() {
           <p style={{ fontSize: 15, lineHeight: 1.7, margin: 0 }}>{section.copy}</p>
         </section>
       ))}
-      <div style={{ marginTop: 36, background: "#F4F3FC", border: "1px solid #CFDAE6", borderRadius: 8, padding: 20, fontSize: 14 }}>
-        Questions? Call <b style={{ color: "#363634" }}>1800-120-4050</b> (toll-free, 9 am – 9 pm) or use the callback button on any page.
-      </div>
-    </main>
+    </LegalPageLayout>
   );
 }

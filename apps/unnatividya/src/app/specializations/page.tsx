@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { JsonLd } from "@/components/json-ld";
-import { formatFee } from "@/data/catalog";
+import { SpecializationExplorer } from "@/components/specialization-explorer";
 import { allSpecializationPages } from "@/lib/specializations";
 
 const SITE_URL = process.env.NEXT_PUBLIC_UNNATIVIDYA_SITE_URL || "https://unnatividya.com";
@@ -13,14 +13,7 @@ export const metadata: Metadata = {
 };
 
 export default function SpecializationsIndexPage() {
-  const pages = allSpecializationPages();
-
-  const grouped = new Map<string, typeof pages>();
-  for (const page of pages) {
-    const list = grouped.get(page.courseLabel) || [];
-    list.push(page);
-    grouped.set(page.courseLabel, list);
-  }
+  const pages = allSpecializationPages().map((page) => ({ ...page, stream: page.courses[0].stream }));
 
   const breadcrumbJsonLd = {
     "@context": "https://schema.org",
@@ -63,26 +56,7 @@ export default function SpecializationsIndexPage() {
             compared across universities where more than one offers it, or shown on its own where only one does. Fee, EMI,
             and duration reflect the base degree program; the specialization is an elective track within it.
           </p>
-          {[...grouped.entries()].map(([label, group]) => (
-            <div key={label} style={{ marginBottom: 32 }}>
-              <h2 style={{ fontSize: 18, marginBottom: 12 }}>{label}</h2>
-              <div className="grid three">
-                {group.map((page) => (
-                  <Link href={`/specializations/${page.slug}`} className="card uv-card" style={{ display: "block", padding: 18, color: "inherit" }} key={page.slug}>
-                    <div style={{ fontSize: 15, fontWeight: 700, color: "#363634" }}>{page.specialization}</div>
-                    <div style={{ fontSize: 13, color: "#707070", marginTop: 4 }}>
-                      {page.isComparison
-                        ? `${page.courses.length} universities · from ${formatFee(page.courses[0].fee)}`
-                        : `${page.courses[0].university.shortName} · ${formatFee(page.courses[0].fee)}`}
-                    </div>
-                    <div style={{ fontSize: 13, color: "#544CC8", fontWeight: 700, marginTop: 10 }}>
-                      {page.isComparison ? "Compare universities" : "View details"} →
-                    </div>
-                  </Link>
-                ))}
-              </div>
-            </div>
-          ))}
+          <SpecializationExplorer pages={pages} />
         </div>
       </div>
     </>

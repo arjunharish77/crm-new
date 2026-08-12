@@ -22,7 +22,7 @@ export default function BlogPage() {
             <Link href="/" style={{ color: "#707070" }}>Home</Link> &gt; Blog
           </div>
           <h1 style={{ fontSize: 28, fontWeight: 700, color: "#363634", margin: 0 }}>Guides & resources</h1>
-          <div style={{ fontSize: 14, color: "#696868", marginTop: 6 }}>Straight answers on online degrees — validity, fees, careers and admissions.</div>
+          <div style={{ fontSize: 14, color: "#696868", marginTop: 6 }}>Straight answers on validity, fees, careers and admissions — written by the counsellors who take your calls.</div>
         </div>
       </div>
 
@@ -31,16 +31,24 @@ export default function BlogPage() {
 
         <div style={{ marginTop: 32, background: "#263238", borderRadius: 8, padding: 28, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 24, flexWrap: "wrap" }}>
           <div>
-            <div style={{ fontSize: 19, fontWeight: 700, color: "#fff" }}>Get admission deadlines in your inbox</div>
-            <div style={{ fontSize: 14, color: "#B8C4CA", marginTop: 4 }}>One email a month — batch dates, new programs and scholarship windows.</div>
+            <div style={{ fontSize: 19, fontWeight: 700, color: "#fff" }}>Admission deadlines in your inbox</div>
+            <div style={{ fontSize: 14, color: "#B8C4CA", marginTop: 4 }}>One email a month — batch dates, new programs and scholarship windows. Nothing else.</div>
           </div>
-          <Link
-            href="/lead?intent=newsletter"
-            data-open-lead
-            style={{ height: 44, padding: "0 22px", display: "inline-flex", alignItems: "center", background: "#544CC8", color: "#fff", borderRadius: 4, fontSize: 14, fontWeight: 700 }}
-          >
-            Subscribe
-          </Link>
+          <div style={{ display: "flex", gap: 10, flexWrap: "wrap", maxWidth: 360 }}>
+            <input
+              type="email"
+              placeholder="Email address"
+              aria-label="Email address"
+              style={{ height: 44, flex: "1 1 160px", minWidth: 0, padding: "0 14px", border: "1px solid #455A64", borderRadius: 4, fontSize: 14, background: "#1B2529", color: "#fff" }}
+            />
+            <Link
+              href="/lead?intent=newsletter"
+              data-open-lead
+              style={{ height: 44, padding: "0 22px", display: "inline-flex", alignItems: "center", background: "#544CC8", color: "#fff", borderRadius: 4, fontSize: 14, fontWeight: 700, whiteSpace: "nowrap" }}
+            >
+              Subscribe
+            </Link>
+          </div>
         </div>
       </div>
     </div>

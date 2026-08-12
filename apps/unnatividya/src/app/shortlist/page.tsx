@@ -20,7 +20,6 @@ export default function ShortlistPage() {
             <Link href="/" style={{ color: "#707070" }}>Home</Link> &gt; Shortlist
           </div>
           <h1 style={{ fontSize: 28, fontWeight: 700, color: "#363634", margin: 0 }}>Your shortlist</h1>
-          <div style={{ fontSize: 14, color: "#696868", marginTop: 6 }}>Saved on this device — tap the heart on any course to add or remove it.</div>
         </div>
       </div>
       <div style={{ ...shell, paddingTop: 28, paddingBottom: 64, flex: 1 }}>

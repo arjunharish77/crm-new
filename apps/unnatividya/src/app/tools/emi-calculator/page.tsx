@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { JsonLd } from "@/components/json-ld";
 import { EmiCalculator } from "@/components/emi-calculator";
+import { StickyMobileBar } from "@/components/sticky-mobile-bar";
 
 const SITE_URL = process.env.NEXT_PUBLIC_UNNATIVIDYA_SITE_URL || "https://unnatividya.com";
 
@@ -14,15 +15,19 @@ export const metadata: Metadata = {
 const FAQS: Array<[string, string]> = [
   [
     "Is the EMI shown here exact, or just an estimate?",
-    "It's a simple no-cost EMI estimate — total fee divided by tenure, at 0% interest — matching the EMI structure our listed universities publish on their own program pages. Actual approval, any processing fee, and available tenures depend on the lender and your admission cycle.",
+    "It's an estimate using the standard reducing-balance EMI formula (or a simple fee ÷ tenure split when you set the rate to 0%). Actual approval, processing fees, and available tenures depend on the lender and your admission cycle.",
   ],
   [
-    "Do I pay any interest on this EMI?",
-    "The calculator assumes a no-cost EMI (0% interest), which is the standard structure universities offer through their finance partners. Confirm the exact terms with a counsellor before you commit, since lender approval isn't guaranteed for every applicant.",
+    "What interest rate should I use?",
+    "Set it to 0% to model the no-cost EMI plans our listed universities publish on their own program pages — that's the default. Move the slider up to 16% to model a standard education loan instead, if that's what you're comparing against.",
   ],
   [
     "What EMI tenures can I choose from?",
-    "6, 12, 18, 24, or 36 months. Longer tenures lower your monthly EMI but don't change the total fee, since this is a no-cost (0% interest) structure.",
+    "6 to 48 months, in steps of 3. Longer tenures lower your monthly EMI but increase total interest paid whenever the rate is above 0%.",
+  ],
+  [
+    "What does the down payment slider do?",
+    "It reduces the loan amount the EMI is calculated on — principal is the total fee minus your down payment. A larger down payment means a smaller loan and a lower EMI at the same tenure and rate.",
   ],
   [
     "Will I be charged a processing fee?",
@@ -30,7 +35,7 @@ const FAQS: Array<[string, string]> = [
   ],
   [
     "Does picking a program from the dropdown auto-fill the correct fee?",
-    "Yes — selecting any program from our catalog fills in its actual total fee automatically, so you don't need to know the exact figure to get a useful estimate.",
+    "Yes — selecting any program from our catalog fills in its actual total fee and typical tenure automatically, so you don't need to know the exact figures to get a useful estimate.",
   ],
 ];
 
@@ -60,14 +65,15 @@ export default function EmiCalculatorPage() {
             </div>
             <h1 style={{ color: "#363634", fontSize: 28, fontWeight: 700, margin: 0 }}>Online degree EMI calculator</h1>
             <div style={{ color: "#696868", fontSize: 14, marginTop: 6 }}>
-              Estimate the monthly no-cost EMI for any program in our catalog, or enter a fee manually.
+              Pick a real program from the catalog, or enter your own numbers. No-cost EMI means 0% interest — the rate
+              slider only matters if you&apos;re modelling a standard education loan instead.
             </div>
           </div>
         </div>
 
-        <div className="container" style={{ paddingTop: 28, paddingBottom: 56 }}>
-          <EmiCalculator />
-          <section className="detail-section" style={{ marginTop: 32 }}>
+        <EmiCalculator />
+        <div className="container" style={{ paddingBottom: 56 }}>
+          <section className="detail-section" style={{ marginTop: 8 }}>
             <h2>Frequently asked questions</h2>
             <div className="faq-list">
               {FAQS.map(([question, answer]) => (
@@ -80,6 +86,7 @@ export default function EmiCalculatorPage() {
           </section>
         </div>
       </div>
+      <StickyMobileBar primary={{ label: "Get exact loan terms", href: "/lead?intent=emi-calculator", openLead: true }} />
     </>
   );
 }

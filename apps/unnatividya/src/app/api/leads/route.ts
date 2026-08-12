@@ -5,7 +5,7 @@ import { query } from "@/lib/db";
 const leadSchema = z.object({
   name: z.string().trim().min(2),
   email: z.string().trim().email(),
-  phone: z.string().trim().regex(/^\d{10}$/),
+  phone: z.string().trim().regex(/^\+\d{6,15}$/),
   city: z.string().trim().optional().default(""),
   course: z.string().optional(),
   university: z.string().optional(),

@@ -10,11 +10,21 @@ export const metadata: Metadata = {
   alternates: { canonical: "/online-degree-guides" },
 };
 
+function levelBadge(level: "UG" | "PG") {
+  return (
+    <span style={{ fontSize: 11, fontWeight: 700, color: level === "PG" ? "#4D00FF" : "#0F5BB8", background: level === "PG" ? "rgba(77,0,255,0.10)" : "rgba(79,168,255,0.12)", borderRadius: 999, whiteSpace: "nowrap", padding: "3px 9px" }}>
+      {level}
+    </span>
+  );
+}
+
 export default function FeeGuidesIndexPage() {
   const guides = feeGuides();
   const eligibilityGuides = allEligibilityGuides();
   const careerScopeGuides = allCareerScopeGuides();
   const ugcApprovalGuides = allUgcApprovalGuides();
+  const levelByKey = new Map(guides.map((guide) => [guide.key, guide.courses[0].level]));
+  const featured = guides.find((guide) => guide.key === "mba") || guides[0];
   const siteUrl = process.env.NEXT_PUBLIC_UNNATIVIDYA_SITE_URL || "https://unnatividya.com";
 
   const breadcrumbJsonLd = {
@@ -58,10 +68,33 @@ export default function FeeGuidesIndexPage() {
             university we list when more than one offers it, or explained in detail (including scholarship categories) when
             only one does. All figures are pulled from the same verified data behind our individual course pages.
           </p>
+
+          {featured ? (
+            <Link
+              href={`/online-degree-guides/${featured.slug}`}
+              className="card uv-card"
+              style={{ display: "grid", gridTemplateColumns: "auto 1fr", gap: 20, alignItems: "center", padding: 24, color: "inherit", marginBottom: 32 }}
+            >
+              <span style={{ fontSize: 11, fontWeight: 700, color: "#544CC8", background: "rgba(84,76,200,0.10)", borderRadius: 999, padding: "4px 10px", whiteSpace: "nowrap" }}>MOST READ GUIDE</span>
+              <div>
+                <div style={{ fontSize: 19, fontWeight: 700, color: "#363634" }}>The complete guide to an online {featured.label} in India</div>
+                <div style={{ fontSize: 14, color: "#555", marginTop: 6, maxWidth: 640 }}>
+                  {featured.courses.length} universities, {formatFee(featured.lowestFee)} to {formatFee(featured.highestFee)}. What actually separates them, what the fee buys, and who should pick which.
+                </div>
+                <div style={{ fontSize: 13, color: "#707070", marginTop: 10 }}>
+                  {featured.courses.length} universities compared · Read the guide →
+                </div>
+              </div>
+            </Link>
+          ) : null}
+
           <div className="grid three">
             {guides.map((guide) => (
               <Link href={`/online-degree-guides/${guide.slug}`} className="card uv-card" style={{ display: "block", padding: 18, color: "inherit" }} key={guide.slug}>
-                <div style={{ fontSize: 16, fontWeight: 700, color: "#363634" }}>{guide.label}</div>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
+                  <div style={{ fontSize: 16, fontWeight: 700, color: "#363634" }}>{guide.label}</div>
+                  {levelBadge(guide.courses[0].level)}
+                </div>
                 <div style={{ fontSize: 13, color: "#707070", marginTop: 4 }}>
                   {guide.isComparison
                     ? `${guide.courses.length} universities · ${formatFee(guide.lowestFee)} – ${formatFee(guide.highestFee)}`
@@ -82,21 +115,30 @@ export default function FeeGuidesIndexPage() {
           <div className="grid three">
             {eligibilityGuides.map((guide) => (
               <Link href={`/online-degree-guides/${guide.slug}`} className="card uv-card" style={{ display: "block", padding: 18, color: "inherit" }} key={guide.slug}>
-                <div style={{ fontSize: 16, fontWeight: 700, color: "#363634" }}>{guide.label}</div>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
+                  <div style={{ fontSize: 16, fontWeight: 700, color: "#363634" }}>{guide.label}</div>
+                  {levelByKey.has(guide.key) ? levelBadge(levelByKey.get(guide.key)!) : null}
+                </div>
                 <div style={{ fontSize: 13, color: "#707070", marginTop: 4 }}>Eligibility & admission</div>
                 <div style={{ fontSize: 13, color: "#544CC8", fontWeight: 700, marginTop: 10 }}>Check eligibility →</div>
               </Link>
             ))}
             {careerScopeGuides.map((guide) => (
               <Link href={`/online-degree-guides/${guide.slug}`} className="card uv-card" style={{ display: "block", padding: 18, color: "inherit" }} key={guide.slug}>
-                <div style={{ fontSize: 16, fontWeight: 700, color: "#363634" }}>{guide.label}</div>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
+                  <div style={{ fontSize: 16, fontWeight: 700, color: "#363634" }}>{guide.label}</div>
+                  {levelByKey.has(guide.key) ? levelBadge(levelByKey.get(guide.key)!) : null}
+                </div>
                 <div style={{ fontSize: 13, color: "#707070", marginTop: 4 }}>Career scope & salary</div>
                 <div style={{ fontSize: 13, color: "#544CC8", fontWeight: 700, marginTop: 10 }}>See career scope →</div>
               </Link>
             ))}
             {ugcApprovalGuides.map((guide) => (
               <Link href={`/online-degree-guides/${guide.slug}`} className="card uv-card" style={{ display: "block", padding: 18, color: "inherit" }} key={guide.slug}>
-                <div style={{ fontSize: 16, fontWeight: 700, color: "#363634" }}>Is {guide.label} UGC approved?</div>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
+                  <div style={{ fontSize: 16, fontWeight: 700, color: "#363634" }}>Is {guide.label} UGC approved?</div>
+                  {levelByKey.has(guide.key) ? levelBadge(levelByKey.get(guide.key)!) : null}
+                </div>
                 <div style={{ fontSize: 13, color: "#707070", marginTop: 4 }}>Validity & approval</div>
                 <div style={{ fontSize: 13, color: "#544CC8", fontWeight: 700, marginTop: 10 }}>Check validity →</div>
               </Link>

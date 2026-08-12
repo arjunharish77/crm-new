@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&display=swap" rel="stylesheet">
+<style>body{margin:0;font-family:'DM Sans',sans-serif;color:#555;background:#F7F8F9}a{color:#544CC8;text-decoration:none}a:hover{color:#453DB8}button,input{font-family:'DM Sans',sans-serif}</style>
+</helmet>
+<div style="min-height:100vh;display:flex;flex-direction:column;background:#F7F8F9">
+<dc-import name="SiteHeader" active="blog" hint-size="100%,110px"></dc-import>
+
+<div style="background:#fff;border-bottom:1px solid #EAEAEA">
+  <div style="max-width:1200px;margin:0 auto;padding:30px 24px 26px">
+    <div style="font-size:12px;color:#707070;margin-bottom:10px"><a href="Home.dc.html" style="color:#707070">Home</a> &gt; Blog</div>
+    <h1 style="font-size:32px;font-weight:700;color:#363634;margin:0 0 6px;letter-spacing:-0.4px">Guides &amp; resources</h1>
+    <p style="font-size:15px;color:#696868;margin:0">Straight answers on validity, fees, careers and admissions — written by the counsellors who take your calls.</p>
+  </div>
+</div>
+
+<div style="max-width:1200px;margin:0 auto;padding:26px 24px 64px;width:100%;box-sizing:border-box;flex:1">
+  <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:24px">
+    <sc-for list="{{ cats }}" as="c" hint-placeholder-count="5">
+      <button onClick="{{ c.pick }}" style="{{ c.style }}">{{ c.label }}</button>
+    </sc-for>
+  </div>
+
+  <div class="uv-3col" style="display:grid;grid-template-columns:repeat(3,1fr);gap:20px">
+    <sc-for list="{{ posts }}" as="p" hint-placeholder-count="6">
+      <a href="Article.dc.html" style="display:flex;flex-direction:column;background:#fff;border:1px solid #CFDAE6;border-radius:8px;overflow:hidden;color:inherit" style-hover="box-shadow:0 4px 8px rgba(36,36,36,0.12)">
+        <div style="height:170px;overflow:hidden"><img src="{{ p.img }}" alt="{{ p.title }}" style="width:100%;height:100%;object-fit:cover;display:block" /></div>
+        <div style="padding:20px;display:flex;flex-direction:column;gap:9px;flex:1">
+          <div style="display:flex;gap:9px;align-items:center">
+            <span style="font-size:11px;font-weight:700;color:#4FA8FF;background:rgba(79,168,255,0.12);border-radius:999px;white-space:nowrap;padding:4px 10px">{{ p.cat }}</span>
+            <span style="font-size:12px;color:#AAAAAA">{{ p.read }}</span>
+          </div>
+          <div style="font-size:17px;font-weight:700;color:#363634;line-height:1.35">{{ p.title }}</div>
+          <div style="font-size:13px;color:#696868;line-height:1.6">{{ p.excerpt }}</div>
+          <span style="margin-top:auto;font-size:13px;font-weight:700;color:#544CC8;padding-top:6px">Read article →</span>
+        </div>
+      </a>
+    </sc-for>
+  </div>
+
+  <div style="margin-top:32px;background:#263238;border-radius:8px;padding:32px;display:flex;justify-content:space-between;align-items:center;gap:26px;flex-wrap:wrap">
+    <div>
+      <div style="font-size:21px;font-weight:700;color:#fff">Admission deadlines in your inbox</div>
+      <div style="font-size:14px;color:#B8C4CA;margin-top:5px">One email a month — batch dates, new programs and scholarship windows. Nothing else.</div>
+    </div>
+    <div style="display:flex;gap:10px">
+      <input placeholder="Email address" style="height:46px;width:250px;padding:0 16px;border:none;border-radius:4px;font-size:14px;color:#555" />
+      <a href="Lead.dc.html" style="height:46px;line-height:46px;padding:0 24px;background:#544CC8;color:#fff;border-radius:4px;font-size:14px;font-weight:700">Subscribe</a>
+    </div>
+  </div>
+</div>
+
+<dc-import name="SiteFooter" hint-size="100%,360px"></dc-import>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{}">
+class Component extends DCLogic {
+  state = { data: null, cat: 'All' };
+  componentDidMount() { import('./uv-data.js').then(d => this.setState({ data: d })); }
+  renderVals() {
+    const d = this.state.data;
+    const CATS = ['All', 'Validity', 'Programs', 'Careers', 'Admissions'];
+    const cats = CATS.map(label => {
+      const on = this.state.cat === label;
+      return {
+        label,
+        style: 'border:1.5px solid ' + (on ? '#544CC8' : '#CFDAE6') + ';background:' + (on ? 'rgba(84,76,200,0.08)' : '#fff') + ';color:' + (on ? '#544CC8' : '#555') + ';border-radius:999px;padding:9px 17px;font-size:13px;font-weight:600;cursor:pointer',
+        pick: () => this.setState({ cat: label })
+      };
+    });
+    if (!d) return { cats, posts: [] };
+    const posts = d.blogPosts.filter(p => this.state.cat === 'All' || p.cat === this.state.cat);
+    return { cats, posts };
+  }
+}
+</script>
+</body>
+</html>

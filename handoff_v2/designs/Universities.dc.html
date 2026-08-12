@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&display=swap" rel="stylesheet">
+<style>body{margin:0;font-family:'DM Sans',sans-serif;color:#555;background:#F7F8F9}a{color:#544CC8;text-decoration:none}a:hover{color:#453DB8}</style>
+</helmet>
+<div style="min-height:100vh;display:flex;flex-direction:column;background:#F7F8F9">
+<dc-import name="SiteHeader" active="universities" hint-size="100%,110px"></dc-import>
+
+<div style="background:#fff;border-bottom:1px solid #EAEAEA">
+  <div style="max-width:1200px;margin:0 auto;padding:30px 24px 26px">
+    <div style="font-size:12px;color:#707070;margin-bottom:10px"><a href="Home.dc.html" style="color:#707070">Home</a> &gt; Universities</div>
+    <h1 style="font-size:32px;font-weight:700;color:#363634;margin:0 0 6px;letter-spacing:-0.4px">Universities we cover</h1>
+    <p style="font-size:15px;color:#696868;margin:0;max-width:640px">Three institutions. Every program is checked against the university's own page and the UGC-DEB entitlement notification before it is listed here.</p>
+  </div>
+</div>
+
+<div style="max-width:1200px;margin:0 auto;padding:26px 24px 64px;width:100%;box-sizing:border-box;display:flex;flex-direction:column;gap:20px;flex:1">
+  <sc-for list="{{ unis }}" as="u" hint-placeholder-count="3">
+    <div style="background:#fff;border:1px solid #CFDAE6;border-radius:8px;overflow:hidden;display:grid;grid-template-columns:280px 1fr 210px" style-hover="box-shadow:0 4px 8px rgba(36,36,36,0.12)">
+      <div style="position:relative;min-height:230px">
+        <img src="{{ u.img }}" alt="{{ u.name }} campus" style="width:100%;height:100%;object-fit:cover;display:block;position:absolute;inset:0" />
+      </div>
+      <div style="padding:24px">
+        <div style="display:flex;align-items:center;gap:14px;margin-bottom:10px">
+          <img src="{{ u.logo }}" alt="{{ u.name }}" style="height:38px;width:auto;max-width:150px;object-fit:contain;object-position:left" />
+          <span style="font-size:11px;font-weight:700;color:#2E7D32;background:rgba(46,125,50,0.10);border-radius:999px;white-space:nowrap;padding:5px 11px">VERIFIED THIS CYCLE</span>
+        </div>
+        <a href="University.dc.html" style="font-size:22px;font-weight:700;color:#363634;display:block">{{ u.name }}</a>
+        <div style="font-size:13px;color:#707070;margin:4px 0 14px">{{ u.city }} · Established {{ u.established }} · {{ u.learners }} online learners</div>
+        <p style="font-size:14px;color:#696868;line-height:1.6;margin:0 0 16px;max-width:640px">{{ u.about }}</p>
+        <div style="display:flex;gap:7px;align-items:center;margin-bottom:16px;flex-wrap:wrap">
+          <sc-for list="{{ u.icons }}" as="ic" hint-placeholder-count="3">
+            <img src="{{ ic }}" alt="Approval" style="height:34px;width:auto" />
+          </sc-for>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(5,auto);gap:26px;justify-content:start;border-top:1px solid #EAEAEA;padding-top:14px">
+          <div><div style="font-size:16px;font-weight:700;color:#363634"><span style="color:#FDB515">★</span> {{ u.rating }}</div><div style="font-size:11px;color:#707070">{{ u.reviews }} reviews</div></div>
+          <div><div style="font-size:16px;font-weight:700;color:#363634">{{ u.programCount }}</div><div style="font-size:11px;color:#707070">online programs</div></div>
+          <div><div style="font-size:16px;font-weight:700;color:#363634">{{ u.placementText }}</div><div style="font-size:11px;color:#707070">placement rate</div></div>
+          <div><div style="font-size:16px;font-weight:700;color:#363634">{{ u.avgPackage }}</div><div style="font-size:11px;color:#707070">average package</div></div>
+          <div><div style="font-size:16px;font-weight:700;color:#363634">{{ u.feeFrom }}</div><div style="font-size:11px;color:#707070">annual fee from</div></div>
+        </div>
+      </div>
+      <div style="padding:24px;display:flex;flex-direction:column;gap:10px;justify-content:center;border-left:1px solid #EAEAEA;background:#F7F8F9">
+        <a href="University.dc.html" style="text-align:center;height:44px;line-height:44px;background:#544CC8;color:#fff;border-radius:4px;font-size:14px;font-weight:700">View university</a>
+        <a href="Lead.dc.html" style="text-align:center;height:44px;line-height:44px;border:1.5px solid #555;color:#555;border-radius:4px;font-size:14px;font-weight:700;box-sizing:border-box;background:#fff">Enquire now</a>
+        <a href="Courses.dc.html" style="text-align:center;font-size:13px;font-weight:700">See all {{ u.programCount }} programs →</a>
+      </div>
+    </div>
+  </sc-for>
+
+  <div style="background:#263238;border-radius:8px;padding:32px;display:flex;justify-content:space-between;align-items:center;gap:26px;flex-wrap:wrap">
+    <div>
+      <div style="font-size:21px;font-weight:700;color:#fff">Can't decide between universities?</div>
+      <div style="font-size:14px;color:#B8C4CA;margin-top:5px">Compare approvals, fees and placement records side by side, or let UnnatiAI shortlist for you.</div>
+    </div>
+    <div style="display:flex;gap:12px">
+      <a href="Compare.dc.html" style="height:46px;line-height:46px;padding:0 24px;background:#544CC8;color:#fff;border-radius:4px;font-size:14px;font-weight:700">Compare now</a>
+      <a href="Recommender.dc.html" style="height:46px;line-height:46px;padding:0 24px;border:1.5px solid #fff;color:#fff;border-radius:4px;font-size:14px;font-weight:700;box-sizing:border-box">Ask UnnatiAI</a>
+    </div>
+  </div>
+</div>
+
+<dc-import name="SiteFooter" hint-size="100%,360px"></dc-import>
+</div>
+
+<div style="position:fixed;right:22px;bottom:22px;z-index:150;display:flex;flex-direction:column;gap:10px;align-items:flex-end">
+  <a href="Lead.dc.html" style="height:46px;line-height:46px;padding:0 22px;background:#fff;border:1.5px solid #544CC8;color:#544CC8;border-radius:999px;font-size:13px;font-weight:700;box-shadow:0 4px 8px rgba(36,36,36,0.12)">Request a callback</a>
+  <a href="https://wa.me/911800120405" target="_blank" rel="noopener" aria-label="Chat on WhatsApp" style="width:52px;height:52px;border-radius:50%;background:#25D366;box-shadow:0 4px 8px rgba(36,36,36,0.16);display:flex;align-items:center;justify-content:center">
+    <span style="width:24px;height:24px;border:2.5px solid #fff;border-radius:50% 50% 50% 4px;display:block"></span>
+  </a>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{}">
+class Component extends DCLogic {
+  state = { data: null };
+  componentDidMount() { import('./uv-data.js').then(d => this.setState({ data: d })); }
+  renderVals() {
+    const d = this.state.data;
+    if (!d) return { unis: [] };
+    return {
+      unis: d.universities.map(u => ({
+        name: u.name, city: u.city, established: u.established, learners: u.learners,
+        about: u.about, img: u.img, logo: u.logo,
+        rating: u.rating, reviews: u.reviews.toLocaleString('en-IN'),
+        icons: u.approvals.map(d.approvalIcon).filter(Boolean),
+        programCount: d.courses.filter(c => c.universityId === u.id).length,
+        placementText: u.placement + '%', avgPackage: u.avgPackage, feeFrom: u.feeFrom
+      }))
+    };
+  }
+}
+</script>
+</body>
+</html>

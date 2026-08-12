@@ -11,12 +11,23 @@ export function SiteFooter() {
               alt="Unnati Vidya"
               width={174}
               height={32}
-              style={{ height: 22, width: "auto", display: "block" }}
+              style={{ height: 24, width: "auto", display: "block" }}
             />
             <p style={{ fontSize: 13, lineHeight: 1.6, marginTop: 12, maxWidth: 280 }}>
               India&apos;s unbiased marketplace for UGC-entitled online degrees. Compare, get
               counselled, enrol — all free.
             </p>
+            <div style={{ display: "flex", gap: 10, marginTop: 16, flexWrap: "wrap" }}>
+              {[
+                { src: "/approvals/ugc.svg", label: "UGC" },
+                { src: "/approvals/naac.svg", label: "NAAC" },
+                { src: "/approvals/aicte.svg", label: "AICTE" },
+              ].map((badge) => (
+                <span key={badge.src} style={{ background: "#fff", borderRadius: 4, height: 30, width: 56, padding: "4px 8px", display: "inline-flex", alignItems: "center", justifyContent: "center", position: "relative" }}>
+                  <Image src={badge.src} alt={badge.label} fill sizes="56px" style={{ objectFit: "contain", padding: 4 }} />
+                </span>
+              ))}
+            </div>
           </div>
           <div style={{ display: "flex", flexDirection: "column", gap: 8, fontSize: 13 }}>
             <p style={{ fontWeight: 700, color: "#fff", fontSize: 14, margin: "0 0 4px" }}>Explore</p>
@@ -34,18 +45,20 @@ export function SiteFooter() {
             <Link href="/courses/online-bca-manipal-university-jaipur" style={{ color: "#B8C4CA" }}>Online BCA</Link>
             <Link href="/courses/online-mca-manipal-university-jaipur" style={{ color: "#B8C4CA" }}>Online MCA</Link>
             <Link href="/courses/online-bcom-manipal-university-jaipur" style={{ color: "#B8C4CA" }}>Online B.Com</Link>
+            <Link href="/courses/online-msc-data-science-amity-online" style={{ color: "#B8C4CA" }}>Online MSc Data Science</Link>
           </div>
           <div style={{ display: "flex", flexDirection: "column", gap: 8, fontSize: 13 }}>
             <p style={{ fontWeight: 700, color: "#fff", fontSize: 14, margin: "0 0 4px" }}>Company</p>
             <Link href="/blog" style={{ color: "#B8C4CA" }}>Blog & guides</Link>
             <Link href="/about" style={{ color: "#B8C4CA" }}>About us</Link>
             <Link href="/how-we-verify" style={{ color: "#B8C4CA" }}>How we verify our data</Link>
+            <Link href="/shortlist" style={{ color: "#B8C4CA" }}>My shortlist</Link>
             <span>Contact: 1800-120-4050</span>
           </div>
       </div>
       <div style={{ borderTop: "1px solid rgba(255,255,255,0.10)" }}>
         <div style={{ maxWidth: 1200, margin: "0 auto", padding: "16px 24px", fontSize: 12, display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
-          <span>© 2026 UnnatiVidya Edutech Pvt Ltd</span>
+          <span>© 2026 Unnati Vidya</span>
           <span>
             <Link href="/privacy" style={{ color: "#B8C4CA" }}>Privacy</Link> · <Link href="/terms" style={{ color: "#B8C4CA" }}>Terms</Link> ·{" "}
             <Link href="/refund-policy" style={{ color: "#B8C4CA" }}>Refund policy</Link>

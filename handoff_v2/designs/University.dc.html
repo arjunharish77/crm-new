@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&display=swap" rel="stylesheet">
+<style>body{margin:0;font-family:'DM Sans',sans-serif;color:#555;background:#fff}a{color:#544CC8;text-decoration:none}a:hover{color:#453DB8}</style>
+</helmet>
+<div style="min-height:100vh;display:flex;flex-direction:column">
+<dc-import name="SiteHeader" active="universities" hint-size="100%,110px"></dc-import>
+
+<div style="background:#263238;color:#fff">
+  <div style="max-width:1200px;margin:0 auto;padding:34px 24px;display:grid;grid-template-columns:1fr 340px;gap:44px;align-items:center" class="uv-2col">
+    <div>
+      <div style="font-size:12px;color:#B8C4CA;margin-bottom:16px"><a href="Home.dc.html" style="color:#B8C4CA">Home</a> &gt; <a href="Universities.dc.html" style="color:#B8C4CA">Universities</a> &gt; Manipal University Jaipur</div>
+      <div style="display:flex;align-items:center;gap:18px">
+        <div style="background:#fff;border-radius:8px;padding:10px 13px;flex:none"><img src="assets/muj-logo.svg" alt="Manipal University Jaipur" style="height:44px;width:auto;display:block" /></div>
+        <div>
+          <h1 style="font-size:36px;font-weight:700;margin:0;line-height:1.1;letter-spacing:-0.5px">Manipal University Jaipur</h1>
+          <div style="font-size:15px;color:#B8C4CA;margin-top:6px">Jaipur, Rajasthan · Established 2011 · 52,000+ online learners</div>
+        </div>
+      </div>
+      <div style="display:flex;gap:10px;margin-top:20px;align-items:center;flex-wrap:wrap">
+        <img src="assets/ap-ugc.svg" alt="UGC entitled" style="height:36px;width:auto;background:#fff;border-radius:4px;padding:4px 7px" />
+        <img src="assets/ap-naac.svg" alt="NAAC A+" style="height:36px;width:auto;background:#fff;border-radius:4px;padding:4px 7px" />
+        <img src="assets/ap-aicte.svg" alt="AICTE" style="height:36px;width:auto;background:#fff;border-radius:4px;padding:4px 7px" />
+        <img src="assets/ap-wes.svg" alt="WES recognised" style="height:36px;width:auto;background:#fff;border-radius:4px;padding:4px 7px" />
+        <span style="font-size:14px;margin-left:8px"><span style="color:#FDB515">★</span> <b>4.7</b> <span style="color:#B8C4CA">(3,240 reviews)</span></span>
+      </div>
+    </div>
+    <div style="height:200px;border-radius:8px;overflow:hidden"><img src="assets/muj-campus.webp" alt="Manipal University Jaipur campus" style="width:100%;height:100%;object-fit:cover;display:block" /></div>
+  </div>
+</div>
+
+<div style="background:#F4F3FC;border-bottom:1px solid #EAEAEA">
+  <div style="max-width:1200px;margin:0 auto;padding:24px;display:grid;grid-template-columns:repeat(5,1fr);gap:24px" class="uv-5col">
+    <div><div style="font-size:25px;font-weight:700;color:#363634;letter-spacing:-0.4px">88%</div><div style="font-size:13px;color:#707070">placement assistance</div></div>
+    <div><div style="font-size:25px;font-weight:700;color:#363634;letter-spacing:-0.4px">₹7.2 LPA</div><div style="font-size:13px;color:#707070">average package</div></div>
+    <div><div style="font-size:25px;font-weight:700;color:#363634;letter-spacing:-0.4px">₹24 LPA</div><div style="font-size:13px;color:#707070">highest package</div></div>
+    <div><div style="font-size:25px;font-weight:700;color:#363634;letter-spacing:-0.4px">320+</div><div style="font-size:13px;color:#707070">hiring partners</div></div>
+    <div><div style="font-size:25px;font-weight:700;color:#363634;letter-spacing:-0.4px">₹75,000</div><div style="font-size:13px;color:#707070">annual fee from</div></div>
+  </div>
+</div>
+
+<div style="position:sticky;top:68px;z-index:90;background:#fff;border-bottom:1px solid #EAEAEA;box-shadow:0 3px 6px rgba(194,194,194,0.10)">
+  <div style="max-width:1200px;margin:0 auto;padding:11px 24px;display:flex;gap:8px;font-size:13px;font-weight:600;overflow-x:auto">
+    <sc-for list="{{ sections }}" as="s" hint-placeholder-count="7">
+      <a href="{{ s.href }}" onClick="{{ s.select }}" style="{{ s.style }}">{{ s.label }}</a>
+    </sc-for>
+  </div>
+</div>
+
+<div style="max-width:1200px;margin:0 auto;padding:36px 24px 64px;width:100%;box-sizing:border-box;display:grid;grid-template-columns:1fr 350px;gap:44px;align-items:start;flex:1" class="uv-2col">
+  <div style="display:flex;flex-direction:column;gap:44px">
+
+    <div id="about" style="scroll-margin-top:140px">
+      <h2 style="font-size:24px;font-weight:700;color:#363634;margin:0 0 14px;letter-spacing:-0.2px">About MUJ Online</h2>
+      <p style="font-size:15px;line-height:1.7;color:#555;margin:0 0 14px">Manipal University Jaipur is part of the Manipal education ecosystem and offers UGC-entitled online degrees for learners who need flexible study without leaving work or family commitments.</p>
+      <p style="font-size:15px;line-height:1.7;color:#555;margin:0 0 20px">Official Online Manipal pages highlight NAAC A+ accreditation, online proctored exams, digital learning support, placement assistance, and scholarship or EMI options for eligible learners.</p>
+      <div class="uv-3col" style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px">
+        <sc-for list="{{ factTiles }}" as="f" hint-placeholder-count="6">
+          <div style="border:1px solid #EAEAEA;border-radius:8px;padding:14px 16px;background:#F7F8F9"><div style="font-size:11px;color:#707070">{{ f.k }}</div><div style="font-size:15px;font-weight:700;color:#363634">{{ f.v }}</div></div>
+        </sc-for>
+      </div>
+    </div>
+
+    <div id="rankings" style="scroll-margin-top:140px">
+      <h2 style="font-size:24px;font-weight:700;color:#363634;margin:0 0 16px;letter-spacing:-0.2px">Recognitions</h2>
+      <div class="uv-2col" style="display:grid;grid-template-columns:repeat(2,1fr);gap:12px">
+        <sc-for list="{{ rankings }}" as="r" hint-placeholder-count="4">
+          <div style="border:1px solid #CFDAE6;border-radius:8px;padding:18px;display:flex;gap:14px;align-items:flex-start">
+            <img src="{{ r.icon }}" alt="" style="height:36px;width:auto;flex:none" />
+            <div><div style="font-size:15px;font-weight:700;color:#363634">{{ r.title }}</div><div style="font-size:13px;color:#696868;line-height:1.55;margin-top:4px">{{ r.note }}</div></div>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+
+    <div id="programs" style="scroll-margin-top:140px">
+      <h2 style="font-size:24px;font-weight:700;color:#363634;margin:0 0 4px;letter-spacing:-0.2px">Online programs offered</h2>
+      <p style="font-size:14px;color:#707070;margin:0 0 16px">Fees verified for the July 2026 admission cycle.</p>
+      <div style="border:1px solid #CFDAE6;border-radius:8px;overflow:hidden">
+        <div style="display:grid;grid-template-columns:1.8fr 1fr 1fr 1fr auto;background:#F5F5F5;font-size:11px;font-weight:700;color:#696868;padding:13px 20px;letter-spacing:0.6px;gap:14px"><span>PROGRAM</span><span>DURATION</span><span>TOTAL FEE</span><span>EMI FROM</span><span></span></div>
+        <sc-for list="{{ programs }}" as="p" hint-placeholder-count="9">
+          <div style="display:grid;grid-template-columns:1.8fr 1fr 1fr 1fr auto;padding:14px 20px;border-top:1px solid #EAEAEA;font-size:14px;align-items:center;gap:14px">
+            <span><a href="Course.dc.html" style="font-weight:700;color:#363634">{{ p.name }}</a> <span style="font-size:11px;font-weight:700;border-radius:999px;white-space:nowrap;padding:2px 8px;margin-left:6px;{{ p.levelStyle }}">{{ p.level }}</span></span>
+            <span>{{ p.duration }}</span>
+            <span style="font-weight:600;color:#363634">{{ p.feeText }}</span>
+            <span>{{ p.emi }}</span>
+            <a href="Course.dc.html" style="font-size:13px;font-weight:700">View →</a>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+
+    <div id="placements" style="scroll-margin-top:140px">
+      <h2 style="font-size:24px;font-weight:700;color:#363634;margin:0 0 16px;letter-spacing:-0.2px">Placements &amp; hiring partners</h2>
+      <div class="uv-4col" style="display:grid;grid-template-columns:repeat(6,1fr);gap:14px;align-items:center;border:1px solid #CFDAE6;border-radius:8px;padding:20px">
+        <div style="height:50px;border:1px solid #EAEAEA;border-radius:6px;background:#F7F8F9;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;color:#AAAAAA">Partner 1</div>
+        <div style="height:50px;border:1px solid #EAEAEA;border-radius:6px;background:#F7F8F9;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;color:#AAAAAA">Partner 2</div>
+        <div style="height:50px;border:1px solid #EAEAEA;border-radius:6px;background:#F7F8F9;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;color:#AAAAAA">Partner 3</div>
+        <div style="height:50px;border:1px solid #EAEAEA;border-radius:6px;background:#F7F8F9;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;color:#AAAAAA">Partner 4</div>
+        <div style="height:50px;border:1px solid #EAEAEA;border-radius:6px;background:#F7F8F9;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;color:#AAAAAA">Partner 5</div>
+        <div style="height:50px;border:1px solid #EAEAEA;border-radius:6px;background:#F7F8F9;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;color:#AAAAAA">Partner 6</div>
+      </div>
+      <div class="uv-4col" style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-top:14px">
+        <div style="border:1px solid #CFDAE6;border-radius:8px;padding:16px;font-size:14px;font-weight:600;color:#363634">Resume clinics</div>
+        <div style="border:1px solid #CFDAE6;border-radius:8px;padding:16px;font-size:14px;font-weight:600;color:#363634">Mock interviews</div>
+        <div style="border:1px solid #CFDAE6;border-radius:8px;padding:16px;font-size:14px;font-weight:600;color:#363634">Job board access</div>
+        <div style="border:1px solid #CFDAE6;border-radius:8px;padding:16px;font-size:14px;font-weight:600;color:#363634">Alumni networking</div>
+      </div>
+      <div style="font-size:13px;color:#707070;margin-top:12px">Placement assistance, not a guaranteed offer — as stated on the university's own pages.</div>
+    </div>
+
+    <div>
+      <h2 style="font-size:24px;font-weight:700;color:#363634;margin:0 0 16px;letter-spacing:-0.2px">Campus &amp; learner moments</h2>
+      <div class="uv-3col" style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px">
+        <div style="height:170px;border-radius:8px;overflow:hidden"><img src="assets/moment-1.webp" alt="Campus moment" style="width:100%;height:100%;object-fit:cover;display:block" /></div>
+        <div style="height:170px;border-radius:8px;overflow:hidden"><img src="assets/moment-2.webp" alt="Campus moment" style="width:100%;height:100%;object-fit:cover;display:block" /></div>
+        <div style="height:170px;border-radius:8px;overflow:hidden"><img src="assets/moment-3.webp" alt="Campus moment" style="width:100%;height:100%;object-fit:cover;display:block" /></div>
+      </div>
+    </div>
+
+    <div id="admission" style="scroll-margin-top:140px">
+      <h2 style="font-size:24px;font-weight:700;color:#363634;margin:0 0 16px;letter-spacing:-0.2px">Admission process</h2>
+      <div class="uv-4col" style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px">
+        <sc-for list="{{ steps }}" as="s" hint-placeholder-count="4">
+          <div style="border:1px solid #CFDAE6;border-radius:8px;padding:18px">
+            <div style="width:30px;height:30px;border-radius:4px;background:rgba(84,76,200,0.10);color:#544CC8;font-weight:700;font-size:14px;display:flex;align-items:center;justify-content:center">{{ s.n }}</div>
+            <div style="font-size:15px;font-weight:700;color:#363634;margin:12px 0 5px">{{ s.title }}</div>
+            <div style="font-size:13px;color:#696868;line-height:1.55">{{ s.copy }}</div>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+
+    <div id="scholarships" style="scroll-margin-top:140px">
+      <h2 style="font-size:24px;font-weight:700;color:#363634;margin:0 0 16px;letter-spacing:-0.2px">Scholarships &amp; concessions</h2>
+      <div style="border:1px solid #CFDAE6;border-radius:8px;overflow:hidden">
+        <div style="display:grid;grid-template-columns:1.5fr 1fr 1.5fr;background:#F5F5F5;font-size:11px;font-weight:700;color:#696868;padding:13px 20px;letter-spacing:0.6px;gap:14px"><span>CATEGORY</span><span>CONCESSION</span><span>PROOF REQUIRED</span></div>
+        <sc-for list="{{ scholarships }}" as="s" hint-placeholder-count="4">
+          <div style="display:grid;grid-template-columns:1.5fr 1fr 1.5fr;padding:14px 20px;border-top:1px solid #EAEAEA;font-size:14px;gap:14px">
+            <span style="font-weight:600;color:#363634">{{ s.cat }}</span>
+            <span style="font-weight:700;color:#2E7D32">{{ s.amount }}</span>
+            <span>{{ s.proof }}</span>
+          </div>
+        </sc-for>
+      </div>
+      <div style="font-size:13px;color:#707070;margin-top:12px">One concession per learner, applied on tuition fee at admission. Eligibility confirmed during free counselling.</div>
+    </div>
+
+    <div id="faq" style="scroll-margin-top:140px">
+      <h2 style="font-size:24px;font-weight:700;color:#363634;margin:0 0 16px;letter-spacing:-0.2px">Frequently asked questions</h2>
+      <div style="display:flex;flex-direction:column;gap:10px">
+        <sc-for list="{{ faqs }}" as="f" hint-placeholder-count="6">
+          <div style="border:1px solid #CFDAE6;border-radius:8px;overflow:hidden">
+            <button onClick="{{ f.toggle }}" style="width:100%;display:flex;justify-content:space-between;align-items:center;gap:16px;padding:15px 20px;background:transparent;border:none;cursor:pointer;text-align:left;font-family:'DM Sans',sans-serif">
+              <span style="font-size:15px;font-weight:600;color:#363634">{{ f.q }}</span>
+              <span style="font-size:15px;color:#707070">{{ f.mark }}</span>
+            </button>
+            <div style="{{ f.bodyStyle }}">{{ f.a }}</div>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+
+    <div>
+      <h2 style="font-size:24px;font-weight:700;color:#363634;margin:0 0 16px;letter-spacing:-0.2px">Other universities</h2>
+      <div class="uv-2col" style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+        <sc-for list="{{ others }}" as="o" hint-placeholder-count="2">
+          <a href="University.dc.html" style="display:flex;gap:14px;align-items:center;border:1px solid #CFDAE6;border-radius:8px;padding:16px;color:inherit" style-hover="border-color:#544CC8;box-shadow:0 4px 8px rgba(36,36,36,0.12)">
+            <img src="{{ o.logo }}" alt="{{ o.name }}" style="height:34px;width:auto;max-width:120px;object-fit:contain;flex:none" />
+            <div><div style="font-size:15px;font-weight:700;color:#363634">{{ o.name }}</div><div style="font-size:13px;color:#555;margin-top:3px">{{ o.city }} · from {{ o.feeFrom }}/yr</div></div>
+          </a>
+        </sc-for>
+      </div>
+    </div>
+  </div>
+
+  <div class="uv-side-rail" style="position:sticky;top:130px;display:flex;flex-direction:column;gap:16px">
+    <div style="background:#fff;border:1px solid #CFDAE6;border-radius:8px;padding:22px;box-shadow:0 1px 3px rgba(0,0,0,0.06)">
+      <div style="font-size:17px;font-weight:700;color:#363634">Get the MUJ brochure</div>
+      <div style="font-size:13px;color:#696868;margin:7px 0 16px;line-height:1.55">Program-wise fees, scholarship eligibility and the next batch dates — sent free by a counsellor.</div>
+      <button onClick="{{ openLead }}" style="width:100%;height:46px;background:#544CC8;color:#fff;border:none;border-radius:4px;font-size:15px;font-weight:700;cursor:pointer;font-family:'DM Sans',sans-serif">Enquire now</button>
+      <a href="Compare.dc.html" style="display:block;text-align:center;margin-top:10px;border:1.5px solid #555;border-radius:4px;height:44px;line-height:44px;font-size:14px;font-weight:700;color:#555">Compare with others</a>
+    </div>
+    <div style="border:1px solid #CFDAE6;border-radius:8px;padding:20px;background:#F4F3FC">
+      <div style="font-size:14px;font-weight:700;color:#363634;margin-bottom:10px">Why learners pick MUJ</div>
+      <div style="display:flex;flex-direction:column;gap:8px;font-size:13px;color:#555;line-height:1.5">
+        <span>Fees from ₹75,000 per year</span>
+        <span>Live and recorded weekend classes</span>
+        <span>No-cost EMI on every program</span>
+        <span>Alumni status equal to on-campus</span>
+      </div>
+    </div>
+    <div style="border:1px solid #CFDAE6;border-radius:8px;padding:20px">
+      <div style="font-size:13px;font-weight:700;color:#363634;margin-bottom:8px">Sources</div>
+      <div style="display:flex;flex-direction:column;gap:5px;font-size:13px">
+        <a href="https://www.onlinemanipal.com/all-courses" target="_blank" rel="noopener">onlinemanipal.com — all courses</a>
+        <a href="https://deb.ugc.ac.in/" target="_blank" rel="noopener">UGC-DEB entitlement list</a>
+      </div>
+    </div>
+  </div>
+</div>
+
+<dc-import name="SiteFooter" hint-size="100%,360px"></dc-import>
+</div>
+
+<div style="position:fixed;right:22px;bottom:22px;z-index:150;display:flex;flex-direction:column;gap:10px;align-items:flex-end">
+  <button onClick="{{ openLead }}" style="height:46px;padding:0 22px;background:#fff;border:1.5px solid #544CC8;color:#544CC8;border-radius:999px;font-size:13px;font-weight:700;box-shadow:0 4px 8px rgba(36,36,36,0.12);cursor:pointer;font-family:'DM Sans',sans-serif">Request a callback</button>
+  <a href="https://wa.me/911800120405" target="_blank" rel="noopener" aria-label="Chat on WhatsApp" style="width:52px;height:52px;border-radius:50%;background:#25D366;box-shadow:0 4px 8px rgba(36,36,36,0.16);display:flex;align-items:center;justify-content:center">
+    <span style="width:24px;height:24px;border:2.5px solid #fff;border-radius:50% 50% 50% 4px;display:block"></span>
+  </a>
+</div>
+<dc-import name="LeadWizard" open="{{ leadOpen }}" on-close="{{ closeLead }}" context="Manipal University Jaipur" hint-size="0px,0px"></dc-import>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{}">
+class Component extends DCLogic {
+  state = { data: null, active: 'about', openFaq: 0, leadOpen: false };
+  componentDidMount() { import('./uv-data.js').then(d => this.setState({ data: d })); }
+
+  renderVals() {
+    const d = this.state.data;
+    const SECTIONS = [['about', 'About'], ['rankings', 'Recognitions'], ['programs', 'Programs'], ['placements', 'Placements'], ['admission', 'Admission'], ['scholarships', 'Scholarships'], ['faq', 'FAQ']];
+    const sections = SECTIONS.map(([id, label]) => ({
+      label, href: '#' + id,
+      select: () => this.setState({ active: id }),
+      style: this.state.active === id
+        ? 'color:#fff;background:#544CC8;padding:8px 15px;border-radius:999px;white-space:nowrap'
+        : 'color:#555;background:#fff;border:1px solid #CFDAE6;padding:7px 14px;border-radius:999px;white-space:nowrap'
+    }));
+
+    const FAQS = [
+      ['Are MUJ online degrees valid?', 'Yes — the programs listed here are UGC-entitled online degrees. Entitlement is granted per program per academic year, so we re-verify it every admission cycle.'],
+      ['Are exams online?', 'Official program pages describe online learning and online proctored assessment. Exact exam rules can vary by program and cycle.'],
+      ['Does MUJ offer EMI?', 'Yes — no-cost EMI options are shown for most programs, with terms depending on the finance partner and the payment plan you choose.'],
+      ['What placement support is offered?', 'Resume clinics, mock interviews, job board access and alumni networking. This is placement assistance, not a guaranteed job offer.'],
+      ['What scholarships are available?', 'Merit and category scholarships of up to 20%, plus concessions for defence personnel, differently-abled learners and alumni. Eligibility depends on the admission cycle.'],
+      ['Is the degree recognised abroad?', 'MUJ lists WES recognition, which several countries accept for credential evaluation. Confirm the specific requirement with the receiving country or employer.']
+    ];
+    const faqs = FAQS.map(([q, a], i) => ({
+      q, a,
+      mark: this.state.openFaq === i ? '\u2212' : '+',
+      bodyStyle: this.state.openFaq === i ? 'padding:0 20px 18px;font-size:14px;color:#555;line-height:1.65;display:block' : 'display:none',
+      toggle: () => this.setState(s => ({ openFaq: s.openFaq === i ? -1 : i }))
+    }));
+
+    const base = {
+      sections, faqs,
+      factTiles: [['Established', '2011'], ['Location', 'Jaipur, Rajasthan'], ['Online learners', '52,000+'], ['Annual fee from', '\u20B975,000'], ['Batches', 'January & July'], ['Exams', 'Online proctored']].map(([k, v]) => ({ k, v })),
+      rankings: [
+        { title: 'UGC-entitled online degrees', note: 'Online degrees equivalent to campus degrees, per official source pages.', icon: 'assets/ap-ugc.svg' },
+        { title: 'NAAC A+ accredited', note: 'Institutional accreditation highlighted across official MUJ online pages.', icon: 'assets/ap-naac.svg' },
+        { title: 'AICTE norms compliant', note: 'Shown on the official Online MBA MUJ recognition section.', icon: 'assets/ap-aicte.svg' },
+        { title: 'WES recognised', note: 'Credential evaluation recognition shown on official source pages.', icon: 'assets/ap-wes.svg' }
+      ],
+      steps: [
+        { n: '1', title: 'Application', copy: 'Fill basic, education and work-experience details and pay the application fee.' },
+        { n: '2', title: 'Fee payment', copy: 'Pay first semester or full program fee through available payment or EMI options.' },
+        { n: '3', title: 'Document upload', copy: 'Upload academic documents, ID proof and other requested records.' },
+        { n: '4', title: 'University approval', copy: 'The university evaluates documents and confirms admission.' }
+      ],
+      scholarships: [
+        ['Merit / category scholarships', 'Up to 20%', 'Category proof and admission-cycle rules'],
+        ['Defence personnel', 'As applicable', 'Service or dependent proof'],
+        ['Differently-abled learners', 'As applicable', 'Valid disability certificate'],
+        ['Alumni / regional categories', 'As applicable', 'University-defined proof']
+      ].map(([cat, amount, proof]) => ({ cat, amount, proof })),
+      programs: [], others: [],
+      leadOpen: this.state.leadOpen,
+      openLead: () => this.setState({ leadOpen: true }),
+      closeLead: () => this.setState({ leadOpen: false })
+    };
+    if (!d) return base;
+
+    const lvlStyle = c => c.level === 'PG' ? 'color:#4D00FF;background:rgba(77,0,255,0.10)' : 'color:#4FA8FF;background:rgba(79,168,255,0.12)';
+    return Object.assign(base, {
+      programs: d.courses.filter(c => c.universityId === 'muj').map(c => ({
+        name: c.name, level: c.level, levelStyle: lvlStyle(c),
+        duration: c.duration, feeText: d.fmtFee(c.fee), emi: c.emi
+      })),
+      others: d.universities.filter(u => u.id !== 'muj').map(u => ({ name: u.name, city: u.city, logo: u.logo, feeFrom: u.feeFrom }))
+    });
+  }
+}
+</script>
+</body>
+</html>

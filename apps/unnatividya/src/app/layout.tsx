@@ -3,6 +3,7 @@ import "@/styles/globals.css";
 import { SiteFooter } from "@/components/site-footer";
 import { SiteHeader } from "@/components/site-header";
 import { StickyCtas } from "@/components/sticky-ctas";
+import { HideOnAdmin } from "@/components/hide-on-admin";
 import { Analytics } from "@/components/analytics";
 import { JsonLd } from "@/components/json-ld";
 import { LeadWizardModal } from "@/components/lead-wizard-modal";
@@ -81,8 +82,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <JsonLd data={[organizationJsonLd, websiteJsonLd]} />
         <SiteHeader />
         <main>{children}</main>
-        <SiteFooter />
-        <StickyCtas />
+        <HideOnAdmin>
+          <SiteFooter />
+          <StickyCtas />
+        </HideOnAdmin>
         <LeadWizardModal />
       </body>
     </html>

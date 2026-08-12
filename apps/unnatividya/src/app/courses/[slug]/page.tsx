@@ -6,7 +6,9 @@ import { ApprovalBadge } from "@/components/approval-badge";
 import { JsonLd } from "@/components/json-ld";
 import { SaveButton } from "@/components/save-button";
 import { SectionPillNav } from "@/components/section-pill-nav";
-import { careerRoleSalary, courseWithUniversity, courses, formatFee, getCourseBySlug } from "@/data/catalog";
+import { StickyMobileBar } from "@/components/sticky-mobile-bar";
+import { CourseEnquiryCard } from "@/components/course-enquiry-card";
+import { careerRoleSalary, courseWithUniversity, courses, formatFee, getCourseBySlug, universityEnrichmentById } from "@/data/catalog";
 import { certificateImagePath, learningMedia, universityMedia } from "@/data/media";
 import { publicAssetExists } from "@/lib/asset-exists";
 import { buildCourseFaqs } from "@/lib/course-faqs";
@@ -50,6 +52,10 @@ export default async function CourseDetailPage({ params }: { params: Promise<{ s
   const comparisonPairs = allComparisonPairs().filter((pair) => pair.left.id === course.id || pair.right.id === course.id);
   const certificatePath = certificateImagePath(course.id);
   const hasCertificateImage = publicAssetExists(certificatePath);
+  const universityEnrichment = universityEnrichmentById[course.universityId];
+  const semesters = course.duration.startsWith("36") ? 6 : 4;
+  const batches = universityEnrichment?.factTiles?.find(([label]) => label === "Batches")?.[1] || "January & July";
+  const isEligibilityVerified = course.dataQuality?.eligibility === "verified";
   const siteUrl = process.env.NEXT_PUBLIC_UNNATIVIDYA_SITE_URL || "https://unnatividya.com";
   const courseJsonLd = {
     "@context": "https://schema.org",
@@ -146,6 +152,7 @@ export default async function CourseDetailPage({ params }: { params: Promise<{ s
               ["Total fee", formatFee(course.fee)],
               ["EMI from", course.emi],
               ["Level", `${course.level} degree`],
+              ["Weekly effort", course.weeklyHours],
             ].map(([label, value]) => (
               <div key={label}>
                 <div style={{ color: "#707070", fontSize: 12 }}>{label}</div>
@@ -160,6 +167,8 @@ export default async function CourseDetailPage({ params }: { params: Promise<{ s
         label="Course sections"
         items={[
           { label: "Overview", href: "#sec-overview" },
+          { label: "Eligibility", href: "#sec-eligibility" },
+          { label: "Admission", href: "#sec-admission" },
           { label: "Specialisations", href: "#sec-specialisations" },
           { label: "Curriculum", href: "#sec-curriculum" },
           { label: "Fees & EMI", href: "#sec-fees" },
@@ -189,12 +198,47 @@ export default async function CourseDetailPage({ params }: { params: Promise<{ s
               </div>
             </div>
             <div className="fact-grid" style={{ marginTop: 18 }}>
-              {(course.highlights || []).map(([label, value]) => <div className="fact" key={label}><span>{label}</span><strong>{value}</strong></div>)}
+              {[
+                ["Mode", "100% online"],
+                ["Semesters", `${semesters} semesters`],
+                ["Credits", course.credits],
+                ["Exams", "Online proctored"],
+                ["Application fee", course.applicationFee],
+                ["Batches", batches],
+              ].map(([label, value]) => <div className="fact" key={label}><span>{label}</span><strong>{value}</strong></div>)}
+            </div>
+          </section>
+
+          <section className="detail-section" id="sec-eligibility">
+            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
+              <h2 style={{ margin: 0 }}>Eligibility</h2>
+              {isEligibilityVerified ? (
+                <span style={{ fontSize: 11, fontWeight: 700, color: "#2E7D32", background: "rgba(46,125,50,0.10)", borderRadius: 999, padding: "3px 9px" }}>SOURCE VERIFIED</span>
+              ) : null}
+            </div>
+            <p style={{ margin: 0, color: "#555", fontSize: 15, lineHeight: 1.65 }}>{course.eligibility}</p>
+          </section>
+
+          <section className="detail-section" id="sec-admission">
+            <h2>Admission process</h2>
+            <div className="grid four">
+              {(universityEnrichment?.admissionSteps || [
+                { title: "Apply online", copy: "Fill the application on the university portal — 10 minutes." },
+                { title: "Upload documents", copy: "Mark sheets, ID proof and a photo. We check them first." },
+                { title: "Pay first semester", copy: "Card, net-banking or no-cost EMI after loan approval." },
+                { title: "Start learning", copy: "LMS login within 72 hours of approval." },
+              ]).map((step, index) => (
+                <div style={{ border: "1px solid #CFDAE6", borderRadius: 8, padding: 16 }} key={step.title}>
+                  <div style={{ width: 32, height: 32, borderRadius: 4, background: "rgba(84,76,200,0.10)", color: "#544CC8", fontWeight: 700, fontSize: 14, display: "flex", alignItems: "center", justifyContent: "center" }}>{index + 1}</div>
+                  <div style={{ fontSize: 14, fontWeight: 700, color: "#363634", margin: "10px 0 4px" }}>{step.title}</div>
+                  <div style={{ fontSize: 13, color: "#696868", lineHeight: 1.5 }}>{step.copy}</div>
+                </div>
+              ))}
             </div>
           </section>
 
           <section className="detail-section" id="sec-specialisations">
-            <h2>Specialisations offered</h2>
+            <h2>{course.specializations.length} specialisations</h2>
             <div style={{ fontSize: 13, color: "#707070", marginBottom: 14 }}>Chosen in semester 3 — same fee, same duration</div>
             <div className="grid three">
               {course.specializations.map((spec) => {
@@ -219,7 +263,7 @@ export default async function CourseDetailPage({ params }: { params: Promise<{ s
 
           <section className="detail-section" id="sec-curriculum" data-acc-group>
             <h2>Curriculum</h2>
-            <div style={{ fontSize: 13, color: "#707070", marginBottom: 14 }}>Click a semester to expand</div>
+            <div style={{ fontSize: 13, color: "#707070", marginBottom: 14 }}>{semesters} semesters, {course.credits}.</div>
             <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
               {(course.curriculum || []).map((term, index) => (
                 <details className="curriculum-item" key={term.term} name="course-curriculum" open={index === 0} style={{ border: "1px solid #CFDAE6", borderRadius: 8, overflow: "hidden" }}>
@@ -251,8 +295,11 @@ export default async function CourseDetailPage({ params }: { params: Promise<{ s
                 </div>
               ))}
             </div>
-            <div style={{ fontSize: 13, color: "#707070", marginTop: 10 }}>No-cost EMI via education loan partners. Scholarship up to 20% for defence, govt employees and merit.</div>
+            <div style={{ fontSize: 13, color: "#707070", marginTop: 10 }}>No-cost EMI via education loan partners. Scholarships up to 20% for merit, defence and differently-abled learners.</div>
             <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 12 }}>
+              <Link href="/tools/emi-calculator" style={{ display: "inline-block", color: "#544CC8", fontWeight: 700, fontSize: 13 }}>
+                Open EMI calculator →
+              </Link>
               {feeGuide ? (
                 <Link href={`/online-degree-guides/${feeGuide.slug}`} style={{ display: "inline-block", color: "#544CC8", fontWeight: 700, fontSize: 13 }}>
                   {feeGuide.isComparison
@@ -376,27 +423,30 @@ export default async function CourseDetailPage({ params }: { params: Promise<{ s
         </div>
 
         <aside className="right-rail">
-          <div style={{ background: "#fff", border: "1px solid #CFDAE6", borderRadius: 8, padding: 22, boxShadow: "0 1px 3px rgba(0,0,0,0.06)" }}>
-            <div style={{ fontSize: 16, fontWeight: 700, color: "#363634" }}>Get the full fee breakup & brochure</div>
-            <div style={{ fontSize: 13, color: "#696868", margin: "6px 0 14px", lineHeight: 1.5 }}>A counsellor will share the brochure, scholarship eligibility and next batch dates.</div>
-            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-              <input placeholder="Full name" style={{ height: 42, padding: "0 14px", border: "1px solid #CFDAE6", borderRadius: 4, fontSize: 14, color: "#555", outlineColor: "#544CC8" }} />
-              <input placeholder="Mobile number" style={{ height: 42, padding: "0 14px", border: "1px solid #CFDAE6", borderRadius: 4, fontSize: 14, color: "#555", outlineColor: "#544CC8" }} />
-              <Link href={`/lead?course=${course.id}&intent=enquire`} className="btn primary" style={{ width: "100%", height: 44, fontSize: 15 }} data-open-lead>Enquire now</Link>
-            </div>
-            <div style={{ fontSize: 11, color: "#707070", marginTop: 10 }}>Free service · no spam · unbiased advice</div>
-          </div>
+          <CourseEnquiryCard courseId={course.id} />
           <Link href={`/compare?add=${course.id}`} style={{ display: "block", textAlign: "center", border: "1.5px solid #555", borderRadius: 4, height: 44, lineHeight: "44px", fontSize: 14, fontWeight: 700, color: "#555", background: "#fff" }}>Compare with similar programs</Link>
           <div style={{ border: "1px solid #CFDAE6", borderRadius: 8, padding: 18, background: "#F4F3FC" }}>
-            <div style={{ fontSize: 14, fontWeight: 700, color: "#363634", marginBottom: 8 }}>Placement support</div>
+            <div style={{ fontSize: 14, fontWeight: 700, color: "#363634", marginBottom: 8 }}>Why learners pick {course.university.shortName}</div>
             <div style={{ display: "flex", flexDirection: "column", gap: 6, fontSize: 13, color: "#555" }}>
+              <span>{course.university.approvals[0]}, {course.university.approvals[1]}</span>
               <span>{course.university.placement}% placement assistance rate</span>
-              <span>Average package {course.university.avgPackage}</span>
-              <span>{course.university.partners}+ hiring partners</span>
+              <span>Weekend live classes suit working learners</span>
+              <span>No-cost EMI from {course.emi}</span>
             </div>
+          </div>
+          <div style={{ borderRadius: 8, padding: 18, background: "linear-gradient(135deg,#4F46E5,#7C3AED)", color: "#fff" }}>
+            <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 6 }}>Not sure this is the one?</div>
+            <div style={{ fontSize: 13, opacity: 0.9, lineHeight: 1.5, marginBottom: 12 }}>Answer 5 questions and UnnatiAI ranks every program against your goal and budget.</div>
+            <Link href="/recommender" style={{ display: "block", textAlign: "center", height: 40, lineHeight: "40px", background: "#fff", color: "#4F46E5", borderRadius: 4, fontSize: 13, fontWeight: 700 }}>
+              Get my shortlist
+            </Link>
           </div>
         </aside>
       </div>
+      <StickyMobileBar
+        primary={{ label: "Enquire now", href: `/lead?course=${course.id}&intent=enquire`, openLead: true }}
+        secondary={{ label: "Compare", href: `/compare?add=${course.id}` }}
+      />
     </>
   );
 }

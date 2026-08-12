@@ -19,9 +19,9 @@ export default function UniversitiesPage() {
           <div className="breadcrumb">
             <Link href="/">Home</Link> &gt; Universities
           </div>
-          <h1>Online universities we cover</h1>
+          <h1>Universities we cover</h1>
           <p className="page-subtitle">
-            Every university listed here is UGC-entitled to award online degrees. We verify approvals each admission cycle.
+            Three institutions. Every program is checked against the university&apos;s own page and the UGC-DEB entitlement notification before it is listed here.
           </p>
         </div>
       </section>
@@ -35,14 +35,17 @@ export default function UniversitiesPage() {
 
               return (
                 <article className="card uni-row" key={university.id}>
-                  <div className="uni-row-media">
+                  <div className="uni-row-media" style={{ position: "relative" }}>
                     <Image
                       src={media.src}
                       alt={media.alt}
                       width={360}
                       height={220}
-                      sizes="(max-width: 760px) 100vw, 210px"
+                      sizes="(max-width: 760px) 100vw, 280px"
                     />
+                    <span style={{ position: "absolute", left: 10, top: 10, background: "#fff", borderRadius: 999, padding: "3px 10px", fontSize: 11, fontWeight: 700, color: "#2E7D32", boxShadow: "0 1px 3px rgba(0,0,0,0.16)" }}>
+                      VERIFIED THIS CYCLE
+                    </span>
                   </div>
                   <div>
                     <Link href={`/universities/${university.slug}`} className="uni-row-title">
@@ -51,9 +54,14 @@ export default function UniversitiesPage() {
                     <div className="university-card-city">
                       {university.city} · Established {university.established}
                     </div>
+                    <p style={{ fontSize: 13, color: "#555", lineHeight: 1.55, maxWidth: 460, margin: "8px 0 0" }}>{university.about}</p>
                     <div className="trust-strip compact">
                       {university.approvals.slice(0, 3).map((approval) => (
-                        <ApprovalBadge label={approval} className="level-badge UG" key={approval} />
+                        <ApprovalBadge
+                          label={approval}
+                          style={{ fontSize: 11, fontWeight: 700, color: "#363634", background: "#F5F5F5", borderRadius: 999, whiteSpace: "nowrap", padding: "3px 9px" }}
+                          key={approval}
+                        />
                       ))}
                     </div>
                     <div className="uni-metrics">
@@ -61,11 +69,17 @@ export default function UniversitiesPage() {
                       <span><b>{universityCourses.length}</b> online programs</span>
                       <span><b>{university.placement}%</b> placement rate</span>
                       <span>avg package <b>{university.avgPackage}</b></span>
+                      <span>annual fee from <b>{university.feeFrom}</b></span>
                     </div>
                   </div>
-                  <div className="uni-actions">
-                    <Link href={`/universities/${university.slug}`} className="btn primary">View university</Link>
-                    <Link href={`/lead?university=${university.id}`} className="btn secondary" data-open-lead>Enquire now</Link>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                    <div className="uni-actions">
+                      <Link href={`/universities/${university.slug}`} className="btn primary">View university</Link>
+                      <Link href={`/lead?university=${university.id}`} className="btn secondary" data-open-lead>Enquire now</Link>
+                    </div>
+                    <Link href={`/courses?university=${university.id}`} style={{ textAlign: "center", fontSize: 12, fontWeight: 600, color: "#544CC8" }}>
+                      See all {universityCourses.length} programs →
+                    </Link>
                   </div>
                 </article>
               );

@@ -153,7 +153,12 @@ export default async function ArticlePage({ params }: { params: Promise<{ slug: 
             <h2>More from the blog</h2>
             <div className="article-rail-links">
               {related.map((item) => (
-                <Link href={`/blog/${item.slug}`} key={item.slug}>{item.title}</Link>
+                <Link href={`/blog/${item.slug}`} key={item.slug} style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                  <span style={{ position: "relative", width: 56, height: 44, borderRadius: 6, overflow: "hidden", flexShrink: 0 }}>
+                    <Image src={resolveBlogCover(item, publicAssetExists)} alt="" fill sizes="56px" style={{ objectFit: "cover" }} />
+                  </span>
+                  {item.title}
+                </Link>
               ))}
             </div>
           </div>
@@ -161,6 +166,15 @@ export default async function ArticlePage({ params }: { params: Promise<{ slug: 
             <h2>Compare UGC-entitled programs</h2>
             <p>Compare fees and approvals side by side.</p>
             <Link href="/compare" className="btn primary" style={{ width: "100%", minHeight: 38, height: 38, fontSize: 13 }}>Open compare</Link>
+          </div>
+          <div className="card course-card">
+            <h2>Sources</h2>
+            <div style={{ display: "flex", flexDirection: "column", gap: 6, fontSize: 13 }}>
+              <a href="https://deb.ugc.ac.in/Uploads/Notices_Upload/UGC_20250909172155_1.pdf" target="_blank" rel="noopener noreferrer" style={{ color: "#544CC8" }}>
+                UGC-DEB entitlement notification
+              </a>
+              <Link href="/how-we-verify" style={{ color: "#544CC8", fontWeight: 600 }}>How we verify our data →</Link>
+            </div>
           </div>
         </aside>
       </div>
