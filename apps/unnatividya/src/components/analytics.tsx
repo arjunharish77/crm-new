@@ -6,6 +6,7 @@ import { useEffect } from "react";
 declare global {
   interface Window {
     dataLayer?: unknown[];
+    gtag?: (...args: unknown[]) => void;
   }
 }
 
@@ -14,11 +15,21 @@ declare global {
  * 22_UNNATIVIDYA_PLATFORM_ENHANCEMENTS_PLAN.md §6), so their own inline script -- the one that
  * normally runs `window.dataLayer = window.dataLayer || []` -- may not have executed yet when an
  * early interaction fires. Initialize it ourselves rather than assuming GTM already did.
+ *
+ * Pushes in BOTH formats deliberately:
+ * - `dataLayer.push({event: name, ...})` is the GTM Custom Event format -- inert until a GTM
+ *   container with a matching trigger is actually built, but ready the moment one is.
+ * - `gtag('event', name, params)` is what GA4's own gtag.js library natively reads. Without this,
+ *   events silently never reach GA4 at all when there's no GTM container configured yet (verified
+ *   live: gtag.js does not consume the plain dataLayer-push shape on its own).
  */
 export function trackEvent(name: string, params: Record<string, unknown> = {}) {
   if (typeof window === "undefined") return;
   window.dataLayer = window.dataLayer || [];
   window.dataLayer.push({ event: name, ...params });
+  if (typeof window.gtag === "function") {
+    window.gtag("event", name, params);
+  }
 }
 
 export function Analytics() {

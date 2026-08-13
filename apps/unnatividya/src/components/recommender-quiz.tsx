@@ -144,6 +144,7 @@ export function RecommenderQuiz({ courses }: { courses: Course[] }) {
   function send(message: string) {
     const text = message.trim();
     if (!text) return;
+    trackEvent("chat_message", { message_length: text.length });
     setChat((items) => [...items, { who: "user", text }, { who: "bot", text: botReply(text, courseItems) }]);
     setDraft("");
   }

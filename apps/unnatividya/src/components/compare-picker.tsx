@@ -66,6 +66,18 @@ function EmptySlot({ onClick, disabled }: { onClick: () => void; disabled: boole
 export function ComparePicker({ allCourses, initialSelectedIds }: { allCourses: PickerCourse[]; initialSelectedIds: string[] }) {
   const router = useRouter();
   const [selectedIds, setSelectedIds] = useState<string[]>(initialSelectedIds);
+
+  // useState's initial value only applies on first mount -- when the URL's ?add= param changes
+  // from an EXTERNAL source (a preset Link, browser back/forward), the parent server component
+  // re-renders with a new initialSelectedIds prop, but React keeps this same component instance
+  // and its existing state, so that new prop would otherwise be silently ignored (URL changes,
+  // UI doesn't). Syncing on the prop's actual value, not the array reference, so this doesn't
+  // also fire (and do nothing) on every render caused by a fresh-but-identical array literal.
+  const initialIdsKey = initialSelectedIds.join(",");
+  useEffect(() => {
+    setSelectedIds(initialSelectedIds);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialIdsKey]);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [levelFilter, setLevelFilter] = useState<string[]>([]);
@@ -115,6 +127,9 @@ export function ComparePicker({ allCourses, initialSelectedIds }: { allCourses: 
     const next = selectedIds.filter((selectedId) => selectedId !== id);
     setSelectedIds(next);
     syncUrl(next);
+    // Complements compare_course_added above -- that one covers adds, this covers removes, so
+    // the full add/remove lifecycle of the selection is visible without double-firing on adds.
+    trackEvent("compare_selection_change", { course_id: id, action: "removed" });
   }
 
   function toggleFilter(setter: (updater: (current: string[]) => string[]) => void, value: string) {

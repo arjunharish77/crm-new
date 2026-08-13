@@ -46,6 +46,13 @@ export function EmiCalculator() {
     trackEvent("emi_calculator_used", { course_id: courseId || undefined, fee, tenure_months: months });
   }
 
+  // Unlike trackUsage() above (fires once per page view, just to mark engagement),
+  // this fires on every slider release -- capturing the actual fee/tenure/rate combinations
+  // visitors explore, which trackUsage()'s single first-touch snapshot can't show.
+  function trackCalculation() {
+    trackEvent("emi_calculation", { fee, down_payment: down, tenure_months: months, rate, emi, total_interest: totalInterest });
+  }
+
   function handleCourseChange(courseId: string) {
     setSelectedCourseId(courseId);
     const course = catalogCourses.find((item) => item.id === courseId);
@@ -54,6 +61,10 @@ export function EmiCalculator() {
       setMonths(course.duration.startsWith("36") ? 36 : 24);
     }
     trackUsage(courseId);
+    // Not calling trackCalculation() here: fee/months were just updated via setFee/setMonths
+    // above in this same synchronous handler, so it would read stale pre-update values from this
+    // render's closure. The slider release handlers below don't have that problem -- onChange has
+    // already committed a re-render by the time a separate mouseup/touchend event fires.
   }
 
   const sliderLabelStyle = { fontSize: 12, fontWeight: 700, color: "#363634", letterSpacing: "0.4px" as const };
@@ -91,8 +102,8 @@ export function EmiCalculator() {
           step={5000}
           value={fee}
           onChange={(event) => setFee(Number(event.target.value))}
-          onMouseUp={() => trackUsage()}
-          onTouchEnd={() => trackUsage()}
+          onMouseUp={() => { trackUsage(); trackCalculation(); }}
+          onTouchEnd={() => { trackUsage(); trackCalculation(); }}
           style={{ width: "100%", accentColor: "#544CC8", marginBottom: 24 }}
         />
 
@@ -108,8 +119,8 @@ export function EmiCalculator() {
           step={5000}
           value={down}
           onChange={(event) => setDown(Number(event.target.value))}
-          onMouseUp={() => trackUsage()}
-          onTouchEnd={() => trackUsage()}
+          onMouseUp={() => { trackUsage(); trackCalculation(); }}
+          onTouchEnd={() => { trackUsage(); trackCalculation(); }}
           style={{ width: "100%", accentColor: "#544CC8", marginBottom: 24 }}
         />
 
@@ -125,8 +136,8 @@ export function EmiCalculator() {
           step={3}
           value={months}
           onChange={(event) => setMonths(Number(event.target.value))}
-          onMouseUp={() => trackUsage()}
-          onTouchEnd={() => trackUsage()}
+          onMouseUp={() => { trackUsage(); trackCalculation(); }}
+          onTouchEnd={() => { trackUsage(); trackCalculation(); }}
           style={{ width: "100%", accentColor: "#544CC8", marginBottom: 24 }}
         />
 
@@ -142,8 +153,8 @@ export function EmiCalculator() {
           step={0.5}
           value={rate}
           onChange={(event) => setRate(Number(event.target.value))}
-          onMouseUp={() => trackUsage()}
-          onTouchEnd={() => trackUsage()}
+          onMouseUp={() => { trackUsage(); trackCalculation(); }}
+          onTouchEnd={() => { trackUsage(); trackCalculation(); }}
           style={{ width: "100%", accentColor: "#544CC8" }}
         />
         <div style={{ fontSize: 12, color: "#707070", marginTop: 8, lineHeight: 1.6 }}>

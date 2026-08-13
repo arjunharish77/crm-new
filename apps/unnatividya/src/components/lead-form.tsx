@@ -14,6 +14,7 @@ function unlockCompare() {
   try {
     window.localStorage.setItem("uv_lead_unlocked", "1");
     window.dispatchEvent(new CustomEvent("uv-lead-unlocked"));
+    trackEvent("compare_unlock");
   } catch {
     // Verification should not fail if localStorage is unavailable.
   }
@@ -60,6 +61,19 @@ export function LeadForm({ context = {} }: { context?: LeadFormContext }) {
     setDial(countryFromTimezone(Intl.DateTimeFormat().resolvedOptions().timeZone).dial);
   }, []);
 
+  // Fires once per mount -- covers both entry points this one shared component renders behind
+  // (the modal, opened via a data-open-lead click, and the standalone /lead page, opened via a
+  // direct visit with no click at all) -- so this is a broader "the form was actually presented"
+  // signal than lead_cta_click, which only fires for the click-triggered case.
+  useEffect(() => {
+    trackEvent("wizard_open", {
+      intent: context.intent || undefined,
+      course_id: context.course || undefined,
+      university_id: context.university || undefined,
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const selectedOption = courseOptions.find((option) => option.label === selectedLabel);
   const universityChoices = selectedOption?.universities || [];
 
@@ -101,6 +115,7 @@ export function LeadForm({ context = {} }: { context?: LeadFormContext }) {
       setMessage("Your enquiry is saved, but we could not send the email OTP. Please try again.");
       return;
     }
+    trackEvent("otp_sent", { intent: context.intent || "lead_wizard" });
     setStep(3);
     setStatus("otp");
     setMessage("We saved your enquiry and sent an email OTP.");
@@ -120,6 +135,7 @@ export function LeadForm({ context = {} }: { context?: LeadFormContext }) {
     }
     unlockCompare();
     trackEvent("lead_verified", { intent: context.intent || "lead_wizard" });
+    trackEvent("otp_verified", { intent: context.intent || "lead_wizard" });
     setStatus("done");
     setMessage("Your email is verified. Compare access is unlocked and our counsellor can now guide you with better context.");
   }
