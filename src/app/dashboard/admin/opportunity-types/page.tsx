@@ -109,6 +109,11 @@ function SortableTypeCard({ type, onManageFields, onEdit, onDelete }: SortableTy
                             >
                                 {type.isActive ? 'Active' : 'Inactive'}
                             </Badge>
+                            {type.programId ? (
+                                <Badge variant="outline" className="mt-2 ml-1.5 h-5 rounded px-2 text-[10px] font-semibold uppercase">
+                                    Catalog Linked
+                                </Badge>
+                            ) : null}
                         </div>
                     </div>
                 </CardHeader>

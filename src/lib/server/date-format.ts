@@ -1,6 +1,7 @@
 import { queryOne } from "@/lib/db/query";
+import { DEFAULT_SERVER_TIME_ZONE } from "@/lib/timezone";
 
-export const DEFAULT_SERVER_TIME_ZONE = "Asia/Kolkata";
+export { DEFAULT_SERVER_TIME_ZONE };
 
 function normalizeTimestamp(value: string) {
   const trimmed = value.trim();
@@ -23,6 +24,26 @@ export function normalizeTenantTimeZone(value: unknown) {
   } catch {
     return DEFAULT_SERVER_TIME_ZONE;
   }
+}
+
+// Wall-clock day-of-week/hour/minute a UTC instant corresponds to in a given IANA zone --
+// for time-window comparisons (e.g. "is it currently within this team's working hours"),
+// not display formatting like the rest of this file.
+export function zonedWallClockParts(date: Date, timeZone: string) {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: normalizeTenantTimeZone(timeZone),
+    weekday: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(date);
+  const get = (type: string) => parts.find((part) => part.type === type)?.value ?? "";
+  const WEEKDAY_INDEX: Record<string, number> = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
+  return {
+    dayOfWeek: WEEKDAY_INDEX[get("weekday")] ?? date.getUTCDay(),
+    hour: Number(get("hour") || 0),
+    minute: Number(get("minute") || 0),
+  };
 }
 
 export function timeZoneFromFeatureFlags(featureFlags: unknown) {

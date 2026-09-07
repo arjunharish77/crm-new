@@ -15,6 +15,7 @@ export interface Lead {
     updatedAt: string;
     assignedUserId?: string | null;
     predictiveScore?: PredictiveRecordScore | null;
+    pendingNbaCount?: number;
 }
 
 export interface PredictiveRecordScore {

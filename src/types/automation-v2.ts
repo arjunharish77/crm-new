@@ -16,6 +16,8 @@ export interface AutomationTrigger {
     type: string;
     opportunityTypeId?: string;
     activityTypeId?: string;
+    appId?: string;
+    eventName?: string;
     conditions?: Array<Record<string, any>>;
     config?: Record<string, any>;
 }

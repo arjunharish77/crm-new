@@ -26,13 +26,19 @@ describe("direct Postgres report infrastructure", () => {
   });
 
   it("creates report schedules with normalized recipients and computed next run", async () => {
-    queryOneMock.mockResolvedValueOnce({
-      id: "schedule-1",
-      tenantId: "tenant-1",
-      userId: "user-1",
-      reportKey: "funnel_conversion_by_stage",
-      recipients: ["admin@example.com"],
-      frequency: "WEEKLY",
+    queryOneMock.mockImplementation(async (sql: string) => {
+      const text = String(sql);
+      if (text.includes('insert into "ReportSchedule"')) {
+        return {
+          id: "schedule-1",
+          tenantId: "tenant-1",
+          userId: "user-1",
+          reportKey: "funnel_conversion_by_stage",
+          recipients: ["admin@example.com"],
+          frequency: "WEEKLY",
+        };
+      }
+      return null;
     });
 
     const { createReportScheduleForTenant } = await import("@/lib/repositories/report-schedules-postgres");
@@ -42,8 +48,9 @@ describe("direct Postgres report infrastructure", () => {
     );
 
     expect(result.id).toBe("schedule-1");
-    expect(queryOneMock.mock.calls[0][0]).toContain('insert into "ReportSchedule"');
-    expect(queryOneMock.mock.calls[0][1][5]).toEqual(["admin@example.com"]);
+    const insertCall = queryOneMock.mock.calls.find((call) => String(call[0]).includes('insert into "ReportSchedule"'));
+    expect(insertCall).toBeTruthy();
+    expect(insertCall![1][5]).toEqual(["admin@example.com"]);
   });
 
   it("processes due schedules and writes pending delivery rows", async () => {
@@ -62,9 +69,12 @@ describe("direct Postgres report infrastructure", () => {
         dayOfMonth: null,
       },
     ]);
-    queryOneMock
-      .mockResolvedValueOnce({ id: "user-1", tenantId: "tenant-1", email: "admin@example.com", rolePermissions: {} })
-      .mockResolvedValueOnce({ id: "delivery-1", status: "PENDING" });
+    queryOneMock.mockImplementation(async (sql: string) => {
+      const text = String(sql);
+      if (text.includes('from "User"')) return { id: "user-1", tenantId: "tenant-1", email: "admin@example.com", rolePermissions: {} };
+      if (text.includes('insert into "ReportEmailDelivery"')) return { id: "delivery-1", status: "PENDING" };
+      return null;
+    });
     executeMock.mockResolvedValue(undefined);
 
     const { processDueReportSchedules } = await import("@/lib/repositories/report-schedules-postgres");
@@ -120,5 +130,54 @@ describe("direct Postgres report infrastructure", () => {
     expect(result).toEqual({ processed: [{ jobId: "job-1", status: "SUCCEEDED", rollupId: "rollup-1" }] });
     expect(executeMock.mock.calls[0][0]).toContain('update "ReportRefreshJob" set status = $1');
     expect(queryOneMock.mock.calls.some((call) => String(call[0]).includes('insert into "ReportRollup"'))).toBe(true);
+  });
+
+  describe("entitlement gating", () => {
+    it("rejects creating a report schedule when Advanced Reporting is disabled for the tenant", async () => {
+      queryOneMock.mockImplementation(async (sql: string) => {
+        if (String(sql).includes('from "TenantFeature"')) return { advancedReporting: false };
+        return null;
+      });
+
+      const { createReportScheduleForTenant } = await import("@/lib/repositories/report-schedules-postgres");
+      await expect(
+        createReportScheduleForTenant(
+          { id: "user-1", tenantId: "tenant-1", email: "admin@example.com" },
+          { reportKey: "funnel_conversion_by_stage" },
+        ),
+      ).rejects.toThrow("FEATURE_DISABLED");
+    });
+
+    it("deactivates (rather than executes) a due schedule when Advanced Reporting has since been disabled for its tenant", async () => {
+      const now = new Date("2026-01-01T00:00:00.000Z");
+      queryMock.mockResolvedValueOnce([
+        {
+          id: "schedule-1",
+          tenantId: "tenant-1",
+          userId: "user-1",
+          reportKey: "funnel_conversion_by_stage",
+          queryDefinition: null,
+          recipients: ["admin@example.com"],
+          format: "LINK",
+          frequency: "DAILY",
+          dayOfWeek: null,
+          dayOfMonth: null,
+        },
+      ]);
+      queryOneMock.mockImplementation(async (sql: string) => {
+        const text = String(sql);
+        if (text.includes('from "User"')) return { id: "user-1", tenantId: "tenant-1", email: "admin@example.com", rolePermissions: {} };
+        if (text.includes('from "TenantFeature"')) return { advancedReporting: false };
+        return null;
+      });
+      executeMock.mockResolvedValue(undefined);
+
+      const { processDueReportSchedules } = await import("@/lib/repositories/report-schedules-postgres");
+      const result = await processDueReportSchedules(now);
+
+      expect(result).toEqual({ processed: [] });
+      expect(queryOneMock.mock.calls.some((call) => String(call[0]).includes('insert into "ReportEmailDelivery"'))).toBe(false);
+      expect(executeMock.mock.calls.some((call) => String(call[0]).includes('"isActive" = false'))).toBe(true);
+    });
   });
 });

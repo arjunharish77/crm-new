@@ -185,3 +185,53 @@ describe("evaluateBadgesForEvent", () => {
     expect(earned).toHaveLength(0);
   });
 });
+
+describe("entitlement gating", () => {
+  it("rejects creating a badge when the Gamification module is disabled for the tenant", async () => {
+    dbMocks.queryOne.mockImplementation(async (sql: string) => {
+      if (sql.includes('from "TenantFeature"')) return { gamificationEnabled: false };
+      return null;
+    });
+
+    const { createBadgeForTenant } = await import("@/lib/server/badges");
+    await expect(
+      createBadgeForTenant(adminUser, { name: "10 Wins", criteriaRules: { eventType: "STAGE_CHANGED", threshold: 3 } }),
+    ).rejects.toThrow("FEATURE_DISABLED");
+  });
+
+  it("rejects updating a badge when the Gamification module is disabled for the tenant", async () => {
+    dbMocks.queryOne.mockImplementation(async (sql: string) => {
+      if (sql.includes('from "TenantFeature"')) return { gamificationEnabled: false };
+      return null;
+    });
+
+    const { updateBadgeForTenant } = await import("@/lib/server/badges");
+    await expect(updateBadgeForTenant(adminUser, "badge-1", { name: "Renamed" })).rejects.toThrow("FEATURE_DISABLED");
+  });
+
+  it("rejects deleting a badge when the Gamification module is disabled for the tenant", async () => {
+    dbMocks.queryOne.mockImplementation(async (sql: string) => {
+      if (sql.includes('from "TenantFeature"')) return { gamificationEnabled: false };
+      return null;
+    });
+
+    const { deleteBadgeForTenant } = await import("@/lib/server/badges");
+    await expect(deleteBadgeForTenant(adminUser, "badge-1")).rejects.toThrow("FEATURE_DISABLED");
+  });
+
+  it("allows a platform admin to bypass the Gamification gate", async () => {
+    dbMocks.queryOne.mockImplementation(async (sql: string) => {
+      if (sql.includes('from "TenantFeature"')) return { gamificationEnabled: false };
+      if (sql.includes('insert into "Badge"')) return { id: "badge-1", tenantId: TENANT, name: "10 Wins" };
+      return null;
+    });
+
+    const { createBadgeForTenant } = await import("@/lib/server/badges");
+    await expect(
+      createBadgeForTenant(
+        { ...adminUser, isPlatformAdmin: true },
+        { name: "10 Wins", criteriaRules: { eventType: "STAGE_CHANGED", threshold: 3 } },
+      ),
+    ).resolves.toBeDefined();
+  });
+});

@@ -1,0 +1,23 @@
+import { NextResponse } from "next/server";
+import { requireCurrentUser } from "@/lib/server/auth";
+import { badRequest, forbidden, serverError, unauthorized } from "@/lib/server/http";
+import { rejectExportRequest } from "@/lib/server/exports";
+
+function hasExportGovernanceAccess(user: any) {
+  const rolePermissions = typeof user.role === "object" && user.role ? (user.role as any).permissions : null;
+  return Boolean(user.isTenantAdmin || user.isPlatformAdmin || rolePermissions?.modules?.integrations === "full");
+}
+
+export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
+  try {
+    const user = await requireCurrentUser(request);
+    if (!hasExportGovernanceAccess(user)) return forbidden("You don't have permission to reject sensitive exports");
+    const { id } = await params;
+    const result = await rejectExportRequest(user, id);
+    return NextResponse.json(result);
+  } catch (error) {
+    if (error instanceof Error && error.message === "UNAUTHORIZED") return unauthorized();
+    if (error instanceof Error && error.message === "EXPORT_REQUEST_NOT_PENDING_APPROVAL") return badRequest("This export is not awaiting approval");
+    return serverError("Failed to reject export", error);
+  }
+}

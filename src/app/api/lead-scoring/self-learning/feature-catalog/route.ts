@@ -30,6 +30,7 @@ export async function PUT(request: Request) {
     return NextResponse.json(await updateFeatureCatalogForTenant(user, items));
   } catch (error) {
     if (error instanceof Error && error.message === "UNAUTHORIZED") return unauthorized();
+    if (error instanceof Error && error.message.startsWith("MODULE_DISABLED")) return forbidden("Predictive Scoring module is disabled for this tenant");
     return serverError("Failed to update scoring feature catalog", error);
   }
 }
@@ -41,6 +42,7 @@ export async function POST(request: Request) {
     return NextResponse.json(await profileFeatureCatalogForTenant(user));
   } catch (error) {
     if (error instanceof Error && error.message === "UNAUTHORIZED") return unauthorized();
+    if (error instanceof Error && error.message.startsWith("MODULE_DISABLED")) return forbidden("Predictive Scoring module is disabled for this tenant");
     return serverError("Failed to profile scoring feature catalog", error);
   }
 }

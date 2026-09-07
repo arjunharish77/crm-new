@@ -12,6 +12,7 @@ import {
 import { ChevronLeft, ChevronRight, Columns3, Rows3, Rows4 } from "lucide-react"
 
 import { cn } from "@/lib/utils"
+import { getCachedPersonalization } from "@/lib/personalization-cache"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import {
@@ -36,6 +37,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { EmptyState, type EmptyStateProps } from "@/components/common/empty-state"
+import { ErrorState } from "@/components/common/error-state"
 import { TableSkeleton } from "@/components/common/skeletons"
 
 export type Density = "compact" | "comfortable"
@@ -46,6 +48,10 @@ export interface DataTableProps<TData> {
   getRowId?: (row: TData) => string
   loading?: boolean
   emptyState?: Omit<EmptyStateProps, "action"> & { action?: React.ReactNode }
+  // A failed fetch must never look like "zero results" -- pass the error message (or `true`
+  // for a generic one) and this renders ErrorState with a retry button instead of EmptyState.
+  error?: string | boolean | null
+  onRetry?: () => void
   onRowClick?: (row: TData) => void
 
   // Selection — controlled, array-of-ids to match the app's existing convention.
@@ -85,13 +91,24 @@ const DENSITY_CELL_CLASS: Record<Density, string> = {
   comfortable: "py-2.5",
 };
 
+// Gap checklist Module 10's "user workspace personalization" item, "compact/comfortable
+// density" sub-item -- a real per-user backend default (User.preferences.density, set from the
+// "My Workspace" settings tab), read from the localStorage cache GeneralSettingsProvider already
+// populates (no extra network round-trip per table). A table's own explicit per-table choice
+// (data-table-density:<storageKey>) always wins once it exists -- this default only applies
+// before the user has ever touched this specific table's own toggle.
 function useDensity(storageKey: string | undefined, defaultDensity: Density) {
   const [density, setDensity] = React.useState<Density>(defaultDensity);
 
   React.useEffect(() => {
     if (!storageKey) return;
     const stored = window.localStorage.getItem(`data-table-density:${storageKey}`);
-    if (stored === "compact" || stored === "comfortable") setDensity(stored);
+    if (stored === "compact" || stored === "comfortable") {
+      setDensity(stored);
+      return;
+    }
+    const globalDefault = getCachedPersonalization()?.density;
+    if (globalDefault === "compact" || globalDefault === "comfortable") setDensity(globalDefault);
   }, [storageKey]);
 
   const update = React.useCallback((next: Density) => {
@@ -102,12 +119,47 @@ function useDensity(storageKey: string | undefined, defaultDensity: Density) {
   return [density, update] as const;
 }
 
+// "Table column preferences" sub-item -- real per-table persistence (previously in-memory only,
+// resetting on reload). Local-only (per browser profile), the same tier as density's own
+// per-table override -- cross-device sync is a further, separate piece not attempted here.
+function useColumnVisibility(storageKey: string | undefined) {
+  const [columnVisibility, setColumnVisibilityState] = React.useState<VisibilityState>({});
+
+  React.useEffect(() => {
+    if (!storageKey) return;
+    try {
+      const stored = window.localStorage.getItem(`data-table-columns:${storageKey}`);
+      if (stored) setColumnVisibilityState(JSON.parse(stored));
+    } catch {
+      // Malformed cache -- fall back to every column visible.
+    }
+  }, [storageKey]);
+
+  const setColumnVisibility = React.useCallback((updater: React.SetStateAction<VisibilityState>) => {
+    setColumnVisibilityState((current) => {
+      const next = typeof updater === "function" ? (updater as (value: VisibilityState) => VisibilityState)(current) : updater;
+      if (storageKey) {
+        try {
+          window.localStorage.setItem(`data-table-columns:${storageKey}`, JSON.stringify(next));
+        } catch {
+          // Private browsing / storage disabled -- the in-memory value still applies this session.
+        }
+      }
+      return next;
+    });
+  }, [storageKey]);
+
+  return [columnVisibility, setColumnVisibility] as const;
+}
+
 export function DataTable<TData>({
   columns,
   data,
   getRowId,
   loading,
   emptyState,
+  error,
+  onRetry,
   onRowClick,
   enableRowSelection,
   rowSelectionIds,
@@ -127,7 +179,7 @@ export function DataTable<TData>({
   className,
 }: DataTableProps<TData>) {
   const [density, setDensity] = useDensity(storageKey, defaultDensity);
-  const [columnVisibility, setColumnVisibility] = React.useState<VisibilityState>({});
+  const [columnVisibility, setColumnVisibility] = useColumnVisibility(storageKey);
 
   const resolveRowId = React.useCallback(
     (row: TData, index: number) => (getRowId ? getRowId(row) : String(index)),
@@ -197,6 +249,14 @@ export function DataTable<TData>({
 
   if (loading) {
     return <TableSkeleton rows={pageSize > 10 ? 10 : pageSize} columns={columns.length} />;
+  }
+
+  if (error) {
+    return (
+      <div data-slot="data-table" className="rounded-xl">
+        <ErrorState description={typeof error === "string" ? error : undefined} onRetry={onRetry} />
+      </div>
+    );
   }
 
   if (currentCount === 0) {

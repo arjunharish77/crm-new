@@ -20,6 +20,14 @@ export async function apiFetch<T = any>(endpoint: string, options: RequestInit =
     const token = Cookies.get('token');
     const requestId = Math.random().toString(36).substring(7);
     const startTime = Date.now();
+    // Gap checklist Module 10's "performance UX polish" item, "request cancellation on
+    // tab/filter changes" -- previously `options.signal` was silently clobbered below (spread
+    // before the internal timeout controller's own `signal`), so a caller had NO way to cancel
+    // an in-flight request at all. `timedOut` distinguishes OUR OWN 30s timeout abort from the
+    // caller's own cancellation in the catch block below, so a deliberate cancellation (e.g. the
+    // user changed filters) never surfaces as a misleading "Request timed out" error.
+    const externalSignal = options.signal;
+    let timedOut = false;
 
     debugLog('log', `[API ${requestId}] Starting fetch to: ${endpoint}`, {
         method: options.method || 'GET',
@@ -33,10 +41,17 @@ export async function apiFetch<T = any>(endpoint: string, options: RequestInit =
         ...options.headers,
     };
 
+    const controller = new AbortController();
+    const onExternalAbort = () => controller.abort();
+    if (externalSignal) {
+        if (externalSignal.aborted) controller.abort();
+        else externalSignal.addEventListener('abort', onExternalAbort);
+    }
+
     try {
         // Add 30-second timeout
-        const controller = new AbortController();
         const timeoutId = setTimeout(() => {
+            timedOut = true;
             debugLog('error', `[API ${requestId}] TIMEOUT after 30s for: ${endpoint}`);
             controller.abort();
         }, 30000);
@@ -48,6 +63,7 @@ export async function apiFetch<T = any>(endpoint: string, options: RequestInit =
         });
 
         clearTimeout(timeoutId);
+        externalSignal?.removeEventListener('abort', onExternalAbort);
         const elapsed = Date.now() - startTime;
         debugLog('log', `[API ${requestId}] Response received in ${elapsed}ms:`, {
             status: response.status,
@@ -122,9 +138,12 @@ export async function apiFetch<T = any>(endpoint: string, options: RequestInit =
 
         return data;
     } catch (error: any) {
+        externalSignal?.removeEventListener('abort', onExternalAbort);
         const elapsed = Date.now() - startTime;
-        const isTimeout = error.name === 'AbortError';
-        debugLog('error', `[API ${requestId}] ${isTimeout ? 'TIMEOUT' : 'Fetch failed'} after ${elapsed}ms:`, {
+        const isAbort = error.name === 'AbortError';
+        const isTimeout = isAbort && timedOut;
+        const isExternalCancel = isAbort && !timedOut && !!externalSignal?.aborted;
+        debugLog('error', `[API ${requestId}] ${isTimeout ? 'TIMEOUT' : isExternalCancel ? 'CANCELLED' : 'Fetch failed'} after ${elapsed}ms:`, {
             name: error.name,
             message: error.message,
             status: error.status,
@@ -135,6 +154,13 @@ export async function apiFetch<T = any>(endpoint: string, options: RequestInit =
             timeoutError.status = 408;
             throw timeoutError;
         }
+        // A caller-initiated cancellation (e.g. the user changed filters/tabs before this
+        // request resolved) is expected, not a failure -- rethrown as-is (still a real
+        // AbortError) so callers can recognize and silently ignore it, matching the standard
+        // `if (error.name !== "AbortError") ...` convention rather than getting a misleading
+        // "Request timed out" or generic network-error message for something they caused on
+        // purpose.
+        if (isExternalCancel) throw error;
         if (error instanceof TypeError && error.message === 'Failed to fetch') {
             throw createNetworkError(endpoint);
         }

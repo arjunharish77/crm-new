@@ -33,6 +33,8 @@ export async function PATCH(
   } catch (error) {
     if (error instanceof Error && error.message === "UNAUTHORIZED") return unauthorized();
     if (error instanceof Error && error.message === "TASK_TITLE_REQUIRED") return badRequest("Task title is required");
+    if (error instanceof Error && error.message === "TASK_COMPLETION_NOTE_REQUIRED") return badRequest("This task requires a completion note before it can be marked complete");
+    if (error instanceof Error && error.message === "TASK_BLOCKED_BY_INCOMPLETE_DEPENDENCY") return badRequest("This task is blocked by another task that isn't complete yet");
     return serverError("Failed to update task", error);
   }
 }

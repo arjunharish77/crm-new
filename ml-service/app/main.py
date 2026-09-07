@@ -34,6 +34,17 @@ class ScoreRequest(BaseModel):
     lookbackDays: int = 365
 
 
+class NbaScoreCandidate(BaseModel):
+    key: str
+    actionType: str
+    features: dict[str, float] = {}
+
+
+class NbaScoreBatchRequest(BaseModel):
+    tenantId: str
+    candidates: list[NbaScoreCandidate] = []
+
+
 @app.post("/train", dependencies=[Depends(require_internal_auth)])
 def train(request: TrainRequest) -> dict:
     from app.model import train_and_evaluate
@@ -58,4 +69,14 @@ def score(request: ScoreRequest) -> dict:
         target_module=request.targetModule,
         model_storage_key=request.modelStorageKey,
         lookback_days=request.lookbackDays,
+    )
+
+
+@app.post("/nba-score-batch", dependencies=[Depends(require_internal_auth)])
+def nba_score_batch(request: NbaScoreBatchRequest) -> dict:
+    from app.nba import score_nba_candidates_batch
+
+    return score_nba_candidates_batch(
+        tenant_id=request.tenantId,
+        candidates=[candidate.model_dump() for candidate in request.candidates],
     )

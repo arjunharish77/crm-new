@@ -1,6 +1,7 @@
 'use client';
 
 import * as React from 'react';
+import { useRouter } from 'next/navigation';
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -14,11 +15,35 @@ import { Bell } from 'lucide-react';
 import { useNotifications } from '@/providers/notification-provider';
 import { formatWorkspaceRelativeTime } from '@/lib/date-format';
 
+// Every notification's `data` payload already carries the ids needed to jump straight to the
+// record it's about -- this just picks the most specific real destination that exists.
+// Activities/Tasks have no per-record detail page in this app, so those fall back to their
+// list page rather than a dead link.
+export function resolveNotificationLink(data: any): string | null {
+    if (!data || typeof data !== 'object') return null;
+    if (data.viewId) return `/dashboard/views?viewId=${data.viewId}`;
+    if (data.entityType === 'OPPORTUNITY' && data.entityId) return `/dashboard/opportunities/${data.entityId}`;
+    if (data.entityType === 'LEAD' && data.entityId) return `/dashboard/leads/${data.entityId}`;
+    if (data.opportunityId) return `/dashboard/opportunities/${data.opportunityId}`;
+    if (data.leadId) return `/dashboard/leads/${data.leadId}`;
+    if (data.taskId) return `/dashboard/tasks`;
+    return null;
+}
+
 export function NotificationBell() {
-    const { notifications, unreadCount, clearNotifications } = useNotifications();
+    const { notifications, unreadCount, clearNotifications, markAsRead } = useNotifications();
+    const router = useRouter();
+    const [open, setOpen] = React.useState(false);
+
+    const handleSelect = (notif: (typeof notifications)[number]) => {
+        const link = resolveNotificationLink(notif.data);
+        markAsRead(notif.id);
+        setOpen(false);
+        if (link) router.push(link);
+    };
 
     return (
-        <DropdownMenu>
+        <DropdownMenu open={open} onOpenChange={setOpen}>
             <Tooltip>
                 <TooltipTrigger asChild>
                     <DropdownMenuTrigger asChild>
@@ -55,20 +80,27 @@ export function NotificationBell() {
                     {notifications.length === 0 ? (
                         <div className="p-8 text-center text-sm text-muted-foreground">No notifications</div>
                     ) : (
-                        notifications.map((notif, i) => (
-                            <React.Fragment key={i}>
-                                <div className="px-4 py-3 hover:bg-accent">
-                                    <div className="flex justify-between gap-3">
-                                        <div className="text-sm font-semibold">{notif.title}</div>
-                                        <div className="shrink-0 text-xs text-muted-foreground">
-                                            {formatWorkspaceRelativeTime(notif.timestamp)}
+                        notifications.map((notif, i) => {
+                            const link = resolveNotificationLink(notif.data);
+                            return (
+                                <React.Fragment key={notif.id ?? i}>
+                                    <button
+                                        type="button"
+                                        onClick={() => handleSelect(notif)}
+                                        className={`block w-full px-4 py-3 text-left hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${link ? "cursor-pointer" : "cursor-default"}`}
+                                    >
+                                        <div className="flex justify-between gap-3">
+                                            <div className="text-sm font-semibold">{notif.title}</div>
+                                            <div className="shrink-0 text-xs text-muted-foreground">
+                                                {formatWorkspaceRelativeTime(notif.timestamp)}
+                                            </div>
                                         </div>
-                                    </div>
-                                    <div className="mt-1 text-sm leading-snug text-muted-foreground">{notif.message}</div>
-                                </div>
-                                {i < notifications.length - 1 && <DropdownMenuSeparator className="m-0" />}
-                            </React.Fragment>
-                        ))
+                                        <div className="mt-1 text-sm leading-snug text-muted-foreground">{notif.message}</div>
+                                    </button>
+                                    {i < notifications.length - 1 && <DropdownMenuSeparator className="m-0" />}
+                                </React.Fragment>
+                            );
+                        })
                     )}
                 </div>
             </DropdownMenuContent>

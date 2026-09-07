@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { deleteFormForTenant, getFormForTenant, updateFormForTenant } from "@/lib/server/crm";
-import { serverError, unauthorized } from "@/lib/server/http";
+import { badRequest, serverError, unauthorized } from "@/lib/server/http";
 import { requireCurrentUser } from "@/lib/server/auth";
 
 export async function GET(
@@ -30,6 +30,9 @@ export async function PATCH(
     return NextResponse.json(form);
   } catch (error) {
     if (error instanceof Error && error.message === "UNAUTHORIZED") return unauthorized();
+    if (error instanceof Error && error.message.startsWith("FEATURE_DISABLED")) {
+      return badRequest("Form Builder is not enabled for this workspace");
+    }
     return serverError("Failed to update form");
   }
 }

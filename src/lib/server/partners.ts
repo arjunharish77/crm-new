@@ -2,6 +2,7 @@ import { randomUUID } from "crypto";
 import { createTenantScopedUser } from "@/lib/server/admin";
 import { createAuditLog } from "@/lib/server/crm";
 import { execute, query, queryOne } from "@/lib/db/query";
+import { assertModuleEnabled } from "@/lib/server/module-entitlements";
 
 type TenantUser = {
   id: string;
@@ -9,6 +10,7 @@ type TenantUser = {
   name?: string | null;
   email?: string | null;
   role?: { permissions?: any } | string | null;
+  isPlatformAdmin?: boolean;
 };
 
 export type CreatePartnerInput = {
@@ -78,6 +80,62 @@ export async function listPartnerProfilesForTenant(user: TenantUser) {
   return profiles.map((profile: any) => ({ ...profile, user: userMap.get(profile.userId) ?? null }));
 }
 
+// Gap checklist Module 17's "embedded analytics surfaces" sub-item ("partner/counselor/team
+// mini dashboards") -- the previously-missing per-partner detail page needs a single-profile
+// fetch, which didn't exist before (only PATCH did).
+export async function getPartnerProfileForTenant(user: TenantUser, partnerProfileId: string) {
+  if (!user.tenantId) return null;
+  const profile = await queryOne<any>(
+    `select id, "tenantId", "userId", "legalBusinessName", gstin, "panNumber", "registeredAddress",
+            "registeredState", status, "invoiceNumberPrefix", "invoiceNumberCounter",
+            "partnerOrganizationId", "parentPartnerProfileId", "canAccessPayouts",
+            "partnerLoginRole", "createdAt", "updatedAt"
+     from "PartnerProfile"
+     where "tenantId" = $1 and id = $2
+     limit 1`,
+    [user.tenantId, partnerProfileId],
+  );
+  if (!profile) return null;
+  const profileUser = await queryOne<any>('select id, name, email, status from "User" where "tenantId" = $1 and id = $2 limit 1', [
+    user.tenantId,
+    profile.userId,
+  ]);
+  return { ...profile, user: profileUser ?? null };
+}
+
+// Gap checklist Module 17's "embedded analytics surfaces" sub-item ("partner/counselor/team
+// mini dashboards"). Reuses listCommissionLedgerForPartner unchanged (already accepts an
+// explicit partnerId for tenant-admin callers) -- both it and listPayoutsForPartnerAsAdmin
+// expect a User.id, so this resolves the profile's own `userId` first. Deliberately calls
+// listPayoutsForPartnerAsAdmin, NOT listPayoutsForPartner -- the latter resolves visibility from
+// the caller's own partner rollup target, which is empty for a real tenant admin (confirmed by
+// reading it fully before reusing it, not assumed).
+export async function getPartnerDashboardForTenant(user: TenantUser, partnerProfileId: string) {
+  const profile = await getPartnerProfileForTenant(user, partnerProfileId);
+  if (!profile) return null;
+
+  const { listCommissionLedgerForPartner } = await import("@/lib/server/commission");
+  const { listPayoutsForPartnerAsAdmin } = await import("@/lib/server/payouts");
+  const [ledgerEntries, payouts] = await Promise.all([
+    listCommissionLedgerForPartner(user, profile.userId),
+    listPayoutsForPartnerAsAdmin(user, profile.userId),
+  ]);
+
+  const totalEarned = ledgerEntries
+    .filter((entry: any) => entry.entryType === "EARNED")
+    .reduce((sum: number, entry: any) => sum + Number(entry.commissionAmount ?? 0), 0);
+  const totalPaid = payouts
+    .filter((payout: any) => payout.status === "PAID")
+    .reduce((sum: number, payout: any) => sum + Number(payout.totalCommissionAmount ?? 0), 0);
+  const pendingPayouts = payouts.filter((payout: any) => payout.status !== "PAID").length;
+
+  return {
+    totals: { totalEarned, totalPaid, pendingPayouts },
+    recentLedgerEntries: ledgerEntries.slice(0, 10),
+    recentPayouts: payouts.slice(0, 10),
+  };
+}
+
 export async function listPartnerLoginsForOrganization(user: TenantUser, partnerOrganizationId: string) {
   if (!user.tenantId) return [];
 
@@ -119,6 +177,7 @@ export async function createPartnerForTenant(user: TenantUser, input: CreatePart
   if (!user.tenantId) {
     throw new Error("TENANT_CONTEXT_REQUIRED");
   }
+  await assertModuleEnabled(user.tenantId, "PARTNERS", { isPlatformAdmin: user.isPlatformAdmin });
 
   await assertRoleIsPartnerRole(user.tenantId, input.roleId);
 
@@ -177,6 +236,7 @@ export async function createPartnerLoginForTenant(
   if (!user.tenantId) {
     throw new Error("TENANT_CONTEXT_REQUIRED");
   }
+  await assertModuleEnabled(user.tenantId, "PARTNERS", { isPlatformAdmin: user.isPlatformAdmin });
 
   await assertRoleIsPartnerRole(user.tenantId, input.roleId);
 
@@ -272,6 +332,7 @@ export async function updatePartnerProfileForTenant(
   if (!user.tenantId) {
     throw new Error("TENANT_CONTEXT_REQUIRED");
   }
+  await assertModuleEnabled(user.tenantId, "PARTNERS", { isPlatformAdmin: user.isPlatformAdmin });
 
   const existing = await queryOne<any>(
     `select id, "tenantId", "userId", "legalBusinessName", gstin, "panNumber", "registeredAddress",

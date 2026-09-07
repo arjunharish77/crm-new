@@ -11,6 +11,28 @@ export const SMART_VIEW_MODULE_OPTIONS: Array<{ value: SmartViewModule; label: s
     { value: "REPORTS", label: "Reports" },
 ];
 
+// Leads/Activities/Tasks/Partners have no tenant-level "disabled" concept anywhere in
+// this app today (confirmed: no TenantFeature column, no sidebar gate) -- only
+// Opportunities, Reports, and (as of the Gamification & Payouts entitlement work) Payouts
+// do, via TenantFeature flags the main nav already checks. Don't invent entitlement flags
+// for modules that don't have one.
+export function isSmartViewModuleEnabled(
+    module: SmartViewModule,
+    features: { opportunityEnabled: boolean; advancedReporting: boolean; payoutsEnabled?: boolean }
+) {
+    if (module === "OPPORTUNITIES") return features.opportunityEnabled;
+    if (module === "REPORTS") return features.advancedReporting;
+    if (module === "PAYOUTS") return features.payoutsEnabled !== false;
+    return true;
+}
+
+export function smartViewModuleDisabledReason(module: SmartViewModule): string | null {
+    if (module === "OPPORTUNITIES") return "The Opportunities module is disabled for this tenant. Ask an admin to enable it in Settings, or edit this View to use a different module.";
+    if (module === "REPORTS") return "Advanced Reporting is disabled for this tenant. Ask an admin to enable it in Settings, or edit this View to use a different module.";
+    if (module === "PAYOUTS") return "Payouts is disabled for this tenant. Ask an admin to enable it in Settings, or edit this View to use a different module.";
+    return null;
+}
+
 const STATUS_OPTIONS = [
     { label: "New", value: "NEW" },
     { label: "Contacted", value: "CONTACTED" },
@@ -46,6 +68,7 @@ export function getSmartViewFields(module: SmartViewModule, references: SmartVie
             { key: "predictiveExpectedResponseLikelihood", label: "Response likelihood", type: "number" },
             { key: "predictiveDuplicateRisk", label: "Duplicate risk", type: "number" },
             { key: "predictiveStaleRisk", label: "Stale risk", type: "number" },
+            { key: "pendingNbaCount", label: "Pending next best actions", type: "number" },
             { key: "ownerId", label: "Owner", type: "select", options: references.users ?? [] },
             { key: "ownerSegment", label: "Owner segment", type: "select", options: dynamicOwnerOptions() },
             { key: "teamSegment", label: "Team segment", type: "select", options: dynamicTeamOptions() },
@@ -64,6 +87,7 @@ export function getSmartViewFields(module: SmartViewModule, references: SmartVie
             { key: "predictiveConfidence", label: "Score confidence", type: "number" },
             { key: "predictiveStallRisk", label: "Stall risk", type: "number" },
             { key: "predictiveExpectedCloseRisk", label: "Expected close risk", type: "number" },
+            { key: "pendingNbaCount", label: "Pending next best actions", type: "number" },
             { key: "priority", label: "Priority", type: "select", options: priorityOptions() },
             { key: "ownerId", label: "Owner", type: "select", options: references.users ?? [] },
             { key: "ownerSegment", label: "Owner segment", type: "select", options: dynamicOwnerOptions() },
@@ -172,6 +196,7 @@ export function getSmartViewQuickActions(module: SmartViewModule): Array<{ value
             { value: "log_activity", label: "Log activity" },
             { value: "assign_owner", label: "Assign owner" },
             { value: "add_to_list", label: "Add to list" },
+            { value: "send_message", label: "Send message" },
         ];
     }
 
@@ -180,6 +205,7 @@ export function getSmartViewQuickActions(module: SmartViewModule): Array<{ value
             { value: "create_task", label: "Create task" },
             { value: "change_stage", label: "Change stage" },
             { value: "assign_owner", label: "Assign owner" },
+            { value: "send_message", label: "Send message" },
         ];
     }
 

@@ -24,9 +24,11 @@ interface LogicBuilderProps {
     currentFieldId: string;
     value?: LogicRule;
     onChange: (value: LogicRule | undefined) => void;
+    /** What this rule gates -- "field" (default), "section", or "tab" -- just for copy. */
+    subjectLabel?: string;
 }
 
-export function ConditionalLogicBuilder({ fields, currentFieldId, value, onChange }: LogicBuilderProps) {
+export function ConditionalLogicBuilder({ fields, currentFieldId, value, onChange, subjectLabel = "field" }: LogicBuilderProps) {
     const [rule, setRule] = useState<LogicRule>(value || {
         action: "SHOW",
         fieldId: "",
@@ -105,7 +107,7 @@ export function ConditionalLogicBuilder({ fields, currentFieldId, value, onChang
                             <SelectItem value="HIDE">Hide</SelectItem>
                         </SelectContent>
                     </Select>
-                    <span>this field when:</span>
+                    <span>this {subjectLabel} when:</span>
                 </div>
 
                 <Select value={rule.fieldId} onValueChange={(v) => updateRule({ fieldId: v })}>

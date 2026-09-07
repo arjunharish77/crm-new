@@ -34,6 +34,8 @@ export function FeatureGate({
         formBuilderEnabled: true,
         advancedReporting: true,
         apiAccessEnabled: false,
+        payoutsEnabled: true,
+        gamificationEnabled: true,
     };
 
     const features = { ...defaultFeatures, ...user?.features };
@@ -60,8 +62,22 @@ export function useFeature(feature: string): boolean {
         formBuilderEnabled: true,
         advancedReporting: true,
         apiAccessEnabled: false,
+        payoutsEnabled: true,
+        gamificationEnabled: true,
     };
 
     const features = { ...defaultFeatures, ...user?.features };
     return !!features[feature];
+}
+
+/**
+ * Hook to check if a platform module (Priority Module 21's TenantModuleEntitlement
+ * catalog) is enabled -- separate from the older per-feature `useFeature` flags above.
+ * A module with no explicit entitlement row defaults to enabled.
+ */
+export function useModuleEnabled(moduleKey: string): boolean {
+    const { user } = useAuth();
+    if (user?.isPlatformAdmin) return true;
+    const status = (user as any)?.moduleEntitlements?.[moduleKey];
+    return status !== "DISABLED" && status !== "SUSPENDED";
 }

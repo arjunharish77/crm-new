@@ -444,3 +444,20 @@ body {
 .leaflet-container {
   z-index: 0;
 }
+
+/* Gap checklist Module 10's "accessibility pass" item, "reduced motion support" -- catches
+   CSS-only animation/transitions (Tailwind's `animate-in`/`transition-*` utilities, Radix's own
+   data-state open/close animations) that MotionConfig's `reducedMotion="user"` (src/app/layout.tsx)
+   doesn't touch, since that only governs framer-motion's own `motion.*` components. Near-zero
+   duration rather than `display: none`/`animation: none` outright, since some libraries rely on
+   an animationend/transitionend event actually firing to finish their own open/close state. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireCurrentUser } from "@/lib/server/auth";
-import { serverError, unauthorized } from "@/lib/server/http";
+import { forbidden, serverError, unauthorized } from "@/lib/server/http";
 import { getLeadSourceRoiReportForTenant } from "@/lib/server/inbuilt-reports";
 
 export async function GET(request: Request) {
@@ -10,6 +10,7 @@ export async function GET(request: Request) {
     return NextResponse.json(report);
   } catch (error) {
     if (error instanceof Error && error.message === "UNAUTHORIZED") return unauthorized();
+    if (error instanceof Error && error.message === "SENSITIVE_REPORT_ACCESS_DENIED") return forbidden();
     return serverError("Failed to fetch lead source ROI report", error);
   }
 }

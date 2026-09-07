@@ -24,6 +24,9 @@ export async function POST(request: Request) {
     return NextResponse.json(form);
   } catch (error) {
     if (error instanceof Error && error.message === "UNAUTHORIZED") return unauthorized();
+    if (error instanceof Error && error.message.startsWith("FEATURE_DISABLED")) {
+      return badRequest("Form Builder is not enabled for this workspace");
+    }
     console.error("Form create failed", error);
     return serverError("Failed to create form", error);
   }

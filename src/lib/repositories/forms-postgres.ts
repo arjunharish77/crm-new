@@ -5,10 +5,13 @@ import { formatExportDateValue, getTenantTimeZone } from "@/lib/server/date-form
 import { checkRateLimit } from "@/lib/server/rate-limit";
 import { runAutomationsForEvent } from "@/lib/repositories/automations-postgres";
 import { distributeRecord } from "@/lib/server/distribution-engine";
+import { assertFeatureEnabled, isFeatureEnabledForTenant } from "@/lib/server/entitlements";
+import { recordAttributionTouch } from "@/lib/server/marketing-journeys";
 
 type TenantUser = {
   id: string;
   tenantId: string | null;
+  isPlatformAdmin?: boolean;
 };
 
 const FORM_COLUMNS = 'id, name, description, fields, config, "isActive", "submitButtonText", "successMessage", "redirectUrl", "spamProtection", "rateLimit", "duplicateAction", "defaultOwnerId", theme, "createdAt", "updatedAt"';
@@ -174,6 +177,9 @@ export async function listFormsForTenant(user: TenantUser) {
 
 export async function listAvailableFormsForPlacement(user: TenantUser, placement: string) {
   if (!user.tenantId) return [];
+  if ((placement === "OPPORTUNITY_DETAIL" || placement === "OPPORTUNITY_CREATE") && !(await isFeatureEnabledForTenant(user.tenantId, "opportunityEnabled"))) {
+    return [];
+  }
   const forms = await listFormsForTenant(user);
   const [salesGroupRows, teamRows, userRecord] = await Promise.all([
     query<any>('select "groupId" from "SalesGroupMember" where "tenantId" = $1 and "userId" = $2', [user.tenantId, user.id]),
@@ -237,6 +243,7 @@ function readProcessValue(record: Record<string, any>, path: string) {
 }
 
 export async function createFormForTenant(user: TenantUser, payload: Record<string, unknown>) {
+  await assertFeatureEnabled(user.tenantId, "formBuilderEnabled", { isPlatformAdmin: user.isPlatformAdmin });
   return withTransaction(user, async (client) => {
     const objectId = await getObjectId(user, "lead", client);
     const now = new Date().toISOString();
@@ -280,6 +287,7 @@ export async function getFormForTenant(user: TenantUser, formId: string) {
 }
 
 export async function updateFormForTenant(user: TenantUser, formId: string, payload: Record<string, unknown>) {
+  await assertFeatureEnabled(user.tenantId, "formBuilderEnabled", { isPlatformAdmin: user.isPlatformAdmin });
   const config = (payload.config as Record<string, unknown> | undefined) ?? {};
   const updatePayload: Record<string, unknown> = { updatedAt: new Date().toISOString() };
   if (payload.name !== undefined) updatePayload.name = payload.name;
@@ -321,7 +329,28 @@ async function getPublicFormRow(identifier: string) {
 
 export async function getPublicForm(identifier: string) {
   const form = await getPublicFormRow(identifier);
-  return form ? formatFormRecord(form, 0) : null;
+  if (!form) return null;
+  const formatted = formatFormRecord(form, 0);
+  if (form.tenantId && !(await isFeatureEnabledForTenant(form.tenantId, "opportunityEnabled"))) {
+    const fields = Array.isArray(formatted.config?.fields) ? formatted.config.fields : [];
+    formatted.config = { ...formatted.config, fields: fields.filter((field: any) => field?.sourceModule !== "opportunity") };
+  }
+  return formatted;
+}
+
+// Drop-off telemetry: beaconed by the public renderer on mount and on every tab/step change
+// (see public-form-renderer.tsx), completely separate from FormSubmission -- this is the
+// only signal anywhere of how far a real visitor got before abandoning a multi-tab form.
+// Best-effort by design: a lost beacon should never surface as an error to a real visitor.
+export async function recordFormProgressEvent(identifier: string, input: { sessionId: string; tabId: string; tabIndex: number }) {
+  const formRow = await getPublicFormRow(identifier);
+  if (!formRow || !formRow.tenantId) return;
+  if (!input.sessionId || !input.tabId) return;
+  await execute(
+    `insert into "FormProgressEvent" (id, "tenantId", "formId", "sessionId", "tabId", "tabIndex", "createdAt")
+     values ($1, $2, $3, $4, $5, $6, $7)`,
+    [randomUUID(), formRow.tenantId, formRow.id, input.sessionId.slice(0, 200), input.tabId.slice(0, 200), Math.max(0, Math.trunc(input.tabIndex) || 0), new Date().toISOString()],
+  ).catch(() => undefined);
 }
 
 export async function submitPublicForm(identifier: string, payload: Record<string, unknown>) {
@@ -340,6 +369,7 @@ export async function submitPublicForm(identifier: string, payload: Record<strin
     });
     if (!rateLimitResult.allowed) throw new Error("RATE_LIMITED");
     const tenantId = formRow.tenantId as string;
+    await assertFeatureEnabled(tenantId, "formBuilderEnabled");
     const user = { id: "public-form", tenantId };
     // No real logged-in user submits a public form; resolve a real actor once so the
     // AuditLog/Activity writes below (which require a real "User" row, see
@@ -394,14 +424,25 @@ export async function submitPublicForm(identifier: string, payload: Record<strin
       await updateReturning("Lead", updatePayload, 'where "tenantId" = $1 and id = $2', [tenantId, leadId], "id", client);
     }
 
-    const opportunityResult = await upsertOpportunityFromFormModule({
-      tenantId,
-      leadId,
-      opportunityId: typeof context.opportunityId === "string" ? context.opportunityId : null,
-      actorId,
-      data: moduleData.opportunity,
-      client,
-    });
+    // Unauthenticated public submit -- the only real enforcement boundary for a
+    // tenant-disabled Opportunities module here, since the builder/placement UI only
+    // hides this cosmetically for authenticated authors.
+    const opportunityModuleEnabled = await isFeatureEnabledForTenant(tenantId, "opportunityEnabled");
+    const opportunityResult = opportunityModuleEnabled
+      ? await upsertOpportunityFromFormModule({
+          tenantId,
+          leadId,
+          opportunityId: typeof context.opportunityId === "string" ? context.opportunityId : null,
+          actorId,
+          data: moduleData.opportunity,
+          client,
+        })
+      : {
+          id: null as string | null,
+          warning: Object.keys(moduleData.opportunity ?? {}).length
+            ? "Opportunities is disabled for this tenant; opportunity data on this form was not saved."
+            : undefined,
+        };
     const opportunityId = opportunityResult.id;
     if (opportunityResult.warning) warnings.push(opportunityResult.warning);
 
@@ -445,6 +486,18 @@ export async function submitPublicForm(identifier: string, payload: Record<strin
       duplicateLeadId: null,
       errorMessage: null,
     }, "id", client);
+
+    if (Object.keys(utmParams).length && leadId) {
+      await recordAttributionTouch(user, {
+        recordType: "LEAD",
+        recordId: leadId,
+        source: typeof utmParams.utm_source === "string" ? utmParams.utm_source : null,
+        medium: typeof utmParams.utm_medium === "string" ? utmParams.utm_medium : null,
+        campaign: typeof utmParams.utm_campaign === "string" ? utmParams.utm_campaign : null,
+        channel: "FORM_SUBMISSION",
+        metadata: { formId: form.id },
+      }).catch(() => undefined);
+    }
 
     return { success: true, leadId, opportunityId, warnings };
   });

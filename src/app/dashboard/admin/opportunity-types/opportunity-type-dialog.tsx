@@ -10,9 +10,11 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Textarea } from '@/components/ui/textarea';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { apiFetch } from '@/lib/api';
 import { cn } from '@/lib/utils';
 import { CreateOpportunityTypeDto, OpportunityType } from '@/types/opportunity-types';
+import type { CatalogProgram } from '@/lib/repositories/catalog-postgres';
 
 interface OpportunityTypeDialogProps {
     open: boolean;
@@ -59,11 +61,16 @@ export function OpportunityTypeDialog({
         description: '',
         icon: '',
         color: '#3b82f6',
+        programId: null,
     });
     const [loading, setLoading] = useState(false);
     const [iconPickerOpen, setIconPickerOpen] = useState(false);
     const [colorPickerOpen, setColorPickerOpen] = useState(false);
     const [iconSearch, setIconSearch] = useState('');
+    // Priority Module 12's "product catalog" item 3 -- links this opportunity type (e.g.
+    // "University 1") to a specific catalog Program. Will show empty until the catalog
+    // management UI (this same module's own next item) exists to actually create Programs.
+    const [programs, setPrograms] = useState<CatalogProgram[]>([]);
 
     useEffect(() => {
         if (open) {
@@ -73,6 +80,7 @@ export function OpportunityTypeDialog({
                     description: opportunityType.description || '',
                     icon: opportunityType.icon || '',
                     color: opportunityType.color || '#3b82f6',
+                    programId: opportunityType.programId ?? null,
                 });
             } else {
                 setFormData({
@@ -80,11 +88,13 @@ export function OpportunityTypeDialog({
                     description: '',
                     icon: '',
                     color: '#3b82f6',
+                    programId: null,
                 });
             }
             setIconSearch('');
             setIconPickerOpen(false);
             setColorPickerOpen(false);
+            apiFetch<CatalogProgram[]>('/catalog/programs').then(setPrograms).catch(() => setPrograms([]));
         }
     }, [open, opportunityType]);
 
@@ -160,6 +170,28 @@ export function OpportunityTypeDialog({
                         onChange={(event) => setFormData({ ...formData, description: event.target.value })}
                         placeholder="Brief description of this opportunity type"
                     />
+                </div>
+
+                <div className="space-y-2">
+                    <Label>Program</Label>
+                    <Select
+                        value={formData.programId ?? '__none__'}
+                        onValueChange={(value) => setFormData({ ...formData, programId: value === '__none__' ? null : value })}
+                    >
+                        <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="__none__">No linked program</SelectItem>
+                            {programs.map((program) => (
+                                <SelectItem key={program.id} value={program.id}>
+                                    {program.universityName} — {program.name}
+                                </SelectItem>
+                            ))}
+                        </SelectContent>
+                    </Select>
+                    <p className="text-xs text-muted-foreground">
+                        Optional -- link this opportunity type (e.g. &quot;University 1&quot;) to a specific catalog program so its course, fee plan, and required-document values can come from that program.
+                        {programs.length === 0 ? ' No programs exist yet in the catalog.' : null}
+                    </p>
                 </div>
 
                 <div className="grid gap-4 sm:grid-cols-2">

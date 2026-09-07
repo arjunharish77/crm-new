@@ -24,6 +24,8 @@ import {
     DropdownMenuContent,
     DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { useFeature } from "@/components/auth/feature-gate";
+import { isPlacementEnabled } from "@/lib/forms/module-entitlements";
 
 const CRM_PLACEMENTS = [
     { value: "LEAD_DETAIL", label: "Lead detail", helper: "Visible on an existing lead record." },
@@ -119,6 +121,7 @@ type PlacementRule = {
 };
 
 export function CrmPlacementEditor({ initialForm, onSaved }: { initialForm: any; onSaved?: (form: any) => void }) {
+    const opportunityEnabled = useFeature("opportunityEnabled");
     const [config, setConfig] = useState<any>(initialForm.config ?? {});
     const [users, setUsers] = useState<any[]>([]);
     const [roles, setRoles] = useState<any[]>([]);
@@ -236,7 +239,9 @@ export function CrmPlacementEditor({ initialForm, onSaved }: { initialForm: any;
                     </Button>
                 </div>
 
-                {CRM_PLACEMENTS.map((placement) => {
+                {CRM_PLACEMENTS.filter(
+                    (placement) => isPlacementEnabled(placement.value, { opportunityEnabled }) || ruleFor(placement.value).enabled
+                ).map((placement) => {
                     const rule = ruleFor(placement.value);
                     return (
                         <Card key={placement.value} className="gap-3 rounded-xl p-3">

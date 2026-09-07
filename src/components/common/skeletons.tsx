@@ -16,7 +16,11 @@ const ROW_WIDTHS = [68, 82, 55, 90, 72, 60, 88, 77, 65, 93, 58, 85, 70, 95, 63, 
 
 export function TableSkeleton({ rows = 8, columns = 5, hasToolbar = true }: TableSkeletonProps) {
     return (
-        <div className="overflow-hidden rounded-xl border bg-card">
+        <div className="overflow-hidden rounded-xl border bg-card" role="status">
+            {/* Gap checklist Module 10's "accessibility pass" item, "screen-reader-friendly
+                status text" -- the skeleton itself is purely decorative (no accessible text of
+                its own), so a screen-reader user hears "Loading" once instead of silence. */}
+            <span className="sr-only">Loading</span>
             {hasToolbar && (
                 <div className="flex gap-2 border-b px-4 py-3">
                     <Skeleton className="h-8 w-20 rounded-lg" />

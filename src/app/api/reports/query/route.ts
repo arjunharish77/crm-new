@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { badRequest, serverError, unauthorized } from "@/lib/server/http";
+import { badRequest, requestTimeout, serverError, unauthorized } from "@/lib/server/http";
 import { requireCurrentUser } from "@/lib/server/auth";
 import {
   executeReportQueryForTenant,
@@ -32,6 +32,12 @@ export async function POST(request: Request) {
     if (error instanceof Error && error.message === "UNAUTHORIZED") return unauthorized();
     if (error instanceof Error && /Unsupported|required|definition/i.test(error.message)) {
       return badRequest(error.message);
+    }
+    if (error instanceof Error && error.message.startsWith("FEATURE_DISABLED")) {
+      return badRequest("Advanced Reporting is not enabled for this workspace");
+    }
+    if (error instanceof Error && error.message === "REPORT_QUERY_TIMEOUT") {
+      return requestTimeout("This report query took too long to run -- try narrowing the fields or filters");
     }
     return serverError("Failed to execute report query", error);
   }

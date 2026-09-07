@@ -1,13 +1,17 @@
 import { randomUUID } from "crypto";
 import { query, queryOne, execute } from "@/lib/db/query";
 import { withTransaction } from "@/lib/db/transaction";
-import { writePrivateFile, readPrivateFile } from "@/lib/storage/file-storage";
+import { writePrivateFile, readPrivateFile, deletePrivateFile } from "@/lib/storage/file-storage";
 import { enqueueExportJob } from "@/lib/server/job-queue";
 import { getCurrentUserById } from "@/lib/repositories/auth-admin-postgres";
-import { exportCustomReportForTenant, exportFormSubmissionsForTenant } from "@/lib/server/crm";
+import { createAuditLog, exportCustomReportForTenant, exportFormSubmissionsForTenant } from "@/lib/server/crm";
 import { generateCycleFinanceCsv } from "@/lib/server/partner-invoices";
 import * as inbuiltReports from "@/lib/server/inbuilt-reports";
 import { formatExportDateValue, formatTenantDate, getTenantTimeZone } from "@/lib/server/date-format";
+import { DatabaseError } from "@/lib/db/errors";
+import { checkRateLimitWithAlert, RateLimitExceededError } from "@/lib/server/rate-limit";
+import { assertAccountActiveForDownload } from "@/lib/server/file-download-guards";
+import { generateSignedDownloadToken, verifySignedDownloadToken } from "@/lib/server/signed-urls";
 
 type TenantUser = {
   id: string;
@@ -23,7 +27,8 @@ export type ExportModuleName =
   | "PARTNERS"
   | "PAYOUTS"
   | "REPORTS"
-  | "FORMS";
+  | "FORMS"
+  | "AUDIT_LOGS";
 
 type ExportRequestRow = {
   id: string;
@@ -59,6 +64,7 @@ const EXPORT_MODULES = new Set<ExportModuleName>([
   "PAYOUTS",
   "REPORTS",
   "FORMS",
+  "AUDIT_LOGS",
 ]);
 
 function ownerScoped(user: TenantUser) {
@@ -100,7 +106,7 @@ function reportResultRows(report: Record<string, unknown>) {
   return flattenObjectToRows(report);
 }
 
-async function inbuiltReportCsv(user: TenantUser, reportKey: string, timeZone: string) {
+async function inbuiltReportRows(user: TenantUser, reportKey: string): Promise<Record<string, unknown>[]> {
   let report: Record<string, unknown>;
   if (reportKey === "funnel_conversion_by_stage") report = await inbuiltReports.getFunnelByStageReportForTenant(user as any);
   else if (reportKey === "funnel_conversion_by_source_campaign") report = await inbuiltReports.getFunnelBySourceCampaignReportForTenant(user as any);
@@ -113,7 +119,36 @@ async function inbuiltReportCsv(user: TenantUser, reportKey: string, timeZone: s
   else if (reportKey === "cohort_funnel_progression") report = await inbuiltReports.getCohortReportForTenant(user as any, "month");
   else if (reportKey === "data_quality") report = await inbuiltReports.getDataQualityReportForTenant(user as any, 30);
   else throw new Error("INVALID_INBUILT_REPORT");
-  return toCsv(reportResultRows(report), timeZone);
+  return reportResultRows(report);
+}
+
+async function inbuiltReportCsv(user: TenantUser, reportKey: string, timeZone: string) {
+  return toCsv(await inbuiltReportRows(user, reportKey), timeZone);
+}
+
+// Gap checklist Module 17, item 19 (scheduled extracts): XLSX export. exceljs is a genuinely
+// new dependency (no spreadsheet-writing library existed anywhere in this codebase before this)
+// -- added specifically for this, since hand-rolling a correct OOXML/SpreadsheetML writer would
+// be a much larger, more error-prone undertaking than using an established library for what is,
+// at its core, a flat-table export.
+export async function toXlsxBuffer(rows: Record<string, unknown>[], timeZone: string): Promise<Buffer> {
+  const ExcelJS = (await import("exceljs")).default;
+  const workbook = new ExcelJS.Workbook();
+  const sheet = workbook.addWorksheet("Report");
+  if (rows.length) {
+    const headers = Object.keys(rows[0]);
+    sheet.addRow(headers);
+    for (const row of rows) {
+      sheet.addRow(headers.map((header) => {
+        const value = row[header];
+        if (value === null || value === undefined) return "";
+        const formatted = formatExportDateValue(value, timeZone);
+        return typeof formatted === "object" ? JSON.stringify(formatted) : formatted;
+      }));
+    }
+  }
+  const buffer = await workbook.xlsx.writeBuffer();
+  return Buffer.from(buffer as ArrayBuffer);
 }
 
 function tenantClause(user: TenantUser, values: unknown[], alias = "") {
@@ -466,11 +501,41 @@ async function fetchExportRows(user: TenantUser, moduleName: ExportModuleName, f
               p."totalCommissionAmount" as "Amount", p."isHeld" as "Held",
               p."holdReason" as "Hold Reason", p."createdAt" as "Created At"
        from "Payout" p
-       left join "PartnerProfile" pp on pp.id = p."partnerId"
+       left join "PartnerProfile" pp on pp."userId" = p."partnerId"
        left join "User" u on u.id = pp."userId"
        left join "PartnerOrganization" po on po.id = p."partnerOrganizationId"
        where ${clauses.join(" and ")}
        order by p."createdAt" desc
+       limit $${values.length}`,
+      values,
+    );
+  }
+
+  if (moduleName === "AUDIT_LOGS") {
+    // "Evidence export" (gap checklist: "audit review workflows") -- routes through the same
+    // ExportRequest/QUEUED/CSV pipeline as every other module, so an audit-log export is
+    // itself tracked (who exported what, when) exactly as rigorously as a lead/opportunity
+    // export -- compliance evidence shouldn't be less accountable than ordinary record data.
+    const clauses = [tenantClause(user, values, "a")];
+    applySelectedExportIds(clauses, values, filters, "a");
+    applyMappedConditions(clauses, values, filters, new Map([
+      ["action", "a.action"],
+      ["entityType", `a."entityType"`],
+      ["reviewStatus", `a."reviewStatus"`],
+      ["createdAt", `a."createdAt"`],
+    ]));
+    if (filters.flagged === true) clauses.push("a.flagged = true");
+    if (filters.legalHold === true) clauses.push(`a."legalHold" = true`);
+    values.push(limit);
+    return query<Record<string, unknown>>(
+      `select a."createdAt" as "Timestamp", u.name as "User", u.email as "User Email",
+              a.action as "Action", a."entityType" as "Entity Type", a."entityId" as "Entity ID",
+              a."reviewStatus" as "Review Status", a.flagged as "Flagged", a."flagReason" as "Flag Reason",
+              a."legalHold" as "Legal Hold"
+       from "AuditLog" a
+       left join "User" u on u.id = a."userId"
+       where ${clauses.join(" and ")}
+       order by a."createdAt" desc
        limit $${values.length}`,
       values,
     );
@@ -528,8 +593,28 @@ async function fetchExportContent(
     return { csv, recordCount: csvRowCount(csv), filenamePrefix: "custom-report" };
   }
   if (moduleName === "REPORTS" && filters.reportKind === "INBUILT" && typeof filters.reportKey === "string") {
+    const filenamePrefix = filters.reportKey.replace(/[^a-z0-9_-]/gi, "-").toLowerCase();
+    // XLSX/PDF (gap checklist Module 17, item 19) are only wired up for inbuilt reports --
+    // every other export path below stays CSV-only, unchanged from before this.
+    const exportType = String(metadata.exportType ?? "CSV").toUpperCase();
+    if (exportType === "XLSX" || exportType === "PDF") {
+      const rows = await inbuiltReportRows(user, filters.reportKey);
+      if (exportType === "XLSX") {
+        const buffer = await toXlsxBuffer(rows, timeZone);
+        return {
+          buffer,
+          contentType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+          extension: "xlsx",
+          recordCount: rows.length,
+          filenamePrefix,
+        };
+      }
+      const { renderReportTablePdf } = await import("@/lib/server/report-pdf");
+      const buffer = await renderReportTablePdf({ title: filters.reportKey, generatedAt: new Date().toISOString(), rows });
+      return { buffer, contentType: "application/pdf", extension: "pdf", recordCount: rows.length, filenamePrefix };
+    }
     const csv = await inbuiltReportCsv(user, filters.reportKey, timeZone);
-    return { csv, recordCount: csvRowCount(csv), filenamePrefix: filters.reportKey.replace(/[^a-z0-9_-]/gi, "-").toLowerCase() };
+    return { csv, recordCount: csvRowCount(csv), filenamePrefix };
   }
   if (moduleName === "FORMS" && filters.exportScope === "SUBMISSIONS" && typeof filters.formId === "string") {
     const csv = await exportFormSubmissionsForTenant(user as any, filters.formId);
@@ -564,40 +649,213 @@ export async function listExportRequestsForUser(user: TenantUser) {
   }));
 }
 
+async function sensitiveColumnsForExport(tenantId: string, moduleName: string, columns: unknown) {
+  if (!Array.isArray(columns) || !columns.length) return [];
+  const rules = await query<{ fieldKey: string }>(
+    `select "fieldKey" from "ExportSensitiveFieldRule" where "tenantId" = $1 and "moduleName" = $2`,
+    [tenantId, moduleName],
+  );
+  if (!rules.length) return [];
+  const flagged = new Set(rules.map((rule) => rule.fieldKey));
+  return columns.filter((column) => typeof column === "string" && flagged.has(column));
+}
+
+// duplicateMode=UPDATE was the destructive shape for imports; here it's including an
+// admin-flagged sensitive field (e.g. SSN, bank details, DOB) in the export columns -- an
+// admin builds the flagged-field list per module (ExportSensitiveFieldRule), and any export
+// that would include one starts life gated behind approval instead of running immediately.
+const EXPORT_USER_LIMIT_PER_HOUR = 10;
+
 export async function createExportRequestForUser(user: TenantUser, input: Record<string, unknown>) {
   if (!user.tenantId) throw new Error("TENANT_REQUIRED");
   const moduleName = String(input.moduleName || "").toUpperCase() as ExportModuleName;
   if (!EXPORT_MODULES.has(moduleName)) throw new Error("INVALID_EXPORT_MODULE");
+
+  // "Export throttling" -- per-user rather than per-tenant, since bulk-data exfiltration abuse
+  // is an individual-actor concern (one compromised or malicious account spamming exports),
+  // not a shared-team-usage one. 10/hour is generous for a real workflow (running a report a
+  // few times while refining filters) but catches a scripted loop.
+  const throttle = await checkRateLimitWithAlert({
+    key: `export:user:${user.id}`,
+    limit: EXPORT_USER_LIMIT_PER_HOUR,
+    windowSeconds: 60 * 60,
+    tenantId: user.tenantId,
+    category: "EXPORT",
+    detail: `user ${user.id}`,
+  });
+  if (!throttle.allowed) throw new RateLimitExceededError(throttle.resetSeconds);
   const id = randomUUID();
   const now = new Date().toISOString();
+  const sensitiveColumns = await sensitiveColumnsForExport(user.tenantId, moduleName, input.columns);
+  const initialStatus = sensitiveColumns.length > 0 ? "PENDING_APPROVAL" : "QUEUED";
+
+  // XLSX/PDF (gap checklist Module 17, item 19) are only rendered for inbuilt-report exports
+  // (see fetchExportContent) -- requesting either for any other module/scope silently falls
+  // back to CSV rather than producing a request whose processing step has no renderer for it.
+  const filters = input.filters && typeof input.filters === "object" ? (input.filters as Record<string, unknown>) : {};
+  const requestedExportType = String(input.exportType ?? "CSV").toUpperCase();
+  const supportsAlternateFormat = moduleName === "REPORTS" && filters.reportKind === "INBUILT";
+  const exportType = ["XLSX", "PDF"].includes(requestedExportType) && supportsAlternateFormat ? requestedExportType : "CSV";
 
   await execute(
     `insert into "ExportRequest"
        (id, "tenantId", "userId", "moduleName", "exportType", status, filters, columns, metadata, "queuedAt", "updatedAt")
-     values ($1, $2, $3, $4, 'CSV', 'QUEUED', $5, $6, $7, $8, $8)`,
+     values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $10)`,
     [
       id,
       user.tenantId,
       user.id,
       moduleName,
-      JSON.stringify(input.filters && typeof input.filters === "object" ? input.filters : {}),
+      exportType,
+      initialStatus,
+      JSON.stringify(filters),
       JSON.stringify(Array.isArray(input.columns) ? input.columns : []),
-      JSON.stringify(input.metadata && typeof input.metadata === "object" ? input.metadata : {}),
+      JSON.stringify({
+        ...(input.metadata && typeof input.metadata === "object" ? input.metadata : {}),
+        exportType,
+        ...(sensitiveColumns.length ? { sensitiveColumns } : {}),
+      }),
       now,
     ],
   );
 
+  if (initialStatus === "QUEUED") {
+    try {
+      await enqueueExportJob(id);
+    } catch (error) {
+      await execute(`update "ExportRequest" set status = 'FAILED', error = $1, "updatedAt" = $2 where id = $3`, [
+        error instanceof Error ? error.message : "Export queue unavailable",
+        new Date().toISOString(),
+        id,
+      ]);
+      throw error;
+    }
+  }
+  const created = await queryOne<ExportRequestRow>(`select * from "ExportRequest" where id = $1`, [id]);
+  await createAuditLog(user, "CREATE", "EXPORT_REQUEST", id, null, { moduleName, filters: input.filters ?? {}, status: initialStatus }, null).catch(() => undefined);
+  return created;
+}
+
+export async function approveExportRequest(user: TenantUser, exportRequestId: string) {
+  const request = await queryOne<ExportRequestRow>(
+    `update "ExportRequest" set status = 'QUEUED', "updatedAt" = $1 where id = $2 and "tenantId" = $3 and status = 'PENDING_APPROVAL' returning *`,
+    [new Date().toISOString(), exportRequestId, user.tenantId],
+  );
+  if (!request) throw new Error("EXPORT_REQUEST_NOT_PENDING_APPROVAL");
+  await createAuditLog(user, "UPDATE", "EXPORT_REQUEST", exportRequestId, null, null, { status: { before: "PENDING_APPROVAL", after: "QUEUED" } });
+  await enqueueExportJob(exportRequestId).catch(() => undefined);
+  return request;
+}
+
+export async function rejectExportRequest(user: TenantUser, exportRequestId: string) {
+  const request = await queryOne<ExportRequestRow>(
+    `update "ExportRequest" set status = 'REJECTED', "updatedAt" = $1 where id = $2 and "tenantId" = $3 and status = 'PENDING_APPROVAL' returning *`,
+    [new Date().toISOString(), exportRequestId, user.tenantId],
+  );
+  if (!request) throw new Error("EXPORT_REQUEST_NOT_PENDING_APPROVAL");
+  await createAuditLog(user, "UPDATE", "EXPORT_REQUEST", exportRequestId, null, null, { status: { before: "PENDING_APPROVAL", after: "REJECTED" } });
+  return request;
+}
+
+export async function listExportSensitiveFieldRulesForTenant(user: TenantUser) {
+  if (!user.tenantId) return [];
+  return query<any>(
+    `select id, "moduleName", "fieldKey", "createdAt" from "ExportSensitiveFieldRule" where "tenantId" = $1 order by "moduleName" asc, "fieldKey" asc`,
+    [user.tenantId],
+  );
+}
+
+export async function createExportSensitiveFieldRuleForTenant(user: TenantUser, input: { moduleName?: string; fieldKey?: string }) {
+  if (!user.tenantId) throw new Error("TENANT_REQUIRED");
+  const moduleName = String(input.moduleName || "").toUpperCase();
+  const fieldKey = String(input.fieldKey || "").trim();
+  if (!EXPORT_MODULES.has(moduleName as ExportModuleName)) throw new Error("INVALID_EXPORT_MODULE");
+  if (!fieldKey) throw new Error("FIELD_KEY_REQUIRED");
   try {
-    await enqueueExportJob(id);
+    const rule = await queryOne<any>(
+      `insert into "ExportSensitiveFieldRule" (id, "tenantId", "moduleName", "fieldKey", "createdBy", "createdAt")
+       values ($1, $2, $3, $4, $5, $6)
+       returning id, "moduleName", "fieldKey", "createdAt"`,
+      [randomUUID(), user.tenantId, moduleName, fieldKey, user.id, new Date().toISOString()],
+    );
+    if (!rule) throw new Error("SENSITIVE_FIELD_RULE_INSERT_FAILED");
+    return rule;
   } catch (error) {
-    await execute(`update "ExportRequest" set status = 'FAILED', error = $1, "updatedAt" = $2 where id = $3`, [
-      error instanceof Error ? error.message : "Export queue unavailable",
-      new Date().toISOString(),
-      id,
-    ]);
+    if (error instanceof DatabaseError && error.code === "23505") throw new Error("DUPLICATE_SENSITIVE_FIELD_RULE");
     throw error;
   }
-  return queryOne<ExportRequestRow>(`select * from "ExportRequest" where id = $1`, [id]);
+}
+
+export async function deleteExportSensitiveFieldRuleForTenant(user: TenantUser, ruleId: string) {
+  await execute(`delete from "ExportSensitiveFieldRule" where id = $1 and "tenantId" = $2`, [ruleId, user.tenantId]);
+}
+
+export async function listExportTemplatesForTenant(user: TenantUser) {
+  if (!user.tenantId) return [];
+  return query<any>(
+    `select id, name, "moduleName", filters, columns, "createdAt" from "ExportTemplate" where "tenantId" = $1 order by name asc`,
+    [user.tenantId],
+  );
+}
+
+export async function createExportTemplateForTenant(
+  user: TenantUser,
+  input: { name?: string; moduleName?: string; filters?: Record<string, unknown>; columns?: string[] }
+) {
+  if (!user.tenantId) throw new Error("TENANT_REQUIRED");
+  const name = String(input.name || "").trim();
+  const moduleName = String(input.moduleName || "").toUpperCase();
+  if (!name) throw new Error("EXPORT_TEMPLATE_NAME_REQUIRED");
+  if (!EXPORT_MODULES.has(moduleName as ExportModuleName)) throw new Error("INVALID_EXPORT_MODULE");
+  try {
+    const template = await queryOne<any>(
+      `insert into "ExportTemplate" (id, "tenantId", name, "moduleName", filters, columns, "createdBy", "createdAt", "updatedAt")
+       values ($1, $2, $3, $4, $5, $6, $7, $8, $8)
+       returning id, name, "moduleName", filters, columns, "createdAt"`,
+      [randomUUID(), user.tenantId, name, moduleName, input.filters ?? {}, input.columns ?? [], user.id, new Date().toISOString()],
+    );
+    if (!template) throw new Error("EXPORT_TEMPLATE_INSERT_FAILED");
+    return template;
+  } catch (error) {
+    if (error instanceof DatabaseError && error.code === "23505") throw new Error("DUPLICATE_EXPORT_TEMPLATE_NAME");
+    throw error;
+  }
+}
+
+export async function deleteExportTemplateForTenant(user: TenantUser, templateId: string) {
+  await execute(`delete from "ExportTemplate" where id = $1 and "tenantId" = $2`, [templateId, user.tenantId]);
+}
+
+const DEFAULT_EXPORT_RETENTION_DAYS = 7;
+
+function exportRetentionDays() {
+  const value = Number(process.env.EXPORT_FILE_RETENTION_DAYS);
+  return Number.isFinite(value) && value > 0 ? value : DEFAULT_EXPORT_RETENTION_DAYS;
+}
+
+// Scheduled cleanup: an export file kept forever is a real, quiet data-exposure liability
+// (a link/file that stays downloadable indefinitely long after anyone remembers it exists).
+// Deletes the underlying stored file and marks the request EXPIRED; the ExportRequest row
+// itself (and its audit trail) survives so "someone exported X on date Y" stays answerable.
+export async function processExpiredExportFiles(limit = 50) {
+  const due = await query<{ id: string; fileObjectId: string | null; storageKey: string | null }>(
+    `select er.id, er."fileObjectId", fo."storageKey"
+     from "ExportRequest" er
+     join "FileObject" fo on fo.id = er."fileObjectId"
+     where er.status = 'COMPLETED' and er."expiresAt" is not null and er."expiresAt" <= $1
+     limit $2`,
+    [new Date().toISOString(), limit],
+  );
+  let processed = 0;
+  for (const row of due) {
+    if (row.storageKey) await deletePrivateFile(row.storageKey).catch(() => undefined);
+    await execute(`update "ExportRequest" set status = 'EXPIRED', "fileObjectId" = null, "updatedAt" = $1 where id = $2`, [
+      new Date().toISOString(),
+      row.id,
+    ]);
+    processed += 1;
+  }
+  return { processed };
 }
 
 export async function processExportRequest(exportRequestId: string) {
@@ -627,11 +885,16 @@ export async function processExportRequest(exportRequestId: string) {
   try {
     const content = await fetchExportContent(user, request.moduleName, request.filters ?? {}, request.metadata ?? {});
     const timeZone = await getTenantTimeZone(user.tenantId);
-    const filename = `${content.filenamePrefix}-${formatTenantDate(new Date(), timeZone).replace(/\//g, "-")}-${request.id}.csv`;
+    const contentAny = content as any;
+    const isBufferContent = "buffer" in contentAny;
+    const extension: string = isBufferContent ? contentAny.extension : "csv";
+    const contentType: string = isBufferContent ? contentAny.contentType : "text/csv; charset=utf-8";
+    const bodyBuffer: Buffer = isBufferContent ? contentAny.buffer : Buffer.from(contentAny.csv, "utf8");
+    const filename = `${content.filenamePrefix}-${formatTenantDate(new Date(), timeZone).replace(/\//g, "-")}-${request.id}.${extension}`;
     const storageKey = `exports/${request.tenantId}/${request.userId}/${filename}`;
-    const stored = await writePrivateFile(storageKey, Buffer.from(content.csv, "utf8"), {
+    const stored = await writePrivateFile(storageKey, bodyBuffer, {
       bucket: "exports",
-      contentType: "text/csv; charset=utf-8",
+      contentType,
     });
     const completedAt = new Date().toISOString();
 
@@ -657,11 +920,12 @@ export async function processExportRequest(exportRequestId: string) {
           completedAt,
         ],
       );
+      const expiresAt = new Date(new Date(completedAt).getTime() + exportRetentionDays() * 24 * 60 * 60 * 1000).toISOString();
       await tx.query(
         `update "ExportRequest"
-         set status = 'COMPLETED', "recordCount" = $1, "fileObjectId" = $2, "completedAt" = $3, "updatedAt" = $3
+         set status = 'COMPLETED', "recordCount" = $1, "fileObjectId" = $2, "completedAt" = $3, "updatedAt" = $3, "expiresAt" = $5
          where id = $4`,
-        [content.recordCount, fileObjectId, completedAt, request.id],
+        [content.recordCount, fileObjectId, completedAt, request.id, expiresAt],
       );
       await tx.query(
         `insert into "Notification" (id, "tenantId", "userId", title, message, data, "isRead", "createdAt", "readAt")
@@ -692,6 +956,7 @@ export async function processExportRequest(exportRequestId: string) {
 
 export async function getExportDownloadForUser(user: TenantUser, exportRequestId: string) {
   if (!user.tenantId) throw new Error("TENANT_REQUIRED");
+  await assertAccountActiveForDownload(user as any);
   const row = await queryOne<{
     id: string;
     status: string;
@@ -699,8 +964,9 @@ export async function getExportDownloadForUser(user: TenantUser, exportRequestId
     storageKey: string | null;
     originalFilename: string | null;
     contentType: string | null;
+    expiresAt: string | null;
   }>(
-    `select er.id, er.status, er."fileObjectId", fo."storageKey", fo."originalFilename", fo."contentType"
+    `select er.id, er.status, er."fileObjectId", er."expiresAt", fo."storageKey", fo."originalFilename", fo."contentType"
      from "ExportRequest" er
      left join "FileObject" fo on fo.id = er."fileObjectId"
      where er.id = $1 and er."tenantId" = $2 and er."userId" = $3
@@ -708,10 +974,62 @@ export async function getExportDownloadForUser(user: TenantUser, exportRequestId
     [exportRequestId, user.tenantId, user.id],
   );
   if (!row) throw new Error("EXPORT_REQUEST_NOT_FOUND");
+  if (row.status === "EXPIRED" || (row.expiresAt && new Date(row.expiresAt).getTime() <= Date.now())) throw new Error("EXPORT_EXPIRED");
   if (row.status !== "COMPLETED" || !row.storageKey) throw new Error("EXPORT_NOT_READY");
+  const buffer = await readPrivateFile(row.storageKey);
+  await createAuditLog(user, "DOWNLOAD", "EXPORT_REQUEST", exportRequestId, null, { filename: row.originalFilename }, null).catch(() => undefined);
   return {
     filename: row.originalFilename || `${exportRequestId}.csv`,
     contentType: row.contentType || "text/csv; charset=utf-8",
-    buffer: await readPrivateFile(row.storageKey),
+    buffer,
+  };
+}
+
+// Same additive "shareable expiring link" pattern as mintPartnerInvoiceDownloadToken -- the
+// existing authenticated route above is unchanged; this is a new capability for a user who
+// wants to hand someone else (or a script, or a different device without re-logging in) a
+// link that itself works for a limited time, without sharing their session.
+export async function mintExportDownloadToken(user: TenantUser, exportRequestId: string, expiresInSeconds = 3600) {
+  if (!user.tenantId) throw new Error("TENANT_REQUIRED");
+  await assertAccountActiveForDownload(user as any);
+  const row = await queryOne<{ id: string; status: string }>(
+    `select id, status from "ExportRequest" where id = $1 and "tenantId" = $2 and "userId" = $3 limit 1`,
+    [exportRequestId, user.tenantId, user.id],
+  );
+  if (!row) throw new Error("EXPORT_REQUEST_NOT_FOUND");
+  if (row.status !== "COMPLETED") throw new Error("EXPORT_NOT_READY");
+  return generateSignedDownloadToken("export-request", exportRequestId, expiresInSeconds);
+}
+
+export async function getExportDownloadByToken(exportRequestId: string, token: string | null) {
+  const verification = verifySignedDownloadToken("export-request", exportRequestId, token);
+  if (!verification.valid) throw new Error(`INVALID_TOKEN:${verification.reason}`);
+
+  const row = await queryOne<{
+    id: string;
+    tenantId: string;
+    userId: string;
+    status: string;
+    storageKey: string | null;
+    originalFilename: string | null;
+    contentType: string | null;
+    expiresAt: string | null;
+  }>(
+    `select er.id, er."tenantId", er."userId", er.status, er."expiresAt", fo."storageKey", fo."originalFilename", fo."contentType"
+     from "ExportRequest" er
+     left join "FileObject" fo on fo.id = er."fileObjectId"
+     where er.id = $1
+     limit 1`,
+    [exportRequestId],
+  );
+  if (!row) throw new Error("EXPORT_REQUEST_NOT_FOUND");
+  if (row.status === "EXPIRED" || (row.expiresAt && new Date(row.expiresAt).getTime() <= Date.now())) throw new Error("EXPORT_EXPIRED");
+  if (row.status !== "COMPLETED" || !row.storageKey) throw new Error("EXPORT_NOT_READY");
+  const buffer = await readPrivateFile(row.storageKey);
+  await createAuditLog({ id: row.userId, tenantId: row.tenantId }, "DOWNLOAD", "EXPORT_REQUEST", exportRequestId, null, { filename: row.originalFilename, viaSignedUrl: true }, null).catch(() => undefined);
+  return {
+    filename: row.originalFilename || `${exportRequestId}.csv`,
+    contentType: row.contentType || "text/csv; charset=utf-8",
+    buffer,
   };
 }

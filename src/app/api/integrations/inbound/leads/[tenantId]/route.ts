@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
-import { createLeadForTenant } from "@/lib/server/crm";
-import { queryOne } from "@/lib/db/query";
 import { badRequest, forbidden, serverError } from "@/lib/server/http";
+import { captureInboundLead, verifyInboundWebhookRequest } from "@/lib/server/inbound-webhooks";
 
 type Params = {
   params: Promise<{ tenantId: string }>;
@@ -11,22 +10,37 @@ export async function POST(request: Request, { params }: Params) {
   try {
     const { tenantId } = await params;
     const url = new URL(request.url);
-    const webhookSecret = process.env.WEBHOOK_SIGNING_SECRET;
-    const suppliedSecret = request.headers.get("x-webhook-secret") ?? url.searchParams.get("secret");
-    if (!webhookSecret) return forbidden("Webhook signing secret is not configured");
-    if (suppliedSecret !== webhookSecret) return forbidden("Invalid webhook secret");
+    const rawBody = await request.text();
 
-    const body = await request.json().catch(() => null);
-    if (!body?.name) return badRequest("Lead name is required");
+    const auth = await verifyInboundWebhookRequest(tenantId, rawBody, {
+      signature: request.headers.get("x-webhook-signature"),
+      timestamp: request.headers.get("x-webhook-timestamp"),
+      legacySecret: request.headers.get("x-webhook-secret") ?? url.searchParams.get("secret"),
+    });
+    if (!auth.ok) {
+      if (auth.reason === "STALE_TIMESTAMP") return forbidden("Request timestamp is missing or outside the allowed window");
+      return forbidden("Invalid or missing webhook signature");
+    }
 
-    const user = await queryOne<{ id: string; name: string | null; email: string | null; tenantId: string }>(
-      `select id, name, email, "tenantId" from "User" where "tenantId" = $1 order by "createdAt" asc limit 1`,
-      [tenantId],
-    );
-    if (!user?.id) return badRequest("No active tenant user found for inbound capture");
+    let body: any = null;
+    try {
+      body = rawBody ? JSON.parse(rawBody) : null;
+    } catch {
+      return badRequest("Request body must be valid JSON");
+    }
 
-    const lead = await createLeadForTenant(user, { ...body, source: body.source ?? "Inbound Webhook" });
-    return NextResponse.json(lead);
+    const idempotencyKey = request.headers.get("x-idempotency-key");
+
+    try {
+      const result = await captureInboundLead(tenantId, body, idempotencyKey);
+      if (result.duplicate) return NextResponse.json({ duplicate: true, leadId: result.leadId });
+      return NextResponse.json(result.lead);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Failed to capture inbound lead";
+      if (message.startsWith("VALIDATION:")) return badRequest(message.slice("VALIDATION:".length));
+      if (message === "NO_TENANT_USER") return badRequest("No active tenant user found for inbound capture");
+      throw error;
+    }
   } catch (error) {
     return serverError("Failed to capture inbound lead", error);
   }

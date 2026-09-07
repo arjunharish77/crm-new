@@ -3,19 +3,21 @@
 import { useEffect, useState, useCallback, useMemo } from "react";
 import { apiFetch } from "@/lib/api";
 import { ColumnDef } from "@tanstack/react-table";
-import { Pencil, Shield, UserPlus, UserX, Users } from "lucide-react";
+import { Copy, KeyRound, Laptop, Pencil, Shield, ShieldOff, UserPlus, UserX, Users } from "lucide-react";
+import { Input } from "@/components/ui/input";
 import { DataTable } from "@/components/ui/data-table";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
-import { Button as IconButton } from "@/components/ui/button";
+import { Button, Button as IconButton } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { toast } from "sonner";
-import { formatWorkspaceDateTime } from "@/lib/date-format";
+import { formatWorkspaceDateTime, formatWorkspaceRelativeTime } from "@/lib/date-format";
 import { User } from "@/types/user";
 import { InviteUserDialog } from "./invite-user-dialog";
 import { EditUserDialog } from "./edit-user-dialog";
 import { BulkActionsToolbar } from "@/components/bulk-actions/bulk-toolbar";
 import { BulkAssignManagerDialog } from "./bulk-assign-manager-dialog";
+import { StandardDialog } from "@/components/common/standard-dialog";
 
 export default function UsersPage() {
     const [users, setUsers] = useState<User[]>([]);
@@ -26,6 +28,13 @@ export default function UsersPage() {
     const [selectedRows, setSelectedRows] = useState<string[]>([]);
     const [isAllSelected, setIsAllSelected] = useState(false);
     const [totalItems, setTotalItems] = useState(0);
+    const [sessionsFor, setSessionsFor] = useState<User | null>(null);
+    const [sessions, setSessions] = useState<any[]>([]);
+    const [loadingSessions, setLoadingSessions] = useState(false);
+    const [revokingSessionId, setRevokingSessionId] = useState<string | null>(null);
+    const [resettingMfaId, setResettingMfaId] = useState<string | null>(null);
+    const [generatingResetLinkId, setGeneratingResetLinkId] = useState<string | null>(null);
+    const [resetLink, setResetLink] = useState<{ userName: string; url: string; expiresAt: string } | null>(null);
 
     const fetchUsers = useCallback(async () => {
         setLoading(true);
@@ -55,6 +64,62 @@ export default function UsersPage() {
     const handleEdit = (user: User) => {
         setUserToEdit(user);
         setEditDialogOpen(true);
+    };
+
+    const viewSessions = async (user: User) => {
+        setSessionsFor(user);
+        setLoadingSessions(true);
+        try {
+            const data = await apiFetch<any[]>(`/admin/users/${user.id}/sessions`);
+            setSessions(Array.isArray(data) ? data : []);
+        } catch (error: any) {
+            toast.error(error?.message || "Failed to load sessions");
+        } finally {
+            setLoadingSessions(false);
+        }
+    };
+
+    const revokeUserSession = async (sessionId: string) => {
+        if (!sessionsFor) return;
+        setRevokingSessionId(sessionId);
+        try {
+            await apiFetch(`/admin/users/${sessionsFor.id}/sessions/${sessionId}`, { method: "DELETE" });
+            toast.success("Session revoked");
+            viewSessions(sessionsFor);
+        } catch (error: any) {
+            toast.error(error?.message || "Failed to revoke session");
+        } finally {
+            setRevokingSessionId(null);
+        }
+    };
+
+    const resetUserMfa = async (user: User) => {
+        if (!confirm(`Reset two-factor authentication for ${user.name || user.email}? They will need to re-enroll, and their backup codes and remembered devices will be cleared.`)) return;
+        setResettingMfaId(user.id);
+        try {
+            await apiFetch(`/admin/users/${user.id}/mfa/reset`, { method: "POST" });
+            toast.success("MFA reset -- the user can log in with just their password and re-enroll");
+        } catch (error: any) {
+            toast.error(error?.message || "Failed to reset MFA");
+        } finally {
+            setResettingMfaId(null);
+        }
+    };
+
+    const generatePasswordResetLink = async (user: User) => {
+        setGeneratingResetLinkId(user.id);
+        try {
+            const result = await apiFetch<{ token: string; expiresAt: string }>(`/admin/users/${user.id}/password-reset-token`, { method: "POST" });
+            setResetLink({
+                userName: user.name || user.email,
+                url: `${window.location.origin}/reset-password?token=${result.token}`,
+                expiresAt: result.expiresAt,
+            });
+        } catch (error: any) {
+            toast.error(error?.message || "Failed to generate reset link");
+        } finally {
+            setGeneratingResetLinkId(null);
+        }
     };
 
     const handleDeactivate = async (ids: string[]) => {
@@ -200,6 +265,53 @@ export default function UsersPage() {
                         </TooltipTrigger>
                         <TooltipContent>Edit User</TooltipContent>
                     </Tooltip>
+                    <Tooltip>
+                        <TooltipTrigger asChild>
+                            <IconButton
+                                variant="ghost"
+                                size="icon-sm"
+                                onClick={(event) => {
+                                    event.stopPropagation();
+                                    viewSessions(row.original);
+                                }}
+                            >
+                                <Laptop className="size-4" />
+                            </IconButton>
+                        </TooltipTrigger>
+                        <TooltipContent>Active Sessions</TooltipContent>
+                    </Tooltip>
+                    <Tooltip>
+                        <TooltipTrigger asChild>
+                            <IconButton
+                                variant="ghost"
+                                size="icon-sm"
+                                disabled={resettingMfaId === row.original.id}
+                                onClick={(event) => {
+                                    event.stopPropagation();
+                                    resetUserMfa(row.original);
+                                }}
+                            >
+                                <ShieldOff className="size-4" />
+                            </IconButton>
+                        </TooltipTrigger>
+                        <TooltipContent>Reset MFA</TooltipContent>
+                    </Tooltip>
+                    <Tooltip>
+                        <TooltipTrigger asChild>
+                            <IconButton
+                                variant="ghost"
+                                size="icon-sm"
+                                disabled={generatingResetLinkId === row.original.id}
+                                onClick={(event) => {
+                                    event.stopPropagation();
+                                    generatePasswordResetLink(row.original);
+                                }}
+                            >
+                                <KeyRound className="size-4" />
+                            </IconButton>
+                        </TooltipTrigger>
+                        <TooltipContent>Generate Password Reset Link</TooltipContent>
+                    </Tooltip>
                     {row.original.status === 'ACTIVE' && (
                         <Tooltip>
                             <TooltipTrigger asChild>
@@ -221,7 +333,7 @@ export default function UsersPage() {
                 </div>
             ),
         },
-    ], [handleDeactivate]);
+    ], [handleDeactivate, resettingMfaId, generatingResetLinkId]);
 
     const [assignManagerDialogOpen, setAssignManagerDialogOpen] = useState(false);
 
@@ -327,6 +439,68 @@ export default function UsersPage() {
                     clearSelection();
                 }}
             />
+
+            <StandardDialog
+                open={!!sessionsFor}
+                onClose={() => setSessionsFor(null)}
+                title={`Active Sessions -- ${sessionsFor?.name ?? ""}`}
+                maxWidth="md"
+                actions={<Button variant="outline" onClick={() => setSessionsFor(null)}>Close</Button>}
+            >
+                <div className="space-y-2 py-2">
+                    {loadingSessions ? (
+                        <p className="text-sm text-muted-foreground">Loading...</p>
+                    ) : sessions.length === 0 ? (
+                        <p className="text-sm text-muted-foreground">No active sessions.</p>
+                    ) : (
+                        sessions.map((session) => (
+                            <div key={session.id} className="flex items-center justify-between gap-3 rounded-lg border p-3">
+                                <div>
+                                    <p className="text-sm font-medium">{session.userAgent || "Unknown device"}</p>
+                                    <p className="text-xs text-muted-foreground">
+                                        {session.ipAddress || "Unknown IP"} -- last active {formatWorkspaceRelativeTime(session.lastActiveAt)}
+                                    </p>
+                                </div>
+                                <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    disabled={revokingSessionId === session.id}
+                                    onClick={() => revokeUserSession(session.id)}
+                                >
+                                    Revoke
+                                </Button>
+                            </div>
+                        ))
+                    )}
+                </div>
+            </StandardDialog>
+
+            <StandardDialog
+                open={!!resetLink}
+                onClose={() => setResetLink(null)}
+                title={`Password Reset Link -- ${resetLink?.userName ?? ""}`}
+                maxWidth="sm"
+                actions={<Button variant="outline" onClick={() => setResetLink(null)}>Close</Button>}
+            >
+                {resetLink && (
+                    <div className="space-y-3 py-2">
+                        <p className="text-sm text-muted-foreground">
+                            Share this link with the user directly (Slack, in person, etc.) -- this app doesn&apos;t send
+                            reset emails. It expires {formatWorkspaceDateTime(resetLink.expiresAt)} and can only be used once.
+                        </p>
+                        <div className="flex gap-2">
+                            <Input readOnly value={resetLink.url} className="font-mono text-xs" onFocus={(event) => event.target.select()} />
+                            <Button
+                                variant="outline"
+                                size="icon"
+                                onClick={() => navigator.clipboard.writeText(resetLink.url).then(() => toast.success("Link copied"))}
+                            >
+                                <Copy className="size-4" />
+                            </Button>
+                        </div>
+                    </div>
+                )}
+            </StandardDialog>
         </div>
     );
 }

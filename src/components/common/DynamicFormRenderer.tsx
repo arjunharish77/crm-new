@@ -10,6 +10,7 @@ import { useObjectMetadata } from '@/hooks/use-object-metadata';
 import { MuiDynamicField } from '@/components/forms/mui-dynamic-field';
 import { apiFetch } from '@/lib/api';
 import { toast } from 'sonner';
+import { useRegisterShortcut } from '@/lib/keyboard-shortcuts';
 
 const RESOURCE_PATHS: Record<string, string> = {
     lead: '/leads',
@@ -137,6 +138,20 @@ export function DynamicFormRenderer({
             setIsSaving(false);
         }
     };
+
+    // Gap checklist Module 10's keyboard shortcut system, "save" sub-item -- this component
+    // backs every entity's create/edit form (Lead/Opportunity/Activity today), so wiring it here
+    // once covers all of them rather than each dialog re-implementing its own save shortcut.
+    // Registered only while this form is actually mounted (a create dialog while open, an edit
+    // dialog while open) -- Radix Dialog unmounts its content on close, so no extra open-state
+    // tracking is needed here.
+    useRegisterShortcut({
+        id: `save-${objectName || metadata?.name || 'form'}`,
+        combo: { key: 's', meta: true },
+        description: `Save ${initialData?.id ? 'changes' : `new ${objectName || metadata?.name || 'record'}`}`,
+        group: objectName ? objectName.charAt(0).toUpperCase() + objectName.slice(1) : 'Form',
+        handler: () => handleSubmit(onSubmit)(),
+    });
 
     if (isMetadataLoading) {
         return (

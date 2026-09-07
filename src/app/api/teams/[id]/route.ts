@@ -1,9 +1,23 @@
 import { NextResponse } from "next/server";
 import { requireCurrentUser } from "@/lib/server/auth";
-import { deleteTeamForTenant, updateTeamForTenant } from "@/lib/server/admin-modules";
+import { deleteTeamForTenant, getTeamForTenant, updateTeamForTenant } from "@/lib/server/admin-modules";
 import { forbidden, serverError, unauthorized } from "@/lib/server/http";
 
 type Params = { params: Promise<{ id: string }> };
+
+export async function GET(request: Request, { params }: Params) {
+  try {
+    const user = await requireCurrentUser(request);
+    if (!user.tenantId) return forbidden("Tenant context required");
+    const { id } = await params;
+    const team = await getTeamForTenant(user, id);
+    if (!team) return NextResponse.json({ message: "Team not found" }, { status: 404 });
+    return NextResponse.json(team);
+  } catch (error) {
+    if (error instanceof Error && error.message === "UNAUTHORIZED") return unauthorized();
+    return serverError("Failed to fetch team", error);
+  }
+}
 
 export async function PATCH(request: Request, { params }: Params) {
   try {

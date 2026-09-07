@@ -73,7 +73,7 @@ async function usersById(tenantId: string, userIds: string[]) {
 export async function listTeamsForTenant(user: TenantUser) {
   const tenantId = requireTenantId(user);
   const teams = await query<any>(
-    'select id, name, description, "leadId", department, "workingHours", timezone, "isActive", "createdAt", "updatedAt" from "Team" where "tenantId"::text = $1 order by "createdAt" desc',
+    'select id, name, description, "leadId", department, "workingHours", timezone, "isActive", "defaultRoleId", "defaultSalesGroupId", "createdAt", "updatedAt" from "Team" where "tenantId"::text = $1 order by "createdAt" desc',
     [tenantId],
   );
   const teamIds = teams.map((team) => String(team.id));
@@ -91,6 +91,27 @@ export async function listTeamsForTenant(user: TenantUser) {
   });
 }
 
+// Gap checklist Module 17's "embedded analytics surfaces" sub-item ("partner/counselor/team
+// mini dashboards") -- the previously-missing per-team detail page needs a single-team fetch,
+// which didn't exist before (only the tenant-wide list did).
+export async function getTeamForTenant(user: TenantUser, teamId: string) {
+  const tenantId = requireTenantId(user);
+  const team = await queryOne<any>(
+    'select id, name, description, "leadId", department, "workingHours", timezone, "isActive", "defaultRoleId", "defaultSalesGroupId", "createdAt", "updatedAt" from "Team" where "tenantId"::text = $1 and id::text = $2 limit 1',
+    [tenantId, teamId],
+  );
+  if (!team) return null;
+  const members = await query<any>(
+    'select id, "teamId", "userId", role, "joinedAt" from "TeamMember" where "tenantId"::text = $1 and "teamId"::text = $2',
+    [tenantId, teamId],
+  );
+  const userMap = await usersById(tenantId, [...new Set(members.map((member) => member.userId).filter(Boolean))]);
+  const teamMembers = members
+    .map((member) => ({ ...member, user: userMap.get(member.userId) ?? null }))
+    .filter((member) => member.user);
+  return { ...team, members: teamMembers, memberCount: teamMembers.length, _count: { members: teamMembers.length } };
+}
+
 export async function createTeamForTenant(user: TenantUser, input: Record<string, unknown>) {
   const tenantId = requireTenantId(user);
   const now = new Date().toISOString();
@@ -104,20 +125,28 @@ export async function createTeamForTenant(user: TenantUser, input: Record<string
     workingHours: input.workingHours ?? null,
     timezone: input.timezone ? String(input.timezone) : "UTC",
     isActive: input.isActive !== false,
+    defaultRoleId: input.defaultRoleId || null,
+    defaultSalesGroupId: input.defaultSalesGroupId || null,
     createdAt: now,
     updatedAt: now,
-  }, 'id, name, description, "leadId", department, "workingHours", timezone, "isActive", "createdAt", "updatedAt"');
+  }, 'id, name, description, "leadId", department, "workingHours", timezone, "isActive", "defaultRoleId", "defaultSalesGroupId", "createdAt", "updatedAt"');
   return { ...data, memberCount: 0, _count: { members: 0 }, members: [] };
 }
 
 export async function updateTeamForTenant(user: TenantUser, id: string, input: Record<string, unknown>) {
   const tenantId = requireTenantId(user);
   const payload: Record<string, unknown> = { updatedAt: new Date().toISOString() };
-  for (const key of ["name", "description", "leadId", "department", "workingHours", "timezone", "isActive"]) {
+  for (const key of ["name", "description", "leadId", "department", "workingHours", "timezone", "isActive", "defaultRoleId", "defaultSalesGroupId"]) {
     if (key in input) payload[key] = input[key] || null;
   }
   if ("leadId" in payload) payload.leadId = asUuidOrNull(payload.leadId);
-  return updateReturning<any>("Team", payload, 'where "tenantId"::text = $1 and id::text = $2', [tenantId, id], 'id, name, description, "leadId", department, "workingHours", timezone, "isActive", "createdAt", "updatedAt"');
+  return updateReturning<any>(
+    "Team",
+    payload,
+    'where "tenantId"::text = $1 and id::text = $2',
+    [tenantId, id],
+    'id, name, description, "leadId", department, "workingHours", timezone, "isActive", "defaultRoleId", "defaultSalesGroupId", "createdAt", "updatedAt"',
+  );
 }
 
 export async function deleteTeamForTenant(user: TenantUser, id: string) {

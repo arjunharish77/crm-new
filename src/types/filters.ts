@@ -20,13 +20,13 @@ export type FilterOperator =
     | 'includes_all'
     | 'includes_any';
 
-export type FilterFieldType = 'text' | 'number' | 'date' | 'select' | 'tags' | 'boolean';
+export type FilterFieldType = 'text' | 'number' | 'date' | 'select' | 'tags' | 'boolean' | 'user';
 
 export interface FilterField {
     key: string;
     label: string;
     type: FilterFieldType;
-    options?: { label: string; value: string }[]; // For select fields
+    options?: { label: string; value: string }[]; // For select/user fields
 }
 
 export interface FilterCondition {
@@ -93,5 +93,15 @@ export const OPERATORS_BY_TYPE: Record<FilterFieldType, { value: FilterOperator;
     ],
     boolean: [
         { value: 'equals', label: 'Is' },
+    ],
+    // "Current user/team tokens" (gap checklist's universal advanced filter drawer sub-item) --
+    // options are real users PLUS the special "@me"/"@myteam" tokens the drawer prepends.
+    user: [
+        { value: 'equals', label: 'Equals' },
+        { value: 'not_equals', label: 'Does not equal' },
+        { value: 'in', label: 'Is one of' },
+        { value: 'not_in', label: 'Is not one of' },
+        { value: 'is_empty', label: 'Is empty' },
+        { value: 'is_not_empty', label: 'Is not empty' },
     ],
 };

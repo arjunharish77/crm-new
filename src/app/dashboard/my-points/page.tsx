@@ -12,6 +12,7 @@ import { TableSkeleton } from "@/components/common/skeletons";
 import { EmptyState } from "@/components/common/empty-state";
 import { formatWorkspaceDateTime } from "@/lib/date-format";
 import { cn } from "@/lib/utils";
+import { useFeature } from "@/components/auth/feature-gate";
 
 type LedgerEntry = {
     id: string;
@@ -48,6 +49,7 @@ type Redemption = {
 };
 
 export default function MyPointsPage() {
+    const gamificationEnabled = useFeature("gamificationEnabled");
     const [ledger, setLedger] = useState<LedgerEntry[]>([]);
     const [balance, setBalance] = useState(0);
     const [badges, setBadges] = useState<UserBadgeRow[]>([]);
@@ -100,6 +102,14 @@ export default function MyPointsPage() {
             setRedeemingKey(null);
         }
     };
+
+    if (!gamificationEnabled) {
+        return (
+            <div className="mx-auto max-w-[1000px] p-4 md:p-6">
+                <EmptyState title="Gamification isn't enabled" description="This feature isn't enabled for your workspace. Contact your admin if you think this is a mistake." />
+            </div>
+        );
+    }
 
     return (
         <motion.div variants={fadeInUp} initial="initial" animate="animate" className="mx-auto max-w-[1000px] p-4 md:p-6">

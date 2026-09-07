@@ -9,11 +9,17 @@ import {
 } from "@/lib/server/partner-access";
 import { query, queryOne } from "@/lib/db/query";
 import { formatTenantDate, getTenantTimeZone } from "@/lib/server/date-format";
+import { assertFeatureEnabled } from "@/lib/server/entitlements";
+import { assertNotImpersonating } from "@/lib/server/sessions";
 
 type TenantUser = {
   id: string;
   tenantId: string | null;
+  isPartner?: boolean;
+  isTenantAdmin?: boolean;
+  isPlatformAdmin?: boolean;
   role?: { permissions?: any } | string | null;
+  isImpersonating?: boolean;
 };
 
 export type PartnerPayoutSettingsInput = {
@@ -227,6 +233,7 @@ export async function generateNextPayoutCycle(user: TenantUser) {
   if (!user.tenantId) {
     throw new Error("TENANT_CONTEXT_REQUIRED");
   }
+  await assertFeatureEnabled(user.tenantId, "payoutsEnabled", { isPlatformAdmin: user.isPlatformAdmin });
 
   const settings = await getPartnerPayoutSettingsForTenant(user);
   if (!settings) {
@@ -265,6 +272,7 @@ export async function computePayoutsForCycle(user: TenantUser, cycleId: string) 
   if (!user.tenantId) {
     throw new Error("TENANT_CONTEXT_REQUIRED");
   }
+  await assertFeatureEnabled(user.tenantId, "payoutsEnabled", { isPlatformAdmin: user.isPlatformAdmin });
 
   const settings = await getPartnerPayoutSettingsForTenant(user);
   const cycle = await queryOne<any>(
@@ -411,9 +419,40 @@ export async function listPayoutsForPartner(user: TenantUser, partnerId: string)
   );
 }
 
+// Gap checklist Module 17's "embedded analytics surfaces" sub-item ("partner mini dashboards").
+// Deliberately NOT the same function as listPayoutsForPartner above -- that one resolves
+// visibility from the CALLER's own PartnerProfile/rollup-target set (self-service or a partner
+// manager viewing their own sub-partners), which returns an empty list for a genuine tenant
+// admin (an admin has no PartnerProfile of their own to resolve a rollup target from) -- a real
+// gap caught by reading that function fully rather than assuming it already covered the admin
+// case. This one is gated on tenant-admin/platform-admin status directly instead.
+export async function listPayoutsForPartnerAsAdmin(user: TenantUser, partnerId: string) {
+  if (!user.tenantId) return [];
+  if (!user.isTenantAdmin && !user.isPlatformAdmin) return [];
+
+  return query<any>(
+    `select id, "tenantId", "payoutCycleId", "partnerId", "partnerOrganizationId", "totalCommissionAmount", status,
+            "invoiceId", "approvedAt", "approvedBy", "paidAt", "paidBy", "paymentReference", "isHeld",
+            "holdReason", "heldAt", "heldBy", "releasedAt", "releasedBy", "createdAt", "updatedAt"
+     from "Payout"
+     where "tenantId" = $1 and "partnerId" = $2
+     order by "createdAt" desc`,
+    [user.tenantId, partnerId],
+  );
+}
+
 export async function canCurrentUserAccessPayoutModule(user: TenantUser) {
   const settings = await getPartnerPayoutSettingsForTenant(user);
   return canAccessPayoutModule(user, settings);
+}
+
+// Shared guard for the partners/me/* self-service payout endpoints -- previously
+// each route duplicated `if (!user.isPartner || !(await canCurrentUserAccessPayoutModule(user)))`
+// inline; consolidated here so the three call sites can't drift from each other.
+export async function requirePartnerPayoutAccess(user: TenantUser) {
+  if (!user.isPartner || !(await canCurrentUserAccessPayoutModule(user))) {
+    throw new Error("PAYOUTS_NOT_VISIBLE_FOR_USER");
+  }
 }
 
 const ALLOWED_TRANSITIONS: Record<string, string[]> = {
@@ -429,9 +468,13 @@ async function transitionPayoutStatus(
   nextStatus: "APPROVED" | "INVOICED" | "PAID",
   extra: Record<string, unknown> = {}
 ) {
+  // Single choke point for approve/invoice/mark-paid -- one guard here covers all three
+  // financial-transition entry points named in the impersonation-governance checklist item.
+  assertNotImpersonating(user, `payout_${nextStatus.toLowerCase()}`);
   if (!user.tenantId) {
     throw new Error("TENANT_CONTEXT_REQUIRED");
   }
+  await assertFeatureEnabled(user.tenantId, "payoutsEnabled", { isPlatformAdmin: user.isPlatformAdmin });
 
   const existing = await queryOne<any>(
     `select id, "tenantId", "payoutCycleId", "partnerId", "partnerOrganizationId", "totalCommissionAmount", status,
@@ -452,8 +495,16 @@ async function transitionPayoutStatus(
   if (nextStatus === "APPROVED" && Number(existing.totalCommissionAmount ?? 0) < Number(settings?.minimumPayoutAmount ?? 0)) {
     throw new Error("PAYOUT_BELOW_MINIMUM");
   }
-  if (nextStatus === "PAID" && settings?.requireInvoiceBeforePayment !== false && !existing.invoiceId) {
-    throw new Error("INVOICE_REQUIRED_BEFORE_PAYMENT");
+  if (nextStatus === "PAID" && settings?.requireInvoiceBeforePayment !== false) {
+    if (!existing.invoiceId) throw new Error("INVOICE_REQUIRED_BEFORE_PAYMENT");
+    // The linked invoiceId can point at an invoice that was since cancelled (e.g. a
+    // reissue was started but hasn't completed yet) -- re-check its live status rather
+    // than trusting that a non-null invoiceId still means "a valid, ISSUED invoice exists".
+    const invoice = await queryOne<any>(`select status from "PartnerInvoice" where "tenantId" = $1 and id = $2 limit 1`, [
+      user.tenantId,
+      existing.invoiceId,
+    ]);
+    if (!invoice || invoice.status !== "ISSUED") throw new Error("INVOICE_REQUIRED_BEFORE_PAYMENT");
   }
 
   const patch: Record<string, unknown> = { status: nextStatus, updatedAt: new Date().toISOString(), ...extra };
@@ -480,6 +531,7 @@ export async function approvePayout(user: TenantUser, payoutId: string) {
 
 export async function holdPayout(user: TenantUser, payoutId: string, holdReason: string) {
   if (!user.tenantId) throw new Error("TENANT_CONTEXT_REQUIRED");
+  await assertFeatureEnabled(user.tenantId, "payoutsEnabled", { isPlatformAdmin: user.isPlatformAdmin });
   if (!holdReason?.trim()) throw new Error("HOLD_REASON_REQUIRED");
   const existing = await queryOne<any>(
     `select id, "tenantId", "payoutCycleId", "partnerId", "partnerOrganizationId", "totalCommissionAmount", status,
@@ -508,6 +560,7 @@ export async function holdPayout(user: TenantUser, payoutId: string, holdReason:
 
 export async function releasePayoutHold(user: TenantUser, payoutId: string) {
   if (!user.tenantId) throw new Error("TENANT_CONTEXT_REQUIRED");
+  await assertFeatureEnabled(user.tenantId, "payoutsEnabled", { isPlatformAdmin: user.isPlatformAdmin });
   const existing = await queryOne<any>(
     `select id, "tenantId", "payoutCycleId", "partnerId", "partnerOrganizationId", "totalCommissionAmount", status,
             "invoiceId", "approvedAt", "approvedBy", "paidAt", "paidBy", "paymentReference", "isHeld",
@@ -539,6 +592,7 @@ export async function createPayoutAdjustment(
   input: { direction?: "CREDIT" | "DEBIT"; amount?: number; reason?: string | null; notes?: string | null; opportunityId?: string | null }
 ) {
   if (!user.tenantId) throw new Error("TENANT_CONTEXT_REQUIRED");
+  await assertFeatureEnabled(user.tenantId, "payoutsEnabled", { isPlatformAdmin: user.isPlatformAdmin });
   const amount = Number(input.amount ?? 0);
   if (!Number.isFinite(amount) || amount <= 0) throw new Error("INVALID_ADJUSTMENT_AMOUNT");
   if (!input.reason?.trim()) throw new Error("ADJUSTMENT_REASON_REQUIRED");
@@ -610,6 +664,82 @@ export async function createPayoutAdjustment(
   });
 
   return { payout: updatedPayout, ledgerEntry };
+}
+
+// Partner-facing "how was this calculated" explainer: the cycle window, every
+// commission ledger entry that fed into the total (the "included conversions"), and
+// the full hold/release/status/adjustment history from the audit log for this payout.
+export async function getPayoutBreakdownForPartner(user: TenantUser, payoutId: string) {
+  if (!user.tenantId) return null;
+  await assertFeatureEnabled(user.tenantId, "payoutsEnabled", { isPlatformAdmin: user.isPlatformAdmin });
+  const payout = await queryOne<any>(
+    `select id, "tenantId", "payoutCycleId", "partnerId", "partnerOrganizationId", "totalCommissionAmount", status,
+            "invoiceId", "isHeld", "holdReason"
+     from "Payout"
+     where "tenantId" = $1 and id = $2
+     limit 1`,
+    [user.tenantId, payoutId],
+  );
+  if (!payout) return null;
+
+  if (!user.isTenantAdmin && !user.isPlatformAdmin) {
+    const settings = await getPartnerPayoutSettingsForTenant(user);
+    const visibleIds = await getPayoutVisiblePartnerUserIds(user, settings);
+    if (!visibleIds.includes(payout.partnerId)) throw new Error("PAYOUT_NOT_VISIBLE_FOR_USER");
+  }
+
+  const cycle = await queryOne<any>(
+    `select id, "cycleLabel", "startDate", "endDate" from "PayoutCycle" where "tenantId" = $1 and id = $2 limit 1`,
+    [user.tenantId, payout.payoutCycleId],
+  );
+  if (!cycle) throw new Error("PAYOUT_CYCLE_NOT_FOUND");
+
+  const rollupTargets = await resolvePartnerRollupTargets(user.tenantId, [payout.partnerId]);
+  const memberUserIds = rollupTargets.get(payout.partnerId)?.memberUserIds ?? [payout.partnerId];
+
+  const ledgerEntries = await query<any>(
+    `select id, "partnerId", "entryType", "baseAmount", "commissionAmount", "opportunityId", "triggerEvent", "createdAt"
+     from "CommissionLedger"
+     where "tenantId" = $1 and "createdAt" >= $2 and "createdAt" < $3 and "partnerId" = any($4::text[])
+     order by "createdAt" asc`,
+    [user.tenantId, cycle.startDate, cycle.endDate, memberUserIds],
+  );
+
+  const history = await query<any>(
+    `select id, action, before, after, diff, metadata, "createdAt"
+     from "AuditLog"
+     where "tenantId" = $1 and "entityType" = 'PAYOUT' and "entityId" = $2
+     order by "createdAt" asc`,
+    [user.tenantId, payoutId],
+  );
+
+  return { payout, cycle, ledgerEntries, history };
+}
+
+// Downloadable statement for a partner -- same breakdown data as the explainer, as a
+// plain CSV with friendly headers, for partners who want an offline record.
+export async function generatePayoutStatementCsv(user: TenantUser, payoutId: string) {
+  const breakdown = await getPayoutBreakdownForPartner(user, payoutId);
+  if (!breakdown) return null;
+
+  const escapeCsv = (value: unknown) => {
+    const text = String(value ?? "");
+    const safe = /^[=+\-@]/.test(text) ? `'${text}` : text;
+    return `"${safe.replace(/"/g, '""')}"`;
+  };
+  const lines = [
+    `Payout Statement`,
+    `Cycle,${escapeCsv(breakdown.cycle.cycleLabel)}`,
+    `Status,${escapeCsv(breakdown.payout.status)}`,
+    `Total Commission,${breakdown.payout.totalCommissionAmount}`,
+    "",
+    "Date,Entry Type,Trigger Event,Opportunity,Amount",
+    ...breakdown.ledgerEntries.map(
+      (entry: any) =>
+        `${escapeCsv(entry.createdAt)},${escapeCsv(entry.entryType)},${escapeCsv(entry.triggerEvent ?? "")},${escapeCsv(entry.opportunityId ?? "")},${entry.entryType === "CORRECTION_DEBIT" ? -Number(entry.commissionAmount) : Number(entry.commissionAmount)}`,
+    ),
+  ];
+  return lines.join("\n");
 }
 
 export async function markPayoutPaid(user: TenantUser, payoutId: string, paymentReference: string) {

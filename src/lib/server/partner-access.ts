@@ -1,4 +1,5 @@
 import { query, queryOne } from "@/lib/db/query";
+import { isFeatureEnabledForTenant } from "@/lib/server/entitlements";
 
 type TenantUser = {
   id: string;
@@ -119,7 +120,9 @@ export async function userMatchesTargetingConfig(
 
 export async function canAccessPayoutModule(user: TenantUser, settings?: { payoutVisibilityConfig?: PartnerVisibilityConfig | null } | null) {
   if (!user.tenantId) return false;
-  if (user.isTenantAdmin || user.isPlatformAdmin) return true;
+  if (user.isPlatformAdmin) return true;
+  if (!(await isFeatureEnabledForTenant(user.tenantId, "payoutsEnabled"))) return false;
+  if (user.isTenantAdmin) return true;
 
   const profile = await getPartnerProfileByUserId(user.tenantId, user.id);
   if (!profile || profile.status === "SUSPENDED" || profile.canAccessPayouts === false) return false;

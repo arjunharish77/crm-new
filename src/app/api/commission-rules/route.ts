@@ -32,6 +32,9 @@ export async function POST(request: Request) {
   } catch (error) {
     if (error instanceof Error && error.message === "UNAUTHORIZED") return unauthorized();
     if (error instanceof Error && error.message === "FORBIDDEN") return forbidden();
+    if (error instanceof Error && error.message.startsWith("FEATURE_DISABLED")) {
+      return badRequest("Payouts is not enabled for this workspace");
+    }
     return serverError("Failed to create commission rule", error);
   }
 }

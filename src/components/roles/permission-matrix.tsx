@@ -30,17 +30,24 @@ const MODULES: { key: PermissionModule; label: string }[] = [
     { key: "opportunities", label: "Opportunities" },
     { key: "activities", label: "Activities" },
     { key: "automations", label: "Automations" },
+    { key: "journeys", label: "Marketing Journeys" },
+    { key: "metrics", label: "Metrics" },
     { key: "users", label: "Users" },
     { key: "roles", label: "Roles" },
     { key: "settings", label: "Settings" },
 ];
 
+// "manage" was already a valid PermissionAction (checked server-side by, e.g.,
+// assertJourneyPermission for approve/launch/pause/overrideSuppression) but was never
+// rendered here as a checkbox -- a pre-existing gap, fixed as part of Module 8's journey RBAC
+// since journeys' governance-weight actions map directly onto it.
 const ACTIONS: { key: PermissionAction; label: string }[] = [
     { key: "read", label: "Read" },
     { key: "create", label: "Create" },
     { key: "update", label: "Update" },
     { key: "delete", label: "Delete" },
     { key: "export", label: "Export" },
+    { key: "manage", label: "Manage" },
 ];
 
 export function PermissionMatrix({ permissions, recordAccess, onChange }: PermissionMatrixProps) {

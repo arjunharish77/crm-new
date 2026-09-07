@@ -7,11 +7,14 @@ import { apiFetch } from "@/lib/api";
 import { Card } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ColumnDef } from "@tanstack/react-table";
-import { Eye, ExternalLink, Filter, ListFilter, Pencil, List as ListIcon, Kanban as KanbanIcon, BarChart3 as AnalyticsIcon } from "lucide-react";
+import { Eye, ExternalLink, Filter, ListFilter, Pencil, List as ListIcon, Kanban as KanbanIcon, BarChart3 as AnalyticsIcon, UserCog } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { DataTable } from "@/components/ui/data-table";
 import { Badge } from "@/components/ui/badge";
 import { Button, Button as IconButton } from "@/components/ui/button";
+import { StandardDialog } from "@/components/common/standard-dialog";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { toast } from "sonner";
 import Link from "next/link";
@@ -24,26 +27,89 @@ import { formatCurrency } from "@/lib/utils";
 import { FeatureGate } from "@/components/auth/feature-gate";
 import { TableSkeleton } from "@/components/common/skeletons";
 import { EmptyState } from "@/components/common/empty-state";
-import { FilterBuilder } from "@/components/filters/filter-builder";
+import { ErrorState } from "@/components/common/error-state";
+import { AdvancedFilterDrawer, FilterGroup } from "@/components/filters/advanced-filter-drawer";
 import { FilterConfig, FilterField } from "@/types/filters";
+import { getSavedViewMode, saveViewMode } from "@/lib/workspace-layout";
+import { isAbortError, useAbortableRequest } from "@/hooks/use-abortable-request";
 import { PredictiveScoreBadge } from "@/components/scoring/predictive-score";
+import { NbaCountChip } from "@/components/next-best-action/nba-count-chip";
 import { QueueExportButton } from "@/components/exports/queue-export-button";
 import { ContextualFormsPanel } from "@/components/forms/contextual-forms-panel";
 
 const EMPTY_FILTERS: FilterConfig = { conditions: [], logic: "AND" };
 const SELECTED_TYPE_STORAGE_KEY = "unnatify.opportunities.selectedTypeId";
 
-function filtersToQuery(filters: FilterConfig) {
-    return filters.conditions.length > 0 ? JSON.stringify([filters]) : "";
+// Gap checklist Module 10's universal advanced filter drawer -- serializes the real, possibly
+// multi-group FilterGroup[] the drawer now produces (upgraded from the single flat-group
+// FilterBuilder this page used before), instead of forcing everything through one FilterConfig
+// group the way the old flat builder's own state shape did.
+function groupsToQuery(groups: FilterGroup[]) {
+    const nonEmpty = groups
+        .map((group) => ({ ...group, conditions: group.conditions.filter((condition) => condition.field) }))
+        .filter((group) => group.conditions.length > 0);
+    return nonEmpty.length > 0 ? JSON.stringify(nonEmpty) : "";
+}
+
+function groupsToFilterConfig(groups: FilterGroup[]): FilterConfig {
+    const firstGroup = groups[0];
+    if (!firstGroup) return EMPTY_FILTERS;
+    return {
+        logic: firstGroup.logic,
+        conditions: groups.flatMap((group) =>
+            group.conditions
+                .filter((condition) => condition.field)
+                .map((condition) => ({ id: condition.id, field: condition.field, operator: condition.operator as any, value: condition.value }))
+        ),
+    };
+}
+
+// Gap checklist Module 17, item 25 (embedded analytics surfaces: "view-level count chips"),
+// mirroring the Leads list page's `LeadStatusChips`. Deliberately a self-contained,
+// independently-fetched component -- it doesn't touch this page's existing kanban/list/
+// selection/filter state at all, so it can't regress any of that.
+function OpportunityStageChips() {
+    const [counts, setCounts] = useState<Array<{ stageId: string | null; stageName: string; count: number }>>([]);
+
+    useEffect(() => {
+        apiFetch<Array<{ stageId: string | null; stageName: string; count: number }>>("/opportunities/stage-counts")
+            .then((data) => setCounts(Array.isArray(data) ? data : []))
+            .catch(() => setCounts([]));
+    }, []);
+
+    if (!counts.length) return null;
+    const total = counts.reduce((sum, row) => sum + Number(row.count ?? 0), 0);
+
+    return (
+        <div className="flex flex-wrap items-center gap-1.5 border-b bg-background px-3 py-2">
+            <Badge variant="outline" className="rounded-md text-xs font-bold">{total} total</Badge>
+            {counts.map((row) => (
+                <Badge key={row.stageId ?? "unassigned"} variant="outline" className="rounded-md text-xs font-normal text-muted-foreground">
+                    {row.stageName}: {row.count}
+                </Badge>
+            ))}
+        </div>
+    );
 }
 
 export default function OpportunitiesPage() {
+    // Gap checklist Module 10's "performance UX polish" item, "request cancellation on
+    // tab/filter changes".
+    const nextFetchSignal = useAbortableRequest();
     const [urlFilters, setUrlFilters] = useState("");
     const [filters, setFilters] = useState<FilterConfig>(EMPTY_FILTERS);
+    const [filterGroups, setFilterGroups] = useState<FilterGroup[]>([]);
     const [filterOpen, setFilterOpen] = useState(false);
     const [data, setData] = useState<Opportunity[]>([]);
     const [loading, setLoading] = useState(true);
-    const [viewMode, setViewMode] = useState<'LIST' | 'KANBAN' | 'ANALYTICS'>('LIST');
+    const [viewMode, setViewModeState] = useState<'LIST' | 'KANBAN' | 'ANALYTICS'>(() => {
+        const saved = getSavedViewMode("opportunities");
+        return saved === "KANBAN" || saved === "ANALYTICS" ? saved : "LIST";
+    });
+    const setViewMode = (mode: 'LIST' | 'KANBAN' | 'ANALYTICS') => {
+        setViewModeState(mode);
+        saveViewMode("opportunities", mode);
+    };
     const [opportunityTypes, setOpportunityTypes] = useState<OpportunityType[]>([]);
     const [selectedTypeId, setSelectedTypeId] = useState<string>("ALL");
 
@@ -51,12 +117,21 @@ export default function OpportunitiesPage() {
     const [isAllSelected, setIsAllSelected] = useState(false);
     const [totalItems, setTotalItems] = useState(0);
     const [paginationModel, setPaginationModel] = useState({ page: 0, pageSize: 25 });
+    const [bulkAssignOpen, setBulkAssignOpen] = useState(false);
+    const [bulkAssignUsers, setBulkAssignUsers] = useState<any[]>([]);
+    const [bulkAssignUserId, setBulkAssignUserId] = useState("");
+    const [bulkAssignReason, setBulkAssignReason] = useState("");
+    const [bulkAssignSubmitting, setBulkAssignSubmitting] = useState(false);
 
     const [editOpportunityOpen, setEditOpportunityOpen] = useState(false);
     const [opportunityToEdit, setOpportunityToEdit] = useState<Opportunity | null>(null);
 
+    const [fetchError, setFetchError] = useState<string | null>(null);
+
     const fetchData = useCallback(async () => {
         setLoading(true);
+        setFetchError(null);
+        const signal = nextFetchSignal();
         try {
             const params = new URLSearchParams({
                 page: viewMode === "LIST" ? String(paginationModel.page + 1) : "1",
@@ -64,7 +139,7 @@ export default function OpportunitiesPage() {
             });
             if (selectedTypeId !== "ALL") params.set("opportunityTypeId", selectedTypeId);
             if (urlFilters) params.set("filters", urlFilters);
-            const response = await apiFetch<PaginatedResponse<Opportunity> | Opportunity[]>(`/opportunities?${params.toString()}`);
+            const response = await apiFetch<PaginatedResponse<Opportunity> | Opportunity[]>(`/opportunities?${params.toString()}`, { signal });
 
             if ('meta' in response && response.data) {
                 setData(response.data);
@@ -74,11 +149,16 @@ export default function OpportunitiesPage() {
                 setTotalItems(response.length);
             }
         } catch (error) {
+            // A superseded request (view mode/type/filters changed again before this one
+            // resolved) -- the newer fetchData call already owns state, so this stale one must
+            // not show an error or touch state at all.
+            if (isAbortError(error)) return;
             toast.error("Failed to fetch opportunities");
+            setFetchError("Failed to load opportunities.");
         } finally {
-            setLoading(false);
+            if (!signal.aborted) setLoading(false);
         }
-    }, [paginationModel.page, paginationModel.pageSize, selectedTypeId, urlFilters, viewMode]);
+    }, [paginationModel.page, paginationModel.pageSize, selectedTypeId, urlFilters, viewMode, nextFetchSignal]);
 
     const fetchTypes = useCallback(async () => {
         try {
@@ -101,10 +181,21 @@ export default function OpportunitiesPage() {
         setUrlFilters(new URLSearchParams(window.location.search).get("filters") ?? "");
     }, []);
 
-    const applyFilters = useCallback((nextFilters: FilterConfig) => {
-        setFilters(nextFilters);
-        setUrlFilters(filtersToQuery(nextFilters));
+    const applyFilterGroups = useCallback((groups: FilterGroup[]) => {
+        setFilterGroups(groups);
+        setFilters(groupsToFilterConfig(groups));
+        setUrlFilters(groupsToQuery(groups));
     }, []);
+
+    // "Query preview/count" -- reuses this page's own /opportunities endpoint with limit=1.
+    const previewFilterCount = useCallback(async (groups: FilterGroup[]) => {
+        const params = new URLSearchParams({ page: "1", limit: "1" });
+        if (selectedTypeId !== "ALL") params.set("opportunityTypeId", selectedTypeId);
+        const query = groupsToQuery(groups);
+        if (query) params.set("filters", query);
+        const response = await apiFetch<PaginatedResponse<Opportunity> | Opportunity[]>(`/opportunities?${params.toString()}`);
+        return "meta" in response ? response.meta.total : Array.isArray(response) ? response.length : 0;
+    }, [selectedTypeId]);
 
     useEffect(() => {
         fetchTypes();
@@ -113,6 +204,10 @@ export default function OpportunitiesPage() {
     useEffect(() => {
         fetchData();
     }, [fetchData]);
+
+    useEffect(() => {
+        apiFetch<any[]>("/users").then(setBulkAssignUsers).catch(() => undefined);
+    }, []);
 
     const handleTypeChange = useCallback((value: string) => {
         setSelectedTypeId(value);
@@ -169,6 +264,41 @@ export default function OpportunitiesPage() {
     const clearSelection = () => {
         setSelectedRows([]);
         setIsAllSelected(false);
+    };
+
+    const handleBulkAssign = async () => {
+        if (!bulkAssignUserId || !bulkAssignReason.trim()) {
+            toast.error("Select a user and enter a reason");
+            return;
+        }
+        if (selectedRows.length === 0) {
+            toast.error("Select at least one opportunity");
+            return;
+        }
+        setBulkAssignSubmitting(true);
+        try {
+            const outcome = await apiFetch<{ reassigned: number; failed: number; pendingApproval: number }>("/assignment/reassign/bulk", {
+                method: "POST",
+                body: JSON.stringify({
+                    entityType: "OPPORTUNITY",
+                    entityIds: selectedRows.map(String),
+                    newOwnerId: bulkAssignUserId,
+                    reason: bulkAssignReason.trim(),
+                }),
+            });
+            toast.success(
+                `${outcome.reassigned} opportunit${outcome.reassigned === 1 ? "y" : "ies"} reassigned` +
+                (outcome.pendingApproval ? `, ${outcome.pendingApproval} submitted for approval` : "") +
+                (outcome.failed ? `, ${outcome.failed} failed` : ""),
+            );
+            setBulkAssignOpen(false);
+            clearSelection();
+            fetchData();
+        } catch {
+            toast.error("Failed to reassign opportunities");
+        } finally {
+            setBulkAssignSubmitting(false);
+        }
     };
 
     const columns = useMemo<ColumnDef<Opportunity, any>[]>(() => [
@@ -243,6 +373,12 @@ export default function OpportunitiesPage() {
                 return a - b;
             },
             cell: ({ row }) => <PredictiveScoreBadge score={row.original.predictiveScore} />,
+        },
+        {
+            accessorKey: 'pendingNbaCount',
+            header: 'Next Best Action',
+            size: 130,
+            cell: ({ row }) => <NbaCountChip count={row.original.pendingNbaCount} />,
         },
         {
             id: 'actions',
@@ -331,7 +467,10 @@ export default function OpportunitiesPage() {
         { key: "predictiveConfidence", label: "Score Confidence", type: "number" },
         { key: "predictiveWinProbability", label: "Win Probability", type: "number" },
         { key: "predictiveStallRisk", label: "Stall Risk", type: "number" },
-    ], [selectedType]);
+        { key: "ownerId", label: "Owner", type: "user", options: bulkAssignUsers.map((u) => ({ label: u.name || u.email, value: u.id })) },
+        { key: "createdAt", label: "Created", type: "date" },
+        { key: "tags", label: "Tags", type: "tags" },
+    ], [selectedType, bulkAssignUsers]);
 
     useEffect(() => {
         clearSelection();
@@ -429,21 +568,15 @@ export default function OpportunitiesPage() {
                     </div>
                 </div>
 
-                <div className="h-px bg-border" />
+                <OpportunityStageChips />
 
-                {filterOpen ? (
-                    <div className="border-b bg-primary/[0.02] px-3 py-3">
-                        <FilterBuilder
-                            fields={filterFields}
-                            value={filters}
-                            onChange={applyFilters}
-                        />
-                    </div>
-                ) : null}
+                <div className="h-px bg-border" />
 
                 <div className="flex-grow overflow-hidden bg-background px-3 py-2">
                         {loading ? (
                             <TableSkeleton rows={10} columns={4} />
+                        ) : fetchError ? (
+                            <ErrorState description={fetchError} onRetry={fetchData} />
                         ) : viewMode === 'KANBAN' ? (
                             !selectedType ? (
                                 <EmptyState
@@ -513,12 +646,60 @@ export default function OpportunitiesPage() {
                     selectedCount={Array.isArray(selectedRows) ? selectedRows.length : 0}
                     onClearSelection={clearSelection}
                     module="opportunities"
+                    onAssignOwner={() => { setBulkAssignUserId(""); setBulkAssignReason(""); setBulkAssignOpen(true); }}
                     onDelete={() => {
                         if (Array.isArray(selectedRows) && selectedRows.length > 0) {
                             handleDelete(selectedRows.map(id => String(id)));
                         }
                     }}
                 />
+
+                <StandardDialog
+                    open={bulkAssignOpen}
+                    onClose={() => setBulkAssignOpen(false)}
+                    title="Reassign selected opportunities"
+                    icon={<UserCog className="size-5" />}
+                    maxWidth="xs"
+                    actions={
+                        <>
+                            <Button variant="ghost" onClick={() => setBulkAssignOpen(false)}>Cancel</Button>
+                            <Button onClick={handleBulkAssign} disabled={!bulkAssignUserId || !bulkAssignReason.trim() || bulkAssignSubmitting}>
+                                <UserCog className="size-4" />
+                                {bulkAssignSubmitting ? "Reassigning..." : "Reassign"}
+                            </Button>
+                        </>
+                    }
+                >
+                    <div className="space-y-3">
+                        <p className="text-sm text-muted-foreground">
+                            Reassign {selectedRows.length} selected opportunit{selectedRows.length === 1 ? "y" : "ies"} to another owner.
+                        </p>
+                        <div className="space-y-2">
+                            <Label>New Owner</Label>
+                            <Select value={bulkAssignUserId} onValueChange={setBulkAssignUserId}>
+                                <SelectTrigger className="w-full">
+                                    <SelectValue placeholder="Select a user" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    {bulkAssignUsers.map((user) => (
+                                        <SelectItem key={user.id} value={user.id}>
+                                            {user.name || user.email || "User"}
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                        </div>
+                        <div className="space-y-2">
+                            <Label>Reason</Label>
+                            <Textarea
+                                placeholder="Why are these opportunities being reassigned?"
+                                rows={2}
+                                value={bulkAssignReason}
+                                onChange={(e) => setBulkAssignReason(e.target.value)}
+                            />
+                        </div>
+                    </div>
+                </StandardDialog>
 
                 {opportunityToEdit && (
                     <EditOpportunityDialog
@@ -532,6 +713,16 @@ export default function OpportunitiesPage() {
                         }}
                     />
                 )}
+
+                <AdvancedFilterDrawer
+                    open={filterOpen}
+                    onClose={() => setFilterOpen(false)}
+                    initialGroups={filterGroups}
+                    storageKey="opportunities"
+                    previewCount={previewFilterCount}
+                    fields={filterFields}
+                    onApply={applyFilterGroups}
+                />
             </div>
         </FeatureGate>
     );

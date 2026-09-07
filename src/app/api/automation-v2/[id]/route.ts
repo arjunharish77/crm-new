@@ -4,7 +4,7 @@ import {
   getAutomationForTenant,
   updateAutomationForTenant,
 } from "@/lib/server/crm";
-import { forbidden, serverError, unauthorized } from "@/lib/server/http";
+import { badRequest, forbidden, serverError, unauthorized } from "@/lib/server/http";
 import { requireInternalUser } from "@/lib/server/auth";
 
 export async function GET(
@@ -36,6 +36,9 @@ export async function PATCH(
   } catch (error) {
     if (error instanceof Error && error.message === "UNAUTHORIZED") return unauthorized();
     if (error instanceof Error && error.message === "FORBIDDEN") return forbidden();
+    if (error instanceof Error && error.message.startsWith("FEATURE_DISABLED")) {
+      return badRequest("Automations is not enabled for this workspace");
+    }
     return serverError("Failed to update automation", error);
   }
 }

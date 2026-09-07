@@ -9,6 +9,7 @@ import { staggerContainer, staggerItem, cardHover, fadeInUp } from "@/lib/motion
 import { toast } from "sonner";
 import { TableSkeleton } from "@/components/common/skeletons";
 import { EmptyState } from "@/components/common/empty-state";
+import { useFeature } from "@/components/auth/feature-gate";
 
 type LeaderboardRow = {
     userId?: string;
@@ -65,6 +66,7 @@ function SegmentedControl<T extends string>({
 }
 
 export default function LeaderboardPage() {
+    const gamificationEnabled = useFeature("gamificationEnabled");
     const [scope, setScope] = useState<"INDIVIDUAL" | "TEAM">("INDIVIDUAL");
     const [range, setRange] = useState("30");
     const [rows, setRows] = useState<LeaderboardRow[]>([]);
@@ -91,6 +93,14 @@ export default function LeaderboardPage() {
     useEffect(() => {
         fetchLeaderboard();
     }, [fetchLeaderboard]);
+
+    if (!gamificationEnabled) {
+        return (
+            <div className="mx-auto max-w-[1000px] p-4 md:p-6">
+                <EmptyState title="Gamification isn't enabled" description="This feature isn't enabled for your workspace. Contact your admin if you think this is a mistake." />
+            </div>
+        );
+    }
 
     return (
         <motion.div

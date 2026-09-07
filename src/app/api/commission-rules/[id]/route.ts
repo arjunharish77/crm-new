@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireTenantAdmin } from "@/lib/server/auth";
 import { deleteCommissionRuleForTenant, updateCommissionRuleForTenant } from "@/lib/server/commission";
-import { forbidden, serverError, unauthorized } from "@/lib/server/http";
+import { badRequest, forbidden, serverError, unauthorized } from "@/lib/server/http";
 
 export async function PATCH(
   request: Request,
@@ -21,6 +21,9 @@ export async function PATCH(
   } catch (error) {
     if (error instanceof Error && error.message === "UNAUTHORIZED") return unauthorized();
     if (error instanceof Error && error.message === "FORBIDDEN") return forbidden();
+    if (error instanceof Error && error.message.startsWith("FEATURE_DISABLED")) {
+      return badRequest("Payouts is not enabled for this workspace");
+    }
     return serverError("Failed to update commission rule", error);
   }
 }
@@ -42,6 +45,9 @@ export async function DELETE(
   } catch (error) {
     if (error instanceof Error && error.message === "UNAUTHORIZED") return unauthorized();
     if (error instanceof Error && error.message === "FORBIDDEN") return forbidden();
+    if (error instanceof Error && error.message.startsWith("FEATURE_DISABLED")) {
+      return badRequest("Payouts is not enabled for this workspace");
+    }
     return serverError("Failed to delete commission rule", error);
   }
 }

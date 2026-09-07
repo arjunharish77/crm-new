@@ -4,7 +4,7 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { motion } from "framer-motion";
-import { ArrowLeft, Loader2, Pencil, Plus, Share2 } from "lucide-react";
+import { Loader2, Pencil, Phone, PhoneCall, Plus, Share2, Users, ClipboardList, Star } from "lucide-react";
 import { toast } from "sonner";
 import { formatWorkspaceDate, formatWorkspaceDateTime, parseWorkspaceDate } from "@/lib/date-format";
 import { apiFetch } from "@/lib/api";
@@ -20,11 +20,19 @@ import { NotesPanel } from "@/components/common/notes-panel";
 import { ContextualFormsPanel } from "@/components/forms/contextual-forms-panel";
 import { ExternalPushDialog } from "@/components/integrations/external-push-dialog";
 import { ExternalPushBadge } from "@/components/integrations/external-push-badge";
+import { LogCallOutcomeDialog } from "@/components/telephony/log-call-outcome-dialog";
+import { RecordShareDialog } from "@/components/common/record-share-dialog";
 import { RelatedTasksPanel } from "@/components/tasks/related-tasks-panel";
+import { ApplyPlaybookDialog } from "@/components/tasks/apply-playbook-dialog";
 import { CommunicationEventsPanel } from "@/components/communications/communication-events-panel";
+import { CallRecordingsPanel } from "@/components/telephony/call-recordings-panel";
+import { CreateCaseButton } from "@/components/cases/create-case-button";
+import { AiAssistantPanel } from "@/components/ai/ai-assistant-panel";
+import { useModuleEnabled } from "@/components/auth/feature-gate";
 import { formatCurrency, cn } from "@/lib/utils";
 import { fadeInUp } from "@/lib/motion";
 import { useAuth } from "@/providers/auth-provider";
+import { useClickToCall } from "@/hooks/use-click-to-call";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -36,6 +44,11 @@ import {
     SelectValue,
 } from "@/components/ui/select";
 import { PredictiveScorePanel } from "@/components/scoring/predictive-score";
+import { NextBestActionPanel } from "@/components/next-best-action/nba-panel";
+import { CallScriptPanel } from "@/components/telephony/call-script-panel";
+import { isFavoriteRecord, recordRecentView, toggleFavoriteRecord } from "@/lib/recent-records";
+import { DetailPageHeader } from "@/components/detail-shell/detail-page-header";
+import { WorkspaceTabs } from "@/components/detail-shell/workspace-tabs";
 
 type ActivityTimeFilter = "ALL" | "TODAY" | "7D" | "30D";
 
@@ -44,11 +57,20 @@ function hasIntegrationsPermission(user: any) {
     return Boolean(user?.isTenantAdmin || user?.isPlatformAdmin || rolePermissions?.modules?.integrations === "full");
 }
 
+function canManageSharing(user: any, opportunity: any) {
+    if (!user || !opportunity) return false;
+    if (opportunity.ownerId === user.id) return true;
+    const rolePermissions = typeof user.role === "object" && user.role ? user.role.permissions : null;
+    return Boolean(user.isTenantAdmin || user.isPlatformAdmin || rolePermissions?.recordAccess === "TEAM" || rolePermissions?.recordAccess === "ALL");
+}
+
 export default function OpportunityDetailPage() {
     const params = useParams();
     const router = useRouter();
     const { user } = useAuth();
+    const serviceDeskEnabled = useModuleEnabled("SERVICE_DESK");
     const opportunityId = params.id as string;
+    const { call: placeClickToCall, calling: clickToCallInProgress } = useClickToCall();
 
     const [opportunity, setOpportunity] = useState<Opportunity | null>(null);
     const [stages, setStages] = useState<StageDefinition[]>([]);
@@ -62,11 +84,19 @@ export default function OpportunityDetailPage() {
     const [activityTimeFilter, setActivityTimeFilter] = useState<ActivityTimeFilter>("ALL");
     const [showPushDialog, setShowPushDialog] = useState(false);
     const [pushRefreshKey, setPushRefreshKey] = useState(0);
+    const [showLogOutcomeDialog, setShowLogOutcomeDialog] = useState(false);
+    const [showPlaybookDialog, setShowPlaybookDialog] = useState(false);
+    const [showShareDialog, setShowShareDialog] = useState(false);
+    const [tasksRefreshKey, setTasksRefreshKey] = useState(0);
+    // "Pin/favorite support" (gap checklist's "recent/favorite records" item).
+    const [isFavorite, setIsFavorite] = useState(false);
 
     const loadData = useCallback(async () => {
         try {
             const opp = await apiFetch<Opportunity>(`/opportunities/${opportunityId}`);
             setOpportunity(opp);
+            recordRecentView("opportunity", opportunityId, opp.title || "Opportunity");
+            setIsFavorite(isFavoriteRecord("opportunity", opportunityId));
             setStages(opp.opportunityType?.stages || []);
 
             const filter = {
@@ -167,6 +197,11 @@ export default function OpportunityDetailPage() {
         );
     }
 
+    const toggleFavorite = () => {
+        toggleFavoriteRecord("opportunity", opportunity.id, opportunity.title || "Opportunity");
+        setIsFavorite((current) => !current);
+    };
+
     return (
         <motion.div
             variants={fadeInUp}
@@ -174,61 +209,110 @@ export default function OpportunityDetailPage() {
             animate="animate"
             className="mx-auto max-w-[1440px] p-3 md:p-4"
         >
-            <div className="mb-4 flex flex-col items-start justify-between gap-3 md:flex-row md:items-center">
-                <Button
-                    variant="ghost"
-                    onClick={() => router.back()}
-                    className="min-h-[34px] text-muted-foreground"
-                >
-                    <ArrowLeft className="size-4" />
-                    Back
-                </Button>
-
-                <div className="flex flex-wrap gap-2">
-                    <CreateActivityDialog
-                        defaultLeadId={opportunity.leadId || undefined}
-                        defaultOpportunityId={opportunity.id}
-                        onSuccess={loadData}
-                        trigger={
+            <DetailPageHeader
+                onBack={() => router.back()}
+                title={opportunity.title}
+                subtitle={opportunity.opportunityType?.name || undefined}
+                statusBadge={
+                    <Badge variant="outline" className="h-5 text-[0.6rem] font-extrabold uppercase tracking-wide">
+                        {currentStage?.name || "Unassigned"}
+                    </Badge>
+                }
+                actions={
+                    <>
+                        <Button
+                            size="icon"
+                            variant="ghost"
+                            className="min-h-9"
+                            onClick={toggleFavorite}
+                            aria-label={isFavorite ? "Remove from favorites" : "Add to favorites"}
+                        >
+                            <Star className={cn("size-4", isFavorite ? "fill-amber-500 text-amber-500" : "text-muted-foreground")} />
+                        </Button>
+                        <CreateActivityDialog
+                            defaultLeadId={opportunity.leadId || undefined}
+                            defaultOpportunityId={opportunity.id}
+                            onSuccess={loadData}
+                            trigger={
+                                <Button
+                                    size="sm"
+                                    className="min-h-9 bg-secondary-container px-3.5 text-on-secondary-container shadow-none hover:bg-secondary-container/80"
+                                >
+                                    <Plus className="size-4" />
+                                    Activity
+                                </Button>
+                            }
+                        />
+                        <ContextualFormsPanel
+                            placement="OPPORTUNITY_DETAIL"
+                            context={{ leadId: opportunity.leadId, opportunityId: opportunity.id }}
+                            entityData={opportunity}
+                            onSaved={loadData}
+                        />
+                        {serviceDeskEnabled && (
+                            <CreateCaseButton
+                                relatedOpportunityId={opportunity.id}
+                                relatedLeadId={opportunity.leadId || undefined}
+                                trigger={
+                                    <Button size="sm" variant="outline" className="min-h-9 px-3.5">
+                                        <Plus className="size-4" />
+                                        Case
+                                    </Button>
+                                }
+                            />
+                        )}
+                        <AiAssistantPanel
+                            entityType="OPPORTUNITY"
+                            entityId={opportunity.id}
+                            entityLabel={opportunity.title}
+                            recipientEmail={opportunity.lead?.email}
+                            recipientPhone={opportunity.lead?.phone}
+                        />
+                        {hasIntegrationsPermission(user) && (
                             <Button
                                 size="sm"
-                                className="min-h-9 bg-secondary-container px-3.5 text-on-secondary-container shadow-none hover:bg-secondary-container/80"
+                                variant="outline"
+                                className="min-h-9 px-3.5"
+                                onClick={() => setShowPushDialog(true)}
                             >
-                                <Plus className="size-4" />
-                                Activity
+                                <Share2 className="size-4" />
+                                Push to External
                             </Button>
-                        }
-                    />
-                    <ContextualFormsPanel
-                        placement="OPPORTUNITY_DETAIL"
-                        context={{ leadId: opportunity.leadId, opportunityId: opportunity.id }}
-                        entityData={opportunity}
-                        onSaved={loadData}
-                    />
-                    {hasIntegrationsPermission(user) && (
+                        )}
                         <Button
                             size="sm"
                             variant="outline"
                             className="min-h-9 px-3.5"
-                            onClick={() => setShowPushDialog(true)}
+                            onClick={() => setShowLogOutcomeDialog(true)}
                         >
-                            <Share2 className="size-4" />
-                            Push to External
+                            <PhoneCall className="size-4" />
+                            Log Call Outcome
                         </Button>
-                    )}
-                    <Button size="sm" className="min-h-9 px-4" onClick={() => setShowEditDialog(true)}>
-                        <Pencil className="size-4" />
-                        Edit
-                    </Button>
-                </div>
-            </div>
+                        {canManageSharing(user, opportunity) && (
+                            <Button
+                                size="sm"
+                                variant="outline"
+                                className="min-h-9 px-3.5"
+                                onClick={() => setShowShareDialog(true)}
+                            >
+                                <Users className="size-4" />
+                                Share
+                            </Button>
+                        )}
+                        <Button size="sm" className="min-h-9 px-4" onClick={() => setShowEditDialog(true)}>
+                            <Pencil className="size-4" />
+                            Edit
+                        </Button>
+                    </>
+                }
+            />
 
             <div className="mb-3 flex justify-end">
                 <ExternalPushBadge opportunityId={opportunityId} refreshKey={pushRefreshKey} />
             </div>
 
             <div className="grid grid-cols-1 gap-4 lg:grid-cols-[380px_1fr]">
-                <div className="flex flex-col gap-4 lg:sticky lg:top-4 lg:self-start">
+                <div className="flex flex-col gap-4 lg:sticky lg:top-20 lg:self-start">
                     <div className="overflow-hidden rounded-2xl border border-secondary/20">
                         <div className="bg-secondary px-5 py-4.5 text-secondary-foreground">
                             <div className="mb-3 flex items-center gap-3">
@@ -279,6 +363,8 @@ export default function OpportunityDetailPage() {
                     </div>
 
                     <PredictiveScorePanel recordType="OPPORTUNITY" recordId={opportunity.id} score={opportunity.predictiveScore} />
+                    <NextBestActionPanel recordType="OPPORTUNITY" recordId={opportunity.id} />
+                    <CallScriptPanel recordType="OPPORTUNITY" recordId={opportunity.id} />
 
                     <div className="rounded-xl border border-border bg-card">
                         <div className="border-b border-border px-3 py-2.5">
@@ -330,9 +416,23 @@ export default function OpportunityDetailPage() {
                                         <p className="text-sm text-muted-foreground">{opportunity.lead.email || "No email"}</p>
                                     </div>
                                 </div>
-                                <Button asChild variant="outline" size="sm" className="min-h-[34px] w-full">
-                                    <Link href={`/dashboard/leads/${opportunity.leadId}`}>Open Lead</Link>
-                                </Button>
+                                <div className="flex gap-2">
+                                    <Button asChild variant="outline" size="sm" className="min-h-[34px] flex-1">
+                                        <Link href={`/dashboard/leads/${opportunity.leadId}`}>Open Lead</Link>
+                                    </Button>
+                                    {opportunity.lead.phone && (
+                                        <Button
+                                            variant="outline"
+                                            size="sm"
+                                            className="min-h-[34px]"
+                                            disabled={clickToCallInProgress}
+                                            onClick={() => placeClickToCall(opportunity.lead!.phone, { leadId: opportunity.leadId, opportunityId: opportunity.id })}
+                                        >
+                                            <Phone className="size-4" />
+                                            Call
+                                        </Button>
+                                    )}
+                                </div>
                             </div>
                         ) : (
                             <p className="text-sm text-muted-foreground">No linked lead.</p>
@@ -341,26 +441,20 @@ export default function OpportunityDetailPage() {
                 </div>
 
                 <div className="overflow-hidden rounded-2xl border border-border bg-card">
-                    <div className="border-b border-border bg-surface-container-lowest px-2 py-2">
-                        <div className="flex gap-1.5 overflow-x-auto pb-0.5">
-                            <WorkspaceTab
-                                label={`Activity History (${filteredActivities.length})`}
-                                active={tabValue === "activity"}
-                                onClick={() => setTabValue("activity")}
-                            />
-                            <WorkspaceTab label="Deal Details" active={tabValue === "details"} onClick={() => setTabValue("details")} />
-                            <WorkspaceTab label="Scoring" active={tabValue === "scoring"} onClick={() => setTabValue("scoring")} />
-                            <WorkspaceTab
-                                label={`Stage History (${history.length})`}
-                                active={tabValue === "stage"}
-                                onClick={() => setTabValue("stage")}
-                            />
-                            <WorkspaceTab label={`Tasks (${taskCount})`} active={tabValue === "tasks"} onClick={() => setTabValue("tasks")} />
-                            <WorkspaceTab label="Communications" active={tabValue === "communications"} onClick={() => setTabValue("communications")} />
-                            <WorkspaceTab label="Notes" active={tabValue === "notes"} onClick={() => setTabValue("notes")} />
-                            <WorkspaceTab label="Audit" active={tabValue === "audit"} onClick={() => setTabValue("audit")} />
-                        </div>
-                    </div>
+                    <WorkspaceTabs
+                        value={tabValue}
+                        onChange={setTabValue}
+                        tabs={[
+                            { value: "activity", label: `Activity History (${filteredActivities.length})` },
+                            { value: "details", label: "Deal Details" },
+                            { value: "scoring", label: "Scoring" },
+                            { value: "stage", label: `Stage History (${history.length})` },
+                            { value: "tasks", label: `Tasks (${taskCount})` },
+                            { value: "communications", label: "Communications" },
+                            { value: "notes", label: "Notes" },
+                            { value: "audit", label: "Audit" },
+                        ]}
+                    />
 
                     <div className="p-3 md:p-4">
                         {tabValue === "activity" && (
@@ -430,7 +524,14 @@ export default function OpportunityDetailPage() {
 
                         {tabValue === "tasks" && (
                             <div className="rounded-lg bg-surface-container-lowest p-2.5">
+                                <div className="mb-2 flex justify-end">
+                                    <Button variant="outline" size="sm" onClick={() => setShowPlaybookDialog(true)}>
+                                        <ClipboardList className="size-4" />
+                                        Apply Playbook
+                                    </Button>
+                                </div>
                                 <RelatedTasksPanel
+                                    key={tasksRefreshKey}
                                     leadId={opportunity.leadId}
                                     opportunityId={opportunity.id}
                                     currentUserId={user?.id}
@@ -445,8 +546,9 @@ export default function OpportunityDetailPage() {
                         )}
 
                         {tabValue === "communications" && (
-                            <div className="rounded-lg bg-surface-container-lowest p-2.5">
+                            <div className="rounded-lg bg-surface-container-lowest p-2.5 space-y-4">
                                 <CommunicationEventsPanel entityType="OPPORTUNITY" entityId={opportunity.id} />
+                                <CallRecordingsPanel entityType="OPPORTUNITY" entityId={opportunity.id} />
                             </div>
                         )}
 
@@ -466,6 +568,28 @@ export default function OpportunityDetailPage() {
                 leadId={opportunity.leadId}
                 opportunityId={opportunity.id}
                 onPushed={() => setPushRefreshKey((key) => key + 1)}
+            />
+            <LogCallOutcomeDialog
+                open={showLogOutcomeDialog}
+                onClose={() => setShowLogOutcomeDialog(false)}
+                leadId={opportunity.leadId}
+                opportunityId={opportunity.id}
+                onLogged={loadData}
+            />
+            <RecordShareDialog
+                open={showShareDialog}
+                onClose={() => setShowShareDialog(false)}
+                recordType="opportunities"
+                recordId={opportunity.id}
+                recordLabel={opportunity.title}
+            />
+            <ApplyPlaybookDialog
+                open={showPlaybookDialog}
+                onClose={() => setShowPlaybookDialog(false)}
+                leadId={opportunity.leadId}
+                opportunityId={opportunity.id}
+                targetModule="OPPORTUNITY"
+                onApplied={() => setTasksRefreshKey((key) => key + 1)}
             />
         </motion.div>
     );
@@ -497,20 +621,5 @@ function PropertyRow({ label, children }: { label: string; children: React.React
             <span className="text-sm text-muted-foreground">{label}</span>
             <span className="text-right text-sm font-bold">{children}</span>
         </div>
-    );
-}
-
-function WorkspaceTab({ label, active, onClick }: { label: string; active: boolean; onClick: () => void }) {
-    return (
-        <button
-            type="button"
-            onClick={onClick}
-            className={cn(
-                "min-h-[34px] shrink-0 rounded-lg px-2.5 py-1.5 text-[0.82rem] font-semibold whitespace-nowrap transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                active ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-accent"
-            )}
-        >
-            {label}
-        </button>
     );
 }

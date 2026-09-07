@@ -16,6 +16,9 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   } catch (error) {
     if (error instanceof Error && error.message === "UNAUTHORIZED") return unauthorized();
     if (error instanceof Error && error.message === "FORBIDDEN") return forbidden();
+    if (error instanceof Error && error.message.startsWith("MODULE_DISABLED")) return forbidden("Marketing Communications module is disabled for this tenant");
+    if (error instanceof Error && error.message.startsWith("INVALID_CAMPAIGN_TRANSITION")) return badRequest(error.message.replace("INVALID_CAMPAIGN_TRANSITION: ", "Cannot move a campaign from "));
+    if (error instanceof Error && error.message === "MARKETING_CAMPAIGN_NOT_FOUND") return NextResponse.json({ message: "Campaign not found" }, { status: 404 });
     return serverError("Failed to update campaign status", error);
   }
 }

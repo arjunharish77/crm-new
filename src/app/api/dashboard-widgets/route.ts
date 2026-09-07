@@ -32,6 +32,9 @@ export async function POST(request: Request) {
     if (error instanceof Error && error.message === "UNAUTHORIZED") {
       return unauthorized();
     }
+    if (error instanceof Error && error.message.startsWith("FEATURE_DISABLED")) {
+      return badRequest("Advanced Reporting is not enabled for this workspace");
+    }
 
     return serverError("Failed to create dashboard widget");
   }

@@ -4,6 +4,7 @@ type TenantUser = {
   id: string;
   tenantId: string | null;
   email?: string | null;
+  isPlatformAdmin?: boolean;
 };
 
 type ScheduleInput = {
@@ -36,4 +37,8 @@ export async function deleteReportScheduleForTenant(user: TenantUser, id: string
 
 export async function processDueReportSchedules(now = new Date()) {
   return pgReportSchedules.processDueReportSchedules(now);
+}
+
+export async function retryFailedReportSchedules(now = new Date()) {
+  return pgReportSchedules.retryFailedReportSchedules(now);
 }

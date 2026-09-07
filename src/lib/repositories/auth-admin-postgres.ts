@@ -40,6 +40,7 @@ type UpdateUserInput = {
   managerId?: string;
   skills?: Record<string, string[] | string>;
   status?: string;
+  isAvailableForAssignment?: boolean;
 };
 
 type CreateTenantInput = {
@@ -66,6 +67,8 @@ type TenantFeatureFlags = {
   formBuilderEnabled: boolean;
   advancedReporting: boolean;
   apiAccessEnabled: boolean;
+  payoutsEnabled: boolean;
+  gamificationEnabled: boolean;
 };
 
 const DEFAULT_TENANT_FEATURE_FLAGS: TenantFeatureFlags = {
@@ -75,6 +78,8 @@ const DEFAULT_TENANT_FEATURE_FLAGS: TenantFeatureFlags = {
   formBuilderEnabled: true,
   advancedReporting: true,
   apiAccessEnabled: false,
+  payoutsEnabled: true,
+  gamificationEnabled: true,
 };
 
 function asUuidOrNull(value: unknown) {
@@ -135,10 +140,45 @@ export async function getLoginUserByEmail(email: string) {
     password: string | null;
     tenantId: string | null;
     roleId: string | null;
+    status: string | null;
+    mfaEnabled: boolean;
+    mfaRequired: boolean | null;
+    createdAt: string;
+    passwordChangedAt: string | null;
   }>(
-    'select id, email, name, password, "tenantId", "roleId" from "User" where lower(email) = lower($1) limit 1',
+    'select id, email, name, password, "tenantId", "roleId", status, "mfaEnabled", "mfaRequired", "createdAt", "passwordChangedAt" from "User" where lower(email) = lower($1) limit 1',
     [email],
   );
+}
+
+// Same shape as getLoginUserByEmail, by id -- used by the MFA-verify step (auth/mfa/verify),
+// which only has the userId from the short-lived MFA-pending token's `sub` claim, not the
+// original login email. Re-verifying status here (not just trusting the earlier password-check
+// step already did) means a user can't bypass the deactivated/suspended checks by completing
+// login through this second step instead of the first.
+export async function getLoginUserById(id: string) {
+  return queryOne<{
+    id: string;
+    email: string;
+    name: string;
+    password: string | null;
+    tenantId: string | null;
+    roleId: string | null;
+    status: string | null;
+    mfaEnabled: boolean;
+    mfaRequired: boolean | null;
+    createdAt: string;
+    passwordChangedAt: string | null;
+  }>(
+    'select id, email, name, password, "tenantId", "roleId", status, "mfaEnabled", "mfaRequired", "createdAt", "passwordChangedAt" from "User" where id = $1 limit 1',
+    [id],
+  );
+}
+
+export async function isTenantSuspended(tenantId: string | null) {
+  if (!tenantId) return false;
+  const tenant = await queryOne<{ status: string }>('select status from "Tenant" where id = $1 limit 1', [tenantId]);
+  return tenant?.status === "SUSPENDED";
 }
 
 export async function getActivePlatformAdminByUserId(userId: string) {
@@ -181,6 +221,7 @@ export async function bootstrapPlatformAdmin(input: { name: string; email: strin
       password: passwordHash,
       status: "ACTIVE",
       roleId,
+      passwordChangedAt: now,
       createdAt: now,
       updatedAt: now,
     }, "id", tx);
@@ -198,26 +239,47 @@ export async function bootstrapPlatformAdmin(input: { name: string; email: strin
 
 export async function getCurrentUserById(userId: string) {
   const userRecord = await queryOne<any>(
-    'select id, email, name, "tenantId", "roleId", "permissionTemplateId" from "User" where id::text = $1 limit 1',
+    'select id, email, name, "tenantId", "roleId", "permissionTemplateId", "mfaEnabled" from "User" where id::text = $1 limit 1',
     [userId],
   );
   if (!userRecord) return null;
 
-  const [roleRecord, platformAdminRecord, tenantFeatureRecord, salesGroupMemberships] = await Promise.all([
+  const [roleRecord, platformAdminRecord, tenantFeatureRecord, salesGroupMemberships, tenantRecord, tenantConfigRecord] = await Promise.all([
     userRecord.roleId
       ? queryOne<any>('select id, name, "permissionTemplateId", permissions from "Role" where id::text = $1 limit 1', [String(userRecord.roleId)])
       : Promise.resolve(null),
     getActivePlatformAdminByUserId(userRecord.id),
     userRecord.tenantId
       ? queryOne<any>(
-          'select "opportunityEnabled", "automationEnabled", "advancedReporting", "apiAccessEnabled", "salesGroupsEnabled", "formBuilderEnabled" from "TenantFeature" where "tenantId"::text = $1 limit 1',
+          'select "opportunityEnabled", "automationEnabled", "advancedReporting", "apiAccessEnabled", "salesGroupsEnabled", "formBuilderEnabled", "payoutsEnabled", "gamificationEnabled" from "TenantFeature" where "tenantId"::text = $1 limit 1',
           [String(userRecord.tenantId)],
         )
       : Promise.resolve(null),
     userRecord.tenantId
       ? query<{ groupId: string }>('select "groupId" from "SalesGroupMember" where "tenantId"::text = $1 and "userId"::text = $2', [String(userRecord.tenantId), String(userRecord.id)])
       : Promise.resolve([]),
+    // Parallelized into the same fan-out (near-zero extra latency) rather than a second
+    // round-trip -- needed so getCurrentUser can actually enforce tenant suspension, which
+    // changeTenantStatus/the suspend+unsuspend API routes have always updated but nothing has
+    // ever checked until now, and so the dashboard can render the maintenance banner.
+    userRecord.tenantId
+      ? queryOne<any>('select status, environment from "Tenant" where id::text = $1 limit 1', [String(userRecord.tenantId)])
+      : Promise.resolve(null),
+    userRecord.tenantId
+      ? queryOne<any>('select "maintenanceActive", "maintenanceMessage" from "TenantConfig" where "tenantId"::text = $1 limit 1', [String(userRecord.tenantId)])
+      : Promise.resolve(null),
   ]);
+
+  // Only explicit non-default overrides are stored -- a module with no row here is
+  // enabled, same "missing -> enabled" convention as TenantFeature's defaults, so the
+  // client only needs to check `moduleEntitlements[key] !== 'DISABLED' && !== 'SUSPENDED'`.
+  const moduleEntitlementRows = userRecord.tenantId
+    ? await query<{ moduleKey: string; status: string }>(
+        'select "moduleKey", status from "TenantModuleEntitlement" where "tenantId"::text = $1',
+        [String(userRecord.tenantId)],
+      )
+    : [];
+  const moduleEntitlements = Object.fromEntries(moduleEntitlementRows.map((row) => [row.moduleKey, row.status]));
 
   let salesGroupTemplateIds: string[] = [];
   const groupIds = salesGroupMemberships.map((member) => member.groupId).filter(Boolean);
@@ -255,12 +317,18 @@ export async function getCurrentUserById(userId: string) {
     isPartner: !!rolePermissions?.isPartnerRole,
     isTenantAdmin: rolePermissions?.recordAccess === "ALL" || rolePermissions?.modules?.admin === "full",
     features: tenantFeatureRecord ?? DEFAULT_TENANT_FEATURE_FLAGS,
+    moduleEntitlements,
+    tenantStatus: tenantRecord?.status ?? "ACTIVE",
+    tenantEnvironment: tenantRecord?.environment ?? "PRODUCTION",
+    maintenanceActive: tenantConfigRecord?.maintenanceActive ?? false,
+    maintenanceMessage: tenantConfigRecord?.maintenanceMessage ?? null,
+    mfaEnabled: !!userRecord.mfaEnabled,
   };
 }
 
 export async function listTenantUsers(tenantId: string | null) {
   const users = await query<any>(
-    `select id, name, email, status, "roleId", "permissionTemplateId", "managerId", "teamId", skills, "createdAt"
+    `select id, name, email, status, "roleId", "permissionTemplateId", "managerId", "teamId", skills, "isAvailableForAssignment", "createdAt"
      from "User"
      where ${tenantId ? '"tenantId"::text = $1' : '"tenantId" is null'}
      order by "createdAt" desc`,
@@ -301,9 +369,17 @@ export async function createTenantScopedUser(tenantId: string, input: CreateUser
     teamId: input.teamId || null,
     managerId: input.managerId || null,
     skills: input.skills ?? null,
+    passwordChangedAt: now,
     createdAt: now,
     updatedAt: now,
   }, 'id, name, email, status, "roleId", "permissionTemplateId", "managerId", "teamId", skills, "createdAt"');
+}
+
+export async function getTenantScopedUserPermissionSummary(tenantId: string, userId: string) {
+  return queryOne<{ id: string; roleId: string | null; permissionTemplateId: string | null }>(
+    'select id, "roleId", "permissionTemplateId" from "User" where "tenantId"::text = $1 and id::text = $2 limit 1',
+    [tenantId, userId],
+  );
 }
 
 export async function updateTenantScopedUser(tenantId: string, userId: string, input: UpdateUserInput) {
@@ -315,8 +391,9 @@ export async function updateTenantScopedUser(tenantId: string, userId: string, i
     managerId: input.managerId || null,
     skills: input.skills ?? null,
     status: input.status,
+    isAvailableForAssignment: input.isAvailableForAssignment,
     updatedAt: new Date().toISOString(),
-  }, 'where "tenantId"::text = $1 and id::text = $2', [tenantId, userId], 'id, name, email, status, "roleId", "permissionTemplateId", "managerId", "teamId", skills, "createdAt"');
+  }, 'where "tenantId"::text = $1 and id::text = $2', [tenantId, userId], 'id, name, email, status, "roleId", "permissionTemplateId", "managerId", "teamId", skills, "isAvailableForAssignment", "createdAt"');
 }
 
 async function listTenantRolesBase(tenantId: string | null) {
@@ -342,6 +419,13 @@ async function listTenantUsersForUsage(tenantId: string | null) {
   return query<{ id: string; roleId: string | null }>(
     `select id, "roleId" from "User" where ${tenantId ? '"tenantId"::text = $1' : '"tenantId" is null'}`,
     tenantId ? [tenantId] : [],
+  );
+}
+
+export async function getTenantRoleById(tenantId: string, roleId: string) {
+  return queryOne<any>(
+    'select id, name, description, "permissionTemplateId", permissions, "createdAt", "updatedAt" from "Role" where "tenantId" = $1 and id = $2 limit 1',
+    [tenantId, roleId],
   );
 }
 
@@ -497,6 +581,7 @@ export async function createTenantWithAdmin(input: CreateTenantInput) {
       password: passwordHash,
       status: "ACTIVE",
       roleId,
+      passwordChangedAt: now,
       createdAt: now,
       updatedAt: now,
     }, "id", tx);
@@ -526,7 +611,7 @@ export async function changeTenantStatus(tenantId: string, status: "ACTIVE" | "S
 
 export async function getTenantFeatureFlags(tenantId: string): Promise<TenantFeatureFlags> {
   const row = await queryOne<Partial<TenantFeatureFlags>>(
-    'select "opportunityEnabled", "automationEnabled", "salesGroupsEnabled", "formBuilderEnabled", "advancedReporting", "apiAccessEnabled" from "TenantFeature" where "tenantId" = $1 limit 1',
+    'select "opportunityEnabled", "automationEnabled", "salesGroupsEnabled", "formBuilderEnabled", "advancedReporting", "apiAccessEnabled", "payoutsEnabled", "gamificationEnabled" from "TenantFeature" where "tenantId" = $1 limit 1',
     [tenantId],
   );
   return { ...DEFAULT_TENANT_FEATURE_FLAGS, ...(row ?? {}) };
@@ -553,8 +638,8 @@ export async function updateTenantFeatureFlags(tenantId: string, flags: Partial<
 
 export async function getTenantConfigForPlatformAdmin(tenantId: string) {
   const [tenant, config] = await Promise.all([
-    queryOne<any>('select id, name, status, plan, "createdAt" from "Tenant" where id = $1 limit 1', [tenantId]),
-    queryOne<any>('select "featureFlags", "storageQuota", "userLimit" from "TenantConfig" where "tenantId" = $1 limit 1', [tenantId]),
+    queryOne<any>('select id, name, status, plan, environment, "createdAt" from "Tenant" where id = $1 limit 1', [tenantId]),
+    queryOne<any>('select "featureFlags", "storageQuota", "userLimit", "maintenanceActive", "maintenanceMessage" from "TenantConfig" where "tenantId" = $1 limit 1', [tenantId]),
   ]);
   if (!tenant) return null;
   return {
@@ -562,7 +647,32 @@ export async function getTenantConfigForPlatformAdmin(tenantId: string) {
     featureFlags: config?.featureFlags ?? {},
     storageQuota: config?.storageQuota ?? 1,
     userLimit: config?.userLimit ?? null,
+    maintenanceActive: config?.maintenanceActive ?? false,
+    maintenanceMessage: config?.maintenanceMessage ?? null,
   };
+}
+
+export async function changeTenantEnvironment(tenantId: string, environment: "PRODUCTION" | "SANDBOX" | "TEST") {
+  const row = await queryOne<any>('update "Tenant" set environment = $1 where id = $2 returning id, environment', [environment, tenantId]);
+  if (!row) throw new Error("TENANT_NOT_FOUND");
+  return row;
+}
+
+// TenantConfig has no row for most tenants today (confirmed: only ever read, never inserted at
+// tenant-creation time) -- upsert-on-write rather than assuming a row already exists, following
+// this session's own established pattern for "settings row that may not exist yet".
+export async function upsertTenantMaintenanceBanner(tenantId: string, input: { active: boolean; message?: string | null }) {
+  const existing = await queryOne<{ id: string }>('select id from "TenantConfig" where "tenantId" = $1 limit 1', [tenantId]);
+  if (existing) {
+    return queryOne<any>(
+      'update "TenantConfig" set "maintenanceActive" = $1, "maintenanceMessage" = $2 where id = $3 returning "maintenanceActive", "maintenanceMessage"',
+      [input.active, input.message ?? null, existing.id],
+    );
+  }
+  return queryOne<any>(
+    'insert into "TenantConfig" (id, "tenantId", "featureFlags", "maintenanceActive", "maintenanceMessage") values ($1, $2, $3, $4, $5) returning "maintenanceActive", "maintenanceMessage"',
+    [randomUUID(), tenantId, {}, input.active, input.message ?? null],
+  );
 }
 
 export async function getTenantUsersForPlatformAdmin(tenantId: string) {

@@ -17,6 +17,9 @@ export async function PATCH(
   } catch (error) {
     if (error instanceof Error && error.message === "UNAUTHORIZED") return unauthorized();
     if (error instanceof Error && /REQUIRED/i.test(error.message)) return badRequest(error.message);
+    if (error instanceof Error && error.message.startsWith("FEATURE_DISABLED")) {
+      return badRequest("Advanced Reporting is not enabled for this workspace");
+    }
     return serverError("Failed to update custom report", error);
   }
 }
@@ -32,6 +35,9 @@ export async function DELETE(
     return NextResponse.json({ ok: true });
   } catch (error) {
     if (error instanceof Error && error.message === "UNAUTHORIZED") return unauthorized();
+    if (error instanceof Error && error.message.startsWith("FEATURE_DISABLED")) {
+      return badRequest("Advanced Reporting is not enabled for this workspace");
+    }
     return serverError("Failed to delete custom report", error);
   }
 }

@@ -59,6 +59,8 @@ import { nanoid } from "nanoid";
 import { EmbedCodeDialog } from "./EmbedCodeDialog";
 import { StyleEditor } from "./style-editor";
 import { ConditionalLogicBuilder } from "./logic-builder";
+import { useFeature } from "@/components/auth/feature-gate";
+import { isFormModuleEnabled } from "@/lib/forms/module-entitlements";
 
 // --- Types ---
 // Options normally used to be plain strings (the same string served as both the stored
@@ -185,6 +187,7 @@ function moduleLabel(module: SourceModule) {
 }
 
 export function FormEditor({ initialForm }: EditorProps) {
+    const opportunityEnabled = useFeature("opportunityEnabled");
     const [fields, setFields] = useState<FormField[]>(initialForm.config?.fields || []);
     const [selectedFieldId, setSelectedFieldId] = useState<string | null>(null);
     const [activeDragItem, setActiveDragItem] = useState<any>(null);
@@ -481,6 +484,10 @@ export function FormEditor({ initialForm }: EditorProps) {
         setSettings({ ...settings, tabs: settings.tabs.map((tab: any) => tab.id === id ? { ...tab, label } : tab) });
     };
 
+    const updateTabLogic = (id: string, logic: FormField["logic"] | undefined) => {
+        setSettings({ ...settings, tabs: settings.tabs.map((tab: any) => tab.id === id ? { ...tab, logic } : tab) });
+    };
+
     const removeTab = (id: string) => {
         if (settings.tabs.length <= 1) {
             toast.error("At least one tab is required");
@@ -500,6 +507,10 @@ export function FormEditor({ initialForm }: EditorProps) {
 
     const updateSectionLabel = (id: string, label: string) => {
         setSettings({ ...settings, sections: settings.sections.map((section: any) => section.id === id ? { ...section, label } : section) });
+    };
+
+    const updateSectionLogic = (id: string, logic: FormField["logic"] | undefined) => {
+        setSettings({ ...settings, sections: settings.sections.map((section: any) => section.id === id ? { ...section, logic } : section) });
     };
 
     const removeSection = (id: string) => {
@@ -586,7 +597,9 @@ export function FormEditor({ initialForm }: EditorProps) {
                                 </SelectTrigger>
                                 <SelectContent>
                                     <SelectItem value="lead">Lead</SelectItem>
-                                    <SelectItem value="opportunity">Opportunity</SelectItem>
+                                    {isFormModuleEnabled("opportunity", { opportunityEnabled }) && (
+                                        <SelectItem value="opportunity">Opportunity</SelectItem>
+                                    )}
                                     <SelectItem value="activity">Activity</SelectItem>
                                     <SelectItem value="task">Task</SelectItem>
                                 </SelectContent>
@@ -868,7 +881,9 @@ export function FormEditor({ initialForm }: EditorProps) {
                                                     </SelectTrigger>
                                                     <SelectContent>
                                                         <SelectItem value="lead">Lead</SelectItem>
-                                                        <SelectItem value="opportunity">Opportunity</SelectItem>
+                                                        {(isFormModuleEnabled("opportunity", { opportunityEnabled }) || selectedField.sourceModule === "opportunity") && (
+                                                            <SelectItem value="opportunity">Opportunity</SelectItem>
+                                                        )}
                                                         <SelectItem value="activity">Activity</SelectItem>
                                                         <SelectItem value="task">Task</SelectItem>
                                                     </SelectContent>
@@ -1046,44 +1061,62 @@ export function FormEditor({ initialForm }: EditorProps) {
                                 </div>
                                 <div>
                                     <p className="mb-2 text-sm font-semibold">Tabs</p>
-                                    <div className="space-y-2">
+                                    <div className="space-y-3">
                                         {settings.tabs.map((tab: any, index: number) => (
-                                            <div key={tab.id} className="flex items-center gap-2">
-                                                <Input
-                                                    aria-label={`Tab ${index + 1}`}
-                                                    value={tab.label}
-                                                    onChange={e => updateTabLabel(tab.id, e.target.value)}
+                                            <div key={tab.id} className="space-y-2 rounded-lg border p-2">
+                                                <div className="flex items-center gap-2">
+                                                    <Input
+                                                        aria-label={`Tab ${index + 1}`}
+                                                        value={tab.label}
+                                                        onChange={e => updateTabLabel(tab.id, e.target.value)}
+                                                    />
+                                                    <Button
+                                                        variant="ghost"
+                                                        size="icon-sm"
+                                                        onClick={() => removeTab(tab.id)}
+                                                        disabled={settings.tabs.length <= 1}
+                                                    >
+                                                        <CloseIcon className="size-4" />
+                                                    </Button>
+                                                </div>
+                                                <ConditionalLogicBuilder
+                                                    fields={fields}
+                                                    currentFieldId=""
+                                                    subjectLabel="tab"
+                                                    value={tab.logic}
+                                                    onChange={(rule) => updateTabLogic(tab.id, rule)}
                                                 />
-                                                <Button
-                                                    variant="ghost"
-                                                    size="icon-sm"
-                                                    onClick={() => removeTab(tab.id)}
-                                                    disabled={settings.tabs.length <= 1}
-                                                >
-                                                    <CloseIcon className="size-4" />
-                                                </Button>
                                             </div>
                                         ))}
                                     </div>
                                 </div>
                                 <div>
                                     <p className="mb-2 text-sm font-semibold">Sections</p>
-                                    <div className="space-y-2">
+                                    <div className="space-y-3">
                                         {settings.sections.map((section: any, index: number) => (
-                                            <div key={section.id} className="flex items-center gap-2">
-                                                <Input
-                                                    aria-label={`Section ${index + 1}`}
-                                                    value={section.label}
-                                                    onChange={e => updateSectionLabel(section.id, e.target.value)}
+                                            <div key={section.id} className="space-y-2 rounded-lg border p-2">
+                                                <div className="flex items-center gap-2">
+                                                    <Input
+                                                        aria-label={`Section ${index + 1}`}
+                                                        value={section.label}
+                                                        onChange={e => updateSectionLabel(section.id, e.target.value)}
+                                                    />
+                                                    <Button
+                                                        variant="ghost"
+                                                        size="icon-sm"
+                                                        onClick={() => removeSection(section.id)}
+                                                        disabled={settings.sections.filter((item: any) => item.tabId === section.tabId).length <= 1}
+                                                    >
+                                                        <CloseIcon className="size-4" />
+                                                    </Button>
+                                                </div>
+                                                <ConditionalLogicBuilder
+                                                    fields={fields}
+                                                    currentFieldId=""
+                                                    subjectLabel="section"
+                                                    value={section.logic}
+                                                    onChange={(rule) => updateSectionLogic(section.id, rule)}
                                                 />
-                                                <Button
-                                                    variant="ghost"
-                                                    size="icon-sm"
-                                                    onClick={() => removeSection(section.id)}
-                                                    disabled={settings.sections.filter((item: any) => item.tabId === section.tabId).length <= 1}
-                                                >
-                                                    <CloseIcon className="size-4" />
-                                                </Button>
                                             </div>
                                         ))}
                                     </div>

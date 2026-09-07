@@ -1,12 +1,16 @@
 import { randomUUID } from "crypto";
 import { execute, query, queryOne, type Queryable } from "@/lib/db/query";
 import { withAdvisoryLock, withTransaction } from "@/lib/db/transaction";
+import { getTenantTimeZone, normalizeTenantTimeZone } from "@/lib/server/date-format";
+import { assertFeatureEnabled, isFeatureEnabledForTenant } from "@/lib/server/entitlements";
+import { checkRateLimitWithAlert } from "@/lib/server/rate-limit";
 
 type TenantUser = {
   id: string;
   tenantId: string | null;
   name?: string | null;
   email?: string | null;
+  isPlatformAdmin?: boolean;
 };
 
 const AUTOMATION_COLUMNS = 'id, name, description, trigger, workflow, "isActive", "createdAt", "updatedAt", "tenantId"';
@@ -159,7 +163,34 @@ function automationNextEdges(edges: any[], nodeId: string, record: Record<string
   return preferred.length ? preferred : nextEdges;
 }
 
-function automationDelayDate(nodeData: Record<string, unknown>) {
+// Reads the wall-clock date/time parts a UTC instant corresponds to in a given IANA zone --
+// used both to know "what time is it right now for this tenant" and, combined with
+// zonedPartsToUtc below, to construct a new UTC instant for a specific wall-clock time in
+// that zone (e.g. "9:00 AM tenant-local").
+function zonedParts(date: Date, timeZone: string) {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: normalizeTenantTimeZone(timeZone),
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(date);
+  const get = (type: string) => Number(parts.find((part) => part.type === type)?.value ?? "0");
+  return { year: get("year"), month: get("month"), day: get("day"), hour: get("hour"), minute: get("minute") };
+}
+
+// Standard offset-correction trick: guess a UTC instant assuming zero offset, see how far
+// that guess drifts when reinterpreted in the target zone, then correct by the drift.
+function zonedPartsToUtc(year: number, month: number, day: number, hour: number, minute: number, timeZone: string) {
+  const guessMs = Date.UTC(year, month - 1, day, hour, minute, 0);
+  const reinterpreted = zonedParts(new Date(guessMs), timeZone);
+  const reinterpretedMs = Date.UTC(reinterpreted.year, reinterpreted.month - 1, reinterpreted.day, reinterpreted.hour, reinterpreted.minute, 0);
+  return new Date(guessMs - (reinterpretedMs - guessMs));
+}
+
+async function automationDelayDate(nodeData: Record<string, unknown>, tenantId: string | null) {
   const exactRunAt = nodeData.runAt ? new Date(String(nodeData.runAt)) : null;
   if (exactRunAt && !Number.isNaN(exactRunAt.getTime()) && exactRunAt.getTime() > Date.now()) return exactRunAt;
   const duration = Math.max(1, Number(nodeData.duration ?? 1));
@@ -167,21 +198,24 @@ function automationDelayDate(nodeData: Record<string, unknown>) {
   const multiplier = unit === "days" ? 24 * 60 * 60 * 1000 : unit === "minutes" ? 60 * 1000 : 60 * 60 * 1000;
   const maxWaitMinutes = Number(nodeData.maxWaitMinutes ?? 0);
   const delayMs = maxWaitMinutes > 0 ? Math.min(duration * multiplier, maxWaitMinutes * 60 * 1000) : duration * multiplier;
-  const runAt = new Date(Date.now() + delayMs);
+  let runAt = new Date(Date.now() + delayMs);
   const allowedFrom = typeof nodeData.allowedFrom === "string" ? nodeData.allowedFrom : "";
   const allowedUntil = typeof nodeData.allowedUntil === "string" ? nodeData.allowedUntil : "";
   if (/^\d{2}:\d{2}$/.test(allowedFrom) && /^\d{2}:\d{2}$/.test(allowedUntil)) {
+    const timeZone = await getTenantTimeZone(tenantId);
     const [fromHour, fromMinute] = allowedFrom.split(":").map(Number);
     const [untilHour, untilMinute] = allowedUntil.split(":").map(Number);
-    const currentMinutes = runAt.getHours() * 60 + runAt.getMinutes();
+    const current = zonedParts(runAt, timeZone);
+    const currentMinutes = current.hour * 60 + current.minute;
     const fromMinutes = fromHour * 60 + fromMinute;
     const untilMinutes = untilHour * 60 + untilMinute;
     const insideWindow = fromMinutes <= untilMinutes
       ? currentMinutes >= fromMinutes && currentMinutes <= untilMinutes
       : currentMinutes >= fromMinutes || currentMinutes <= untilMinutes;
     if (!insideWindow) {
-      runAt.setHours(fromHour, fromMinute, 0, 0);
-      if (currentMinutes > untilMinutes && fromMinutes <= untilMinutes) runAt.setDate(runAt.getDate() + 1);
+      const rollToNextDay = currentMinutes > untilMinutes && fromMinutes <= untilMinutes;
+      const target = zonedPartsToUtc(current.year, current.month, current.day, fromHour, fromMinute, timeZone);
+      runAt = rollToNextDay ? new Date(target.getTime() + 24 * 60 * 60 * 1000) : target;
     }
   }
   return runAt;
@@ -222,6 +256,13 @@ function triggerMatches(trigger: Record<string, unknown>, eventType: string, rec
   if (String(trigger.type ?? "MANUAL") !== eventType) return false;
   if (trigger.opportunityTypeId && String(record.opportunityTypeId ?? "") !== String(trigger.opportunityTypeId)) return false;
   if (trigger.activityTypeId && String(record.typeId ?? "") !== String(trigger.activityTypeId)) return false;
+  // App-originated trigger (gap checklist Module 16's app event bus "triggers" half) -- both
+  // filters are optional so a trigger can be scoped to one specific installed app, one specific
+  // event name from that app, or (with neither set) every app-originated event tenant-wide.
+  if (trigger.type === "APP_EVENT") {
+    if (trigger.appId && String(record.appId ?? "") !== String(trigger.appId)) return false;
+    if (trigger.eventName && String(record.eventName ?? "") !== String(trigger.eventName)) return false;
+  }
   const conditions = Array.isArray(trigger.conditions) ? trigger.conditions : [];
   return conditions.every((condition) => automationConditionMatches(record, condition as Record<string, unknown>));
 }
@@ -251,6 +292,8 @@ async function executeAutomationAction(
   nodeData: Record<string, unknown>,
   _triggerEventType = "AUTOMATION",
   client?: Queryable,
+  visitedAutomationIds?: Set<string>,
+  automationId: string | null = null,
 ) {
   const type = String(nodeData.type ?? "");
   if (["trigger", "branch", "delay", "wait", "wait_until_activity", "split_test"].includes(type)) return;
@@ -336,6 +379,48 @@ async function executeAutomationAction(
     return;
   }
 
+  if (type === "share_opportunity" || type === "stop_share_opportunity") {
+    const targetId = entityType === "OPPORTUNITY" ? entityId : String(record.opportunityId ?? "");
+    if (!targetId || !user.tenantId) return;
+    const requestedUserIds = Array.isArray(nodeData.sharedUserIds) ? (nodeData.sharedUserIds as string[]).filter(Boolean) : [];
+    const requestedTeamIds = Array.isArray(nodeData.sharedTeamIds) ? (nodeData.sharedTeamIds as string[]).filter(Boolean) : [];
+    const existing = await queryOne<any>(
+      'select "sharedUserIds", "sharedTeamIds" from "RecordShare" where "tenantId" = $1 and "recordType" = \'OPPORTUNITY\' and "recordId" = $2',
+      [user.tenantId, targetId],
+      client,
+    );
+    const existingUserIds: string[] = existing?.sharedUserIds ?? [];
+    const existingTeamIds: string[] = existing?.sharedTeamIds ?? [];
+    let sharedUserIds: string[];
+    let sharedTeamIds: string[];
+    if (type === "share_opportunity") {
+      // Additive by design -- a recurring automation (e.g. re-firing on every stage change)
+      // must not wipe out sharing a person set up manually via the Share dialog.
+      sharedUserIds = [...new Set([...existingUserIds, ...requestedUserIds])];
+      sharedTeamIds = [...new Set([...existingTeamIds, ...requestedTeamIds])];
+    } else if (requestedUserIds.length || requestedTeamIds.length) {
+      // Specific targets given -- remove just those, keep everything else shared.
+      sharedUserIds = existingUserIds.filter((id) => !requestedUserIds.includes(id));
+      sharedTeamIds = existingTeamIds.filter((id) => !requestedTeamIds.includes(id));
+    } else {
+      // No targets specified on a stop-share action -- clear all sharing on this record.
+      sharedUserIds = [];
+      sharedTeamIds = [];
+    }
+    await execute(
+      `insert into "RecordShare" (id, "tenantId", "recordType", "recordId", "sharedUserIds", "sharedTeamIds", "createdBy", "updatedBy", "createdAt", "updatedAt")
+       values ($1, $2, 'OPPORTUNITY', $3, $4, $5, $6, $6, $7, $7)
+       on conflict ("tenantId", "recordType", "recordId") do update set
+         "sharedUserIds" = excluded."sharedUserIds",
+         "sharedTeamIds" = excluded."sharedTeamIds",
+         "updatedBy" = excluded."updatedBy",
+         "updatedAt" = excluded."updatedAt"`,
+      [randomUUID(), user.tenantId, targetId, sharedUserIds, sharedTeamIds, user.id, new Date().toISOString()],
+      client,
+    );
+    return;
+  }
+
   if (type === "add_opportunity") {
     const leadId = entityType === "LEAD" ? entityId : String(record.leadId ?? "");
     if (!leadId || !nodeData.opportunityTypeId) return;
@@ -376,6 +461,28 @@ async function executeAutomationAction(
     return;
   }
 
+  // Real bug found while building the app-backed automation node (Module 16, Phase 3): these
+  // two node types have existed in the builder UI's palette and config panel (list picker) for
+  // a while, but this file never had a matching branch to actually execute them -- a workflow
+  // built with either node silently did nothing at runtime, with no error surfaced anywhere.
+  // Reuses crm.ts's own add/removeLeadFromLeadListForTenant rather than writing to
+  // LeadListMember directly, so this fires the exact same LEAD_ADDED_TO_LIST automation trigger
+  // and audit-log entry the manual "add to list" UI action already does -- not a second,
+  // divergent code path. Dynamic import to avoid a circular import (crm.ts imports this file as
+  // pgAutomations), the same pattern this file's own call_app_action branch and crm.ts's NBA-
+  // widget branch already use.
+  if ((type === "add_to_list" || type === "remove_from_list") && nodeData.listId) {
+    const leadId = entityType === "LEAD" ? entityId : String(record.leadId ?? "");
+    if (!leadId || !user.tenantId) return;
+    const { addLeadsToLeadListForTenant, removeLeadFromLeadListForTenant } = await import("@/lib/server/crm");
+    if (type === "add_to_list") {
+      await addLeadsToLeadListForTenant(user, String(nodeData.listId), [leadId]).catch(() => undefined);
+    } else {
+      await removeLeadFromLeadListForTenant(user, String(nodeData.listId), leadId).catch(() => undefined);
+    }
+    return;
+  }
+
   if (type === "increment_score") {
     const targetId = entityType === "LEAD" ? entityId : String(record.leadId ?? "");
     if (!targetId) return;
@@ -395,10 +502,11 @@ async function executeAutomationAction(
     const leadId = entityType === "LEAD" ? entityId : String(record.leadId ?? "") || null;
     const opportunityId = entityType === "OPPORTUNITY" ? entityId : String(record.opportunityId ?? "") || null;
     const activityId = entityType === "ACTIVITY" ? entityId : String(record.activityId ?? "") || null;
+    const caseId = entityType === "CASE" ? entityId : String(record.caseId ?? "") || null;
     await execute(
       `insert into "Task"
-       (id, "tenantId", title, description, status, priority, "ownerId", "createdBy", "leadId", "opportunityId", "activityId", "dueAt", "reminderAt", "completedAt", "completedBy", metadata, "createdAt", "updatedAt")
-       values ($1, $2, $3, $4, 'OPEN', $5, $6, $7, $8, $9, $10, $11, $12, null, null, $13, $14, $14)`,
+       (id, "tenantId", title, description, status, priority, "ownerId", "createdBy", "leadId", "opportunityId", "activityId", "caseId", "dueAt", "reminderAt", "completedAt", "completedBy", metadata, "createdAt", "updatedAt")
+       values ($1, $2, $3, $4, 'OPEN', $5, $6, $7, $8, $9, $10, $11, $12, $13, null, null, $14, $15, $15)`,
       [
         randomUUID(),
         user.tenantId,
@@ -410,11 +518,80 @@ async function executeAutomationAction(
         leadId,
         opportunityId,
         activityId,
+        caseId,
         nodeData.dueAt ?? null,
         nodeData.reminderAt ?? null,
         { source: "AUTOMATION", entityType, entityId },
         now,
       ],
+      client,
+    );
+    return;
+  }
+
+  if (type === "apply_task_playbook") {
+    const playbookId = String(nodeData.playbookId ?? "");
+    if (!playbookId) return;
+    const leadId = entityType === "LEAD" ? entityId : String(record.leadId ?? "") || null;
+    const opportunityId = entityType === "OPPORTUNITY" ? entityId : String(record.opportunityId ?? "") || null;
+    if (!leadId && !opportunityId) return;
+
+    const playbook = await queryOne<any>(
+      'select id from "TaskPlaybook" where "tenantId" = $1 and id = $2 and "isActive" = true limit 1',
+      [user.tenantId, playbookId],
+      client,
+    );
+    if (!playbook) return;
+    const items = await query<any>(
+      'select id, title, description, priority, "dueInDays", "assignToRecordOwner" from "TaskPlaybookItem" where "tenantId" = $1 and "playbookId" = $2 order by "itemOrder" asc',
+      [user.tenantId, playbookId],
+      client,
+    );
+    if (!items.length) return;
+
+    let recordOwnerId: string | null = null;
+    if (opportunityId) {
+      const opportunity = await queryOne<{ ownerId: string | null }>('select "ownerId" from "Opportunity" where "tenantId" = $1 and id = $2 limit 1', [user.tenantId, opportunityId], client);
+      recordOwnerId = opportunity?.ownerId ?? null;
+    }
+    if (!recordOwnerId && leadId) {
+      const lead = await queryOne<{ ownerId: string | null }>('select "ownerId" from "Lead" where "tenantId" = $1 and id = $2 limit 1', [user.tenantId, leadId], client);
+      recordOwnerId = lead?.ownerId ?? null;
+    }
+
+    const now = new Date().toISOString();
+    const taskIds: string[] = [];
+    for (const item of items) {
+      const taskId = randomUUID();
+      const dueAt = new Date(Date.now() + Number(item.dueInDays ?? 1) * 24 * 60 * 60 * 1000).toISOString();
+      const ownerId = item.assignToRecordOwner && recordOwnerId ? recordOwnerId : user.id;
+      await execute(
+        `insert into "Task"
+         (id, "tenantId", title, description, status, priority, "ownerId", "createdBy", "leadId", "opportunityId", "activityId", "dueAt", "reminderAt", "completedAt", "completedBy", metadata, "createdAt", "updatedAt")
+         values ($1, $2, $3, $4, 'OPEN', $5, $6, $7, $8, $9, null, $10, null, null, null, $11, $12, $12)`,
+        [
+          taskId,
+          user.tenantId,
+          item.title,
+          item.description,
+          item.priority,
+          ownerId,
+          user.id,
+          leadId,
+          opportunityId,
+          dueAt,
+          { source: "TASK_PLAYBOOK", playbookId, playbookItemId: item.id },
+          now,
+        ],
+        client,
+      );
+      taskIds.push(taskId);
+    }
+
+    await execute(
+      `insert into "TaskPlaybookApplication" (id, "tenantId", "playbookId", "leadId", "opportunityId", "taskIds", "appliedBy", source, "createdAt")
+       values ($1, $2, $3, $4, $5, $6, $7, 'AUTOMATION', $8)`,
+      [randomUUID(), user.tenantId, playbookId, leadId, opportunityId, taskIds, user.id, now],
       client,
     );
     return;
@@ -449,28 +626,194 @@ async function executeAutomationAction(
     const recipient = String(nodeData.to ?? (channel === "EMAIL" ? record.email : record.phone) ?? "").trim();
     const body = String(nodeData.message ?? nodeData.body ?? "").trim();
     if (!["EMAIL", "WHATSAPP", "SMS"].includes(channel) || !recipient || !body) return;
-    const now = new Date().toISOString();
-    await execute(
-      `insert into "CommunicationOutbox"
-       (id, "tenantId", channel, "providerConfigId", "senderIdentityId", "templateId", recipient, subject, body,
-        payload, status, "nextAttemptAt", "sourceType", "sourceId", "entityType", "entityId", "createdBy", "createdAt", "updatedAt")
-       values ($1, $2, $3, null, null, null, $4, $5, $6, $7, 'QUEUED', $8, 'AUTOMATION', $9, $10, $11, $12, $8, $8)`,
-      [
-        randomUUID(),
-        user.tenantId,
-        channel,
+    // Routed through the same consent/suppression checks every other send path uses
+    // (queueCommunicationForTenant) instead of a raw insert -- this node previously
+    // inserted 'QUEUED' unconditionally, so an automation (including every Marketing
+    // Journey step) could message an opted-out or suppressed recipient. Dynamic import
+    // avoids a top-level circular import: communications.ts already imports
+    // runAutomationsForEvent from this file.
+    const { queueCommunicationForTenant } = await import("@/lib/server/communications");
+
+    // Channel fallback/throttle (gap checklist Module 8, item 8), configured per node --
+    // journeys have no single canonical "campaign row" the way MarketingCampaign steps do,
+    // so this node resolves and embeds the controls directly on the outbox row instead.
+    const fallbackChannel = String(nodeData.fallbackChannel ?? "").toUpperCase();
+    const fallbackCondition = String(nodeData.fallbackCondition ?? "BLOCKED_OR_FAILED");
+    const fallbackRecipient = String(nodeData.fallbackTo ?? (fallbackChannel === "EMAIL" ? record.email : record.phone) ?? "").trim();
+    const fallback =
+      ["EMAIL", "WHATSAPP", "SMS"].includes(fallbackChannel) && fallbackRecipient && nodeData.fallbackMessage
+        ? {
+            channel: fallbackChannel as "EMAIL" | "WHATSAPP" | "SMS",
+            recipient: fallbackRecipient,
+            subject: (nodeData.fallbackSubject as string | undefined) ?? null,
+            body: String(nodeData.fallbackMessage),
+            delayMinutes: Number(nodeData.fallbackDelayMinutes ?? 0),
+            // "BLOCKED_OR_FAILED" (default) fires immediately if the primary send is
+            // suppressed/fatigue-capped, AND (separately) from the delayed FAILED-branch path
+            // if it later exhausts retries. "FAILED_ONLY" suppresses the immediate branch.
+            immediate: fallbackCondition !== "FAILED_ONLY",
+          }
+        : null;
+    const throttlePerMinute = nodeData.throttlePerMinute ? Number(nodeData.throttlePerMinute) : null;
+    const deliveryControls =
+      throttlePerMinute || nodeData.quietHours
+        ? {
+            throttlePerMinute,
+            quietHours: (nodeData.quietHours as Record<string, unknown> | undefined) ?? null,
+            throttleKey: `${user.tenantId}:${entityType}:${nodeData.label ?? type}`,
+          }
+        : null;
+
+    await queueCommunicationForTenant(
+      user,
+      {
+        channel: channel as "EMAIL" | "WHATSAPP" | "SMS",
         recipient,
-        nodeData.subject ?? null,
+        subject: (nodeData.subject as string | undefined) ?? null,
         body,
-        { automationNode: nodeData.label ?? type, sourceRecord: record },
-        now,
-        entityId,
+        sourceType: "AUTOMATION",
+        sourceId: entityId,
         entityType,
         entityId,
-        user.id,
-      ],
+        payload: { automationNode: nodeData.label ?? type, sourceRecord: record },
+        fallback,
+        deliveryControls,
+      },
       client,
     );
+    return;
+  }
+
+  if (type === "assign_case" || type === "add_case_comment") {
+    // Only meaningful for a case-triggered automation acting on its own triggering case --
+    // there's no "related case" concept the way Opportunity has a parent Lead, so unlike
+    // assign_owner this has no target/current-record picker.
+    if (entityType !== "CASE") return;
+    // Dynamic import avoids a top-level circular import: cases-postgres.ts already imports
+    // runAutomationsForEvent from this same file (same reasoning as the send_email node's
+    // import of communications.ts).
+    const cases = await import("@/lib/repositories/cases-postgres");
+    if (type === "assign_case") {
+      const ownerId = String(nodeData.ownerId ?? "");
+      if (!ownerId) return;
+      const reason = String(nodeData.reason ?? "").trim() || "Assigned by automation";
+      await cases.assignCaseToUser(user, entityId, { newOwnerId: ownerId, reason });
+      return;
+    }
+    const body = String(nodeData.body ?? "").trim();
+    if (!body) return;
+    await cases.addCommentToCase(user, entityId, { body, isInternal: nodeData.isInternal !== false });
+    return;
+  }
+
+  // Remaining case automation actions (gap checklist Module 11, item 13). "create_case" is
+  // deliberately usable from ANY trigger scope (e.g. a Lead automation opening a case), not
+  // just case-scoped ones -- every other node here acts on the triggering Case itself, so they
+  // all still guard entityType === "CASE" the same way assign_case/add_case_comment do above.
+  if (type === "create_case") {
+    const cases = await import("@/lib/repositories/cases-postgres");
+    const subject = String(nodeData.subject ?? "").trim() || `Case from automation (${entityType} ${entityId})`;
+    await cases.createCaseForTenant(user, {
+      subject,
+      description: nodeData.description ? String(nodeData.description) : null,
+      typeId: nodeData.typeId ? String(nodeData.typeId) : null,
+      priorityId: nodeData.priorityId ? String(nodeData.priorityId) : null,
+      queueId: nodeData.queueId ? String(nodeData.queueId) : null,
+      relatedLeadId: entityType === "LEAD" ? entityId : (record.leadId ? String(record.leadId) : null),
+      relatedOpportunityId: entityType === "OPPORTUNITY" ? entityId : (record.opportunityId ? String(record.opportunityId) : null),
+      requesterName: record.name ? String(record.name) : (record.title ? String(record.title) : null),
+      requesterEmail: record.email ? String(record.email) : null,
+      requesterPhone: record.phone ? String(record.phone) : null,
+    }).catch(() => undefined);
+    return;
+  }
+
+  if (type === "update_case") {
+    if (entityType !== "CASE") return;
+    const cases = await import("@/lib/repositories/cases-postgres");
+    const patch: Record<string, unknown> = {};
+    for (const key of ["subject", "description", "typeId", "priorityId", "queueId"] as const) {
+      if (nodeData[key] !== undefined && nodeData[key] !== "") patch[key] = nodeData[key];
+    }
+    if (Object.keys(patch).length === 0) return;
+    await cases.updateCaseForTenant(user, entityId, patch);
+    return;
+  }
+
+  if (type === "close_case" || type === "reopen_case") {
+    if (entityType !== "CASE") return;
+    const cases = await import("@/lib/repositories/cases-postgres");
+    const statuses = await query<{ id: string; isClosedStatus: boolean }>(
+      'select id, "isClosedStatus" from "CaseStatus" where "tenantId" = $1 order by "order" asc',
+      [user.tenantId],
+      client,
+    );
+    const target = type === "close_case" ? statuses.find((s) => s.isClosedStatus) : statuses.find((s) => !s.isClosedStatus);
+    if (!target) return;
+    await cases.updateCaseForTenant(user, entityId, { statusId: target.id });
+    return;
+  }
+
+  if (type === "escalate_case") {
+    if (entityType !== "CASE") return;
+    const caseRow = await queryOne<any>('select * from "Case" where "tenantId" = $1 and id = $2', [user.tenantId, entityId], client);
+    if (!caseRow?.ownerId) return;
+    const owner = await queryOne<{ managerId: string | null }>('select "managerId" from "User" where id = $1', [caseRow.ownerId], client);
+    const escalateToId = String(nodeData.escalateToId ?? "") || owner?.managerId;
+    if (!escalateToId) return;
+    await execute('update "Case" set "escalatedAt" = $1, "escalatedToId" = $2 where "tenantId" = $3 and id = $4', [new Date().toISOString(), escalateToId, user.tenantId, entityId], client);
+    const { createUserNotification } = await import("@/lib/server/notifications");
+    await createUserNotification({
+      tenantId: user.tenantId!, userId: escalateToId, title: "Case escalated",
+      message: `Case #${caseRow.caseNumber} "${caseRow.subject}" was escalated to you by an automation.`,
+      data: { entityType: "CASE", entityId, caseId: entityId },
+      category: "CASES",
+    }).catch(() => undefined);
+    return;
+  }
+
+  if (type === "send_case_acknowledgement" || type === "send_case_response") {
+    if (entityType !== "CASE") return;
+    const caseRow = await queryOne<any>('select * from "Case" where "tenantId" = $1 and id = $2', [user.tenantId, entityId], client);
+    if (!caseRow) return;
+    const channel = String(nodeData.channel ?? "EMAIL") as "EMAIL" | "WHATSAPP" | "SMS";
+    const recipient = channel === "EMAIL" ? caseRow.requesterEmail : caseRow.requesterPhone;
+    if (!recipient) return;
+    const body = String(nodeData.body ?? "").trim() || (type === "send_case_acknowledgement"
+      ? `We've received your request "${caseRow.subject}" (Case #${caseRow.caseNumber}) and will get back to you shortly.`
+      : `Update on Case #${caseRow.caseNumber}: ${caseRow.subject}`);
+    const { queueCommunicationForTenant } = await import("@/lib/server/communications");
+    await queueCommunicationForTenant(user, {
+      channel, recipient, subject: `Case #${caseRow.caseNumber}: ${caseRow.subject}`, body,
+      sourceType: type === "send_case_acknowledgement" ? "CASE_AUTO_ACK" : "CASE_AUTOMATION_RESPONSE",
+      sourceId: entityId, entityType: "CASE", entityId,
+    }, client).catch(() => undefined);
+    return;
+  }
+
+  if (type === "pause_case_sla" || type === "resume_case_sla") {
+    if (entityType !== "CASE") return;
+    const cases = await import("@/lib/repositories/cases-postgres");
+    if (type === "pause_case_sla") await cases.pauseCaseSla(user, entityId);
+    else await cases.resumeCaseSla(user, entityId);
+    return;
+  }
+
+  if (type === "apply_case_macro") {
+    if (entityType !== "CASE") return;
+    const macroId = String(nodeData.macroId ?? "");
+    if (!macroId) return;
+    const { applyCaseMacro } = await import("@/lib/repositories/case-macros-postgres");
+    await applyCaseMacro(user, entityId, macroId).catch(() => undefined);
+    return;
+  }
+
+  if (type === "add_case_to_queue") {
+    if (entityType !== "CASE") return;
+    const queueId = String(nodeData.queueId ?? "");
+    if (!queueId) return;
+    const cases = await import("@/lib/repositories/cases-postgres");
+    await cases.updateCaseForTenant(user, entityId, { queueId });
     return;
   }
 
@@ -499,6 +842,57 @@ async function executeAutomationAction(
       body: JSON.stringify({ entityType, entityId, record }),
     });
   }
+
+  // App-backed automation action node. nodeData.input values are static by default; a value
+  // that is exactly "{{some.path}}" (a full-string match, not an in-string substitution) is
+  // resolved against the triggering record via valueAtPath instead -- full-match rather than
+  // partial-string templating avoids the JSON-escaping class of bug a raw string .replace()
+  // would have here (a record value containing a `"` or `\` could otherwise corrupt the
+  // outbound JSON body).
+  if (type === "call_app_action" && nodeData.appId && nodeData.actionKey && user.tenantId) {
+    const rawInput = (nodeData.input && typeof nodeData.input === "object" ? nodeData.input : {}) as Record<string, unknown>;
+    const resolvedInput: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(rawInput)) {
+      const match = typeof value === "string" ? value.match(/^\{\{(.+)\}\}$/) : null;
+      resolvedInput[key] = match ? valueAtPath(record, match[1].trim()) : value;
+    }
+    // Dynamic import to avoid a circular import -- marketplace-postgres.ts imports
+    // createAuditLog from crm.ts, which itself imports this file (same pattern crm.ts's own
+    // NBA-widget branch uses to reach back into next-best-action.ts).
+    const { invokeAppAction } = await import("@/lib/repositories/marketplace-postgres");
+    await invokeAppAction(user, String(nodeData.appId), String(nodeData.actionKey), resolvedInput, automationId).catch(() => undefined);
+  }
+
+  if (type === "run_automation") {
+    const targetId = String(nodeData.targetAutomationId ?? "");
+    if (!targetId || !user.tenantId) return;
+    // Cycle guard: visitedAutomationIds carries every automation already running in this
+    // call chain (seeded with the top-level automation's own id in executeAutomationWorkflow,
+    // extended here before recursing). A->B->A silently no-ops on the repeat visit rather
+    // than recursing until the stack blows up -- matches this file's existing convention of
+    // quietly skipping an action when its target can't be resolved (see share_opportunity,
+    // clear_field, change_stage above) rather than throwing and failing the whole execution.
+    if (visitedAutomationIds?.has(targetId)) return;
+    const targetAutomation = await queryOne<any>(
+      'select id, name, trigger, workflow, "isActive" from "AutomationV2" where id = $1 and "tenantId" = $2 and "deletedAt" is null and "isActive" = true',
+      [targetId, user.tenantId],
+      client,
+    );
+    if (!targetAutomation) return;
+    const nextVisited = new Set(visitedAutomationIds ?? []);
+    nextVisited.add(targetId);
+    const startedAt = new Date().toISOString();
+    const log = await executeAutomationWorkflow(user, targetAutomation, entityType, entityId, record, "LIVE", { client, visitedAutomationIds: nextVisited });
+    const waiting = log.some((step) => step.status === "WAITING");
+    await execute(
+      `insert into "AutomationExecution"
+        (id, "tenantId", "automationId", status, "entityType", "entityId", context, "executionLog", "workflowSnapshot", "startedAt", "completedAt", error)
+       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, null)`,
+      [randomUUID(), user.tenantId, targetAutomation.id, waiting ? "WAITING" : "COMPLETED", entityType, entityId, { subAutomation: true }, { steps: log }, targetAutomation.workflow, startedAt, waiting ? null : new Date().toISOString()],
+      client,
+    );
+    return;
+  }
 }
 
 async function scheduleAutomationResume(
@@ -521,15 +915,34 @@ async function scheduleAutomationResume(
   );
 }
 
-async function executeAutomationWorkflow(
+// "activity.<field>" (valueAtPath's existing entity-prefix convention) always means the
+// specific Activity that fired this trigger -- there was no way at all to reference "the
+// lead's most recent activity" from a Lead- or Opportunity-triggered automation, since only
+// the triggering row itself was ever reachable. Enriching `record` once, up front, lets
+// valueAtPath resolve "leadActivity.<field>" via its ordinary generic-object-path lookup with
+// no changes to the (deeply, synchronously, recursively used) condition evaluator itself.
+async function attachLatestLeadActivity(user: TenantUser, entityType: string, entityId: string, record: Record<string, unknown>, client?: Queryable) {
+  const leadId = entityType === "LEAD" ? entityId : String(record.leadId ?? "");
+  if (!leadId || !user.tenantId) return record;
+  const latest = await queryOne<any>(
+    'select * from "Activity" where "tenantId" = $1 and "leadId" = $2 order by "createdAt" desc limit 1',
+    [user.tenantId, leadId],
+    client,
+  );
+  return { ...record, leadActivity: latest ?? null };
+}
+
+export async function executeAutomationWorkflow(
   user: TenantUser,
   automation: any,
   entityType: string,
   entityId: string,
   record: Record<string, unknown>,
   mode: "LIVE" | "TEST",
-  options: { startNodeIds?: string[]; resumeJobId?: string; client?: Queryable } = {},
+  options: { startNodeIds?: string[]; resumeJobId?: string; client?: Queryable; visitedAutomationIds?: Set<string> } = {},
 ) {
+  const visitedAutomationIds = options.visitedAutomationIds ?? new Set<string>([automation.id]);
+  record = await attachLatestLeadActivity(user, entityType, entityId, record, options.client);
   const workflow = (automation.workflow ?? {}) as { nodes?: any[]; edges?: any[]; config?: Record<string, unknown> };
   const nodes = Array.isArray(workflow.nodes) ? workflow.nodes : [];
   const edges = Array.isArray(workflow.edges) ? workflow.edges : [];
@@ -605,7 +1018,7 @@ async function executeAutomationWorkflow(
       const waitConfig = nodeType === "wait_until_activity" && nodeData.timeoutDuration
         ? { ...nodeData, duration: nodeData.timeoutDuration, unit: nodeData.timeoutUnit ?? nodeData.unit }
         : nodeData;
-      const runAt = automationDelayDate(waitConfig);
+      const runAt = await automationDelayDate(waitConfig, user.tenantId);
       stepLog.status = mode === "LIVE" ? "WAITING" : "TEST_WAIT_SKIPPED";
       const resumeNodeIds = nodeType === "wait_until_activity" && String(nodeData.timeoutAction ?? "continue") === "exit" ? [] : nextNodeIds;
       stepLog.resumeNodeIds = resumeNodeIds;
@@ -617,7 +1030,7 @@ async function executeAutomationWorkflow(
       }
     } else {
       if (mode === "LIVE") {
-        await executeAutomationAction(user, entityType, entityId, record, nodeData, String((automation.trigger as Record<string, unknown> | undefined)?.type ?? "AUTOMATION"), options.client);
+        await executeAutomationAction(user, entityType, entityId, record, nodeData, String((automation.trigger as Record<string, unknown> | undefined)?.type ?? "AUTOMATION"), options.client, visitedAutomationIds, automation.id ?? null);
       }
       queue.push(...automationNextEdges(edges, node.id, record, nodeData).map((edge) => edge.target));
     }
@@ -660,6 +1073,7 @@ export async function getAutomationForTenant(user: TenantUser, id: string) {
 }
 
 export async function createAutomationForTenant(user: TenantUser, payload: Record<string, unknown>) {
+  await assertFeatureEnabled(user.tenantId, "automationEnabled", { isPlatformAdmin: user.isPlatformAdmin });
   return withTransaction(user, async (client) => {
     const now = new Date().toISOString();
     const row = await queryOne<any>(
@@ -685,6 +1099,7 @@ export async function createAutomationForTenant(user: TenantUser, payload: Recor
 }
 
 export async function updateAutomationForTenant(user: TenantUser, id: string, payload: Record<string, unknown>) {
+  await assertFeatureEnabled(user.tenantId, "automationEnabled", { isPlatformAdmin: user.isPlatformAdmin });
   return withTransaction(user, async (client) => {
     const existing = await getAutomationForTenant(user, id);
     if (!existing) throw new Error("AUTOMATION_NOT_FOUND");
@@ -731,7 +1146,7 @@ export async function listAutomationExecutionsForTenant(user: TenantUser, automa
   );
 }
 
-async function loadAutomationTestRecord(user: TenantUser, entityType: string, entityId: string) {
+export async function loadAutomationTestRecord(user: TenantUser, entityType: string, entityId: string) {
   const type = entityType.toUpperCase();
   const table = type === "OPPORTUNITY" ? "Opportunity" : type === "ACTIVITY" ? "Activity" : "Lead";
   const tenant = tenantWhere(user, 2);
@@ -739,6 +1154,7 @@ async function loadAutomationTestRecord(user: TenantUser, entityType: string, en
 }
 
 export async function testAutomationForTenant(user: TenantUser, automationId: string, input: { entityType: string; entityId: string }) {
+  await assertFeatureEnabled(user.tenantId, "automationEnabled", { isPlatformAdmin: user.isPlatformAdmin });
   const automation = await getAutomationForTenant(user, automationId);
   if (!automation) throw new Error("AUTOMATION_NOT_FOUND");
   const record = await loadAutomationTestRecord(user, input.entityType, input.entityId);
@@ -755,6 +1171,31 @@ export async function testAutomationForTenant(user: TenantUser, automationId: st
 
 export async function runAutomationsForEvent(user: TenantUser, eventType: string, entityType: string, entityId: string, record: Record<string, unknown>) {
   if (!user.tenantId) return [];
+  // Every call site is a fire-and-forget `.catch(() => undefined)` from another repository's
+  // own mutation (leads, opportunities, forms, distribution, cases, etc.) -- a thrown error
+  // here would look identical to a genuine automation failure instead of the deliberate
+  // "nothing to do here" outcome a disabled tenant should produce. Mirrors distributeRecord's
+  // graceful no-op for the same reason.
+  if (!(await isFeatureEnabledForTenant(user.tenantId, "automationEnabled"))) return [];
+
+  // "Automation/job throttling" -- a tenant-wide ceiling on how many triggering EVENTS get
+  // matched against automations per minute, distinct from the existing per-automation
+  // maxExecutionsPerRecord cap below (a workflow-safety guard against one record re-triggering
+  // the same automation forever, not a throughput limit). 1000/min is generous enough that a
+  // real bulk import (hundreds of leads created in a burst) doesn't trip it, but catches a
+  // runaway loop or scripted abuse hammering this tenant's automation triggers. Same
+  // fire-and-forget philosophy as the feature-flag check above: every caller already
+  // `.catch(() => undefined)`s this function, so a skipped batch here is silent, not an error.
+  const throttle = await checkRateLimitWithAlert({
+    key: `automation:tenant:${user.tenantId}`,
+    limit: 1000,
+    windowSeconds: 60,
+    tenantId: user.tenantId,
+    category: "AUTOMATION",
+    detail: `tenant ${user.tenantId}, event ${eventType}`,
+  });
+  if (!throttle.allowed) return [];
+
   const automations = await query<any>(
     `select id, name, trigger, workflow, "isActive"
      from "AutomationV2"
@@ -805,6 +1246,97 @@ export async function runAutomationsForEvent(user: TenantUser, eventType: string
   return results;
 }
 
+// Manual bulk enrollment: runs an Automation's own workflow steps directly for a batch of
+// existing records, bypassing the normal event-trigger matching entirely (an enrolled record
+// doesn't need to match the automation's trigger condition -- enrollment IS the trigger).
+// Mirrors runAutomationsForEvent's per-record execute-and-log shape exactly, but against a
+// caller-supplied id list instead of trigger-matched automations, and tracked under one
+// AutomationEnrollmentJob row per batch.
+export async function enrollRecordsInAutomation(
+  user: TenantUser,
+  automationId: string,
+  entityType: "LEAD" | "OPPORTUNITY",
+  recordIds: string[],
+) {
+  if (!user.tenantId) throw new Error("TENANT_CONTEXT_REQUIRED");
+  await assertFeatureEnabled(user.tenantId, "automationEnabled", { isPlatformAdmin: user.isPlatformAdmin });
+  const ids = [...new Set(recordIds.filter(Boolean))].slice(0, 500);
+  if (!ids.length) throw new Error("NO_RECORDS_PROVIDED");
+
+  const automation = await queryOne<any>(
+    'select id, name, trigger, workflow, "isActive" from "AutomationV2" where id = $1 and "tenantId" = $2 and "deletedAt" is null',
+    [automationId, user.tenantId],
+  );
+  if (!automation) throw new Error("AUTOMATION_NOT_FOUND");
+
+  const table = entityType === "OPPORTUNITY" ? "Opportunity" : "Lead";
+  const records = await query<any>(`select * from "${table}" where "tenantId" = $1 and id = any($2::text[])`, [user.tenantId, ids]);
+  const recordById = new Map(records.map((record: any) => [record.id, record]));
+
+  const jobId = randomUUID();
+  const now = new Date().toISOString();
+  await execute(
+    `insert into "AutomationEnrollmentJob" (id, "tenantId", "automationId", "entityType", "totalRecords", "processed", "succeeded", "failed", status, errors, "createdBy", "createdAt")
+     values ($1, $2, $3, $4, $5, 0, 0, 0, 'PROCESSING', '[]', $6, $7)`,
+    [jobId, user.tenantId, automationId, entityType, ids.length, user.id, now],
+  );
+
+  let succeeded = 0;
+  const errors: Array<{ recordId: string; message: string }> = [];
+  for (const id of ids) {
+    const record = recordById.get(id);
+    if (!record) {
+      errors.push({ recordId: id, message: "Record not found" });
+      continue;
+    }
+    const startedAt = new Date().toISOString();
+    const log: Array<Record<string, unknown>> = [];
+    try {
+      await withTransaction(user, async (client) => {
+        log.push(...await executeAutomationWorkflow(user, automation, entityType, id, record, "LIVE", { client }));
+        const waiting = log.some((step) => step.status === "WAITING");
+        await execute(
+          `insert into "AutomationExecution"
+            (id, "tenantId", "automationId", status, "entityType", "entityId", context, "executionLog", "workflowSnapshot", "startedAt", "completedAt", error)
+           values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, null)`,
+          [randomUUID(), user.tenantId, automation.id, waiting ? "WAITING" : "COMPLETED", entityType, id, { manualEnrollment: true, jobId }, { steps: log }, automation.workflow, startedAt, waiting ? null : new Date().toISOString()],
+          client,
+        );
+      });
+      succeeded += 1;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Automation failed";
+      await execute(
+        `insert into "AutomationExecution"
+          (id, "tenantId", "automationId", status, "entityType", "entityId", context, "executionLog", "workflowSnapshot", "startedAt", "completedAt", error)
+         values ($1, $2, $3, 'FAILED', $4, $5, $6, $7, $8, $9, $10, $11)`,
+        [randomUUID(), user.tenantId, automation.id, entityType, id, { manualEnrollment: true, jobId }, { steps: log }, automation.workflow, startedAt, new Date().toISOString(), message],
+      );
+      errors.push({ recordId: id, message });
+    }
+  }
+
+  const status = errors.length === 0 ? "COMPLETED" : "COMPLETED_WITH_ERRORS";
+  await execute(
+    `update "AutomationEnrollmentJob" set processed = $1, succeeded = $2, failed = $3, status = $4, errors = $5, "completedAt" = $6 where id = $7`,
+    [ids.length, succeeded, errors.length, status, JSON.stringify(errors), new Date().toISOString(), jobId],
+  );
+
+  return { jobId, totalRecords: ids.length, succeeded, failed: errors.length, status };
+}
+
+export async function listAutomationEnrollmentJobsForTenant(user: TenantUser, automationId: string) {
+  if (!user.tenantId) return [];
+  return query<any>(
+    `select id, "entityType", "totalRecords", processed, succeeded, failed, status, errors, "createdAt", "completedAt"
+     from "AutomationEnrollmentJob"
+     where "tenantId" = $1 and "automationId" = $2
+     order by "createdAt" desc
+     limit 20`,
+    [user.tenantId, automationId],
+  );
+}
+
 async function resolveAutomationJobUser(job: any, fallbackUser?: TenantUser, client?: Queryable): Promise<TenantUser> {
   if (fallbackUser && fallbackUser.tenantId === job.tenantId) return fallbackUser;
   if (job.userId) {
@@ -844,6 +1376,12 @@ async function processDueAutomationJobsInternal(input: { tenantId?: string; fall
       const user = await resolveAutomationJobUser(job, input.fallbackUser, client);
       const automation = await getAutomationForTenant(user, job.automationId);
       if (!automation || !automation.isActive) {
+        await execute('update "AutomationQueue" set status = $1, "updatedAt" = $2 where id = $3', ["CANCELLED", new Date().toISOString(), job.id], client);
+        return;
+      }
+      // A tenant that disabled Automations after this job was already queued -- cancel rather
+      // than execute a workflow they no longer have access to, or silently drop the job.
+      if (!(await isFeatureEnabledForTenant(job.tenantId, "automationEnabled"))) {
         await execute('update "AutomationQueue" set status = $1, "updatedAt" = $2 where id = $3', ["CANCELLED", new Date().toISOString(), job.id], client);
         return;
       }

@@ -1,11 +1,13 @@
 import { randomUUID } from "crypto";
 import { createAuditLog, automationConditionMatches } from "@/lib/server/crm";
 import { userMatchesTargetingConfig, type ParticipantConfig } from "@/lib/server/partner-access";
+import { assertFeatureEnabled, isFeatureEnabledForTenant } from "@/lib/server/entitlements";
 import { execute, query, queryOne } from "@/lib/db/query";
 
 type TenantUser = {
   id: string;
   tenantId: string | null;
+  isPlatformAdmin?: boolean;
   role?: { permissions?: any } | string | null;
 };
 
@@ -106,6 +108,7 @@ export async function getGamificationSettingsForTenant(user: TenantUser) {
 
 export async function upsertGamificationSettingsForTenant(user: TenantUser, input: GamificationSettingsInput) {
   if (!user.tenantId) throw new Error("TENANT_CONTEXT_REQUIRED");
+  await assertFeatureEnabled(user.tenantId, "gamificationEnabled", { isPlatformAdmin: user.isPlatformAdmin });
   const existing = await getGamificationSettingsForTenant(user);
   const now = new Date().toISOString();
   const payload = {
@@ -198,6 +201,7 @@ export async function listGamificationRulesForTenant(user: TenantUser) {
 
 export async function createGamificationRuleForTenant(user: TenantUser, input: GamificationRuleInput) {
   if (!user.tenantId) throw new Error("TENANT_CONTEXT_REQUIRED");
+  await assertFeatureEnabled(user.tenantId, "gamificationEnabled", { isPlatformAdmin: user.isPlatformAdmin });
   const now = new Date().toISOString();
   const data = await queryOne<any>(
     `insert into "GamificationRule"
@@ -231,6 +235,7 @@ export async function updateGamificationRuleForTenant(
   input: Partial<GamificationRuleInput>
 ) {
   if (!user.tenantId) throw new Error("TENANT_CONTEXT_REQUIRED");
+  await assertFeatureEnabled(user.tenantId, "gamificationEnabled", { isPlatformAdmin: user.isPlatformAdmin });
   const existing = await queryOne<any>(
     `select id, "tenantId", name, "triggerEventType", "audienceScope", conditions, "pointsAwarded",
             priority, "isActive", "createdAt", "updatedAt"
@@ -264,6 +269,7 @@ export async function updateGamificationRuleForTenant(
 
 export async function deleteGamificationRuleForTenant(user: TenantUser, id: string) {
   if (!user.tenantId) throw new Error("TENANT_CONTEXT_REQUIRED");
+  await assertFeatureEnabled(user.tenantId, "gamificationEnabled", { isPlatformAdmin: user.isPlatformAdmin });
   const existing = await queryOne<any>(
     `select id, "tenantId", name, "triggerEventType", "audienceScope", conditions, "pointsAwarded",
             priority, "isActive", "createdAt", "updatedAt"
@@ -365,6 +371,7 @@ export async function awardPointsForEvent(
   triggerEventType: string
 ) {
   if (!user.tenantId) return [];
+  if (!(await isFeatureEnabledForTenant(user.tenantId, "gamificationEnabled"))) return [];
   const targetUserId = resolveTargetUserId(entityType, record);
   if (!targetUserId) return [];
   if (!(await isUserIncludedInGamification(user, targetUserId))) {
@@ -581,6 +588,7 @@ export async function listGamificationRedemptionsForTenant(user: TenantUser) {
 
 export async function requestGamificationRedemption(user: TenantUser, input: GamificationRedemptionInput) {
   if (!user.tenantId) throw new Error("TENANT_CONTEXT_REQUIRED");
+  await assertFeatureEnabled(user.tenantId, "gamificationEnabled", { isPlatformAdmin: user.isPlatformAdmin });
   if (!(await isUserIncludedInGamification(user, user.id))) throw new Error("USER_NOT_IN_GAMIFICATION_PARTICIPANTS");
 
   const catalogItem = await resolveRedemptionCatalogItem(user, input);
@@ -632,6 +640,7 @@ export async function updateGamificationRedemptionStatus(
   input: { status: "FULFILLED" | "FAILED"; thirdPartyReference?: string | null; failureReason?: string | null }
 ) {
   if (!user.tenantId) throw new Error("TENANT_CONTEXT_REQUIRED");
+  await assertFeatureEnabled(user.tenantId, "gamificationEnabled", { isPlatformAdmin: user.isPlatformAdmin });
   const existing = await queryOne<any>(
     `select id, "tenantId", "userId", "redemptionType", "pointsRedeemed", "monetaryAmount",
             "thirdPartyProvider", "thirdPartyReference", status, "catalogItemKey", "rewardName",

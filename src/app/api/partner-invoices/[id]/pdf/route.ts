@@ -22,10 +22,11 @@ export async function GET(
 
     if ("file" in result && result.file) {
       const contentType = result.contentType || "application/pdf";
+      const friendlyName = (result.invoiceNumber || id).replace(/[^a-zA-Z0-9._-]/g, "-");
       return new NextResponse(new Uint8Array(result.file), {
         headers: {
           "Content-Type": contentType,
-          "Content-Disposition": `inline; filename="partner-invoice-${id}.pdf"`,
+          "Content-Disposition": `inline; filename="Invoice-${friendlyName}.pdf"`,
         },
       });
     }

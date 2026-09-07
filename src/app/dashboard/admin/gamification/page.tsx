@@ -15,6 +15,7 @@ import { Plus, Pencil, Trash2, Trophy, Award, Target } from "lucide-react";
 import { toast } from "sonner";
 import { TableSkeleton } from "@/components/common/skeletons";
 import { EmptyState } from "@/components/common/empty-state";
+import { useFeature } from "@/components/auth/feature-gate";
 import { ConditionBuilder, type ConditionFieldOption, type CrmCondition } from "@/components/common/condition-builder";
 
 const TRIGGER_EVENT_TYPES = [
@@ -158,6 +159,7 @@ const emptyBadgeForm: { name: string; description: string; iconEmoji: string; au
 };
 
 export default function GamificationSettingsPage() {
+    const gamificationEnabled = useFeature("gamificationEnabled");
     const [rules, setRules] = useState<GamificationRule[]>([]);
     const [badges, setBadges] = useState<Badge[]>([]);
     const [settings, setSettings] = useState<GamificationSettings>(DEFAULT_GAMIFICATION_SETTINGS);
@@ -424,6 +426,14 @@ export default function GamificationSettingsPage() {
         { key: "createdAt", label: "Record Created Date", type: "date" },
         { key: "ownerId", label: "Record Owner", type: "select", options: partners.map((partner) => ({ value: partner.userId, label: partner.legalBusinessName })) },
     ];
+
+    if (!gamificationEnabled) {
+        return (
+            <div className="mx-auto max-w-[1200px] p-4 md:p-6">
+                <EmptyState title="Gamification isn't enabled" description="Enable the Gamification feature flag for this tenant to configure rules, badges, and rewards." />
+            </div>
+        );
+    }
 
     return (
         <div className="mx-auto max-w-[1200px] p-4 md:p-6">

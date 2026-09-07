@@ -258,5 +258,89 @@ describe("direct Postgres forms repository", () => {
       expect(result.warnings.length).toBeGreaterThan(0);
       expect(queryOneMock.mock.calls.some((call) => String(call[0]).includes('insert into "Opportunity"'))).toBe(false);
     });
+
+    it("rejects a public submission when the Form Builder module is disabled for the tenant", async () => {
+      setupMocks({
+        form: {
+          ...BASE_FORM,
+          fields: [{ id: "email", label: "Email", mapping: "lead.email" }],
+        },
+      });
+      queryOneMock.mockImplementation(async (sql: string) => {
+        const text = String(sql);
+        if (text.includes('from "Form" where id')) return BASE_FORM;
+        if (text.includes('from "TenantFeature"')) return { formBuilderEnabled: false };
+        return null;
+      });
+
+      const { submitPublicForm } = await import("@/lib/repositories/forms-postgres");
+      await expect(
+        submitPublicForm("form-1", { "lead.email": "student@example.com" }),
+      ).rejects.toThrow("FEATURE_DISABLED");
+      expect(queryOneMock.mock.calls.some((call) => String(call[0]).includes('insert into "Lead"'))).toBe(false);
+    });
+  });
+
+  describe("entitlement gating", () => {
+    it("rejects creating a form when the Form Builder module is disabled for the tenant", async () => {
+      queryOneMock.mockImplementation(async (sql: string) => {
+        const text = String(sql);
+        if (text.includes('from "TenantFeature"')) return { formBuilderEnabled: false };
+        return null;
+      });
+
+      const { createFormForTenant } = await import("@/lib/repositories/forms-postgres");
+      await expect(
+        createFormForTenant({ id: "user-1", tenantId: "tenant-1" }, { name: "New Form" }),
+      ).rejects.toThrow("FEATURE_DISABLED");
+    });
+
+    it("rejects updating a form when the Form Builder module is disabled for the tenant", async () => {
+      queryOneMock.mockImplementation(async (sql: string) => {
+        const text = String(sql);
+        if (text.includes('from "TenantFeature"')) return { formBuilderEnabled: false };
+        return null;
+      });
+
+      const { updateFormForTenant } = await import("@/lib/repositories/forms-postgres");
+      await expect(
+        updateFormForTenant({ id: "user-1", tenantId: "tenant-1" }, "form-1", { name: "Renamed" }),
+      ).rejects.toThrow("FEATURE_DISABLED");
+    });
+
+    it("allows a platform admin to bypass the Form Builder gate", async () => {
+      queryOneMock.mockImplementation(async (sql: string) => {
+        const text = String(sql);
+        if (text.includes('from "TenantFeature"')) return { formBuilderEnabled: false };
+        if (text.includes('"Form"')) {
+          return {
+            id: "form-1",
+            tenantId: "tenant-1",
+            name: "Website Application",
+            description: null,
+            fields: [],
+            config: {},
+            isActive: true,
+            submitButtonText: "Submit",
+            successMessage: "Thanks",
+            redirectUrl: null,
+            spamProtection: true,
+            rateLimit: 10,
+            duplicateAction: "CREATE",
+            theme: "default",
+            createdAt: "2026-01-01T00:00:00.000Z",
+            updatedAt: "2026-01-01T00:00:00.000Z",
+          };
+        }
+        return null;
+      });
+      queryMock.mockResolvedValue([]);
+      executeMock.mockResolvedValue(1);
+
+      const { updateFormForTenant } = await import("@/lib/repositories/forms-postgres");
+      await expect(
+        updateFormForTenant({ id: "admin-1", tenantId: "tenant-1", isPlatformAdmin: true }, "form-1", { name: "Renamed" }),
+      ).resolves.toBeDefined();
+    });
   });
 });

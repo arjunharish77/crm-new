@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { createTenantWithAdmin, listTenants } from "@/lib/server/admin";
 import { requirePlatformAdmin } from "@/lib/server/auth";
 import { badRequest, forbidden, serverError, unauthorized } from "@/lib/server/http";
+import { getEffectiveSecurityPolicy } from "@/lib/server/security-policy";
+import { validatePasswordStrength } from "@/lib/server/password-policy";
 
 export async function GET(request: Request) {
   try {
@@ -23,6 +25,10 @@ export async function POST(request: Request) {
     if (!body?.name || !body?.adminName || !body?.adminEmail || !body?.adminPassword) {
       return badRequest("Tenant and admin details are required");
     }
+
+    const policy = await getEffectiveSecurityPolicy(null);
+    const strengthErrors = validatePasswordStrength(body.adminPassword, policy);
+    if (strengthErrors.length) return badRequest(strengthErrors.join(", "));
 
     const created = await createTenantWithAdmin(body);
     return NextResponse.json(created);

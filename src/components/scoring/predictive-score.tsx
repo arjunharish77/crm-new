@@ -10,6 +10,7 @@ import { formatWorkspaceDateTime } from "@/lib/date-format";
 import { cn } from "@/lib/utils";
 import { PredictiveRecordScore } from "@/types/leads";
 import { toast } from "sonner";
+import { useModuleEnabled } from "@/components/auth/feature-gate";
 
 const BAND_CLASSNAMES: Record<string, string> = {
     HOT: "border-destructive/25 bg-destructive/10 text-destructive",
@@ -27,6 +28,8 @@ type ScoreHistoryRow = {
 };
 
 export function PredictiveScoreBadge({ score, compact = false }: { score?: PredictiveRecordScore | null; compact?: boolean }) {
+    const moduleEnabled = useModuleEnabled("PREDICTIVE_SCORING");
+    if (!moduleEnabled) return null;
     if (!score) {
         return <span className="text-xs text-muted-foreground">Not scored</span>;
     }
@@ -59,8 +62,10 @@ export function PredictiveScorePanel({
 }) {
     const [history, setHistory] = useState<ScoreHistoryRow[]>([]);
     const [overrideBusy, setOverrideBusy] = useState(false);
+    const moduleEnabled = useModuleEnabled("PREDICTIVE_SCORING");
 
     useEffect(() => {
+        if (!moduleEnabled) return;
         let mounted = true;
         apiFetch<ScoreHistoryRow[]>(`/lead-scoring/self-learning/history?recordType=${recordType}&recordId=${recordId}`)
             .then((data) => {
@@ -72,7 +77,9 @@ export function PredictiveScorePanel({
         return () => {
             mounted = false;
         };
-    }, [recordId, recordType]);
+    }, [recordId, recordType, moduleEnabled]);
+
+    if (!moduleEnabled) return null;
 
     if (!score) {
         return (

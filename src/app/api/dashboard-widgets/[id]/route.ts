@@ -22,6 +22,9 @@ export async function PATCH(
     if (error instanceof Error && error.message === "UNAUTHORIZED") {
       return unauthorized();
     }
+    if (error instanceof Error && error.message.startsWith("FEATURE_DISABLED")) {
+      return badRequest("Advanced Reporting is not enabled for this workspace");
+    }
 
     return serverError("Failed to update dashboard widget");
   }
@@ -39,6 +42,9 @@ export async function DELETE(
   } catch (error) {
     if (error instanceof Error && error.message === "UNAUTHORIZED") {
       return unauthorized();
+    }
+    if (error instanceof Error && error.message.startsWith("FEATURE_DISABLED")) {
+      return badRequest("Advanced Reporting is not enabled for this workspace");
     }
 
     return serverError("Failed to delete dashboard widget");

@@ -12,12 +12,17 @@ import {
     ChevronLeft,
     ChevronRight,
     ChevronUp,
+    Database,
     Download,
     FileText,
+    Inbox,
     LayoutDashboard,
     LayoutList,
+    LifeBuoy,
     List,
     Megaphone,
+    Package,
+    Phone,
     Puzzle,
     Shield,
     ShieldCheck,
@@ -34,6 +39,7 @@ import { apiFetch } from '@/lib/api';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import { useModuleEnabled } from '@/components/auth/feature-gate';
 
 const drawerWidth = 248;
 const railWidth = 68;
@@ -55,8 +61,17 @@ export function NavigationDrawer({ open, toggleDrawer }: { open: boolean; toggle
     const [adminOpen, setAdminOpen] = React.useState(true);
     const [platformOpen, setPlatformOpen] = React.useState(true);
     const [customOpen, setCustomOpen] = React.useState(true);
+    const [pinnedOpen, setPinnedOpen] = React.useState(true);
     const [customObjects, setCustomObjects] = React.useState<any[]>([]);
     const [canAccessPayouts, setCanAccessPayouts] = React.useState(true);
+    // "Pinned modules" (gap checklist Module 10's user workspace personalization item).
+    const [pinnedModules, setPinnedModules] = React.useState<string[]>([]);
+
+    React.useEffect(() => {
+        apiFetch('/settings/personalization')
+            .then((data: any) => setPinnedModules(Array.isArray(data?.pinnedModules) ? data.pinnedModules : []))
+            .catch(() => undefined);
+    }, []);
 
     React.useEffect(() => {
         const mediaQuery = window.matchMedia('(max-width: 767px)');
@@ -67,6 +82,54 @@ export function NavigationDrawer({ open, toggleDrawer }: { open: boolean; toggle
 
         return () => mediaQuery.removeEventListener('change', updateIsMobile);
     }, []);
+
+    // Gap checklist Module 10's "accessibility pass" item, "focus traps in dialogs/drawers" --
+    // this mobile overlay is a hand-rolled `<aside>`, not a Radix Dialog/Sheet (which trap focus
+    // for free), so it needs its own trap: focus the first focusable element on open, cycle
+    // Tab/Shift+Tab within the drawer, close on Escape, and restore focus to whatever was
+    // focused before opening (the hamburger trigger, wherever it lives).
+    const mobileDrawerRef = React.useRef<HTMLElement | null>(null);
+    const previouslyFocusedRef = React.useRef<HTMLElement | null>(null);
+
+    React.useEffect(() => {
+        if (!isMobile) return;
+        if (open) {
+            previouslyFocusedRef.current = document.activeElement as HTMLElement | null;
+            const firstFocusable = mobileDrawerRef.current?.querySelector<HTMLElement>(
+                'a[href], button:not([disabled]), input, [tabindex]:not([tabindex="-1"])'
+            );
+            firstFocusable?.focus();
+        } else {
+            previouslyFocusedRef.current?.focus();
+        }
+    }, [open, isMobile]);
+
+    React.useEffect(() => {
+        if (!isMobile || !open) return;
+        const handleKeyDown = (event: KeyboardEvent) => {
+            if (event.key === "Escape") {
+                event.preventDefault();
+                toggleDrawer();
+                return;
+            }
+            if (event.key !== "Tab") return;
+            const focusable = mobileDrawerRef.current?.querySelectorAll<HTMLElement>(
+                'a[href], button:not([disabled]), input, [tabindex]:not([tabindex="-1"])'
+            );
+            if (!focusable || focusable.length === 0) return;
+            const first = focusable[0];
+            const last = focusable[focusable.length - 1];
+            if (event.shiftKey && document.activeElement === first) {
+                event.preventDefault();
+                last.focus();
+            } else if (!event.shiftKey && document.activeElement === last) {
+                event.preventDefault();
+                first.focus();
+            }
+        };
+        document.addEventListener("keydown", handleKeyDown);
+        return () => document.removeEventListener("keydown", handleKeyDown);
+    }, [open, isMobile, toggleDrawer]);
 
     React.useEffect(() => {
         apiFetch('/metadata/objects')
@@ -79,6 +142,12 @@ export function NavigationDrawer({ open, toggleDrawer }: { open: boolean; toggle
     }, []);
 
     const isPartner = !!(user?.role as any)?.permissions?.isPartnerRole;
+    const serviceDeskEnabled = useModuleEnabled('SERVICE_DESK');
+    // Journeys live as a tab on the same /dashboard/marketing page and work independently of
+    // Marketing Communications (its own module) -- keep the nav entry reachable if either is
+    // enabled, since the page itself already gates each tab set separately.
+    const marketingEnabled = useModuleEnabled('MARKETING');
+    const journeyOrchestrationEnabled = useModuleEnabled('JOURNEY_ORCHESTRATION');
 
     React.useEffect(() => {
         if (!isPartner) return;
@@ -96,8 +165,8 @@ export function NavigationDrawer({ open, toggleDrawer }: { open: boolean; toggle
             { name: 'My Tasks', href: '/dashboard/tasks', icon: <CheckSquare className="size-5" /> },
             { name: 'Views', href: '/dashboard/views', icon: <LayoutList className="size-5" /> },
             { name: 'Exports', href: '/dashboard/exports', icon: <Download className="size-5" /> },
-            { name: 'My Payouts', href: '/dashboard/payouts', icon: <BadgeDollarSign className="size-5" />, enabled: canAccessPayouts },
-            { name: 'My Points', href: '/dashboard/my-points', icon: <Star className="size-5" /> },
+            { name: 'My Payouts', href: '/dashboard/payouts', icon: <BadgeDollarSign className="size-5" />, enabled: canAccessPayouts && user?.features?.payoutsEnabled !== false },
+            { name: 'My Points', href: '/dashboard/my-points', icon: <Star className="size-5" />, enabled: user?.features?.gamificationEnabled !== false },
         ]
         : [
             { name: 'Dashboard', href: '/dashboard', icon: <LayoutDashboard className="size-5" /> },
@@ -106,23 +175,28 @@ export function NavigationDrawer({ open, toggleDrawer }: { open: boolean; toggle
             { name: 'Opportunities', href: '/dashboard/opportunities', icon: <BriefcaseBusiness className="size-5" />, enabled: user?.features?.opportunityEnabled !== false },
             { name: 'Activities', href: '/dashboard/activities', icon: <Activity className="size-5" /> },
             { name: 'Tasks', href: '/dashboard/tasks', icon: <CheckSquare className="size-5" /> },
+            { name: 'Call Center', href: '/dashboard/call-center', icon: <Phone className="size-5" /> },
+            { name: 'Cases', href: '/dashboard/cases', icon: <LifeBuoy className="size-5" />, enabled: serviceDeskEnabled },
             { name: 'Views', href: '/dashboard/views', icon: <LayoutList className="size-5" /> },
             { name: 'Exports', href: '/dashboard/exports', icon: <Download className="size-5" /> },
             { name: 'Forms', href: '/dashboard/forms', icon: <FileText className="size-5" />, enabled: user?.features?.formBuilderEnabled !== false },
             { name: 'Automations', href: '/dashboard/automations-v2', icon: <WandSparkles className="size-5" />, enabled: user?.features?.automationEnabled !== false },
-            { name: 'Marketing', href: '/dashboard/marketing', icon: <Megaphone className="size-5" /> },
+            { name: 'Marketing', href: '/dashboard/marketing', icon: <Megaphone className="size-5" />, enabled: marketingEnabled || journeyOrchestrationEnabled },
             { name: 'Reports', href: '/dashboard/reports', icon: <BarChart3 className="size-5" />, enabled: user?.features?.advancedReporting !== false },
-            { name: 'Leaderboard', href: '/dashboard/leaderboard', icon: <Trophy className="size-5" /> },
-            { name: 'My Points', href: '/dashboard/my-points', icon: <Star className="size-5" /> },
+            { name: 'Leaderboard', href: '/dashboard/leaderboard', icon: <Trophy className="size-5" />, enabled: user?.features?.gamificationEnabled !== false },
+            { name: 'My Points', href: '/dashboard/my-points', icon: <Star className="size-5" />, enabled: user?.features?.gamificationEnabled !== false },
         ];
 
     const adminNavigation: NavItem[] = [
+        { name: 'Approvals', href: '/dashboard/approvals', icon: <Inbox className="size-5" /> },
         { name: 'Settings', href: '/dashboard/settings', icon: <SlidersHorizontal className="size-5" /> },
     ];
 
     const platformNavigation: NavItem[] = [
         { name: 'Tenants', href: '/platform-admin', icon: <ShieldCheck className="size-5" />, adminOnly: true },
         { name: 'Audit Logs', href: '/platform-admin/audit-logs', icon: <Shield className="size-5" />, adminOnly: true },
+        { name: 'Schema Status', href: '/platform-admin/schema-status', icon: <Database className="size-5" />, adminOnly: true },
+        { name: 'Marketplace', href: '/platform-admin/marketplace', icon: <Package className="size-5" />, adminOnly: true },
     ];
 
     const goTo = (href: string) => {
@@ -239,6 +313,19 @@ export function NavigationDrawer({ open, toggleDrawer }: { open: boolean; toggle
             </div>
 
             <div className="grow overflow-y-auto py-1">
+                {pinnedModules.length > 0 ? (() => {
+                    const pinnedItems = [...navigation, ...adminNavigation].filter(
+                        (item) => item.enabled !== false && pinnedModules.includes(item.href),
+                    );
+                    if (pinnedItems.length === 0) return null;
+                    return (
+                        <>
+                            {renderSection('Pinned', pinnedItems, pinnedOpen, () => setPinnedOpen(!pinnedOpen))}
+                            {(open || isMobile) ? <div className="mx-3 my-2 h-px bg-border" /> : null}
+                        </>
+                    );
+                })() : null}
+
                 <ul className="space-y-1 px-2">
                     {navigation.filter(item => item.enabled !== false).map(renderNavItem)}
                 </ul>
@@ -279,6 +366,10 @@ export function NavigationDrawer({ open, toggleDrawer }: { open: boolean; toggle
                     />
                 ) : null}
                 <aside
+                    ref={mobileDrawerRef}
+                    role="dialog"
+                    aria-modal="true"
+                    aria-label="Navigation"
                     className={cn(
                         "fixed inset-y-0 left-0 z-50 flex w-[248px] flex-col border-r bg-background shadow-xl transition-transform md:hidden",
                         open ? "translate-x-0" : "-translate-x-full"

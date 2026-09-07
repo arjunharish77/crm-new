@@ -4,7 +4,7 @@ import {
   deleteOpportunityTypeConfigForTenant,
   updateOpportunityTypeConfigForTenant,
 } from "@/lib/server/admin-modules";
-import { forbidden, serverError, unauthorized } from "@/lib/server/http";
+import { badRequest, forbidden, serverError, unauthorized } from "@/lib/server/http";
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -16,6 +16,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     return NextResponse.json(updated);
   } catch (error) {
     if (error instanceof Error && error.message === "UNAUTHORIZED") return unauthorized();
+    if (error instanceof Error && error.message === "PROGRAM_NOT_FOUND") return badRequest("Selected program was not found for this workspace");
     return serverError("Failed to update opportunity type", error);
   }
 }

@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { apiFetch } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -10,12 +11,19 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Checkbox } from "@/components/ui/checkbox";
 import { StandardDialog } from "@/components/common/standard-dialog";
 import { EmptyState } from "@/components/common/empty-state";
+import { ErrorState } from "@/components/common/error-state";
 import { TableSkeleton } from "@/components/common/skeletons";
 import { formatWorkspaceDateTime, formatWorkspaceDateTimeInput, workspaceDateTimeInputToIso } from "@/lib/date-format";
 import { cn } from "@/lib/utils";
-import { CalendarDays, CheckCircle2, ChevronLeft, ChevronRight, Clock, Edit3, ListChecks, Plus, RefreshCw, Trash2 } from "lucide-react";
+import { AlertTriangle, CalendarDays, CheckCircle2, ChevronLeft, ChevronRight, Clock, Edit3, Inbox, ListChecks, Plus, RefreshCw, Star, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { QueueExportButton } from "@/components/exports/queue-export-button";
+import { TaskChecklistDependenciesPanel } from "@/components/tasks/task-checklist-dependencies-panel";
+import { TaskRecurrenceEscalationFields, type RecurrenceRule } from "@/components/tasks/task-recurrence-escalation-fields";
+import { NextBestActionPanel } from "@/components/next-best-action/nba-panel";
+import { getFavoriteRecords, recordRecentView, toggleFavoriteRecord } from "@/lib/recent-records";
+import { getSavedViewMode, saveViewMode } from "@/lib/workspace-layout";
+import { RecordPreviewPopover } from "@/components/common/record-preview-popover";
 
 type Task = {
     id: string;
@@ -35,7 +43,40 @@ type Task = {
     lead?: { name?: string | null; email?: string | null; company?: string | null } | null;
     opportunity?: { title?: string | null } | null;
     activity?: { notes?: string | null; outcome?: string | null } | null;
+    parentTaskId?: string | null;
+    requireCompletionNote?: boolean;
+    completionNote?: string | null;
+    checklist?: Array<{ id: string; title: string; isDone: boolean }>;
+    blockedBy?: Array<{ taskId: string; title: string; status: string }>;
+    isBlocked?: boolean;
+    subtaskCount?: number;
+    recurrenceRule?: RecurrenceRule | null;
+    seriesId?: string | null;
+    escalateAfterMinutes?: number | null;
+    escalateToUserId?: string | null;
+    slaTarget?: string | null;
+    slaStatus?: "PENDING" | "MET" | "BREACHED" | null;
+    queueId?: string | null;
+    queuedAt?: string | null;
+    claimedBy?: string | null;
 };
+
+function taskSlaBadge(task: Task) {
+    const isOpen = task.status !== "COMPLETED" && task.status !== "CANCELLED";
+    const breached = task.slaStatus === "BREACHED" || (isOpen && !!task.slaTarget && new Date(task.slaTarget).getTime() < Date.now());
+    if (breached) {
+        return (
+            <Badge variant="destructive" className="rounded-md text-[0.65rem] font-semibold">
+                <AlertTriangle className="size-3" />
+                SLA Breached
+            </Badge>
+        );
+    }
+    if (task.slaStatus === "MET") {
+        return <Badge variant="outline" className="rounded-md text-[0.65rem] font-semibold">SLA Met</Badge>;
+    }
+    return null;
+}
 
 type UserOption = { id: string; name?: string | null; email?: string | null };
 type LeadOption = { id: string; name?: string | null; email?: string | null; company?: string | null };
@@ -65,6 +106,9 @@ const EMPTY_FORM = {
     dueAt: "",
     reminderAt: "",
     comment: "",
+    recurrenceRule: null as RecurrenceRule | null,
+    escalateAfterMinutes: null as number | null,
+    escalateToUserId: null as string | null,
 };
 
 const STATUS_OPTIONS = [
@@ -100,6 +144,7 @@ function fromLocalInputValue(value: string) {
 export default function TasksPage() {
     const [tasks, setTasks] = useState<Task[]>([]);
     const [users, setUsers] = useState<UserOption[]>([]);
+    const [teams, setTeams] = useState<Array<{ id: string; name: string }>>([]);
     const [leads, setLeads] = useState<LeadOption[]>([]);
     const [opportunities, setOpportunities] = useState<OpportunityOption[]>([]);
     const [activities, setActivities] = useState<ActivityOption[]>([]);
@@ -113,13 +158,33 @@ export default function TasksPage() {
     const [form, setForm] = useState(EMPTY_FORM);
     const [paginationModel, setPaginationModel] = useState({ page: 0, pageSize: 10 });
     const [selectedTaskIds, setSelectedTaskIds] = useState<string[]>([]);
-    const [viewMode, setViewMode] = useState<"list" | "calendar">("list");
+    const [viewMode, setViewModeState] = useState<"list" | "calendar">(() => {
+        const saved = getSavedViewMode("tasks");
+        return saved === "calendar" ? "calendar" : "list";
+    });
+    const setViewMode = (mode: "list" | "calendar") => {
+        setViewModeState(mode);
+        saveViewMode("tasks", mode);
+    };
+    const [favoriteTaskIds, setFavoriteTaskIds] = useState<string[]>([]);
+
+    useEffect(() => {
+        setFavoriteTaskIds(getFavoriteRecords().filter((record) => record.type === "task").map((record) => record.id));
+    }, []);
+
+    const toggleFavoriteTask = (task: Task) => {
+        const updated = toggleFavoriteRecord("task", task.id, task.title);
+        setFavoriteTaskIds(updated.filter((record) => record.type === "task").map((record) => record.id));
+    };
     const [calendarMode, setCalendarMode] = useState<"day" | "week" | "month">("week");
     const [bulkOwnerId, setBulkOwnerId] = useState("");
     const [bulkDueAt, setBulkDueAt] = useState("");
 
+    const [fetchError, setFetchError] = useState<string | null>(null);
+
     const fetchTasks = useCallback(async () => {
         setLoading(true);
+        setFetchError(null);
         try {
             const params = new URLSearchParams();
             if (quickFilter !== "ALL") params.set("due", quickFilter);
@@ -130,6 +195,7 @@ export default function TasksPage() {
             setTasks(Array.isArray(data) ? data : []);
         } catch (error: any) {
             toast.error(error.message || "Failed to load tasks");
+            setFetchError(error.message || "Failed to load tasks.");
         } finally {
             setLoading(false);
         }
@@ -139,8 +205,26 @@ export default function TasksPage() {
         fetchTasks();
     }, [fetchTasks]);
 
+    // Keep the open edit dialog's task snapshot in sync whenever the list refetches (e.g.
+    // after toggling a checklist item or saving dependencies from within the dialog itself).
+    useEffect(() => {
+        if (!editingTask) return;
+        const fresh = tasks.find((task) => task.id === editingTask.id);
+        if (fresh && fresh !== editingTask) setEditingTask(fresh);
+    }, [tasks, editingTask]);
+
+    const siblingTasksForEditingTask = useMemo(() => {
+        if (!editingTask) return [];
+        return tasks.filter((task) =>
+            task.id !== editingTask.id &&
+            ((editingTask.leadId && task.leadId === editingTask.leadId) ||
+                (editingTask.opportunityId && task.opportunityId === editingTask.opportunityId))
+        );
+    }, [tasks, editingTask]);
+
     useEffect(() => {
         apiFetch<UserOption[]>("/users").then((data) => setUsers(Array.isArray(data) ? data : [])).catch(() => undefined);
+        apiFetch<any>("/teams").then((data) => setTeams(Array.isArray(data) ? data : [])).catch(() => undefined);
         apiFetch<any>("/leads?limit=200")
             .then((response) => setLeads(Array.isArray(response) ? response : Array.isArray(response?.data) ? response.data : []))
             .catch(() => setLeads([]));
@@ -203,7 +287,34 @@ export default function TasksPage() {
         setDialogOpen(true);
     };
 
+    // Lets the global command palette's "Create Task" command, and the global create menu's
+    // contextual "New Task" (header.tsx, from a Lead/Opportunity detail page), open the real
+    // creation dialog pre-linked to that record -- read via window.location, not next/
+    // navigation's useSearchParams, matching this app's existing convention (views/page.tsx)
+    // since this page isn't wrapped in a Suspense boundary.
+    useEffect(() => {
+        const params = new URLSearchParams(window.location.search);
+        if (params.get("create") === "1") {
+            openCreate();
+            const leadId = params.get("leadId");
+            const opportunityId = params.get("opportunityId");
+            if (leadId || opportunityId) {
+                setForm((current) => ({ ...current, leadId: leadId ?? current.leadId, opportunityId: opportunityId ?? current.opportunityId }));
+            }
+        }
+        // "Quick-open from command palette" / recent-records deep link (gap checklist's
+        // "recent/favorite records" item) -- Tasks has no per-record detail route, so opening a
+        // specific task means fetching it and opening the existing edit dialog, same as the
+        // Edit button on each row already does.
+        const taskId = params.get("taskId");
+        if (taskId) {
+            apiFetch<Task>(`/tasks/${taskId}`).then(openEdit).catch(() => toast.error("Failed to load task"));
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
+
     const openEdit = (task: Task) => {
+        recordRecentView("task", task.id, task.title);
         setEditingTask(task);
         setForm({
             title: task.title,
@@ -217,6 +328,9 @@ export default function TasksPage() {
             dueAt: toLocalInputValue(task.dueAt),
             reminderAt: toLocalInputValue(task.reminderAt),
             comment: "",
+            recurrenceRule: task.recurrenceRule ?? null,
+            escalateAfterMinutes: task.escalateAfterMinutes ?? null,
+            escalateToUserId: task.escalateToUserId ?? null,
         });
         setDialogOpen(true);
     };
@@ -253,6 +367,16 @@ export default function TasksPage() {
         }
     };
 
+    const skipTaskOccurrence = async (task: Task) => {
+        try {
+            const result = await apiFetch<{ nextTask?: Task | null }>(`/tasks/${task.id}/skip`, { method: "POST" });
+            toast.success(result.nextTask ? "Skipped -- next occurrence created" : "Task skipped");
+            fetchTasks();
+        } catch (error: any) {
+            toast.error(error.message || "Failed to skip task");
+        }
+    };
+
     const updateTaskStatus = async (task: Task, status: Task["status"]) => {
         try {
             await apiFetch(`/tasks/${task.id}`, { method: "PATCH", body: JSON.stringify({ status }) });
@@ -270,6 +394,19 @@ export default function TasksPage() {
             fetchTasks();
         } catch (error: any) {
             toast.error(error.message || "Failed to reschedule task");
+        }
+    };
+
+    const handleBulkDelete = async () => {
+        if (!selectedTaskIds.length) return;
+        if (!confirm(`Are you sure you want to delete ${selectedTaskIds.length} task${selectedTaskIds.length === 1 ? "" : "s"}?`)) return;
+        try {
+            await Promise.all(selectedTaskIds.map((id) => apiFetch(`/tasks/${id}`, { method: "DELETE" })));
+            toast.success(`${selectedTaskIds.length} task${selectedTaskIds.length === 1 ? "" : "s"} deleted`);
+            setSelectedTaskIds([]);
+            fetchTasks();
+        } catch (error: any) {
+            toast.error(error.message || "Failed to delete selected tasks");
         }
     };
 
@@ -301,6 +438,36 @@ export default function TasksPage() {
         }
     };
 
+    const sendTaskToQueue = async (task: Task, queueId: string) => {
+        try {
+            await apiFetch(`/tasks/${task.id}/queue`, { method: "POST", body: JSON.stringify({ queueId }) });
+            toast.success("Task sent to queue");
+            fetchTasks();
+        } catch (error: any) {
+            toast.error(error.message || "Failed to send task to queue");
+        }
+    };
+
+    const claimTask = async (task: Task) => {
+        try {
+            await apiFetch(`/tasks/${task.id}/claim`, { method: "POST" });
+            toast.success("Task claimed");
+            fetchTasks();
+        } catch (error: any) {
+            toast.error(error.message || "Failed to claim task");
+        }
+    };
+
+    const unclaimTask = async (task: Task) => {
+        try {
+            await apiFetch(`/tasks/${task.id}/unclaim`, { method: "POST" });
+            toast.success("Task unclaimed");
+            fetchTasks();
+        } catch (error: any) {
+            toast.error(error.message || "Failed to unclaim task");
+        }
+    };
+
     return (
         <div className="mx-auto max-w-[1400px] p-4 md:p-6">
             <div className="flex flex-col justify-between gap-3 md:flex-row md:items-center">
@@ -324,6 +491,12 @@ export default function TasksPage() {
                     <Button variant="outline" onClick={fetchTasks}>
                         <RefreshCw className="size-4" />
                         Refresh
+                    </Button>
+                    <Button variant="outline" asChild>
+                        <Link href="/dashboard/tasks/queues">
+                            <Inbox className="size-4" />
+                            Team Queues
+                        </Link>
                     </Button>
                     <Button onClick={openCreate}>
                         <Plus className="size-4" />
@@ -422,6 +595,10 @@ export default function TasksPage() {
                         <Button size="sm" variant="outline" disabled={!bulkOwnerId} onClick={() => bulkUpdateTasks({ ownerId: bulkOwnerId })}>Reassign</Button>
                         <Input className="h-9 w-[210px]" type="datetime-local" value={bulkDueAt} onChange={(event) => setBulkDueAt(event.target.value)} />
                         <Button size="sm" variant="outline" disabled={!bulkDueAt} onClick={() => bulkUpdateTasks({ dueAt: fromLocalInputValue(bulkDueAt) })}>Reschedule</Button>
+                        <Button size="sm" variant="outline" className="text-destructive hover:bg-destructive/10 hover:text-destructive" onClick={handleBulkDelete}>
+                            <Trash2 className="size-4" />
+                            Delete
+                        </Button>
                         <Button size="sm" variant="ghost" onClick={() => setSelectedTaskIds([])}>Clear</Button>
                     </div>
                 </div>
@@ -430,6 +607,8 @@ export default function TasksPage() {
             <div className="mt-4">
                 {loading ? (
                     <TableSkeleton rows={5} columns={4} />
+                ) : fetchError ? (
+                    <ErrorState description={fetchError} onRetry={fetchTasks} />
                 ) : tasks.length === 0 ? (
                     <EmptyState
                         icon={<CheckCircle2 className="size-12 text-muted-foreground opacity-50" />}
@@ -465,14 +644,41 @@ export default function TasksPage() {
                                             <Badge variant={task.priority === "URGENT" || task.priority === "HIGH" ? "destructive" : "secondary"} className="rounded-md text-[0.65rem] font-semibold">
                                                 {task.priority}
                                             </Badge>
+                                            {task.isBlocked && (
+                                                <Badge variant="destructive" className="rounded-md text-[0.65rem] font-semibold">
+                                                    <AlertTriangle className="size-3" />
+                                                    Blocked
+                                                </Badge>
+                                            )}
+                                            {task.checklist?.length ? (
+                                                <Badge variant="outline" className="rounded-md text-[0.65rem]">
+                                                    {task.checklist.filter((item) => item.isDone).length}/{task.checklist.length}
+                                                </Badge>
+                                            ) : null}
+                                            {taskSlaBadge(task)}
+                                            {task.queueId && !task.claimedBy ? (
+                                                <Badge variant="secondary" className="rounded-md text-[0.65rem]">Unclaimed in queue</Badge>
+                                            ) : null}
                                         </div>
                                         {task.description ? <p className="mt-1 text-xs text-muted-foreground">{task.description}</p> : null}
                                         <div className="mt-2 flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
                                             <span>Owner: {task.owner?.name || task.owner?.email || "Unknown user"}</span>
                                             {task.dueAt ? <span className="inline-flex items-center gap-1"><CalendarDays className="size-3" />{formatWorkspaceDateTime(task.dueAt)}</span> : null}
                                             {task.reminderAt ? <span className="inline-flex items-center gap-1"><Clock className="size-3" />Reminder {formatWorkspaceDateTime(task.reminderAt)}</span> : null}
-                                            {task.lead ? <span>Lead: {task.lead.name}</span> : null}
-                                            {task.opportunity ? <span>Opportunity: {task.opportunity.title}</span> : null}
+                                            {task.lead && task.leadId ? (
+                                                <RecordPreviewPopover entityType="lead" entityId={task.leadId}>
+                                                    <button type="button" className="underline decoration-dotted underline-offset-2 hover:text-foreground">
+                                                        Lead: {task.lead.name}
+                                                    </button>
+                                                </RecordPreviewPopover>
+                                            ) : null}
+                                            {task.opportunity && task.opportunityId ? (
+                                                <RecordPreviewPopover entityType="opportunity" entityId={task.opportunityId}>
+                                                    <button type="button" className="underline decoration-dotted underline-offset-2 hover:text-foreground">
+                                                        Opportunity: {task.opportunity.title}
+                                                    </button>
+                                                </RecordPreviewPopover>
+                                            ) : null}
                                         </div>
                                         </div>
                                     </div>
@@ -485,6 +691,17 @@ export default function TasksPage() {
                                         ) : (
                                             <Button size="sm" variant="outline" onClick={() => updateTaskStatus(task, "OPEN")}>Reopen</Button>
                                         )}
+                                        {task.recurrenceRule && task.status !== "COMPLETED" && task.status !== "CANCELLED" && (
+                                            <Button size="sm" variant="ghost" onClick={() => skipTaskOccurrence(task)}>Skip</Button>
+                                        )}
+                                        <Button
+                                            size="icon-sm"
+                                            variant="ghost"
+                                            onClick={() => toggleFavoriteTask(task)}
+                                            aria-label={favoriteTaskIds.includes(task.id) ? `Unfavorite ${task.title}` : `Favorite ${task.title}`}
+                                        >
+                                            <Star className={cn("size-4", favoriteTaskIds.includes(task.id) ? "fill-amber-500 text-amber-500" : "text-muted-foreground")} />
+                                        </Button>
                                         <Button size="icon-sm" variant="ghost" onClick={() => openEdit(task)} aria-label={`Edit ${task.title}`}>
                                             <Edit3 className="size-4" />
                                         </Button>
@@ -600,6 +817,11 @@ export default function TasksPage() {
                             <Input type="datetime-local" value={form.reminderAt} onChange={(e) => setForm((current) => ({ ...current, reminderAt: e.target.value }))} />
                         </div>
                     </div>
+                    <TaskRecurrenceEscalationFields
+                        value={{ recurrenceRule: form.recurrenceRule, escalateAfterMinutes: form.escalateAfterMinutes, escalateToUserId: form.escalateToUserId }}
+                        onChange={(next) => setForm((current) => ({ ...current, ...next }))}
+                        users={users}
+                    />
                     <div className="grid gap-4 sm:grid-cols-2">
                         <div className="space-y-2">
                             <Label>Lead</Label>
@@ -684,10 +906,50 @@ export default function TasksPage() {
                             ) : null}
                         </div>
                     ) : null}
+                    {editingTask && (editingTask.opportunityId || editingTask.leadId) ? (
+                        // Prefer the Opportunity's recommendations when the task is linked to both
+                        // -- more specific than the parent Lead's.
+                        <NextBestActionPanel
+                            recordType={editingTask.opportunityId ? "OPPORTUNITY" : "LEAD"}
+                            recordId={(editingTask.opportunityId || editingTask.leadId) as string}
+                            title="Recommended Next Actions"
+                        />
+                    ) : null}
                     <div className="space-y-2">
                         <Label>{editingTask ? "Add Comment" : "Initial Comment"}</Label>
                         <Input value={form.comment} onChange={(e) => setForm((current) => ({ ...current, comment: e.target.value }))} />
                     </div>
+                    {editingTask && (
+                        <TaskChecklistDependenciesPanel task={editingTask} siblingTasks={siblingTasksForEditingTask} onRefresh={fetchTasks} />
+                    )}
+                    {editingTask && (
+                        <div className="rounded-xl border p-3">
+                            <p className="text-sm font-extrabold">Team Queue</p>
+                            {editingTask.queueId ? (
+                                <div className="mt-2 flex flex-wrap items-center gap-2">
+                                    <Badge variant={editingTask.claimedBy ? "outline" : "secondary"} className="rounded-md text-[0.65rem]">
+                                        {teams.find((team) => team.id === editingTask.queueId)?.name || "Queue"}
+                                        {editingTask.claimedBy ? " - Claimed" : " - Unclaimed"}
+                                    </Badge>
+                                    {editingTask.claimedBy ? (
+                                        <Button size="sm" variant="outline" onClick={() => unclaimTask(editingTask)}>Unclaim</Button>
+                                    ) : (
+                                        <Button size="sm" variant="outline" onClick={() => claimTask(editingTask)}>Claim</Button>
+                                    )}
+                                </div>
+                            ) : (
+                                <div className="mt-2 flex flex-wrap items-center gap-2">
+                                    <p className="text-xs text-muted-foreground">Not in a queue yet.</p>
+                                    <Select onValueChange={(queueId) => sendTaskToQueue(editingTask, queueId)}>
+                                        <SelectTrigger className="w-48" size="sm"><SelectValue placeholder="Send to queue..." /></SelectTrigger>
+                                        <SelectContent>
+                                            {teams.map((team) => <SelectItem key={team.id} value={team.id}>{team.name}</SelectItem>)}
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+                            )}
+                        </div>
+                    )}
                 </div>
             </StandardDialog>
         </div>

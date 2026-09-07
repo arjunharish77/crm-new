@@ -3,26 +3,34 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { EmptyState } from "@/components/common/empty-state";
+import { QueueExportButton } from "@/components/exports/queue-export-button";
+import { useFeature } from "@/components/auth/feature-gate";
 import { SaveViewDialog } from "@/components/views/save-view-dialog";
-import { fieldLabel, getSmartViewFields, SMART_VIEW_MODULE_OPTIONS } from "@/components/views/smart-view-fields";
+import { fieldLabel, getSmartViewFields, isSmartViewModuleEnabled, smartViewModuleDisabledReason, SMART_VIEW_MODULE_OPTIONS } from "@/components/views/smart-view-fields";
 import { applySmartViewFilters } from "@/components/views/smart-view-filtering";
+import { ViewRowActionsMenu } from "@/components/views/view-row-actions";
 import { apiFetch } from "@/lib/api";
 import { formatWorkspaceDateTime } from "@/lib/date-format";
+import { fetchCached } from "@/lib/views-metadata-cache";
 import { cn } from "@/lib/utils";
 import { FilterConfig } from "@/types/filters";
 import { SmartViewModule, SmartViewTab } from "@/types/smart-views";
-import { ChevronLeft, ChevronRight, Copy, LayoutList, MoreHorizontal, Pencil, Plus, RefreshCw, Search, SlidersHorizontal, Star, Trash2 } from "lucide-react";
+import { Archive, ChevronLeft, ChevronRight, Copy, LayoutList, MessageSquare, MoreHorizontal, Pencil, Plus, RefreshCw, Search, SlidersHorizontal, Star, Trash2, UserCog } from "lucide-react";
 import { toast } from "sonner";
+import { getFavoriteRecords, isFavoriteRecord, recordRecentView, toggleFavoriteRecord } from "@/lib/recent-records";
 
 type ViewRecord = {
     id: string;
     name: string;
     module?: string;
+    ownerId?: string;
     isDefault: boolean;
     isPinned?: boolean;
     isShared: boolean;
@@ -35,6 +43,12 @@ type ViewRecord = {
     displayOrder?: number;
     defaultModule?: string | null;
     defaultPersona?: "ADMIN" | "MANAGER" | "REP" | "PARTNER" | null;
+    viewCount?: number;
+    lastOpenedAt?: string | null;
+    isArchived?: boolean;
+    isStale?: boolean;
+    possibleDuplicateOfId?: string | null;
+    comments?: Array<{ id: string; body: string; createdBy: string; createdAt: string }>;
 };
 
 type CurrentUser = {
@@ -42,9 +56,29 @@ type CurrentUser = {
     teamId?: string | null;
     isTenantAdmin?: boolean;
     isPlatformAdmin?: boolean;
+    role?: string | { name: string; permissions?: any } | null;
 };
 
+// Quick actions mutate Lead/Opportunity/Activity/Task records -- gate them by the same
+// module write-permission levels the Role admin UI already exposes (leads/opportunities/
+// activities). Tasks has no such module axis (confirmed elsewhere: task access is governed
+// by recordAccess, not a permission module), so task quick actions are left ungated here and
+// rely on the server-side checks each task route already performs.
+function hasModuleWriteAccess(user: CurrentUser | null, module: SmartViewModule) {
+    if (!user) return false;
+    if (user.isTenantAdmin || user.isPlatformAdmin) return true;
+    const permissions = user.role && typeof user.role === "object" ? (user.role as any).permissions : null;
+    const key = module === "LEADS" ? "leads" : module === "OPPORTUNITIES" ? "opportunities" : module === "ACTIVITIES" ? "activities" : null;
+    if (!key) return true;
+    const level = permissions?.modules?.[key];
+    return level === "write" || level === "full";
+}
+
 const EMPTY_FILTERS: FilterConfig = { conditions: [], logic: "AND" };
+// Matches the per-module fetch cap in fetchModuleData below -- used only to detect (not
+// enforce) truncation, so the UI can say so explicitly rather than silently showing a
+// partial result set as if it were complete.
+const ROW_LIMIT = 500;
 
 const DEFAULT_COLUMNS: Record<SmartViewModule, string[]> = {
     LEADS: ["name", "email", "status", "source", "score", "createdAt"],
@@ -57,20 +91,48 @@ const DEFAULT_COLUMNS: Record<SmartViewModule, string[]> = {
 };
 
 export default function ViewsPage() {
+    const opportunityEnabled = useFeature("opportunityEnabled");
+    const advancedReporting = useFeature("advancedReporting");
+    const payoutsEnabled = useFeature("payoutsEnabled");
     const [views, setViews] = useState<ViewRecord[]>([]);
     const [loading, setLoading] = useState(true);
     const [builderOpen, setBuilderOpen] = useState(false);
     const [editingView, setEditingView] = useState<ViewRecord | null>(null);
     const [selectedViewId, setSelectedViewId] = useState<string | null>(null);
+    // "Pin/favorite support" (gap checklist's "recent/favorite records" item) -- a personal,
+    // per-browser favorite list, distinct from a SavedView's own `isPinned` field (that one is
+    // the view's own creator-set property, shown to everyone it's shared with; this is this
+    // viewer's own quick-access list, same as the star toggle Leads/Opportunities detail pages
+    // now have).
+    const [favoriteViewIds, setFavoriteViewIds] = useState<string[]>([]);
     const [activeTabId, setActiveTabId] = useState<string | null>(null);
     const [recordsByTab, setRecordsByTab] = useState<Record<string, any[]>>({});
     const [tabErrors, setTabErrors] = useState<Record<string, string>>({});
+    const [truncatedTabs, setTruncatedTabs] = useState<Record<string, boolean>>({});
     const [loadingRecords, setLoadingRecords] = useState(false);
     const [lastUpdatedAt, setLastUpdatedAt] = useState<string | null>(null);
     const [search, setSearch] = useState("");
     const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
+    const [users, setUsers] = useState<Array<{ id: string; name?: string | null; email?: string | null }>>([]);
+    const [leadLists, setLeadLists] = useState<Array<{ id: string; name: string }>>([]);
+    const [activityTypes, setActivityTypes] = useState<Array<{ id: string; name: string }>>([]);
+    const [opportunityTypes, setOpportunityTypes] = useState<any[]>([]);
+    const [selectedRecordIds, setSelectedRecordIds] = useState<string[]>([]);
+    const [showArchived, setShowArchived] = useState(false);
+    const [transferDialogOpen, setTransferDialogOpen] = useState(false);
+    const [transferTargetUserId, setTransferTargetUserId] = useState("");
+    const [commentsDialogOpen, setCommentsDialogOpen] = useState(false);
+    const [commentDraft, setCommentDraft] = useState("");
+    const [postingComment, setPostingComment] = useState(false);
+    const [deepLinkViewId, setDeepLinkViewId] = useState<string | null>(null);
+    const [deepLinkSummary, setDeepLinkSummary] = useState<{ id: string; name: string; ownerId: string; ownerName: string } | null>(null);
+    const [requestingAccess, setRequestingAccess] = useState(false);
 
     const canShareViews = !!(currentUser?.isTenantAdmin || currentUser?.isPlatformAdmin);
+    const stagesByOpportunityTypeId = useMemo(
+        () => new Map(opportunityTypes.map((type: any) => [type.id, type.stages ?? []])),
+        [opportunityTypes]
+    );
 
     const fetchViews = useCallback(async () => {
         setLoading(true);
@@ -87,9 +149,40 @@ export default function ViewsPage() {
     }, []);
 
     useEffect(() => {
+        setFavoriteViewIds(getFavoriteRecords().filter((r) => r.type === "view").map((r) => r.id));
+    }, []);
+
+    const toggleFavoriteView = () => {
+        if (!selectedView) return;
+        const next = toggleFavoriteRecord("view", selectedView.id, selectedView.name);
+        setFavoriteViewIds(next.filter((r) => r.type === "view").map((r) => r.id));
+    };
+
+    useEffect(() => {
         fetchViews();
         apiFetch<CurrentUser>("/auth/me").then(setCurrentUser).catch(() => setCurrentUser(null));
+        fetchCached("users", () => apiFetch<any[]>("/users")).then((data) => setUsers(Array.isArray(data) ? data : [])).catch(() => setUsers([]));
+        apiFetch<any[]>("/lead-lists").then((data) => setLeadLists(Array.isArray(data) ? data : [])).catch(() => setLeadLists([]));
+        fetchCached("activity-types", () => apiFetch<any[]>("/activity-types")).then((data) => setActivityTypes(Array.isArray(data) ? data : [])).catch(() => setActivityTypes([]));
+        fetchCached("opportunity-types", () => apiFetch<any[]>("/opportunity-types")).then((data) => setOpportunityTypes(Array.isArray(data) ? data : [])).catch(() => setOpportunityTypes([]));
+        // Read via window.location rather than next/navigation's useSearchParams -- this page
+        // isn't wrapped in a Suspense boundary and nothing else in the app uses that hook yet.
+        const viewId = new URLSearchParams(window.location.search).get("viewId");
+        if (viewId) setDeepLinkViewId(viewId);
     }, [fetchViews]);
+
+    // A deep-linked View that isn't in this user's normal (access-filtered) list means they
+    // don't have access to it -- look up just enough to offer "Request access" without
+    // exposing its actual data.
+    useEffect(() => {
+        if (!deepLinkViewId || loading) return;
+        if (views.some((view) => view.id === deepLinkViewId)) {
+            setSelectedViewId(deepLinkViewId);
+            setDeepLinkSummary(null);
+            return;
+        }
+        apiFetch<any>(`/saved-views/${deepLinkViewId}/summary`).then(setDeepLinkSummary).catch(() => setDeepLinkSummary(null));
+    }, [deepLinkViewId, views, loading]);
 
     const selectedView = useMemo(
         () => views.find((view) => view.id === selectedViewId) ?? views[0] ?? null,
@@ -107,27 +200,41 @@ export default function ViewsPage() {
         setSearch("");
     }, [selectedViewId]);
 
+    useEffect(() => {
+        setSelectedRecordIds([]);
+    }, [activeTabId]);
+
     const loadRecords = useCallback(async (view: ViewRecord | null, nextTabs: SmartViewTab[]) => {
         if (!view || nextTabs.length === 0) return;
         setLoadingRecords(true);
         const nextRecords: Record<string, any[]> = {};
         const nextErrors: Record<string, string> = {};
+        const nextTruncated: Record<string, boolean> = {};
 
         await Promise.all(nextTabs.map(async (tab) => {
+            if (!isSmartViewModuleEnabled(tab.module, { opportunityEnabled, advancedReporting, payoutsEnabled })) {
+                nextRecords[tab.id] = [];
+                nextErrors[tab.id] = smartViewModuleDisabledReason(tab.module) ?? `The ${moduleLabel(tab.module)} module is disabled for this tenant.`;
+                return;
+            }
             try {
                 const records = await fetchRecordsForTab(tab, currentUser);
+                nextTruncated[tab.id] = records.length >= ROW_LIMIT;
                 nextRecords[tab.id] = applySmartViewFilters(records, tab.filters ?? EMPTY_FILTERS);
             } catch (error: any) {
                 nextRecords[tab.id] = [];
-                nextErrors[tab.id] = error?.message || `Failed to load ${moduleLabel(tab.module)}`;
+                nextErrors[tab.id] = error?.status === 408
+                    ? `This tab took too long to load. Try narrowing its filters or splitting it into a separate View.`
+                    : error?.message || `Failed to load ${moduleLabel(tab.module)}`;
             }
         }));
 
         setRecordsByTab(nextRecords);
         setTabErrors(nextErrors);
+        setTruncatedTabs(nextTruncated);
         setLastUpdatedAt(new Date().toISOString());
         setLoadingRecords(false);
-    }, [currentUser]);
+    }, [currentUser, opportunityEnabled, advancedReporting, payoutsEnabled]);
 
     useEffect(() => {
         loadRecords(selectedView, tabs);
@@ -164,8 +271,56 @@ export default function ViewsPage() {
             setSelectedViewId(updated.id);
             toast.success("Smart View updated");
             fetchViews();
-        } catch {
-            toast.error("Failed to update Smart View");
+        } catch (error: any) {
+            toast.error(error?.message || "Failed to update Smart View");
+        }
+    };
+
+    const toggleArchiveView = async (view: ViewRecord) => {
+        await updateView(view, { isArchived: !view.isArchived });
+    };
+
+    const transferOwnership = async () => {
+        if (!selectedView || !transferTargetUserId) return;
+        await updateView(selectedView, { ownerId: transferTargetUserId });
+        setTransferDialogOpen(false);
+        setTransferTargetUserId("");
+    };
+
+    const openView = (id: string) => {
+        setSelectedViewId(id);
+        apiFetch(`/saved-views/${id}/open`, { method: "POST" }).catch(() => undefined);
+        const view = views.find((v) => v.id === id);
+        if (view) recordRecentView("view", id, view.name);
+    };
+
+    const postComment = async () => {
+        if (!selectedView || !commentDraft.trim()) return;
+        setPostingComment(true);
+        try {
+            const updated = await apiFetch<ViewRecord>(`/saved-views/${selectedView.id}/comments`, {
+                method: "POST",
+                body: JSON.stringify({ body: commentDraft.trim() }),
+            });
+            setViews((current) => current.map((item) => item.id === updated.id ? updated : item));
+            setCommentDraft("");
+        } catch (error: any) {
+            toast.error(error?.message || "Failed to add comment");
+        } finally {
+            setPostingComment(false);
+        }
+    };
+
+    const requestAccess = async () => {
+        if (!deepLinkViewId) return;
+        setRequestingAccess(true);
+        try {
+            await apiFetch(`/saved-views/${deepLinkViewId}/request-access`, { method: "POST" });
+            toast.success("Access requested");
+        } catch (error: any) {
+            toast.error(error?.message || "Failed to request access");
+        } finally {
+            setRequestingAccess(false);
         }
     };
 
@@ -207,9 +362,33 @@ export default function ViewsPage() {
     const activeRecords = recordsByTab[activeTab?.id ?? ""] ?? [];
     const visibleRecords = useMemo(() => applySearchAndSort(activeRecords, activeTab, search), [activeRecords, activeTab, search]);
     const columns = useMemo(() => activeTab ? columnsForTab(activeTab) : [], [activeTab]);
+    // Precomputed once per (records, chip config) change rather than recalculated on every
+    // render (e.g. typing in search, toggling row selection) -- each chip re-scans up to 500
+    // records through applySmartViewFilters, which isn't free to redo on unrelated re-renders.
+    const chipCounts = useMemo(() => {
+        const counts = new Map<string, number>();
+        for (const chip of activeTab?.countChips ?? []) counts.set(chip.id, countForChip(activeRecords, chip));
+        return counts;
+    }, [activeRecords, activeTab?.countChips]);
+    const visibleViews = useMemo(() => views.filter((view) => showArchived || !view.isArchived), [views, showArchived]);
+    const duplicateOfView = selectedView?.possibleDuplicateOfId ? views.find((view) => view.id === selectedView.possibleDuplicateOfId) : null;
+    const sharedTargetCount = (selectedView?.sharedUserIds?.length ?? 0)
+        + (selectedView?.sharedTeamIds?.length ?? 0)
+        + (selectedView?.sharedSalesGroupIds?.length ?? 0)
+        + (selectedView?.sharedRoleIds?.length ?? 0);
 
     return (
         <div className="flex h-full min-h-[calc(100vh-80px)] flex-col bg-background">
+            {deepLinkSummary ? (
+                <div className="flex flex-wrap items-center gap-2 border-b bg-amber-50 px-4 py-2.5 text-sm dark:bg-amber-950/30">
+                    <span>
+                        You don&apos;t have access to &quot;{deepLinkSummary.name}&quot; (owned by {deepLinkSummary.ownerName}).
+                    </span>
+                    <Button size="sm" disabled={requestingAccess} onClick={requestAccess}>
+                        {requestingAccess ? "Requesting..." : "Request access"}
+                    </Button>
+                </div>
+            ) : null}
             <div className="border-b bg-card px-4 py-3 md:px-5">
                 <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
                     <div className="flex min-w-0 flex-1 flex-wrap items-center gap-3">
@@ -219,21 +398,48 @@ export default function ViewsPage() {
                             </div>
                             <h1 className="text-base font-extrabold tracking-tight">Smart Views</h1>
                         </div>
-                        <Select value={selectedViewId ?? ""} onValueChange={setSelectedViewId} disabled={loading || views.length === 0}>
+                        <Select value={selectedViewId ?? ""} onValueChange={openView} disabled={loading || visibleViews.length === 0}>
                             <SelectTrigger className="h-9 w-full min-w-[280px] max-w-[460px] rounded-md font-semibold">
                                 <SelectValue placeholder="Select Smart View" />
                             </SelectTrigger>
                             <SelectContent>
-                                {views.map((view) => (
+                                {visibleViews.map((view) => (
                                     <SelectItem key={view.id} value={view.id}>
-                                        {view.name}
+                                        {view.name}{view.isArchived ? " (Archived)" : ""}
                                     </SelectItem>
                                 ))}
                             </SelectContent>
                         </Select>
+                        <label className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+                            <Checkbox checked={showArchived} onCheckedChange={(checked) => setShowArchived(!!checked)} />
+                            Show archived
+                        </label>
                         {selectedView?.isPinned ? <Star className="size-4 fill-amber-500 text-amber-500" /> : null}
+                        {selectedView && (
+                            <Button variant="ghost" size="icon-sm" onClick={toggleFavoriteView} aria-label={favoriteViewIds.includes(selectedView.id) ? "Remove from favorites" : "Add to favorites"}>
+                                <Star className={cn("size-4", favoriteViewIds.includes(selectedView.id) ? "fill-amber-500 text-amber-500" : "text-muted-foreground")} />
+                            </Button>
+                        )}
                         {selectedView?.isShared ? <Badge variant="secondary" className="rounded-md">{selectedView.scope === "TENANT_DEFAULT" ? "Tenant" : "Assigned"}</Badge> : <Badge variant="outline" className="rounded-md">Private</Badge>}
                         {activeTab ? <Badge variant="outline" className="rounded-md">{moduleLabel(activeTab.module)}</Badge> : null}
+                        {selectedView?.isArchived ? <Badge variant="secondary" className="rounded-md">Archived</Badge> : null}
+                        {selectedView?.isStale ? <Badge variant="outline" className="rounded-md text-muted-foreground">Stale</Badge> : null}
+                        {duplicateOfView ? (
+                            <Badge variant="outline" className="rounded-md" title={`Same module and filters as "${duplicateOfView.name}"`}>
+                                Possible duplicate of &quot;{duplicateOfView.name}&quot;
+                            </Badge>
+                        ) : null}
+                        {sharedTargetCount > 0 ? (
+                            <span className="text-xs text-muted-foreground">
+                                Shared with {selectedView?.sharedUserIds?.length ? `${selectedView.sharedUserIds.length} user${selectedView.sharedUserIds.length === 1 ? "" : "s"}` : null}
+                                {selectedView?.sharedTeamIds?.length ? `, ${selectedView.sharedTeamIds.length} team${selectedView.sharedTeamIds.length === 1 ? "" : "s"}` : ""}
+                                {selectedView?.sharedSalesGroupIds?.length ? `, ${selectedView.sharedSalesGroupIds.length} sales group${selectedView.sharedSalesGroupIds.length === 1 ? "" : "s"}` : ""}
+                                {selectedView?.sharedRoleIds?.length ? `, ${selectedView.sharedRoleIds.length} role${selectedView.sharedRoleIds.length === 1 ? "" : "s"}` : ""}
+                            </span>
+                        ) : null}
+                        {selectedView && (selectedView.viewCount ?? 0) > 0 ? (
+                            <span className="text-xs text-muted-foreground">Opened {selectedView.viewCount}x{selectedView.lastOpenedAt ? `, last ${relativeTime(selectedView.lastOpenedAt)}` : ""}</span>
+                        ) : null}
                     </div>
                     <div className="flex flex-wrap items-center gap-2">
                         <Button variant="outline" size="sm" onClick={() => loadRecords(selectedView, tabs)} disabled={!selectedView || loadingRecords}>
@@ -290,6 +496,20 @@ export default function ViewsPage() {
                                         <Copy className="size-4" />
                                         Clone
                                     </DropdownMenuItem>
+                                    <DropdownMenuItem onClick={() => toggleArchiveView(selectedView)}>
+                                        <Archive className="size-4" />
+                                        {selectedView.isArchived ? "Unarchive" : "Archive"}
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem onClick={() => setCommentsDialogOpen(true)}>
+                                        <MessageSquare className="size-4" />
+                                        Comments{selectedView.comments?.length ? ` (${selectedView.comments.length})` : ""}
+                                    </DropdownMenuItem>
+                                    {canShareViews ? (
+                                        <DropdownMenuItem onClick={() => { setTransferTargetUserId(""); setTransferDialogOpen(true); }}>
+                                            <UserCog className="size-4" />
+                                            Transfer ownership
+                                        </DropdownMenuItem>
+                                    ) : null}
                                     <DropdownMenuItem className="text-destructive focus:text-destructive" onClick={() => deleteView(selectedView)}>
                                         <Trash2 className="size-4" />
                                         Delete
@@ -319,6 +539,7 @@ export default function ViewsPage() {
                             {tabs.map((tab) => {
                                 const active = tab.id === activeTab.id;
                                 const count = recordsByTab[tab.id]?.length;
+                                const enabled = isSmartViewModuleEnabled(tab.module, { opportunityEnabled, advancedReporting, payoutsEnabled });
                                 return (
                                     <button
                                         key={tab.id}
@@ -331,12 +552,14 @@ export default function ViewsPage() {
                                     >
                                         <div className="flex items-center justify-between gap-2">
                                             <span className={cn("truncate text-sm font-bold", active && "text-foreground")}>{tab.name}</span>
-                                            {tab.filters?.conditions?.length ? (
+                                            {!enabled ? (
+                                                <Badge variant="destructive" className="h-5 rounded-md px-1.5 text-[0.65rem]">Disabled</Badge>
+                                            ) : tab.filters?.conditions?.length ? (
                                                 <Badge variant="outline" className="h-5 rounded-md px-1.5 text-[0.65rem]">{tab.filters.conditions.length}</Badge>
                                             ) : null}
                                         </div>
                                         <div className={cn("mt-0.5 text-lg font-extrabold", active ? "text-primary" : "text-muted-foreground")}>
-                                            {loadingRecords && count === undefined ? "..." : (count ?? 0).toLocaleString()}
+                                            {!enabled ? "-" : loadingRecords && count === undefined ? "..." : (count ?? 0).toLocaleString()}
                                         </div>
                                         <div className="text-xs text-muted-foreground">{moduleLabel(tab.module)}</div>
                                     </button>
@@ -372,17 +595,35 @@ export default function ViewsPage() {
                                 <Badge variant="outline" className="h-9 rounded-md px-3">
                                     {visibleRecords.length.toLocaleString()} records
                                 </Badge>
+                                {truncatedTabs[activeTab.id] ? (
+                                    <Badge variant="secondary" className="h-9 rounded-md px-3" title="This tab stops at the per-load row limit. Add more specific filters to see records beyond this cap.">
+                                        Showing first {ROW_LIMIT} -- add filters for more
+                                    </Badge>
+                                ) : null}
                             </div>
                         </div>
                         {activeTab.countChips?.length ? (
                             <div className="mt-2 flex flex-wrap gap-2">
                                 {activeTab.countChips.map((chip) => (
                                     <Badge key={chip.id} variant="secondary" className="rounded-md">
-                                        {chip.label}: {countForChip(activeRecords, chip).toLocaleString()}
+                                        {chip.label}: {(chipCounts.get(chip.id) ?? 0).toLocaleString()}
                                     </Badge>
                                 ))}
                             </div>
                         ) : null}
+                        {selectedRecordIds.length > 0 && (
+                            <div className="mt-2 flex items-center gap-2 rounded-md border bg-surface-container-low px-3 py-2">
+                                <span className="text-sm font-semibold">{selectedRecordIds.length} selected</span>
+                                <QueueExportButton
+                                    moduleName={activeTab.module}
+                                    selectedIds={selectedRecordIds}
+                                    currentPageIds={visibleRecords.map((record) => record.id)}
+                                    totalItems={visibleRecords.length}
+                                    size="sm"
+                                />
+                                <Button variant="ghost" size="sm" onClick={() => setSelectedRecordIds([])}>Clear</Button>
+                            </div>
+                        )}
                     </div>
 
                     <div className="min-h-0 flex-1 overflow-auto bg-background">
@@ -397,7 +638,20 @@ export default function ViewsPage() {
                                 <EmptyState title="No records found" description="Adjust the Smart View filters or refresh this tab." />
                             </div>
                         ) : (
-                            <InlineRecordsTable tab={activeTab} records={visibleRecords} columns={columns} />
+                            <InlineRecordsTable
+                                tab={activeTab}
+                                records={visibleRecords}
+                                columns={columns}
+                                selectedIds={selectedRecordIds}
+                                onToggleSelect={(id, checked) => setSelectedRecordIds((current) => checked ? [...current, id] : current.filter((existing) => existing !== id))}
+                                onToggleSelectAll={(checked) => setSelectedRecordIds(checked ? visibleRecords.map((record) => record.id) : [])}
+                                quickActions={hasModuleWriteAccess(currentUser, activeTab.module) ? activeTab.quickActions ?? [] : []}
+                                users={users}
+                                leadLists={leadLists}
+                                activityTypes={activityTypes}
+                                stagesByOpportunityTypeId={stagesByOpportunityTypeId}
+                                onActionDone={() => loadRecords(selectedView, tabs)}
+                            />
                         )}
                     </div>
                 </>
@@ -419,6 +673,59 @@ export default function ViewsPage() {
                     fetchViews();
                 }}
             />
+
+            <Dialog open={transferDialogOpen} onOpenChange={setTransferDialogOpen}>
+                <DialogContent className="sm:max-w-[425px]">
+                    <DialogHeader>
+                        <DialogTitle>Transfer ownership</DialogTitle>
+                        <DialogDescription>Move this Smart View to another user. They&apos;ll be able to edit or delete it going forward.</DialogDescription>
+                    </DialogHeader>
+                    <Select value={transferTargetUserId} onValueChange={setTransferTargetUserId}>
+                        <SelectTrigger className="w-full"><SelectValue placeholder="Select a user" /></SelectTrigger>
+                        <SelectContent>
+                            {users.filter((user) => user.id !== selectedView?.ownerId).map((user) => (
+                                <SelectItem key={user.id} value={user.id}>{user.name || user.email || "User"}</SelectItem>
+                            ))}
+                        </SelectContent>
+                    </Select>
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => setTransferDialogOpen(false)}>Cancel</Button>
+                        <Button disabled={!transferTargetUserId} onClick={transferOwnership}>Transfer</Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
+            <Dialog open={commentsDialogOpen} onOpenChange={setCommentsDialogOpen}>
+                <DialogContent className="sm:max-w-[425px]">
+                    <DialogHeader>
+                        <DialogTitle>Comments</DialogTitle>
+                    </DialogHeader>
+                    <div className="max-h-64 space-y-2 overflow-y-auto">
+                        {selectedView?.comments?.length ? (
+                            selectedView.comments.map((comment) => {
+                                const author = users.find((user) => user.id === comment.createdBy);
+                                return (
+                                    <div key={comment.id} className="rounded-md border bg-surface-container-low px-3 py-2 text-sm">
+                                        <div className="flex items-center justify-between text-xs text-muted-foreground">
+                                            <span className="font-semibold">{author?.name || author?.email || "Unknown"}</span>
+                                            <span>{relativeTime(comment.createdAt)}</span>
+                                        </div>
+                                        <p className="mt-1">{comment.body}</p>
+                                    </div>
+                                );
+                            })
+                        ) : (
+                            <p className="text-sm text-muted-foreground">No comments yet.</p>
+                        )}
+                    </div>
+                    <div className="flex items-center gap-2">
+                        <Input value={commentDraft} onChange={(event) => setCommentDraft(event.target.value)} placeholder="Add a comment" />
+                        <Button disabled={postingComment || !commentDraft.trim()} onClick={postComment}>
+                            {postingComment ? "Posting..." : "Post"}
+                        </Button>
+                    </div>
+                </DialogContent>
+            </Dialog>
         </div>
     );
 }
@@ -543,28 +850,79 @@ function applySearchAndSort(records: any[], tab: SmartViewTab | null, search: st
     return next;
 }
 
-function InlineRecordsTable({ tab, records, columns }: { tab: SmartViewTab; records: any[]; columns: Array<{ key: string; label: string }> }) {
+function InlineRecordsTable({
+    tab,
+    records,
+    columns,
+    selectedIds,
+    onToggleSelect,
+    onToggleSelectAll,
+    quickActions,
+    users,
+    leadLists,
+    activityTypes,
+    stagesByOpportunityTypeId,
+    onActionDone,
+}: {
+    tab: SmartViewTab;
+    records: any[];
+    columns: Array<{ key: string; label: string }>;
+    selectedIds: string[];
+    onToggleSelect: (id: string, checked: boolean) => void;
+    onToggleSelectAll: (checked: boolean) => void;
+    quickActions: string[];
+    users: Array<{ id: string; name?: string | null; email?: string | null }>;
+    leadLists: Array<{ id: string; name: string }>;
+    activityTypes: Array<{ id: string; name: string }>;
+    stagesByOpportunityTypeId: Map<string, any[]>;
+    onActionDone: () => void;
+}) {
     const densityClass = tab.density === "compact" ? "py-2" : tab.density === "spacious" ? "py-5" : "py-3";
+    const selectedSet = new Set(selectedIds);
+    const allSelected = records.length > 0 && records.every((record) => selectedSet.has(record.id));
     return (
         <div className="min-w-full overflow-x-auto">
             <Table>
                 <TableHeader className="sticky top-0 z-10 bg-muted">
                     <TableRow>
+                        <TableHead className="w-10 border-r">
+                            <Checkbox checked={allSelected} onCheckedChange={(checked) => onToggleSelectAll(!!checked)} aria-label="Select all" />
+                        </TableHead>
                         {columns.map((column) => (
                             <TableHead key={column.key} className="min-w-[170px] whitespace-nowrap border-r text-xs font-extrabold uppercase tracking-[0.04em] text-muted-foreground">
                                 {column.label}
                             </TableHead>
                         ))}
+                        <TableHead className="w-10" />
                     </TableRow>
                 </TableHeader>
                 <TableBody>
                     {records.map((record, index) => (
                         <TableRow key={record.id ?? `${tab.id}-${index}`} className="hover:bg-surface-container-low/70">
+                            <TableCell className="border-r align-top">
+                                <Checkbox
+                                    checked={selectedSet.has(record.id)}
+                                    onCheckedChange={(checked) => onToggleSelect(record.id, !!checked)}
+                                    aria-label={`Select ${record.id}`}
+                                />
+                            </TableCell>
                             {columns.map((column) => (
                                 <TableCell key={column.key} className={cn("max-w-[340px] whitespace-normal border-r align-top text-sm", densityClass)}>
                                     {formatCell(displayValue(tab.module, record, column.key))}
                                 </TableCell>
                             ))}
+                            <TableCell className="align-top">
+                                <ViewRowActionsMenu
+                                    module={tab.module}
+                                    record={record}
+                                    quickActions={quickActions}
+                                    users={users}
+                                    leadLists={leadLists}
+                                    activityTypes={activityTypes}
+                                    stagesByOpportunityTypeId={stagesByOpportunityTypeId}
+                                    onDone={onActionDone}
+                                />
+                            </TableCell>
                         </TableRow>
                     ))}
                 </TableBody>

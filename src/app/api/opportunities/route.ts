@@ -42,6 +42,9 @@ export async function POST(request: Request) {
     if (error instanceof Error && error.message === "UNAUTHORIZED") {
       return unauthorized();
     }
+    if (error instanceof Error && error.message.startsWith("FEATURE_DISABLED")) {
+      return badRequest("Opportunities is not enabled for this workspace");
+    }
 
     console.error("Opportunity create failed", error);
     return serverError("Failed to create opportunity", error);

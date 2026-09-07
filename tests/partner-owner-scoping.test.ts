@@ -43,7 +43,7 @@ describe("Partner owner-scoping in direct Postgres lead access", () => {
 
   it("forces ownerId filtering for partner lead lists", async () => {
     queryOneMock.mockResolvedValueOnce({ count: 1 });
-    queryMock.mockResolvedValueOnce([{ id: "lead-own", ownerId: "partner-1" }]).mockResolvedValueOnce([]);
+    queryMock.mockResolvedValueOnce([{ id: "lead-own", ownerId: "partner-1" }]).mockResolvedValueOnce([]).mockResolvedValueOnce([]);
 
     const { listLeadsForTenant } = await import("@/lib/repositories/leads-postgres");
     await listLeadsForTenant(partnerUser, 1, 50);
@@ -55,7 +55,7 @@ describe("Partner owner-scoping in direct Postgres lead access", () => {
 
   it("does not owner-scope a non-partner rep with recordAccess ALL", async () => {
     queryOneMock.mockResolvedValueOnce({ count: 2 });
-    queryMock.mockResolvedValueOnce([{ id: "lead-own" }, { id: "lead-other" }]).mockResolvedValueOnce([]);
+    queryMock.mockResolvedValueOnce([{ id: "lead-own" }, { id: "lead-other" }]).mockResolvedValueOnce([]).mockResolvedValueOnce([]);
 
     const { listLeadsForTenant } = await import("@/lib/repositories/leads-postgres");
     await listLeadsForTenant(repUser, 1, 50);

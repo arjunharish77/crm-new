@@ -4,11 +4,20 @@ import { withTransaction } from "@/lib/db/transaction";
 import { listLeadsForTenant } from "@/lib/repositories/leads-postgres";
 import { runAutomationsForEvent } from "@/lib/repositories/automations-postgres";
 import { distributeRecord } from "@/lib/server/distribution-engine";
+import { refreshNextBestActionsForRecord } from "@/lib/server/next-best-action";
+import { recordAttributionTouch } from "@/lib/server/marketing-journeys";
+import { assertFeatureEnabled } from "@/lib/server/entitlements";
+import { enqueueWebhookEvent } from "@/lib/server/webhook-outbox";
+import { enqueueAppEvent } from "@/lib/server/marketplace-events";
+import { invalidateReportRollupsForTenant } from "@/lib/server/report-rollups";
+import { applyFilterCondition, buildGroupedFilterClause, type FilterValueKind } from "@/lib/query-filters";
+import { substituteUserTokens } from "@/lib/server/user-token-filters";
 
 type TenantUser = {
   id: string;
   tenantId: string | null;
   role?: { permissions?: any } | string | null;
+  isPlatformAdmin?: boolean;
 };
 
 type FilterCondition = {
@@ -27,27 +36,28 @@ type FilterInput =
 const OPPORTUNITY_COLUMNS =
   'id, "tenantId", "objectId", "leadId", "opportunityTypeId", "stageId", title, amount, "expectedCloseDate", priority, tags, "ownerId", "createdAt", "updatedAt"';
 
-const OPPORTUNITY_FILTER_COLUMNS = new Map([
-  ["id", "id"],
-  ["leadId", "leadId"],
-  ["opportunityTypeId", "opportunityTypeId"],
-  ["stageId", "stageId"],
-  ["title", "title"],
-  ["amount", "amount"],
-  ["expectedCloseDate", "expectedCloseDate"],
-  ["priority", "priority"],
-  ["ownerId", "ownerId"],
-  ["createdAt", "createdAt"],
-  ["updatedAt", "updatedAt"],
+const OPPORTUNITY_FILTER_COLUMNS = new Map<string, { column: string; kind: FilterValueKind }>([
+  ["id", { column: "id", kind: "text" }],
+  ["leadId", { column: "leadId", kind: "text" }],
+  ["opportunityTypeId", { column: "opportunityTypeId", kind: "select" }],
+  ["stageId", { column: "stageId", kind: "select" }],
+  ["title", { column: "title", kind: "text" }],
+  ["amount", { column: "amount", kind: "number" }],
+  ["expectedCloseDate", { column: "expectedCloseDate", kind: "date" }],
+  ["priority", { column: "priority", kind: "select" }],
+  ["ownerId", { column: "ownerId", kind: "user" }],
+  ["createdAt", { column: "createdAt", kind: "date" }],
+  ["updatedAt", { column: "updatedAt", kind: "date" }],
+  ["tags", { column: "tags", kind: "tags" }],
 ]);
 
-const SCORE_FIELD_TO_COLUMN = new Map([
-  ["predictiveScoreBand", "scoreBand"],
-  ["predictiveConfidence", "confidence"],
-  ["predictiveConversionProbability", "conversionProbability"],
-  ["predictiveWinProbability", "winProbability"],
-  ["predictiveStallRisk", "stallRisk"],
-  ["predictiveExpectedCloseRisk", "expectedCloseRisk"],
+const SCORE_FIELD_TO_COLUMN = new Map<string, { column: string; kind: FilterValueKind }>([
+  ["predictiveScoreBand", { column: "scoreBand", kind: "select" }],
+  ["predictiveConfidence", { column: "confidence", kind: "number" }],
+  ["predictiveConversionProbability", { column: "conversionProbability", kind: "number" }],
+  ["predictiveWinProbability", { column: "winProbability", kind: "number" }],
+  ["predictiveStallRisk", { column: "stallRisk", kind: "number" }],
+  ["predictiveExpectedCloseRisk", { column: "expectedCloseRisk", kind: "number" }],
 ]);
 
 function isOwnerScoped(user: TenantUser) {
@@ -65,51 +75,11 @@ function addCondition(
   field: string,
   operator: string | undefined,
   value: unknown,
-  columnMap: Map<string, string>,
+  columnMap: Map<string, { column: string; kind: FilterValueKind }>,
 ) {
-  const column = columnMap.get(field);
-  if (!column) return;
-  const quotedColumn = `"${column}"`;
-  const op = operator ?? "equals";
-
-  if (op === "equals") {
-    if (Array.isArray(value)) {
-      values.push(value.map(String));
-      clauses.push(`${quotedColumn}::text = any($${values.length}::text[])`);
-      return;
-    }
-    values.push(value);
-    clauses.push(`${quotedColumn} = $${values.length}`);
-  } else if (op === "not_equals") {
-    if (Array.isArray(value)) {
-      values.push(value.map(String));
-      clauses.push(`${quotedColumn}::text <> all($${values.length}::text[])`);
-      return;
-    }
-    values.push(value);
-    clauses.push(`${quotedColumn} <> $${values.length}`);
-  } else if (op === "in" && Array.isArray(value)) {
-    values.push(value.map(String));
-    clauses.push(`${quotedColumn}::text = any($${values.length}::text[])`);
-  } else if (op === "not_in" && Array.isArray(value)) {
-    values.push(value.map(String));
-    clauses.push(`${quotedColumn}::text <> all($${values.length}::text[])`);
-  } else if (op === "contains" && typeof value === "string") {
-    values.push(`%${value}%`);
-    clauses.push(`${quotedColumn} ilike $${values.length}`);
-  } else if (op === "greater_than") {
-    values.push(value);
-    clauses.push(`${quotedColumn} > $${values.length}`);
-  } else if (op === "less_than") {
-    values.push(value);
-    clauses.push(`${quotedColumn} < $${values.length}`);
-  } else if (op === "gte") {
-    values.push(value);
-    clauses.push(`${quotedColumn} >= $${values.length}`);
-  } else if (op === "lte") {
-    values.push(value);
-    clauses.push(`${quotedColumn} <= $${values.length}`);
-  }
+  const entry = columnMap.get(field);
+  if (!entry) return;
+  applyFilterCondition(clauses, values, entry.column, operator, value, entry.kind);
 }
 
 function splitScoreFilters(filters: FilterInput[] | null) {
@@ -129,15 +99,36 @@ function buildWhere(user: TenantUser, filters: FilterInput[] | null, opportunity
   const clauses: string[] = [];
   const values: unknown[] = [];
 
+  let tenantIdParam: number | null = null;
   if (user.tenantId) {
     values.push(user.tenantId);
-    clauses.push(`"tenantId" = $${values.length}`);
+    tenantIdParam = values.length;
+    clauses.push(`"tenantId" = $${tenantIdParam}`);
   } else {
     clauses.push('"tenantId" is null');
   }
+  // Same soft-merge exclusion as buildLeadWhere in leads-postgres.ts -- a merged-away
+  // Opportunity row survives (mergeLeadsForTenant/dedupe-postgres.ts) rather than being
+  // deleted, so it must be filtered out of every normal read path explicitly.
+  clauses.push('"mergedIntoId" is null');
   if (isOwnerScoped(user)) {
     values.push(user.id);
-    clauses.push(`"ownerId" = $${values.length}`);
+    const userIdParam = values.length;
+    if (tenantIdParam) {
+      // Same RecordShare exception as leads-postgres.ts's buildLeadWhere -- kept identical
+      // in shape deliberately, not abstracted into a shared helper, since these two files
+      // don't share a common query-builder module today.
+      clauses.push(
+        `("ownerId" = $${userIdParam} or id = any(
+          select rs."recordId" from "RecordShare" rs
+          where rs."tenantId" = $${tenantIdParam} and rs."recordType" = 'OPPORTUNITY'
+            and ($${userIdParam} = any(rs."sharedUserIds")
+                 or exists (select 1 from "User" u where u.id = $${userIdParam} and u."teamId"::text = any(rs."sharedTeamIds")))
+        ))`
+      );
+    } else {
+      clauses.push(`"ownerId" = $${userIdParam}`);
+    }
   }
   if (opportunityTypeId) {
     values.push(opportunityTypeId);
@@ -151,13 +142,7 @@ function buildWhere(user: TenantUser, filters: FilterInput[] | null, opportunity
     }
   }
 
-  for (const group of Array.isArray(filters) ? filters : []) {
-    const conditions = "conditions" in group && Array.isArray(group.conditions) ? group.conditions : [group as FilterCondition];
-    for (const condition of conditions) {
-      if (!condition?.field) continue;
-      addCondition(clauses, values, condition.field, condition.operator, condition.value, OPPORTUNITY_FILTER_COLUMNS);
-    }
-  }
+  buildGroupedFilterClause(clauses, values, Array.isArray(filters) ? filters : [], OPPORTUNITY_FILTER_COLUMNS);
 
   return { sql: clauses.length ? `where ${clauses.join(" and ")}` : "", values };
 }
@@ -196,7 +181,7 @@ async function getPredictiveScoreMap(tenantId: string | null, recordIds: string[
             "expectedResponseLikelihood", "duplicateRisk", "staleRisk", "expectedCloseRisk",
             "suggestedCloseDate", "suggestedCloseDateDeltaDays", "nextBestAction", "nextBestActivityType",
             "topDrivers", "missingDataWarnings", "similarRecordIds", "suggestedDataImprovements",
-            "overrideReason", "overrideUntil", "overrideOwnerId", "overriddenAt",
+            "overrideReason", "overrideUntil", "overrideOwnerId", "overriddenAt", "callEngagementScore",
             "calculatedAt", "updatedAt"
      from "RecordScore"
      where "recordType" = 'OPPORTUNITY'
@@ -205,6 +190,21 @@ async function getPredictiveScoreMap(tenantId: string | null, recordIds: string[
     tenantId ? [recordIds, tenantId] : [recordIds],
   );
   return new Map(rows.map((score) => [score.recordId, score]));
+}
+
+async function getPendingNbaCountMap(tenantId: string | null, recordIds: string[]) {
+  if (!recordIds.length) return new Map<string, number>();
+  const rows = await query<{ recordId: string; count: number }>(
+    `select "recordId", count(*)::int as count
+     from "NextBestActionRecommendation"
+     where "recordType" = 'OPPORTUNITY'
+       and "recordId" = any($1::text[])
+       and (status = 'PENDING' or (status = 'SNOOZED' and ("snoozedUntil" is null or "snoozedUntil" <= now())))
+       and ${tenantId ? '"tenantId" = $2' : '"tenantId" is null'}
+     group by "recordId"`,
+    tenantId ? [recordIds, tenantId] : [recordIds],
+  );
+  return new Map(rows.map((row) => [row.recordId, row.count]));
 }
 
 async function getObjectId(user: TenantUser) {
@@ -224,7 +224,7 @@ async function getObjectId(user: TenantUser) {
 
 export async function listOpportunityTypesForTenant(user: TenantUser) {
   const types = await query<any>(
-    `select id, "tenantId", name, description, icon, color, "order", "isActive"
+    `select id, "tenantId", name, description, icon, color, "order", "isActive", "programId"
      from "OpportunityType"
      where ${user.tenantId ? '"tenantId" = $1' : '"tenantId" is null'}
      order by "order" asc`,
@@ -244,10 +244,11 @@ export async function listOpportunityTypesForTenant(user: TenantUser) {
 }
 
 async function decorateOpportunities(user: TenantUser, opportunities: any[]) {
-  const [types, leads, scoreMap] = await Promise.all([
+  const [types, leads, scoreMap, nbaCountMap] = await Promise.all([
     listOpportunityTypesForTenant(user),
     listLeadsForTenant(user, 1, 500),
     getPredictiveScoreMap(user.tenantId, opportunities.map((opportunity) => opportunity.id)),
+    getPendingNbaCountMap(user.tenantId, opportunities.map((opportunity) => opportunity.id)),
   ]);
   const stageMap = new Map(types.flatMap((type: any) => (type.stages ?? []).map((stage: any) => [stage.id, stage])));
   const typeMap = new Map(types.map((type: any) => [type.id, type]));
@@ -259,6 +260,7 @@ async function decorateOpportunities(user: TenantUser, opportunities: any[]) {
     opportunityType: typeMap.get(opportunity.opportunityTypeId),
     stage: stageMap.get(opportunity.stageId),
     predictiveScore: scoreMap.get(opportunity.id) ?? null,
+    pendingNbaCount: nbaCountMap.get(opportunity.id) ?? 0,
   }));
 }
 
@@ -278,7 +280,10 @@ export async function listOpportunitiesForTenantByType(
     return { data: [], meta: { total: 0, page: currentPage, last_page: 1, limit: currentLimit } };
   }
 
-  const where = buildWhere(user, recordFilters, opportunityTypeId, scoreMatchedIds);
+  // "Current user/team tokens" -- see the matching comment in leads-postgres.ts's own
+  // listLeadsForTenant for why this resolves "@myteam" here rather than making buildWhere async.
+  const resolvedFilters = await substituteUserTokens(recordFilters, user);
+  const where = buildWhere(user, resolvedFilters, opportunityTypeId, scoreMatchedIds);
   const [countRow, opportunities] = await Promise.all([
     queryOne<{ count: number }>(`select count(*)::int as count from "Opportunity" ${where.sql}`, where.values),
     query<any>(
@@ -295,6 +300,39 @@ export async function listOpportunitiesForTenantByType(
 
 export async function listOpportunitiesForTenant(user: TenantUser, limit: number) {
   return listOpportunitiesForTenantByType(user, limit, null);
+}
+
+// Gap checklist Module 17, item 25 (embedded analytics surfaces: "view-level count chips"),
+// mirroring `getLeadStatusCountsForTenant` in leads-postgres.ts. Deliberately NOT
+// `getOpportunityStatsForTenant` (which pulls up to 500 full Opportunity rows just to count
+// them) -- a cheap `group by "stageId"` count query plus a small, separate stage-name lookup,
+// same tenant/ownership scoping (`buildWhere`) every other Opportunity read path uses.
+export async function getOpportunityStageCountsForTenant(user: TenantUser) {
+  const where = buildWhere(user, null, null, null);
+  const counts = await query<{ stageId: string | null; count: number }>(
+    `select "stageId", count(*)::int as count from "Opportunity" ${where.sql} group by "stageId"`,
+    where.values,
+  );
+  const stageIds = counts.map((row) => row.stageId).filter((id): id is string => !!id);
+  const stages = stageIds.length
+    ? await query<{ id: string; name: string; order: number }>(`select id, name, "order" from "OpportunityStage" where id = any($1::text[])`, [
+        stageIds,
+      ])
+    : [];
+  const stageById = new Map(stages.map((stage) => [stage.id, stage]));
+
+  return counts
+    .map((row) => {
+      const stage = row.stageId ? stageById.get(row.stageId) : undefined;
+      return {
+        stageId: row.stageId,
+        stageName: stage?.name ?? (row.stageId ? "Unknown" : "Unassigned"),
+        order: stage?.order ?? Number.MAX_SAFE_INTEGER,
+        count: row.count,
+      };
+    })
+    .sort((a, b) => a.order - b.order)
+    .map(({ order, ...rest }) => rest);
 }
 
 export async function getOpportunityForTenant(user: TenantUser, id: string) {
@@ -324,6 +362,7 @@ function fieldDiff(before: Record<string, any>, after: Record<string, any>) {
 }
 
 export async function createOpportunityForTenant(user: TenantUser, payload: Record<string, unknown>) {
+  await assertFeatureEnabled(user.tenantId, "opportunityEnabled", { isPlatformAdmin: user.isPlatformAdmin });
   const objectId = await getObjectId(user);
   const types = await listOpportunityTypesForTenant(user);
   const selectedType = types.find((type) => type.id === payload.opportunityTypeId);
@@ -364,10 +403,27 @@ export async function createOpportunityForTenant(user: TenantUser, payload: Reco
   const distribution = await distributeRecord(user, "OPPORTUNITY", created.id, created).catch(() => null);
   const createdWithOwner = distribution?.assignedUserId ? { ...created, ownerId: distribution.assignedUserId } : created;
   await runAutomationsForEvent(user, "OPPORTUNITY_CREATED", "OPPORTUNITY", createdWithOwner.id, createdWithOwner).catch(() => undefined);
+  await enqueueWebhookEvent(user.tenantId, "OPPORTUNITY_CREATED", createdWithOwner).catch(() => undefined);
+  await enqueueAppEvent(user.tenantId, "OPPORTUNITY_CREATED", createdWithOwner).catch(() => undefined);
+  await refreshNextBestActionsForRecord(user, "OPPORTUNITY", createdWithOwner.id);
+  // Credited against the LEAD, not the Opportunity itself, so it joins the lead's earlier
+  // form/website attribution touches under the same (recordType, recordId) key --
+  // an Opportunity has no touches of its own to attribute against.
+  if (createdWithOwner.leadId) {
+    await recordAttributionTouch(user, {
+      recordType: "LEAD",
+      recordId: createdWithOwner.leadId,
+      channel: "OTHER",
+      touchType: "CONVERSION",
+      metadata: { opportunityId: createdWithOwner.id },
+    }).catch(() => undefined);
+  }
+  await invalidateReportRollupsForTenant(user.tenantId).catch(() => undefined);
   return { ...(await decorateOpportunities(user, [createdWithOwner]))[0], distribution };
 }
 
 export async function updateOpportunityForTenant(user: TenantUser, id: string, payload: Record<string, unknown>) {
+  await assertFeatureEnabled(user.tenantId, "opportunityEnabled", { isPlatformAdmin: user.isPlatformAdmin });
   const existing = await getOpportunityForTenant(user, id);
   if (!existing) return null;
   const now = new Date().toISOString();
@@ -411,27 +467,36 @@ export async function updateOpportunityForTenant(user: TenantUser, id: string, p
   const diff = fieldDiff(existing, updated);
   await createAuditLog(user, "UPDATE", updated.id, existing, updated, Object.keys(diff).length ? diff : null);
   await runAutomationsForEvent(user, "OPPORTUNITY_UPDATED", "OPPORTUNITY", updated.id, updated).catch(() => undefined);
+  await enqueueWebhookEvent(user.tenantId, "OPPORTUNITY_UPDATED", updated).catch(() => undefined);
+  await enqueueAppEvent(user.tenantId, "OPPORTUNITY_UPDATED", updated).catch(() => undefined);
   if (updated.stageId && existing.stageId !== updated.stageId) {
     const stageNames = await query<{ id: string; name: string }>(
       'select id, name from "StageDefinition" where id = any($1::text[])',
       [[existing.stageId, updated.stageId]],
     );
     const stageNameById = new Map(stageNames.map((stage) => [stage.id, stage.name]));
-    await runAutomationsForEvent(user, "STAGE_CHANGED", "OPPORTUNITY", updated.id, {
+    const stageChangedPayload = {
       ...updated,
       fromStageId: existing.stageId,
       toStageId: updated.stageId,
       fromStageName: stageNameById.get(existing.stageId) ?? null,
       toStageName: stageNameById.get(updated.stageId) ?? null,
-    }).catch(() => undefined);
+    };
+    await runAutomationsForEvent(user, "STAGE_CHANGED", "OPPORTUNITY", updated.id, stageChangedPayload).catch(() => undefined);
+    await enqueueWebhookEvent(user.tenantId, "STAGE_CHANGED", stageChangedPayload).catch(() => undefined);
+    await enqueueAppEvent(user.tenantId, "STAGE_CHANGED", stageChangedPayload).catch(() => undefined);
   }
+  await refreshNextBestActionsForRecord(user, "OPPORTUNITY", updated.id);
+  await invalidateReportRollupsForTenant(user.tenantId).catch(() => undefined);
   return (await decorateOpportunities(user, [updated]))[0] ?? updated;
 }
 
 export async function deleteOpportunityForTenant(user: TenantUser, id: string) {
+  await assertFeatureEnabled(user.tenantId, "opportunityEnabled", { isPlatformAdmin: user.isPlatformAdmin });
   const where = buildWhere(user, null);
   const values = where.values.concat([id]);
   await execute(`delete from "Opportunity" ${where.sql} and id = $${values.length}`, values);
+  await invalidateReportRollupsForTenant(user.tenantId).catch(() => undefined);
 }
 
 export async function getOpportunityHistoryForTenant(user: TenantUser, opportunityId: string) {

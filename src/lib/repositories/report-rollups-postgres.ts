@@ -1,5 +1,6 @@
 import { randomUUID } from "crypto";
 import { execute, query, queryOne } from "@/lib/db/query";
+import { createUserNotification } from "@/lib/server/notifications";
 
 type TenantUser = {
   id: string;
@@ -121,6 +122,93 @@ export async function refreshReportRollupForTenant(user: TenantUser, input: Refr
   }
 }
 
+export async function listReportRefreshStatesForTenant(user: TenantUser) {
+  if (!user.tenantId) throw new Error("TENANT_CONTEXT_REQUIRED");
+  return query(
+    `select ${STATE_COLUMNS} from "ReportRefreshState" where "tenantId" = $1 order by "updatedAt" desc`,
+    [user.tenantId],
+  );
+}
+
+export async function updateReportRefreshPolicyForTenant(
+  user: TenantUser,
+  input: { reportKey: string; scopeType?: "ORG" | "TEAM" | "USER" | "PARTNER"; scopeId?: string | null; refreshIntervalMinutes: number },
+) {
+  if (!user.tenantId) throw new Error("TENANT_CONTEXT_REQUIRED");
+  if (!input.reportKey) throw new Error("REPORT_KEY_REQUIRED");
+  if (!Number.isFinite(input.refreshIntervalMinutes) || input.refreshIntervalMinutes < 1) {
+    throw new Error("INVALID_REFRESH_INTERVAL");
+  }
+  return upsertRefreshState(user, input.reportKey, input.scopeType ?? "ORG", input.scopeId ?? null, {
+    refreshIntervalMinutes: Math.round(input.refreshIntervalMinutes),
+    updatedAt: new Date().toISOString(),
+  });
+}
+
+// Scheduled half of "manual refresh, scheduled refresh" -- until now the only way a
+// ReportRefreshJob was ever created was the admin-triggered API route (reason 'MANUAL').
+// ReportRefreshState.refreshIntervalMinutes already existed in the schema but nothing ever
+// read it. This scans for states that are due (or have never completed) and don't already
+// have a job in flight, and enqueues a 'SCHEDULED' job for each -- reusing the exact same
+// processPendingReportRefreshJobs consumer, not a second refresh pipeline.
+export async function processDueReportRollupRefreshes(limit = 50) {
+  const due = await query<any>(
+    `select s."tenantId", s."reportKey", s."scopeType", s."scopeId"
+     from "ReportRefreshState" s
+     where s.status <> 'REFRESHING'
+       and (
+         s."lastSuccessfulAt" is null
+         or s."lastSuccessfulAt" <= now() - (greatest(s."refreshIntervalMinutes", 1) || ' minutes')::interval
+       )
+       and not exists (
+         select 1 from "ReportRefreshJob" j
+         where j."tenantId" = s."tenantId"
+           and j."reportKey" = s."reportKey"
+           and j."scopeType" = s."scopeType"
+           and (j."scopeId" = s."scopeId" or (j."scopeId" is null and s."scopeId" is null))
+           and j.status in ('PENDING', 'RUNNING')
+       )
+     order by s."lastSuccessfulAt" asc nulls first
+     limit $1`,
+    [limit],
+  );
+
+  const enqueued = [];
+  for (const state of due) {
+    const job = await queryOne<{ id: string }>(
+      `insert into "ReportRefreshJob"
+        (id, "tenantId", "reportKey", "scopeType", "scopeId", "periodStart", "periodEnd", "requestedBy", reason, status, "createdAt")
+       values ($1, $2, $3, $4, $5, null, null, null, 'SCHEDULED', 'PENDING', $6)
+       returning id`,
+      [randomUUID(), state.tenantId, state.reportKey, state.scopeType, state.scopeId, new Date().toISOString()],
+    );
+    if (job) enqueued.push({ tenantId: state.tenantId, reportKey: state.reportKey, scopeType: state.scopeType, scopeId: state.scopeId, jobId: job.id });
+  }
+  return { enqueued };
+}
+
+// Failed-refresh alert -- reuses the same createUserNotification primitive the webhook outbox
+// and scoring worker jobs already use for this exact kind of "background job failed" alert,
+// rather than building a separate notification path. A MANUAL job's requester gets notified
+// directly; a SCHEDULED job has no requester, so it falls back to the tenant's earliest-created
+// user, matching webhook-outbox.ts's own "no specific owner" precedent.
+async function notifyReportRollupRefreshFailed(job: any, message: string) {
+  let userId = job.requestedBy as string | null;
+  if (!userId) {
+    const owner = await queryOne<{ id: string }>(`select id from "User" where "tenantId" = $1 order by "createdAt" asc limit 1`, [job.tenantId]);
+    userId = owner?.id ?? null;
+  }
+  if (!userId) return;
+  await createUserNotification({
+    tenantId: job.tenantId,
+    userId,
+    title: "Report rollup refresh failed",
+    message: `Refreshing "${job.reportKey}" failed: ${message}.`,
+    data: { type: "reports.rollupRefreshFailed", reportKey: job.reportKey, scopeType: job.scopeType, scopeId: job.scopeId, error: message },
+    category: "REPORTS",
+  });
+}
+
 export async function processPendingReportRefreshJobs(limit = 25) {
   const jobs = await query<any>(
     `select ${JOB_COLUMNS}
@@ -159,6 +247,7 @@ export async function processPendingReportRefreshJobs(limit = 25) {
         ["FAILED", new Date().toISOString(), message, job.id],
       );
       processed.push({ jobId: job.id, status: "FAILED", error: message });
+      await notifyReportRollupRefreshFailed(job, message).catch(() => undefined);
     }
   }
 
@@ -238,4 +327,20 @@ function inferSourceWatermark(report: any): string | null {
   if (report?.generatedAt) return report.generatedAt;
   if (report?.meta?.generatedAt) return report.meta.generatedAt;
   return null;
+}
+
+// Gap checklist Module 17, item 24 ("analytics performance layer" -- cache invalidation as an
+// explicit concept, previously timer-only: a rollup only ever went stale on
+// refreshIntervalMinutes, never because the underlying data actually changed). Deliberately
+// coarse -- marks every one of the tenant's ReportRefreshState rows STALE (skipping any
+// currently REFRESHING, so an in-flight run isn't corrupted) rather than trying to map which
+// specific reportKey depends on which entity type. Better to over-invalidate (a handful of
+// unrelated reports refresh a bit sooner than strictly necessary) than under-invalidate (a
+// report keeps confidently showing FRESH while the data behind it has already changed).
+export async function invalidateReportRollupsForTenant(tenantId: string | null | undefined) {
+  if (!tenantId) return;
+  await execute(
+    `update "ReportRefreshState" set status = 'STALE', "updatedAt" = $1 where "tenantId" = $2 and status <> 'REFRESHING'`,
+    [new Date().toISOString(), tenantId],
+  );
 }

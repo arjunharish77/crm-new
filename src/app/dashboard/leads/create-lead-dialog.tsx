@@ -6,15 +6,17 @@ import { Button } from "@/components/ui/button";
 import { StandardDialog } from "@/components/common/standard-dialog";
 import { LeadForm } from "./lead-form";
 import { ContextualFormsPanel } from "@/components/forms/contextual-forms-panel";
+import { Lead } from "@/types/leads";
 
 interface CreateLeadDialogProps {
     onSuccess: () => void;
     trigger?: React.ReactNode;
     open?: boolean; // Controlled
     onOpenChange?: (open: boolean) => void; // Controlled
+    initialData?: Partial<Lead>;
 }
 
-export function CreateLeadDialog({ onSuccess, trigger, open: controlledOpen, onOpenChange: setControlledOpen }: CreateLeadDialogProps) {
+export function CreateLeadDialog({ onSuccess, trigger, open: controlledOpen, onOpenChange: setControlledOpen, initialData }: CreateLeadDialogProps) {
     const [internalOpen, setInternalOpen] = useState(false);
 
     // Use controlled state if provided, otherwise internal
@@ -54,6 +56,7 @@ export function CreateLeadDialog({ onSuccess, trigger, open: controlledOpen, onO
                     />
                 </div>
                 <LeadForm
+                    initialData={initialData}
                     onSuccess={() => {
                         onSuccess();
                         handleClose();

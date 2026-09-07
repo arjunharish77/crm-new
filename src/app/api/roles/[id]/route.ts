@@ -16,7 +16,7 @@ export async function PATCH(
 
     const body = await request.json().catch(() => ({}));
     const { id } = await params;
-    const role = await updateTenantRole(user.tenantId, id, body);
+    const role = await updateTenantRole(user.tenantId, id, body, { id: user.id, tenantId: user.tenantId });
     return NextResponse.json(role);
   } catch (error) {
     if (error instanceof Error && error.message === "UNAUTHORIZED") return unauthorized();
@@ -37,7 +37,7 @@ export async function DELETE(
     }
 
     const { id } = await params;
-    await deleteTenantRole(user.tenantId, id);
+    await deleteTenantRole(user.tenantId, id, { id: user.id, tenantId: user.tenantId });
     return NextResponse.json({ success: true });
   } catch (error) {
     if (error instanceof Error && error.message === "UNAUTHORIZED") return unauthorized();

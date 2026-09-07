@@ -2,7 +2,7 @@
 
 import React from "react";
 import { motion } from "framer-motion";
-import { CircleAlert } from "lucide-react";
+import { AlertTriangle, RefreshCw } from "lucide-react";
 import { fadeInUp, spring } from "@/lib/motion";
 import { Button } from "@/components/ui/button";
 
@@ -12,21 +12,24 @@ export interface ErrorStateProps {
     onRetry?: () => void;
 }
 
-export function ErrorState({
-    title = "Something went wrong",
-    description = "An unexpected error occurred. Please try again.",
-    onRetry,
-}: ErrorStateProps) {
+// Sibling to EmptyState -- same layout/motion so a failed fetch reads as
+// visually distinct from "zero results" instead of the two looking identical.
+export function ErrorState({ title = "Something went wrong", description = "Failed to load this data.", onRetry }: ErrorStateProps) {
     return (
         <motion.div variants={fadeInUp} initial="initial" animate="animate">
-            <div className="flex flex-col items-center justify-center py-16 px-8 text-center">
+            {/* Gap checklist Module 10's "accessibility pass" item, "screen-reader-friendly
+                status text" -- a failed load is exactly the kind of dynamic state change a
+                screen-reader user would otherwise never learn about (no error text appears
+                anywhere else on the page). role="alert" implies an assertive live region, so
+                this interrupts and announces immediately rather than waiting to be polled. */}
+            <div role="alert" className="flex flex-col items-center justify-center py-16 px-8 text-center">
                 <motion.div
-                    initial={{ scale: 0.8, opacity: 0, rotate: -10 }}
-                    animate={{ scale: 1, opacity: 1, rotate: 0 }}
+                    initial={{ scale: 0.8, opacity: 0 }}
+                    animate={{ scale: 1, opacity: 1 }}
                     transition={spring.expressive}
                 >
                     <div className="mb-6 flex h-20 w-20 items-center justify-center rounded-full bg-destructive/8">
-                        <CircleAlert className="size-10 text-destructive opacity-80" />
+                        <AlertTriangle className="size-10 text-destructive opacity-70" />
                     </div>
                 </motion.div>
 
@@ -36,7 +39,8 @@ export function ErrorState({
                 </p>
                 {onRetry && (
                     <Button variant="outline" onClick={onRetry}>
-                        Try Again
+                        <RefreshCw className="size-4" />
+                        Try again
                     </Button>
                 )}
             </div>

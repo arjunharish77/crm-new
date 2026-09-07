@@ -22,6 +22,9 @@ export async function POST(
     if (error instanceof Error && error.message === "RATE_LIMITED") {
       return tooManyRequests("This form is receiving too many submissions right now. Please try again later.");
     }
+    if (error instanceof Error && error.message.startsWith("FEATURE_DISABLED")) {
+      return badRequest("This form is not currently accepting submissions");
+    }
     return serverError("Failed to submit form");
   }
 }

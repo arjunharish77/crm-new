@@ -146,6 +146,15 @@ export function ImportDialog({ entityName, apiEndpoint, trigger, onSuccess }: Im
                         <div
                             className="border-2 border-dashed rounded-lg p-10 flex flex-col items-center justify-center text-center hover:bg-muted/50 cursor-pointer transition-colors"
                             onClick={() => fileInputRef.current?.click()}
+                            role="button"
+                            tabIndex={0}
+                            aria-label="Click to upload CSV"
+                            onKeyDown={(event) => {
+                                if (event.key === "Enter" || event.key === " ") {
+                                    event.preventDefault();
+                                    fileInputRef.current?.click();
+                                }
+                            }}
                         >
                             <input
                                 type="file"

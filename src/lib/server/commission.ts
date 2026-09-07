@@ -2,6 +2,7 @@ import { randomUUID } from "crypto";
 import { createAuditLog, automationConditionMatches } from "@/lib/server/crm";
 import { getPayoutVisiblePartnerUserIds } from "@/lib/server/partner-access";
 import { execute, query, queryOne } from "@/lib/db/query";
+import { assertFeatureEnabled, isFeatureEnabledForTenant } from "@/lib/server/entitlements";
 
 type TenantUser = {
   id: string;
@@ -54,6 +55,7 @@ export async function createCommissionRuleForTenant(user: TenantUser, input: Com
   if (!user.tenantId) {
     throw new Error("TENANT_CONTEXT_REQUIRED");
   }
+  await assertFeatureEnabled(user.tenantId, "payoutsEnabled", { isPlatformAdmin: user.isPlatformAdmin });
 
   const now = new Date().toISOString();
   const data = await queryOne<any>(
@@ -93,6 +95,7 @@ export async function updateCommissionRuleForTenant(
   if (!user.tenantId) {
     throw new Error("TENANT_CONTEXT_REQUIRED");
   }
+  await assertFeatureEnabled(user.tenantId, "payoutsEnabled", { isPlatformAdmin: user.isPlatformAdmin });
 
   const existing = await queryOne<any>(
     `select id, "tenantId", name, "partnerId", "opportunityTypeId", conditions, "ruleType", value, priority,
@@ -131,6 +134,7 @@ export async function deleteCommissionRuleForTenant(user: TenantUser, id: string
   if (!user.tenantId) {
     throw new Error("TENANT_CONTEXT_REQUIRED");
   }
+  await assertFeatureEnabled(user.tenantId, "payoutsEnabled", { isPlatformAdmin: user.isPlatformAdmin });
 
   const existing = await queryOne<any>(
     `select id, "tenantId", name, "partnerId", "opportunityTypeId", conditions, "ruleType", value, priority,
@@ -269,6 +273,10 @@ export async function calculateAndRecordCommissionForOpportunity(
   triggerEvent: string
 ) {
   if (!user.tenantId || !opportunity?.ownerId) return null;
+  // Not yet wired into any live automation trigger (latent, exported defensively) --
+  // graceful no-op rather than a throw, matching runAutomationsForEvent/distributeRecord's
+  // convention for anything reachable from a fire-and-forget automation-action call site.
+  if (!(await isFeatureEnabledForTenant(user.tenantId, "payoutsEnabled"))) return null;
 
   const partnerProfile = await queryOne<any>(
     `select id, "userId", status

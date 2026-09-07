@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import { toast } from "sonner";
+import { matchesLogicRule } from "@/lib/forms/visibility";
 import { StandardDialog } from "@/components/common/standard-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -288,6 +289,8 @@ function FormDialog({
                 <FormRenderer
                     formId={formId}
                     fields={configFields}
+                    sections={Array.isArray(form?.config?.sections) ? form.config.sections : []}
+                    tabs={Array.isArray(form?.config?.tabs) ? form.config.tabs : []}
                     context={context}
                     entityData={entityData}
                     placement={placement}
@@ -311,6 +314,8 @@ function FormDialog({
 function FormRenderer({
     formId,
     fields,
+    sections = [],
+    tabs = [],
     context,
     entityData,
     placement,
@@ -319,6 +324,8 @@ function FormRenderer({
 }: {
     formId: string;
     fields: any[];
+    sections?: any[];
+    tabs?: any[];
     context: ContextualFormsPanelProps["context"];
     entityData?: Record<string, any> | null;
     placement: ContextualFormsPanelProps["placement"];
@@ -378,10 +385,15 @@ function FormRenderer({
         window.localStorage.setItem(draftKey, JSON.stringify(formData));
     }, [draftKey, formData, submitted]);
 
-    // Conditional logic (same as public form)
+    // Conditional logic (same engine as the public form renderer). Sections/tabs don't
+    // get their own paged navigation here (this panel renders as one flat form inside a
+    // dialog, not a multi-step wizard) but a field's section/tab condition still
+    // determines whether the field itself is shown -- a field in a hidden section stays
+    // hidden here too, just without a visible "section" wrapper around it.
     const visibleFields = useMemo(() => {
         const opportunityTypeSelector = fields.find((f) => f.mapping === "opportunity.opportunityTypeId");
         const selectedOpportunityTypeId = opportunityTypeSelector ? formData[opportunityTypeSelector.id] : undefined;
+        const sectionById = new Map(sections.map((section) => [section.id, section]));
         return fields.filter((field) => {
             // Type-driven visibility: an opportunity-module field tagged with an authoring-time
             // opportunityTypeId is only shown once the real selector field matches that tag.
@@ -390,21 +402,16 @@ function FormRenderer({
                 return false;
             }
 
-            if (!field.logic || !field.logic.fieldId) return true;
-            const sourceValue = formData[field.logic.fieldId];
-            const targetValue = field.logic.value;
-            let isMatch = false;
-            switch (field.logic.operator) {
-                case "equals": isMatch = String(sourceValue) === String(targetValue); break;
-                case "not_equals": isMatch = String(sourceValue) !== String(targetValue); break;
-                case "contains": isMatch = String(sourceValue).includes(String(targetValue)); break;
-                case "gt": isMatch = Number(sourceValue) > Number(targetValue); break;
-                case "lt": isMatch = Number(sourceValue) < Number(targetValue); break;
-                default: isMatch = String(sourceValue) === String(targetValue);
-            }
-            return field.logic.action === "SHOW" ? isMatch : !isMatch;
+            if (!matchesLogicRule(formData, field.logic)) return false;
+
+            const section = field.sectionId ? sectionById.get(field.sectionId) : undefined;
+            if (section && !matchesLogicRule(formData, section.logic)) return false;
+            const tab = section?.tabId ? tabs.find((t) => t.id === section.tabId) : undefined;
+            if (tab && !matchesLogicRule(formData, tab.logic)) return false;
+
+            return true;
         });
-    }, [fields, formData]);
+    }, [fields, formData, sections, tabs]);
 
     const handleChange = useCallback((id: string, value: any) => {
         setFormData((prev) => ({ ...prev, [id]: value }));
@@ -487,13 +494,16 @@ function FormRenderer({
                 await Promise.all(promises);
                 toast.success("Updated successfully!");
             } else {
-                await apiFetch(`/public/forms/${formId}/submit`, {
+                const result = await apiFetch<{ warnings?: string[] }>(`/public/forms/${formId}/submit`, {
                     method: "POST",
                     body: JSON.stringify({
                         ...publicPayload,
                         _context: context,
                     }),
                 });
+                if (Array.isArray(result?.warnings)) {
+                    result.warnings.forEach((warning) => toast.warning(warning));
+                }
                 toast.success("Saved successfully!");
             }
 

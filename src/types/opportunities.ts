@@ -35,6 +35,7 @@ export interface Opportunity {
     activities?: any[];
     stageHistory?: OpportunityStageHistory[];
     predictiveScore?: PredictiveRecordScore | null;
+    pendingNbaCount?: number;
 }
 
 /**

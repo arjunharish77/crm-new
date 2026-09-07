@@ -6,11 +6,13 @@ const dbMocks = vi.hoisted(() => {
     PartnerProfile: any[];
     PartnerOrganization: any[];
     User: any[];
+    TenantModuleEntitlement: Array<{ tenantId: string; moduleKey: string; status: string }>;
   } = {
     Role: [],
     PartnerProfile: [],
     PartnerOrganization: [],
     User: [],
+    TenantModuleEntitlement: [],
   };
 
   return {
@@ -33,6 +35,10 @@ const dbMocks = vi.hoisted(() => {
 
       if (sql.includes('from "PartnerProfile"')) {
         return state.PartnerProfile.find((profile) => profile.tenantId === params[0] && profile.id === params[1]) ?? null;
+      }
+
+      if (sql.includes('select status from "TenantModuleEntitlement"')) {
+        return state.TenantModuleEntitlement.find((row) => row.tenantId === params[0] && row.moduleKey === params[1]) ?? null;
       }
 
       if (sql.includes('insert into "PartnerOrganization"')) {
@@ -125,6 +131,7 @@ beforeEach(() => {
   dbMocks.state.PartnerProfile = [];
   dbMocks.state.PartnerOrganization = [];
   dbMocks.state.User = [];
+  dbMocks.state.TenantModuleEntitlement = [];
   dbMocks.query.mockClear();
   dbMocks.queryOne.mockClear();
   dbMocks.execute.mockClear();
@@ -198,5 +205,32 @@ describe("partner organization logins", () => {
     expect(login?.partnerOrganizationId).toBeTruthy();
     expect(dbMocks.state.PartnerOrganization).toHaveLength(1);
     expect(dbMocks.state.PartnerProfile.find((profile: any) => profile.id === "legacy-profile")?.partnerOrganizationId).toBe(login?.partnerOrganizationId);
+  });
+
+  it("rejects creating a partner login when the PARTNERS module is disabled", async () => {
+    dbMocks.state.TenantModuleEntitlement = [{ tenantId: TENANT, moduleKey: "PARTNERS", status: "DISABLED" }];
+    dbMocks.state.Role = [{ id: "partner-role", tenantId: TENANT, permissions: { isPartnerRole: true } }];
+    dbMocks.state.PartnerProfile = [
+      {
+        id: "primary-profile",
+        tenantId: TENANT,
+        userId: "partner-primary",
+        legalBusinessName: "Alpha Partners",
+        status: "ACTIVE",
+        invoiceNumberPrefix: "ALP",
+        partnerOrganizationId: "partner-org-1",
+        partnerLoginRole: "PRIMARY",
+        canAccessPayouts: true,
+      },
+    ];
+
+    await expect(
+      createPartnerLoginForTenant(adminUser, "primary-profile", {
+        name: "Alpha Finance",
+        email: "finance@alpha.example",
+        password: "secret123",
+        roleId: "partner-role",
+      }),
+    ).rejects.toThrow("MODULE_DISABLED");
   });
 });

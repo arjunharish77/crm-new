@@ -26,6 +26,7 @@ interface NotificationContextType {
     notifications: Notification[];
     unreadCount: number;
     clearNotifications: () => void;
+    markAsRead: (id: string | undefined) => void;
 }
 
 const NotificationContext = createContext<NotificationContextType | undefined>(undefined);
@@ -83,9 +84,13 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
             });
             setUnreadCount(prev => prev + 1);
 
-            toast(newNotification.title, {
-                description: newNotification.message,
-            });
+            // Inbound calls get their own rich popup (InboundCallPopupProvider), driven off
+            // this same `notifications` array -- the default toast is redundant for that type.
+            if (newNotification.data?.type !== "INBOUND_CALL") {
+                toast(newNotification.title, {
+                    description: newNotification.message,
+                });
+            }
         };
 
         eventSource.onerror = () => {
@@ -113,11 +118,31 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
         }
     };
 
+    // Marks a single notification read (as opposed to "Clear all") -- used when a user
+    // clicks through a notification to its record, since reading one shouldn't dismiss the
+    // rest of the list.
+    const markAsRead = (id: string | undefined) => {
+        if (!id) return;
+        setNotifications((prev) => prev.filter((item) => item.id !== id));
+        setUnreadCount((prev) => Math.max(0, prev - 1));
+        if (token) {
+            fetch(`${API_URL}/notifications`, {
+                method: "PATCH",
+                headers: {
+                    "Content-Type": "application/json",
+                    Authorization: `Bearer ${token}`,
+                },
+                body: JSON.stringify({ ids: [id] }),
+            }).catch(() => undefined);
+        }
+    };
+
     return (
         <NotificationContext.Provider value={{
             notifications,
             unreadCount,
-            clearNotifications
+            clearNotifications,
+            markAsRead,
         }}>
             {children}
         </NotificationContext.Provider>

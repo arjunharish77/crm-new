@@ -19,6 +19,9 @@ import {
     Send,
     Share2,
     Pencil,
+    HeartPulse,
+    RefreshCw,
+    XCircle,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -68,6 +71,38 @@ import { apiFetch } from '@/lib/api';
 import { formatWorkspaceDateTime } from '@/lib/date-format';
 import { toast } from 'sonner';
 
+interface InboundWebhookSettings {
+    currentSecret: string;
+    hasPreviousSecret: boolean;
+    previousSecretExpiresAt: string | null;
+    isActive: boolean;
+}
+
+interface InboundWebhookEvent {
+    id: string;
+    idempotencyKey: string | null;
+    status: 'ACCEPTED' | 'DUPLICATE' | 'REJECTED' | 'FAILED';
+    payload: any;
+    leadId: string | null;
+    errorMessage: string | null;
+    createdAt: string;
+}
+
+const INBOUND_EVENT_STATUS_CLASSNAMES: Record<string, string> = {
+    ACCEPTED: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400',
+    DUPLICATE: 'border-muted bg-muted text-muted-foreground',
+    REJECTED: 'border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-400',
+    FAILED: 'border-destructive/30 bg-destructive/10 text-destructive',
+};
+
+interface ConnectorHealthCheck {
+    key: string;
+    label: string;
+    status: 'ok' | 'degraded' | 'error' | 'not_configured';
+    detail?: string;
+    latencyMs?: number;
+}
+
 interface Webhook {
     id: string;
     name: string;
@@ -75,7 +110,35 @@ interface Webhook {
     events: string[];
     isActive: boolean;
     secret?: string;
+    rateLimitPerMinute?: number;
 }
+
+interface WebhookDelivery {
+    id: string;
+    eventType: string;
+    status: 'PENDING' | 'SENDING' | 'DELIVERED' | 'FAILED' | 'CANCELLED';
+    retryCount: number;
+    httpStatus: number | null;
+    responseBody: string | null;
+    error: string | null;
+    createdAt: string;
+    processedAt: string | null;
+}
+
+const WEBHOOK_EVENT_OPTIONS = [
+    'LEAD_CREATED', 'LEAD_UPDATED', 'OPPORTUNITY_CREATED', 'OPPORTUNITY_UPDATED', 'STAGE_CHANGED', 'ACTIVITY_CREATED', 'ACTIVITY_UPDATED',
+    'TASK_CREATED', 'TASK_UPDATED',
+    'CASE_CREATED', 'CASE_ASSIGNED', 'CASE_UPDATED', 'CASE_COMMENTED', 'CASE_RESOLVED', 'CASE_REOPENED', 'CASE_STATUS_CHANGED', 'CASE_SLA_WARNING', 'CASE_SLA_BREACHED',
+    'COMMUNICATION_SENT', 'COMMUNICATION_FAILED',
+];
+
+const WEBHOOK_DELIVERY_STATUS_CLASSNAMES: Record<string, string> = {
+    DELIVERED: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400',
+    PENDING: 'border-blue-500/30 bg-blue-500/10 text-blue-700 dark:text-blue-400',
+    SENDING: 'border-blue-500/30 bg-blue-500/10 text-blue-700 dark:text-blue-400',
+    FAILED: 'border-destructive/30 bg-destructive/10 text-destructive',
+    CANCELLED: 'border-muted bg-muted text-muted-foreground',
+};
 
 interface ImportJob {
     id: string;
@@ -85,6 +148,37 @@ interface ImportJob {
     errors?: { row: number; message: string }[];
     createdAt: string;
 }
+
+interface ImportTemplate {
+    id: string;
+    name: string;
+    module: string;
+    mapping: { fields?: { source: string; target: string }[] };
+    duplicateMode: 'SKIP' | 'UPDATE' | 'CREATE';
+}
+
+interface ImportPreview {
+    total: number;
+    wouldCreate: number;
+    wouldUpdate: number;
+    wouldSkip: number;
+    wouldFail: number;
+    isDestructive: boolean;
+    sampleErrors: { row: number; message: string }[];
+}
+
+const ACTIVE_IMPORT_STATUSES = new Set(['QUEUED', 'PROCESSING', 'PENDING_APPROVAL']);
+
+const IMPORT_STATUS_CLASSNAMES: Record<string, string> = {
+    COMPLETED: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400',
+    QUEUED: 'border-blue-500/30 bg-blue-500/10 text-blue-700 dark:text-blue-400',
+    PROCESSING: 'border-blue-500/30 bg-blue-500/10 text-blue-700 dark:text-blue-400',
+    PENDING_APPROVAL: 'border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-400',
+    COMPLETED_WITH_ERRORS: 'border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-400',
+    FAILED: 'border-destructive/30 bg-destructive/10 text-destructive',
+    CANCELLED: 'border-muted bg-muted text-muted-foreground',
+    REJECTED: 'border-destructive/30 bg-destructive/10 text-destructive',
+};
 
 interface CallLog {
     id: string;
@@ -327,7 +421,13 @@ export default function IntegrationsSettingsPage() {
     const [savingCommunication, setSavingCommunication] = useState(false);
     const [loading, setLoading] = useState(true);
     const [isAddingWebhook, setIsAddingWebhook] = useState(false);
-    const [newWebhook, setNewWebhook] = useState({ name: '', url: '', events: ['LEAD.CREATED'], secret: '' });
+    const [newWebhook, setNewWebhook] = useState({ name: '', url: '', events: ['LEAD_CREATED'] as string[], secret: '', rateLimitPerMinute: 60 });
+    const [togglingWebhookId, setTogglingWebhookId] = useState<string | null>(null);
+    const [testingWebhookId, setTestingWebhookId] = useState<string | null>(null);
+    const [webhookTestResult, setWebhookTestResult] = useState<Record<string, any>>({});
+    const [viewingDeliveriesForWebhook, setViewingDeliveriesForWebhook] = useState<Webhook | null>(null);
+    const [webhookDeliveries, setWebhookDeliveries] = useState<WebhookDelivery[]>([]);
+    const [loadingDeliveries, setLoadingDeliveries] = useState(false);
     const [isImportOpen, setIsImportOpen] = useState(false);
     const [importModule, setImportModule] = useState<'LEAD' | 'OPPORTUNITY' | 'ACTIVITY'>('LEAD');
     const [duplicateMode, setDuplicateMode] = useState<'SKIP' | 'UPDATE' | 'CREATE'>('SKIP');
@@ -335,6 +435,11 @@ export default function IntegrationsSettingsPage() {
     const [csvRows, setCsvRows] = useState<Record<string, string>[]>([]);
     const [mappings, setMappings] = useState<Record<string, string>>({});
     const [importing, setImporting] = useState(false);
+    const [importTemplates, setImportTemplates] = useState<ImportTemplate[]>([]);
+    const [selectedTemplateId, setSelectedTemplateId] = useState('');
+    const [saveAsTemplateName, setSaveAsTemplateName] = useState('');
+    const [importPreview, setImportPreview] = useState<ImportPreview | null>(null);
+    const [previewing, setPreviewing] = useState(false);
     const [telephony, setTelephony] = useState<any>({
         provider: '',
         agentPopupUrl: '',
@@ -346,6 +451,8 @@ export default function IntegrationsSettingsPage() {
         clickToCallMode: 'SERVER',
         clickToCallHeaders: [],
         webhookSecret: '',
+        previousWebhookSecret: '' as string | null,
+        previousWebhookSecretExpiresAt: null as string | null,
         inboundNumber: '',
         outboundCallerId: '',
         defaultAgentNumber: '',
@@ -362,29 +469,59 @@ export default function IntegrationsSettingsPage() {
         enableTeamAssignment: false,
         userAgentMappings: [],
         callStatusMappings: { answered: 'Answered', missed: 'Missed', failed: 'Failed' },
+        callingQuietHours: { enabled: false, start: '21:00', end: '09:00' },
+        recordingRetentionDays: '',
+        defaultCallQueueTeamId: '',
         isActive: false,
     });
     const [telephonySection, setTelephonySection] = useState('click2call');
+    const [rotatingTelephonySecret, setRotatingTelephonySecret] = useState(false);
+    const [doNotCallList, setDoNotCallList] = useState<Array<{ id: string; address: string; reason: string | null; createdAt: string }>>([]);
+    const [teams, setTeams] = useState<Array<{ id: string; name: string }>>([]);
+    const [newDoNotCallNumber, setNewDoNotCallNumber] = useState('');
+    const [showTelephonySecret, setShowTelephonySecret] = useState(false);
     const [callLogs, setCallLogs] = useState<CallLog[]>([]);
     const [testCall, setTestCall] = useState({ phoneNumber: '', leadId: '' });
     const [externalIntegrations, setExternalIntegrations] = useState<ExternalIntegration[]>([]);
     const [externalIntegrationDraft, setExternalIntegrationDraft] = useState<ExternalIntegration>(DEFAULT_EXTERNAL_INTEGRATION);
     const [editingExternalIntegrationId, setEditingExternalIntegrationId] = useState<string | null>(null);
     const [savingExternalIntegration, setSavingExternalIntegration] = useState(false);
+    const [connectorHealth, setConnectorHealth] = useState<ConnectorHealthCheck[]>([]);
+    const [connectorHealthCheckedAt, setConnectorHealthCheckedAt] = useState<string | null>(null);
+    const [loadingHealth, setLoadingHealth] = useState(false);
+    const [inboundSettings, setInboundSettings] = useState<InboundWebhookSettings | null>(null);
+    const [inboundEvents, setInboundEvents] = useState<InboundWebhookEvent[]>([]);
+    const [rotatingInboundSecret, setRotatingInboundSecret] = useState(false);
+    const [showInboundSecret, setShowInboundSecret] = useState(false);
+    const [testPayload, setTestPayload] = useState('{\n  "name": "Test Lead",\n  "email": "test@example.com"\n}');
+    const [testingInbound, setTestingInbound] = useState(false);
+    const [testResult, setTestResult] = useState<any>(null);
 
     useEffect(() => {
         fetchData();
     }, []);
 
+    // Imports run async now (worker-backed) -- poll while any job is still in flight so the
+    // status column reflects real progress without a manual refresh.
+    useEffect(() => {
+        if (!imports.some((job) => ACTIVE_IMPORT_STATUSES.has(job.status))) return;
+        const timer = setInterval(() => {
+            apiFetch('/integrations/csv/jobs').then((data) => setImports(data || [])).catch(() => undefined);
+        }, 4000);
+        return () => clearInterval(timer);
+    }, [imports]);
+
     const fetchData = async () => {
         setLoading(true);
         try {
-            const [whData, impData] = await Promise.all([
+            const [whData, impData, templateData] = await Promise.all([
                 apiFetch('/integrations/webhooks'),
                 apiFetch('/integrations/csv/jobs'),
+                apiFetch('/integrations/csv/templates'),
             ]);
             setWebhooks(whData || []);
             setImports(impData || []);
+            setImportTemplates(templateData || []);
             apiFetch('/integrations/telephony')
                 .then((data) => setTelephony({
                     provider: data?.config?.provider ?? '',
@@ -397,6 +534,8 @@ export default function IntegrationsSettingsPage() {
                     clickToCallMode: data?.config?.clickToCallMode ?? 'SERVER',
                     clickToCallHeaders: data?.config?.clickToCallHeaders ?? [],
                     webhookSecret: data?.config?.webhookSecret ?? '',
+                    previousWebhookSecret: data?.config?.previousWebhookSecret ?? null,
+                    previousWebhookSecretExpiresAt: data?.config?.previousWebhookSecretExpiresAt ?? null,
                     inboundNumber: data?.config?.inboundNumber ?? '',
                     outboundCallerId: data?.config?.outboundCallerId ?? '',
                     defaultAgentNumber: data?.config?.defaultAgentNumber ?? '',
@@ -413,11 +552,20 @@ export default function IntegrationsSettingsPage() {
                     enableTeamAssignment: Boolean(data?.config?.enableTeamAssignment ?? false),
                     userAgentMappings: data?.config?.userAgentMappings ?? [],
                     callStatusMappings: data?.config?.callStatusMappings ?? { answered: 'Answered', missed: 'Missed', failed: 'Failed' },
+                    callingQuietHours: data?.config?.callingQuietHours ?? { enabled: false, start: '21:00', end: '09:00' },
+                    recordingRetentionDays: data?.config?.recordingRetentionDays != null ? String(data.config.recordingRetentionDays) : '',
+                    defaultCallQueueTeamId: data?.config?.defaultCallQueueTeamId ?? '',
                     isActive: Boolean(data?.isActive)
                 }))
                 .catch(() => undefined);
             apiFetch('/integrations/telephony/call-logs')
                 .then((data) => setCallLogs(Array.isArray(data) ? data : []))
+                .catch(() => undefined);
+            apiFetch('/integrations/telephony/suppress')
+                .then((data) => setDoNotCallList(Array.isArray(data) ? data : []))
+                .catch(() => undefined);
+            apiFetch('/teams')
+                .then((data) => setTeams(Array.isArray(data) ? data : []))
                 .catch(() => undefined);
             Promise.all([
                 apiFetch('/communications/providers'),
@@ -440,6 +588,78 @@ export default function IntegrationsSettingsPage() {
         }
     };
 
+    const fetchConnectorHealth = async () => {
+        setLoadingHealth(true);
+        try {
+            const data = await apiFetch<{ checks: ConnectorHealthCheck[]; checkedAt: string }>('/settings/integrations/health');
+            setConnectorHealth(data.checks);
+            setConnectorHealthCheckedAt(data.checkedAt);
+        } catch (err) {
+            toast.error('Failed to check connector health');
+        } finally {
+            setLoadingHealth(false);
+        }
+    };
+
+    const fetchInboundWebhookData = async () => {
+        try {
+            const [settings, events] = await Promise.all([
+                apiFetch<InboundWebhookSettings>('/integrations/inbound/settings'),
+                apiFetch<InboundWebhookEvent[]>('/integrations/inbound/events'),
+            ]);
+            setInboundSettings(settings);
+            setInboundEvents(events || []);
+        } catch {
+            toast.error('Failed to load inbound webhook settings');
+        }
+    };
+
+    const handleRotateInboundSecret = async () => {
+        if (!confirm('Rotate the inbound webhook secret? The previous secret keeps working for 24 hours so you can update callers.')) return;
+        setRotatingInboundSecret(true);
+        try {
+            const settings = await apiFetch<InboundWebhookSettings>('/integrations/inbound/settings/rotate', { method: 'POST' });
+            setInboundSettings(settings);
+            setShowInboundSecret(true);
+            toast.success('Secret rotated');
+        } catch {
+            toast.error('Failed to rotate secret');
+        } finally {
+            setRotatingInboundSecret(false);
+        }
+    };
+
+    const handleSendTestPayload = async () => {
+        let parsed: Record<string, unknown>;
+        try {
+            parsed = JSON.parse(testPayload);
+        } catch {
+            toast.error('Test payload must be valid JSON');
+            return;
+        }
+        setTestingInbound(true);
+        setTestResult(null);
+        try {
+            const result = await apiFetch('/integrations/inbound/settings/test', { method: 'POST', body: JSON.stringify(parsed) });
+            setTestResult(result);
+            fetchInboundWebhookData();
+        } catch {
+            toast.error('Failed to send test payload');
+        } finally {
+            setTestingInbound(false);
+        }
+    };
+
+    const handleRetryInboundEvent = async (eventId: string) => {
+        try {
+            await apiFetch(`/integrations/inbound/events/${eventId}/retry`, { method: 'POST' });
+            toast.success('Retry attempted');
+            fetchInboundWebhookData();
+        } catch {
+            toast.error('Retry failed');
+        }
+    };
+
     const handleAddWebhook = async () => {
         try {
             const created = await apiFetch('/integrations/webhooks', {
@@ -448,7 +668,7 @@ export default function IntegrationsSettingsPage() {
             });
             setWebhooks([...webhooks, created]);
             setIsAddingWebhook(false);
-            setNewWebhook({ name: '', url: '', events: ['LEAD.CREATED'], secret: '' });
+            setNewWebhook({ name: '', url: '', events: ['LEAD_CREATED'], secret: '', rateLimitPerMinute: 60 });
             toast.success('Webhook created successfully');
         } catch (err) {
             toast.error('Failed to create webhook');
@@ -463,6 +683,48 @@ export default function IntegrationsSettingsPage() {
             toast.success('Webhook deleted');
         } catch (err) {
             toast.error('Failed to delete webhook');
+        }
+    };
+
+    const handleToggleWebhookActive = async (webhook: Webhook) => {
+        setTogglingWebhookId(webhook.id);
+        try {
+            const updated = await apiFetch<Webhook>(`/integrations/webhooks/${webhook.id}`, {
+                method: 'PATCH',
+                body: JSON.stringify({ isActive: !webhook.isActive }),
+            });
+            setWebhooks(webhooks.map((wh) => (wh.id === webhook.id ? updated : wh)));
+            toast.success(updated.isActive ? 'Webhook resumed' : 'Webhook paused');
+        } catch {
+            toast.error('Failed to update webhook');
+        } finally {
+            setTogglingWebhookId(null);
+        }
+    };
+
+    const handleTestWebhook = async (webhookId: string) => {
+        setTestingWebhookId(webhookId);
+        try {
+            const result = await apiFetch(`/integrations/webhooks/${webhookId}/test`, { method: 'POST' });
+            setWebhookTestResult({ ...webhookTestResult, [webhookId]: result });
+            toast[result.error ? 'error' : 'success'](result.error ? `Test failed: ${result.error}` : `Test delivered (HTTP ${result.httpStatus})`);
+        } catch {
+            toast.error('Failed to send test delivery');
+        } finally {
+            setTestingWebhookId(null);
+        }
+    };
+
+    const openWebhookDeliveries = async (webhook: Webhook) => {
+        setViewingDeliveriesForWebhook(webhook);
+        setLoadingDeliveries(true);
+        try {
+            const deliveries = await apiFetch<WebhookDelivery[]>(`/integrations/webhooks/${webhook.id}/deliveries`);
+            setWebhookDeliveries(deliveries || []);
+        } catch {
+            toast.error('Failed to load delivery log');
+        } finally {
+            setLoadingDeliveries(false);
         }
     };
 
@@ -490,36 +752,111 @@ export default function IntegrationsSettingsPage() {
         setMappings(autoMappings);
     };
 
-    const handleRunImport = async () => {
+    const currentImportMappings = () => Object.entries(mappings).filter(([, target]) => target).map(([source, target]) => ({ source, target }));
+
+    const validateImportMapping = () => {
         const mappedTargets = Object.values(mappings).filter((value) => typeof value === "string" && value.length > 0);
         const missingRequired = IMPORT_FIELDS[importModule].filter((field) => field.required && !mappedTargets.includes(field.key));
         if (missingRequired.length > 0) {
             toast.error(`Map required fields: ${missingRequired.map((field) => field.label).join(', ')}`);
-            return;
+            return false;
         }
+        return true;
+    };
+
+    const handlePreviewImport = async () => {
+        if (!validateImportMapping()) return;
+        setPreviewing(true);
+        try {
+            const preview = await apiFetch<ImportPreview>('/integrations/csv/preview', {
+                method: 'POST',
+                body: JSON.stringify({ module: importModule, duplicateMode, rows: csvRows, mappings: currentImportMappings() }),
+            });
+            setImportPreview(preview);
+        } catch {
+            toast.error('Failed to preview import');
+        } finally {
+            setPreviewing(false);
+        }
+    };
+
+    const handleRunImport = async () => {
+        if (!validateImportMapping()) return;
         setImporting(true);
         try {
-            await apiFetch('/integrations/csv/jobs', {
+            if (saveAsTemplateName.trim()) {
+                await apiFetch('/integrations/csv/templates', {
+                    method: 'POST',
+                    body: JSON.stringify({ name: saveAsTemplateName.trim(), module: importModule, duplicateMode, mappings: currentImportMappings() }),
+                }).catch(() => toast.error('Import will proceed, but saving the template failed'));
+            }
+            const job = await apiFetch<ImportJob>('/integrations/csv/jobs', {
                 method: 'POST',
-                body: JSON.stringify({
-                    module: importModule,
-                    duplicateMode,
-                    rows: csvRows,
-                    mappings: Object.entries(mappings)
-                        .filter(([, target]) => target)
-                        .map(([source, target]) => ({ source, target })),
-                }),
+                body: JSON.stringify({ module: importModule, duplicateMode, rows: csvRows, mappings: currentImportMappings() }),
             });
-            toast.success('Import completed');
+            toast.success(job.status === 'PENDING_APPROVAL' ? 'Import queued -- awaiting approval (overwrites existing records)' : 'Import queued');
             setIsImportOpen(false);
             setCsvHeaders([]);
             setCsvRows([]);
             setMappings({});
+            setImportPreview(null);
+            setSaveAsTemplateName('');
+            setSelectedTemplateId('');
             fetchData();
         } catch {
-            toast.error('Import failed');
+            toast.error('Failed to queue import');
         } finally {
             setImporting(false);
+        }
+    };
+
+    const handleLoadImportTemplate = (templateId: string) => {
+        setSelectedTemplateId(templateId);
+        const template = importTemplates.find((item) => item.id === templateId);
+        if (!template) return;
+        setImportModule(template.module as 'LEAD' | 'OPPORTUNITY' | 'ACTIVITY');
+        setDuplicateMode(template.duplicateMode);
+        setMappings(Object.fromEntries((template.mapping?.fields ?? []).map((field) => [field.source, field.target])));
+    };
+
+    const handleDeleteImportTemplate = async (templateId: string) => {
+        try {
+            await apiFetch(`/integrations/csv/templates/${templateId}`, { method: 'DELETE' });
+            setImportTemplates(importTemplates.filter((item) => item.id !== templateId));
+            toast.success('Template deleted');
+        } catch {
+            toast.error('Failed to delete template');
+        }
+    };
+
+    const handleCancelImportJob = async (jobId: string) => {
+        try {
+            await apiFetch(`/integrations/csv/jobs/${jobId}/cancel`, { method: 'POST' });
+            toast.success('Cancel requested');
+            fetchData();
+        } catch {
+            toast.error('Failed to cancel import');
+        }
+    };
+
+    const handleApproveImportJob = async (jobId: string) => {
+        try {
+            await apiFetch(`/integrations/csv/jobs/${jobId}/approve`, { method: 'POST' });
+            toast.success('Import approved and queued');
+            fetchData();
+        } catch {
+            toast.error('Failed to approve import');
+        }
+    };
+
+    const handleRejectImportJob = async (jobId: string) => {
+        if (!confirm('Reject this import? It will not run.')) return;
+        try {
+            await apiFetch(`/integrations/csv/jobs/${jobId}/reject`, { method: 'POST' });
+            toast.success('Import rejected');
+            fetchData();
+        } catch {
+            toast.error('Failed to reject import');
         }
     };
 
@@ -537,13 +874,68 @@ export default function IntegrationsSettingsPage() {
 
     const handleSaveTelephony = async () => {
         try {
+            // webhookSecret/previousWebhookSecret* are managed exclusively via the dedicated
+            // rotate endpoint below -- excluded here so a general settings save (e.g. changing
+            // the Provider field) can never silently overwrite the live secret with whatever
+            // stale value happens to be sitting in this form's local state.
+            const { webhookSecret, previousWebhookSecret, previousWebhookSecretExpiresAt, ...rest } = telephony;
             await apiFetch('/integrations/telephony', {
                 method: 'POST',
-                body: JSON.stringify(telephony),
+                body: JSON.stringify(rest),
             });
             toast.success('Telephony settings saved');
         } catch {
             toast.error('Failed to save telephony settings');
+        }
+    };
+
+    const handleRotateTelephonySecret = async () => {
+        if (!confirm('Rotate the telephony webhook secret? The previous secret keeps working for 24 hours so you can update your provider.')) return;
+        setRotatingTelephonySecret(true);
+        try {
+            const result = await apiFetch<{ webhookSecret: string; hasPreviousSecret: boolean; previousWebhookSecretExpiresAt: string | null }>(
+                '/integrations/telephony/webhook-secret/rotate',
+                { method: 'POST' },
+            );
+            setTelephony({
+                ...telephony,
+                webhookSecret: result.webhookSecret,
+                previousWebhookSecret: result.hasPreviousSecret ? 'set' : null,
+                previousWebhookSecretExpiresAt: result.previousWebhookSecretExpiresAt,
+            });
+            setShowTelephonySecret(true);
+            toast.success('Webhook secret rotated');
+        } catch {
+            toast.error('Failed to rotate webhook secret -- save telephony settings once first if this is the first time');
+        } finally {
+            setRotatingTelephonySecret(false);
+        }
+    };
+
+    const handleAddDoNotCallNumber = async () => {
+        if (!newDoNotCallNumber.trim()) {
+            toast.error('Enter a phone number');
+            return;
+        }
+        try {
+            const created = await apiFetch<{ id: string; address: string; reason: string | null; createdAt: string }>('/integrations/telephony/suppress', {
+                method: 'POST',
+                body: JSON.stringify({ phoneNumber: newDoNotCallNumber.trim(), reason: 'MANUAL' }),
+            });
+            setDoNotCallList([created, ...doNotCallList.filter((entry) => entry.address !== created.address)]);
+            setNewDoNotCallNumber('');
+            toast.success('Number added to do-not-call list');
+        } catch {
+            toast.error('Failed to add number');
+        }
+    };
+
+    const handleRemoveDoNotCallNumber = async (id: string) => {
+        try {
+            await apiFetch(`/integrations/telephony/suppress/${id}`, { method: 'DELETE' });
+            setDoNotCallList(doNotCallList.filter((entry) => entry.id !== id));
+        } catch {
+            toast.error('Failed to remove number');
         }
     };
 
@@ -702,7 +1094,14 @@ export default function IntegrationsSettingsPage() {
                 Connect your CRM to external tools via Webhooks and CSV imports.
             </p>
 
-            <Tabs value={String(activeTab)} onValueChange={(value) => setActiveTab(Number(value))}>
+            <Tabs
+                value={String(activeTab)}
+                onValueChange={(value) => {
+                    setActiveTab(Number(value));
+                    if (value === '6' && !connectorHealthCheckedAt) fetchConnectorHealth();
+                    if (value === '1' && !inboundSettings) fetchInboundWebhookData();
+                }}
+            >
                 <TabsList className="mb-4">
                     <TabsTrigger value="0">
                         <WebhookIcon className="size-4" />
@@ -727,6 +1126,10 @@ export default function IntegrationsSettingsPage() {
                     <TabsTrigger value="5">
                         <Share2 className="size-4" />
                         External Push
+                    </TabsTrigger>
+                    <TabsTrigger value="6">
+                        <HeartPulse className="size-4" />
+                        Health
                     </TabsTrigger>
                 </TabsList>
 
@@ -766,12 +1169,25 @@ export default function IntegrationsSettingsPage() {
                                                     {wh.events.map((ev) => (
                                                         <Badge key={ev} variant="outline">{ev}</Badge>
                                                     ))}
+                                                    <Badge variant="outline">{wh.rateLimitPerMinute ?? 60}/min</Badge>
                                                 </div>
                                             </div>
                                         </div>
-                                        <Button variant="ghost" size="icon" onClick={() => handleDeleteWebhook(wh.id)}>
-                                            <Trash2 className="size-4 text-destructive" />
-                                        </Button>
+                                        <div className="flex items-center gap-1">
+                                            <Button variant="ghost" size="sm" disabled={togglingWebhookId === wh.id} onClick={() => handleToggleWebhookActive(wh)}>
+                                                {wh.isActive ? 'Pause' : 'Resume'}
+                                            </Button>
+                                            <Button variant="ghost" size="sm" disabled={testingWebhookId === wh.id} onClick={() => handleTestWebhook(wh.id)}>
+                                                <Send className="size-4" />
+                                                {testingWebhookId === wh.id ? 'Sending...' : 'Test'}
+                                            </Button>
+                                            <Button variant="ghost" size="sm" onClick={() => openWebhookDeliveries(wh)}>
+                                                Deliveries
+                                            </Button>
+                                            <Button variant="ghost" size="icon" onClick={() => handleDeleteWebhook(wh.id)}>
+                                                <Trash2 className="size-4 text-destructive" />
+                                            </Button>
+                                        </div>
                                     </div>
                                 ))}
                             </div>
@@ -794,8 +1210,109 @@ export default function IntegrationsSettingsPage() {
                                 <AlertTriangle className="text-amber-600" />
                                 <AlertDescription>
                                     Send a POST body with at least <code>name</code>. Email, phone, company, source, and status are also accepted.
+                                    Sign requests with <code>X-Webhook-Timestamp</code> (unix seconds) and <code>X-Webhook-Signature</code>
+                                    (hex HMAC-SHA256 of <code>{'{timestamp}.{rawBody}'}</code> using the secret below). Requests older than 5 minutes are rejected.
+                                    An optional <code>X-Idempotency-Key</code> header prevents duplicate leads on retry.
                                 </AlertDescription>
                             </Alert>
+
+                            {inboundSettings && (
+                                <div className="space-y-2 rounded-lg border p-3">
+                                    <Label>Signing secret</Label>
+                                    <div className="flex items-center gap-2">
+                                        <Input
+                                            readOnly
+                                            type={showInboundSecret ? 'text' : 'password'}
+                                            value={inboundSettings.currentSecret}
+                                            className="font-mono text-xs"
+                                        />
+                                        <Button variant="ghost" size="icon" onClick={() => setShowInboundSecret(!showInboundSecret)}>
+                                            {showInboundSecret ? <Ban className="size-4" /> : <CheckCircle2 className="size-4" />}
+                                        </Button>
+                                        <Button variant="ghost" size="icon" onClick={() => copyToClipboard(inboundSettings.currentSecret)}>
+                                            <Copy className="size-4" />
+                                        </Button>
+                                    </div>
+                                    {inboundSettings.hasPreviousSecret && (
+                                        <p className="text-xs text-muted-foreground">
+                                            Previous secret still valid until {inboundSettings.previousSecretExpiresAt ? new Date(inboundSettings.previousSecretExpiresAt).toLocaleString() : '—'}.
+                                        </p>
+                                    )}
+                                    <Button variant="outline" size="sm" disabled={rotatingInboundSecret} onClick={handleRotateInboundSecret}>
+                                        <RefreshCw className={rotatingInboundSecret ? 'size-4 animate-spin' : 'size-4'} />
+                                        Rotate Secret
+                                    </Button>
+                                </div>
+                            )}
+                        </CardContent>
+                    </Card>
+
+                    <Card>
+                        <CardHeader>
+                            <CardTitle>Test Payload Console</CardTitle>
+                            <CardDescription>Send a real signed test request through the exact same path an external caller hits.</CardDescription>
+                        </CardHeader>
+                        <CardContent className="space-y-3">
+                            <Textarea
+                                rows={5}
+                                className="font-mono text-xs"
+                                value={testPayload}
+                                onChange={(event) => setTestPayload(event.target.value)}
+                            />
+                            <Button variant="outline" disabled={testingInbound} onClick={handleSendTestPayload}>
+                                <Send className="size-4" />
+                                {testingInbound ? 'Sending...' : 'Send Test Payload'}
+                            </Button>
+                            {testResult && (
+                                <Alert variant={testResult.error ? "destructive" : "info"}>
+                                    {testResult.error ? <AlertTriangle /> : <CheckCircle2 />}
+                                    <AlertDescription>
+                                        {testResult.error ? `Failed: ${testResult.error}` : `Succeeded${testResult.result?.duplicate ? ' (duplicate, no new lead created)' : ` -- leadId ${testResult.result?.leadId}`}`}
+                                        <pre className="mt-2 overflow-auto rounded bg-muted/40 p-2 text-xs">{JSON.stringify(testResult.request, null, 2)}</pre>
+                                    </AlertDescription>
+                                </Alert>
+                            )}
+                        </CardContent>
+                    </Card>
+
+                    <Card>
+                        <CardHeader>
+                            <CardTitle>Recent Events</CardTitle>
+                            <CardDescription>Every inbound request, including rejected and failed ones (dead-letter view).</CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                            {inboundEvents.length === 0 ? (
+                                <p className="text-sm text-muted-foreground">No inbound events yet.</p>
+                            ) : (
+                                <Table>
+                                    <TableHeader>
+                                        <TableRow>
+                                            <TableHead>Time</TableHead>
+                                            <TableHead>Status</TableHead>
+                                            <TableHead>Detail</TableHead>
+                                            <TableHead></TableHead>
+                                        </TableRow>
+                                    </TableHeader>
+                                    <TableBody>
+                                        {inboundEvents.map((event) => (
+                                            <TableRow key={event.id}>
+                                                <TableCell className="whitespace-nowrap text-xs">{new Date(event.createdAt).toLocaleString()}</TableCell>
+                                                <TableCell>
+                                                    <Badge variant="outline" className={INBOUND_EVENT_STATUS_CLASSNAMES[event.status]}>{event.status}</Badge>
+                                                </TableCell>
+                                                <TableCell className="whitespace-normal text-xs">
+                                                    {event.errorMessage || (event.leadId ? `Lead ${event.leadId}` : '-')}
+                                                </TableCell>
+                                                <TableCell>
+                                                    {event.status === 'FAILED' && (
+                                                        <Button size="sm" variant="ghost" onClick={() => handleRetryInboundEvent(event.id)}>Retry</Button>
+                                                    )}
+                                                </TableCell>
+                                            </TableRow>
+                                        ))}
+                                    </TableBody>
+                                </Table>
+                            )}
                         </CardContent>
                     </Card>
                 </TabsContent>
@@ -826,19 +1343,33 @@ export default function IntegrationsSettingsPage() {
                                         <TableHead>Skipped</TableHead>
                                         <TableHead>Failed</TableHead>
                                         <TableHead>Errors</TableHead>
+                                        <TableHead></TableHead>
                                     </TableRow>
                                 </TableHeader>
                                 <TableBody>
                                     {imports.map((job) => (
                                         <TableRow key={job.id}>
                                             <TableCell>{job.module}</TableCell>
-                                            <TableCell><Badge variant="secondary">{job.status}</Badge></TableCell>
+                                            <TableCell>
+                                                <Badge variant="outline" className={IMPORT_STATUS_CLASSNAMES[job.status]}>{job.status.replace(/_/g, ' ')}</Badge>
+                                            </TableCell>
                                             <TableCell>{job.stats?.created ?? 0}</TableCell>
                                             <TableCell>{job.stats?.updated ?? 0}</TableCell>
                                             <TableCell>{job.stats?.skipped ?? 0}</TableCell>
                                             <TableCell>{job.stats?.failed ?? 0}</TableCell>
                                             <TableCell className="whitespace-normal">
                                                 {job.errors?.slice(0, 2).map((error) => `Row ${error.row}: ${error.message}`).join(' | ') || '-'}
+                                            </TableCell>
+                                            <TableCell className="whitespace-nowrap">
+                                                {job.status === 'PENDING_APPROVAL' && (
+                                                    <div className="flex gap-1">
+                                                        <Button size="sm" variant="outline" onClick={() => handleApproveImportJob(job.id)}>Approve</Button>
+                                                        <Button size="sm" variant="ghost" onClick={() => handleRejectImportJob(job.id)}>Reject</Button>
+                                                    </div>
+                                                )}
+                                                {(job.status === 'QUEUED' || job.status === 'PROCESSING') && (
+                                                    <Button size="sm" variant="ghost" onClick={() => handleCancelImportJob(job.id)}>Cancel</Button>
+                                                )}
                                             </TableCell>
                                         </TableRow>
                                     ))}
@@ -863,6 +1394,8 @@ export default function IntegrationsSettingsPage() {
                                     ['team', 'Team Assignment'],
                                     ['mapping', 'User-Agent Mapping'],
                                     ['status', 'Call Status Mapping'],
+                                    ['compliance', 'Compliance & Consent'],
+                                    ['queueRouting', 'Queue Routing'],
                                 ].map(([key, label]) => (
                                     <button
                                         key={key}
@@ -923,12 +1456,42 @@ export default function IntegrationsSettingsPage() {
                                             value={telephony.defaultAgentNumber}
                                             onChange={(value) => setTelephony({ ...telephony, defaultAgentNumber: value })}
                                         />
-                                        <FieldInput
-                                            label="Webhook Secret"
-                                            type="password"
-                                            value={telephony.webhookSecret}
-                                            onChange={(value) => setTelephony({ ...telephony, webhookSecret: value })}
-                                        />
+                                        <div className="space-y-1.5">
+                                            <Label>Webhook Signing Secret</Label>
+                                            {telephony.webhookSecret ? (
+                                                <>
+                                                    <div className="flex items-center gap-2">
+                                                        <Input
+                                                            readOnly
+                                                            type={showTelephonySecret ? 'text' : 'password'}
+                                                            value={telephony.webhookSecret}
+                                                            className="font-mono text-xs"
+                                                        />
+                                                        <Button variant="ghost" size="icon" onClick={() => setShowTelephonySecret(!showTelephonySecret)}>
+                                                            {showTelephonySecret ? <Ban className="size-4" /> : <CheckCircle2 className="size-4" />}
+                                                        </Button>
+                                                        <Button variant="ghost" size="icon" onClick={() => copyToClipboard(telephony.webhookSecret)}>
+                                                            <Copy className="size-4" />
+                                                        </Button>
+                                                    </div>
+                                                    {telephony.previousWebhookSecret && (
+                                                        <p className="text-xs text-muted-foreground">
+                                                            Previous secret still valid until {telephony.previousWebhookSecretExpiresAt ? new Date(telephony.previousWebhookSecretExpiresAt).toLocaleString() : '—'}.
+                                                        </p>
+                                                    )}
+                                                </>
+                                            ) : (
+                                                <p className="text-xs text-muted-foreground">No secret generated yet -- rotate to create one.</p>
+                                            )}
+                                            <Button variant="outline" size="sm" disabled={rotatingTelephonySecret} onClick={handleRotateTelephonySecret}>
+                                                <RefreshCw className={rotatingTelephonySecret ? 'size-4 animate-spin' : 'size-4'} />
+                                                Rotate Secret
+                                            </Button>
+                                            <p className="text-xs text-muted-foreground">
+                                                Sign webhook requests with X-Webhook-Timestamp and X-Webhook-Signature (hex HMAC-SHA256 of timestamp.rawBody) using this secret.
+                                                A legacy shared-secret header is still accepted for backward compatibility but is deprecated.
+                                            </p>
+                                        </div>
                                     </div>
                                 )}
 
@@ -1141,6 +1704,133 @@ export default function IntegrationsSettingsPage() {
                                                 />
                                             </div>
                                         ))}
+                                    </div>
+                                )}
+
+                                {telephonySection === 'compliance' && (
+                                    <div className="space-y-6">
+                                        <div className="space-y-3">
+                                            <div className="flex items-center gap-2">
+                                                <Switch
+                                                    checked={telephony.callingQuietHours?.enabled ?? false}
+                                                    onCheckedChange={(checked) => setTelephony({ ...telephony, callingQuietHours: { ...(telephony.callingQuietHours ?? { start: '21:00', end: '09:00' }), enabled: checked } })}
+                                                />
+                                                <Label>Block click-to-call during quiet hours</Label>
+                                            </div>
+                                            <Alert variant="info">
+                                                <Info />
+                                                <AlertDescription>Calls attempted inside this window are blocked before dialing (server local time).</AlertDescription>
+                                            </Alert>
+                                            <div className="flex flex-col gap-3 md:flex-row">
+                                                <FieldInput
+                                                    className="w-full"
+                                                    label="Quiet Hours Start"
+                                                    type="time"
+                                                    value={telephony.callingQuietHours?.start ?? '21:00'}
+                                                    onChange={(value) => setTelephony({ ...telephony, callingQuietHours: { ...(telephony.callingQuietHours ?? { enabled: false, end: '09:00' }), start: value } })}
+                                                />
+                                                <FieldInput
+                                                    className="w-full"
+                                                    label="Quiet Hours End"
+                                                    type="time"
+                                                    value={telephony.callingQuietHours?.end ?? '09:00'}
+                                                    onChange={(value) => setTelephony({ ...telephony, callingQuietHours: { ...(telephony.callingQuietHours ?? { enabled: false, start: '21:00' }), end: value } })}
+                                                />
+                                            </div>
+                                        </div>
+
+                                        <div className="space-y-3">
+                                            <div>
+                                                <p className="text-sm font-medium">Do-Not-Call List</p>
+                                                <p className="text-sm text-muted-foreground">Numbers on this list are blocked from click-to-call, with the same explanation surfaced to the agent.</p>
+                                            </div>
+                                            <div className="flex gap-2">
+                                                <FieldInput
+                                                    className="w-full"
+                                                    label="Phone Number"
+                                                    value={newDoNotCallNumber}
+                                                    onChange={setNewDoNotCallNumber}
+                                                />
+                                                <Button className="self-end" onClick={handleAddDoNotCallNumber}>
+                                                    <Plus className="size-4" />
+                                                    Add
+                                                </Button>
+                                            </div>
+                                            {doNotCallList.length === 0 ? (
+                                                <p className="text-sm text-muted-foreground">No numbers suppressed yet.</p>
+                                            ) : (
+                                                <div className="space-y-2">
+                                                    {doNotCallList.map((entry) => (
+                                                        <div key={entry.id} className="flex items-center justify-between rounded-md border px-3 py-2">
+                                                            <div>
+                                                                <p className="text-sm font-medium">{entry.address}</p>
+                                                                <p className="text-xs text-muted-foreground">
+                                                                    {entry.reason ?? 'MANUAL'} · added {formatWorkspaceDateTime(entry.createdAt)}
+                                                                </p>
+                                                            </div>
+                                                            <Button variant="ghost" size="icon" onClick={() => handleRemoveDoNotCallNumber(entry.id)}>
+                                                                <Trash2 className="size-4" />
+                                                            </Button>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            )}
+                                        </div>
+
+                                        <Alert variant="info">
+                                            <Info />
+                                            <AlertDescription>
+                                                Calling consent and opt-out capture reuse the same suppression/consent records as email, WhatsApp, and SMS -- a contact who has opted out of phone
+                                                contact on their record is blocked here too. Blocked calls surface the specific reason (do-not-call, opted out, or quiet hours) in the click-to-call
+                                                toast so agents know why a call didn&apos;t go through.
+                                            </AlertDescription>
+                                        </Alert>
+
+                                        <div className="space-y-1.5">
+                                            <Label>Recording Retention (days)</Label>
+                                            <Input
+                                                type="number"
+                                                min={0}
+                                                className="w-40"
+                                                placeholder="Keep indefinitely"
+                                                value={telephony.recordingRetentionDays}
+                                                onChange={(e) => setTelephony({ ...telephony, recordingRetentionDays: e.target.value })}
+                                            />
+                                            <p className="text-xs text-muted-foreground">
+                                                Applies to new recordings captured after this is set. Leave blank or 0 to keep recordings indefinitely. Expired
+                                                recordings are cleared automatically; the call log entry and its metadata are kept.
+                                            </p>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {telephonySection === 'queueRouting' && (
+                                    <div className="space-y-3">
+                                        <Alert variant="info">
+                                            <Info />
+                                            <AlertDescription>
+                                                Missed calls and inbound calls with no matching Lead/Opportunity are routed into this team&apos;s queue for
+                                                triage. Leave blank to disable auto-routing.
+                                            </AlertDescription>
+                                        </Alert>
+                                        <div className="space-y-1.5">
+                                            <Label>Default Call Queue Team</Label>
+                                            <select
+                                                className="w-full rounded-md border bg-background px-3 py-2 text-sm"
+                                                value={telephony.defaultCallQueueTeamId}
+                                                onChange={(e) => setTelephony({ ...telephony, defaultCallQueueTeamId: e.target.value })}
+                                            >
+                                                <option value="">Auto-routing disabled</option>
+                                                {teams.map((team) => (
+                                                    <option key={team.id} value={team.id}>
+                                                        {team.name}
+                                                    </option>
+                                                ))}
+                                            </select>
+                                        </div>
+                                        <p className="text-xs text-muted-foreground">
+                                            Queued calls, claiming, and per-team backlog are managed from the Call Center workspace.
+                                        </p>
                                     </div>
                                 )}
 
@@ -1669,6 +2359,72 @@ export default function IntegrationsSettingsPage() {
                         </Card>
                     </div>
                 </TabsContent>
+
+                <TabsContent value="6" className="space-y-4">
+                    <div className="flex items-center justify-between">
+                        <div>
+                            <h2 className="text-lg font-semibold">Connector Health</h2>
+                            <p className="text-sm text-muted-foreground">
+                                {connectorHealthCheckedAt
+                                    ? `Last checked ${new Date(connectorHealthCheckedAt).toLocaleTimeString()}`
+                                    : 'Live status for the systems this CRM depends on.'}
+                            </p>
+                        </div>
+                        <Button variant="outline" onClick={fetchConnectorHealth} disabled={loadingHealth}>
+                            <RefreshCw className={loadingHealth ? 'size-4 animate-spin' : 'size-4'} />
+                            Refresh
+                        </Button>
+                    </div>
+
+                    {loadingHealth && connectorHealth.length === 0 ? (
+                        <div className="flex justify-center py-8">
+                            <Loader2 className="size-6 animate-spin text-primary" />
+                        </div>
+                    ) : connectorHealth.length === 0 ? (
+                        <Alert variant="info">
+                            <Info />
+                            <AlertDescription>Click Refresh to check connector health.</AlertDescription>
+                        </Alert>
+                    ) : (
+                        <Card className="overflow-hidden py-0">
+                            <div className="divide-y">
+                                {connectorHealth.map((check) => (
+                                    <div key={check.key} className="flex items-center justify-between gap-3 p-4">
+                                        <div className="flex items-center gap-3">
+                                            {check.status === 'ok' && <CheckCircle2 className="size-5 text-green-600" />}
+                                            {check.status === 'degraded' && <AlertTriangle className="size-5 text-amber-500" />}
+                                            {check.status === 'error' && <XCircle className="size-5 text-destructive" />}
+                                            {check.status === 'not_configured' && <Ban className="size-5 text-muted-foreground" />}
+                                            <div>
+                                                <div className="font-medium">{check.label}</div>
+                                                {check.detail && <div className="text-xs text-muted-foreground">{check.detail}</div>}
+                                            </div>
+                                        </div>
+                                        <div className="flex items-center gap-2">
+                                            {typeof check.latencyMs === 'number' && (
+                                                <span className="text-xs text-muted-foreground">{check.latencyMs}ms</span>
+                                            )}
+                                            <Badge
+                                                variant="outline"
+                                                className={
+                                                    check.status === 'ok'
+                                                        ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400'
+                                                        : check.status === 'degraded'
+                                                          ? 'border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-400'
+                                                          : check.status === 'error'
+                                                            ? 'border-destructive/30 bg-destructive/10 text-destructive'
+                                                            : 'border-muted bg-muted text-muted-foreground'
+                                                }
+                                            >
+                                                {check.status.replace('_', ' ')}
+                                            </Badge>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </Card>
+                    )}
+                </TabsContent>
             </Tabs>
 
             {/* Add Webhook Dialog */}
@@ -1709,8 +2465,84 @@ export default function IntegrationsSettingsPage() {
                             onChange={(e) => setNewWebhook({ ...newWebhook, secret: e.target.value })}
                             placeholder="HMAC Signing Secret"
                         />
+                        <p className="text-xs text-muted-foreground">
+                            If set, deliveries are signed with X-Webhook-Signature (HMAC-SHA256 of timestamp.body) and X-Webhook-Timestamp.
+                        </p>
+                    </div>
+                    <div className="space-y-1.5">
+                        <Label>Events</Label>
+                        <div className="flex flex-wrap gap-3">
+                            {WEBHOOK_EVENT_OPTIONS.map((event) => (
+                                <label key={event} className="flex items-center gap-1.5 text-sm">
+                                    <Checkbox
+                                        checked={newWebhook.events.includes(event)}
+                                        onCheckedChange={(checked) => setNewWebhook({
+                                            ...newWebhook,
+                                            events: checked ? [...newWebhook.events, event] : newWebhook.events.filter((ev) => ev !== event),
+                                        })}
+                                    />
+                                    {event}
+                                </label>
+                            ))}
+                        </div>
+                    </div>
+                    <div className="space-y-1.5">
+                        <Label>Rate Limit (deliveries per minute)</Label>
+                        <Input
+                            type="number"
+                            min={1}
+                            value={newWebhook.rateLimitPerMinute}
+                            onChange={(e) => setNewWebhook({ ...newWebhook, rateLimitPerMinute: Math.max(1, Number(e.target.value) || 60) })}
+                        />
+                        <p className="text-xs text-muted-foreground">
+                            A burst past this limit is delayed a few seconds and retried, not dropped or counted as a failed attempt.
+                        </p>
                     </div>
                 </div>
+            </StandardDialog>
+
+            {/* Webhook Deliveries Dialog */}
+            <StandardDialog
+                open={!!viewingDeliveriesForWebhook}
+                onClose={() => setViewingDeliveriesForWebhook(null)}
+                title={`Deliveries -- ${viewingDeliveriesForWebhook?.name ?? ''}`}
+                maxWidth="lg"
+                actions={<Button variant="outline" onClick={() => setViewingDeliveriesForWebhook(null)}>Close</Button>}
+            >
+                {loadingDeliveries ? (
+                    <div className="flex justify-center py-8">
+                        <Loader2 className="size-6 animate-spin text-primary" />
+                    </div>
+                ) : webhookDeliveries.length === 0 ? (
+                    <p className="py-4 text-sm text-muted-foreground">No deliveries yet.</p>
+                ) : (
+                    <Table>
+                        <TableHeader>
+                            <TableRow>
+                                <TableHead>Time</TableHead>
+                                <TableHead>Event</TableHead>
+                                <TableHead>Status</TableHead>
+                                <TableHead>Attempts</TableHead>
+                                <TableHead>HTTP</TableHead>
+                                <TableHead>Error</TableHead>
+                            </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                            {webhookDeliveries.map((delivery) => (
+                                <TableRow key={delivery.id}>
+                                    <TableCell className="whitespace-nowrap text-xs">{new Date(delivery.createdAt).toLocaleString()}</TableCell>
+                                    <TableCell className="text-xs">{delivery.eventType}</TableCell>
+                                    <TableCell>
+                                        <Badge variant="outline" className={WEBHOOK_DELIVERY_STATUS_CLASSNAMES[delivery.status]}>{delivery.status}</Badge>
+                                    </TableCell>
+                                    <TableCell>{delivery.retryCount}</TableCell>
+                                    <TableCell>{delivery.httpStatus ?? '-'}</TableCell>
+                                    <TableCell className="whitespace-normal text-xs">{delivery.error ?? '-'}</TableCell>
+                                </TableRow>
+                            ))}
+                        </TableBody>
+                    </Table>
+                )}
             </StandardDialog>
 
             {/* Import CSV Dialog */}
@@ -1722,13 +2554,39 @@ export default function IntegrationsSettingsPage() {
                 actions={
                     <>
                         <Button variant="outline" onClick={() => setIsImportOpen(false)}>Cancel</Button>
+                        <Button variant="outline" disabled={previewing || csvRows.length === 0} onClick={handlePreviewImport}>
+                            {previewing ? 'Checking...' : 'Preview'}
+                        </Button>
                         <Button disabled={importing || csvRows.length === 0} onClick={handleRunImport}>
-                            {importing ? 'Importing...' : 'Run Import'}
+                            {importing ? 'Queuing...' : 'Run Import'}
                         </Button>
                     </>
                 }
             >
                 <div className="space-y-4 py-2">
+                    {importTemplates.length > 0 && (
+                        <div className="space-y-1.5">
+                            <Label>Load saved mapping</Label>
+                            <div className="flex gap-2">
+                                <Select value={selectedTemplateId || NONE_VALUE} onValueChange={(value) => value !== NONE_VALUE && handleLoadImportTemplate(value)}>
+                                    <SelectTrigger className="w-full">
+                                        <SelectValue placeholder="Choose a template" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value={NONE_VALUE}>None</SelectItem>
+                                        {importTemplates.map((template) => (
+                                            <SelectItem key={template.id} value={template.id}>{template.name} ({template.module})</SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                                {selectedTemplateId && (
+                                    <Button variant="ghost" size="icon" onClick={() => handleDeleteImportTemplate(selectedTemplateId)}>
+                                        <Trash2 className="size-4 text-destructive" />
+                                    </Button>
+                                )}
+                            </div>
+                        </div>
+                    )}
                     <div className="grid grid-cols-1 gap-3 md:grid-cols-[1fr_1fr_auto_auto] md:items-end">
                         <div className="space-y-1.5">
                             <Label>Module</Label>
@@ -1820,6 +2678,30 @@ export default function IntegrationsSettingsPage() {
                                     ))}
                                 </TableBody>
                             </Table>
+
+                            {importPreview && (
+                                <Alert variant={importPreview.isDestructive ? "destructive" : "info"}>
+                                    {importPreview.isDestructive ? <AlertTriangle /> : <Info />}
+                                    <AlertDescription>
+                                        {importPreview.wouldCreate} to create, {importPreview.wouldUpdate} to update, {importPreview.wouldSkip} to skip, {importPreview.wouldFail} would fail.
+                                        {importPreview.isDestructive && ' This import updates existing records and will require approval before it runs.'}
+                                        {importPreview.sampleErrors.length > 0 && (
+                                            <div className="mt-1 text-xs">
+                                                {importPreview.sampleErrors.slice(0, 3).map((error) => `Row ${error.row}: ${error.message}`).join(' | ')}
+                                            </div>
+                                        )}
+                                    </AlertDescription>
+                                </Alert>
+                            )}
+
+                            <div className="space-y-1.5">
+                                <Label>Save this mapping as a reusable template (optional)</Label>
+                                <Input
+                                    placeholder="Template name"
+                                    value={saveAsTemplateName}
+                                    onChange={(event) => setSaveAsTemplateName(event.target.value)}
+                                />
+                            </div>
                         </>
                     )}
                 </div>

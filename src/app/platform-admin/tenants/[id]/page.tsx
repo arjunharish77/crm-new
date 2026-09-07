@@ -14,10 +14,54 @@ import {
     TableRow
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { formatWorkspaceRelativeTime } from "@/lib/date-format";
-import { ArrowLeft, UserCog, Activity, Users } from "lucide-react";
+import { ArrowLeft, UserCog, Activity, Users, Flag, LayoutGrid, ShieldOff, ShieldCheck, Wrench, FlaskConical } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import { useAuth } from "@/providers/auth-provider";
+import { cn } from "@/lib/utils";
+import { StandardDialog } from "@/components/common/standard-dialog";
+
+type ModuleEntitlement = {
+    key: string;
+    name: string;
+    category: string;
+    isCore: boolean;
+    status: "ENABLED" | "DISABLED" | "SUSPENDED" | "TRIAL";
+};
+
+const MODULE_STATUS_BADGE: Record<ModuleEntitlement["status"], string> = {
+    ENABLED: "border-primary/20 bg-primary/10 text-primary",
+    TRIAL: "border-tertiary/20 bg-tertiary/10 text-tertiary",
+    SUSPENDED: "border-destructive/20 bg-destructive/10 text-destructive",
+    DISABLED: "border-border bg-muted text-muted-foreground",
+};
+
+type TenantFeatureFlags = {
+    opportunityEnabled: boolean;
+    automationEnabled: boolean;
+    salesGroupsEnabled: boolean;
+    formBuilderEnabled: boolean;
+    advancedReporting: boolean;
+    apiAccessEnabled: boolean;
+    payoutsEnabled: boolean;
+    gamificationEnabled: boolean;
+};
+
+const FEATURE_FLAG_LABELS: Record<keyof TenantFeatureFlags, string> = {
+    opportunityEnabled: "Opportunities",
+    automationEnabled: "Automations",
+    salesGroupsEnabled: "Sales Groups",
+    formBuilderEnabled: "Form Builder",
+    advancedReporting: "Advanced Reporting",
+    apiAccessEnabled: "API Access",
+    payoutsEnabled: "Payouts & Commissions",
+    gamificationEnabled: "Gamification",
+};
 
 export default function TenantDetailPage() {
     const params = useParams();
@@ -28,29 +72,184 @@ export default function TenantDetailPage() {
     const [config, setConfig] = useState<any>(null);
     const [users, setUsers] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
+    const [featureFlags, setFeatureFlags] = useState<TenantFeatureFlags | null>(null);
+    const [savingFlag, setSavingFlag] = useState<string | null>(null);
+    const [modules, setModules] = useState<ModuleEntitlement[]>([]);
+    const [savingModule, setSavingModule] = useState<string | null>(null);
+    const [savingStatus, setSavingStatus] = useState(false);
+    const [savingEnvironment, setSavingEnvironment] = useState(false);
+    const [maintenanceDraft, setMaintenanceDraft] = useState({ active: false, message: "" });
+    const [savingMaintenance, setSavingMaintenance] = useState(false);
+    const [impersonateTarget, setImpersonateTarget] = useState<{ id: string; email: string } | null>(null);
+    const [impersonateReason, setImpersonateReason] = useState("");
+    const [impersonating, setImpersonating] = useState(false);
+    const [demoStatus, setDemoStatus] = useState<{ leadCount: number; opportunityCount: number } | null>(null);
+    const [seedingDemo, setSeedingDemo] = useState(false);
+    const [resettingDemo, setResettingDemo] = useState(false);
+
+    const fetchModules = () => {
+        apiFetch<ModuleEntitlement[]>(`/platform-admin/tenants/${tenantId}/modules`).then(setModules).catch(() => setModules([]));
+    };
+
+    const fetchDemoStatus = () => {
+        apiFetch<{ leadCount: number; opportunityCount: number }>(`/platform-admin/tenants/${tenantId}/demo-data`)
+            .then(setDemoStatus)
+            .catch(() => setDemoStatus(null));
+    };
 
     useEffect(() => {
         if (tenantId) {
             setLoading(true);
             Promise.all([
                 apiFetch(`/platform-admin/tenants/${tenantId}/config`),
-                apiFetch(`/platform-admin/tenants/${tenantId}/users`)
-            ]).then(([configData, usersData]) => {
+                apiFetch(`/platform-admin/tenants/${tenantId}/users`),
+                apiFetch<TenantFeatureFlags>(`/platform-admin/tenants/${tenantId}/feature-flags`).catch(() => null),
+                apiFetch<ModuleEntitlement[]>(`/platform-admin/tenants/${tenantId}/modules`).catch(() => []),
+                apiFetch<{ leadCount: number; opportunityCount: number }>(`/platform-admin/tenants/${tenantId}/demo-data`).catch(() => null),
+            ]).then(([configData, usersData, flagsData, moduleData, demoData]: any[]) => {
                 setConfig(configData);
+                setMaintenanceDraft({ active: !!configData?.maintenanceActive, message: configData?.maintenanceMessage || "" });
                 setUsers(usersData);
+                setFeatureFlags(flagsData);
+                setModules(moduleData);
+                setDemoStatus(demoData);
             }).catch(() => toast.error("Failed to load tenant details"))
                 .finally(() => setLoading(false));
         }
     }, [tenantId]);
 
-    const handleImpersonate = async (userId: string) => {
-        if (!confirm("Impersonate this user? You will see the app as they see it.")) return;
+    const handleSeedDemoData = async () => {
+        setSeedingDemo(true);
+        try {
+            const result = await apiFetch<{ leadsCreated: number; opportunitiesCreated: number; opportunitiesSkippedReason: string | null }>(
+                `/platform-admin/tenants/${tenantId}/demo-data/seed`,
+                { method: "POST" },
+            );
+            toast.success(`Seeded ${result.leadsCreated} demo leads and ${result.opportunitiesCreated} demo opportunities`);
+            if (result.opportunitiesSkippedReason) toast.info(result.opportunitiesSkippedReason);
+            fetchDemoStatus();
+        } catch (error: any) {
+            toast.error(error.message || "Failed to seed demo data");
+        } finally {
+            setSeedingDemo(false);
+        }
+    };
 
+    const handleResetDemoData = async () => {
+        if (!confirm("Delete all demo data for this tenant? This only removes records flagged as demo data (seeded by the button above) -- real leads and opportunities are never touched.")) return;
+        setResettingDemo(true);
+        try {
+            await apiFetch(`/platform-admin/tenants/${tenantId}/demo-data/reset`, { method: "POST" });
+            toast.success("Demo data reset");
+            fetchDemoStatus();
+        } catch (error: any) {
+            toast.error(error.message || "Failed to reset demo data");
+        } finally {
+            setResettingDemo(false);
+        }
+    };
+
+    const handleModuleStatusChange = async (module: ModuleEntitlement, status: ModuleEntitlement["status"]) => {
+        if (status === module.status) return;
+        const reason = status === "DISABLED" || status === "SUSPENDED" ? window.prompt(`Reason for ${status.toLowerCase()}ing ${module.name}? (optional)`) ?? "" : "";
+        setSavingModule(module.key);
+        try {
+            await apiFetch(`/platform-admin/tenants/${tenantId}/modules/${module.key}`, {
+                method: "PATCH",
+                body: JSON.stringify({ status, reason: reason || null }),
+            });
+            toast.success(`${module.name} set to ${status}`);
+            fetchModules();
+        } catch (error: any) {
+            toast.error(error.message || "Failed to update module status");
+        } finally {
+            setSavingModule(null);
+        }
+    };
+
+    const handleToggleSuspend = async () => {
+        const suspending = config.tenant.status !== "SUSPENDED";
+        if (suspending && !confirm("Suspend this tenant? Its users will be immediately signed out and unable to log back in until unsuspended.")) return;
+        setSavingStatus(true);
+        try {
+            const result = await apiFetch<{ pendingApproval?: boolean }>(`/platform-admin/tenants/${tenantId}/${suspending ? "suspend" : "unsuspend"}`, { method: "POST" });
+            if (result?.pendingApproval) {
+                toast.success("Request submitted -- a different platform admin must approve it before this takes effect.");
+                return;
+            }
+            setConfig({ ...config, tenant: { ...config.tenant, status: suspending ? "SUSPENDED" : "ACTIVE" } });
+            toast.success(suspending ? "Tenant suspended" : "Tenant unsuspended");
+        } catch (error: any) {
+            toast.error(error.message || "Failed to update tenant status");
+        } finally {
+            setSavingStatus(false);
+        }
+    };
+
+    const handleEnvironmentChange = async (environment: string) => {
+        setSavingEnvironment(true);
+        try {
+            await apiFetch(`/platform-admin/tenants/${tenantId}/environment`, { method: "PATCH", body: JSON.stringify({ environment }) });
+            setConfig({ ...config, tenant: { ...config.tenant, environment } });
+            toast.success(`Environment set to ${environment}`);
+        } catch (error: any) {
+            toast.error(error.message || "Failed to update environment");
+        } finally {
+            setSavingEnvironment(false);
+        }
+    };
+
+    const handleSaveMaintenance = async () => {
+        setSavingMaintenance(true);
+        try {
+            await apiFetch(`/platform-admin/tenants/${tenantId}/maintenance`, {
+                method: "PATCH",
+                body: JSON.stringify({ active: maintenanceDraft.active, message: maintenanceDraft.message || null }),
+            });
+            toast.success("Maintenance banner updated");
+        } catch (error: any) {
+            toast.error(error.message || "Failed to update maintenance banner");
+        } finally {
+            setSavingMaintenance(false);
+        }
+    };
+
+    const handleToggleFlag = async (key: keyof TenantFeatureFlags, checked: boolean) => {
+        if (!featureFlags) return;
+        setSavingFlag(key);
+        const previous = featureFlags;
+        setFeatureFlags({ ...featureFlags, [key]: checked });
+        try {
+            const updated = await apiFetch<TenantFeatureFlags>(`/platform-admin/tenants/${tenantId}/feature-flags`, {
+                method: "PATCH",
+                body: JSON.stringify({ [key]: checked }),
+            });
+            setFeatureFlags(updated);
+            toast.success(`${FEATURE_FLAG_LABELS[key]} ${checked ? "enabled" : "disabled"}`);
+        } catch (error: any) {
+            setFeatureFlags(previous);
+            toast.error(error.message || "Failed to update feature flag");
+        } finally {
+            setSavingFlag(null);
+        }
+    };
+
+    const handleImpersonate = async (userId: string, reason: string) => {
         try {
             const data = await apiFetch('/platform-admin/impersonate', {
                 method: 'POST',
-                body: JSON.stringify({ userId, tenantId })
+                body: JSON.stringify({ userId, tenantId, reason })
             });
+
+            // Gap checklist: "privileged action controls" -- when a tenant/platform admin has
+            // turned on approval-required for impersonation, this returns a pending request
+            // instead of a token. A different platform admin has to approve it, then this
+            // admin comes back to /platform-admin/privileged-actions to actually start the
+            // session (see privileged-actions.ts for why it can't be handed to the approver).
+            if (data.pendingApproval) {
+                toast.success("Impersonation request submitted -- a different platform admin must approve it before you can start the session.");
+                return;
+            }
 
             // Save admin token
             if (token) {
@@ -68,6 +267,18 @@ export default function TenantDetailPage() {
         }
     };
 
+    const submitImpersonate = async () => {
+        if (!impersonateTarget || !impersonateReason.trim()) return;
+        setImpersonating(true);
+        try {
+            await handleImpersonate(impersonateTarget.id, impersonateReason.trim());
+        } finally {
+            setImpersonating(false);
+            setImpersonateTarget(null);
+            setImpersonateReason("");
+        }
+    };
+
     if (loading) return <div className="p-8">Loading...</div>;
     if (!config) return <div className="p-8">Tenant not found</div>;
 
@@ -75,20 +286,115 @@ export default function TenantDetailPage() {
 
     return (
         <div className="space-y-6">
-            <div className="flex items-center gap-4">
-                <Button variant="ghost" size="icon" onClick={() => router.back()}>
-                    <ArrowLeft className="h-4 w-4" />
-                </Button>
-                <div>
-                    <h2 className="text-2xl font-bold tracking-tight">{tenant.name}</h2>
-                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                        <Badge variant={tenant.status === 'ACTIVE' ? 'default' : 'destructive'}>
-                            {tenant.status}
-                        </Badge>
-                        <span>Plan: {tenant.plan || 'Basic'}</span>
+            <div className="flex items-center justify-between gap-4">
+                <div className="flex items-center gap-4">
+                    <Button variant="ghost" size="icon" onClick={() => router.back()}>
+                        <ArrowLeft className="h-4 w-4" />
+                    </Button>
+                    <div>
+                        <h2 className="text-2xl font-bold tracking-tight">{tenant.name}</h2>
+                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                            <Badge variant={tenant.status === 'ACTIVE' ? 'default' : 'destructive'}>
+                                {tenant.status}
+                            </Badge>
+                            <Badge variant="outline">{tenant.environment || 'PRODUCTION'}</Badge>
+                            <span>Plan: {tenant.plan || 'Basic'}</span>
+                        </div>
                     </div>
                 </div>
+                <Button
+                    variant={tenant.status === 'ACTIVE' ? 'destructive' : 'default'}
+                    disabled={savingStatus}
+                    onClick={handleToggleSuspend}
+                >
+                    {tenant.status === 'ACTIVE' ? <ShieldOff className="h-4 w-4" /> : <ShieldCheck className="h-4 w-4" />}
+                    {tenant.status === 'ACTIVE' ? 'Suspend Tenant' : 'Unsuspend Tenant'}
+                </Button>
             </div>
+
+            <Card>
+                <CardHeader>
+                    <CardTitle className="flex items-center gap-2 text-sm font-medium">
+                        <Wrench className="h-4 w-4" />
+                        Environment &amp; Maintenance
+                    </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                    <div className="flex items-center justify-between gap-4">
+                        <div>
+                            <Label>Environment</Label>
+                            <p className="text-xs text-muted-foreground">Classifies this tenant for reporting/billing exclusion of sandbox and test workspaces.</p>
+                        </div>
+                        <Select value={tenant.environment || 'PRODUCTION'} disabled={savingEnvironment} onValueChange={handleEnvironmentChange}>
+                            <SelectTrigger className="w-40"><SelectValue /></SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="PRODUCTION">Production</SelectItem>
+                                <SelectItem value="SANDBOX">Sandbox</SelectItem>
+                                <SelectItem value="TEST">Test</SelectItem>
+                            </SelectContent>
+                        </Select>
+                    </div>
+                    <div className="flex items-center justify-between gap-4">
+                        <div>
+                            <Label>Maintenance Banner</Label>
+                            <p className="text-xs text-muted-foreground">Shows an informational banner to this tenant&apos;s users without blocking access.</p>
+                        </div>
+                        <Switch
+                            checked={maintenanceDraft.active}
+                            onCheckedChange={(checked) => setMaintenanceDraft({ ...maintenanceDraft, active: checked })}
+                        />
+                    </div>
+                    {maintenanceDraft.active && (
+                        <Input
+                            placeholder="Message shown to this tenant's users"
+                            value={maintenanceDraft.message}
+                            onChange={(e) => setMaintenanceDraft({ ...maintenanceDraft, message: e.target.value })}
+                        />
+                    )}
+                    <div className="flex justify-end">
+                        <Button size="sm" disabled={savingMaintenance} onClick={handleSaveMaintenance}>Save Maintenance Banner</Button>
+                    </div>
+                </CardContent>
+            </Card>
+
+            <Card>
+                <CardHeader>
+                    <CardTitle className="flex items-center gap-2 text-sm font-medium">
+                        <FlaskConical className="h-4 w-4" />
+                        Demo Data
+                    </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                    <p className="text-xs text-muted-foreground">
+                        Seeds a small set of clearly-labeled sample leads (and opportunities, if a pipeline is already configured) for exploring this workspace. Every seeded record is flagged internally so it can be safely removed later without touching any real data.
+                    </p>
+                    <div className="flex items-center justify-between gap-4 rounded-xl border p-3">
+                        <div className="text-sm">
+                            {demoStatus ? (
+                                <span>
+                                    <strong>{demoStatus.leadCount}</strong> demo lead{demoStatus.leadCount === 1 ? "" : "s"} and{" "}
+                                    <strong>{demoStatus.opportunityCount}</strong> demo opportunit{demoStatus.opportunityCount === 1 ? "y" : "ies"} currently seeded
+                                </span>
+                            ) : (
+                                <span className="text-muted-foreground">Demo data status unavailable</span>
+                            )}
+                        </div>
+                        <div className="flex gap-2">
+                            <Button size="sm" variant="outline" disabled={seedingDemo} onClick={handleSeedDemoData}>
+                                {seedingDemo ? "Seeding..." : "Seed Demo Data"}
+                            </Button>
+                            <Button
+                                size="sm"
+                                variant="destructive"
+                                disabled={resettingDemo || !demoStatus || (demoStatus.leadCount === 0 && demoStatus.opportunityCount === 0)}
+                                onClick={handleResetDemoData}
+                            >
+                                {resettingDemo ? "Resetting..." : "Reset Demo Data"}
+                            </Button>
+                        </div>
+                    </div>
+                </CardContent>
+            </Card>
 
             <div className="grid gap-4 md:grid-cols-3">
                 <Card>
@@ -143,7 +449,7 @@ export default function TenantDetailPage() {
                                         <Button
                                             variant="outline"
                                             size="sm"
-                                            onClick={() => handleImpersonate(u.id)}
+                                            onClick={() => { setImpersonateTarget({ id: u.id, email: u.email }); setImpersonateReason(""); }}
                                             className="ml-auto"
                                         >
                                             <UserCog className="h-4 w-4 mr-2" />
@@ -156,6 +462,109 @@ export default function TenantDetailPage() {
                     </Table>
                 </CardContent>
             </Card>
+
+            <Card>
+                <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                        <Flag className="h-4 w-4" />
+                        Feature Flags
+                    </CardTitle>
+                </CardHeader>
+                <CardContent>
+                    {!featureFlags ? (
+                        <p className="text-sm text-muted-foreground">Failed to load feature flags.</p>
+                    ) : (
+                        <div className="grid gap-3 sm:grid-cols-2">
+                            {(Object.keys(FEATURE_FLAG_LABELS) as (keyof TenantFeatureFlags)[]).map((key) => (
+                                <label key={key} className="flex items-center justify-between gap-3 rounded-xl border p-3">
+                                    <Label className="text-sm font-medium">{FEATURE_FLAG_LABELS[key]}</Label>
+                                    <Switch
+                                        checked={!!featureFlags[key]}
+                                        disabled={savingFlag === key}
+                                        onCheckedChange={(checked) => handleToggleFlag(key, checked)}
+                                    />
+                                </label>
+                            ))}
+                        </div>
+                    )}
+                </CardContent>
+            </Card>
+
+            <Card>
+                <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                        <LayoutGrid className="h-4 w-4" />
+                        Modules
+                    </CardTitle>
+                </CardHeader>
+                <CardContent>
+                    {modules.length === 0 ? (
+                        <p className="text-sm text-muted-foreground">Failed to load module entitlements.</p>
+                    ) : (
+                        <div className="space-y-2">
+                            {modules.map((module) => (
+                                <div key={module.key} className="flex items-center justify-between gap-3 rounded-xl border p-3">
+                                    <div>
+                                        <div className="flex items-center gap-2">
+                                            <span className="text-sm font-medium">{module.name}</span>
+                                            <Badge variant="outline" className={cn("rounded-md text-[0.65rem] font-semibold", MODULE_STATUS_BADGE[module.status])}>
+                                                {module.status}
+                                            </Badge>
+                                            {module.isCore && <Badge variant="outline" className="rounded-md text-[0.65rem]">Core</Badge>}
+                                        </div>
+                                        <p className="text-xs text-muted-foreground">{module.category}</p>
+                                    </div>
+                                    <Select
+                                        value={module.status}
+                                        disabled={module.isCore || savingModule === module.key}
+                                        onValueChange={(value) => handleModuleStatusChange(module, value as ModuleEntitlement["status"])}
+                                    >
+                                        <SelectTrigger className="w-[140px]"><SelectValue /></SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="ENABLED">Enabled</SelectItem>
+                                            <SelectItem value="TRIAL">Trial</SelectItem>
+                                            <SelectItem value="SUSPENDED">Suspended</SelectItem>
+                                            <SelectItem value="DISABLED">Disabled</SelectItem>
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                </CardContent>
+            </Card>
+
+            <StandardDialog
+                open={!!impersonateTarget}
+                onClose={() => setImpersonateTarget(null)}
+                title={`Impersonate ${impersonateTarget?.email ?? ""}`}
+                maxWidth="sm"
+                actions={
+                    <>
+                        <Button variant="outline" onClick={() => setImpersonateTarget(null)}>Cancel</Button>
+                        <Button onClick={submitImpersonate} disabled={impersonating || !impersonateReason.trim()}>
+                            {impersonating ? "Starting..." : "Start Impersonation"}
+                        </Button>
+                    </>
+                }
+            >
+                <div className="space-y-3 py-2">
+                    <p className="text-sm text-muted-foreground">
+                        You will see the app exactly as this user does. This requires a reason -- it&apos;s recorded in the audit trail alongside every action taken during the session, and the session expires after 4 hours regardless of activity.
+                    </p>
+                    <div className="space-y-1.5">
+                        <Label htmlFor="impersonate-reason">Reason (required)</Label>
+                        <Textarea
+                            id="impersonate-reason"
+                            rows={3}
+                            value={impersonateReason}
+                            onChange={(e) => setImpersonateReason(e.target.value)}
+                            placeholder="e.g. Investigating support ticket #1234 -- user reports missing lead data"
+                            autoFocus
+                        />
+                    </div>
+                </div>
+            </StandardDialog>
         </div>
     );
 }

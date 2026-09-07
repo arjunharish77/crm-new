@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback, useMemo } from "react";
+import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { ColumnDef } from "@tanstack/react-table";
@@ -17,6 +18,7 @@ import { apiFetch } from "@/lib/api";
 import { CreateTeamDialog } from "./create-team-dialog";
 
 export default function TeamsPage() {
+    const router = useRouter();
     const [teams, setTeams] = useState<Team[]>([]);
     const [loading, setLoading] = useState(false);
     const [selectedRows, setSelectedRows] = useState<string[]>([]);
@@ -35,6 +37,10 @@ export default function TeamsPage() {
                     leadId: team.leadId,
                     memberCount: team._count?.members ?? team.memberCount ?? team.members?.length ?? 0,
                     createdAt: team.createdAt,
+                    workingHours: team.workingHours,
+                    timezone: team.timezone,
+                    defaultRoleId: team.defaultRoleId,
+                    defaultSalesGroupId: team.defaultSalesGroupId,
                 }))
             );
         } catch (error: any) {
@@ -175,6 +181,7 @@ export default function TeamsPage() {
                         enableRowSelection
                         rowSelectionIds={selectedRows}
                         onRowSelectionIdsChange={setSelectedRows}
+                        onRowClick={(row) => router.push(`/dashboard/settings/teams/${row.id}`)}
                         emptyState={{
                             icon: <Users className="size-10 text-muted-foreground opacity-50" />,
                             title: "No teams defined",

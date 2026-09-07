@@ -4,7 +4,7 @@ import { SuperAdminGuard } from "@/components/auth/super-admin-guard";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
-import { ShieldCheck, LogOut, LayoutDashboard, Users, FileText, Menu as MenuIcon } from "lucide-react";
+import { ShieldCheck, LogOut, LayoutDashboard, Users, FileText, UserCog, ShieldAlert, Menu as MenuIcon } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
@@ -20,6 +20,8 @@ export default function PlatformAdminLayout({ children }: { children: React.Reac
         { href: "/platform-admin", label: "Dashboard", icon: LayoutDashboard },
         { href: "/platform-admin/tenants", label: "Tenants", icon: Users },
         { href: "/platform-admin/audit-logs", label: "Audit Logs", icon: FileText },
+        { href: "/platform-admin/impersonation-review", label: "Impersonation Review", icon: UserCog },
+        { href: "/platform-admin/privileged-actions", label: "Privileged Actions", icon: ShieldAlert },
     ];
 
     const drawerContent = (

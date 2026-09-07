@@ -2,15 +2,28 @@
 
 import { Queue, Worker } from "bullmq";
 import dotenv from "dotenv";
-import { processDueAutomationJobs } from "@/lib/server/crm";
-import { processDueTaskReminders, processOverdueTaskAutomations } from "@/lib/server/tasks";
-import { processPendingReportRefreshJobs } from "@/lib/server/report-rollups";
-import { processDueReportSchedules } from "@/lib/server/report-schedules";
+import { processDueAutomationJobs, processImportJob } from "@/lib/server/crm";
+import { processDueTaskReminders, processOverdueTaskAutomations, processTaskReminderEscalations, processTaskSlaBreaches } from "@/lib/server/tasks";
+import { processDueReportRollupRefreshes, processPendingReportRefreshJobs } from "@/lib/server/report-rollups";
+import { processDueReportSchedules, retryFailedReportSchedules } from "@/lib/server/report-schedules";
 import { processCommunicationOutbox } from "@/lib/server/communications";
-import { processExportRequest } from "@/lib/server/exports";
+import { processExportRequest, processExpiredExportFiles } from "@/lib/server/exports";
 import { recomputeLeadScoresForTenant } from "@/lib/server/admin-modules";
 import { processDueScheduledScoringRetraining, recomputeSelfLearningScoresForTenant } from "@/lib/server/self-learning-scoring";
 import { createUserNotification } from "@/lib/server/notifications";
+import { processDueNextBestActionRefresh } from "@/lib/server/next-best-action";
+import { processDueJourneyEnrollmentRefresh, alertDegradedJourneys } from "@/lib/server/marketing-journeys";
+import { runScheduledDataQualityScan } from "@/lib/server/inbuilt-reports";
+import { processWebhookOutbox } from "@/lib/server/webhook-outbox";
+import { processAppEventDeliveries } from "@/lib/server/marketplace-events";
+import { processDueAppSyncs } from "@/lib/server/marketplace-sync";
+import { expireCallRecordings } from "@/lib/server/call-recordings";
+import { processDueDataRetentionEnforcement } from "@/lib/server/retention";
+import { processDueSuppressionExpiry } from "@/lib/server/communications";
+import { processCaseSlaEscalations, alertStaleUnassignedCases } from "@/lib/repositories/cases-postgres";
+import { computeDueMetricGrainSnapshots } from "@/lib/server/metrics";
+import { dispatchCaseSurveys } from "@/lib/repositories/case-survey-postgres";
+import { refreshCaseAnalyticsSnapshots } from "@/lib/server/inbuilt-reports";
 
 const QUEUE_NAME = "crm-jobs";
 const DEFAULT_REPEAT_MS = 60_000;
@@ -23,10 +36,30 @@ const recurringJobs = [
   { name: "automation.processDue", processor: () => processDueAutomationJobs(50) },
   { name: "tasks.processReminders", processor: () => processDueTaskReminders() },
   { name: "tasks.processOverdue", processor: () => processOverdueTaskAutomations() },
+  { name: "tasks.processReminderEscalations", processor: () => processTaskReminderEscalations() },
+  { name: "tasks.processSlaBreaches", processor: () => processTaskSlaBreaches() },
   { name: "reports.processRollups", processor: () => processPendingReportRefreshJobs(25) },
+  { name: "reports.processRollupSchedule", processor: () => processDueReportRollupRefreshes(50) },
   { name: "reports.processSchedules", processor: () => processDueReportSchedules() },
+  { name: "reports.retryFailedSchedules", processor: () => retryFailedReportSchedules() },
   { name: "communications.processDue", processor: () => processCommunicationOutbox(50) },
   { name: "scoring.processScheduledRetraining", processor: () => processDueScheduledScoringRetraining(10) },
+  { name: "nba.processScheduledRefresh", processor: () => processDueNextBestActionRefresh(50) },
+  { name: "journeys.processEnrollmentRefresh", processor: () => processDueJourneyEnrollmentRefresh() },
+  { name: "journeys.alertDegraded", processor: () => alertDegradedJourneys(100) },
+  { name: "dataQuality.processScheduledScan", processor: () => runScheduledDataQualityScan(25) },
+  { name: "webhooks.processOutbox", processor: () => processWebhookOutbox(25) },
+  { name: "marketplace.processAppDeliveries", processor: () => processAppEventDeliveries(25) },
+  { name: "marketplace.processAppSyncs", processor: () => processDueAppSyncs(25) },
+  { name: "exports.processExpiry", processor: () => processExpiredExportFiles(50) },
+  { name: "telephony.expireRecordings", processor: () => expireCallRecordings(100) },
+  { name: "retention.enforce", processor: () => processDueDataRetentionEnforcement(25) },
+  { name: "communications.processSuppressionExpiry", processor: () => processDueSuppressionExpiry(100) },
+  { name: "cases.processSlaEscalations", processor: () => processCaseSlaEscalations(200) },
+  { name: "cases.dispatchSurveys", processor: () => dispatchCaseSurveys(100) },
+  { name: "cases.refreshAnalyticsSnapshots", processor: () => refreshCaseAnalyticsSnapshots(50) },
+  { name: "cases.alertStaleUnassigned", processor: () => alertStaleUnassignedCases(24, 100) },
+  { name: "metrics.computeGrainSnapshots", processor: () => computeDueMetricGrainSnapshots(200) },
 ] as const;
 
 type RecurringJobName = (typeof recurringJobs)[number]["name"];
@@ -86,6 +119,11 @@ async function main() {
         const exportRequestId = typeof job.data?.exportRequestId === "string" ? job.data.exportRequestId : "";
         if (!exportRequestId) throw new Error("Missing exportRequestId");
         return processExportRequest(exportRequestId);
+      }
+      if (job.name === "imports.process") {
+        const importJobId = typeof job.data?.importJobId === "string" ? job.data.importJobId : "";
+        if (!importJobId) throw new Error("Missing importJobId");
+        return processImportJob(importJobId);
       }
       if (job.name === "scoring.recomputeRules") {
         const { tenantId, userId } = job.data as { tenantId: string; userId: string };

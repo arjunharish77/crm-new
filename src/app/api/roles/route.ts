@@ -28,7 +28,7 @@ export async function POST(request: Request) {
       return badRequest("Role name and permissions are required");
     }
 
-    const role = await createTenantRole(user.tenantId, body);
+    const role = await createTenantRole(user.tenantId, body, { id: user.id, tenantId: user.tenantId });
     return NextResponse.json(role);
   } catch (error) {
     if (error instanceof Error && error.message === "UNAUTHORIZED") return unauthorized();

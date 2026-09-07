@@ -58,16 +58,16 @@ export default function GDPRPage() {
         if (!newRequest.contactEmail) return toast.error('Email is required');
 
         try {
-            const created = await apiFetch('/governance/gdpr/request', {
+            await apiFetch('/governance/gdpr/request', {
                 method: 'POST',
                 body: JSON.stringify(newRequest),
             });
-            setRequests([created, ...requests]);
             setIsAdding(false);
             setNewRequest({ contactEmail: '', type: 'EXPORT' });
-            toast.success('GDPR request initiated');
-        } catch (err) {
-            toast.error('Failed to create request');
+            toast.success('GDPR request completed');
+            fetchRequests();
+        } catch (err: any) {
+            toast.error(err?.message || 'Failed to create request');
         }
     };
 
@@ -144,10 +144,12 @@ export default function GDPRPage() {
                                             </Badge>
                                         </TableCell>
                                         <TableCell>
-                                            {req.status === 'COMPLETED' && req.type === 'EXPORT' && (
-                                                <Button variant="ghost" size="sm">
-                                                    <Download className="size-4" />
-                                                    Download
+                                            {req.filePath && (
+                                                <Button variant="ghost" size="sm" asChild>
+                                                    <a href={`/api${req.filePath}`}>
+                                                        <Download className="size-4" />
+                                                        Download
+                                                    </a>
                                                 </Button>
                                             )}
                                         </TableCell>

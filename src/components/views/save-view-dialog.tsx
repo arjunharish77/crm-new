@@ -16,11 +16,13 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { FilterBuilder } from "@/components/filters/filter-builder";
-import { fieldLabel, getSmartViewFields, getSmartViewQuickActions, SMART_VIEW_MODULE_OPTIONS, SmartViewReferenceOptions } from "@/components/views/smart-view-fields";
+import { useFeature } from "@/components/auth/feature-gate";
+import { fieldLabel, getSmartViewFields, getSmartViewQuickActions, isSmartViewModuleEnabled, SMART_VIEW_MODULE_OPTIONS, SmartViewReferenceOptions } from "@/components/views/smart-view-fields";
 import { BarChart3, Columns3, Layers3, Loader2, Plus, Settings2, Sparkles, Tags, Trash2, Users } from "lucide-react";
 import { FilterConfig } from "@/types/filters";
 import { SmartViewChart, SmartViewCountChip, SmartViewModule, SmartViewScope, SmartViewSort, SmartViewTab } from "@/types/smart-views";
 import { apiFetch } from "@/lib/api";
+import { fetchCached } from "@/lib/views-metadata-cache";
 import { toast } from "sonner";
 
 interface SaveViewDialogProps {
@@ -113,6 +115,10 @@ export function SaveViewDialog({
     initialView = null,
     onSuccess,
 }: SaveViewDialogProps) {
+    const opportunityEnabled = useFeature("opportunityEnabled");
+    const advancedReporting = useFeature("advancedReporting");
+    const payoutsEnabled = useFeature("payoutsEnabled");
+    const moduleFeatures = { opportunityEnabled, advancedReporting, payoutsEnabled };
     const [loading, setLoading] = useState(false);
     const [name, setName] = useState("");
     const [isDefault, setIsDefault] = useState(false);
@@ -126,6 +132,8 @@ export function SaveViewDialog({
     const [sharedTeamIds, setSharedTeamIds] = useState<string[]>([]);
     const [sharedSalesGroupIds, setSharedSalesGroupIds] = useState<string[]>([]);
     const [sharedRoleIds, setSharedRoleIds] = useState<string[]>([]);
+    const [previewRecipients, setPreviewRecipients] = useState<Array<{ id: string; name?: string; email?: string }> | null>(null);
+    const [previewLoading, setPreviewLoading] = useState(false);
     const [tabs, setTabs] = useState<SmartViewTab[]>([]);
     const [activeTabId, setActiveTabId] = useState("");
     const [builderStep, setBuilderStep] = useState<BuilderStep>("filters");
@@ -190,10 +198,10 @@ export function SaveViewDialog({
     useEffect(() => {
         if (!open) return;
         Promise.all([
-            apiFetch<any[]>("/users").catch(() => []),
-            apiFetch<any[]>("/teams").catch(() => []),
-            apiFetch<any[]>("/sales-groups").catch(() => []),
-            apiFetch<any[]>("/roles").catch(() => []),
+            fetchCached("users", () => apiFetch<any[]>("/users")).catch(() => []),
+            fetchCached("teams", () => apiFetch<any[]>("/teams")).catch(() => []),
+            fetchCached("sales-groups", () => apiFetch<any[]>("/sales-groups")).catch(() => []),
+            fetchCached("roles", () => apiFetch<any[]>("/roles")).catch(() => []),
         ]).then(([userData, teamData, groupData, roleData]) => {
             setUsers(Array.isArray(userData) ? userData : []);
             setTeams(Array.isArray(teamData) ? teamData : []);
@@ -205,12 +213,12 @@ export function SaveViewDialog({
     useEffect(() => {
         if (!open) return;
         Promise.all([
-            apiFetch<any>("/leads?limit=300").catch(() => []),
-            apiFetch<any>("/opportunities?limit=300").catch(() => []),
-            apiFetch<any[]>("/opportunity-types").catch(() => []),
-            apiFetch<any[]>("/activity-types").catch(() => []),
-            apiFetch<any[]>("/partners").catch(() => []),
-            apiFetch<any[]>("/reports/custom").catch(() => []),
+            fetchCached("leads:300", () => apiFetch<any>("/leads?limit=300")).catch(() => []),
+            fetchCached("opportunities:300", () => apiFetch<any>("/opportunities?limit=300")).catch(() => []),
+            fetchCached("opportunity-types", () => apiFetch<any[]>("/opportunity-types")).catch(() => []),
+            fetchCached("activity-types", () => apiFetch<any[]>("/activity-types")).catch(() => []),
+            fetchCached("partners", () => apiFetch<any[]>("/partners")).catch(() => []),
+            fetchCached("reports/custom", () => apiFetch<any[]>("/reports/custom")).catch(() => []),
         ]).then(([leadData, opportunityData, opportunityTypeData, activityTypeData, partnerData, reportData]) => {
             const leadList = Array.isArray(leadData) ? leadData : Array.isArray(leadData?.data) ? leadData.data : [];
             const opportunityList = Array.isArray(opportunityData) ? opportunityData : Array.isArray(opportunityData?.data) ? opportunityData.data : [];
@@ -421,6 +429,25 @@ export function SaveViewDialog({
         </div>
     );
 
+    useEffect(() => {
+        setPreviewRecipients(null);
+    }, [sharedUserIds, sharedTeamIds, sharedSalesGroupIds, sharedRoleIds]);
+
+    const previewShare = async () => {
+        setPreviewLoading(true);
+        try {
+            const recipients = await apiFetch<Array<{ id: string; name?: string; email?: string }>>("/saved-views/preview-share", {
+                method: "POST",
+                body: JSON.stringify({ sharedUserIds, sharedTeamIds, sharedSalesGroupIds, sharedRoleIds }),
+            });
+            setPreviewRecipients(Array.isArray(recipients) ? recipients : []);
+        } catch {
+            toast.error("Failed to preview recipients");
+        } finally {
+            setPreviewLoading(false);
+        }
+    };
+
     return (
         <StandardDialog
             open={open}
@@ -499,6 +526,25 @@ export function SaveViewDialog({
                                 {renderTargetMenu("Roles", roles, sharedRoleIds, setSharedRoleIds)}
                             </div>
                         ) : null}
+                        {scope === "SHARED" || scope === "ROLE" ? (
+                            <div className="space-y-2">
+                                <Button type="button" variant="outline" size="sm" disabled={previewLoading} onClick={previewShare}>
+                                    {previewLoading ? "Loading..." : "Preview recipients"}
+                                </Button>
+                                {previewRecipients ? (
+                                    <div className="rounded-lg border bg-surface-container-low p-3 text-sm">
+                                        {previewRecipients.length === 0 ? (
+                                            <p className="text-muted-foreground">No one would gain access with the current selection.</p>
+                                        ) : (
+                                            <>
+                                                <p className="mb-1 font-semibold">This will be visible to {previewRecipients.length} {previewRecipients.length === 1 ? "person" : "people"}:</p>
+                                                <p className="text-muted-foreground">{previewRecipients.map((recipient) => recipient.name || recipient.email || recipient.id).join(", ")}</p>
+                                            </>
+                                        )}
+                                    </div>
+                                ) : null}
+                            </div>
+                        ) : null}
                     </div>
                 ) : (
                     <div className="rounded-xl border bg-card p-3">
@@ -549,7 +595,12 @@ export function SaveViewDialog({
                                 className={`w-full rounded-lg border px-3 py-2 text-left text-xs transition-colors ${activeTab?.id === tab.id ? "border-primary bg-primary/10 text-primary" : "bg-card hover:bg-accent"}`}
                             >
                                 <span className="block max-w-[150px] truncate font-extrabold">{tab.name || "Untitled tab"}</span>
-                                <span className="text-muted-foreground">{SMART_VIEW_MODULE_OPTIONS.find((option) => option.value === tab.module)?.label}</span>
+                                <span className="text-muted-foreground">
+                                    {SMART_VIEW_MODULE_OPTIONS.find((option) => option.value === tab.module)?.label}
+                                    {!isSmartViewModuleEnabled(tab.module, moduleFeatures) && (
+                                        <Badge variant="destructive" className="ml-1.5 h-4 rounded-md px-1 text-[0.6rem]">Disabled</Badge>
+                                    )}
+                                </span>
                             </button>
                         ))}
                     </div>
@@ -576,9 +627,14 @@ export function SaveViewDialog({
                                             <SelectValue />
                                         </SelectTrigger>
                                         <SelectContent>
-                                            {SMART_VIEW_MODULE_OPTIONS.map((option) => (
-                                                <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
-                                            ))}
+                                            {SMART_VIEW_MODULE_OPTIONS.map((option) => {
+                                                const enabled = isSmartViewModuleEnabled(option.value, moduleFeatures);
+                                                return (
+                                                    <SelectItem key={option.value} value={option.value} disabled={!enabled && option.value !== activeTab.module}>
+                                                        {option.label}{!enabled ? " (Disabled)" : ""}
+                                                    </SelectItem>
+                                                );
+                                            })}
                                         </SelectContent>
                                     </Select>
                                 </div>

@@ -1,6 +1,6 @@
 export type RecordAccess = 'OWN' | 'TEAM' | 'ALL';
 export type PermissionAction = 'read' | 'create' | 'update' | 'delete' | 'export' | 'manage';
-export type PermissionModule = 'leads' | 'opportunities' | 'activities' | 'automations' | 'users' | 'roles' | 'settings';
+export type PermissionModule = 'leads' | 'opportunities' | 'activities' | 'automations' | 'journeys' | 'metrics' | 'users' | 'roles' | 'settings';
 
 export interface ModulePermissions {
     [key: string]: boolean | 'full' | {
@@ -49,6 +49,7 @@ export interface User {
     permissionTemplateId?: string;
     teamId?: string;
     managerId?: string;
+    isAvailableForAssignment?: boolean;
 }
 
 export interface Team {
@@ -58,6 +59,10 @@ export interface Team {
     leadId?: string;
     memberCount: number;
     createdAt: string;
+    workingHours?: { days?: number[]; start?: string; end?: string } | null;
+    timezone?: string | null;
+    defaultRoleId?: string | null;
+    defaultSalesGroupId?: string | null;
 }
 
 export interface PermissionTemplate {

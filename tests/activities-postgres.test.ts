@@ -35,12 +35,14 @@ describe("direct Postgres activities repository", () => {
     const result = await listActivitiesForTenant(
       { id: "user-1", tenantId: "tenant-1" },
       50,
-      {
-        conditions: [
-          { field: "notes", operator: "contains", value: "call" },
-          { field: "notes; drop table Activity", operator: "equals", value: "bad" },
-        ],
-      },
+      [
+        {
+          conditions: [
+            { field: "notes", operator: "contains", value: "call" },
+            { field: "notes; drop table Activity", operator: "equals", value: "bad" },
+          ],
+        },
+      ],
     );
 
     expect(result.meta.total).toBe(1);

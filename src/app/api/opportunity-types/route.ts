@@ -33,6 +33,9 @@ export async function POST(request: Request) {
     if (error instanceof Error && error.message === "UNAUTHORIZED") {
       return unauthorized();
     }
+    if (error instanceof Error && error.message === "PROGRAM_NOT_FOUND") {
+      return badRequest("Selected program was not found for this workspace");
+    }
 
     return serverError("Failed to create opportunity type", error);
   }

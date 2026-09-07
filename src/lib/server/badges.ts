@@ -2,11 +2,13 @@ import { randomUUID } from "crypto";
 import { createAuditLog } from "@/lib/server/crm";
 import { ruleMatchesAudience } from "@/lib/server/gamification";
 import { execute, query, queryOne } from "@/lib/db/query";
+import { assertFeatureEnabled } from "@/lib/server/entitlements";
 
 type TenantUser = {
   id: string;
   tenantId: string | null;
   role?: { permissions?: any } | string | null;
+  isPlatformAdmin?: boolean;
 };
 
 const EPOCH = "1970-01-01T00:00:00.000Z";
@@ -37,6 +39,7 @@ export async function listBadgesForTenant(user: TenantUser) {
 
 export async function createBadgeForTenant(user: TenantUser, input: BadgeInput) {
   if (!user.tenantId) throw new Error("TENANT_CONTEXT_REQUIRED");
+  await assertFeatureEnabled(user.tenantId, "gamificationEnabled", { isPlatformAdmin: user.isPlatformAdmin });
   const now = new Date().toISOString();
   const data = await queryOne<any>(
     `insert into "Badge"
@@ -65,6 +68,7 @@ export async function createBadgeForTenant(user: TenantUser, input: BadgeInput) 
 
 export async function updateBadgeForTenant(user: TenantUser, id: string, input: Partial<BadgeInput>) {
   if (!user.tenantId) throw new Error("TENANT_CONTEXT_REQUIRED");
+  await assertFeatureEnabled(user.tenantId, "gamificationEnabled", { isPlatformAdmin: user.isPlatformAdmin });
   const existing = await queryOne<any>(
     `select id, "tenantId", name, description, "iconEmoji", "audienceScope", "criteriaRules",
             "isActive", "createdAt", "updatedAt"
@@ -98,6 +102,7 @@ export async function updateBadgeForTenant(user: TenantUser, id: string, input: 
 
 export async function deleteBadgeForTenant(user: TenantUser, id: string) {
   if (!user.tenantId) throw new Error("TENANT_CONTEXT_REQUIRED");
+  await assertFeatureEnabled(user.tenantId, "gamificationEnabled", { isPlatformAdmin: user.isPlatformAdmin });
   const existing = await queryOne<any>(
     `select id, "tenantId", name, description, "iconEmoji", "audienceScope", "criteriaRules",
             "isActive", "createdAt", "updatedAt"

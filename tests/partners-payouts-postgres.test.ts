@@ -35,6 +35,7 @@ describe("direct Postgres partners, payouts, and invoices", () => {
 
   it("rolls multiple partner logins into one organization payout", async () => {
     queryOneMock
+      .mockResolvedValueOnce(null) // TenantFeature entitlement check (defaults to enabled)
       .mockResolvedValueOnce({
         id: "settings-1",
         approvalMode: "MANUAL",

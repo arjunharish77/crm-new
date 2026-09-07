@@ -5,7 +5,7 @@ import {
   updateOpportunityForTenant,
 } from "@/lib/server/crm";
 import { requireCurrentUser } from "@/lib/server/auth";
-import { serverError, unauthorized } from "@/lib/server/http";
+import { badRequest, serverError, unauthorized } from "@/lib/server/http";
 
 export async function GET(
   request: Request,
@@ -45,6 +45,9 @@ export async function PATCH(
     if (error instanceof Error && error.message === "UNAUTHORIZED") {
       return unauthorized();
     }
+    if (error instanceof Error && error.message.startsWith("FEATURE_DISABLED")) {
+      return badRequest("Opportunities is not enabled for this workspace");
+    }
 
     return serverError("Failed to update opportunity", error);
   }
@@ -62,6 +65,9 @@ export async function DELETE(
   } catch (error) {
     if (error instanceof Error && error.message === "UNAUTHORIZED") {
       return unauthorized();
+    }
+    if (error instanceof Error && error.message.startsWith("FEATURE_DISABLED")) {
+      return badRequest("Opportunities is not enabled for this workspace");
     }
 
     return serverError("Failed to delete opportunity", error);

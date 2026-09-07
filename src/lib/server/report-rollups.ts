@@ -27,3 +27,22 @@ export async function refreshReportRollupForTenant(user: TenantUser, input: Refr
 export async function processPendingReportRefreshJobs(limit = 25) {
   return pgReportRollups.processPendingReportRefreshJobs(limit);
 }
+
+export async function listReportRefreshStatesForTenant(user: TenantUser) {
+  return pgReportRollups.listReportRefreshStatesForTenant(user);
+}
+
+export async function updateReportRefreshPolicyForTenant(
+  user: TenantUser,
+  input: { reportKey: string; scopeType?: "ORG" | "TEAM" | "USER" | "PARTNER"; scopeId?: string | null; refreshIntervalMinutes: number },
+) {
+  return pgReportRollups.updateReportRefreshPolicyForTenant(user, input);
+}
+
+export async function processDueReportRollupRefreshes(limit = 50) {
+  return pgReportRollups.processDueReportRollupRefreshes(limit);
+}
+
+export async function invalidateReportRollupsForTenant(tenantId: string | null | undefined) {
+  return pgReportRollups.invalidateReportRollupsForTenant(tenantId);
+}

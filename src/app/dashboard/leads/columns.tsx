@@ -1,14 +1,16 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { ColumnDef } from "@tanstack/react-table";
 import { Eye, ExternalLink, Pencil } from "lucide-react";
 import { Lead } from "@/types/leads";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Select, SelectContent, SelectItem, SelectTrigger } from "@/components/ui/select";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { PredictiveScoreBadge } from "@/components/scoring/predictive-score";
+import { NbaCountChip } from "@/components/next-best-action/nba-count-chip";
 import { formatWorkspaceDate } from "@/lib/date-format";
 import { cn } from "@/lib/utils";
 
@@ -21,11 +23,55 @@ const STATUS_CLASSNAMES: Record<string, string> = {
     CONVERTED: "bg-tertiary/12 text-tertiary border-tertiary/25",
 };
 const DEFAULT_STATUS_CLASSNAME = "bg-muted text-muted-foreground border-border";
+const LEAD_STATUS_OPTIONS = Object.keys(STATUS_CLASSNAMES);
 
 export type LeadColumnActions = {
     onQuickView: (leadId: string) => void;
     onEdit: (lead: Lead) => void;
+    // Inline status edit -- resolves once the PATCH settles (or throws), so the cell can
+    // roll back optimistic UI on failure without the parent needing to know cell internals.
+    onStatusChange: (lead: Lead, status: string) => Promise<void>;
 };
+
+function StatusCell({ lead, onStatusChange }: { lead: Lead; onStatusChange: LeadColumnActions["onStatusChange"] }) {
+    const [status, setStatus] = useState(lead.status);
+    const [saving, setSaving] = useState(false);
+
+    // Keep in sync if the row's underlying data refetches with a different status (e.g.
+    // another user changed it, or a filter/sort re-triggered a fetch).
+    useEffect(() => setStatus(lead.status), [lead.status]);
+
+    return (
+        <Select
+            value={status}
+            disabled={saving}
+            onValueChange={(next) => {
+                const previous = status;
+                setStatus(next);
+                setSaving(true);
+                onStatusChange(lead, next)
+                    .catch(() => setStatus(previous))
+                    .finally(() => setSaving(false));
+            }}
+        >
+            <SelectTrigger
+                size="sm"
+                onClick={(e) => e.stopPropagation()}
+                className={cn(
+                    "h-7 w-fit gap-1 rounded-full border px-2.5 text-xs font-bold uppercase tracking-wide [&_svg]:size-3",
+                    STATUS_CLASSNAMES[status] ?? DEFAULT_STATUS_CLASSNAME,
+                )}
+            >
+                {status}
+            </SelectTrigger>
+            <SelectContent onClick={(e) => e.stopPropagation()}>
+                {LEAD_STATUS_OPTIONS.map((option) => (
+                    <SelectItem key={option} value={option}>{option}</SelectItem>
+                ))}
+            </SelectContent>
+        </Select>
+    );
+}
 
 export function buildLeadColumns(actions: LeadColumnActions): ColumnDef<Lead, any>[] {
     return [
@@ -58,17 +104,7 @@ export function buildLeadColumns(actions: LeadColumnActions): ColumnDef<Lead, an
             accessorKey: "status",
             header: "Status",
             size: 140,
-            cell: ({ row }) => {
-                const status = row.original.status;
-                return (
-                    <Badge
-                        variant="outline"
-                        className={cn("font-bold uppercase tracking-wide", STATUS_CLASSNAMES[status] ?? DEFAULT_STATUS_CLASSNAME)}
-                    >
-                        {status}
-                    </Badge>
-                );
-            },
+            cell: ({ row }) => <StatusCell lead={row.original} onStatusChange={actions.onStatusChange} />,
         },
         {
             accessorKey: "source",
@@ -86,6 +122,12 @@ export function buildLeadColumns(actions: LeadColumnActions): ColumnDef<Lead, an
                 return a - b;
             },
             cell: ({ row }) => <PredictiveScoreBadge score={row.original.predictiveScore} />,
+        },
+        {
+            accessorKey: "pendingNbaCount",
+            header: "Next Best Action",
+            size: 130,
+            cell: ({ row }) => <NbaCountChip count={row.original.pendingNbaCount} />,
         },
         {
             accessorKey: "createdAt",
@@ -106,6 +148,7 @@ export function buildLeadColumns(actions: LeadColumnActions): ColumnDef<Lead, an
                             <Button
                                 variant="ghost"
                                 size="icon-sm"
+                                aria-label="View preview"
                                 onClick={(e) => {
                                     e.stopPropagation();
                                     actions.onQuickView(row.original.id);
@@ -118,7 +161,7 @@ export function buildLeadColumns(actions: LeadColumnActions): ColumnDef<Lead, an
                     </Tooltip>
                     <Tooltip>
                         <TooltipTrigger asChild>
-                            <Button variant="ghost" size="icon-sm" asChild onClick={(e) => e.stopPropagation()}>
+                            <Button variant="ghost" size="icon-sm" aria-label="Open detail" asChild onClick={(e) => e.stopPropagation()}>
                                 <Link href={`/dashboard/leads/${row.original.id}`}>
                                     <ExternalLink className="size-4" />
                                 </Link>
@@ -131,6 +174,7 @@ export function buildLeadColumns(actions: LeadColumnActions): ColumnDef<Lead, an
                             <Button
                                 variant="ghost"
                                 size="icon-sm"
+                                aria-label="Edit lead"
                                 onClick={(e) => {
                                     e.stopPropagation();
                                     actions.onEdit(row.original);

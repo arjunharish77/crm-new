@@ -71,6 +71,9 @@ import {
   writeCommissionLedgerEntry,
   listCommissionLedgerForPartner,
   calculateAndRecordCommissionForOpportunity,
+  createCommissionRuleForTenant,
+  updateCommissionRuleForTenant,
+  deleteCommissionRuleForTenant,
 } from "@/lib/server/commission";
 
 const TENANT = "tenant-a";
@@ -205,5 +208,63 @@ describe("calculateAndRecordCommissionForOpportunity — trigger-time flow", () 
 
     const entry = await calculateAndRecordCommissionForOpportunity(adminUser, { ...opportunity, ownerId: null }, "STAGE_CHANGED");
     expect(entry).toBeNull();
+  });
+
+  it("is a no-op when the Payouts module is disabled for the tenant, without throwing (latent/not-yet-wired-into-automations)", async () => {
+    dbMocks.state.PartnerProfile = [{ id: "pp-1", tenantId: TENANT, userId: partnerUserId, status: "ACTIVE" }];
+    dbMocks.state.CommissionRule = [{ id: "rule-1", tenantId: TENANT, isActive: true, priority: 1, ruleType: "PERCENTAGE", value: 8, conditions: {}, createdAt: new Date().toISOString() }];
+    dbMocks.queryOne.mockImplementation(async (sql: string) => {
+      if (sql.includes('from "TenantFeature"')) return { payoutsEnabled: false };
+      return null;
+    });
+
+    const entry = await calculateAndRecordCommissionForOpportunity(adminUser, opportunity, "STAGE_CHANGED");
+    expect(entry).toBeNull();
+  });
+});
+
+describe("Commission Rule CRUD — entitlement gating", () => {
+  it("rejects creating a commission rule when the Payouts module is disabled for the tenant", async () => {
+    dbMocks.queryOne.mockImplementation(async (sql: string) => {
+      if (sql.includes('from "TenantFeature"')) return { payoutsEnabled: false };
+      return null;
+    });
+
+    await expect(
+      createCommissionRuleForTenant(adminUser, { name: "Default", ruleType: "PERCENTAGE", value: 5 }),
+    ).rejects.toThrow("FEATURE_DISABLED");
+  });
+
+  it("rejects updating a commission rule when the Payouts module is disabled for the tenant", async () => {
+    dbMocks.queryOne.mockImplementation(async (sql: string) => {
+      if (sql.includes('from "TenantFeature"')) return { payoutsEnabled: false };
+      return null;
+    });
+
+    await expect(updateCommissionRuleForTenant(adminUser, "rule-1", { value: 10 })).rejects.toThrow("FEATURE_DISABLED");
+  });
+
+  it("rejects deleting a commission rule when the Payouts module is disabled for the tenant", async () => {
+    dbMocks.queryOne.mockImplementation(async (sql: string) => {
+      if (sql.includes('from "TenantFeature"')) return { payoutsEnabled: false };
+      return null;
+    });
+
+    await expect(deleteCommissionRuleForTenant(adminUser, "rule-1")).rejects.toThrow("FEATURE_DISABLED");
+  });
+
+  it("allows a platform admin to bypass the Payouts gate", async () => {
+    dbMocks.queryOne.mockImplementation(async (sql: string) => {
+      if (sql.includes('from "TenantFeature"')) return { payoutsEnabled: false };
+      if (sql.includes('insert into "CommissionRule"')) return { id: "rule-1", tenantId: TENANT, name: "Default" };
+      return null;
+    });
+
+    await expect(
+      createCommissionRuleForTenant(
+        { id: "admin-1", tenantId: TENANT, isPlatformAdmin: true },
+        { name: "Default", ruleType: "PERCENTAGE", value: 5 },
+      ),
+    ).resolves.toBeDefined();
   });
 });

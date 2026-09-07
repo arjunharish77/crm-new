@@ -9,6 +9,7 @@ export type CrmJobName =
   | "reports.processSchedules"
   | "communications.processDue"
   | "exports.process"
+  | "imports.process"
   | "scoring.recomputeRules"
   | "scoring.recomputeSelfLearning"
   | "scoring.processScheduledRetraining";
@@ -50,6 +51,15 @@ export async function enqueueExportJob(exportRequestId: string) {
     "exports.process" satisfies CrmJobName,
     { exportRequestId },
     { jobId: `export-${exportRequestId}` },
+  );
+}
+
+export async function enqueueImportJob(importJobId: string) {
+  const queue = getCrmQueue();
+  return queue.add(
+    "imports.process" satisfies CrmJobName,
+    { importJobId },
+    { jobId: `import-${importJobId}` },
   );
 }
 

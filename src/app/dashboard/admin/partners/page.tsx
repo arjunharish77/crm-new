@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { apiFetch } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -11,9 +12,12 @@ import { UserPlus, UsersRound } from "lucide-react";
 import { toast } from "sonner";
 import { TableSkeleton } from "@/components/common/skeletons";
 import { EmptyState } from "@/components/common/empty-state";
+import { ErrorState } from "@/components/common/error-state";
 import { AddPartnerDialog } from "./add-partner-dialog";
+import { BulkActionsToolbar } from "@/components/bulk-actions/bulk-toolbar";
 import { AddPartnerLoginDialog } from "./add-partner-login-dialog";
 import { QueueExportButton } from "@/components/exports/queue-export-button";
+import { useModuleEnabled } from "@/components/auth/feature-gate";
 
 type PartnerProfile = {
     id: string;
@@ -29,19 +33,26 @@ type PartnerProfile = {
 };
 
 export default function PartnersPage() {
+    const router = useRouter();
+    const partnersEnabled = useModuleEnabled("PARTNERS");
     const [partners, setPartners] = useState<PartnerProfile[]>([]);
     const [loading, setLoading] = useState(true);
     const [dialogOpen, setDialogOpen] = useState(false);
     const [loginDialogPartner, setLoginDialogPartner] = useState<PartnerProfile | null>(null);
     const [updatingProfileId, setUpdatingProfileId] = useState<string | null>(null);
+    const [selectedPartnerIds, setSelectedPartnerIds] = useState<string[]>([]);
+
+    const [fetchError, setFetchError] = useState<string | null>(null);
 
     const fetchPartners = useCallback(async () => {
         setLoading(true);
+        setFetchError(null);
         try {
             const data = await apiFetch<PartnerProfile[]>("/partners");
             setPartners(Array.isArray(data) ? data : []);
         } catch (error) {
             toast.error("Failed to fetch partners");
+            setFetchError("Failed to load partners.");
         } finally {
             setLoading(false);
         }
@@ -71,6 +82,28 @@ export default function PartnersPage() {
         }
     };
 
+    // Bulk suspend -- loops the same single-login PATCH endpoint updatePartner already uses
+    // (no bulk endpoint exists, matching the pattern used for Leads/Opportunities delete).
+    // Scoped to primary-partner cards, not nested logins, since a "row" in this two-level
+    // grouped layout is ambiguous at the login level.
+    const handleBulkSuspend = async () => {
+        if (selectedPartnerIds.length === 0) return;
+        if (!confirm(`Suspend ${selectedPartnerIds.length} partner${selectedPartnerIds.length === 1 ? "" : "s"}?`)) return;
+        let suspended = 0;
+        let failed = 0;
+        for (const id of selectedPartnerIds) {
+            try {
+                await apiFetch(`/partners/${id}`, { method: "PATCH", body: JSON.stringify({ status: "SUSPENDED" }) });
+                suspended += 1;
+            } catch {
+                failed += 1;
+            }
+        }
+        toast.success(`${suspended} partner${suspended === 1 ? "" : "s"} suspended${failed ? `, ${failed} failed` : ""}`);
+        setSelectedPartnerIds([]);
+        fetchPartners();
+    };
+
     return (
         <div className="mx-auto max-w-[1600px] p-4">
             <div className="mb-4 flex items-center justify-between gap-4">
@@ -84,24 +117,36 @@ export default function PartnersPage() {
                 </div>
                 <div className="flex items-center gap-2">
                     <QueueExportButton moduleName="PARTNERS" />
-                    <Button onClick={() => setDialogOpen(true)}>
-                        <UserPlus className="size-4" />
-                        Add Partner
-                    </Button>
+                    {partnersEnabled && (
+                        <Button onClick={() => setDialogOpen(true)}>
+                            <UserPlus className="size-4" />
+                            Add Partner
+                        </Button>
+                    )}
                 </div>
             </div>
 
+            {!partnersEnabled && (
+                <p className="mb-3 text-sm text-muted-foreground">
+                    The Partners module is disabled for this tenant -- existing partners are still visible below, but new partners/logins can&apos;t be created and existing profiles can&apos;t be edited until it&apos;s re-enabled.
+                </p>
+            )}
+
             {loading ? (
                 <TableSkeleton rows={6} columns={4} />
+            ) : fetchError ? (
+                <ErrorState description={fetchError} onRetry={fetchPartners} />
             ) : partners.length === 0 ? (
                 <EmptyState
                     title="No partners yet"
                     description="Add a channel partner to give them portal access scoped to their own records."
                     action={
-                        <Button variant="outline" onClick={() => setDialogOpen(true)}>
-                            <UserPlus className="size-4" />
-                            Add Partner
-                        </Button>
+                        partnersEnabled ? (
+                            <Button variant="outline" onClick={() => setDialogOpen(true)}>
+                                <UserPlus className="size-4" />
+                                Add Partner
+                            </Button>
+                        ) : undefined
                     }
                 />
             ) : (
@@ -115,6 +160,15 @@ export default function PartnersPage() {
                         >
                             <div className="flex items-center justify-between gap-4">
                                 <div className="flex items-center gap-3">
+                                    <Checkbox
+                                        checked={selectedPartnerIds.includes(partner.id)}
+                                        onCheckedChange={(checked) => {
+                                            setSelectedPartnerIds((prev) =>
+                                                checked ? [...prev, partner.id] : prev.filter((id) => id !== partner.id)
+                                            );
+                                        }}
+                                        aria-label={`Select ${partner.legalBusinessName}`}
+                                    />
                                     <Avatar className="bg-primary/10 font-bold text-primary">
                                         <AvatarFallback>
                                             {(partner.user?.name || partner.legalBusinessName || "?").charAt(0).toUpperCase()}
@@ -130,10 +184,15 @@ export default function PartnersPage() {
                                     </div>
                                 </div>
                                 <div className="flex items-center gap-2">
-                                    <Button variant="outline" size="sm" onClick={() => setLoginDialogPartner(partner)}>
-                                        <UserPlus className="size-4" />
-                                        Add Login
+                                    <Button variant="outline" size="sm" onClick={() => router.push(`/dashboard/settings/partners/${partner.id}`)}>
+                                        View Dashboard
                                     </Button>
+                                    {partnersEnabled && (
+                                        <Button variant="outline" size="sm" onClick={() => setLoginDialogPartner(partner)}>
+                                            <UserPlus className="size-4" />
+                                            Add Login
+                                        </Button>
+                                    )}
                                     <Badge variant="outline" className="rounded-md text-[0.65rem] font-semibold">
                                         {partner.gstin ? "GST Registered" : "Unregistered"}
                                     </Badge>
@@ -163,7 +222,7 @@ export default function PartnersPage() {
                                             </div>
                                             <Select
                                                 value={login.partnerLoginRole}
-                                                disabled={updatingProfileId === login.id}
+                                                disabled={updatingProfileId === login.id || !partnersEnabled}
                                                 onValueChange={(value) => updatePartner(login, { partnerLoginRole: value as PartnerProfile["partnerLoginRole"] })}
                                             >
                                                 <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
@@ -176,7 +235,7 @@ export default function PartnersPage() {
                                             </Select>
                                             <Select
                                                 value={login.parentPartnerProfileId || "__none__"}
-                                                disabled={updatingProfileId === login.id || login.id === partner.id}
+                                                disabled={updatingProfileId === login.id || login.id === partner.id || !partnersEnabled}
                                                 onValueChange={(value) => updatePartner(login, { parentPartnerProfileId: value === "__none__" ? null : value })}
                                             >
                                                 <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
@@ -191,7 +250,7 @@ export default function PartnersPage() {
                                             </Select>
                                             <Select
                                                 value={login.status}
-                                                disabled={updatingProfileId === login.id}
+                                                disabled={updatingProfileId === login.id || !partnersEnabled}
                                                 onValueChange={(value) => updatePartner(login, { status: value as PartnerProfile["status"] })}
                                             >
                                                 <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
@@ -204,7 +263,7 @@ export default function PartnersPage() {
                                                 Payouts
                                                 <Checkbox
                                                     checked={login.canAccessPayouts}
-                                                    disabled={updatingProfileId === login.id}
+                                                    disabled={updatingProfileId === login.id || !partnersEnabled}
                                                     onCheckedChange={(checked) => updatePartner(login, { canAccessPayouts: checked === true })}
                                                 />
                                             </label>
@@ -236,6 +295,13 @@ export default function PartnersPage() {
                     setLoginDialogPartner(null);
                     fetchPartners();
                 }}
+            />
+
+            <BulkActionsToolbar
+                selectedCount={selectedPartnerIds.length}
+                onClearSelection={() => setSelectedPartnerIds([])}
+                module="partners"
+                onSuspend={handleBulkSuspend}
             />
         </div>
     );

@@ -12,8 +12,10 @@ import { EmptyState } from "@/components/common/empty-state";
 import { TableSkeleton } from "@/components/common/skeletons";
 import { formatWorkspaceDateTime, formatWorkspaceDateTimeInput, workspaceDateTimeInputToIso } from "@/lib/date-format";
 import { cn } from "@/lib/utils";
-import { CalendarDays, CheckCircle2, Clock, Edit3, Plus, Trash2 } from "lucide-react";
+import { AlertTriangle, CalendarDays, CheckCircle2, Clock, Edit3, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
+import { TaskChecklistDependenciesPanel } from "@/components/tasks/task-checklist-dependencies-panel";
+import { TaskRecurrenceEscalationFields, type RecurrenceRule } from "@/components/tasks/task-recurrence-escalation-fields";
 
 type Task = {
     id: string;
@@ -28,7 +30,36 @@ type Task = {
     opportunityId: string | null;
     activityId: string | null;
     owner?: { name?: string | null; email?: string | null } | null;
+    parentTaskId?: string | null;
+    requireCompletionNote?: boolean;
+    completionNote?: string | null;
+    checklist?: Array<{ id: string; title: string; isDone: boolean }>;
+    blockedBy?: Array<{ taskId: string; title: string; status: string }>;
+    isBlocked?: boolean;
+    subtaskCount?: number;
+    recurrenceRule?: RecurrenceRule | null;
+    escalateAfterMinutes?: number | null;
+    escalateToUserId?: string | null;
+    slaTarget?: string | null;
+    slaStatus?: "PENDING" | "MET" | "BREACHED" | null;
 };
+
+function taskSlaBadge(task: Task) {
+    const isOpen = task.status !== "COMPLETED" && task.status !== "CANCELLED";
+    const breached = task.slaStatus === "BREACHED" || (isOpen && !!task.slaTarget && new Date(task.slaTarget).getTime() < Date.now());
+    if (breached) {
+        return (
+            <Badge variant="destructive" className="rounded-md text-[0.65rem] font-semibold">
+                <AlertTriangle className="size-3" />
+                SLA Breached
+            </Badge>
+        );
+    }
+    if (task.slaStatus === "MET") {
+        return <Badge variant="outline" className="rounded-md text-[0.65rem] font-semibold">SLA Met</Badge>;
+    }
+    return null;
+}
 
 type UserOption = { id: string; name?: string | null; email?: string | null };
 
@@ -48,6 +79,9 @@ const EMPTY_FORM = {
     ownerId: "",
     dueAt: "",
     reminderAt: "",
+    recurrenceRule: null as RecurrenceRule | null,
+    escalateAfterMinutes: null as number | null,
+    escalateToUserId: null as string | null,
 };
 
 const STATUS_OPTIONS = [
@@ -104,6 +138,15 @@ export function RelatedTasksPanel({ leadId, opportunityId, activityId, currentUs
         fetchTasks();
     }, [fetchTasks]);
 
+    // Keep the open edit dialog's task snapshot in sync whenever the list refetches (e.g.
+    // after toggling a checklist item or saving dependencies from within the dialog itself),
+    // so the dialog doesn't keep showing stale checklist/dependency state until it's reopened.
+    useEffect(() => {
+        if (!editingTask) return;
+        const fresh = tasks.find((task) => task.id === editingTask.id);
+        if (fresh && fresh !== editingTask) setEditingTask(fresh);
+    }, [tasks, editingTask]);
+
     useEffect(() => {
         apiFetch<UserOption[]>("/users")
             .then((data) => setUsers(Array.isArray(data) ? data : []))
@@ -126,6 +169,9 @@ export function RelatedTasksPanel({ leadId, opportunityId, activityId, currentUs
             ownerId: task.ownerId,
             dueAt: toLocalInputValue(task.dueAt),
             reminderAt: toLocalInputValue(task.reminderAt),
+            recurrenceRule: task.recurrenceRule ?? null,
+            escalateAfterMinutes: task.escalateAfterMinutes ?? null,
+            escalateToUserId: task.escalateToUserId ?? null,
         });
         setDialogOpen(true);
     };
@@ -160,6 +206,16 @@ export function RelatedTasksPanel({ leadId, opportunityId, activityId, currentUs
             fetchTasks();
         } catch (error: any) {
             toast.error(error.message || "Failed to update task");
+        }
+    };
+
+    const skipTaskOccurrence = async (task: Task) => {
+        try {
+            const result = await apiFetch<{ nextTask?: Task | null }>(`/tasks/${task.id}/skip`, { method: "POST" });
+            toast.success(result.nextTask ? "Skipped -- next occurrence created" : "Task skipped");
+            fetchTasks();
+        } catch (error: any) {
+            toast.error(error.message || "Failed to skip task");
         }
     };
 
@@ -204,6 +260,18 @@ export function RelatedTasksPanel({ leadId, opportunityId, activityId, currentUs
                                         <p className={cn("text-sm font-bold", task.status === "COMPLETED" && "text-muted-foreground line-through")}>{task.title}</p>
                                         <Badge variant="outline" className="rounded-md text-[0.65rem] font-semibold">{task.status.replace("_", " ")}</Badge>
                                         <Badge variant={task.priority === "HIGH" || task.priority === "URGENT" ? "destructive" : "secondary"} className="rounded-md text-[0.65rem] font-semibold">{task.priority}</Badge>
+                                        {task.isBlocked && (
+                                            <Badge variant="destructive" className="rounded-md text-[0.65rem] font-semibold">
+                                                <AlertTriangle className="size-3" />
+                                                Blocked
+                                            </Badge>
+                                        )}
+                                        {task.checklist?.length ? (
+                                            <Badge variant="outline" className="rounded-md text-[0.65rem]">
+                                                {task.checklist.filter((item) => item.isDone).length}/{task.checklist.length}
+                                            </Badge>
+                                        ) : null}
+                                        {taskSlaBadge(task)}
                                     </div>
                                     {task.description ? <p className="mt-1 text-xs text-muted-foreground">{task.description}</p> : null}
                                     <div className="mt-2 flex flex-wrap gap-3 text-xs text-muted-foreground">
@@ -217,6 +285,9 @@ export function RelatedTasksPanel({ leadId, opportunityId, activityId, currentUs
                                         <Button size="sm" variant="outline" onClick={() => updateTaskStatus(task, "COMPLETED")}>Complete</Button>
                                     ) : (
                                         <Button size="sm" variant="outline" onClick={() => updateTaskStatus(task, "OPEN")}>Reopen</Button>
+                                    )}
+                                    {task.recurrenceRule && task.status !== "COMPLETED" && task.status !== "CANCELLED" && (
+                                        <Button size="sm" variant="ghost" onClick={() => skipTaskOccurrence(task)}>Skip</Button>
                                     )}
                                     <Button size="icon-sm" variant="ghost" onClick={() => openEdit(task)} aria-label={`Edit ${task.title}`}>
                                         <Edit3 className="size-4" />
@@ -288,6 +359,14 @@ export function RelatedTasksPanel({ leadId, opportunityId, activityId, currentUs
                             <Input type="datetime-local" value={form.reminderAt} onChange={(event) => setForm((current) => ({ ...current, reminderAt: event.target.value }))} />
                         </div>
                     </div>
+                    <TaskRecurrenceEscalationFields
+                        value={{ recurrenceRule: form.recurrenceRule, escalateAfterMinutes: form.escalateAfterMinutes, escalateToUserId: form.escalateToUserId }}
+                        onChange={(next) => setForm((current) => ({ ...current, ...next }))}
+                        users={users}
+                    />
+                    {editingTask && (
+                        <TaskChecklistDependenciesPanel task={editingTask} siblingTasks={tasks} onRefresh={fetchTasks} />
+                    )}
                 </div>
             </StandardDialog>
         </div>

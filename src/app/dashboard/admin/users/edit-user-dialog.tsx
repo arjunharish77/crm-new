@@ -11,6 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import {
     Select,
     SelectContent,
@@ -51,6 +52,7 @@ const formSchema = z.object({
         category: z.string().min(1, "Category is required"),
         values: z.array(z.string()).min(1, "At least one value is required"),
     })),
+    isAvailableForAssignment: z.boolean(),
 });
 
 type EditUserFormValues = z.infer<typeof formSchema>;
@@ -167,6 +169,7 @@ export function EditUserDialog({
             teamId: "",
             managerId: "",
             skills: [],
+            isAvailableForAssignment: true,
         },
     });
 
@@ -207,6 +210,7 @@ export function EditUserDialog({
                     teamId: user.team?.id || user.teamId || "",
                     managerId: user.manager?.id || user.managerId || "",
                     skills: transformSkillsToArray(user.skills || {}),
+                    isAvailableForAssignment: user.isAvailableForAssignment !== false,
                 });
             }
         }
@@ -233,6 +237,7 @@ export function EditUserDialog({
                     teamId: values.teamId,
                     managerId: values.managerId,
                     skills: skillsObj,
+                    isAvailableForAssignment: values.isAvailableForAssignment,
                 }),
             });
 
@@ -383,6 +388,22 @@ export function EditUserDialog({
                         )}
                     />
                 </div>
+
+                <Controller
+                    name="isAvailableForAssignment"
+                    control={control}
+                    render={({ field }) => (
+                        <div className="flex items-start gap-3 rounded-lg border border-border p-4">
+                            <Switch checked={field.value} onCheckedChange={field.onChange} />
+                            <div>
+                                <Label>Available for lead/opportunity assignment</Label>
+                                <p className="text-xs text-muted-foreground">
+                                    Turn off when this user is away or on leave -- distribution rules will skip them until this is switched back on.
+                                </p>
+                            </div>
+                        </div>
+                    )}
+                />
 
                 <div className="rounded-lg border border-border p-4">
                     <div className="mb-4 flex items-center justify-between gap-3">

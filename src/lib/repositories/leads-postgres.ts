@@ -2,11 +2,20 @@ import { randomUUID } from "crypto";
 import { execute, query, queryOne } from "@/lib/db/query";
 import { runAutomationsForEvent } from "@/lib/repositories/automations-postgres";
 import { distributeRecord } from "@/lib/server/distribution-engine";
+import { refreshNextBestActionsForRecord } from "@/lib/server/next-best-action";
+import { enqueueWebhookEvent } from "@/lib/server/webhook-outbox";
+import { enqueueAppEvent } from "@/lib/server/marketplace-events";
+import { checkRateLimit } from "@/lib/server/rate-limit";
+import { invalidateReportRollupsForTenant } from "@/lib/server/report-rollups";
+import { applyFilterCondition, buildGroupedFilterClause, type FilterValueKind } from "@/lib/query-filters";
+import { substituteUserTokens } from "@/lib/server/user-token-filters";
 
 type TenantUser = {
   id: string;
   tenantId: string | null;
   role?: { permissions?: any } | string | null;
+  isImpersonating?: boolean;
+  impersonatedBy?: string | null;
 };
 
 type LeadFilterCondition = {
@@ -23,19 +32,20 @@ type LeadFilterInput =
     };
 
 const LEAD_COLUMNS = 'id, name, email, phone, company, source, status, score, tags, "createdBy", "createdAt", "updatedAt", "ownerId"';
-const LEAD_FILTER_COLUMNS = new Map([
-  ["id", "id"],
-  ["name", "name"],
-  ["email", "email"],
-  ["phone", "phone"],
-  ["company", "company"],
-  ["source", "source"],
-  ["status", "status"],
-  ["score", "score"],
-  ["createdBy", "createdBy"],
-  ["ownerId", "ownerId"],
-  ["createdAt", "createdAt"],
-  ["updatedAt", "updatedAt"],
+const LEAD_FILTER_COLUMNS = new Map<string, { column: string; kind: FilterValueKind }>([
+  ["id", { column: "id", kind: "text" }],
+  ["name", { column: "name", kind: "text" }],
+  ["email", { column: "email", kind: "text" }],
+  ["phone", { column: "phone", kind: "text" }],
+  ["company", { column: "company", kind: "text" }],
+  ["source", { column: "source", kind: "text" }],
+  ["status", { column: "status", kind: "select" }],
+  ["score", { column: "score", kind: "number" }],
+  ["createdBy", { column: "createdBy", kind: "user" }],
+  ["ownerId", { column: "ownerId", kind: "user" }],
+  ["createdAt", { column: "createdAt", kind: "date" }],
+  ["updatedAt", { column: "updatedAt", kind: "date" }],
+  ["tags", { column: "tags", kind: "tags" }],
 ]);
 
 const PREDICTIVE_SCORE_FILTER_FIELDS = new Set([
@@ -49,15 +59,15 @@ const PREDICTIVE_SCORE_FILTER_FIELDS = new Set([
   "predictiveStaleRisk",
 ]);
 
-const SCORE_FIELD_TO_COLUMN = new Map([
-  ["predictiveScoreBand", "scoreBand"],
-  ["predictiveConfidence", "confidence"],
-  ["predictiveConversionProbability", "conversionProbability"],
-  ["predictiveWinProbability", "winProbability"],
-  ["predictiveStallRisk", "stallRisk"],
-  ["predictiveExpectedResponseLikelihood", "expectedResponseLikelihood"],
-  ["predictiveDuplicateRisk", "duplicateRisk"],
-  ["predictiveStaleRisk", "staleRisk"],
+const SCORE_FIELD_TO_COLUMN = new Map<string, { column: string; kind: FilterValueKind }>([
+  ["predictiveScoreBand", { column: "scoreBand", kind: "select" }],
+  ["predictiveConfidence", { column: "confidence", kind: "number" }],
+  ["predictiveConversionProbability", { column: "conversionProbability", kind: "number" }],
+  ["predictiveWinProbability", { column: "winProbability", kind: "number" }],
+  ["predictiveStallRisk", { column: "stallRisk", kind: "number" }],
+  ["predictiveExpectedResponseLikelihood", { column: "expectedResponseLikelihood", kind: "number" }],
+  ["predictiveDuplicateRisk", { column: "duplicateRisk", kind: "number" }],
+  ["predictiveStaleRisk", { column: "staleRisk", kind: "number" }],
 ]);
 
 function isOwnerScoped(user: TenantUser) {
@@ -94,67 +104,50 @@ function addCondition(
   field: string,
   operator: string | undefined,
   value: unknown,
-  columnMap: Map<string, string>,
+  columnMap: Map<string, { column: string; kind: FilterValueKind }>,
 ) {
-  const column = columnMap.get(field);
-  if (!column) return;
-  const quotedColumn = `"${column}"`;
-  const op = operator ?? "equals";
-
-  if (op === "equals") {
-    if (Array.isArray(value)) {
-      values.push(value.map(String));
-      clauses.push(`${quotedColumn}::text = any($${values.length}::text[])`);
-      return;
-    }
-    values.push(value);
-    clauses.push(`${quotedColumn} = $${values.length}`);
-  } else if (op === "not_equals") {
-    if (Array.isArray(value)) {
-      values.push(value.map(String));
-      clauses.push(`${quotedColumn}::text <> all($${values.length}::text[])`);
-      return;
-    }
-    values.push(value);
-    clauses.push(`${quotedColumn} <> $${values.length}`);
-  } else if (op === "in" && Array.isArray(value)) {
-    values.push(value.map(String));
-    clauses.push(`${quotedColumn}::text = any($${values.length}::text[])`);
-  } else if (op === "not_in" && Array.isArray(value)) {
-    values.push(value.map(String));
-    clauses.push(`${quotedColumn}::text <> all($${values.length}::text[])`);
-  } else if (op === "contains" && typeof value === "string") {
-    values.push(`%${value}%`);
-    clauses.push(`${quotedColumn} ilike $${values.length}`);
-  } else if (op === "greater_than") {
-    values.push(value);
-    clauses.push(`${quotedColumn} > $${values.length}`);
-  } else if (op === "less_than") {
-    values.push(value);
-    clauses.push(`${quotedColumn} < $${values.length}`);
-  } else if (op === "gte") {
-    values.push(value);
-    clauses.push(`${quotedColumn} >= $${values.length}`);
-  } else if (op === "lte") {
-    values.push(value);
-    clauses.push(`${quotedColumn} <= $${values.length}`);
-  }
+  const entry = columnMap.get(field);
+  if (!entry) return;
+  applyFilterCondition(clauses, values, entry.column, operator, value, entry.kind);
 }
 
 function buildLeadWhere(user: TenantUser, filters: LeadFilterInput[] | null, scoreMatchedIds?: string[] | null) {
   const clauses: string[] = [];
   const values: unknown[] = [];
 
+  let tenantIdParam: number | null = null;
   if (user.tenantId) {
     values.push(user.tenantId);
-    clauses.push(`"tenantId" = $${values.length}`);
+    tenantIdParam = values.length;
+    clauses.push(`"tenantId" = $${tenantIdParam}`);
   } else {
     clauses.push(`"tenantId" is null`);
   }
 
+  // A merged-away Lead is a soft-merge: the row survives (see mergeLeadsForTenant /
+  // dedupe-postgres.ts) rather than being deleted, so every normal read path must exclude it
+  // explicitly -- otherwise it would keep showing up in lists/search right alongside its
+  // survivor as if nothing happened.
+  clauses.push(`"mergedIntoId" is null`);
+
   if (isOwnerScoped(user)) {
     values.push(user.id);
-    clauses.push(`"ownerId" = $${values.length}`);
+    const userIdParam = values.length;
+    if (tenantIdParam) {
+      // A record explicitly shared with this user (directly, or via their team) is visible
+      // even to an otherwise OWN-scoped user -- RecordShare is the one exception to "only my
+      // own records" enforced here at the row-selection level, not layered on afterward.
+      clauses.push(
+        `("ownerId" = $${userIdParam} or id = any(
+          select rs."recordId" from "RecordShare" rs
+          where rs."tenantId" = $${tenantIdParam} and rs."recordType" = 'LEAD'
+            and ($${userIdParam} = any(rs."sharedUserIds")
+                 or exists (select 1 from "User" u where u.id = $${userIdParam} and u."teamId"::text = any(rs."sharedTeamIds")))
+        ))`
+      );
+    } else {
+      clauses.push(`"ownerId" = $${userIdParam}`);
+    }
   }
 
   if (scoreMatchedIds) {
@@ -165,16 +158,7 @@ function buildLeadWhere(user: TenantUser, filters: LeadFilterInput[] | null, sco
     }
   }
 
-  for (const group of normalizeLeadFilters(filters)) {
-    const conditions: LeadFilterCondition[] =
-      "conditions" in group && Array.isArray(group.conditions)
-        ? group.conditions
-        : [group as LeadFilterCondition];
-    for (const condition of conditions) {
-      if (!condition?.field) continue;
-      addCondition(clauses, values, condition.field, condition.operator, condition.value, LEAD_FILTER_COLUMNS);
-    }
-  }
+  buildGroupedFilterClause(clauses, values, normalizeLeadFilters(filters), LEAD_FILTER_COLUMNS);
 
   return { sql: clauses.length ? `where ${clauses.join(" and ")}` : "", values };
 }
@@ -211,7 +195,7 @@ async function getPredictiveScoreMap(tenantId: string | null, recordIds: string[
             "expectedResponseLikelihood", "duplicateRisk", "staleRisk", "expectedCloseRisk",
             "suggestedCloseDate", "suggestedCloseDateDeltaDays", "nextBestAction", "nextBestActivityType",
             "topDrivers", "missingDataWarnings", "similarRecordIds", "suggestedDataImprovements",
-            "overrideReason", "overrideUntil", "overrideOwnerId", "overriddenAt",
+            "overrideReason", "overrideUntil", "overrideOwnerId", "overriddenAt", "callEngagementScore",
             "calculatedAt", "updatedAt"
      from "RecordScore"
      where "recordType" = 'LEAD'
@@ -222,11 +206,27 @@ async function getPredictiveScoreMap(tenantId: string | null, recordIds: string[
   return new Map(rows.map((score) => [score.recordId, score]));
 }
 
-function formatLead(lead: any, predictiveScore: any = null) {
+export async function getPendingNbaCountMap(tenantId: string | null, recordIds: string[]) {
+  if (!recordIds.length) return new Map<string, number>();
+  const rows = await query<{ recordId: string; count: number }>(
+    `select "recordId", count(*)::int as count
+     from "NextBestActionRecommendation"
+     where "recordType" = 'LEAD'
+       and "recordId" = any($1::text[])
+       and (status = 'PENDING' or (status = 'SNOOZED' and ("snoozedUntil" is null or "snoozedUntil" <= now())))
+       and ${tenantId ? '"tenantId" = $2' : '"tenantId" is null'}
+     group by "recordId"`,
+    tenantId ? [recordIds, tenantId] : [recordIds],
+  );
+  return new Map(rows.map((row) => [row.recordId, row.count]));
+}
+
+function formatLead(lead: any, predictiveScore: any = null, pendingNbaCount = 0) {
   return {
     ...lead,
     assignedUserId: lead.ownerId ?? null,
     predictiveScore,
+    pendingNbaCount,
   };
 }
 
@@ -255,11 +255,43 @@ export async function createAuditLog(
   after: unknown,
   diff: Record<string, unknown> | null,
 ) {
+  // "Complete audit trail" for impersonation (gap checklist: "impersonation governance") --
+  // this is the single choke point nearly every write in this app already calls to log an
+  // audit entry, so tagging it here covers all of them for free rather than needing every
+  // individual call site to remember to pass impersonation context through. Without this, an
+  // action taken by a platform admin impersonating a user was audit-logged identically to one
+  // the real user took themselves -- indistinguishable after the fact. `user` here is
+  // typically the exact object requireCurrentUser/getCurrentUser returned, which already
+  // carries isImpersonating/impersonatedBy when applicable.
+  const metadata = user.isImpersonating && user.impersonatedBy ? { impersonatedBy: user.impersonatedBy } : null;
+  const id = randomUUID();
   await execute(
     `insert into "AuditLog" (id, "tenantId", "userId", action, "entityType", "entityId", before, after, diff, metadata, "createdAt")
-     values ($1, $2, $3, $4, $5, $6, $7, $8, $9, null, $10)`,
-    [randomUUID(), user.tenantId, user.id, action, entityType, entityId, before, after, diff, new Date().toISOString()],
+     values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
+    [id, user.tenantId, user.id, action, entityType, entityId, before, after, diff, metadata, new Date().toISOString()],
   );
+  // "Anomaly flags" (gap checklist: "audit review workflows") -- real but deliberately narrow:
+  // a rate-based check reusing the existing Redis-backed rate limiter (more than N of the same
+  // action by one user within a window gets flagged for a reviewer), not ML/statistical
+  // modeling. Runs at this one choke point so every one of the ~90 call sites gets it for free.
+  await flagAuditLogIfAnomalous(id, user.id, action).catch(() => undefined);
+}
+
+const ANOMALY_ACTION_LIMIT = 20;
+const ANOMALY_WINDOW_SECONDS = 10 * 60;
+
+async function flagAuditLogIfAnomalous(auditLogId: string, userId: string, action: string) {
+  const result = await checkRateLimit({
+    key: `audit-anomaly:${userId}:${action}`,
+    limit: ANOMALY_ACTION_LIMIT,
+    windowSeconds: ANOMALY_WINDOW_SECONDS,
+  });
+  if (!result.allowed) {
+    await execute(`update "AuditLog" set flagged = true, "flagReason" = $1 where id = $2`, [
+      `More than ${ANOMALY_ACTION_LIMIT} "${action}" actions by this user within ${ANOMALY_WINDOW_SECONDS / 60} minutes`,
+      auditLogId,
+    ]);
+  }
 }
 
 function fieldDiff(before: Record<string, any>, after: Record<string, any>) {
@@ -286,7 +318,12 @@ export async function listLeadsForTenant(
   if (scoreMatchedIds && scoreMatchedIds.length === 0) {
     return { data: [], meta: { total: 0, page: currentPage, last_page: 1, limit: currentLimit } };
   }
-  const where = buildLeadWhere(user, recordFilters, scoreMatchedIds);
+  // "Current user/team tokens" (gap checklist's universal advanced filter drawer sub-item) --
+  // "@myteam" needs a DB lookup, so it's resolved here, once, before the synchronous
+  // buildLeadWhere runs, rather than making buildLeadWhere itself async (which would ripple
+  // into its several other no-filter call sites below).
+  const resolvedFilters = await substituteUserTokens(recordFilters, user);
+  const where = buildLeadWhere(user, resolvedFilters, scoreMatchedIds);
 
   const [countRow, data] = await Promise.all([
     queryOne<{ count: number }>(`select count(*)::int as count from "Lead" ${where.sql}`, where.values),
@@ -295,10 +332,13 @@ export async function listLeadsForTenant(
       where.values.concat([currentLimit, offset]),
     ),
   ]);
-  const scoreMap = await getPredictiveScoreMap(user.tenantId, data.map((lead) => lead.id));
+  const [scoreMap, nbaCountMap] = await Promise.all([
+    getPredictiveScoreMap(user.tenantId, data.map((lead) => lead.id)),
+    getPendingNbaCountMap(user.tenantId, data.map((lead) => lead.id)),
+  ]);
 
   return {
-    data: data.map((lead) => formatLead(lead, scoreMap.get(lead.id) ?? null)),
+    data: data.map((lead) => formatLead(lead, scoreMap.get(lead.id) ?? null, nbaCountMap.get(lead.id) ?? 0)),
     meta: {
       total: countRow?.count ?? 0,
       page: currentPage,
@@ -306,6 +346,15 @@ export async function listLeadsForTenant(
       limit: currentLimit,
     },
   };
+}
+
+// Gap checklist Module 17, item 25 (embedded analytics surfaces: "view-level count chips").
+// A cheap, dedicated aggregate query -- reuses the exact same tenant/ownership scoping
+// (`buildLeadWhere`) every other Lead read path uses, so the counts a viewer sees always match
+// what they're actually allowed to see, not a raw tenant-wide count.
+export async function getLeadStatusCountsForTenant(user: TenantUser) {
+  const where = buildLeadWhere(user, null, null);
+  return query<{ status: string; count: number }>(`select status, count(*)::int as count from "Lead" ${where.sql} group by status`, where.values);
 }
 
 export async function createLeadForTenant(user: TenantUser, payload: Record<string, unknown>) {
@@ -337,6 +386,10 @@ export async function createLeadForTenant(user: TenantUser, payload: Record<stri
   const distribution = await distributeRecord(user, "LEAD", formatted.id, formatted).catch(() => null);
   const formattedWithOwner = distribution?.assignedUserId ? { ...formatted, ownerId: distribution.assignedUserId } : formatted;
   await runAutomationsForEvent(user, "LEAD_CREATED", "LEAD", formattedWithOwner.id, formattedWithOwner).catch(() => undefined);
+  await enqueueWebhookEvent(user.tenantId, "LEAD_CREATED", formattedWithOwner).catch(() => undefined);
+  await enqueueAppEvent(user.tenantId, "LEAD_CREATED", formattedWithOwner).catch(() => undefined);
+  await refreshNextBestActionsForRecord(user, "LEAD", formattedWithOwner.id);
+  await invalidateReportRollupsForTenant(user.tenantId).catch(() => undefined);
   return formattedWithOwner;
 }
 
@@ -382,6 +435,10 @@ export async function updateLeadForTenant(user: TenantUser, id: string, payload:
   const diff = fieldDiff(existing, formatted);
   await createAuditLog(user, "UPDATE", "LEAD", formatted.id, existing, formatted, Object.keys(diff).length ? diff : null);
   await runAutomationsForEvent(user, "LEAD_UPDATED", "LEAD", formatted.id, formatted).catch(() => undefined);
+  await enqueueWebhookEvent(user.tenantId, "LEAD_UPDATED", formatted).catch(() => undefined);
+  await enqueueAppEvent(user.tenantId, "LEAD_UPDATED", formatted).catch(() => undefined);
+  await refreshNextBestActionsForRecord(user, "LEAD", formatted.id);
+  await invalidateReportRollupsForTenant(user.tenantId).catch(() => undefined);
   return formatted;
 }
 
@@ -389,5 +446,7 @@ export async function deleteLeadsForTenant(user: TenantUser, ids: string[]) {
   if (!ids.length) return 0;
   const where = buildLeadWhere(user, null);
   const values = where.values.concat([ids]);
-  return execute(`delete from "Lead" ${where.sql} and id = any($${values.length}::text[])`, values);
+  const deleted = await execute(`delete from "Lead" ${where.sql} and id = any($${values.length}::text[])`, values);
+  await invalidateReportRollupsForTenant(user.tenantId).catch(() => undefined);
+  return deleted;
 }

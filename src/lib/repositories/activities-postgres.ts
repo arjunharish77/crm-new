@@ -3,6 +3,11 @@ import { execute, query, queryOne } from "@/lib/db/query";
 import { listOpportunityTypesForTenant } from "@/lib/repositories/opportunities-postgres";
 import { runAutomationsForEvent } from "@/lib/repositories/automations-postgres";
 import { formatTenantDate, getTenantTimeZone } from "@/lib/server/date-format";
+import { enqueueWebhookEvent } from "@/lib/server/webhook-outbox";
+import { enqueueAppEvent } from "@/lib/server/marketplace-events";
+import { invalidateReportRollupsForTenant } from "@/lib/server/report-rollups";
+import { applyFilterCondition, buildGroupedFilterClause, type FilterValueKind } from "@/lib/query-filters";
+import { substituteUserTokens } from "@/lib/server/user-token-filters";
 
 type TenantUser = {
   id: string;
@@ -16,26 +21,35 @@ type ActivityFilterCondition = {
   value: string | number | boolean | null;
 };
 
-type ActivityFilterConfig = {
-  conditions?: ActivityFilterCondition[];
-  logic?: "AND" | "OR";
-};
+// Real bug found and fixed while unifying this with Lead/Opportunity's own filter builders:
+// this used to be a single flat {conditions, logic} object whose `logic` was silently ignored
+// entirely (buildWhere always ANDed every condition together no matter what) -- now an array of
+// real, independent groups, each with its own honored AND/OR logic, matching Lead/Opportunity's
+// own LeadFilterInput[]/FilterInput[] shape exactly (see buildGroupedFilterClause,
+// query-filters.ts). A bare condition (no `conditions` array) is still accepted as its own
+// one-condition group, so an older flat {conditions, logic} caller still works unchanged.
+type ActivityFilterInput =
+  | ActivityFilterCondition
+  | {
+      logic?: "AND" | "OR";
+      conditions?: ActivityFilterCondition[];
+    };
 
 const ACTIVITY_COLUMNS =
   'id, "tenantId", "typeId", "leadId", "opportunityId", outcome, notes, "dueAt", "completedAt", "slaStatus", "slaTarget", "isRecurring", "recurrenceRule", "seriesId", "createdAt", "updatedAt", "createdBy"';
 
-const ACTIVITY_FILTER_COLUMNS = new Map([
-  ["typeId", "typeId"],
-  ["leadId", "leadId"],
-  ["opportunityId", "opportunityId"],
-  ["outcome", "outcome"],
-  ["notes", "notes"],
-  ["dueAt", "dueAt"],
-  ["completedAt", "completedAt"],
-  ["slaStatus", "slaStatus"],
-  ["createdBy", "createdBy"],
-  ["createdAt", "createdAt"],
-  ["updatedAt", "updatedAt"],
+const ACTIVITY_FILTER_COLUMNS = new Map<string, { column: string; kind: FilterValueKind }>([
+  ["typeId", { column: "typeId", kind: "select" }],
+  ["leadId", { column: "leadId", kind: "text" }],
+  ["opportunityId", { column: "opportunityId", kind: "text" }],
+  ["outcome", { column: "outcome", kind: "select" }],
+  ["notes", { column: "notes", kind: "text" }],
+  ["dueAt", { column: "dueAt", kind: "date" }],
+  ["completedAt", { column: "completedAt", kind: "date" }],
+  ["slaStatus", { column: "slaStatus", kind: "select" }],
+  ["createdBy", { column: "createdBy", kind: "user" }],
+  ["createdAt", { column: "createdAt", kind: "date" }],
+  ["updatedAt", { column: "updatedAt", kind: "date" }],
 ]);
 
 const CORE_ACTIVITY_TYPES = [
@@ -56,58 +70,10 @@ function tenantWhere(user: TenantUser, values: unknown[]) {
   return '"tenantId" is null';
 }
 
-function addActivityCondition(clauses: string[], values: unknown[], condition: ActivityFilterCondition) {
-  const column = ACTIVITY_FILTER_COLUMNS.get(condition.field);
-  if (!column) return;
-  const quoted = `"${column}"`;
-  const operator = condition.operator ?? "equals";
-  if (operator === "equals") {
-    if (Array.isArray(condition.value)) {
-      values.push(condition.value.map(String));
-      clauses.push(`${quoted}::text = any($${values.length}::text[])`);
-      return;
-    }
-    values.push(condition.value);
-    clauses.push(`${quoted} = $${values.length}`);
-  } else if (operator === "not_equals") {
-    if (Array.isArray(condition.value)) {
-      values.push(condition.value.map(String));
-      clauses.push(`${quoted}::text <> all($${values.length}::text[])`);
-      return;
-    }
-    values.push(condition.value);
-    clauses.push(`${quoted} <> $${values.length}`);
-  } else if (operator === "in" && Array.isArray(condition.value)) {
-    values.push(condition.value.map(String));
-    clauses.push(`${quoted}::text = any($${values.length}::text[])`);
-  } else if (operator === "not_in" && Array.isArray(condition.value)) {
-    values.push(condition.value.map(String));
-    clauses.push(`${quoted}::text <> all($${values.length}::text[])`);
-  } else if (operator === "contains" && typeof condition.value === "string") {
-    values.push(`%${condition.value}%`);
-    clauses.push(`${quoted} ilike $${values.length}`);
-  } else if (operator === "gte") {
-    values.push(condition.value);
-    clauses.push(`${quoted} >= $${values.length}`);
-  } else if (operator === "lte") {
-    values.push(condition.value);
-    clauses.push(`${quoted} <= $${values.length}`);
-  } else if (operator === "greater_than") {
-    values.push(condition.value);
-    clauses.push(`${quoted} > $${values.length}`);
-  } else if (operator === "less_than") {
-    values.push(condition.value);
-    clauses.push(`${quoted} < $${values.length}`);
-  }
-}
-
-function buildWhere(user: TenantUser, filters: ActivityFilterConfig | null) {
+function buildWhere(user: TenantUser, filters: ActivityFilterInput[] | null) {
   const values: unknown[] = [];
   const clauses = [tenantWhere(user, values)];
-  for (const condition of filters?.conditions ?? []) {
-    if (!condition?.field) continue;
-    addActivityCondition(clauses, values, condition);
-  }
+  buildGroupedFilterClause(clauses, values, filters, ACTIVITY_FILTER_COLUMNS);
   return { sql: `where ${clauses.join(" and ")}`, values };
 }
 
@@ -214,11 +180,14 @@ async function hydrateActivities(user: TenantUser, activities: any[]) {
   }));
 }
 
-export async function listActivitiesForTenant(user: TenantUser, limit: number, filters: ActivityFilterConfig | null, page = 1) {
+export async function listActivitiesForTenant(user: TenantUser, limit: number, filters: ActivityFilterInput[] | null, page = 1) {
   const currentLimit = Math.min(500, Math.max(1, Number.isFinite(limit) ? limit : 100));
   const currentPage = Math.max(1, Number.isFinite(page) ? page : 1);
   const offset = (currentPage - 1) * currentLimit;
-  const where = buildWhere(user, filters);
+  // "Current user/team tokens" -- see the matching comment in leads-postgres.ts's own
+  // listLeadsForTenant.
+  const resolvedFilters = await substituteUserTokens(filters, user);
+  const where = buildWhere(user, resolvedFilters);
   const [countRow, activities] = await Promise.all([
     queryOne<{ count: number }>(`select count(*)::int as count from "Activity" ${where.sql}`, where.values),
     query<any>(
@@ -271,7 +240,23 @@ export async function createActivityForTenant(user: TenantUser, payload: Record<
   if (hydrated.opportunityId) {
     await runAutomationsForEvent(user, "ACTIVITY_CREATED_ON_OPPORTUNITY", "ACTIVITY", hydrated.id, hydrated).catch(() => undefined);
   }
+  await enqueueWebhookEvent(user.tenantId, "ACTIVITY_CREATED", hydrated).catch(() => undefined);
+  await enqueueAppEvent(user.tenantId, "ACTIVITY_CREATED", hydrated).catch(() => undefined);
+  await refreshNbaForActivity(user, hydrated).catch(() => undefined);
+  await invalidateReportRollupsForTenant(user.tenantId).catch(() => undefined);
   return hydrated;
+}
+
+// Event-based NBA refresh (gap checklist: "worker job... plus event-based refresh on
+// lead/opportunity/activity/task/communication/scoring changes") -- an Activity logged
+// against a Lead/Opportunity is a real signal that record's recommendations may be stale
+// (e.g. a just-logged call satisfies what a "call this lead" recommendation was suggesting).
+// Dynamic import: next-best-action.ts already imports createActivityForTenant from this
+// file, so a static import back would be circular.
+async function refreshNbaForActivity(user: TenantUser, hydrated: { leadId?: string | null; opportunityId?: string | null }) {
+  const { refreshNextBestActionsForRecord } = await import("@/lib/server/next-best-action");
+  if (hydrated.leadId) await refreshNextBestActionsForRecord(user, "LEAD", hydrated.leadId);
+  if (hydrated.opportunityId) await refreshNextBestActionsForRecord(user, "OPPORTUNITY", hydrated.opportunityId);
 }
 
 function diff(before: Record<string, any>, after: Record<string, any>) {
@@ -321,6 +306,10 @@ export async function updateActivityForTenant(user: TenantUser, id: string, payl
   if (hydrated.opportunityId) {
     await runAutomationsForEvent(user, "ACTIVITY_UPDATED_ON_OPPORTUNITY", "ACTIVITY", hydrated.id, hydrated).catch(() => undefined);
   }
+  await enqueueWebhookEvent(user.tenantId, "ACTIVITY_UPDATED", hydrated).catch(() => undefined);
+  await enqueueAppEvent(user.tenantId, "ACTIVITY_UPDATED", hydrated).catch(() => undefined);
+  await refreshNbaForActivity(user, hydrated).catch(() => undefined);
+  await invalidateReportRollupsForTenant(user.tenantId).catch(() => undefined);
   return hydrated;
 }
 

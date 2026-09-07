@@ -1,5 +1,39 @@
-import { describe, it, expect } from "vitest";
-import { formatInvoiceNumber, getCurrentFinancialYear, computeTaxSplit } from "@/lib/server/partner-invoices";
+import { describe, it, expect, vi, beforeEach } from "vitest";
+
+const { queryOneMock, queryMock } = vi.hoisted(() => ({
+  queryOneMock: vi.fn(),
+  queryMock: vi.fn(),
+}));
+
+vi.mock("@/lib/db/query", () => ({
+  query: queryMock,
+  queryOne: queryOneMock,
+}));
+vi.mock("@/lib/server/crm", () => ({
+  createAuditLog: vi.fn(async () => null),
+}));
+vi.mock("@/lib/server/payouts", () => ({
+  getPartnerPayoutSettingsForTenant: vi.fn(async () => ({})),
+}));
+vi.mock("@/lib/server/partner-access", () => ({
+  getPayoutVisiblePartnerUserIds: vi.fn(async () => []),
+  resolvePartnerRollupTarget: vi.fn(async () => ({ memberUserIds: [] })),
+}));
+vi.mock("@/lib/storage/file-storage", () => ({
+  readPrivateFile: vi.fn(),
+  writePrivateFile: vi.fn(),
+}));
+vi.mock("@/lib/repositories/files-postgres", () => ({
+  getFileObjectForEntity: vi.fn(),
+  upsertFileObjectForTenant: vi.fn(),
+}));
+
+import {
+  formatInvoiceNumber,
+  getCurrentFinancialYear,
+  computeTaxSplit,
+  cancelAndReissuePartnerInvoice,
+} from "@/lib/server/partner-invoices";
 
 describe("formatInvoiceNumber", () => {
   it("simple {prefix}-{counter} pattern", () => {
@@ -84,5 +118,34 @@ describe("computeTaxSplit — GST place-of-supply logic", () => {
     const result = computeTaxSplit(1000, 18, null, "Karnataka", true);
     expect(result.igstAmount).toBe(180);
     expect(result.cgstAmount).toBe(0);
+  });
+});
+
+describe("cancelAndReissuePartnerInvoice — entitlement gating ordering", () => {
+  beforeEach(() => {
+    queryOneMock.mockReset();
+    queryMock.mockReset();
+  });
+
+  it("rejects the cancellation before writing any state when Payouts is disabled for the tenant", async () => {
+    queryOneMock.mockImplementation(async (sql: string) => {
+      if (String(sql).includes('from "TenantFeature"')) return { payoutsEnabled: false };
+      // If the gate check didn't run first, the code would reach this select next --
+      // returning a real row here would let the bug (cancel-before-gate) proceed further.
+      if (String(sql).includes('from "PartnerInvoice"')) return { id: "invoice-1", status: "ISSUED", payoutId: "payout-1" };
+      return null;
+    });
+
+    await expect(
+      cancelAndReissuePartnerInvoice(
+        { id: "admin-1", tenantId: "tenant-1", isTenantAdmin: true },
+        "invoice-1",
+        "Wrong amount",
+      ),
+    ).rejects.toThrow("FEATURE_DISABLED");
+
+    // The concrete regression this guards against: no cancellation UPDATE should ever
+    // be issued for a disabled tenant, not even a since-reverted one.
+    expect(queryOneMock.mock.calls.some((call) => String(call[0]).includes('set "status" = \'CANCELLED\''))).toBe(false);
   });
 });

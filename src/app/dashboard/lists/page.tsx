@@ -16,7 +16,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { StandardDialog } from "@/components/common/standard-dialog";
-import { AdvancedFilterModal, FilterGroup } from "@/components/filters/advanced-filter-modal";
+import { AdvancedFilterDrawer, FilterGroup } from "@/components/filters/advanced-filter-drawer";
 import { formatWorkspaceDateTime } from "@/lib/date-format";
 import type { FilterField } from "@/types/filters";
 
@@ -37,6 +37,8 @@ const LEAD_FILTER_FIELDS: FilterField[] = [
     },
     { label: "Source", key: "source", type: "text" },
     { label: "Score", key: "score", type: "number" },
+    { label: "Created", key: "createdAt", type: "date" },
+    { label: "Tags", key: "tags", type: "tags" },
 ];
 
 type LeadListSummary = {
@@ -90,6 +92,17 @@ export default function LeadListsPage() {
             mountedRef.current = false;
         };
     }, [fetchLists]);
+
+    // Lets the global create menu (header.tsx) open this page's own real "New List" dialog on
+    // load -- read via window.location, not next/navigation's useSearchParams, matching this
+    // app's existing convention (views/page.tsx, tasks/page.tsx) since this page isn't wrapped
+    // in a Suspense boundary.
+    useEffect(() => {
+        if (new URLSearchParams(window.location.search).get("create") === "1") {
+            setOpen(true);
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
 
     const createList = async () => {
         if (!form.name.trim()) {
@@ -316,9 +329,20 @@ export default function LeadListsPage() {
                 </div>
             </StandardDialog>
 
-            <AdvancedFilterModal
+            <AdvancedFilterDrawer
                 open={filterOpen}
                 onClose={() => setFilterOpen(false)}
+                initialGroups={filters}
+                storageKey="lists"
+                previewCount={async (groups) => {
+                    const nonEmpty = groups
+                        .map((group) => ({ ...group, conditions: group.conditions.filter((condition) => condition.field) }))
+                        .filter((group) => group.conditions.length > 0);
+                    const params = new URLSearchParams({ page: "1", limit: "1" });
+                    if (nonEmpty.length) params.set("filters", JSON.stringify(nonEmpty));
+                    const response = await apiFetch<{ meta?: { total: number } } | any[]>(`/leads?${params.toString()}`);
+                    return Array.isArray(response) ? response.length : response.meta?.total ?? 0;
+                }}
                 fields={LEAD_FILTER_FIELDS}
                 onApply={setFilters}
             />

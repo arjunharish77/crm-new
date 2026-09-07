@@ -16,7 +16,7 @@ export async function PATCH(
 
     const body = await request.json().catch(() => ({}));
     const { id } = await params;
-    const updated = await updateTenantScopedUser(user.tenantId, id, body);
+    const updated = await updateTenantScopedUser(user.tenantId, id, body, { id: user.id, tenantId: user.tenantId });
     return NextResponse.json(updated);
   } catch (error) {
     if (error instanceof Error && error.message === "UNAUTHORIZED") return unauthorized();

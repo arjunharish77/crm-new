@@ -9,6 +9,7 @@ import { CheckCircle2 } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useSearchParams } from "next/navigation";
+import { matchesLogicRule, type LogicRule } from "@/lib/forms/visibility";
 
 interface FormConfig {
     fields: any[];
@@ -18,8 +19,8 @@ interface FormConfig {
     customCss?: string;
     submitButtonText?: string;
     layoutColumns?: number;
-    tabs?: Array<{ id: string; label: string }>;
-    sections?: Array<{ id: string; tabId: string; label: string }>;
+    tabs?: Array<{ id: string; label: string; logic?: LogicRule }>;
+    sections?: Array<{ id: string; tabId: string; label: string; logic?: LogicRule }>;
     useMultiStep?: boolean;
     showSectionNames?: boolean;
 }
@@ -45,6 +46,10 @@ export function PublicFormRenderer({ slug, config }: RendererProps) {
     const [submitting, setSubmitting] = useState(false);
     const [submitted, setSubmitted] = useState(false);
     const [activeTabId, setActiveTabId] = useState(config.tabs?.[0]?.id || "tab_1");
+    // Stable per-page-load id, not tied to any user identity -- just enough to bucket
+    // "did this same visit reach tab N" for the drop-off report without correlating to a
+    // real person.
+    const [sessionId] = useState(() => (typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`));
     const fields = Array.isArray(config.fields) ? config.fields : [];
     const tabs = config.tabs?.length ? config.tabs : [{ id: "tab_1", label: "Tab 1" }];
     const sections = config.sections?.length ? config.sections : [{ id: "section_1", tabId: tabs[0].id, label: "Section 1" }];
@@ -77,36 +82,90 @@ export function PublicFormRenderer({ slug, config }: RendererProps) {
         window.localStorage.setItem(draftKey, JSON.stringify(formData));
     }, [draftKey, formData, submitted]);
 
-    // Conditional Logic Evaluation
-    const visibleFields = useMemo(() => {
-        const opportunityTypeSelector = fields.find(f => f.mapping === "opportunity.opportunityTypeId");
-        const selectedOpportunityTypeId = opportunityTypeSelector ? formData[opportunityTypeSelector.id] : undefined;
-        return fields.filter(field => {
-            // Type-driven visibility: an opportunity-module field tagged with an authoring-time
-            // opportunityTypeId is only shown once the real selector field matches that tag.
-            // Fields added under "All types" carry no tag and stay always-visible.
-            if (field.sourceModule === "opportunity" && field.opportunityTypeId && field.opportunityTypeId !== selectedOpportunityTypeId) {
-                return false;
-            }
+    // Drop-off telemetry: fires on mount (tab 0) and every subsequent tab change, completely
+    // separate from the final submit call -- this is the only thing that can ever tell you
+    // how far a real visitor got before abandoning a multi-tab form. sendBeacon is preferred
+    // since it's designed to survive the page unloading immediately after (e.g. closing the
+    // tab mid-abandon), which a normal fetch call is not guaranteed to.
+    useEffect(() => {
+        if (submitted) return;
+        const tabIndex = Math.max(0, tabs.findIndex((tab) => tab.id === activeTabId));
+        const payload = JSON.stringify({ sessionId, tabId: activeTabId, tabIndex });
+        const url = `/api/public/forms/${slug}/progress`;
+        if (typeof navigator !== "undefined" && typeof navigator.sendBeacon === "function") {
+            navigator.sendBeacon(url, new Blob([payload], { type: "application/json" }));
+        } else {
+            fetch(url, { method: "POST", body: payload, headers: { "Content-Type": "application/json" }, keepalive: true }).catch(() => undefined);
+        }
+        // Deliberately scoped to activeTabId/submitted only -- sessionId/slug never change
+        // after mount, and tabs is a fresh array reference every render in the single-tab
+        // fallback case, which would otherwise re-fire the beacon on every keystroke.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [activeTabId, submitted]);
 
-            if (!field.logic || !field.logic.fieldId) return true;
+    // A field's own visibility, ignoring whatever section/tab it lives in -- used both to
+    // build the final visibleFields list and to decide whether a section/tab has anything
+    // left to show at all (e.g. a section whose only fields were stripped server-side for a
+    // disabled feature, or hidden by their own conditions, shouldn't render as an empty shell).
+    const opportunityTypeSelector = fields.find(f => f.mapping === "opportunity.opportunityTypeId");
+    const selectedOpportunityTypeId = opportunityTypeSelector ? formData[opportunityTypeSelector.id] : undefined;
+    const isFieldSelfVisible = (field: any) => {
+        if (field.sourceModule === "opportunity" && field.opportunityTypeId && field.opportunityTypeId !== selectedOpportunityTypeId) {
+            return false;
+        }
+        return matchesLogicRule(formData, field.logic);
+    };
+    const effectiveFieldTabId = (field: any) => field.tabId || tabs[0]?.id;
+    const effectiveFieldSectionId = (field: any) => field.sectionId || sections.find((section) => section.tabId === effectiveFieldTabId(field))?.id;
 
-            const sourceValue = formData[field.logic.fieldId];
-            const targetValue = field.logic.value;
-            let isMatch = false;
-
-            switch (field.logic.operator) {
-                case 'equals': isMatch = String(sourceValue) === String(targetValue); break;
-                case 'not_equals': isMatch = String(sourceValue) !== String(targetValue); break;
-                case 'contains': isMatch = String(sourceValue).includes(String(targetValue)); break;
-                case 'gt': isMatch = Number(sourceValue) > Number(targetValue); break;
-                case 'lt': isMatch = Number(sourceValue) < Number(targetValue); break;
-                default: isMatch = String(sourceValue) === String(targetValue);
-            }
-
-            return field.logic.action === 'SHOW' ? isMatch : !isMatch;
+    // Section/tab-level conditions -- same rule shape and evaluator as fields. A section/tab
+    // also needs at least one field that would actually be shown; otherwise it's an empty
+    // shell (e.g. every field in it stripped or independently hidden) with nothing to render.
+    const visibleSections = useMemo(
+        () =>
+            sections.filter(
+                (section) =>
+                    matchesLogicRule(formData, section.logic) &&
+                    fields.some((field) => isFieldSelfVisible(field) && effectiveFieldSectionId(field) === section.id),
+            ),
+        [sections, fields, formData],
+    );
+    const visibleTabs = useMemo(() => {
+        return tabs.filter((tab) => {
+            if (!matchesLogicRule(formData, tab.logic)) return false;
+            // A tab whose own condition passes but whose every section is hidden has
+            // nothing to show either -- skip it from the tab strip and stepper nav.
+            const tabSectionIds = visibleSections.filter((section) => section.tabId === tab.id).map((section) => section.id);
+            return tabSectionIds.length > 0;
         });
-    }, [fields, formData]);
+    }, [tabs, visibleSections, formData]);
+
+    // Conditional Logic Evaluation. A field inside a hidden section/tab is suppressed
+    // too -- not just the section/tab header -- so a required field that's only reachable
+    // through a hidden section can't block submission, and a value entered before a
+    // section/tab was hidden can't leak into the payload.
+    const visibleFields = useMemo(() => {
+        const visibleTabIds = new Set(visibleTabs.map((tab) => tab.id));
+        const visibleSectionIds = new Set(visibleSections.map((section) => section.id));
+        return fields.filter(field => {
+            if (!isFieldSelfVisible(field)) return false;
+
+            const effectiveTabId = effectiveFieldTabId(field);
+            if (effectiveTabId !== undefined && !visibleTabIds.has(effectiveTabId)) return false;
+            const effectiveSectionId = effectiveFieldSectionId(field);
+            if (effectiveSectionId !== undefined && !visibleSectionIds.has(effectiveSectionId)) return false;
+
+            return true;
+        });
+    }, [fields, formData, visibleTabs, visibleSections, tabs, sections]);
+
+    useEffect(() => {
+        if (visibleTabs.length && !visibleTabs.some((tab) => tab.id === activeTabId)) {
+            setActiveTabId(visibleTabs[0].id);
+        }
+    }, [visibleTabs, activeTabId]);
+
+    const activeTabIndex = visibleTabs.findIndex((tab) => tab.id === activeTabId);
 
     const isMissingRequiredValue = (value: unknown) => {
         if (Array.isArray(value)) return value.length === 0;
@@ -157,10 +216,14 @@ export function PublicFormRenderer({ slug, config }: RendererProps) {
                 activityId: searchParams.get("activityId"),
             };
 
-            await apiFetch(`/public/forms/${slug}/submit`, {
+            const result = await apiFetch<{ warnings?: string[] }>(`/public/forms/${slug}/submit`, {
                 method: 'POST',
                 body: JSON.stringify(payload)
             });
+
+            if (Array.isArray(result?.warnings)) {
+                result.warnings.forEach((warning) => toast.warning(warning));
+            }
 
             window.localStorage.removeItem(draftKey);
             setSubmitted(true);
@@ -212,9 +275,9 @@ export function PublicFormRenderer({ slug, config }: RendererProps) {
                         This form does not have any fields yet.
                     </div>
                 )}
-                {tabs.length > 1 && (
+                {visibleTabs.length > 1 && (
                     <div className="flex gap-2 border-b border-gray-200 overflow-x-auto">
-                        {tabs.map((tab) => (
+                        {visibleTabs.map((tab) => (
                             <button
                                 key={tab.id}
                                 type="button"
@@ -226,7 +289,7 @@ export function PublicFormRenderer({ slug, config }: RendererProps) {
                         ))}
                     </div>
                 )}
-                {sections.filter((section) => section.tabId === activeTabId).map((section) => {
+                {visibleSections.filter((section) => section.tabId === activeTabId).map((section) => {
                     const sectionFields = visibleFields.filter((field) => (field.tabId || tabs[0].id) === activeTabId && (field.sectionId || sections.find((item) => item.tabId === activeTabId)?.id) === section.id);
                     if (sectionFields.length === 0) return null;
                     return (
@@ -350,13 +413,13 @@ export function PublicFormRenderer({ slug, config }: RendererProps) {
                 })}
 
                 <div className="flex gap-2">
-                    {tabs.findIndex((tab) => tab.id === activeTabId) > 0 && (
-                        <Button type="button" variant="outline" className="w-full py-4 text-base font-bold" onClick={() => setActiveTabId(tabs[tabs.findIndex((tab) => tab.id === activeTabId) - 1].id)}>
+                    {activeTabIndex > 0 && (
+                        <Button type="button" variant="outline" className="w-full py-4 text-base font-bold" onClick={() => setActiveTabId(visibleTabs[activeTabIndex - 1].id)}>
                             Previous
                         </Button>
                     )}
-                    {config.useMultiStep && tabs.findIndex((tab) => tab.id === activeTabId) < tabs.length - 1 ? (
-                        <Button type="button" className="w-full py-4 text-base font-bold" onClick={() => setActiveTabId(tabs[tabs.findIndex((tab) => tab.id === activeTabId) + 1].id)}>
+                    {config.useMultiStep && activeTabIndex >= 0 && activeTabIndex < visibleTabs.length - 1 ? (
+                        <Button type="button" className="w-full py-4 text-base font-bold" onClick={() => setActiveTabId(visibleTabs[activeTabIndex + 1].id)}>
                             Next
                         </Button>
                     ) : (

@@ -2,11 +2,15 @@ import { randomUUID } from "crypto";
 import { createAuditLog } from "@/lib/server/crm";
 import { query as pgQuery, queryOne as pgQueryOne } from "@/lib/db/query";
 import { trainViaMlService, scoreViaMlService } from "@/lib/server/ml-service-client";
+import { refreshNextBestActionsForRecord } from "@/lib/server/next-best-action";
+import { assertModuleEnabled } from "@/lib/server/module-entitlements";
+import { computeTelephonySignals, type TelephonyCallSignal, type TelephonyDispositionSignal } from "@/lib/server/telephony-signals";
 
 type TenantUser = {
   id: string;
   tenantId: string | null;
   role?: { permissions?: any } | string | null;
+  isPlatformAdmin?: boolean;
 };
 
 export type ScoringSettings = {
@@ -59,6 +63,10 @@ type ScoreResult = {
   suggestedCloseDateDeltaDays?: number | null;
   nextBestAction?: string | null;
   nextBestActivityType?: string | null;
+  // Telephony-derived: composite of answered-call rate, disposition quality, talk time, and
+  // missed callbacks. Null (not 0) when the record has no call history at all -- distinct
+  // from "we checked and it's genuinely low."
+  callEngagementScore?: number | null;
   topDrivers?: Array<{ type: "POSITIVE" | "NEGATIVE" | "INFO"; label: string; value?: unknown }>;
   missingDataWarnings?: string[];
   similarRecordIds?: string[];
@@ -528,11 +536,35 @@ function firstDate(records: any[], key = "createdAt") {
   return first;
 }
 
+function telephonyFeatureFields(
+  calls: TelephonyCallSignal[],
+  dispositions: TelephonyDispositionSignal[],
+  tasksById: Map<string, { status?: string | null }>,
+  now: Date,
+) {
+  const signals = computeTelephonySignals(calls, dispositions, tasksById, now);
+  return {
+    callCount: signals.callCount,
+    answeredCallRate: signals.answeredCallRate,
+    lastCallOutcome: signals.lastCallOutcome,
+    callCadenceDays: signals.callCadenceDays,
+    missedCallbackCount: signals.missedCallbackCount,
+    avgTalkTimeSeconds: signals.avgTalkTimeSeconds,
+    dispositionQualityScore: signals.dispositionQualityScore,
+    lastDispositionOutcome: signals.lastDispositionOutcome,
+    preferredContactWindow: signals.preferredContactWindow,
+    callEngagementScore: signals.callEngagementScore,
+  };
+}
+
 export function buildLeadFeatureSnapshot(input: {
   lead: any;
   opportunities: any[];
   activities: any[];
   tasks: any[];
+  calls?: TelephonyCallSignal[];
+  dispositions?: TelephonyDispositionSignal[];
+  tasksById?: Map<string, { status?: string | null }>;
   now?: Date;
 }): FeatureSnapshot {
   const now = input.now ?? new Date();
@@ -559,6 +591,7 @@ export function buildLeadFeatureSnapshot(input: {
       firstResponseMinutes: firstActivityAt && input.lead.createdAt
         ? Math.max(0, Math.round((new Date(firstActivityAt).getTime() - new Date(input.lead.createdAt).getTime()) / 60000))
         : null,
+      ...telephonyFeatureFields(input.calls ?? [], input.dispositions ?? [], input.tasksById ?? new Map(), now),
     },
   };
 }
@@ -568,6 +601,9 @@ export function buildOpportunityFeatureSnapshot(input: {
   activities: any[];
   tasks: any[];
   stage: any;
+  calls?: TelephonyCallSignal[];
+  dispositions?: TelephonyDispositionSignal[];
+  tasksById?: Map<string, { status?: string | null }>;
   now?: Date;
 }): FeatureSnapshot {
   const now = input.now ?? new Date();
@@ -591,6 +627,7 @@ export function buildOpportunityFeatureSnapshot(input: {
       completedTaskCount: completedTasks(input.tasks),
       overdueTaskCount: overdueTasks(input.tasks, now),
       lastActivityAgeDays: daysBetween(latestActivityAt, now),
+      ...telephonyFeatureFields(input.calls ?? [], input.dispositions ?? [], input.tasksById ?? new Map(), now),
     },
   };
 }
@@ -670,6 +707,8 @@ function leadScoreFromFeatures(snapshot: FeatureSnapshot, lead: any, calibration
   const overdueCount = Number(features.overdueTaskCount ?? 0);
   const lastActivityAge = features.lastActivityAgeDays === null ? null : Number(features.lastActivityAgeDays);
   const firstResponseMinutes = features.firstResponseMinutes === null ? null : Number(features.firstResponseMinutes);
+  const callEngagementScore = features.callEngagementScore === null || features.callEngagementScore === undefined ? null : Number(features.callEngagementScore);
+  const missedCallbackCount = Number(features.missedCallbackCount ?? 0);
 
   const fitScore = clampScore(
     35 +
@@ -686,7 +725,12 @@ function leadScoreFromFeatures(snapshot: FeatureSnapshot, lead: any, calibration
     Math.min(Number(features.completedTaskCount ?? 0), 5) * 4 -
     overdueCount * 8 +
     (lastActivityAge === null ? -10 : lastActivityAge <= 7 ? 18 : lastActivityAge <= 30 ? 8 : -8) +
-    (firstResponseMinutes === null ? 0 : firstResponseMinutes <= 60 ? 12 : firstResponseMinutes <= 1440 ? 5 : -5)
+    (firstResponseMinutes === null ? 0 : firstResponseMinutes <= 60 ? 12 : firstResponseMinutes <= 1440 ? 5 : -5) +
+    // Telephony engagement is a light-touch adjustment, not a dominant term -- absent call
+    // history (callEngagementScore === null) contributes nothing, rather than being treated
+    // as a negative signal the way a missing activity/response would be.
+    (callEngagementScore === null ? 0 : (callEngagementScore - 50) * 0.12) -
+    missedCallbackCount * 3
   );
 
   const historicalConfidence = Math.min(100, Math.round((calibration.totalLeadRecords / Math.max(1, settings.minimumHistoricalRecords)) * 100));
@@ -721,10 +765,20 @@ function leadScoreFromFeatures(snapshot: FeatureSnapshot, lead: any, calibration
       { type: activityCount > 0 ? "POSITIVE" : "NEGATIVE", label: "Activity coverage", value: activityCount },
       { type: overdueCount > 0 ? "NEGATIVE" : "POSITIVE", label: "Overdue tasks", value: overdueCount },
       { type: firstResponseMinutes !== null && firstResponseMinutes <= 60 ? "POSITIVE" : "INFO", label: "First response minutes", value: firstResponseMinutes },
+      ...(callEngagementScore === null
+        ? []
+        : [
+            { type: (callEngagementScore >= 60 ? "POSITIVE" : callEngagementScore <= 30 ? "NEGATIVE" : "INFO") as "POSITIVE" | "NEGATIVE" | "INFO", label: "Call engagement", value: callEngagementScore },
+            ...(features.lastCallOutcome ? [{ type: "INFO" as const, label: "Last call outcome", value: features.lastCallOutcome }] : []),
+            ...(missedCallbackCount > 0 ? [{ type: "NEGATIVE" as const, label: "Missed callbacks", value: missedCallbackCount }] : []),
+            ...(features.callCadenceDays != null ? [{ type: "INFO" as const, label: "Call cadence days", value: features.callCadenceDays }] : []),
+            ...(features.preferredContactWindow ? [{ type: "INFO" as const, label: "Preferred contact window", value: features.preferredContactWindow }] : []),
+          ]),
     ],
     expectedResponseLikelihood,
     duplicateRisk,
     staleRisk,
+    callEngagementScore,
     expectedCloseRisk: null,
     suggestedCloseDate: null,
     suggestedCloseDateDeltaDays: null,
@@ -745,6 +799,8 @@ function opportunityScoreFromFeatures(snapshot: FeatureSnapshot, opportunity: an
   const activityCount = Number(features.activityCount ?? 0);
   const overdueCount = Number(features.overdueTaskCount ?? 0);
   const lastActivityAge = features.lastActivityAgeDays === null ? null : Number(features.lastActivityAgeDays);
+  const callEngagementScore = features.callEngagementScore === null || features.callEngagementScore === undefined ? null : Number(features.callEngagementScore);
+  const missedCallbackCount = Number(features.missedCallbackCount ?? 0);
 
   const fitScore = clampScore(35 + stageRate * 35 + priorityRate * 15 + (Number(features.amount ?? 0) > 0 ? 10 : -5));
   const engagementScore = clampScore(
@@ -752,7 +808,9 @@ function opportunityScoreFromFeatures(snapshot: FeatureSnapshot, opportunity: an
     Math.min(activityCount, 8) * 7 +
     Math.min(Number(features.completedTaskCount ?? 0), 5) * 4 -
     overdueCount * 9 +
-    (lastActivityAge === null ? -12 : lastActivityAge <= 7 ? 18 : lastActivityAge <= 30 ? 6 : -12)
+    (lastActivityAge === null ? -12 : lastActivityAge <= 7 ? 18 : lastActivityAge <= 30 ? 6 : -12) +
+    (callEngagementScore === null ? 0 : (callEngagementScore - 50) * 0.12) -
+    missedCallbackCount * 3
   );
   const historicalConfidence = Math.min(100, Math.round((calibration.totalOpportunityRecords / Math.max(1, settings.minimumHistoricalRecords)) * 100));
   const heuristicProbability = clampScore(fitScore * 0.5 + engagementScore * 0.3 + calibration.opportunityOverallWinRate * 20);
@@ -790,10 +848,20 @@ function opportunityScoreFromFeatures(snapshot: FeatureSnapshot, opportunity: an
       { type: activityCount > 0 ? "POSITIVE" : "NEGATIVE", label: "Activity coverage", value: activityCount },
       { type: overdueCount > 0 ? "NEGATIVE" : "POSITIVE", label: "Overdue tasks", value: overdueCount },
       { type: lastActivityAge !== null && lastActivityAge <= 7 ? "POSITIVE" : "INFO", label: "Last activity age days", value: lastActivityAge },
+      ...(callEngagementScore === null
+        ? []
+        : [
+            { type: (callEngagementScore >= 60 ? "POSITIVE" : callEngagementScore <= 30 ? "NEGATIVE" : "INFO") as "POSITIVE" | "NEGATIVE" | "INFO", label: "Call engagement", value: callEngagementScore },
+            ...(features.lastCallOutcome ? [{ type: "INFO" as const, label: "Last call outcome", value: features.lastCallOutcome }] : []),
+            ...(missedCallbackCount > 0 ? [{ type: "NEGATIVE" as const, label: "Missed callbacks", value: missedCallbackCount }] : []),
+            ...(features.callCadenceDays != null ? [{ type: "INFO" as const, label: "Call cadence days", value: features.callCadenceDays }] : []),
+            ...(features.preferredContactWindow ? [{ type: "INFO" as const, label: "Preferred contact window", value: features.preferredContactWindow }] : []),
+          ]),
     ],
     expectedResponseLikelihood: null,
     duplicateRisk: null,
     staleRisk: null,
+    callEngagementScore,
     expectedCloseRisk,
     suggestedCloseDate,
     suggestedCloseDateDeltaDays: closeDeltaDays,
@@ -866,6 +934,7 @@ export async function getScoringSettingsForTenant(user: TenantUser): Promise<Sco
 
 export async function updateScoringSettingsForTenant(user: TenantUser, input: Partial<ScoringSettings>) {
   const tenantId = requireTenantId(user);
+  await assertModuleEnabled(tenantId, "PREDICTIVE_SCORING", { isPlatformAdmin: user.isPlatformAdmin });
   await getScoringSettingsForTenant(user);
   const payload: Record<string, unknown> = {
     updatedAt: new Date().toISOString(),
@@ -981,6 +1050,7 @@ export async function listFeatureCatalogForTenant(user: TenantUser, targetModule
 
 export async function updateFeatureCatalogForTenant(user: TenantUser, items: Array<Record<string, unknown>>) {
   const tenantId = requireTenantId(user);
+  await assertModuleEnabled(tenantId, "PREDICTIVE_SCORING", { isPlatformAdmin: user.isPlatformAdmin });
   const now = new Date().toISOString();
   for (const item of items) {
     const targetModule = item.targetModule === "OPPORTUNITY" ? "OPPORTUNITY" : "LEAD";
@@ -1019,6 +1089,7 @@ export async function updateFeatureCatalogForTenant(user: TenantUser, items: Arr
 
 export async function profileFeatureCatalogForTenant(user: TenantUser) {
   const tenantId = requireTenantId(user);
+  await assertModuleEnabled(tenantId, "PREDICTIVE_SCORING", { isPlatformAdmin: user.isPlatformAdmin });
   const latest = await pgQuery<any>(
     `select distinct on ("recordType", "recordId") "recordType", features
      from "ScoringFeatureSnapshot"
@@ -1122,6 +1193,7 @@ export async function listScoringModelVersionsForTenant(user: TenantUser, target
 
 export async function promoteScoringModelVersion(user: TenantUser, modelVersionId: string, options: { reviewNotes?: string | null; rollbackReason?: string | null } = {}) {
   const tenantId = requireTenantId(user);
+  await assertModuleEnabled(tenantId, "PREDICTIVE_SCORING", { isPlatformAdmin: user.isPlatformAdmin });
   const version = await pgQueryOne<any>(
     `select id, "modelId", status from "ScoringModelVersion" where "tenantId" = $1 and id = $2 limit 1`,
     [tenantId, modelVersionId],
@@ -1181,6 +1253,7 @@ export async function applyManualScoreOverride(user: TenantUser, input: {
   expiresAt?: string | null;
 }) {
   const tenantId = requireTenantId(user);
+  await assertModuleEnabled(tenantId, "PREDICTIVE_SCORING", { isPlatformAdmin: user.isPlatformAdmin });
   const now = new Date().toISOString();
   const existing = await pgQueryOne<any>(
     `select id, "fitScore", "engagementScore", "conversionProbability", "winProbability", "stallRisk",
@@ -1293,6 +1366,7 @@ export async function applyManualScoreOverride(user: TenantUser, input: {
 
 export async function clearManualScoreOverride(user: TenantUser, input: { recordType: RecordType; recordId: string; reason?: string }) {
   const tenantId = requireTenantId(user);
+  await assertModuleEnabled(tenantId, "PREDICTIVE_SCORING", { isPlatformAdmin: user.isPlatformAdmin });
   const now = new Date().toISOString();
   await pgQuery(
     `update "ScoringManualOverride"
@@ -1401,13 +1475,14 @@ async function getModelVersionMetrics(tenantId: string, modelVersionId: string) 
 
 export async function recomputeSelfLearningScoresForTenant(user: TenantUser, input: { targetModules?: RecordType[]; force?: boolean; triggeredBy?: "MANUAL" | "SCHEDULED" | "QUALITY_DRIFT" | "API" } = {}) {
   const tenantId = requireTenantId(user);
+  await assertModuleEnabled(tenantId, "PREDICTIVE_SCORING", { isPlatformAdmin: user.isPlatformAdmin });
   const settings = await getScoringSettingsForTenant(user);
   const targetModules = (input.targetModules?.length ? input.targetModules : settings.targetModules).filter((module): module is RecordType => module === "LEAD" || module === "OPPORTUNITY");
   const controls = featureControls(settings);
 
   const since = new Date();
   since.setDate(since.getDate() - settings.lookbackDays);
-  const [leads, opportunities, stages, activities, tasks] = await Promise.all([
+  const [leads, opportunities, stages, activities, tasks, calls, dispositions] = await Promise.all([
     pgQuery<any>(
       `select id, name, email, phone, company, status, source, score, "ownerId", "createdAt", "updatedAt"
        from "Lead"
@@ -1441,6 +1516,24 @@ export async function recomputeSelfLearningScoresForTenant(user: TenantUser, inp
        limit 5000`,
       [tenantId, since.toISOString()],
     ),
+    pgQuery<any>(
+      `select id, "leadId", "opportunityId", status, duration, "startedAt"
+       from "TelephonyCallLog"
+       where "tenantId" = $1 and "startedAt" >= $2
+       order by "startedAt" desc
+       limit 5000`,
+      [tenantId, since.toISOString()],
+    ),
+    pgQuery<any>(
+      `select cd.id, cd."leadId", cd."opportunityId", cd."interestLevel", cd."callbackAt", cd."taskId", cd."createdAt",
+              o.name as "outcomeName"
+       from "CallDisposition" cd
+       left join "DispositionOutcome" o on o.id = cd."dispositionOutcomeId"
+       where cd."tenantId" = $1 and cd."createdAt" >= $2
+       order by cd."createdAt" desc
+       limit 5000`,
+      [tenantId, since.toISOString()],
+    ),
   ]);
 
   const opportunitiesByLeadId = groupByNullableId(opportunities, "leadId");
@@ -1448,6 +1541,11 @@ export async function recomputeSelfLearningScoresForTenant(user: TenantUser, inp
   const tasksByLeadId = groupByNullableId(tasks, "leadId");
   const activitiesByOpportunityId = groupByNullableId(activities, "opportunityId");
   const tasksByOpportunityId = groupByNullableId(tasks, "opportunityId");
+  const callsByLeadId = groupByNullableId(calls, "leadId");
+  const callsByOpportunityId = groupByNullableId(calls, "opportunityId");
+  const dispositionsByLeadId = groupByNullableId(dispositions, "leadId");
+  const dispositionsByOpportunityId = groupByNullableId(dispositions, "opportunityId");
+  const tasksById = new Map(tasks.map((task) => [task.id, task]));
   const stageById = new Map(stages.map((stage) => [stage.id, stage]));
   const opportunityWon = (opportunity: any) => isWonStage(stageById.get(opportunity.stageId));
 
@@ -1483,6 +1581,9 @@ export async function recomputeSelfLearningScoresForTenant(user: TenantUser, inp
         opportunities: opportunitiesByLeadId.get(lead.id) ?? [],
         activities: activitiesByLeadId.get(lead.id) ?? [],
         tasks: tasksByLeadId.get(lead.id) ?? [],
+        calls: callsByLeadId.get(lead.id) ?? [],
+        dispositions: dispositionsByLeadId.get(lead.id) ?? [],
+        tasksById,
       });
 
       const holdoutSamples = holdout.map((lead) => {
@@ -1655,6 +1756,9 @@ export async function recomputeSelfLearningScoresForTenant(user: TenantUser, inp
         stage: stageById.get(opportunity.stageId),
         activities: activitiesByOpportunityId.get(opportunity.id) ?? [],
         tasks: tasksByOpportunityId.get(opportunity.id) ?? [],
+        calls: callsByOpportunityId.get(opportunity.id) ?? [],
+        dispositions: dispositionsByOpportunityId.get(opportunity.id) ?? [],
+        tasksById,
       });
 
       const holdoutSamples = holdout.map((opportunity) => {
@@ -1861,6 +1965,7 @@ async function persistScore(user: TenantUser, snapshot: FeatureSnapshot, score: 
     missingDataWarnings: score.missingDataWarnings ?? [],
     similarRecordIds: score.similarRecordIds ?? [],
     suggestedDataImprovements: score.suggestedDataImprovements ?? [],
+    callEngagementScore: score.callEngagementScore ?? null,
     featureSnapshotId: featureSnapshot.id,
     calculatedAt: now,
     updatedAt: now,
@@ -1875,10 +1980,10 @@ async function persistScore(user: TenantUser, snapshot: FeatureSnapshot, score: 
            "expectedResponseLikelihood" = $10, "duplicateRisk" = $11, "staleRisk" = $12, "expectedCloseRisk" = $13,
            "suggestedCloseDate" = $14, "suggestedCloseDateDeltaDays" = $15, "nextBestAction" = $16,
            "nextBestActivityType" = $17, "topDrivers" = $18, "missingDataWarnings" = $19,
-           "similarRecordIds" = $20, "suggestedDataImprovements" = $21,
+           "similarRecordIds" = $20, "suggestedDataImprovements" = $21, "callEngagementScore" = $22,
            "overrideReason" = null, "overrideUntil" = null, "overrideOwnerId" = null, "overriddenAt" = null,
-           "featureSnapshotId" = $22, "modelVersionId" = $23, "calculatedAt" = $24, "updatedAt" = $25
-       where "tenantId" = $26 and id = $27`,
+           "featureSnapshotId" = $23, "modelVersionId" = $24, "calculatedAt" = $25, "updatedAt" = $26
+       where "tenantId" = $27 and id = $28`,
       [
         payload.fitScore,
         payload.engagementScore,
@@ -1901,6 +2006,7 @@ async function persistScore(user: TenantUser, snapshot: FeatureSnapshot, score: 
         jsonb(payload.missingDataWarnings),
         jsonb(payload.similarRecordIds),
         jsonb(payload.suggestedDataImprovements),
+        payload.callEngagementScore,
         payload.featureSnapshotId,
         modelVersionId,
         payload.calculatedAt,
@@ -1917,10 +2023,10 @@ async function persistScore(user: TenantUser, snapshot: FeatureSnapshot, score: 
          "winProbability", "stallRisk", "scoreBand", confidence, reasons, source, "expectedResponseLikelihood",
          "duplicateRisk", "staleRisk", "expectedCloseRisk", "suggestedCloseDate", "suggestedCloseDateDeltaDays",
          "nextBestAction", "nextBestActivityType", "topDrivers", "missingDataWarnings", "similarRecordIds",
-         "suggestedDataImprovements", "featureSnapshotId",
+         "suggestedDataImprovements", "callEngagementScore", "featureSnapshotId",
          "calculatedAt", "updatedAt", "createdAt")
        values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17,
-               $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $28, $28)`,
+               $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $29, $29)`,
       [
         scoreId,
         tenantId,
@@ -1948,6 +2054,7 @@ async function persistScore(user: TenantUser, snapshot: FeatureSnapshot, score: 
         jsonb(payload.missingDataWarnings),
         jsonb(payload.similarRecordIds),
         jsonb(payload.suggestedDataImprovements),
+        payload.callEngagementScore,
         payload.featureSnapshotId,
         now,
       ],
@@ -1961,5 +2068,21 @@ async function persistScore(user: TenantUser, snapshot: FeatureSnapshot, score: 
      values ($1, $2, $3, $4, $5, $6, $7, 'RECOMPUTE', $8)`,
     [randomUUID(), tenantId, scoreId, score.recordType, score.recordId, existing ? jsonb(existing) : null, jsonb(payload), now],
   );
+
+  // Event-based NBA refresh (gap checklist: "worker job... plus event-based refresh on
+  // lead/opportunity/activity/task/communication/scoring changes") -- deliberately gated on a
+  // real score-BAND transition, not every recompute: this function runs inside a per-tenant
+  // bulk loop over up to 2000 Leads/Opportunities (recomputeSelfLearningScoresForTenant), and
+  // an unconditional refresh call here would mean up to 2000 extra NBA-generation passes per
+  // recompute run. NBA's computeCandidateScore does read the raw conversionProbability/
+  // winProbability when available (falling back to scoreBandToNumber(band) only when neither
+  // exists), so this gate is a deliberate approximation, not a precise "did the NBA score
+  // actually change" check -- a band crossing is treated as the practical proxy for "changed
+  // enough to be worth a refresh," trading a bit of missed nuance (a same-band probability
+  // swing that DOES move the propensity term) for keeping this cheap on the bulk recompute path.
+  if (existing && existing.scoreBand !== payload.scoreBand) {
+    await refreshNextBestActionsForRecord(user, score.recordType, score.recordId).catch(() => undefined);
+  }
+
   return true;
 }

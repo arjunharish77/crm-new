@@ -17,6 +17,7 @@ interface RetentionPolicy {
     activityRetentionDays: number;
     auditLogRetentionDays: number;
     deletedRecordsRetentionDays: number;
+    marketplaceAppLogRetentionDays: number;
     lastEnforcedAt: string | null;
     tenant?: {
         id: string;
@@ -62,9 +63,10 @@ export default function RetentionPage() {
     };
 
     const updatePolicy = async (tenantId: string | null, values: Partial<RetentionPolicy>) => {
+        if (!tenantId) return;
         try {
             const res = await fetch(
-                `/api/platform-admin/retention/policy/${tenantId || 'global'}`,
+                `/api/platform-admin/retention/policy/${tenantId}`,
                 {
                     method: "PATCH",
                     headers: {
@@ -101,7 +103,7 @@ export default function RetentionPage() {
             if (res.ok) {
                 const results = await res.json();
                 toast.success(
-                    `Enforcement complete! Deleted: ${results.leadsDeleted} leads, ${results.opportunitiesDeleted} opps, ${results.activitiesDeleted} activities, ${results.auditLogsDeleted} logs`
+                    `Enforcement complete across ${results.tenantsProcessed} tenant(s) -- anonymized: ${results.leadsAnonymized} leads, ${results.opportunitiesAnonymized} opportunities, ${results.activitiesAnonymized} activities; purged: ${results.auditLogsDeleted} audit logs`
                 );
                 fetchPolicies();
             } else {
@@ -209,6 +211,11 @@ export default function RetentionPage() {
                                                     value={editingPolicy.auditLogRetentionDays}
                                                     onChange={(value) => setEditingPolicy({ ...editingPolicy, auditLogRetentionDays: value })}
                                                 />
+                                                <RetentionInput
+                                                    label="Marketplace App Logs (days)"
+                                                    value={editingPolicy.marketplaceAppLogRetentionDays}
+                                                    onChange={(value) => setEditingPolicy({ ...editingPolicy, marketplaceAppLogRetentionDays: value })}
+                                                />
                                             </div>
                                             <div className="mt-4 flex justify-end">
                                                     <Button
@@ -217,6 +224,7 @@ export default function RetentionPage() {
                                                             opportunityRetentionDays: editingPolicy.opportunityRetentionDays,
                                                             activityRetentionDays: editingPolicy.activityRetentionDays,
                                                             auditLogRetentionDays: editingPolicy.auditLogRetentionDays,
+                                                            marketplaceAppLogRetentionDays: editingPolicy.marketplaceAppLogRetentionDays,
                                                         })}
                                                     >
                                                         <Save className="size-4" />
@@ -230,6 +238,7 @@ export default function RetentionPage() {
                                             <RetentionStat label="Opportunities" value={policy.opportunityRetentionDays} />
                                             <RetentionStat label="Activities" value={policy.activityRetentionDays} />
                                             <RetentionStat label="Audit Logs" value={policy.auditLogRetentionDays} />
+                                            <RetentionStat label="Marketplace App Logs" value={policy.marketplaceAppLogRetentionDays} />
                                         </div>
                                     )}
                                 </div>

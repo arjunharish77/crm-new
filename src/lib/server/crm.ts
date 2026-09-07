@@ -6,10 +6,15 @@ import * as pgForms from "@/lib/repositories/forms-postgres";
 import * as pgLeadLists from "@/lib/repositories/lead-lists-postgres";
 import * as pgLeads from "@/lib/repositories/leads-postgres";
 import * as pgOpportunities from "@/lib/repositories/opportunities-postgres";
+import * as pgRecordShare from "@/lib/repositories/record-share-postgres";
 import * as pgReportsDashboards from "@/lib/repositories/reports-dashboards-postgres";
 import * as pgViews from "@/lib/repositories/views-postgres";
 import { SmartViewTab } from "@/types/smart-views";
 import { formatExportDateValue, formatTenantDate, getTenantTimeZone } from "@/lib/server/date-format";
+import { getCurrentUserById } from "@/lib/repositories/auth-admin-postgres";
+import { enqueueImportJob } from "@/lib/server/job-queue";
+import { createUserNotification } from "@/lib/server/notifications";
+import { DatabaseError } from "@/lib/db/errors";
 
 type TenantUser = {
   id: string;
@@ -18,6 +23,8 @@ type TenantUser = {
   email?: string | null;
   roleId?: string | null;
   role?: { permissions?: any } | string | null;
+  isTenantAdmin?: boolean;
+  isPlatformAdmin?: boolean;
 };
 
 type ActivityFilterCondition = {
@@ -26,10 +33,12 @@ type ActivityFilterCondition = {
   value: string | number | boolean | null;
 };
 
-type ActivityFilterConfig = {
-  conditions?: ActivityFilterCondition[];
-  logic?: "AND" | "OR";
-};
+type ActivityFilterInput =
+  | ActivityFilterCondition
+  | {
+      logic?: "AND" | "OR";
+      conditions?: ActivityFilterCondition[];
+    };
 
 type NoteEntityType = "LEAD" | "OPPORTUNITY" | "ACTIVITY";
 
@@ -43,6 +52,8 @@ type DashboardWidgetInput = {
     x?: number;
     y?: number;
   };
+  visibility?: "PRIVATE" | "TEAM" | "TENANT";
+  sharedWithTeamId?: string | null;
 };
 
 type SavedViewInput = {
@@ -63,6 +74,8 @@ type SavedViewInput = {
   sharedTeamIds?: string[];
   sharedSalesGroupIds?: string[];
   sharedRoleIds?: string[];
+  isArchived?: boolean;
+  ownerId?: string;
 };
 
 type CustomReportInput = {
@@ -103,12 +116,15 @@ type WebhookInput = {
   events?: string[];
   secret?: string;
   isActive?: boolean;
+  rateLimitPerMinute?: number;
 };
 
 type GlobalSearchResults = {
   leads: Array<{ id: string; type: "lead"; name: string; company: string | null }>;
   opportunities: Array<{ id: string; type: "opportunity"; title: string; amount: number | null }>;
   activities: Array<{ id: string; type: "activity"; notes: string | null }>;
+  tasks: Array<{ id: string; type: "task"; title: string }>;
+  partners: Array<{ id: string; type: "partner"; name: string; company: string | null }>;
 };
 
 export async function createAuditLog(
@@ -324,6 +340,10 @@ export async function listLeadsForTenant(
   return pgLeads.listLeadsForTenant(user, page, limit, filters);
 }
 
+export async function getLeadStatusCountsForTenant(user: TenantUser) {
+  return pgLeads.getLeadStatusCountsForTenant(user);
+}
+
 async function countLeadsForTenant(user: TenantUser, filters: LeadFilterInput[] | null = null) {
   const result = await pgLeads.listLeadsForTenant(user, 1, 1, filters);
   return result.meta.total;
@@ -393,7 +413,7 @@ export async function listActivityTypesForTenant(user: TenantUser) {
   return pgActivities.listActivityTypesForTenant(user);
 }
 
-async function ensureSystemActivityType(user: TenantUser, name: string, icon: string, color: string) {
+export async function ensureSystemActivityType(user: TenantUser, name: string, icon: string, color: string) {
   const objectId = await getObjectId(user, "activity");
   const existing = await queryOne<{ id: string }>(
     `select id from "ActivityType" where name = $1 and ${user.tenantId ? '"tenantId" = $2' : '"tenantId" is null'} limit 1`,
@@ -415,7 +435,7 @@ async function ensureSystemActivityType(user: TenantUser, name: string, icon: st
 export async function listActivitiesForTenant(
   user: TenantUser,
   limit: number,
-  filters: ActivityFilterConfig | null,
+  filters: ActivityFilterInput[] | null,
   page = 1
 ) {
   return pgActivities.listActivitiesForTenant(user, limit, filters, page);
@@ -431,6 +451,10 @@ export async function updateActivityForTenant(user: TenantUser, id: string, payl
 
 export async function getOpportunityStatsForTenant(user: TenantUser) {
   return pgOpportunities.getOpportunityStatsForTenant(user);
+}
+
+export async function getOpportunityStageCountsForTenant(user: TenantUser) {
+  return pgOpportunities.getOpportunityStageCountsForTenant(user);
 }
 
 export async function getActivityStatsForTenant(user: TenantUser) {
@@ -489,14 +513,31 @@ export async function getGovernanceHistoryForTenant(
 
 export async function listAuditLogsForTenant(
   user: TenantUser,
-  filters?: { entityType?: string; entityId?: string; action?: string }
+  filters?: {
+    entityType?: string;
+    entityTypes?: string[];
+    entityId?: string;
+    action?: string;
+    reviewStatus?: string;
+    flagged?: boolean;
+    legalHold?: boolean;
+    dateFrom?: string;
+    dateTo?: string;
+    // Gap checklist Module 10's "user-level audit of productivity actions" item -- previously
+    // no filter anywhere in this stack (repository/API/UI) could answer "what did user X do,"
+    // only "what happened to record Y."
+    userId?: string;
+  }
 ) {
   const values: unknown[] = [];
   const clauses = [user.tenantId ? (() => {
     values.push(user.tenantId);
     return `"tenantId" = $${values.length}`;
   })() : '"tenantId" is null'];
-  if (filters?.entityType) {
+  if (filters?.entityTypes?.length) {
+    values.push(filters.entityTypes.map((t) => t.toUpperCase()));
+    clauses.push(`"entityType" = any($${values.length}::text[])`);
+  } else if (filters?.entityType) {
     values.push(filters.entityType.toUpperCase());
     clauses.push(`"entityType" = $${values.length}`);
   }
@@ -508,16 +549,41 @@ export async function listAuditLogsForTenant(
     values.push(filters.action.toUpperCase());
     clauses.push(`action = $${values.length}`);
   }
+  if (filters?.userId) {
+    values.push(filters.userId);
+    clauses.push(`"userId" = $${values.length}`);
+  }
+  // "Status" + "anomaly flags" + "retention/legal hold" sub-items -- gap checklist: "audit
+  // review workflows".
+  if (filters?.reviewStatus) {
+    values.push(filters.reviewStatus);
+    clauses.push(`"reviewStatus" = $${values.length}`);
+  }
+  if (filters?.flagged) {
+    clauses.push(`flagged = true`);
+  }
+  if (filters?.legalHold) {
+    clauses.push(`"legalHold" = true`);
+  }
+  if (filters?.dateFrom) {
+    values.push(filters.dateFrom);
+    clauses.push(`"createdAt" >= $${values.length}`);
+  }
+  if (filters?.dateTo) {
+    values.push(filters.dateTo);
+    clauses.push(`"createdAt" <= $${values.length}`);
+  }
 
   const data = await query<any>(
-    `select id, action, "entityType", "entityId", before, after, diff, metadata, "createdAt", "userId"
+    `select id, action, "entityType", "entityId", before, after, diff, metadata, "createdAt", "userId",
+            "reviewStatus", "reviewerId", "reviewedBy", "reviewedAt", "reviewNote", flagged, "flagReason", "legalHold"
      from "AuditLog"
      where ${clauses.join(" and ")}
      order by "createdAt" desc
      limit 200`,
     values,
   );
-  const userIds = [...new Set(data.map((item: any) => item.userId).filter(Boolean))];
+  const userIds = [...new Set(data.flatMap((item: any) => [item.userId, item.reviewerId, item.reviewedBy]).filter(Boolean))];
   const users = userIds.length
     ? await query<any>(
         `select id, name, email from "User" where id = any($1::text[]) and ${user.tenantId ? '"tenantId" = $2' : '"tenantId" is null'}`,
@@ -539,6 +605,14 @@ export async function listAuditLogsForTenant(
       diff: item.diff,
     },
     metadata: item.metadata,
+    reviewStatus: item.reviewStatus,
+    reviewer: item.reviewerId ? (userMap.get(item.reviewerId) ?? null) : null,
+    reviewedBy: item.reviewedBy ? (userMap.get(item.reviewedBy) ?? null) : null,
+    reviewedAt: item.reviewedAt,
+    reviewNote: item.reviewNote,
+    flagged: item.flagged,
+    flagReason: item.flagReason,
+    legalHold: item.legalHold,
   }));
 }
 
@@ -690,7 +764,17 @@ export async function getDashboardWidgetForTenant(user: TenantUser, id: string) 
   return pgReportsDashboards.getDashboardWidgetForTenant(user, id);
 }
 
-export async function getDashboardWidgetDataForTenant(user: TenantUser, id: string) {
+// Gap checklist Module 17, item 4 (advanced dashboard builder: cross-filtering/drill-down).
+// Deliberately scoped to the two module-backed widget shapes where a single, unambiguous
+// filterable field already exists: LEADS (status/source, whichever the clicked BAR was grouped
+// by) and OPPORTUNITIES (always stage name). ACTIVITIES and every report-backed widget (19
+// structurally different report shapes, each with its own grouping semantics) are excluded --
+// applying a filter correctly to all of them would need per-report filtering logic, not a
+// generic mechanism, so this stays an honest STAT/BAR-only feature rather than a broken
+// promise of universal drill-down.
+export type DashboardCrossFilter = { module: "LEADS" | "OPPORTUNITIES"; field: string; value: string } | null;
+
+export async function getDashboardWidgetDataForTenant(user: TenantUser, id: string, crossFilter: DashboardCrossFilter = null) {
   const widget = await getDashboardWidgetForTenant(user, id);
 
   if (!widget) {
@@ -702,13 +786,25 @@ export async function getDashboardWidgetDataForTenant(user: TenantUser, id: stri
     return getReportBackedWidgetData(user, widget);
   }
 
+  // Gap checklist Module 16's app-backed reports, "expose ... through ... widgets" half --
+  // the piece the original pass explicitly left unattempted (see the comment above
+  // marketplace-postgres.ts's App-backed report datasets section). Built per explicit user
+  // decision, reusing the exact same STAT/BAR/TABLE rendering every other widget source
+  // already has -- no new chart type.
+  const appReportKey = String((widget.config as any)?.appReportKey ?? "");
+  if (appReportKey) {
+    return getAppReportBackedWidgetData(user, widget);
+  }
+
   const moduleName = String((widget.config as any)?.module ?? "").toUpperCase();
   const metric = String((widget.config as any)?.metric ?? "COUNT").toUpperCase();
+  const activeFilter = crossFilter && crossFilter.module === moduleName ? crossFilter : null;
 
   if (widget.type === "STAT") {
     if (moduleName === "LEADS") {
       const leads = await listLeadsForTenant(user, 1, 500);
-      return metric === "COUNT" ? leads.meta.total : leads.meta.total;
+      if (!activeFilter) return metric === "COUNT" ? leads.meta.total : leads.meta.total;
+      return leads.data.filter((item: any) => String((item as any)[activeFilter.field] ?? "Unknown") === activeFilter.value).length;
     }
 
     if (moduleName === "OPPORTUNITIES") {
@@ -716,9 +812,11 @@ export async function getDashboardWidgetDataForTenant(user: TenantUser, id: stri
       return opportunities.data.filter((item: any) => {
         const stage = item.stage;
         const filters = (widget.config as any)?.filters?.stage;
-        if (!filters) return true;
-        if (filters.isWon === false && stage?.isWon) return false;
-        if (filters.isLost === false && stage?.isClosed && !stage?.isWon) return false;
+        if (filters) {
+          if (filters.isWon === false && stage?.isWon) return false;
+          if (filters.isLost === false && stage?.isClosed && !stage?.isWon) return false;
+        }
+        if (activeFilter && String(stage?.name ?? "Unassigned") !== activeFilter.value) return false;
         return true;
       }).length;
     }
@@ -734,6 +832,56 @@ export async function getDashboardWidgetDataForTenant(user: TenantUser, id: stri
   if (widget.type === "FUNNEL") {
     const stats = await getOpportunityStatsForTenant(user);
     return stats.map((item) => ({ stage: item.stage, count: item.count, value: item.value }));
+  }
+
+  // Gap checklist Module 17's chart-library expansion, "sankey diagram" sub-item -- visualizing
+  // source->stage flow (per explicit user direction). Reuses recharts' own built-in `Sankey`
+  // component (already ships with the pre-existing `recharts` dependency, confirmed by reading
+  // its actual type definitions before assuming a new `d3-sankey`-class package was needed --
+  // it wasn't) -- no new dependency added. Data reuses `listOpportunitiesForTenant`'s already-
+  // decorated rows (`opportunity.lead`/`opportunity.stage` are joined in-memory there already),
+  // the same source this widget's own BAR/FUNNEL siblings already read from.
+  if (widget.type === "SANKEY") {
+    const opportunities = await listOpportunitiesForTenant(user, 500);
+    const sourceNames: string[] = [];
+    const stageNames: string[] = [];
+    const flowCounts = new Map<string, number>();
+    for (const item of opportunities.data as any[]) {
+      const source = item.lead?.source ?? "Unknown";
+      const stage = item.stage?.name ?? "Unassigned";
+      if (!sourceNames.includes(source)) sourceNames.push(source);
+      if (!stageNames.includes(stage)) stageNames.push(stage);
+      const key = `${source} ${stage}`;
+      flowCounts.set(key, (flowCounts.get(key) ?? 0) + 1);
+    }
+    const nodes = [...sourceNames, ...stageNames].map((name) => ({ name }));
+    const links = [...flowCounts.entries()].map(([key, value]) => {
+      const [source, stage] = key.split(" ");
+      return { source: sourceNames.indexOf(source), target: sourceNames.length + stageNames.indexOf(stage), value };
+    });
+    return { nodes, links };
+  }
+
+  // Gap checklist Module 17's chart-library expansion, "pivot table" sub-item -- row dimension +
+  // column dimension + aggregation, reusing the semantic metric layer's own object/field/
+  // aggregation model (per explicit user direction). A pivot widget references an existing
+  // Metric (its own `groupBy` becomes the pivot's row dimension) plus one additional column
+  // dimension picked at widget-creation time -- not a second query-definition UI.
+  if (widget.type === "PIVOT") {
+    const pivotConfig = (widget.config as any)?.pivot;
+    if (!pivotConfig?.metricId || !pivotConfig?.columnGroupBy) return { rowLabels: [], columnLabels: [], cells: {} };
+    const { getMetricForTenant } = await import("@/lib/server/metrics");
+    const { executePivotQueryForTenant } = await import("@/lib/server/reporting-query");
+    const metric = await getMetricForTenant(user, pivotConfig.metricId);
+    if (!metric?.groupBy) return { rowLabels: [], columnLabels: [], cells: {} };
+    return executePivotQueryForTenant(user, {
+      root: metric.root,
+      aggregation: metric.aggregation,
+      aggregateField: metric.aggregateField,
+      filters: metric.filters,
+      rowGroupBy: metric.groupBy,
+      columnGroupBy: pivotConfig.columnGroupBy,
+    });
   }
 
   if (widget.type === "TREND") {
@@ -770,12 +918,41 @@ export async function getDashboardWidgetDataForTenant(user: TenantUser, id: stri
     }
   }
 
+  if (widget.type === "NBA") {
+    // Dynamic import to avoid a circular import -- next-best-action.ts already imports
+    // createAuditLog/automationConditionMatches from this file (same pattern communications.ts
+    // uses to reach back into automations-postgres.ts).
+    const { listRecommendationsForOwner } = await import("@/lib/server/next-best-action");
+    const recommendations = await listRecommendationsForOwner(user, user.id);
+    // listRecommendationsForOwner returns raw recommendation rows with no lead/opportunity
+    // name join (the table only stores recordType/recordId) -- capped small by the tenant's
+    // own maxVisibleRecommendationsPerUser (default 5), so an individual lookup per row here
+    // is not a real N+1 risk.
+    return Promise.all(
+      recommendations.map(async (rec: any) => {
+        const record = rec.recordType === "OPPORTUNITY"
+          ? await pgOpportunities.getOpportunityForTenant(user, rec.recordId).catch(() => null)
+          : await pgLeads.getLeadForTenant(user, rec.recordId).catch(() => null);
+        return {
+          id: rec.id,
+          recordType: rec.recordType,
+          recordId: rec.recordId,
+          recordName: (record as any)?.name ?? (record as any)?.title ?? "Unknown record",
+          actionType: rec.actionType,
+          reason: rec.reason,
+          score: rec.score,
+        };
+      }),
+    );
+  }
+
   if (widget.type === "BAR") {
     if (moduleName === "LEADS") {
       const leads = await listLeadsForTenant(user, 1, 500);
-      const counts = new Map<string, number>();
       const groupBy = String((widget.config as any)?.groupBy ?? "status");
-      leads.data.forEach((item: any) => {
+      const rows = activeFilter ? leads.data.filter((item: any) => String((item as any)[activeFilter.field] ?? "Unknown") === activeFilter.value) : leads.data;
+      const counts = new Map<string, number>();
+      rows.forEach((item: any) => {
         const key = groupBy === "source" ? item.source ?? "Unknown" : item.status ?? "Unknown";
         counts.set(key, (counts.get(key) ?? 0) + 1);
       });
@@ -783,8 +960,21 @@ export async function getDashboardWidgetDataForTenant(user: TenantUser, id: stri
     }
 
     if (moduleName === "OPPORTUNITIES") {
-      const stats = await getOpportunityStatsForTenant(user);
-      return stats.map((item) => ({ group: item.stage, value: item.count }));
+      // Computed inline (rather than delegating to getOpportunityStatsForTenant, which BAR used
+      // before) so the active cross-filter can narrow the same raw rows STAT uses -- the result
+      // is identical to before when no filter is active, since BAR only ever consumed `.count`.
+      const opportunities = await listOpportunitiesForTenant(user, 500);
+      const rows = activeFilter ? opportunities.data.filter((item: any) => String(item.stage?.name ?? "Unassigned") === activeFilter.value) : opportunities.data;
+      const counts = new Map<string, number>();
+      const order = new Map<string, number>();
+      rows.forEach((item: any) => {
+        const key = item.stage?.name ?? "Unassigned";
+        counts.set(key, (counts.get(key) ?? 0) + 1);
+        if (!order.has(key)) order.set(key, item.stage?.order ?? Number.MAX_SAFE_INTEGER);
+      });
+      return [...counts.entries()]
+        .sort((a, b) => (order.get(a[0]) ?? 0) - (order.get(b[0]) ?? 0))
+        .map(([group, value]) => ({ group, value }));
     }
 
     if (moduleName === "ACTIVITIES") {
@@ -794,6 +984,37 @@ export async function getDashboardWidgetDataForTenant(user: TenantUser, id: stri
   }
 
   return [];
+}
+
+// Gap checklist Module 16's app-backed reports, "expose ... through ... widgets" half -- reuses
+// getAppReportData's own permission check (install status + "reports":"read"/"write" grant) and
+// TTL cache entirely; this only reshapes its {rows, columnSchema} into whatever the widget's own
+// chart type expects. Dynamic import to avoid a circular import (marketplace-postgres.ts imports
+// createAuditLog from this file), same pattern the call_app_action node's invokeAppAction import
+// already uses.
+async function getAppReportBackedWidgetData(user: TenantUser, widget: any) {
+  const marketplace = await import("@/lib/repositories/marketplace-postgres");
+  const appId = String(widget.config?.appReportAppId ?? "");
+  const reportKey = String(widget.config?.appReportKey ?? "");
+  const result = await marketplace.getAppReportData(user, appId, reportKey);
+  const rows = Array.isArray(result.rows) ? (result.rows as Record<string, unknown>[]) : [];
+
+  if (widget.type === "STAT") {
+    const metric = String(widget.config?.metric ?? "__count__");
+    if (metric === "__count__") return rows.length;
+    return rows.reduce((sum, row) => sum + (Number(row[metric]) || 0), 0);
+  }
+
+  if (widget.type === "BAR") {
+    const columns = Array.isArray(result.columnSchema) ? result.columnSchema : [];
+    const groupField = String(widget.config?.groupField ?? columns[0]?.key ?? "");
+    const valueField = String(widget.config?.valueField ?? columns[1]?.key ?? "");
+    return rows.map((row) => ({ group: String(row[groupField] ?? "Unknown"), value: Number(row[valueField]) || 0 }));
+  }
+
+  // TABLE (and any other type this widget might be created as) -- raw rows, same shape
+  // TableWidget already renders for every other data source (columns auto-derived from keys).
+  return rows;
 }
 
 async function getReportBackedWidgetData(user: TenantUser, widget: any) {
@@ -845,6 +1066,49 @@ async function getReportBackedWidgetData(user: TenantUser, widget: any) {
 
   if (reportKey === "predictive_scoring") {
     return getPredictiveScoringWidgetData(user, widget.type, metric);
+  }
+
+  // Gap checklist Module 17, item 4/25 (new chart types + embedded analytics surfaces): wires
+  // real data from this session's new reports into the new PIE/STACKED_BAR/TABLE/HEATMAP widget
+  // types, rather than leaving them reachable only with placeholder/empty data.
+  if (reportKey === "marketing_attribution_summary") {
+    const model = String(widget.config?.model ?? "LINEAR").toUpperCase() as any;
+    const report = await reports.getMarketingAttributionSummaryReportForTenant(user, model);
+    if (widget.type === "STAT") return report.bySource.length;
+    return report.bySource.slice(0, Number(widget.config?.limit ?? 8)).map((row: any) => ({ group: row.source, value: row.credit }));
+  }
+
+  if (reportKey === "sender_reputation") {
+    const report = await reports.getSenderReputationReportForTenant(user, Number(widget.config?.days ?? 30));
+    if (widget.type === "STAT") return readPath(report, metric) ?? 0;
+    return report.byChannel.map((row: any) => ({ group: row.channel, sent: row.sent, failed: row.failed, bounced: row.bounced }));
+  }
+
+  if (reportKey === "funnel_explorer") {
+    const { getFunnelExplorerForTenant } = reports;
+    const report = await getFunnelExplorerForTenant(user, String(widget.config?.segment ?? "SOURCE").toUpperCase() as any);
+    if (widget.type === "STAT") return report.reEntryCount;
+    if (widget.type === "TABLE") return report.segments;
+    return report.stageAging.map((row: any) => ({ stage: row.stageName, count: row.openCount }));
+  }
+
+  if (reportKey === "campaign_roi") {
+    const report = await reports.getCampaignRoiReportForTenant(user);
+    if (widget.type === "STAT") return report.journeys.length;
+    return report.journeys.slice(0, Number(widget.config?.limit ?? 10));
+  }
+
+  if (reportKey === "cohort_funnel_progression") {
+    const report = await reports.getCohortReportForTenant(user, "month", String(widget.config?.dimension ?? "CREATED_DATE").toUpperCase() as any);
+    if (widget.type === "STAT") return report.rows.length;
+    // Heatmap grid: cohort (row) x stage (col), cell value = reach rate percent.
+    return report.rows.flatMap((cohortRow: any) =>
+      cohortRow.stages.map((stage: any) => ({
+        row: cohortRow.cohortLabel,
+        col: stage.stageName,
+        value: Math.round((stage.reachRate ?? 0) * 100),
+      })),
+    );
   }
 
   return widget.type === "STAT" ? 0 : [];
@@ -899,6 +1163,36 @@ function readPath(source: any, path: string) {
 
 function sumMetric(rows: any[], metric: string) {
   return rows.reduce((sum, row) => sum + Number(readPath(row, metric) ?? 0), 0);
+}
+
+// Gap checklist Module 17's advanced dashboard builder, "export/schedule for a whole dashboard"
+// sub-item -- per explicit user direction, one combined PDF. A "dashboard" here is a
+// DashboardTab -- exports every widget the viewer owns on that tab (never another user's shared
+// widgets, matching the exact tab-membership rule the client itself already uses:
+// `(widget.tabId ?? defaultTabId) === tabId`), rendering each widget's already-computed data
+// through `getDashboardWidgetDataForTenant` unchanged -- no second data-fetching path.
+export async function exportDashboardTabPdfForTenant(user: TenantUser, tabId: string): Promise<{ tabName: string; buffer: Buffer }> {
+  const { listDashboardTabsForTenant } = await import("@/lib/repositories/dashboard-tabs-postgres");
+  const { renderDashboardTabPdf } = await import("@/lib/server/report-pdf");
+
+  const tabs = await listDashboardTabsForTenant(user);
+  const tab = tabs.find((item: any) => item.id === tabId);
+  if (!tab) throw new Error("DASHBOARD_TAB_NOT_FOUND");
+  const defaultTabId = tabs.find((item: any) => item.isDefault)?.id ?? tabs[0]?.id ?? null;
+
+  const allWidgets = await listDashboardWidgetsForTenant(user);
+  const tabWidgets = allWidgets.filter((widget: any) => widget.isOwner !== false && (widget.tabId ?? defaultTabId) === tabId);
+
+  const widgets = await Promise.all(
+    tabWidgets.map(async (widget: any) => ({
+      title: widget.title,
+      type: widget.type,
+      data: await getDashboardWidgetDataForTenant(user, widget.id),
+    })),
+  );
+
+  const buffer = await renderDashboardTabPdf({ tabName: tab.name, generatedAt: new Date().toISOString(), widgets });
+  return { tabName: tab.name, buffer };
 }
 
 function normalizeDashboardPersona(user: TenantUser, persona?: string | null) {
@@ -975,6 +1269,18 @@ export async function getPublicForm(identifier: string) {
 
 export async function submitPublicForm(identifier: string, payload: Record<string, unknown>) {
   return pgForms.submitPublicForm(identifier, payload);
+}
+
+export async function recordFormProgressEvent(identifier: string, input: { sessionId: string; tabId: string; tabIndex: number }) {
+  return pgForms.recordFormProgressEvent(identifier, input);
+}
+
+export async function getRecordShareForTenant(user: TenantUser, recordType: pgRecordShare.RecordShareType, recordId: string) {
+  return pgRecordShare.getRecordShareForTenant(user, recordType, recordId);
+}
+
+export async function upsertRecordShareForTenant(user: TenantUser, recordType: pgRecordShare.RecordShareType, recordId: string, input: pgRecordShare.RecordShareInput) {
+  return pgRecordShare.upsertRecordShareForTenant(user, recordType, recordId, input);
 }
 
 export async function getFormStatsForTenant(user: TenantUser, formId: string) {
@@ -1111,6 +1417,27 @@ export async function deleteSavedViewForTenant(user: TenantUser, id: string) {
   return pgViews.deleteSavedViewForTenant(user, id);
 }
 
+export async function recordSavedViewOpened(user: TenantUser, id: string) {
+  return pgViews.recordSavedViewOpened(user, id);
+}
+
+export async function addSavedViewCommentForTenant(user: TenantUser, id: string, body: string) {
+  return pgViews.addSavedViewCommentForTenant(user, id, body);
+}
+
+export async function requestSavedViewAccessForTenant(user: TenantUser, id: string) {
+  return pgViews.requestSavedViewAccessForTenant(user, id);
+}
+
+export async function getSavedViewSummaryForTenant(user: TenantUser, id: string) {
+  return pgViews.getSavedViewSummaryForTenant(user, id);
+}
+
+export async function previewSavedViewShareTargets(user: TenantUser, targets: pgViews.SavedViewShareTargets) {
+  if (!user.tenantId) return [];
+  return pgViews.resolveSavedViewShareTargets(user.tenantId, targets);
+}
+
 export async function listLeadListsForTenant(user: TenantUser) {
   return pgLeadLists.listLeadListsForTenant(user);
 }
@@ -1185,6 +1512,26 @@ export async function ingestWebsiteVisitForTenant(input: Record<string, unknown>
     outcome: "SUCCESS",
     notes,
   });
+
+  // The tracking script (src/app/api/tracking/script/route.ts) has always sent these,
+  // but until now nothing here read them -- captured UTM params were silently dropped
+  // instead of ever reaching an attribution record.
+  const utmSource = typeof input.utm_source === "string" ? input.utm_source : null;
+  const utmMedium = typeof input.utm_medium === "string" ? input.utm_medium : null;
+  const utmCampaign = typeof input.utm_campaign === "string" ? input.utm_campaign : null;
+  if (utmSource || utmMedium || utmCampaign) {
+    const { recordAttributionTouch } = await import("@/lib/server/marketing-journeys");
+    await recordAttributionTouch(user, {
+      recordType: "LEAD",
+      recordId: lead.id,
+      source: utmSource,
+      medium: utmMedium,
+      campaign: utmCampaign,
+      channel: "WEBSITE_VISIT",
+      metadata: { url: pageUrl },
+    }).catch(() => undefined);
+  }
+
   return { tracked: true, activityId: activity.id, leadId: lead.id };
 }
 
@@ -1282,9 +1629,11 @@ async function createImportedRecord(user: TenantUser, module: ImportModule, payl
   return createActivityForTenant(user, payload);
 }
 
+const IMPORT_JOB_COLUMNS = 'id, module, "filePath", status, stats, errors, "createdAt", "userId"';
+
 export async function listImportJobsForTenant(user: TenantUser) {
   return query(
-    `select id, module, "filePath", status, stats, errors, "createdAt", "userId"
+    `select ${IMPORT_JOB_COLUMNS}
      from "ImportJob"
      where ${user.tenantId ? '"tenantId" = $1' : '"tenantId" is null'}
      order by "createdAt" desc
@@ -1293,36 +1642,168 @@ export async function listImportJobsForTenant(user: TenantUser) {
   );
 }
 
-export async function runImportForTenant(user: TenantUser, input: ImportInput) {
+// Staged validation: classifies every row as would-create/would-update/would-skip/error
+// against the exact same mapping + duplicate-detection logic the real run uses, without
+// writing anything -- lets an admin catch a bad mapping or an unexpectedly large
+// duplicateMode=UPDATE blast radius before committing to it.
+export async function previewImportForTenant(user: TenantUser, input: ImportInput) {
+  const importModule = normalizeImportModule(input.module);
+  const rows = Array.isArray(input.rows) ? input.rows : [];
+  const duplicateMode = input.duplicateMode === "UPDATE" || input.duplicateMode === "CREATE" ? input.duplicateMode : "SKIP";
+  let wouldCreate = 0;
+  let wouldUpdate = 0;
+  let wouldSkip = 0;
+  const rowErrors: Array<{ row: number; message: string }> = [];
+
+  for (const [index, row] of rows.entries()) {
+    try {
+      const payload = mapImportRow(row, input.mappings);
+      const duplicateId = await findDuplicateForImport(user, importModule, payload);
+      if (duplicateId && duplicateMode === "SKIP") wouldSkip += 1;
+      else if (duplicateId && duplicateMode === "UPDATE") wouldUpdate += 1;
+      else wouldCreate += 1;
+    } catch (error) {
+      rowErrors.push({ row: index + 1, message: error instanceof Error ? error.message : "Row could not be evaluated" });
+    }
+  }
+
+  return {
+    total: rows.length,
+    wouldCreate,
+    wouldUpdate,
+    wouldSkip,
+    wouldFail: rowErrors.length,
+    isDestructive: duplicateMode === "UPDATE" && wouldUpdate > 0,
+    sampleErrors: rowErrors.slice(0, 10),
+  };
+}
+
+// duplicateMode=UPDATE overwrites existing records in bulk -- the one genuinely destructive
+// shape an import can take (CREATE-only and SKIP-duplicates are purely additive) -- so it
+// starts life gated behind an explicit approval step instead of going straight to the queue.
+export async function queueImportForTenant(user: TenantUser, input: ImportInput) {
   const importModule = normalizeImportModule(input.module);
   const rows = Array.isArray(input.rows) ? input.rows : [];
   const duplicateMode = input.duplicateMode === "UPDATE" || input.duplicateMode === "CREATE" ? input.duplicateMode : "SKIP";
   const now = new Date().toISOString();
   const jobId = randomUUID();
-  const rowErrors: Array<{ row: number; message: string }> = [];
-  let created = 0;
-  let updated = 0;
-  let skipped = 0;
+  const isDestructive = duplicateMode === "UPDATE";
+  const initialStatus = isDestructive ? "PENDING_APPROVAL" : "QUEUED";
 
   await execute(
     `insert into "ImportJob" (
-       id, "tenantId", "userId", module, "filePath", status, mapping, stats, errors, "createdAt", "updatedAt"
-     ) values ($1, $2, $3, $4, null, 'PROCESSING', $5, $6, $7, $8, $8)`,
+       id, "tenantId", "userId", module, "filePath", status, mapping, rows, stats, errors, "cancelRequested", "createdAt", "updatedAt"
+     ) values ($1, $2, $3, $4, null, $5, $6, $7, $8, $9, false, $10, $10)`,
     [
       jobId,
       user.tenantId,
       user.id,
       importModule,
+      initialStatus,
       { fields: input.mappings ?? [], duplicateMode },
+      rows,
       { total: rows.length, processed: 0, created: 0, updated: 0, skipped: 0, failed: 0 },
       [],
       now,
     ],
   );
+  await createAuditLog(user, "CREATE", "IMPORT_JOB", jobId, null, { module: importModule, duplicateMode, rowCount: rows.length, status: initialStatus }, null);
+
+  if (!isDestructive) await enqueueImportJob(jobId).catch(() => undefined);
+
+  return queryOne<any>(`select ${IMPORT_JOB_COLUMNS} from "ImportJob" where id = $1`, [jobId]);
+}
+
+export async function approveImportJob(user: TenantUser, jobId: string) {
+  const job = await queryOne<any>(
+    `update "ImportJob"
+     set status = 'QUEUED', "updatedAt" = $1
+     where id = $2 and status = 'PENDING_APPROVAL' and ${user.tenantId ? '"tenantId" = $3' : '"tenantId" is null'}
+     returning ${IMPORT_JOB_COLUMNS}`,
+    user.tenantId ? [new Date().toISOString(), jobId, user.tenantId] : [new Date().toISOString(), jobId],
+  );
+  if (!job) throw new Error("IMPORT_JOB_NOT_PENDING_APPROVAL");
+  await createAuditLog(user, "UPDATE", "IMPORT_JOB", jobId, null, null, { status: { before: "PENDING_APPROVAL", after: "QUEUED" } });
+  await enqueueImportJob(jobId).catch(() => undefined);
+  return job;
+}
+
+export async function rejectImportJob(user: TenantUser, jobId: string) {
+  const job = await queryOne<any>(
+    `update "ImportJob"
+     set status = 'REJECTED', "updatedAt" = $1
+     where id = $2 and status = 'PENDING_APPROVAL' and ${user.tenantId ? '"tenantId" = $3' : '"tenantId" is null'}
+     returning ${IMPORT_JOB_COLUMNS}`,
+    user.tenantId ? [new Date().toISOString(), jobId, user.tenantId] : [new Date().toISOString(), jobId],
+  );
+  if (!job) throw new Error("IMPORT_JOB_NOT_PENDING_APPROVAL");
+  await createAuditLog(user, "UPDATE", "IMPORT_JOB", jobId, null, null, { status: { before: "PENDING_APPROVAL", after: "REJECTED" } });
+  return job;
+}
+
+// Cooperative cancel: a job still QUEUED (worker hasn't picked it up yet) can be cancelled
+// outright; one already PROCESSING can only ask nicely via cancelRequested, checked between
+// rows in processImportJob below -- there's no way to interrupt a row already mid-write.
+export async function cancelImportJob(user: TenantUser, jobId: string) {
+  const queuedCancel = await queryOne<any>(
+    `update "ImportJob"
+     set status = 'CANCELLED', "updatedAt" = $1
+     where id = $2 and status = 'QUEUED' and ${user.tenantId ? '"tenantId" = $3' : '"tenantId" is null'}
+     returning ${IMPORT_JOB_COLUMNS}`,
+    user.tenantId ? [new Date().toISOString(), jobId, user.tenantId] : [new Date().toISOString(), jobId],
+  );
+  if (queuedCancel) {
+    await createAuditLog(user, "UPDATE", "IMPORT_JOB", jobId, null, null, { status: { before: "QUEUED", after: "CANCELLED" } });
+    return queuedCancel;
+  }
+  const flagged = await queryOne<any>(
+    `update "ImportJob"
+     set "cancelRequested" = true, "updatedAt" = $1
+     where id = $2 and status = 'PROCESSING' and ${user.tenantId ? '"tenantId" = $3' : '"tenantId" is null'}
+     returning ${IMPORT_JOB_COLUMNS}`,
+    user.tenantId ? [new Date().toISOString(), jobId, user.tenantId] : [new Date().toISOString(), jobId],
+  );
+  if (!flagged) throw new Error("IMPORT_JOB_NOT_CANCELLABLE");
+  await createAuditLog(user, "UPDATE", "IMPORT_JOB", jobId, null, null, { cancelRequested: { before: false, after: true } });
+  return flagged;
+}
+
+// Worker-invoked: atomically claims the job (QUEUED -> PROCESSING) so a duplicate/retried
+// job message can't double-process the same rows, then runs the same per-row mapping +
+// duplicate-detection + create/update logic the old synchronous runImportForTenant used.
+export async function processImportJob(importJobId: string) {
+  const claimed = await queryOne<any>(
+    `update "ImportJob"
+     set status = 'PROCESSING', "updatedAt" = $1
+     where id = $2 and status = 'QUEUED'
+     returning id, "tenantId", "userId", module, mapping, rows`,
+    [new Date().toISOString(), importJobId],
+  );
+  if (!claimed) return null;
+
+  const requester = await getCurrentUserById(claimed.userId);
+  const user: TenantUser = requester ? (requester as TenantUser) : { id: claimed.userId, tenantId: claimed.tenantId };
+  const importModule = claimed.module as ImportModule;
+  const rows: Record<string, unknown>[] = Array.isArray(claimed.rows) ? claimed.rows : [];
+  const mappings: ImportMapping[] | undefined = claimed.mapping?.fields;
+  const duplicateMode: "SKIP" | "UPDATE" | "CREATE" = claimed.mapping?.duplicateMode ?? "SKIP";
+
+  const rowErrors: Array<{ row: number; message: string }> = [];
+  let created = 0;
+  let updated = 0;
+  let skipped = 0;
+  let cancelled = false;
 
   for (const [index, row] of rows.entries()) {
+    if (index % 25 === 0) {
+      const current = await queryOne<{ cancelRequested: boolean }>(`select "cancelRequested" from "ImportJob" where id = $1`, [importJobId]);
+      if (current?.cancelRequested) {
+        cancelled = true;
+        break;
+      }
+    }
     try {
-      const payload = mapImportRow(row, input.mappings);
+      const payload = mapImportRow(row, mappings);
       const duplicateId = await findDuplicateForImport(user, importModule, payload);
       if (duplicateId && duplicateMode === "SKIP") {
         skipped += 1;
@@ -1336,34 +1817,71 @@ export async function runImportForTenant(user: TenantUser, input: ImportInput) {
       await createImportedRecord(user, importModule, payload);
       created += 1;
     } catch (error) {
-      rowErrors.push({
-        row: index + 1,
-        message: error instanceof Error ? error.message : "Import failed",
-      });
+      rowErrors.push({ row: index + 1, message: error instanceof Error ? error.message : "Import failed" });
     }
   }
 
-  const stats = {
-    total: rows.length,
-    processed: rows.length,
-    created,
-    updated,
-    skipped,
-    failed: rowErrors.length,
-  };
+  const processed = created + updated + skipped + rowErrors.length;
+  const stats = { total: rows.length, processed, created, updated, skipped, failed: rowErrors.length };
+  const finalStatus = cancelled ? "CANCELLED" : rowErrors.length > 0 ? "COMPLETED_WITH_ERRORS" : "COMPLETED";
 
   const data = await queryOne<any>(
     `update "ImportJob"
-     set status = $1, stats = $2, errors = $3, "updatedAt" = $4
-     where id = $5 and ${user.tenantId ? '"tenantId" = $6' : '"tenantId" is null'}
-     returning id, module, "filePath", status, stats, errors, "createdAt", "userId"`,
-    user.tenantId
-      ? [rowErrors.length > 0 ? "COMPLETED_WITH_ERRORS" : "COMPLETED", stats, rowErrors, new Date().toISOString(), jobId, user.tenantId]
-      : [rowErrors.length > 0 ? "COMPLETED_WITH_ERRORS" : "COMPLETED", stats, rowErrors, new Date().toISOString(), jobId],
+     set status = $1, stats = $2, errors = $3, rows = null, "updatedAt" = $4
+     where id = $5
+     returning ${IMPORT_JOB_COLUMNS}`,
+    [finalStatus, stats, rowErrors, new Date().toISOString(), importJobId],
   );
   if (!data) throw new Error("IMPORT_JOB_NOT_FOUND");
-  await createAuditLog(user, "CREATE", "IMPORT_JOB", jobId, null, data, stats);
+  await createAuditLog(user, "UPDATE", "IMPORT_JOB", importJobId, null, data, stats);
+  await createUserNotification({
+    tenantId: claimed.tenantId,
+    userId: claimed.userId,
+    title: cancelled ? "Import cancelled" : rowErrors.length > 0 ? "Import completed with errors" : "Import completed",
+    message: `${importModule} import: ${created} created, ${updated} updated, ${skipped} skipped, ${rowErrors.length} failed.`,
+    data: { type: "imports.process", importJobId, stats },
+  }).catch(() => undefined);
   return data;
+}
+
+export async function listImportTemplatesForTenant(user: TenantUser) {
+  if (!user.tenantId) return [];
+  return query<any>(
+    `select id, name, module, mapping, "duplicateMode", "createdAt", "updatedAt"
+     from "ImportTemplate" where "tenantId" = $1 order by name asc`,
+    [user.tenantId],
+  );
+}
+
+export async function createImportTemplateForTenant(
+  user: TenantUser,
+  input: { name?: string; module?: string; mappings?: ImportMapping[]; duplicateMode?: "SKIP" | "UPDATE" | "CREATE" }
+) {
+  if (!user.tenantId) throw new Error("TENANT_REQUIRED");
+  const name = String(input.name ?? "").trim();
+  if (!name) throw new Error("IMPORT_TEMPLATE_NAME_REQUIRED");
+  const importModule = normalizeImportModule(input.module);
+  const now = new Date().toISOString();
+  try {
+    const template = await queryOne<any>(
+      `insert into "ImportTemplate" (id, "tenantId", name, module, mapping, "duplicateMode", "createdBy", "createdAt", "updatedAt")
+       values ($1, $2, $3, $4, $5, $6, $7, $8, $8)
+       returning id, name, module, mapping, "duplicateMode", "createdAt", "updatedAt"`,
+      [randomUUID(), user.tenantId, name, importModule, input.mappings ?? [], input.duplicateMode ?? "SKIP", user.id, now],
+    );
+    if (!template) throw new Error("IMPORT_TEMPLATE_INSERT_FAILED");
+    return template;
+  } catch (error) {
+    if (error instanceof DatabaseError && error.code === "23505") throw new Error("DUPLICATE_IMPORT_TEMPLATE_NAME");
+    throw error;
+  }
+}
+
+export async function deleteImportTemplateForTenant(user: TenantUser, templateId: string) {
+  await execute(
+    `delete from "ImportTemplate" where id = $1 and ${user.tenantId ? '"tenantId" = $2' : '"tenantId" is null'}`,
+    user.tenantId ? [templateId, user.tenantId] : [templateId],
+  );
 }
 
 export async function listWebhooksForTenant(user: TenantUser) {
@@ -1374,6 +1892,7 @@ export async function listWebhooksForTenant(user: TenantUser) {
             events,
             "isActive",
             secret,
+            "rateLimitPerMinute",
             "createdAt",
             "updatedAt"
      from "WebhookSubscription"
@@ -1388,11 +1907,12 @@ export async function createWebhookForTenant(user: TenantUser, input: WebhookInp
   const url = String(input.url ?? "").trim();
   if (!name || !url) throw new Error("WEBHOOK_NAME_URL_REQUIRED");
   const now = new Date().toISOString();
+  const rateLimitPerMinute = Number.isFinite(input.rateLimitPerMinute) && Number(input.rateLimitPerMinute) > 0 ? Math.round(Number(input.rateLimitPerMinute)) : 60;
   const webhook = await queryOne<any>(
     `insert into "WebhookSubscription" (
-       id, "tenantId", url, events, secret, "isActive", "createdAt", "updatedAt"
-     ) values ($1, $2, $3, $4, $5, $6, $7, $7)
-     returning id, coalesce(nullif(url, ''), 'Webhook') as name, url, events, "isActive", secret, "createdAt", "updatedAt"`,
+       id, "tenantId", url, events, secret, "isActive", "rateLimitPerMinute", "createdAt", "updatedAt"
+     ) values ($1, $2, $3, $4, $5, $6, $7, $8, $8)
+     returning id, coalesce(nullif(url, ''), 'Webhook') as name, url, events, "isActive", secret, "rateLimitPerMinute", "createdAt", "updatedAt"`,
     [
       randomUUID(),
       user.tenantId,
@@ -1400,11 +1920,42 @@ export async function createWebhookForTenant(user: TenantUser, input: WebhookInp
       JSON.stringify(Array.isArray(input.events) && input.events.length > 0 ? input.events : ["LEAD_CREATED"]),
       input.secret ? String(input.secret) : null,
       input.isActive !== false,
+      rateLimitPerMinute,
       now,
     ],
   );
   if (!webhook) throw new Error("WEBHOOK_CREATE_FAILED");
   await createAuditLog(user, "CREATE", "WEBHOOK", webhook.id, null, webhook, null);
+  return webhook;
+}
+
+// Covers both editing the event subscription list and pause/resume (isActive) -- there was
+// previously no update path at all for a WebhookSubscription (create/delete only), so a
+// subscription's events could never actually be changed once created.
+export async function updateWebhookForTenant(user: TenantUser, id: string, input: Partial<WebhookInput>) {
+  const existing = await queryOne<any>(
+    `select id, url, events, "isActive", secret, "rateLimitPerMinute" from "WebhookSubscription" where id = $1 and ${user.tenantId ? '"tenantId" = $2' : '"tenantId" is null'}`,
+    user.tenantId ? [id, user.tenantId] : [id],
+  );
+  if (!existing) throw new Error("WEBHOOK_NOT_FOUND");
+
+  const nextUrl = input.url !== undefined ? String(input.url).trim() : existing.url;
+  const nextEvents = Array.isArray(input.events) && input.events.length > 0 ? input.events : existing.events;
+  const nextIsActive = input.isActive !== undefined ? Boolean(input.isActive) : existing.isActive;
+  const nextSecret = input.secret !== undefined ? (input.secret ? String(input.secret) : null) : existing.secret;
+  const nextRateLimit = Number.isFinite(input.rateLimitPerMinute) && Number(input.rateLimitPerMinute) > 0 ? Math.round(Number(input.rateLimitPerMinute)) : existing.rateLimitPerMinute;
+
+  const webhook = await queryOne<any>(
+    `update "WebhookSubscription"
+     set url = $1, events = $2, "isActive" = $3, secret = $4, "rateLimitPerMinute" = $5, "updatedAt" = $6
+     where id = $7 and ${user.tenantId ? '"tenantId" = $8' : '"tenantId" is null'}
+     returning id, coalesce(nullif(url, ''), 'Webhook') as name, url, events, "isActive", secret, "rateLimitPerMinute", "createdAt", "updatedAt"`,
+    user.tenantId
+      ? [nextUrl, JSON.stringify(nextEvents), nextIsActive, nextSecret, nextRateLimit, new Date().toISOString(), id, user.tenantId]
+      : [nextUrl, JSON.stringify(nextEvents), nextIsActive, nextSecret, nextRateLimit, new Date().toISOString(), id],
+  );
+  if (!webhook) throw new Error("WEBHOOK_UPDATE_FAILED");
+  await createAuditLog(user, "UPDATE", "WEBHOOK", id, existing, webhook, { isActive: { before: existing.isActive, after: nextIsActive } });
   return webhook;
 }
 
@@ -1430,7 +1981,17 @@ export async function getTelephonySettingsForTenant(user: TenantUser) {
 
 export async function saveTelephonySettingsForTenant(user: TenantUser, config: Record<string, unknown>) {
   const now = new Date().toISOString();
-  const existing = await getTelephonySettingsForTenant(user) as { id?: string };
+  const existing = await getTelephonySettingsForTenant(user) as { id?: string; config?: Record<string, unknown> };
+  // The webhook secret (and its rotation-grace-window fields) are managed exclusively via
+  // rotateTelephonyWebhookSecret -- always preserved here regardless of what the client sends,
+  // so a general settings save (e.g. changing the Provider field) can never blow away the
+  // live secret with a stale or absent value.
+  const mergedConfig = {
+    ...config,
+    webhookSecret: existing.config?.webhookSecret ?? null,
+    previousWebhookSecret: existing.config?.previousWebhookSecret ?? null,
+    previousWebhookSecretExpiresAt: existing.config?.previousWebhookSecretExpiresAt ?? null,
+  };
   const data = existing.id
     ? await queryOne<any>(
         `update "IntegrationSetting"
@@ -1438,15 +1999,15 @@ export async function saveTelephonySettingsForTenant(user: TenantUser, config: R
          where id = $5 and ${user.tenantId ? '"tenantId" = $6' : '"tenantId" is null'}
          returning id, type, config, "isActive", "updatedAt"`,
         user.tenantId
-          ? [config, Boolean(config.isActive), asUuidOrNull(user.id), now, existing.id, user.tenantId]
-          : [config, Boolean(config.isActive), asUuidOrNull(user.id), now, existing.id],
+          ? [mergedConfig, Boolean(config.isActive), asUuidOrNull(user.id), now, existing.id, user.tenantId]
+          : [mergedConfig, Boolean(config.isActive), asUuidOrNull(user.id), now, existing.id],
       )
     : await queryOne<any>(
         `insert into "IntegrationSetting" (
            id, "tenantId", type, config, "isActive", "updatedBy", "createdAt", "updatedAt"
          ) values ($1, $2, 'TELEPHONY', $3, $4, $5, $6, $6)
          returning id, type, config, "isActive", "updatedAt"`,
-        [randomUUID(), user.tenantId, config, Boolean(config.isActive), asUuidOrNull(user.id), now],
+        [randomUUID(), user.tenantId, mergedConfig, Boolean(config.isActive), asUuidOrNull(user.id), now],
       );
   if (!data) throw new Error("TELEPHONY_SETTINGS_SAVE_FAILED");
   await createAuditLog(user, "UPDATE", "INTEGRATION_SETTING", data.id, null, data, { type: "TELEPHONY" });
@@ -1529,15 +2090,16 @@ export async function buildClickToCallPayloadForTenant(user: TenantUser, input: 
   const phoneNumber = String(input.phoneNumber ?? input.toNumber ?? "");
   if (!phoneNumber) throw new Error("PHONE_NUMBER_REQUIRED");
   const leadId = input.leadId ? String(input.leadId) : null;
+  const opportunityId = input.opportunityId ? String(input.opportunityId) : null;
+  // Reuses the same record-access-scoped lookups every other surface uses (OWN-scoped reps
+  // only see their own records) -- the previous raw tenant-only query let a rep click-to-call
+  // any lead in the tenant regardless of ownership, bypassing the access model everywhere
+  // else in the app enforces.
   let lead: any = null;
-  if (leadId) {
-    lead = await queryOne<any>(
-      `select id, name, email, phone, company, "ownerId"
-       from "Lead"
-       where id = $1 and ${user.tenantId ? '"tenantId" = $2' : '"tenantId" is null'}
-       limit 1`,
-      user.tenantId ? [leadId, user.tenantId] : [leadId],
-    );
+  if (leadId) lead = await getLeadForTenant(user, leadId);
+  if (!lead && opportunityId) {
+    const opportunity = await getOpportunityForTenant(user, opportunityId);
+    if (opportunity?.lead) lead = opportunity.lead;
   }
   const replacements: Record<string, string> = {
     "@leadPhone": phoneNumber,
@@ -1577,7 +2139,24 @@ export async function buildClickToCallPayloadForTenant(user: TenantUser, input: 
   let executed = false;
   let success = false;
 
-  if (url && input.execute !== false) {
+  // Compliance gate: DND suppression, per-record consent opt-out, and tenant-configured
+  // quiet hours -- checked immediately before dialing, never after, so a blocked number never
+  // reaches the provider at all. Reuses the same CommunicationSuppression/CommunicationConsent
+  // tables the EMAIL/WHATSAPP/SMS channels already use (their channel CHECK constraint was
+  // widened to accept PHONE for exactly this reuse) rather than a parallel do-not-call list.
+  let complianceBlockReason: "SUPPRESSED" | "OPTED_OUT" | "QUIET_HOURS" | null = null;
+  if (user.tenantId) {
+    const { checkTelephonyComplianceForCall } = await import("@/lib/server/telephony-webhook");
+    const compliance = await checkTelephonyComplianceForCall(user.tenantId, phoneNumber, {
+      entityType: leadId ? "LEAD" : opportunityId ? "OPPORTUNITY" : undefined,
+      entityId: leadId ?? opportunityId,
+    });
+    if (!compliance.allowed) complianceBlockReason = compliance.reason;
+  }
+
+  if (complianceBlockReason) {
+    providerResponse = { blocked: true, reason: complianceBlockReason };
+  } else if (url && input.execute !== false) {
     executed = true;
     try {
       const response = await fetch(url, { method, headers, body });
@@ -1590,19 +2169,54 @@ export async function buildClickToCallPayloadForTenant(user: TenantUser, input: 
     }
   }
 
+  // Call-attempt audit log: previously a click-to-call dial left zero record of the call ever
+  // happening -- no TelephonyCallLog row, no Activity -- unless the provider's own webhook
+  // later fired (and given how weak that webhook's auth was before this pass, a
+  // misconfigured/absent webhook silently lost that history entirely). Every click-to-call
+  // invocation now logs a real attempt row immediately, regardless of whether the provider
+  // request itself succeeded, so "a rep tried to call this number at this time" is always
+  // answerable. A later webhook event for the same callId (if the provider sends one) updates
+  // this same row via recordTelephonyCallEvent's upsert instead of creating a second one.
+  let callLogId: string | null = null;
+  try {
+    if (!user.tenantId) throw new Error("TENANT_REQUIRED");
+    const { recordTelephonyCallEvent } = await import("@/lib/server/telephony-webhook");
+    const log = await recordTelephonyCallEvent(
+      user.tenantId,
+      {
+        provider: config.provider || "click-to-call",
+        callId: `manual-${randomUUID()}`,
+        direction: "OUTBOUND",
+        toNumber: phoneNumber,
+        status: complianceBlockReason ? "blocked" : executed && success ? "dialing" : executed ? "failed" : "not-attempted",
+        leadId,
+        opportunityId,
+        agentId: user.id,
+        metadata: { source: "click-to-call", triggeredBy: user.id },
+      },
+      user,
+    );
+    callLogId = log?.id ?? null;
+  } catch {
+    // Never let audit-log failure block the actual call attempt from reaching the provider.
+  }
+
   return {
     provider: config.provider ?? "",
     clickToCallUrl: url,
     agentPopupUrl: config.agentPopupUrl ?? "",
     executed,
     success,
+    blocked: !!complianceBlockReason,
+    blockReason: complianceBlockReason,
     providerResponse,
+    callLogId,
     request: { method, headers, body },
     payload: {
       agentId: input.agentId ?? user.id,
       phoneNumber,
       leadId,
-      opportunityId: input.opportunityId ?? null,
+      opportunityId,
       metadata: input.metadata ?? {},
     },
   };
@@ -1632,13 +2246,14 @@ export async function searchTenantData(user: TenantUser, term: string): Promise<
   const normalized = term.trim();
 
   if (!normalized) {
-    return { leads: [], opportunities: [], activities: [] };
+    return { leads: [], opportunities: [], activities: [], tasks: [], partners: [] };
   }
 
   const pattern = `%${normalized}%`;
   const tenantWhere = user.tenantId ? '"tenantId" = $2' : '"tenantId" is null';
+  const partnerTenantWhere = user.tenantId ? '"PartnerProfile"."tenantId" = $2' : '"PartnerProfile"."tenantId" is null';
   const values = user.tenantId ? [pattern, user.tenantId] : [pattern];
-  const [leads, opportunities, activities] = await Promise.all([
+  const [leads, opportunities, activities, tasks, partners] = await Promise.all([
     query<any>(
       `select id, name, company
        from "Lead"
@@ -1663,6 +2278,27 @@ export async function searchTenantData(user: TenantUser, term: string): Promise<
        limit 8`,
       values,
     ),
+    query<any>(
+      `select id, title
+       from "Task"
+       where title ilike $1 and ${tenantWhere}
+       order by "updatedAt" desc
+       limit 8`,
+      values,
+    ),
+    query<any>(
+      `select "PartnerProfile".id, "PartnerProfile"."legalBusinessName", "User".name, "User".email
+       from "PartnerProfile"
+       join "User" on "User".id = "PartnerProfile"."userId"
+       where (
+         "PartnerProfile"."legalBusinessName" ilike $1
+         or "User".name ilike $1
+         or "User".email ilike $1
+       ) and ${partnerTenantWhere}
+       order by "PartnerProfile"."updatedAt" desc
+       limit 8`,
+      values,
+    ),
   ]);
 
   return {
@@ -1682,6 +2318,17 @@ export async function searchTenantData(user: TenantUser, term: string): Promise<
       id: item.id,
       type: "activity" as const,
       notes: item.notes ?? null,
+    })),
+    tasks: tasks.map((item: any) => ({
+      id: item.id,
+      type: "task" as const,
+      title: item.title,
+    })),
+    partners: partners.map((item: any) => ({
+      id: item.id,
+      type: "partner" as const,
+      name: item.name ?? item.legalBusinessName,
+      company: item.legalBusinessName ?? null,
     })),
   };
 }
@@ -1819,6 +2466,19 @@ export async function runAutomationsForEvent(
 
 export async function processDueAutomationJobsForTenant(user: TenantUser, limit = 25) {
   return pgAutomations.processDueAutomationJobsForTenant(user, limit);
+}
+
+export async function enrollRecordsInAutomation(
+  user: TenantUser,
+  automationId: string,
+  entityType: "LEAD" | "OPPORTUNITY",
+  recordIds: string[]
+) {
+  return pgAutomations.enrollRecordsInAutomation(user, automationId, entityType, recordIds);
+}
+
+export async function listAutomationEnrollmentJobsForTenant(user: TenantUser, automationId: string) {
+  return pgAutomations.listAutomationEnrollmentJobsForTenant(user, automationId);
 }
 
 export async function processDueAutomationJobs(limit = 50) {

@@ -13,6 +13,7 @@ import { Plus, Pencil, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { TableSkeleton } from "@/components/common/skeletons";
 import { EmptyState } from "@/components/common/empty-state";
+import { useFeature } from "@/components/auth/feature-gate";
 import { ConditionBuilder, type ConditionFieldOption, type CrmCondition } from "@/components/common/condition-builder";
 
 type CommissionRule = {
@@ -40,6 +41,7 @@ const emptyForm = {
 };
 
 export default function CommissionRulesPage() {
+    const payoutsEnabled = useFeature("payoutsEnabled");
     const [rules, setRules] = useState<CommissionRule[]>([]);
     const [partners, setPartners] = useState<any[]>([]);
     const [opportunityTypes, setOpportunityTypes] = useState<any[]>([]);
@@ -150,6 +152,14 @@ export default function CommissionRulesPage() {
         { key: "createdAt", label: "Opportunity Created Date", type: "date" },
         { key: "expectedCloseDate", label: "Expected Close Date", type: "date" },
     ];
+
+    if (!payoutsEnabled) {
+        return (
+            <div className="mx-auto max-w-[1200px] p-4 md:p-6">
+                <EmptyState title="Payouts isn't enabled" description="Enable the Payouts feature flag for this tenant to configure commission rules." />
+            </div>
+        );
+    }
 
     return (
         <div className="mx-auto max-w-[1200px] p-4 md:p-6">

@@ -130,17 +130,31 @@ async function applyMigration(client, filePath) {
   }
 }
 
+// Fixed, app-specific advisory lock key -- prevents two concurrent migration runs (e.g. a
+// deploy script and a developer running this locally at the same time) from racing each
+// other mid-migration. Distinct from the per-rule keys distribution-engine.ts computes
+// dynamically for assignment locking, so there's no collision risk between the two uses.
+const MIGRATION_LOCK_KEY = 72727001;
+
 async function main() {
   await withClient(directDatabaseUrl(), async (client) => {
-    await client.query("create schema if not exists public");
-    await ensureMigrationTable(client);
-    await applyOptionalBaseSchema(client);
-    const files = migrationFiles();
-    for (const file of files) {
-      await applyMigration(client, file);
+    const lock = await client.query("select pg_try_advisory_lock($1) as acquired", [MIGRATION_LOCK_KEY]);
+    if (!lock.rows[0]?.acquired) {
+      throw new Error("Another migration run holds the lock (pg_try_advisory_lock failed) -- refusing to run concurrently.");
     }
-    await grantAppRolePrivileges(client);
-    console.log(`Migration complete. Checked ${files.length} migration files.`);
+    try {
+      await client.query("create schema if not exists public");
+      await ensureMigrationTable(client);
+      await applyOptionalBaseSchema(client);
+      const files = migrationFiles();
+      for (const file of files) {
+        await applyMigration(client, file);
+      }
+      await grantAppRolePrivileges(client);
+      console.log(`Migration complete. Checked ${files.length} migration files.`);
+    } finally {
+      await client.query("select pg_advisory_unlock($1)", [MIGRATION_LOCK_KEY]);
+    }
   });
 }
 

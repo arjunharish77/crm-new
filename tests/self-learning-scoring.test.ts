@@ -54,6 +54,12 @@ vi.mock("@/lib/db/query", () => ({
     if (sql.includes('from "Task"')) {
       return rows("Task").filter((row) => row.tenantId === params[0] && row.createdAt >= params[1]);
     }
+    if (sql.includes('from "TelephonyCallLog"')) {
+      return rows("TelephonyCallLog").filter((row) => row.tenantId === params[0] && row.startedAt >= params[1]);
+    }
+    if (sql.includes('from "CallDisposition"')) {
+      return rows("CallDisposition").filter((row) => row.tenantId === params[0] && row.createdAt >= params[1]);
+    }
     if (sql.includes('update "Lead" set score')) {
       const row = rows("Lead").find((lead) => lead.tenantId === params[2] && lead.id === params[3]);
       if (row) Object.assign(row, { score: params[0], updatedAt: params[1] });
@@ -114,7 +120,7 @@ vi.mock("@/lib/db/query", () => ({
       return [];
     }
     if (sql.includes('update "RecordScore"')) {
-      const row = rows("RecordScore").find((score) => score.tenantId === params[25] && score.id === params[26]);
+      const row = rows("RecordScore").find((score) => score.tenantId === params[26] && score.id === params[27]);
       if (row) {
         Object.assign(row, {
           fitScore: params[0],
@@ -138,10 +144,11 @@ vi.mock("@/lib/db/query", () => ({
           missingDataWarnings: params[18],
           similarRecordIds: params[19],
           suggestedDataImprovements: params[20],
-          featureSnapshotId: params[21],
-          modelVersionId: params[22],
-          calculatedAt: params[23],
-          updatedAt: params[24],
+          callEngagementScore: params[21],
+          featureSnapshotId: params[22],
+          modelVersionId: params[23],
+          calculatedAt: params[24],
+          updatedAt: params[25],
         });
       }
       return [];
@@ -174,10 +181,11 @@ vi.mock("@/lib/db/query", () => ({
         missingDataWarnings: params[23],
         similarRecordIds: params[24],
         suggestedDataImprovements: params[25],
-        featureSnapshotId: params[26],
-        calculatedAt: params[27],
-        updatedAt: params[27],
-        createdAt: params[27],
+        callEngagementScore: params[26],
+        featureSnapshotId: params[27],
+        calculatedAt: params[28],
+        updatedAt: params[28],
+        createdAt: params[28],
       });
       return [];
     }
@@ -263,6 +271,9 @@ vi.mock("@/lib/db/query", () => ({
       if (!matches.length) return null;
       return { versionNumber: Math.max(...matches.map((version) => version.versionNumber)) };
     }
+    if (sql.includes('select status from "TenantModuleEntitlement"')) {
+      return rows("TenantModuleEntitlement").find((row) => row.tenantId === params[0] && row.moduleKey === params[1]) ?? null;
+    }
     return null;
   },
   execute: async () => ({ rowCount: 0 }),
@@ -309,6 +320,13 @@ describe("Predictive scoring", () => {
     expect(settings.isEnabled).toBe(true);
     expect(settings.targetModules).toEqual(["LEAD"]);
     expect(settings.minimumHistoricalRecords).toBe(3);
+  });
+
+  it("rejects settings updates and recompute when the Predictive Scoring module is disabled", async () => {
+    rows("TenantModuleEntitlement").push({ tenantId: TENANT, moduleKey: "PREDICTIVE_SCORING", status: "DISABLED" });
+
+    await expect(updateScoringSettingsForTenant(adminUser, { isEnabled: true })).rejects.toThrow("MODULE_DISABLED");
+    await expect(recomputeSelfLearningScoresForTenant(adminUser)).rejects.toThrow("MODULE_DISABLED");
   });
 
   it("calculates calibration rates from historic outcomes", () => {
@@ -398,6 +416,44 @@ describe("Predictive scoring", () => {
     expect(getActiveDb().RecordScore[0].nextBestAction).toEqual(expect.any(String));
     expect(JSON.parse(getActiveDb().RecordScore[0].topDrivers)).toEqual(expect.any(Array));
     expect(getActiveDb().ScoringTrainingRun[0].status).toBe("COMPLETED");
+  });
+
+  it("feeds telephony call/disposition history into callEngagementScore and reasons", async () => {
+    setFixtureDb({
+      ScoringSettings: [
+        {
+          id: "settings-telephony",
+          tenantId: TENANT,
+          isEnabled: true,
+          targetModules: ["LEAD"],
+          objective: "CONVERSION",
+          minimumHistoricalRecords: 1,
+          lookbackDays: 365,
+          retrainCadence: "MANUAL",
+          fallbackMode: "RULE_SCORE",
+        },
+      ],
+      Lead: [
+        { id: "lead-1", tenantId: TENANT, email: "caller@example.com", phone: "999", company: "Acme", source: "Website", status: "NEW", score: 0, createdAt: "2026-01-01T00:00:00.000Z", updatedAt: "2026-01-01T00:00:00.000Z" },
+      ],
+      TelephonyCallLog: [
+        { id: "call-1", tenantId: TENANT, leadId: "lead-1", opportunityId: null, status: "completed", duration: 200, startedAt: "2026-01-02T09:00:00.000" },
+        { id: "call-2", tenantId: TENANT, leadId: "lead-1", opportunityId: null, status: "completed", duration: 180, startedAt: "2026-01-03T09:00:00.000" },
+      ],
+      CallDisposition: [
+        { id: "disp-1", tenantId: TENANT, leadId: "lead-1", opportunityId: null, interestLevel: "HOT", callbackAt: null, taskId: null, outcomeName: "Interested", createdAt: "2026-01-03T09:05:00.000Z" },
+      ],
+    });
+
+    await recomputeSelfLearningScoresForTenant(adminUser);
+
+    const score = getActiveDb().RecordScore[0];
+    expect(score.callEngagementScore).toEqual(expect.any(Number));
+    expect(score.callEngagementScore).toBeGreaterThan(50);
+    const reasons = JSON.parse(score.reasons);
+    expect(reasons.some((reason: any) => reason.label === "Call engagement")).toBe(true);
+    expect(reasons.some((reason: any) => reason.label === "Call cadence days")).toBe(true);
+    expect(reasons.some((reason: any) => reason.label === "Preferred contact window" && reason.value === "MORNING")).toBe(true);
   });
 
   it("keeps active manual overrides ahead of recomputed predictive scores", async () => {

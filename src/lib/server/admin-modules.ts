@@ -1,13 +1,15 @@
 import { randomUUID } from "crypto";
-import { execute, query, queryOne } from "@/lib/db/query";
+import { execute, query, queryOne, type Queryable } from "@/lib/db/query";
 import { withTransaction } from "@/lib/db/transaction";
 import * as pgAdminModules from "@/lib/repositories/admin-modules-postgres";
+import { assertModuleEnabled } from "@/lib/server/module-entitlements";
 
 type TenantUser = {
   id: string;
   tenantId: string | null;
   name?: string | null;
   email?: string | null;
+  isPlatformAdmin?: boolean;
 };
 
 type GeneralSettings = {
@@ -135,6 +137,10 @@ export async function listTeamsForTenant(user: TenantUser) {
   return pgAdminModules.listTeamsForTenant(user);
 }
 
+export async function getTeamForTenant(user: TenantUser, id: string) {
+  return pgAdminModules.getTeamForTenant(user, id);
+}
+
 export async function createTeamForTenant(user: TenantUser, input: Record<string, unknown>) {
   return pgAdminModules.createTeamForTenant(user, input);
 }
@@ -179,62 +185,227 @@ export async function removeSalesGroupMemberForTenant(user: TenantUser, groupId:
   return pgAdminModules.removeSalesGroupMemberForTenant(user, groupId, userId);
 }
 
+function isValidDateString(value: unknown): value is string {
+  return typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value);
+}
+
+// Normalized schema (migration 0082) -- see distribution-engine.ts's own RuleBundle type for
+// the read-side counterpart. Builds the UI-facing `config` shape from the 4 child tables
+// instead of unpacking a single conditions jsonb blob.
+async function loadAssignmentRuleConfigs(tenantId: string, ruleIds: string[], client?: Queryable) {
+  const configs = new Map<string, Record<string, unknown>>(ruleIds.map((id) => [id, {
+    userPool: [] as string[],
+    fallbackUserId: undefined as string | undefined,
+    conditions: [] as Array<{ field: string; operator: string; value: unknown }>,
+    userWeights: {} as Record<string, number>,
+    maxAssignmentsPerUser: undefined as number | undefined,
+    maxAssignmentsPerWindow: undefined as number | undefined,
+    windowPeriod: "DAY",
+    activeFrom: undefined as string | undefined,
+    activeUntil: undefined as string | undefined,
+    requiredSkills: [] as string[],
+  }]));
+  if (ruleIds.length === 0) return configs;
+
+  // A shared TransactionClient wraps a single pg connection (can't run overlapping queries),
+  // and -- more importantly here -- must be used so a caller mid-transaction (create/update,
+  // just below) reads back the child rows it just wrote before they've committed. Without a
+  // client (the plain list/read path), the pool lets these run concurrently.
+  const conditions = await query<any>('select "ruleId", field, operator, value, "order" from "DistributionCondition" where "tenantId" = $1 and "ruleId" = any($2::text[]) order by "ruleId", "order"', [tenantId, ruleIds], client);
+  const targets = await query<any>('select "ruleId", "userId", "isPoolMember", "isFallback", weight from "DistributionTarget" where "tenantId" = $1 and "ruleId" = any($2::text[])', [tenantId, ruleIds], client);
+  const quotas = await query<any>('select "ruleId", "maxAssignmentsPerUser", "maxAssignmentsPerWindow", "windowPeriod" from "DistributionQuota" where "tenantId" = $1 and "ruleId" = any($2::text[])', [tenantId, ruleIds], client);
+  const availabilities = await query<any>('select "ruleId", "activeFrom", "activeUntil", "requiredSkills" from "DistributionAvailability" where "tenantId" = $1 and "ruleId" = any($2::text[])', [tenantId, ruleIds], client);
+
+  for (const row of conditions) {
+    const config = configs.get(row.ruleId);
+    if (config) (config.conditions as unknown[]).push({ field: row.field, operator: row.operator, value: row.value });
+  }
+  for (const row of targets) {
+    const config = configs.get(row.ruleId);
+    if (!config) continue;
+    if (row.isPoolMember) (config.userPool as string[]).push(row.userId);
+    if (row.isFallback) config.fallbackUserId = row.userId;
+    if (row.isPoolMember && row.weight !== null) (config.userWeights as Record<string, number>)[row.userId] = Number(row.weight);
+  }
+  for (const row of quotas) {
+    const config = configs.get(row.ruleId);
+    if (!config) continue;
+    config.maxAssignmentsPerUser = row.maxAssignmentsPerUser ?? undefined;
+    config.maxAssignmentsPerWindow = row.maxAssignmentsPerWindow ?? undefined;
+    config.windowPeriod = row.windowPeriod ?? "DAY";
+  }
+  for (const row of availabilities) {
+    const config = configs.get(row.ruleId);
+    if (!config) continue;
+    config.activeFrom = row.activeFrom ?? undefined;
+    config.activeUntil = row.activeUntil ?? undefined;
+    config.requiredSkills = Array.isArray(row.requiredSkills) ? row.requiredSkills : [];
+  }
+
+  return configs;
+}
+
 export async function listAssignmentRulesForTenant(user: TenantUser) {
   const tenantId = requireTenantId(user);
   const rows = await query<any>(
-    `select id, name, description, "entityType", priority, "isActive", conditions, strategy, "targetGroupId", "targetUserIds", "createdAt", "updatedAt"
+    `select id, name, description, "entityType", priority, "isActive", strategy, "targetGroupId", "territoryField", "ruleSetId", "isDefault", "createdAt", "updatedAt"
      from "AssignmentRule"
      where "tenantId" = $1
      order by priority desc`,
     [tenantId],
   );
 
+  const configs = await loadAssignmentRuleConfigs(tenantId, rows.map((rule) => rule.id));
+
   return rows.map((rule) => ({
     ...rule,
     type: rule.strategy,
-    config: {
-      salesGroupId: rule.targetGroupId ?? undefined,
-      userPool: rule.targetUserIds ?? [],
-      matchingKeys:
-        rule.conditions && typeof rule.conditions === "object" && !Array.isArray(rule.conditions)
-          ? Object.fromEntries(Object.entries(rule.conditions as Record<string, unknown>).filter(([key]) => !key.startsWith("__")))
-          : {},
-      fallbackUserId:
-        rule.conditions && typeof rule.conditions === "object" && !Array.isArray(rule.conditions)
-          ? (rule.conditions as Record<string, unknown>).__fallbackUserId
-          : undefined,
-    },
+    config: { ...configs.get(rule.id), salesGroupId: rule.targetGroupId ?? undefined, territoryField: rule.territoryField ?? undefined },
   }));
+}
+
+// Writes the 4 child tables for a rule from the builder's submitted `config`, replacing
+// whatever was there before -- except DistributionTarget.fairnessCredit, which is carried
+// forward for any user who remains in the pool/fallback slot after the edit (the normalized-
+// schema equivalent of the old jsonb rebuild's careful __weightedState preservation: an
+// unrelated edit, like renaming the rule, must not reset a user's accumulated weighted-fairness
+// credit). DistributionCondition ordering and DistributionQuota/DistributionAvailability have
+// no persisted state of their own, so those are a plain delete-and-reinsert.
+async function writeAssignmentRuleChildRows(tenantId: string, ruleId: string, config: Record<string, unknown>, isDefault: boolean, client: Queryable) {
+  const now = new Date().toISOString();
+
+  await execute('delete from "DistributionCondition" where "tenantId" = $1 and "ruleId" = $2', [tenantId, ruleId], client);
+  const conditions = isDefault ? [] : Array.isArray(config.conditions) ? config.conditions : [];
+  for (let index = 0; index < conditions.length; index += 1) {
+    const condition = conditions[index] as Record<string, unknown>;
+    if (!condition || !condition.field) continue;
+    await execute(
+      `insert into "DistributionCondition" (id, "tenantId", "ruleId", field, operator, value, "order", "createdAt", "updatedAt")
+       values ($1,$2,$3,$4,$5,$6,$7,$8,$8)`,
+      [randomUUID(), tenantId, ruleId, String(condition.field), String(condition.operator ?? "equals"), condition.value ?? null, index, now],
+      client,
+    );
+  }
+
+  const existingTargets = await query<{ userId: string; fairnessCredit: number }>(
+    'select "userId", "fairnessCredit" from "DistributionTarget" where "tenantId" = $1 and "ruleId" = $2',
+    [tenantId, ruleId],
+    client,
+  );
+  const creditByUserId = new Map(existingTargets.map((target) => [target.userId, Number(target.fairnessCredit) || 0]));
+  await execute('delete from "DistributionTarget" where "tenantId" = $1 and "ruleId" = $2', [tenantId, ruleId], client);
+
+  const poolIds: string[] = Array.isArray(config.userPool) ? config.userPool.map(String) : [];
+  const fallbackUserId = config.fallbackUserId ? String(config.fallbackUserId) : null;
+  const weights = config.userWeights && typeof config.userWeights === "object" ? (config.userWeights as Record<string, unknown>) : {};
+  const targetUserIds = new Set([...poolIds, ...(fallbackUserId ? [fallbackUserId] : [])]);
+  for (const userId of targetUserIds) {
+    const isPoolMember = poolIds.includes(userId);
+    const isFallback = userId === fallbackUserId;
+    const weight = isPoolMember && weights[userId] !== undefined && weights[userId] !== null && weights[userId] !== "" ? Number(weights[userId]) || null : null;
+    await execute(
+      `insert into "DistributionTarget" (id, "tenantId", "ruleId", "userId", "isPoolMember", "isFallback", weight, "fairnessCredit", "createdAt", "updatedAt")
+       values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$9)`,
+      [randomUUID(), tenantId, ruleId, userId, isPoolMember, isFallback, weight, creditByUserId.get(userId) ?? 0, now],
+      client,
+    );
+  }
+
+  await execute('delete from "DistributionQuota" where "tenantId" = $1 and "ruleId" = $2', [tenantId, ruleId], client);
+  const maxAssignmentsPerUser = Number(config.maxAssignmentsPerUser) > 0 ? Number(config.maxAssignmentsPerUser) : null;
+  const maxAssignmentsPerWindow = Number(config.maxAssignmentsPerWindow) > 0 ? Number(config.maxAssignmentsPerWindow) : null;
+  if (maxAssignmentsPerUser || maxAssignmentsPerWindow) {
+    await execute(
+      `insert into "DistributionQuota" (id, "tenantId", "ruleId", "maxAssignmentsPerUser", "maxAssignmentsPerWindow", "windowPeriod", "createdAt", "updatedAt")
+       values ($1,$2,$3,$4,$5,$6,$7,$7)`,
+      [randomUUID(), tenantId, ruleId, maxAssignmentsPerUser, maxAssignmentsPerWindow, maxAssignmentsPerWindow ? (config.windowPeriod === "WEEK" ? "WEEK" : "DAY") : null, now],
+      client,
+    );
+  }
+
+  await execute('delete from "DistributionAvailability" where "tenantId" = $1 and "ruleId" = $2', [tenantId, ruleId], client);
+  const activeFrom = isValidDateString(config.activeFrom) ? (config.activeFrom as string) : null;
+  const activeUntil = isValidDateString(config.activeUntil) ? (config.activeUntil as string) : null;
+  const requiredSkills = Array.isArray(config.requiredSkills) && config.requiredSkills.length > 0 ? config.requiredSkills.map(String) : null;
+  if (activeFrom || activeUntil || requiredSkills) {
+    await execute(
+      `insert into "DistributionAvailability" (id, "tenantId", "ruleId", "activeFrom", "activeUntil", "requiredSkills", "createdAt", "updatedAt")
+       values ($1,$2,$3,$4,$5,$6,$7,$7)`,
+      [randomUUID(), tenantId, ruleId, activeFrom, activeUntil, requiredSkills, now],
+      client,
+    );
+  }
+}
+
+async function loadAssignmentRuleForTenant(tenantId: string, ruleId: string, client: Queryable) {
+  const rule = await queryOne<any>(
+    `select id, name, description, "entityType", priority, "isActive", strategy, "targetGroupId", "territoryField", "ruleSetId", "isDefault", "createdAt", "updatedAt"
+     from "AssignmentRule" where "tenantId" = $1 and id = $2`,
+    [tenantId, ruleId],
+    client,
+  );
+  if (!rule) throw new Error("ASSIGNMENTRULE_NOT_FOUND");
+  const configs = await loadAssignmentRuleConfigs(tenantId, [ruleId], client);
+  return { ...rule, type: rule.strategy, config: { ...configs.get(ruleId), salesGroupId: rule.targetGroupId ?? undefined, territoryField: rule.territoryField ?? undefined } };
+}
+
+// A default (catch-all) rule always matches -- its conditions are forced empty regardless
+// of what's passed in, and only one may exist per tenant+entityType, so marking a new rule
+// default silently un-defaults whichever rule previously held that slot rather than leaving
+// two catch-alls to race on priority order.
+async function clearOtherDefaultRules(tenantId: string, entityType: string, exceptId?: string) {
+  const clauses = ['"tenantId" = $1', '"entityType" = $2', '"isDefault" = true'];
+  const values: unknown[] = [tenantId, entityType];
+  if (exceptId) {
+    values.push(exceptId);
+    clauses.push(`id <> $${values.length}`);
+  }
+  await execute(`update "AssignmentRule" set "isDefault" = false where ${clauses.join(" and ")}`, values);
 }
 
 export async function createAssignmentRuleForTenant(user: TenantUser, input: Record<string, unknown>) {
   const tenantId = requireTenantId(user);
+  await assertModuleEnabled(tenantId, "DISTRIBUTION", { isPlatformAdmin: user.isPlatformAdmin });
   const config = (input.config as Record<string, unknown>) ?? {};
-  const conditions = {
-    ...((config.matchingKeys as Record<string, unknown>) ?? {}),
-    ...(config.fallbackUserId ? { __fallbackUserId: String(config.fallbackUserId) } : {}),
-  };
+  const isDefault = input.isDefault === true;
+  const entityType = input.entityType ? String(input.entityType) : "LEAD";
   const now = new Date().toISOString();
+  const ruleId = randomUUID();
 
-  return insertReturning<any>("AssignmentRule", {
-    id: randomUUID(),
-    tenantId,
-    name: String(input.name ?? "").trim(),
-    description: input.description ? String(input.description) : null,
-    entityType: input.entityType ? String(input.entityType) : "LEAD",
-    priority: Number(input.priority ?? 0),
-    isActive: input.isActive !== false,
-    conditions,
-    strategy: input.type ? String(input.type) : "ROUND_ROBIN",
-    targetGroupId: config.salesGroupId ? String(config.salesGroupId) : null,
-    targetUserIds: Array.isArray(config.userPool) ? config.userPool.map(String) : [],
-    createdAt: now,
-    updatedAt: now,
-  }, 'id, name, description, "entityType", priority, "isActive", conditions, strategy, "targetGroupId", "targetUserIds", "createdAt", "updatedAt"');
+  if (isDefault) await clearOtherDefaultRules(tenantId, entityType);
+
+  return withTransaction(user, async (client) => {
+    await execute(
+      `insert into "AssignmentRule"
+         (id, "tenantId", name, description, "entityType", priority, "isActive", "isDefault", strategy, "targetGroupId", "territoryField", "ruleSetId", "roundRobinCursor", "createdAt", "updatedAt")
+       values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,-1,$13,$13)`,
+      [
+        ruleId,
+        tenantId,
+        String(input.name ?? "").trim(),
+        input.description ? String(input.description) : null,
+        entityType,
+        Number(input.priority ?? 0),
+        input.isActive !== false,
+        isDefault,
+        input.type ? String(input.type) : "ROUND_ROBIN",
+        config.salesGroupId ? String(config.salesGroupId) : null,
+        config.territoryField ? String(config.territoryField) : null,
+        input.ruleSetId ? String(input.ruleSetId) : null,
+        now,
+      ],
+      client,
+    );
+
+    await writeAssignmentRuleChildRows(tenantId, ruleId, config, isDefault, client);
+
+    return loadAssignmentRuleForTenant(tenantId, ruleId, client);
+  });
 }
 
 export async function updateAssignmentRuleForTenant(user: TenantUser, id: string, input: Record<string, unknown>) {
   const tenantId = requireTenantId(user);
+  await assertModuleEnabled(tenantId, "DISTRIBUTION", { isPlatformAdmin: user.isPlatformAdmin });
   const config = (input.config as Record<string, unknown>) ?? {};
   const payload: Record<string, unknown> = { updatedAt: new Date().toISOString() };
 
@@ -244,27 +415,112 @@ export async function updateAssignmentRuleForTenant(user: TenantUser, id: string
   if ("priority" in input) payload.priority = Number(input.priority ?? 0);
   if ("isActive" in input) payload.isActive = input.isActive !== false;
   if ("type" in input) payload.strategy = String(input.type ?? "ROUND_ROBIN");
+  if ("isDefault" in input) payload.isDefault = input.isDefault === true;
+  if ("ruleSetId" in input) payload.ruleSetId = input.ruleSetId ? String(input.ruleSetId) : null;
   if ("config" in input) {
-    payload.conditions = {
-      ...((config.matchingKeys as Record<string, unknown>) ?? {}),
-      ...(config.fallbackUserId ? { __fallbackUserId: String(config.fallbackUserId) } : {}),
-    };
     payload.targetGroupId = config.salesGroupId ? String(config.salesGroupId) : null;
-    payload.targetUserIds = Array.isArray(config.userPool) ? config.userPool.map(String) : [];
+    payload.territoryField = config.territoryField ? String(config.territoryField) : null;
   }
 
-  return updateReturning<any>(
-    "AssignmentRule",
-    payload,
-    'where "tenantId" = $1 and id = $2',
-    [tenantId, id],
-    'id, name, description, "entityType", priority, "isActive", conditions, strategy, "targetGroupId", "targetUserIds", "createdAt", "updatedAt"',
-  );
+  if (payload.isDefault === true) {
+    const entityType = String(payload.entityType ?? (await queryOne<any>('select "entityType" from "AssignmentRule" where id = $1 and "tenantId" = $2', [id, tenantId]))?.entityType ?? "LEAD");
+    await clearOtherDefaultRules(tenantId, entityType, id);
+  }
+
+  return withTransaction(user, async (client) => {
+    await updateReturning<any>("AssignmentRule", payload, 'where "tenantId" = $1 and id = $2', [tenantId, id], "id");
+
+    if ("config" in input) {
+      // isDefault may not be part of THIS patch (e.g. only config changed) -- fall back to the
+      // row's current isDefault so a config-only edit on an existing default rule still forces
+      // its conditions empty, matching create's behavior.
+      const isDefault = "isDefault" in payload
+        ? payload.isDefault === true
+        : Boolean((await queryOne<any>('select "isDefault" from "AssignmentRule" where "tenantId" = $1 and id = $2', [tenantId, id], client))?.isDefault);
+      await writeAssignmentRuleChildRows(tenantId, id, config, isDefault, client);
+    }
+
+    return loadAssignmentRuleForTenant(tenantId, id, client);
+  });
 }
 
 export async function deleteAssignmentRuleForTenant(user: TenantUser, id: string) {
   const tenantId = requireTenantId(user);
+  await assertModuleEnabled(tenantId, "DISTRIBUTION", { isPlatformAdmin: user.isPlatformAdmin });
+  // DistributionCondition/Target/Quota/Availability all cascade-delete via their ruleId FK.
   await execute('delete from "AssignmentRule" where "tenantId" = $1 and id = $2', [tenantId, id]);
+}
+
+// Drag/drop reordering: the dragged-into order becomes the new priority order top-to-bottom
+// (index 0 = highest priority), matching distribution-engine's `order by priority desc`.
+export async function reorderAssignmentRulesForTenant(user: TenantUser, orderedIds: string[]) {
+  const tenantId = requireTenantId(user);
+  await assertModuleEnabled(tenantId, "DISTRIBUTION", { isPlatformAdmin: user.isPlatformAdmin });
+  const total = orderedIds.length;
+  await Promise.all(orderedIds.map((id, index) =>
+    execute('update "AssignmentRule" set priority = $1, "updatedAt" = $2 where "tenantId" = $3 and id = $4', [total - index, new Date().toISOString(), tenantId, id])
+  ));
+}
+
+// Distribution rule folders (DistributionRuleSet, migration 0082) -- purely organizational,
+// grouping rules for display in the builder; AssignmentRule.ruleSetId is nullable (ungrouped is
+// the default) and ON DELETE SET NULL, so deleting a folder never destroys the rules in it.
+export async function listDistributionRuleSetsForTenant(user: TenantUser, entityType?: string) {
+  const tenantId = requireTenantId(user);
+  const clauses = ['"tenantId" = $1'];
+  const params: unknown[] = [tenantId];
+  if (entityType) {
+    params.push(String(entityType).toUpperCase());
+    clauses.push(`"entityType" = $${params.length}`);
+  }
+  return query<any>(
+    `select id, "entityType", name, description, "order", "isActive", "createdAt", "updatedAt" from "DistributionRuleSet" where ${clauses.join(" and ")} order by "order" asc, name asc`,
+    params,
+  );
+}
+
+export async function createDistributionRuleSetForTenant(user: TenantUser, input: Record<string, unknown>) {
+  const tenantId = requireTenantId(user);
+  await assertModuleEnabled(tenantId, "DISTRIBUTION", { isPlatformAdmin: user.isPlatformAdmin });
+  const now = new Date().toISOString();
+  return insertReturning<any>(
+    "DistributionRuleSet",
+    {
+      id: randomUUID(),
+      tenantId,
+      entityType: input.entityType ? String(input.entityType).toUpperCase() : "LEAD",
+      name: String(input.name ?? "").trim(),
+      description: input.description ? String(input.description) : null,
+      order: Number(input.order ?? 0),
+      isActive: input.isActive !== false,
+      createdAt: now,
+      updatedAt: now,
+    },
+    'id, "entityType", name, description, "order", "isActive", "createdAt", "updatedAt"',
+  );
+}
+
+export async function updateDistributionRuleSetForTenant(user: TenantUser, id: string, input: Record<string, unknown>) {
+  const tenantId = requireTenantId(user);
+  await assertModuleEnabled(tenantId, "DISTRIBUTION", { isPlatformAdmin: user.isPlatformAdmin });
+  const payload: Record<string, unknown> = { updatedAt: new Date().toISOString() };
+  if ("name" in input) payload.name = String(input.name ?? "").trim();
+  if ("description" in input) payload.description = input.description ? String(input.description) : null;
+  if ("order" in input) payload.order = Number(input.order ?? 0);
+  if ("isActive" in input) payload.isActive = input.isActive !== false;
+  return updateReturning<any>(
+    "DistributionRuleSet",
+    payload,
+    'where "tenantId" = $1 and id = $2',
+    [tenantId, id],
+    'id, "entityType", name, description, "order", "isActive", "createdAt", "updatedAt"',
+  );
+}
+
+export async function deleteDistributionRuleSetForTenant(user: TenantUser, id: string) {
+  const tenantId = requireTenantId(user);
+  await assertModuleEnabled(tenantId, "DISTRIBUTION", { isPlatformAdmin: user.isPlatformAdmin });
+  await execute('delete from "DistributionRuleSet" where "tenantId" = $1 and id = $2', [tenantId, id]);
 }
 
 export async function listLeadScoringRulesForTenant(user: TenantUser) {
@@ -443,12 +699,22 @@ export async function deleteCustomFieldForTenant(user: TenantUser, id: string) {
   ]);
 }
 
+// Priority Module 12's "product catalog" item 3 -- an OpportunityType (e.g. "University 1")
+// can optionally link to a catalog Program, so future course-dropdown/fee-plan/document-checklist
+// UI (separate, later items) can resolve the right catalog data through this one FK. `Program.id`
+// alone has no composite (tenantId, id) constraint, so a cross-tenant id could otherwise slip
+// through -- verified here at the application layer instead.
+async function assertProgramBelongsToTenant(tenantId: string, programId: string) {
+  const row = await queryOne<{ id: string }>('select id from "Program" where id = $1 and "tenantId" = $2', [programId, tenantId]);
+  if (!row) throw new Error("PROGRAM_NOT_FOUND");
+}
+
 export async function listOpportunityTypeConfigsForTenant(user: TenantUser) {
   const tenantId = requireTenantId(user);
   const objectId = await getObjectDefinitionId(tenantId, "OPPORTUNITY");
   const [types, opportunityCounts, fields] = await Promise.all([
     query<any>(
-      'select id, name, description, icon, color, "order", "isActive", "createdAt", "updatedAt" from "OpportunityType" where "tenantId" = $1 and "objectId" = $2 order by "order" asc',
+      'select id, name, description, icon, color, "order", "isActive", "programId", "createdAt", "updatedAt" from "OpportunityType" where "tenantId" = $1 and "objectId" = $2 order by "order" asc',
       [tenantId, objectId],
     ),
     query<any>('select "opportunityTypeId", count(*)::int as count from "Opportunity" where "tenantId" = $1 group by "opportunityTypeId"', [tenantId]),
@@ -475,6 +741,8 @@ export async function createOpportunityTypeConfigForTenant(user: TenantUser, inp
     [tenantId, objectId],
   );
   const order = typeof input.order === "number" ? Number(input.order) : Number(last?.order ?? 0) + 1;
+  const programId = input.programId ? String(input.programId) : null;
+  if (programId) await assertProgramBelongsToTenant(tenantId, programId);
 
   return insertReturning<any>("OpportunityType", {
     id: randomUUID(),
@@ -486,9 +754,10 @@ export async function createOpportunityTypeConfigForTenant(user: TenantUser, inp
     color: input.color ? String(input.color) : null,
     order,
     isActive: input.isActive !== false,
+    programId,
     createdAt: now,
     updatedAt: now,
-  }, 'id, name, description, icon, color, "order", "isActive", "createdAt", "updatedAt"');
+  }, 'id, name, description, icon, color, "order", "isActive", "programId", "createdAt", "updatedAt"');
 }
 
 export async function updateOpportunityTypeConfigForTenant(user: TenantUser, id: string, input: Record<string, unknown>) {
@@ -499,13 +768,18 @@ export async function updateOpportunityTypeConfigForTenant(user: TenantUser, id:
   }
   if ("isActive" in input) payload.isActive = input.isActive !== false;
   if ("order" in input) payload.order = Number(input.order ?? 0);
+  if ("programId" in input) {
+    const programId = input.programId ? String(input.programId) : null;
+    if (programId) await assertProgramBelongsToTenant(tenantId, programId);
+    payload.programId = programId;
+  }
 
   return updateReturning<any>(
     "OpportunityType",
     payload,
     'where "tenantId" = $1 and id = $2',
     [tenantId, id],
-    'id, name, description, icon, color, "order", "isActive", "createdAt", "updatedAt"',
+    'id, name, description, icon, color, "order", "isActive", "programId", "createdAt", "updatedAt"',
   );
 }
 

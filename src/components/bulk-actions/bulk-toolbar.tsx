@@ -17,6 +17,7 @@ import {
     UserCog,
     Settings,
     ListPlus,
+    CheckCircle2,
 } from "lucide-react";
 import { spring } from "@/lib/motion";
 import { cn } from "@/lib/utils";
@@ -29,7 +30,7 @@ interface BulkAction {
     color?: "error" | "primary" | "secondary" | "inherit";
 }
 
-export type BulkModule = "leads" | "opportunities" | "users" | "tenants";
+export type BulkModule = "leads" | "opportunities" | "users" | "tenants" | "activities" | "payouts" | "partners";
 
 export interface BulkActionsToolbarProps {
     selectedCount: number;
@@ -52,6 +53,12 @@ export interface BulkActionsToolbarProps {
     onAssignManager?: () => void;
     // Tenants actions
     onToggleFeatures?: () => void;
+    // Activities actions
+    onMarkCompleted?: () => void;
+    // Payouts actions
+    onApprove?: () => void;
+    // Partners actions
+    onSuspend?: () => void;
 }
 
 export function BulkActionsToolbar({
@@ -71,6 +78,9 @@ export function BulkActionsToolbar({
     onAssignTeam,
     onAssignManager,
     onToggleFeatures,
+    onMarkCompleted,
+    onApprove,
+    onSuspend,
 }: BulkActionsToolbarProps) {
     // Build context-aware actions based on module
     const actions: BulkAction[] = [];
@@ -105,6 +115,18 @@ export function BulkActionsToolbar({
         if (onToggleFeatures) actions.push({ label: "Features", icon: <Settings className="size-4" />, onClick: onToggleFeatures });
         if (onExport) actions.push({ label: "Export", icon: <Download className="size-4" />, onClick: onExport });
         if (onDelete) actions.push({ label: "Delete", icon: <Trash2 className="size-4" />, onClick: onDelete, color: "error" });
+    }
+
+    if (module === "activities") {
+        if (onMarkCompleted) actions.push({ label: "Mark Completed", icon: <CheckCircle2 className="size-4" />, onClick: onMarkCompleted });
+    }
+
+    if (module === "payouts") {
+        if (onApprove) actions.push({ label: "Approve", icon: <CheckCircle2 className="size-4" />, onClick: onApprove });
+    }
+
+    if (module === "partners") {
+        if (onSuspend) actions.push({ label: "Suspend", icon: <ToggleRight className="size-4" />, onClick: onSuspend, color: "error" });
     }
 
     return (

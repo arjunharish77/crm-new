@@ -90,3 +90,32 @@ export async function scoreViaMlService(input: {
 }): Promise<MlScoreResult | null> {
   return postJson<MlScoreResult>("/score", input);
 }
+
+export type MlNbaScoreResult = {
+  available: boolean;
+  reason?: string;
+  mlScore?: number;
+  sampleSize?: number;
+};
+
+// NBA candidate scoring (gap checklist: "Add NBA scoring in ml-service") -- trains a small
+// LogisticRegression on the fly from this tenant's own recommendation history per actionType
+// (see ml-service/app/nba.py), scored against the exact same feature breakdown
+// next-best-action.ts's computeCandidateScore already computes. `available: false` (below the
+// minimum sample size, or single-class history) is handled the same as a null response --
+// callers just skip that candidate's signal, same fail-open contract as
+// trainViaMlService/scoreViaMlService.
+//
+// Batched, not one call per candidate: generateRecommendationsForRecord evaluates every active
+// rule for one record in a single pass, and multiple rules commonly share an actionType --
+// scoring them one at a time would mean ml-service re-training an identical model from scratch
+// per rule. This sends every eligible candidate for one generation pass in a single request;
+// ml-service groups them by actionType and trains each unique one exactly once.
+export async function scoreNbaCandidatesBatchViaMlService(input: {
+  tenantId: string;
+  candidates: Array<{ key: string; actionType: string; features: Record<string, number> }>;
+}): Promise<Record<string, MlNbaScoreResult> | null> {
+  if (!input.candidates.length) return {};
+  const result = await postJson<{ results: Record<string, MlNbaScoreResult> }>("/nba-score-batch", input);
+  return result?.results ?? null;
+}

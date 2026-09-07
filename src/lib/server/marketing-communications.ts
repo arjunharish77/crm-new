@@ -2,8 +2,9 @@ import { randomUUID } from "crypto";
 import { query, queryOne } from "@/lib/db/query";
 import { createAuditLog } from "@/lib/server/crm";
 import { getLeadListForTenant } from "@/lib/repositories/lead-lists-postgres";
-import { listLeadsForTenant } from "@/lib/repositories/leads-postgres";
+import { listLeadsForTenant, getPendingNbaCountMap } from "@/lib/repositories/leads-postgres";
 import { queueCommunicationForTenant, renderTemplate } from "@/lib/server/communications";
+import { assertModuleEnabled } from "@/lib/server/module-entitlements";
 
 type TenantUser = {
   id: string;
@@ -170,6 +171,7 @@ function defaultStats() {
 
 export async function upsertMarketingCampaignForTenant(user: TenantUser, input: CampaignInput & { id?: string }) {
   const tenantId = requireTenantId(user);
+  await assertModuleEnabled(tenantId, "MARKETING", { isPlatformAdmin: user.isPlatformAdmin });
   const now = new Date().toISOString();
   const id = input.id || randomUUID();
   const name = String(input.name ?? "").trim();
@@ -268,10 +270,34 @@ async function replaceCampaignSteps(user: TenantUser, campaignId: string, defaul
   }
 }
 
+// Gap checklist Module 10's "approval inbox" item, "campaign approvals" sub-item -- real bug
+// found and fixed while wiring this into the unified inbox: updateMarketingCampaignStatusForTenant
+// previously accepted ANY status with no transition validation at all, so a campaign could jump
+// straight from DRAFT to RUNNING, silently bypassing PENDING_APPROVAL/APPROVED entirely --
+// "approval" was a label a status COULD pass through, never a gate anything actually enforced.
+// Mirrors the same ALLOWED_TRANSITIONS guard payouts.ts's own transitionPayoutStatus already uses.
+const CAMPAIGN_ALLOWED_TRANSITIONS: Record<CampaignStatus, CampaignStatus[]> = {
+  DRAFT: ["PENDING_APPROVAL", "CANCELLED"],
+  PENDING_APPROVAL: ["APPROVED", "DRAFT", "CANCELLED"],
+  APPROVED: ["SCHEDULED", "RUNNING", "DRAFT", "CANCELLED"],
+  SCHEDULED: ["RUNNING", "CANCELLED"],
+  RUNNING: ["PAUSED", "COMPLETED", "CANCELLED"],
+  PAUSED: ["RUNNING", "CANCELLED"],
+  COMPLETED: [],
+  CANCELLED: [],
+};
+
 export async function updateMarketingCampaignStatusForTenant(user: TenantUser, id: string, status: CampaignStatus) {
   const tenantId = requireTenantId(user);
+  await assertModuleEnabled(tenantId, "MARKETING", { isPlatformAdmin: user.isPlatformAdmin });
   const before = await getMarketingCampaignForTenant(user, id);
   if (!before) throw new Error("MARKETING_CAMPAIGN_NOT_FOUND");
+  // A same-status "transition" is always allowed as a no-op -- launchMarketingCampaignForTenant
+  // (below) can legitimately re-invoke this with "RUNNING" while a drip campaign's status is
+  // already RUNNING, which isn't a real state change to validate against the transition map.
+  if (status !== before.status && !CAMPAIGN_ALLOWED_TRANSITIONS[before.status as CampaignStatus]?.includes(status)) {
+    throw new Error(`INVALID_CAMPAIGN_TRANSITION: ${before.status} -> ${status}`);
+  }
   const now = new Date().toISOString();
   const updates: string[] = ['status = $3', '"updatedBy" = $4', '"updatedAt" = $5'];
   const values: unknown[] = [tenantId, id, status, user.id, now];
@@ -293,10 +319,32 @@ export async function updateMarketingCampaignStatusForTenant(user: TenantUser, i
 export async function previewMarketingCampaignAudienceForTenant(user: TenantUser, input: Pick<CampaignInput, "audienceType" | "audienceConfig" | "channel">) {
   const channel = normalizeChannel(input.channel);
   const records = await resolveAudience(user, normalizeAudienceType(input.audienceType), input.audienceConfig ?? {}, channel, 100);
-  return { count: records.total, sample: records.items.slice(0, 10) };
+
+  // "Recommendation surfaces... marketing campaign audience builder" (gap checklist: "NBA
+  // recommendation surfaces") -- this screen has no persistent per-record detail view the way
+  // Lead/Opportunity detail pages do (confirmed directly: audience preview is a flat,
+  // potentially-large recipient sample, not a record workspace), so a per-row expand/collapse
+  // is the real surface here: each LEAD-backed sample row gets its own bulk-computed
+  // pendingNbaCount (the same lookup the Leads list page's count-chip column already relies
+  // on) to render a real NbaCountChip inline, and the frontend expands a row into the exact
+  // same NextBestActionPanel every other surface uses, scoped to that recipient's real
+  // recordId -- not a bespoke summary-only substitute. The tenant-wide aggregate
+  // (recipientsWithPendingNba/sampledLeadCount) stays too, for an at-a-glance read before
+  // expanding anything.
+  const sample = records.items.slice(0, 10);
+  const leadIds = records.items.filter((item: any) => item.entityType === "LEAD").map((item: any) => String(item.entityId));
+  const pendingNbaMap = leadIds.length ? await getPendingNbaCountMap(user.tenantId, leadIds) : new Map<string, number>();
+  const recipientsWithPendingNba = leadIds.filter((id: string) => (pendingNbaMap.get(id) ?? 0) > 0).length;
+  const sampleWithNba = sample.map((item: any) =>
+    item.entityType === "LEAD" ? { ...item, pendingNbaCount: pendingNbaMap.get(String(item.entityId)) ?? 0 } : item,
+  );
+
+  return { count: records.total, sample: sampleWithNba, recipientsWithPendingNba, sampledLeadCount: leadIds.length };
 }
 
 export async function sendMarketingCampaignTestForTenant(user: TenantUser, id: string, recipient: string) {
+  const tenantId = requireTenantId(user);
+  await assertModuleEnabled(tenantId, "MARKETING", { isPlatformAdmin: user.isPlatformAdmin });
   const campaign = await getMarketingCampaignForTenant(user, id);
   if (!campaign) throw new Error("MARKETING_CAMPAIGN_NOT_FOUND");
   const queued = await queueCommunicationForTenant(user, {
@@ -316,6 +364,7 @@ export async function sendMarketingCampaignTestForTenant(user: TenantUser, id: s
 
 export async function launchMarketingCampaignForTenant(user: TenantUser, id: string) {
   const tenantId = requireTenantId(user);
+  await assertModuleEnabled(tenantId, "MARKETING", { isPlatformAdmin: user.isPlatformAdmin });
   const campaign = await getMarketingCampaignForTenant(user, id);
   if (!campaign) throw new Error("MARKETING_CAMPAIGN_NOT_FOUND");
   if (!["APPROVED", "SCHEDULED", "RUNNING"].includes(campaign.status)) {

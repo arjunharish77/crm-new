@@ -15,7 +15,10 @@ export interface EmptyStateProps {
 export function EmptyState({ icon, title, description, action }: EmptyStateProps) {
     return (
         <motion.div variants={fadeInUp} initial="initial" animate="animate">
-            <div className="flex flex-col items-center justify-center py-16 px-8 text-center">
+            {/* Gap checklist Module 10's "accessibility pass" item, "screen-reader-friendly
+                status text" -- role="status" is a polite live region, so a screen-reader user
+                hears "no results" once things settle, without interrupting like an alert would. */}
+            <div role="status" className="flex flex-col items-center justify-center py-16 px-8 text-center">
                 <motion.div
                     initial={{ scale: 0.8, opacity: 0 }}
                     animate={{ scale: 1, opacity: 1 }}

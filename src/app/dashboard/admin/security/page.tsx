@@ -16,6 +16,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 interface SecurityPolicy {
     id?: string;
@@ -37,6 +38,14 @@ interface SecurityPolicy {
     enforceAuditLogging: boolean;
     logFailedLoginAttempts: boolean;
     requireLoginNotifications: boolean;
+    mfaEnforcementMode: "DISABLED" | "OPTIONAL" | "REQUIRED_NEW_USERS" | "REQUIRED_ALL";
+    mfaEnforcedSince: string | null;
+    mfaGracePeriodDays: number;
+    privilegedActionApprovalRequired: boolean;
+    reassignmentApprovalRequired: boolean;
+    reassignmentLimitCount: number | null;
+    reassignmentLimitWindowDays: number | null;
+    tenantName?: string | null;
     tenant?: {
         id: string;
         name: string;
@@ -178,6 +187,28 @@ export default function SecurityPolicyPage() {
                 )}
             </div>
 
+            {policies.length > 1 && (
+                <div className="mt-4 max-w-xs space-y-1.5">
+                    <Label className="text-xs font-normal text-muted-foreground">Policy</Label>
+                    <Select
+                        value={selectedPolicy?.tenantId || "global"}
+                        onValueChange={(value) => {
+                            const next = policies.find((p) => (p.tenantId || "global") === value);
+                            if (next) { setSelectedPolicy(next); setEditing(false); }
+                        }}
+                    >
+                        <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                            {policies.map((p) => (
+                                <SelectItem key={p.tenantId || "global"} value={p.tenantId || "global"}>
+                                    {p.tenantId ? (p.tenantName || p.tenantId) : "Global Default"}
+                                </SelectItem>
+                            ))}
+                        </SelectContent>
+                    </Select>
+                </div>
+            )}
+
             {selectedPolicy && (
                 <div className="mt-4 grid gap-4 lg:grid-cols-2">
                     <Card className="h-full gap-4 rounded-lg py-5">
@@ -186,7 +217,7 @@ export default function SecurityPolicyPage() {
                                 <Lock className="h-5 w-5 text-primary" />
                                 Password Policy
                             </CardTitle>
-                            <CardDescription>Configure password requirements and security</CardDescription>
+                            <CardDescription>Enforced at account creation, self-service password change, and login (expiry) -- see Settings &gt; Password and the admin Users page&apos;s reset-link action.</CardDescription>
                         </CardHeader>
                         <CardContent className="space-y-4 px-5">
                             <NumberField
@@ -243,7 +274,7 @@ export default function SecurityPolicyPage() {
                                 <Shield className="h-5 w-5 text-primary" />
                                 Login & Session
                             </CardTitle>
-                            <CardDescription>Manage session timeouts and access controls</CardDescription>
+                            <CardDescription>Session timeouts, concurrent-session limits, and login lockout are enforced live at login and on every request.</CardDescription>
                         </CardHeader>
                         <CardContent className="space-y-4 px-5">
                             <div className="grid gap-4 sm:grid-cols-2">
@@ -281,19 +312,13 @@ export default function SecurityPolicyPage() {
                                     disabled={!editing}
                                 />
                                 <PolicySwitch
-                                    label="Enable Two-Factor Authentication"
-                                    checked={selectedPolicy.enableTwoFactor}
-                                    onCheckedChange={(checked) => updateField("enableTwoFactor", checked)}
-                                    disabled={!editing}
-                                />
-                                <PolicySwitch
-                                    label="Log Failed Login Attempts"
+                                    label="Log Failed Login Attempts (not yet enforced -- always on today)"
                                     checked={selectedPolicy.logFailedLoginAttempts}
                                     onCheckedChange={(checked) => updateField("logFailedLoginAttempts", checked)}
                                     disabled={!editing}
                                 />
                                 <PolicySwitch
-                                    label="Require Login Notifications"
+                                    label="Require Login Notifications (not yet enforced)"
                                     checked={selectedPolicy.requireLoginNotifications}
                                     onCheckedChange={(checked) => updateField("requireLoginNotifications", checked)}
                                     disabled={!editing}
@@ -302,9 +327,54 @@ export default function SecurityPolicyPage() {
                         </CardContent>
                     </Card>
 
+                    <Card className="h-full gap-4 rounded-lg py-5">
+                        <CardHeader className="gap-1 px-5">
+                            <CardTitle className="flex items-center gap-2 text-base">
+                                <Shield className="h-5 w-5 text-primary" />
+                                Multi-Factor Authentication
+                            </CardTitle>
+                            <CardDescription>
+                                Enforced live at login. Users always keep the option to enroll in MFA voluntarily
+                                regardless of this setting -- this controls whether it&apos;s required.
+                            </CardDescription>
+                        </CardHeader>
+                        <CardContent className="space-y-4 px-5">
+                            <div className="space-y-1.5">
+                                <Label className="text-sm">Enforcement Mode</Label>
+                                <Select
+                                    value={selectedPolicy.mfaEnforcementMode}
+                                    onValueChange={(value) => updateField("mfaEnforcementMode", value as SecurityPolicy["mfaEnforcementMode"])}
+                                    disabled={!editing}
+                                >
+                                    <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="DISABLED">Disabled -- MFA cannot be enabled by users</SelectItem>
+                                        <SelectItem value="OPTIONAL">Optional -- users may enroll if they choose</SelectItem>
+                                        <SelectItem value="REQUIRED_NEW_USERS">Required for new users (created after this is turned on)</SelectItem>
+                                        <SelectItem value="REQUIRED_ALL">Required for all users</SelectItem>
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                            <NumberField
+                                label="Enrollment Grace Period (days)"
+                                value={selectedPolicy.mfaGracePeriodDays}
+                                onChange={(value) => updateField("mfaGracePeriodDays", value)}
+                                disabled={!editing}
+                            />
+                            <p className="text-xs text-muted-foreground">
+                                When a required mode is turned on, affected users can still log in without MFA for this many
+                                days (to enroll); after that, login is blocked until they enroll or an admin resets their MFA.
+                                {selectedPolicy.mfaEnforcedSince && (
+                                    <> Currently anchored to {new Date(selectedPolicy.mfaEnforcedSince).toLocaleString()}.</>
+                                )}
+                            </p>
+                        </CardContent>
+                    </Card>
+
                     <Card className="gap-4 rounded-lg py-5 lg:col-span-2">
                         <CardHeader className="gap-1 px-5">
                             <CardTitle className="text-base">Audit & Compliance</CardTitle>
+                            <CardDescription>Saved, but not yet enforced -- audit logging already runs unconditionally app-wide today, and there&apos;s no IP-allowlist mechanism yet for this to gate.</CardDescription>
                         </CardHeader>
                         <CardContent className="grid gap-3 px-5 md:grid-cols-2">
                             <PolicySwitch
@@ -319,6 +389,56 @@ export default function SecurityPolicyPage() {
                                 onCheckedChange={(checked) => updateField("enforceIpRestrictions", checked)}
                                 disabled={!editing}
                             />
+                        </CardContent>
+                    </Card>
+
+                    <Card className="gap-4 rounded-lg py-5 lg:col-span-2">
+                        <CardHeader className="gap-1 px-5">
+                            <CardTitle className="text-base">Privileged Action Controls</CardTitle>
+                            <CardDescription>
+                                When on, a different tenant admin must approve a permission template change or API key
+                                rotation before it takes effect -- see Settings &gt; Privileged Actions for the approval queue.
+                            </CardDescription>
+                        </CardHeader>
+                        <CardContent className="px-5">
+                            <PolicySwitch
+                                label="Require a second admin's approval for sensitive changes"
+                                checked={selectedPolicy.privilegedActionApprovalRequired}
+                                onCheckedChange={(checked) => updateField("privilegedActionApprovalRequired", checked)}
+                                disabled={!editing}
+                            />
+                        </CardContent>
+                    </Card>
+
+                    <Card className="gap-4 rounded-lg py-5 lg:col-span-2">
+                        <CardHeader className="gap-1 px-5">
+                            <CardTitle className="text-base">Reassignment Governance</CardTitle>
+                            <CardDescription>
+                                Controls on manual/bulk record reassignment (Assign owner) -- a dedicated toggle from
+                                Privileged Action Controls above, since it gates a different, higher-frequency action.
+                            </CardDescription>
+                        </CardHeader>
+                        <CardContent className="space-y-4 px-5">
+                            <PolicySwitch
+                                label="Require a second admin's approval before a reassignment takes effect"
+                                checked={selectedPolicy.reassignmentApprovalRequired}
+                                onCheckedChange={(checked) => updateField("reassignmentApprovalRequired", checked)}
+                                disabled={!editing}
+                            />
+                            <div className="border-t border-border pt-4">
+                                <NumberField
+                                    label="Max reassignments per record in the window below (0 = no limit)"
+                                    value={selectedPolicy.reassignmentLimitCount ?? 0}
+                                    onChange={(value) => updateField("reassignmentLimitCount", value > 0 ? value : null)}
+                                    disabled={!editing}
+                                />
+                                <NumberField
+                                    label="Reassignment limit window (days)"
+                                    value={selectedPolicy.reassignmentLimitWindowDays ?? 7}
+                                    onChange={(value) => updateField("reassignmentLimitWindowDays", value > 0 ? value : null)}
+                                    disabled={!editing}
+                                />
+                            </div>
                         </CardContent>
                     </Card>
                 </div>

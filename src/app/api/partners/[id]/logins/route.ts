@@ -48,6 +48,7 @@ export async function POST(
     if (error instanceof Error && error.message === "ROLE_IS_NOT_A_PARTNER_ROLE") {
       return badRequest("roleId must reference a role with isPartnerRole enabled");
     }
+    if (error instanceof Error && error.message.startsWith("MODULE_DISABLED")) return forbidden("Partners module is disabled for this tenant");
     return serverError("Failed to create partner login", error);
   }
 }

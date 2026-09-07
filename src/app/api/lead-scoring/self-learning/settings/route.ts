@@ -25,6 +25,7 @@ export async function PUT(request: Request) {
     return NextResponse.json(settings);
   } catch (error) {
     if (error instanceof Error && error.message === "UNAUTHORIZED") return unauthorized();
+    if (error instanceof Error && error.message.startsWith("MODULE_DISABLED")) return forbidden("Predictive Scoring module is disabled for this tenant");
     return serverError("Failed to update predictive scoring settings", error);
   }
 }

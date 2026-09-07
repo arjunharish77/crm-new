@@ -11,12 +11,15 @@ import { Switch } from "@/components/ui/switch";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { StandardDialog } from "@/components/common/standard-dialog";
-import { Plus, RefreshCw, Download, Receipt, CalendarDays, FileText, Building2, ShieldCheck, PauseCircle, CircleDollarSign } from "lucide-react";
+import { Plus, RefreshCw, Download, Receipt, CalendarDays, FileText, Building2, ShieldCheck, PauseCircle, CircleDollarSign, FileWarning, MessageSquareWarning } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { TableSkeleton } from "@/components/common/skeletons";
 import { EmptyState } from "@/components/common/empty-state";
 import { QueueExportButton } from "@/components/exports/queue-export-button";
+import { BulkActionsToolbar } from "@/components/bulk-actions/bulk-toolbar";
+import { useFeature } from "@/components/auth/feature-gate";
+import { formatWorkspaceDateTime } from "@/lib/date-format";
 
 type PayoutCycle = {
     id: string;
@@ -36,6 +39,16 @@ type Payout = {
     isHeld: boolean;
     holdReason: string | null;
     partner: { name?: string; email?: string; legalBusinessName?: string } | null;
+};
+
+type PayoutDispute = {
+    id: string;
+    payoutId: string;
+    reason: string;
+    status: "OPEN" | "RESOLVED" | "DISMISSED";
+    resolutionNotes: string | null;
+    createdAt: string;
+    partner: { name?: string; email?: string } | null;
 };
 
 type PayoutSettings = {
@@ -129,6 +142,7 @@ const STATUS_BADGE_CLASSNAMES: Record<Payout["status"], string> = {
 };
 
 export default function PayoutCyclesPage() {
+    const payoutsEnabled = useFeature("payoutsEnabled");
     const [settings, setSettings] = useState<PayoutSettings>(DEFAULT_SETTINGS);
     const [settingsLoaded, setSettingsLoaded] = useState(false);
     const [savingSettings, setSavingSettings] = useState(false);
@@ -140,6 +154,7 @@ export default function PayoutCyclesPage() {
     const [selectedCycleId, setSelectedCycleId] = useState<string | null>(null);
     const [payouts, setPayouts] = useState<Payout[]>([]);
     const [loadingPayouts, setLoadingPayouts] = useState(false);
+    const [selectedPayoutIds, setSelectedPayoutIds] = useState<string[]>([]);
     const [computing, setComputing] = useState(false);
 
     const [markPaidTarget, setMarkPaidTarget] = useState<Payout | null>(null);
@@ -179,10 +194,44 @@ export default function PayoutCyclesPage() {
         }
     }, []);
 
+    const [disputes, setDisputes] = useState<PayoutDispute[]>([]);
+    const [loadingDisputes, setLoadingDisputes] = useState(false);
+    const [resolvingDispute, setResolvingDispute] = useState<string | null>(null);
+
+    const fetchDisputes = useCallback(async () => {
+        setLoadingDisputes(true);
+        try {
+            const data = await apiFetch<PayoutDispute[]>("/payout-disputes?status=OPEN");
+            setDisputes(Array.isArray(data) ? data : []);
+        } catch {
+            toast.error("Failed to load payout disputes");
+        } finally {
+            setLoadingDisputes(false);
+        }
+    }, []);
+
+    const handleResolveDispute = async (disputeId: string, status: "RESOLVED" | "DISMISSED") => {
+        const notes = window.prompt(status === "RESOLVED" ? "Resolution notes (optional):" : "Dismissal notes (optional):") ?? "";
+        setResolvingDispute(disputeId);
+        try {
+            await apiFetch(`/payout-disputes/${disputeId}`, {
+                method: "PATCH",
+                body: JSON.stringify({ status, resolutionNotes: notes }),
+            });
+            toast.success(status === "RESOLVED" ? "Dispute resolved" : "Dispute dismissed");
+            fetchDisputes();
+        } catch (error: any) {
+            toast.error(error.message || "Failed to update dispute");
+        } finally {
+            setResolvingDispute(null);
+        }
+    };
+
     useEffect(() => {
         fetchSettings();
         fetchCycles();
-    }, [fetchSettings, fetchCycles]);
+        fetchDisputes();
+    }, [fetchSettings, fetchCycles, fetchDisputes]);
 
     useEffect(() => {
         Promise.all([
@@ -297,6 +346,31 @@ export default function PayoutCyclesPage() {
         }
     };
 
+    // Bulk approve -- only meaningful for DRAFT, non-held payouts (the same eligibility the
+    // single-row Approve button already enforces). Ineligible selections are silently
+    // skipped rather than erroring the whole batch, and each approval is independent so one
+    // failure (e.g. below-minimum threshold) doesn't block the rest.
+    const handleBulkApprove = async () => {
+        const eligible = payouts.filter((payout) => selectedPayoutIds.includes(payout.id) && !payout.isHeld && payout.status === "DRAFT");
+        if (eligible.length === 0) {
+            toast.error("No selected payouts are eligible for approval");
+            return;
+        }
+        let approved = 0;
+        let failed = 0;
+        for (const payout of eligible) {
+            try {
+                await apiFetch(`/payouts/${payout.id}/approve`, { method: "POST" });
+                approved += 1;
+            } catch {
+                failed += 1;
+            }
+        }
+        toast.success(`${approved} payout${approved === 1 ? "" : "s"} approved${failed ? `, ${failed} failed` : ""}`);
+        setSelectedPayoutIds([]);
+        if (selectedCycleId) fetchPayouts(selectedCycleId);
+    };
+
     const handleMarkPaid = async () => {
         if (!markPaidTarget) return;
         try {
@@ -377,6 +451,36 @@ export default function PayoutCyclesPage() {
         }
     };
 
+    const [reissueTarget, setReissueTarget] = useState<Payout | null>(null);
+    const [reissueReason, setReissueReason] = useState("");
+    const [reissuing, setReissuing] = useState(false);
+    const handleReissueInvoice = async () => {
+        if (!reissueTarget?.invoiceId) return;
+        setReissuing(true);
+        try {
+            await apiFetch(`/partner-invoices/${reissueTarget.invoiceId}/reissue`, {
+                method: "POST",
+                body: JSON.stringify({ reason: reissueReason }),
+            });
+            toast.success("Invoice cancelled and reissued");
+            setReissueTarget(null);
+            setReissueReason("");
+            if (selectedCycleId) fetchPayouts(selectedCycleId);
+        } catch (error: any) {
+            toast.error(error.message || "Failed to reissue invoice");
+        } finally {
+            setReissuing(false);
+        }
+    };
+
+    if (!payoutsEnabled) {
+        return (
+            <div className="mx-auto max-w-[1600px] p-4 md:p-6">
+                <EmptyState title="Payouts isn't enabled" description="Enable the Payouts feature flag for this tenant to configure cycles, commission, and invoicing." />
+            </div>
+        );
+    }
+
     return (
         <div className="mx-auto max-w-[1600px] p-4 md:p-6">
             <div className="flex flex-wrap items-center gap-3">
@@ -394,6 +498,9 @@ export default function PayoutCyclesPage() {
                         <TabsTrigger value="visibility">Visibility</TabsTrigger>
                         <TabsTrigger value="billing">Billing Identity</TabsTrigger>
                         <TabsTrigger value="cycles">Cycles & Payouts</TabsTrigger>
+                        <TabsTrigger value="disputes">
+                            Disputes{disputes.length > 0 ? ` (${disputes.length})` : ""}
+                        </TabsTrigger>
                     </TabsList>
                 </div>
 
@@ -826,11 +933,22 @@ export default function PayoutCyclesPage() {
                                     {payouts.map((payout) => (
                                         <div key={payout.id} className="rounded-[14px] border bg-card p-4">
                                             <div className="flex flex-wrap items-center justify-between gap-3">
-                                                <div>
-                                                    <p className="text-sm font-bold">
-                                                        {payout.partner?.legalBusinessName || payout.partner?.name || payout.partnerId}
-                                                    </p>
-                                                    <p className="text-xs text-muted-foreground">{payout.partner?.email}</p>
+                                                <div className="flex items-center gap-3">
+                                                    <Checkbox
+                                                        checked={selectedPayoutIds.includes(payout.id)}
+                                                        onCheckedChange={(checked) => {
+                                                            setSelectedPayoutIds((prev) =>
+                                                                checked ? [...prev, payout.id] : prev.filter((id) => id !== payout.id)
+                                                            );
+                                                        }}
+                                                        aria-label={`Select payout for ${payout.partner?.legalBusinessName || payout.partner?.name || payout.partnerId}`}
+                                                    />
+                                                    <div>
+                                                        <p className="text-sm font-bold">
+                                                            {payout.partner?.legalBusinessName || payout.partner?.name || payout.partnerId}
+                                                        </p>
+                                                        <p className="text-xs text-muted-foreground">{payout.partner?.email}</p>
+                                                    </div>
                                                 </div>
                                                 <div className="flex flex-wrap items-center gap-2.5">
                                                     <span className="text-sm font-bold">
@@ -886,6 +1004,19 @@ export default function PayoutCyclesPage() {
                                                             </a>
                                                         </Button>
                                                     )}
+                                                    {payout.invoiceId && (
+                                                        <Button
+                                                            size="sm"
+                                                            variant="ghost"
+                                                            onClick={() => {
+                                                                setReissueTarget(payout);
+                                                                setReissueReason("");
+                                                            }}
+                                                        >
+                                                            <FileWarning className="size-4" />
+                                                            Cancel & Reissue
+                                                        </Button>
+                                                    )}
                                                     {(payout.status === "APPROVED" || payout.status === "INVOICED") && (
                                                         <Button size="sm" onClick={() => setMarkPaidTarget(payout)} disabled={payout.isHeld}>Mark Paid</Button>
                                                     )}
@@ -905,6 +1036,58 @@ export default function PayoutCyclesPage() {
                     )}
                 </div>
             </div>
+                </TabsContent>
+
+                <TabsContent value="disputes">
+                    <div className="rounded-[14px] border bg-card p-4">
+                        <div className="mb-4 flex items-start gap-3">
+                            <div className="rounded-lg bg-destructive/10 p-2 text-destructive">
+                                <MessageSquareWarning className="size-4" />
+                            </div>
+                            <div>
+                                <h2 className="text-sm font-bold">Open Payout Disputes</h2>
+                                <p className="mt-0.5 text-xs text-muted-foreground">
+                                    Raised by partners from their payout details view. Resolve or dismiss once reviewed.
+                                </p>
+                            </div>
+                        </div>
+                        {loadingDisputes ? (
+                            <TableSkeleton rows={3} columns={2} />
+                        ) : disputes.length === 0 ? (
+                            <EmptyState title="No open disputes" description="Partner-raised payout disputes will show up here." />
+                        ) : (
+                            <div className="space-y-3">
+                                {disputes.map((dispute) => (
+                                    <div key={dispute.id} className="rounded-xl border bg-surface-container-low p-3">
+                                        <div className="flex flex-wrap items-center justify-between gap-2">
+                                            <div>
+                                                <p className="text-sm font-semibold">{dispute.partner?.name || dispute.partner?.email || "Unknown partner"}</p>
+                                                <p className="text-xs text-muted-foreground">{formatWorkspaceDateTime(dispute.createdAt)}</p>
+                                            </div>
+                                            <div className="flex items-center gap-2">
+                                                <Button
+                                                    size="sm"
+                                                    variant="outline"
+                                                    disabled={resolvingDispute === dispute.id}
+                                                    onClick={() => handleResolveDispute(dispute.id, "DISMISSED")}
+                                                >
+                                                    Dismiss
+                                                </Button>
+                                                <Button
+                                                    size="sm"
+                                                    disabled={resolvingDispute === dispute.id}
+                                                    onClick={() => handleResolveDispute(dispute.id, "RESOLVED")}
+                                                >
+                                                    Mark Resolved
+                                                </Button>
+                                            </div>
+                                        </div>
+                                        <p className="mt-2 text-sm">{dispute.reason}</p>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
                 </TabsContent>
             </Tabs>
 
@@ -1012,6 +1195,45 @@ export default function PayoutCyclesPage() {
                     <Input placeholder="Notes (optional)" value={adjustmentNotes} onChange={(e) => setAdjustmentNotes(e.target.value)} />
                 </div>
             </StandardDialog>
+
+            <StandardDialog
+                open={!!reissueTarget}
+                onClose={() => setReissueTarget(null)}
+                title="Cancel & Reissue Invoice"
+                maxWidth="xs"
+                actions={
+                    <>
+                        <Button variant="ghost" onClick={() => setReissueTarget(null)}>Cancel</Button>
+                        <Button variant="destructive" onClick={handleReissueInvoice} disabled={!reissueReason.trim() || reissuing}>
+                            {reissuing ? "Reissuing..." : "Cancel & Reissue"}
+                        </Button>
+                    </>
+                }
+            >
+                <div className="space-y-3">
+                    <p className="text-xs text-muted-foreground">
+                        This cancels the current invoice (kept for audit history, marked CANCELLED) and immediately
+                        generates a fresh invoice with a new number against the same payout. Use this for a
+                        credit-note style correction — e.g. wrong GST/company details — not for a commission amount
+                        change (use Adjust for that).
+                    </p>
+                    <div className="space-y-2">
+                        <Label>Reason</Label>
+                        <Input
+                            placeholder="e.g. Incorrect GSTIN on original invoice"
+                            value={reissueReason}
+                            onChange={(e) => setReissueReason(e.target.value)}
+                        />
+                    </div>
+                </div>
+            </StandardDialog>
+
+            <BulkActionsToolbar
+                selectedCount={selectedPayoutIds.length}
+                onClearSelection={() => setSelectedPayoutIds([])}
+                module="payouts"
+                onApprove={handleBulkApprove}
+            />
         </div>
     );
 }

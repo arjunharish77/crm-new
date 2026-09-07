@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import ReactFlow, {
     MiniMap,
@@ -19,7 +19,7 @@ import ReactFlow, {
 } from 'reactflow';
 import 'reactflow/dist/style.css';
 import { ExpressiveNode } from '@/components/automation/expressive-node';
-import { FeatureGate } from '@/components/auth/feature-gate';
+import { useFeature, useModuleEnabled } from '@/components/auth/feature-gate';
 import { motion, AnimatePresence } from 'framer-motion';
 import { fadeInUp, spring } from '@/lib/motion';
 import { Button } from '@/components/ui/button';
@@ -75,11 +75,17 @@ import {
     Star,
     Loader2,
     Info,
+    Users,
+    MessageSquare,
+    Blocks,
+    LifeBuoy,
+    TrendingUp,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { ExecutionLogViewer } from '@/components/automation/execution-log-viewer';
 import { DEFAULT_WORKSPACE_TIME_ZONE, formatWorkspaceDateTime, getDisplaySettings } from '@/lib/date-format';
 import { TestWorkflowDialog } from '@/components/automation/TestWorkflowDialog';
+import { EnrollRecordsDialog } from '@/components/automation/EnrollRecordsDialog';
 import { apiFetch } from '@/lib/api';
 import { toast } from 'sonner';
 import { AutomationV2 } from '@/types/automation-v2';
@@ -102,6 +108,8 @@ const NODE_TYPES = [
     { type: 'distribute_opportunity', label: 'Distribute Opportunity', icon: GitBranch, color: '#0288d1' },
     { type: 'assign_owner', label: 'Assign Owner', icon: User, color: '#5c6bc0' },
     { type: 'change_stage', label: 'Change Stage', icon: Database, color: '#43a047' },
+    { type: 'share_opportunity', label: 'Share Opportunity', icon: Users, color: '#0288d1' },
+    { type: 'stop_share_opportunity', label: 'Stop Sharing Opportunity', icon: Users, color: '#78909c' },
     { type: 'calculate_commission', label: 'Calculate Partner Commission', icon: Coins, color: '#2e7d32' },
     { type: 'award_points', label: 'Award Gamification Points', icon: Sparkles, color: '#f9a825' },
     { type: 'evaluate_badges', label: 'Evaluate Badges', icon: Award, color: '#8e24aa' },
@@ -112,6 +120,7 @@ const NODE_TYPES = [
     { type: 'star_lead', label: 'Star Lead', icon: Star, color: '#f9a825' },
     { type: 'increment_score', label: 'Change Lead Score', icon: Database, color: '#7cb342' },
     { type: 'create_task', label: 'Create Task', icon: ListPlus, color: '#5c6bc0' },
+    { type: 'apply_task_playbook', label: 'Apply Task Playbook', icon: ListPlus, color: '#3949ab' },
     { type: 'update_task', label: 'Update Task', icon: Database, color: '#5c6bc0' },
     { type: 'assign_task', label: 'Assign Task', icon: User, color: '#5c6bc0' },
     { type: 'reschedule_task', label: 'Reschedule Task', icon: Clock, color: '#5c6bc0' },
@@ -121,6 +130,21 @@ const NODE_TYPES = [
     { type: 'stop', label: 'Stop Automation', icon: Square, color: '#d32f2f' },
     { type: 'send_email', label: 'Send Email / Notify', icon: Mail, color: '#ff5722' },
     { type: 'webhook', label: 'Webhook', icon: Webhook, color: '#e91e63' },
+    { type: 'run_automation', label: 'Run Another Automation', icon: Zap, color: '#6d4c41' },
+    { type: 'call_app_action', label: 'Call App Action', icon: Blocks, color: '#00838f' },
+    { type: 'assign_case', label: 'Assign Case', icon: User, color: '#5c6bc0' },
+    { type: 'add_case_comment', label: 'Add Case Comment', icon: MessageSquare, color: '#00897b' },
+    { type: 'create_case', label: 'Create Case', icon: LifeBuoy, color: '#5c6bc0' },
+    { type: 'update_case', label: 'Update Case', icon: Database, color: '#5c6bc0' },
+    { type: 'escalate_case', label: 'Escalate Case', icon: TrendingUp, color: '#e53935' },
+    { type: 'send_case_acknowledgement', label: 'Send Case Acknowledgement', icon: Mail, color: '#ff5722' },
+    { type: 'send_case_response', label: 'Send Case Response', icon: Mail, color: '#ff5722' },
+    { type: 'pause_case_sla', label: 'Pause Case SLA', icon: Clock, color: '#607d8b' },
+    { type: 'resume_case_sla', label: 'Resume Case SLA', icon: Clock, color: '#546e7a' },
+    { type: 'apply_case_macro', label: 'Apply Case Macro', icon: MessageSquare, color: '#00897b' },
+    { type: 'add_case_to_queue', label: 'Add Case to Queue', icon: ListPlus, color: '#5c6bc0' },
+    { type: 'close_case', label: 'Close Case', icon: Square, color: '#5c6bc0' },
+    { type: 'reopen_case', label: 'Reopen Case', icon: Square, color: '#5c6bc0' },
 ];
 
 const LEAD_FIELDS = [
@@ -186,10 +210,14 @@ const TRIGGER_TYPES = [
     { value: "LEAD_UPDATED", label: "Lead Update", scope: "lead" },
     { value: "LEAD_ADDED_TO_LIST", label: "Lead Added to List", scope: "lead" },
     { value: "LEAD_DATE", label: "Lead Specific Date", scope: "lead" },
+    { value: "LEAD_DISTRIBUTION_SUCCESS", label: "Lead Auto-Assigned", scope: "lead" },
+    { value: "LEAD_DISTRIBUTION_FAILED", label: "Lead Auto-Assignment Failed", scope: "lead" },
     { value: "OPPORTUNITY_CREATED", label: "New Opportunity", scope: "opportunity" },
     { value: "OPPORTUNITY_UPDATED", label: "Opportunity Update", scope: "opportunity" },
     { value: "STAGE_CHANGED", label: "Opportunity Stage Changed", scope: "opportunity" },
     { value: "OPPORTUNITY_DATE", label: "Opportunity Specific Date", scope: "opportunity" },
+    { value: "OPPORTUNITY_DISTRIBUTION_SUCCESS", label: "Opportunity Auto-Assigned", scope: "opportunity" },
+    { value: "OPPORTUNITY_DISTRIBUTION_FAILED", label: "Opportunity Auto-Assignment Failed", scope: "opportunity" },
     { value: "ACTIVITY_CREATED", label: "New Activity on Lead", scope: "activity_lead" },
     { value: "ACTIVITY_UPDATED", label: "Activity Update on Lead", scope: "activity_lead" },
     { value: "ACTIVITY_CREATED_ON_OPPORTUNITY", label: "New Activity on Opportunity", scope: "activity_opportunity" },
@@ -205,6 +233,16 @@ const TRIGGER_TYPES = [
     { value: "TASK_COMPLETED_ON_OPPORTUNITY", label: "Task Completed on Opportunity", scope: "task_opportunity" },
     { value: "TASK_REMINDER_ON_OPPORTUNITY", label: "Task Reminder on Opportunity", scope: "task_opportunity" },
     { value: "TASK_OVERDUE_ON_OPPORTUNITY", label: "Task Overdue on Opportunity", scope: "task_opportunity" },
+    // Fired by recordTelephonyCallEvent (src/lib/server/telephony-webhook.ts) against whichever
+    // Lead or Opportunity the call is linked to -- like REGULAR_INTERVAL/MANUAL above, these
+    // aren't strictly Lead-scoped, so "lead" is used here as the same established catch-all
+    // scope for a trigger that can't commit to one entity type ahead of time.
+    { value: "CALL_MISSED", label: "Call Missed", scope: "lead" },
+    { value: "CALL_ANSWERED", label: "Call Answered", scope: "lead" },
+    { value: "CALL_COMPLETED", label: "Call Completed", scope: "lead" },
+    { value: "CALL_FAILED", label: "Call Failed", scope: "lead" },
+    { value: "RECORDING_AVAILABLE", label: "Call Recording Available", scope: "lead" },
+    { value: "DISPOSITION_SELECTED", label: "Call Disposition Selected", scope: "lead" },
     { value: "COMMUNICATION_SENT", label: "Communication Sent", scope: "communication" },
     { value: "COMMUNICATION_DELIVERED", label: "Communication Delivered", scope: "communication" },
     { value: "COMMUNICATION_OPENED", label: "Email Opened", scope: "communication" },
@@ -215,6 +253,26 @@ const TRIGGER_TYPES = [
     { value: "COMMUNICATION_UNSUBSCRIBED", label: "Unsubscribed", scope: "communication" },
     { value: "REGULAR_INTERVAL", label: "At Regular Intervals", scope: "lead" },
     { value: "MANUAL", label: "Manual Trigger", scope: "lead" },
+    { value: "CASE_CREATED", label: "New Case", scope: "case" },
+    { value: "CASE_UPDATED", label: "Case Updated", scope: "case" },
+    { value: "CASE_ASSIGNED", label: "Case Assigned", scope: "case" },
+    { value: "CASE_STATUS_CHANGED", label: "Case Status Changed", scope: "case" },
+    { value: "CASE_RESOLVED", label: "Case Resolved", scope: "case" },
+    { value: "CASE_REOPENED", label: "Case Reopened", scope: "case" },
+    { value: "CASE_COMMENTED", label: "Case Commented", scope: "case" },
+    { value: "CASE_SLA_WARNING", label: "Case SLA Warning", scope: "case" },
+    { value: "CASE_SLA_BREACHED", label: "Case SLA Breached", scope: "case" },
+    { value: "CASE_SATISFACTION_SUBMITTED", label: "Case Satisfaction Submitted", scope: "case" },
+    { value: "CASE_MERGED", label: "Case Merged", scope: "case" },
+    // Gap checklist Module 16's app event bus, "triggers" half -- an installed app calling
+    // POST /api/v1/apps/automation-events fires this, optionally narrowed to one specific app
+    // and/or event name via the App/Event Name fields below (triggerMatches' APP_EVENT branch
+    // in automations-postgres.ts); left blank, it fires for every app-originated event tenant-wide.
+    { value: "APP_EVENT", label: "App Event", scope: "app_event" },
+];
+
+const APP_EVENT_FIELDS = [
+    { key: "eventName", label: "Event Name" },
 ];
 
 const LEAD_NODE_TYPES = new Set([
@@ -240,6 +298,8 @@ const OPPORTUNITY_NODE_TYPES = new Set([
     "change_stage",
     "calculate_commission",
     "clear_field",
+    "share_opportunity",
+    "stop_share_opportunity",
 ]);
 
 const ACTIVITY_NODE_TYPES = new Set([
@@ -249,6 +309,7 @@ const ACTIVITY_NODE_TYPES = new Set([
 
 const TASK_NODE_TYPES = new Set([
     "create_task",
+    "apply_task_playbook",
     "update_task",
     "assign_task",
     "reschedule_task",
@@ -268,6 +329,27 @@ const GENERIC_NODE_TYPES = new Set([
     "stop",
     "award_points",
     "evaluate_badges",
+    "run_automation",
+    "call_app_action",
+    // Usable from any trigger scope, not just "case" -- e.g. a Lead automation opening a
+    // support case for that lead. Every other case-related node still acts on the triggering
+    // Case itself, so those stay in CASE_NODE_TYPES below.
+    "create_case",
+]);
+
+const CASE_NODE_TYPES = new Set([
+    "assign_case",
+    "add_case_comment",
+    "update_case",
+    "escalate_case",
+    "send_case_acknowledgement",
+    "send_case_response",
+    "pause_case_sla",
+    "resume_case_sla",
+    "apply_case_macro",
+    "add_case_to_queue",
+    "close_case",
+    "reopen_case",
 ]);
 
 function contextForTriggerScope(scope: string) {
@@ -276,6 +358,7 @@ function contextForTriggerScope(scope: string) {
         opportunity: scope === "opportunity" || scope === "activity_opportunity" || scope === "task_opportunity",
         activity: scope === "activity_lead" || scope === "activity_opportunity" || scope === "activity_activity",
         task: scope === "task_lead" || scope === "task_opportunity",
+        case: scope === "case",
     };
 }
 
@@ -286,7 +369,8 @@ function nodeAllowedForScope(nodeType: string, scope: string) {
     if (LEAD_NODE_TYPES.has(nodeType)) return context.lead;
     if (OPPORTUNITY_NODE_TYPES.has(nodeType)) return context.opportunity;
     if (ACTIVITY_NODE_TYPES.has(nodeType)) return context.activity;
-    if (TASK_NODE_TYPES.has(nodeType)) return nodeType === "create_task" ? context.lead || context.opportunity || context.activity || context.task : context.task;
+    if (TASK_NODE_TYPES.has(nodeType)) return nodeType === "create_task" || nodeType === "apply_task_playbook" ? context.lead || context.opportunity || context.activity || context.task : context.task;
+    if (CASE_NODE_TYPES.has(nodeType)) return context.case;
     return true;
 }
 
@@ -442,11 +526,14 @@ function normalizeMultiIfElseBranches(nodes: Node[], edges: Edge[]) {
     };
 }
 
+const OPPORTUNITY_TRIGGER_SCOPES = ["opportunity", "activity_opportunity", "task_opportunity"];
+
 function AutomationBuilderContent() {
     const router = useRouter();
     const params = useParams();
     const automationId = params?.id as string;
     const isNew = automationId === 'new';
+
 
     const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
     const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
@@ -454,6 +541,7 @@ function AutomationBuilderContent() {
     const [loading, setLoading] = useState(!isNew);
     const [saving, setSaving] = useState(false);
     const [showTestDialog, setShowTestDialog] = useState(false);
+    const [showEnrollDialog, setShowEnrollDialog] = useState(false);
     const [configDialogOpen, setConfigDialogOpen] = useState(false);
     const [reactFlowInstance, setReactFlowInstance] = useState<ReactFlowInstance | null>(null);
     const [addAfterNodeId, setAddAfterNodeId] = useState<string | null>(null);
@@ -464,15 +552,35 @@ function AutomationBuilderContent() {
     const [description, setDescription] = useState('');
     const [isActive, setIsActive] = useState(true);
     const [triggerType, setTriggerType] = useState('LEAD_CREATED');
+    const opportunityEnabled = useFeature("opportunityEnabled");
+    const serviceDeskEnabled = useModuleEnabled("SERVICE_DESK");
+    // Opportunity-scoped triggers disappear from new-selection pickers once the tenant
+    // disables Opportunities -- an automation already saved with one keeps working
+    // (nothing here touches runAutomationsForEvent), and stays selectable/visible in its
+    // own picker via the currentValue carve-out so the Select doesn't go blank. Case
+    // triggers get the same treatment against the newer module-entitlement system.
+    const getAvailableTriggerTypes = (currentValue?: string) =>
+        TRIGGER_TYPES.filter(
+            (trigger) =>
+                (opportunityEnabled || !OPPORTUNITY_TRIGGER_SCOPES.includes(trigger.scope) || trigger.value === currentValue) &&
+                (serviceDeskEnabled || trigger.scope !== "case" || trigger.value === currentValue)
+        );
     const [tabValue, setTabValue] = useState(0); // 0: Designer, 1: History
     const [designerSection, setDesignerSection] = useState<"workflow" | "step">("workflow");
     const [executions, setExecutions] = useState<any[]>([]);
     const [activityTypes, setActivityTypes] = useState<any[]>([]);
     const [opportunityTypes, setOpportunityTypes] = useState<any[]>([]);
     const [users, setUsers] = useState<any[]>([]);
+    const [teams, setTeams] = useState<any[]>([]);
+    const [otherAutomations, setOtherAutomations] = useState<any[]>([]);
+    const [taskPlaybooks, setTaskPlaybooks] = useState<any[]>([]);
     const [leadLists, setLeadLists] = useState<any[]>([]);
+    const [availableAppActions, setAvailableAppActions] = useState<any[]>([]);
     const [triggerOpportunityTypeId, setTriggerOpportunityTypeId] = useState("");
     const [triggerActivityTypeId, setTriggerActivityTypeId] = useState("");
+    const [triggerAppId, setTriggerAppId] = useState("");
+    const [triggerEventName, setTriggerEventName] = useState("");
+    const [availableAutomationApps, setAvailableAutomationApps] = useState<Array<{ appId: string; appName: string }>>([]);
     const [maxExecutionsPerRecord, setMaxExecutionsPerRecord] = useState(10);
     const [maxStepsPerRun, setMaxStepsPerRun] = useState(100);
     const [exitConditionLogic, setExitConditionLogic] = useState<"AND" | "OR">("OR");
@@ -510,7 +618,12 @@ function AutomationBuilderContent() {
             setTriggerActivityTypeId((current) => current || list[0]?.id || "");
         }).catch(() => undefined);
         apiFetch("/users").then((data) => setUsers(Array.isArray(data) ? data : [])).catch(() => undefined);
+        apiFetch("/teams").then((data) => setTeams(Array.isArray(data) ? data : [])).catch(() => undefined);
+        apiFetch("/automation-v2").then((data) => setOtherAutomations(Array.isArray(data) ? data.filter((item: any) => item.isActive) : [])).catch(() => undefined);
+        apiFetch("/settings/task-playbooks?activeOnly=true").then((data) => setTaskPlaybooks(Array.isArray(data) ? data : [])).catch(() => undefined);
         apiFetch("/lead-lists").then((data) => setLeadLists(Array.isArray(data) ? data : [])).catch(() => undefined);
+        apiFetch("/marketplace/available-actions").then((data) => setAvailableAppActions(Array.isArray(data) ? data : [])).catch(() => undefined);
+        apiFetch("/marketplace/available-automation-apps").then((data) => setAvailableAutomationApps(Array.isArray(data) ? data : [])).catch(() => undefined);
         apiFetch("/custom-fields?objectType=LEAD").then((data) => setLeadCustomFields(Array.isArray(data) ? data : [])).catch(() => setLeadCustomFields([]));
         apiFetch("/custom-fields?objectType=OPPORTUNITY").then((data) => setOpportunityCustomFields(Array.isArray(data) ? data : [])).catch(() => setOpportunityCustomFields([]));
         apiFetch("/custom-fields?objectType=ACTIVITY").then((data) => setActivityCustomFields(Array.isArray(data) ? data : [])).catch(() => setActivityCustomFields([]));
@@ -538,6 +651,8 @@ function AutomationBuilderContent() {
             setTriggerType(data.trigger?.type || 'LEAD_CREATED');
             setTriggerOpportunityTypeId(data.trigger?.opportunityTypeId || "");
             setTriggerActivityTypeId(data.trigger?.activityTypeId || "");
+            setTriggerAppId(data.trigger?.appId || "");
+            setTriggerEventName(data.trigger?.eventName || "");
             const workflowConfig = data.workflow?.config ?? {};
             setMaxExecutionsPerRecord(Number(workflowConfig.maxExecutionsPerRecord ?? 10));
             setMaxStepsPerRun(Number(workflowConfig.maxStepsPerRun ?? 100));
@@ -847,6 +962,8 @@ function AutomationBuilderContent() {
                     type: triggerType,
                     opportunityTypeId: triggerOpportunityTypeId || undefined,
                     activityTypeId: triggerActivityTypeId || undefined,
+                    appId: triggerType === "APP_EVENT" ? (triggerAppId || undefined) : undefined,
+                    eventName: triggerType === "APP_EVENT" ? (triggerEventName || undefined) : undefined,
                 },
                 workflow: {
                     config: {
@@ -1077,6 +1194,19 @@ function AutomationBuilderContent() {
         activityCustomFields.filter((field) => field.isActive !== false).map((field) => customFieldToOption(field, "activity")),
         triggerActivityCustomFields.filter((field) => field.isActive !== false).map((field) => customFieldToOption(field, "activity"))
     );
+    // Distinct from activityConditionFields ("activity." -- the specific Activity that fired
+    // this trigger, only meaningful for activity-scoped triggers): this is the lead's most
+    // recent Activity of any kind, available regardless of what actually triggered the run.
+    // Previously there was no way to reference "any/latest Activity" from a Lead- or
+    // Opportunity-triggered automation at all -- only the triggering row itself was reachable.
+    const leadActivityConditionFields = mergeFieldOptions(
+        ACTIVITY_FIELDS.map((field) => ({
+            ...field,
+            key: `leadActivity.${field.key}`,
+            label: `Lead's Latest Activity: ${field.label}`,
+            options: field.key === "typeId" ? activityTypes.map((type) => ({ label: type.name, value: type.id })) : field.options,
+        }))
+    );
     const taskConditionFields = TASK_FIELDS.map((field) => ({
         ...field,
         key: `task.${field.key}`,
@@ -1088,20 +1218,23 @@ function AutomationBuilderContent() {
         key: `communication.${field.key}`,
         label: `Communication: ${field.label}`,
     }));
+    const appEventConditionFields = APP_EVENT_FIELDS;
 
     const isOpportunityScopedTrigger = triggerScope === "opportunity" || triggerScope === "activity_opportunity" || triggerScope === "task_opportunity";
     const isActivityScopedTrigger = triggerScope === "activity_lead" || triggerScope === "activity_opportunity" || triggerScope === "activity_activity";
     const allConditionFields = triggerScope === "communication"
         ? [...communicationConditionFields, ...leadConditionFields, ...opportunityConditionFields]
+        : triggerScope === "app_event"
+        ? appEventConditionFields
         : triggerScope === "opportunity" || triggerScope === "task_opportunity"
-        ? [...(triggerScope === "task_opportunity" ? taskConditionFields : []), ...leadConditionFields, ...opportunityConditionFields]
+        ? [...(triggerScope === "task_opportunity" ? taskConditionFields : []), ...leadConditionFields, ...opportunityConditionFields, ...leadActivityConditionFields]
         : triggerScope === "activity_opportunity"
-            ? [...activityConditionFields, ...opportunityConditionFields, ...leadConditionFields]
+            ? [...activityConditionFields, ...opportunityConditionFields, ...leadConditionFields, ...leadActivityConditionFields]
             : triggerScope === "activity_lead" || triggerScope === "activity_activity"
-                ? [...activityConditionFields, ...leadConditionFields]
+                ? [...activityConditionFields, ...leadConditionFields, ...leadActivityConditionFields]
                 : triggerScope === "task_lead"
-                    ? [...taskConditionFields, ...leadConditionFields]
-            : leadConditionFields;
+                    ? [...taskConditionFields, ...leadConditionFields, ...leadActivityConditionFields]
+            : [...leadConditionFields, ...leadActivityConditionFields];
     const defaultConditionField = allConditionFields[0]?.key ?? "lead.source";
 
     const fieldMetaForValue = (fieldKey: string, source = allConditionFields) => source.find((field) => field.key === fieldKey || field.key.replace(/^(lead|opportunity|activity|task|communication)\./, "") === fieldKey);
@@ -1164,6 +1297,12 @@ function AutomationBuilderContent() {
                             Test
                         </Button>
                     )}
+                    {!isNew && (
+                        <Button variant="outline" size="sm" onClick={() => setShowEnrollDialog(true)}>
+                            <Users className="size-4" />
+                            Enroll
+                        </Button>
+                    )}
                     <Button size="sm" onClick={handleSave} disabled={saving}>
                         <Save className="size-4" />
                         {saving ? 'Saving...' : 'Save'}
@@ -1221,7 +1360,7 @@ function AutomationBuilderContent() {
                                                 <SelectValue />
                                             </SelectTrigger>
                                             <SelectContent>
-                                                {TRIGGER_TYPES.map((trigger) => (
+                                                {getAvailableTriggerTypes(triggerType).map((trigger) => (
                                                     <SelectItem key={trigger.value} value={trigger.value}>{trigger.label}</SelectItem>
                                                 ))}
                                             </SelectContent>
@@ -1256,6 +1395,28 @@ function AutomationBuilderContent() {
                                                 </SelectContent>
                                             </Select>
                                         </div>
+                                    )}
+                                    {triggerScope === "app_event" && (
+                                        <>
+                                            <div className="space-y-1.5">
+                                                <Label>App (leave unset for any app)</Label>
+                                                <Select value={triggerAppId || "__any__"} onValueChange={(value) => setTriggerAppId(value === "__any__" ? "" : value)}>
+                                                    <SelectTrigger className="w-full">
+                                                        <SelectValue />
+                                                    </SelectTrigger>
+                                                    <SelectContent>
+                                                        <SelectItem value="__any__">Any app</SelectItem>
+                                                        {availableAutomationApps.map((app) => (
+                                                            <SelectItem key={app.appId} value={app.appId}>{app.appName}</SelectItem>
+                                                        ))}
+                                                    </SelectContent>
+                                                </Select>
+                                            </div>
+                                            <div className="space-y-1.5">
+                                                <Label>Event Name (leave blank for any event)</Label>
+                                                <Input value={triggerEventName} onChange={(e) => setTriggerEventName(e.target.value)} placeholder="e.g. order.completed" />
+                                            </div>
+                                        </>
                                     )}
                                 </div>
                             </div>
@@ -1412,7 +1573,7 @@ function AutomationBuilderContent() {
                                                         <SelectValue />
                                                     </SelectTrigger>
                                                     <SelectContent>
-                                                        {TRIGGER_TYPES.map((trigger) => (
+                                                        {getAvailableTriggerTypes(nodeConfig.triggerType || triggerType).map((trigger) => (
                                                             <SelectItem key={trigger.value} value={trigger.value}>{trigger.label}</SelectItem>
                                                         ))}
                                                     </SelectContent>
@@ -1754,6 +1915,60 @@ function AutomationBuilderContent() {
                                                     <Label>Body</Label>
                                                     <Textarea rows={3} value={nodeConfig.body || ''} onChange={(e) => setNodeConfig({ ...nodeConfig, body: e.target.value })} />
                                                 </div>
+                                                <div className="space-y-1.5">
+                                                    <Label>Fallback Channel (optional)</Label>
+                                                    <Select
+                                                        value={nodeConfig.fallbackChannel || 'NONE'}
+                                                        onValueChange={(value) => setNodeConfig({ ...nodeConfig, fallbackChannel: value === 'NONE' ? '' : value })}
+                                                    >
+                                                        <SelectTrigger><SelectValue /></SelectTrigger>
+                                                        <SelectContent>
+                                                            <SelectItem value="NONE">None</SelectItem>
+                                                            <SelectItem value="EMAIL">Email</SelectItem>
+                                                            <SelectItem value="WHATSAPP">WhatsApp</SelectItem>
+                                                            <SelectItem value="SMS">SMS</SelectItem>
+                                                        </SelectContent>
+                                                    </Select>
+                                                </div>
+                                                {nodeConfig.fallbackChannel && (
+                                                    <>
+                                                        <div className="space-y-1.5">
+                                                            <Label>Fallback Message</Label>
+                                                            <Textarea rows={2} value={nodeConfig.fallbackMessage || ''} onChange={(e) => setNodeConfig({ ...nodeConfig, fallbackMessage: e.target.value })} />
+                                                        </div>
+                                                        <div className="space-y-1.5">
+                                                            <Label>Fallback Condition</Label>
+                                                            <Select
+                                                                value={nodeConfig.fallbackCondition || 'BLOCKED_OR_FAILED'}
+                                                                onValueChange={(value) => setNodeConfig({ ...nodeConfig, fallbackCondition: value })}
+                                                            >
+                                                                <SelectTrigger><SelectValue /></SelectTrigger>
+                                                                <SelectContent>
+                                                                    <SelectItem value="BLOCKED_OR_FAILED">Immediately if blocked, or after send fails</SelectItem>
+                                                                    <SelectItem value="FAILED_ONLY">Only after send fails</SelectItem>
+                                                                </SelectContent>
+                                                            </Select>
+                                                        </div>
+                                                        <div className="space-y-1.5">
+                                                            <Label>Fallback Delay (minutes)</Label>
+                                                            <Input
+                                                                type="number"
+                                                                min={0}
+                                                                value={nodeConfig.fallbackDelayMinutes ?? ''}
+                                                                onChange={(e) => setNodeConfig({ ...nodeConfig, fallbackDelayMinutes: e.target.value })}
+                                                            />
+                                                        </div>
+                                                    </>
+                                                )}
+                                                <div className="space-y-1.5">
+                                                    <Label>Throttle (max sends / minute, optional)</Label>
+                                                    <Input
+                                                        type="number"
+                                                        min={1}
+                                                        value={nodeConfig.throttlePerMinute ?? ''}
+                                                        onChange={(e) => setNodeConfig({ ...nodeConfig, throttlePerMinute: e.target.value })}
+                                                    />
+                                                </div>
                                             </>
                                         )}
 
@@ -1931,6 +2146,174 @@ function AutomationBuilderContent() {
                                             </div>
                                         )}
 
+                                        {selectedNode.data?.type === 'assign_case' && (
+                                            <>
+                                                <div className="space-y-1.5">
+                                                    <Label>Owner</Label>
+                                                    <Select value={nodeConfig.ownerId || ''} onValueChange={(value) => setNodeConfig({ ...nodeConfig, ownerId: value })}>
+                                                        <SelectTrigger className="w-full">
+                                                            <SelectValue placeholder="Select owner" />
+                                                        </SelectTrigger>
+                                                        <SelectContent>
+                                                            {users.map((user) => (
+                                                                <SelectItem key={user.id} value={user.id}>{user.name || user.email}</SelectItem>
+                                                            ))}
+                                                        </SelectContent>
+                                                    </Select>
+                                                </div>
+                                                <div className="space-y-1.5">
+                                                    <Label>Reason (optional)</Label>
+                                                    <Input placeholder="Assigned by automation" value={nodeConfig.reason || ''} onChange={(e) => setNodeConfig({ ...nodeConfig, reason: e.target.value })} />
+                                                </div>
+                                            </>
+                                        )}
+
+                                        {selectedNode.data?.type === 'add_case_comment' && (
+                                            <>
+                                                <div className="space-y-1.5">
+                                                    <Label>Comment</Label>
+                                                    <Textarea rows={3} value={nodeConfig.body || ''} onChange={(e) => setNodeConfig({ ...nodeConfig, body: e.target.value })} />
+                                                </div>
+                                                <label className="flex items-center gap-2 text-sm font-medium">
+                                                    <Switch checked={nodeConfig.isInternal !== false} onCheckedChange={(checked) => setNodeConfig({ ...nodeConfig, isInternal: checked })} />
+                                                    Internal note (not visible to the requester)
+                                                </label>
+                                            </>
+                                        )}
+
+                                        {(selectedNode.data?.type === 'create_case' || selectedNode.data?.type === 'update_case') && (
+                                            <>
+                                                <div className="space-y-1.5">
+                                                    <Label>Subject{selectedNode.data?.type === 'update_case' ? ' (leave blank to keep unchanged)' : ' (optional -- a default is generated)'}</Label>
+                                                    <Input value={nodeConfig.subject || ''} onChange={(e) => setNodeConfig({ ...nodeConfig, subject: e.target.value })} />
+                                                </div>
+                                                <div className="space-y-1.5">
+                                                    <Label>Description</Label>
+                                                    <Textarea rows={2} value={nodeConfig.description || ''} onChange={(e) => setNodeConfig({ ...nodeConfig, description: e.target.value })} />
+                                                </div>
+                                            </>
+                                        )}
+
+                                        {selectedNode.data?.type === 'escalate_case' && (
+                                            <div className="space-y-1.5">
+                                                <Label>Escalate to (optional -- defaults to the owner&apos;s manager)</Label>
+                                                <Select value={nodeConfig.escalateToId || ''} onValueChange={(value) => setNodeConfig({ ...nodeConfig, escalateToId: value })}>
+                                                    <SelectTrigger className="w-full"><SelectValue placeholder="Owner's manager" /></SelectTrigger>
+                                                    <SelectContent>
+                                                        {users.map((user) => (<SelectItem key={user.id} value={user.id}>{user.name || user.email}</SelectItem>))}
+                                                    </SelectContent>
+                                                </Select>
+                                            </div>
+                                        )}
+
+                                        {(selectedNode.data?.type === 'send_case_acknowledgement' || selectedNode.data?.type === 'send_case_response') && (
+                                            <>
+                                                <div className="space-y-1.5">
+                                                    <Label>Channel</Label>
+                                                    <Select value={nodeConfig.channel || 'EMAIL'} onValueChange={(value) => setNodeConfig({ ...nodeConfig, channel: value })}>
+                                                        <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                                                        <SelectContent>
+                                                            <SelectItem value="EMAIL">Email</SelectItem>
+                                                            <SelectItem value="WHATSAPP">WhatsApp</SelectItem>
+                                                            <SelectItem value="SMS">SMS</SelectItem>
+                                                        </SelectContent>
+                                                    </Select>
+                                                </div>
+                                                <div className="space-y-1.5">
+                                                    <Label>Message (optional -- a sensible default is used if left blank)</Label>
+                                                    <Textarea rows={3} value={nodeConfig.body || ''} onChange={(e) => setNodeConfig({ ...nodeConfig, body: e.target.value })} />
+                                                </div>
+                                            </>
+                                        )}
+
+                                        {selectedNode.data?.type === 'apply_case_macro' && (
+                                            <div className="space-y-1.5">
+                                                <Label>Macro ID</Label>
+                                                <Input placeholder="Copy from Settings > Service Desk > Macros" value={nodeConfig.macroId || ''} onChange={(e) => setNodeConfig({ ...nodeConfig, macroId: e.target.value })} />
+                                            </div>
+                                        )}
+
+                                        {selectedNode.data?.type === 'add_case_to_queue' && (
+                                            <div className="space-y-1.5">
+                                                <Label>Queue ID</Label>
+                                                <Input placeholder="Copy from Settings > Service Desk > Queues" value={nodeConfig.queueId || ''} onChange={(e) => setNodeConfig({ ...nodeConfig, queueId: e.target.value })} />
+                                            </div>
+                                        )}
+
+                                        {(selectedNode.data?.type === 'pause_case_sla' || selectedNode.data?.type === 'resume_case_sla' || selectedNode.data?.type === 'close_case' || selectedNode.data?.type === 'reopen_case') && (
+                                            <Alert variant="info" className="text-[13px]">
+                                                <Info className="size-4" />
+                                                <AlertDescription>Acts on the triggering case directly -- no configuration needed.</AlertDescription>
+                                            </Alert>
+                                        )}
+
+                                        {(selectedNode.data?.type === 'share_opportunity' || selectedNode.data?.type === 'stop_share_opportunity') && (
+                                            <>
+                                                <Alert variant="info" className="text-[13px]">
+                                                    <Info className="size-4" />
+                                                    <AlertDescription>
+                                                        {selectedNode.data?.type === 'share_opportunity'
+                                                            ? "Grants the selected users/teams access to this opportunity, in addition to anyone already shared with it -- doesn't remove existing shares."
+                                                            : "Removes just the selected users/teams from this opportunity's sharing. Leave both empty to clear all sharing on this record."}
+                                                    </AlertDescription>
+                                                </Alert>
+                                                <div className="space-y-1.5">
+                                                    <Label>Users</Label>
+                                                    <DropdownMenu>
+                                                        <DropdownMenuTrigger asChild>
+                                                            <Button variant="outline" className="w-full justify-between">
+                                                                {(nodeConfig.sharedUserIds ?? []).length === 0 ? "Select users" : `${(nodeConfig.sharedUserIds ?? []).length} selected`}
+                                                            </Button>
+                                                        </DropdownMenuTrigger>
+                                                        <DropdownMenuContent align="start" className="max-h-64 w-72 overflow-y-auto">
+                                                            {users.map((option) => {
+                                                                const current: string[] = nodeConfig.sharedUserIds ?? [];
+                                                                return (
+                                                                    <DropdownMenuCheckboxItem
+                                                                        key={option.id}
+                                                                        checked={current.includes(option.id)}
+                                                                        onCheckedChange={(checked) => setNodeConfig({
+                                                                            ...nodeConfig,
+                                                                            sharedUserIds: checked ? [...new Set([...current, option.id])] : current.filter((id) => id !== option.id),
+                                                                        })}
+                                                                    >
+                                                                        {option.name || option.email}
+                                                                    </DropdownMenuCheckboxItem>
+                                                                );
+                                                            })}
+                                                        </DropdownMenuContent>
+                                                    </DropdownMenu>
+                                                </div>
+                                                <div className="space-y-1.5">
+                                                    <Label>Teams</Label>
+                                                    <DropdownMenu>
+                                                        <DropdownMenuTrigger asChild>
+                                                            <Button variant="outline" className="w-full justify-between">
+                                                                {(nodeConfig.sharedTeamIds ?? []).length === 0 ? "Select teams" : `${(nodeConfig.sharedTeamIds ?? []).length} selected`}
+                                                            </Button>
+                                                        </DropdownMenuTrigger>
+                                                        <DropdownMenuContent align="start" className="max-h-64 w-72 overflow-y-auto">
+                                                            {teams.map((option) => {
+                                                                const current: string[] = nodeConfig.sharedTeamIds ?? [];
+                                                                return (
+                                                                    <DropdownMenuCheckboxItem
+                                                                        key={option.id}
+                                                                        checked={current.includes(option.id)}
+                                                                        onCheckedChange={(checked) => setNodeConfig({
+                                                                            ...nodeConfig,
+                                                                            sharedTeamIds: checked ? [...new Set([...current, option.id])] : current.filter((id) => id !== option.id),
+                                                                        })}
+                                                                    >
+                                                                        {option.name || option.id}
+                                                                    </DropdownMenuCheckboxItem>
+                                                                );
+                                                            })}
+                                                        </DropdownMenuContent>
+                                                    </DropdownMenu>
+                                                </div>
+                                            </>
+                                        )}
+
                                         {selectedNode.data?.type === 'calculate_commission' && (
                                             <Alert variant="info" className="text-[13px]">
                                                 <Info className="size-4" />
@@ -1942,6 +2325,26 @@ function AutomationBuilderContent() {
                                                     a partner, or no rule matches, this step is a no-op.
                                                 </AlertDescription>
                                             </Alert>
+                                        )}
+
+                                        {selectedNode.data?.type === 'run_automation' && (
+                                            <div className="space-y-1.5">
+                                                <Label>Automation to Run</Label>
+                                                <Select value={nodeConfig.targetAutomationId || ''} onValueChange={(value) => setNodeConfig({ ...nodeConfig, targetAutomationId: value })}>
+                                                    <SelectTrigger className="w-full"><SelectValue placeholder="Select an automation" /></SelectTrigger>
+                                                    <SelectContent>
+                                                        {otherAutomations.filter((item) => item.id !== automationId).map((item) => (
+                                                            <SelectItem key={item.id} value={item.id}>{item.name}</SelectItem>
+                                                        ))}
+                                                    </SelectContent>
+                                                </Select>
+                                                <Alert variant="info" className="text-[13px]">
+                                                    <Info className="size-4" />
+                                                    <AlertDescription>
+                                                        Runs the selected automation&apos;s own workflow for this record, regardless of whether it would normally match that automation&apos;s trigger. If it eventually tries to run this automation again (directly or through a longer chain), that repeat is silently skipped rather than looping forever.
+                                                    </AlertDescription>
+                                                </Alert>
+                                            </div>
                                         )}
 
                                         {selectedNode.data?.type === 'award_points' && (
@@ -2028,6 +2431,54 @@ function AutomationBuilderContent() {
                                                     <Label>Body (JSON)</Label>
                                                     <Textarea rows={3} value={nodeConfig.body || ''} onChange={(e) => setNodeConfig({ ...nodeConfig, body: e.target.value })} />
                                                 </div>
+                                            </>
+                                        )}
+
+                                        {selectedNode.data?.type === 'call_app_action' && (
+                                            <>
+                                                <div className="space-y-1.5">
+                                                    <Label>App Action</Label>
+                                                    <Select
+                                                        value={nodeConfig.appId && nodeConfig.actionKey ? `${nodeConfig.appId}|||${nodeConfig.actionKey}` : ''}
+                                                        onValueChange={(value) => {
+                                                            const [appId, actionKey] = value.split('|||');
+                                                            setNodeConfig({ ...nodeConfig, appId, actionKey, input: {} });
+                                                        }}
+                                                    >
+                                                        <SelectTrigger className="w-full"><SelectValue placeholder="Select an app action" /></SelectTrigger>
+                                                        <SelectContent>
+                                                            {availableAppActions.map((action) => (
+                                                                <SelectItem key={action.id} value={`${action.appId}|||${action.key}`}>{action.appName} — {action.name}</SelectItem>
+                                                            ))}
+                                                        </SelectContent>
+                                                    </Select>
+                                                    {availableAppActions.length === 0 && (
+                                                        <p className="text-xs text-muted-foreground">No installed app has exposed an action with &quot;automations&quot; write access granted.</p>
+                                                    )}
+                                                </div>
+                                                {(availableAppActions.find((a) => a.appId === nodeConfig.appId && a.key === nodeConfig.actionKey)?.inputSchema ?? []).map((field: any) => (
+                                                    <div key={field.key} className="space-y-1.5">
+                                                        <Label>{field.label}{field.required ? ' *' : ''}</Label>
+                                                        {field.type === 'select' ? (
+                                                            <Select
+                                                                value={nodeConfig.input?.[field.key] ?? ''}
+                                                                onValueChange={(value) => setNodeConfig({ ...nodeConfig, input: { ...nodeConfig.input, [field.key]: value } })}
+                                                            >
+                                                                <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                                                                <SelectContent>
+                                                                    {(field.options ?? []).map((option: string) => <SelectItem key={option} value={option}>{option}</SelectItem>)}
+                                                                </SelectContent>
+                                                            </Select>
+                                                        ) : (
+                                                            <Input
+                                                                type={field.type === 'number' ? 'number' : 'text'}
+                                                                value={nodeConfig.input?.[field.key] ?? ''}
+                                                                placeholder="Literal value, or {{lead.email}} to pull from the triggering record"
+                                                                onChange={(e) => setNodeConfig({ ...nodeConfig, input: { ...nodeConfig.input, [field.key]: e.target.value } })}
+                                                            />
+                                                        )}
+                                                    </div>
+                                                ))}
                                             </>
                                         )}
 
@@ -2125,6 +2576,15 @@ function AutomationBuilderContent() {
                     automationName={name}
                 />
             )}
+            {!isNew && (
+                <EnrollRecordsDialog
+                    open={showEnrollDialog}
+                    onClose={() => setShowEnrollDialog(false)}
+                    automationId={automationId}
+                    automationName={name}
+                    defaultEntityType={isOpportunityScopedTrigger ? "OPPORTUNITY" : "LEAD"}
+                />
+            )}
             <StandardDialog
                 open={configDialogOpen && Boolean(selectedNode)}
                 onClose={() => setConfigDialogOpen(false)}
@@ -2166,7 +2626,7 @@ function AutomationBuilderContent() {
                                 <Select value={nodeConfig.triggerType || triggerType} onValueChange={(value) => setNodeConfig({ ...nodeConfig, triggerType: value })}>
                                     <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
                                     <SelectContent>
-                                        {TRIGGER_TYPES.map((trigger) => (
+                                        {getAvailableTriggerTypes(nodeConfig.triggerType || triggerType).map((trigger) => (
                                             <SelectItem key={trigger.value} value={trigger.value}>{trigger.label}</SelectItem>
                                         ))}
                                     </SelectContent>
@@ -2491,6 +2951,22 @@ function AutomationBuilderContent() {
                             </div>
                         )}
 
+                        {selectedNode.data?.type === 'apply_task_playbook' && (
+                            <div className="grid gap-4 rounded-xl border bg-card p-4">
+                                <div className="space-y-2">
+                                    <Label>Playbook</Label>
+                                    <Select value={nodeConfig.playbookId || ''} onValueChange={(value) => setNodeConfig({ ...nodeConfig, playbookId: value })}>
+                                        <SelectTrigger><SelectValue placeholder="Select a task playbook" /></SelectTrigger>
+                                        <SelectContent>{taskPlaybooks.map((playbook) => <SelectItem key={playbook.id} value={playbook.id}>{playbook.name} ({playbook.itemCount} tasks)</SelectItem>)}</SelectContent>
+                                    </Select>
+                                </div>
+                                <Alert variant="info">
+                                    <Info className="size-4" />
+                                    <AlertDescription>Creates every task in the selected playbook against this record&apos;s Lead/Opportunity, due dates offset from when this step runs. Manage playbooks under Settings &gt; Task Playbooks.</AlertDescription>
+                                </Alert>
+                            </div>
+                        )}
+
                         {['assign_task', 'reschedule_task', 'complete_task'].includes(selectedNode.data?.type) && (
                             <div className="grid gap-4 rounded-xl border bg-card p-4 md:grid-cols-2">
                                 {selectedNode.data?.type === 'assign_task' && (
@@ -2640,6 +3116,164 @@ function AutomationBuilderContent() {
                             </div>
                         )}
 
+                        {selectedNode.data?.type === 'assign_case' && (
+                            <div className="grid gap-4 rounded-xl border bg-card p-4 md:grid-cols-2">
+                                <div className="space-y-2">
+                                    <Label>Owner</Label>
+                                    <Select value={nodeConfig.ownerId || ''} onValueChange={(value) => setNodeConfig({ ...nodeConfig, ownerId: value })}>
+                                        <SelectTrigger><SelectValue placeholder="Select owner" /></SelectTrigger>
+                                        <SelectContent>{users.map((user) => <SelectItem key={user.id} value={user.id}>{user.name || user.email}</SelectItem>)}</SelectContent>
+                                    </Select>
+                                </div>
+                                <div className="space-y-2">
+                                    <Label>Reason (optional)</Label>
+                                    <Input placeholder="Assigned by automation" value={nodeConfig.reason || ''} onChange={(e) => setNodeConfig({ ...nodeConfig, reason: e.target.value })} />
+                                </div>
+                            </div>
+                        )}
+
+                        {selectedNode.data?.type === 'add_case_comment' && (
+                            <div className="space-y-2 rounded-xl border bg-card p-4">
+                                <Label>Comment</Label>
+                                <Textarea rows={3} value={nodeConfig.body || ''} onChange={(e) => setNodeConfig({ ...nodeConfig, body: e.target.value })} />
+                                <label className="flex items-center gap-2 text-sm font-medium">
+                                    <Switch checked={nodeConfig.isInternal !== false} onCheckedChange={(checked) => setNodeConfig({ ...nodeConfig, isInternal: checked })} />
+                                    Internal note (not visible to the requester)
+                                </label>
+                            </div>
+                        )}
+
+                        {(selectedNode.data?.type === 'create_case' || selectedNode.data?.type === 'update_case') && (
+                            <div className="grid gap-4 rounded-xl border bg-card p-4 md:grid-cols-2">
+                                <div className="space-y-2">
+                                    <Label>Subject{selectedNode.data?.type === 'update_case' ? ' (leave blank to keep unchanged)' : ' (optional)'}</Label>
+                                    <Input value={nodeConfig.subject || ''} onChange={(e) => setNodeConfig({ ...nodeConfig, subject: e.target.value })} />
+                                </div>
+                                <div className="space-y-2">
+                                    <Label>Description</Label>
+                                    <Textarea rows={2} value={nodeConfig.description || ''} onChange={(e) => setNodeConfig({ ...nodeConfig, description: e.target.value })} />
+                                </div>
+                            </div>
+                        )}
+
+                        {selectedNode.data?.type === 'escalate_case' && (
+                            <div className="space-y-2 rounded-xl border bg-card p-4">
+                                <Label>Escalate to (optional -- defaults to the owner&apos;s manager)</Label>
+                                <Select value={nodeConfig.escalateToId || ''} onValueChange={(value) => setNodeConfig({ ...nodeConfig, escalateToId: value })}>
+                                    <SelectTrigger><SelectValue placeholder="Owner's manager" /></SelectTrigger>
+                                    <SelectContent>{users.map((user) => <SelectItem key={user.id} value={user.id}>{user.name || user.email}</SelectItem>)}</SelectContent>
+                                </Select>
+                            </div>
+                        )}
+
+                        {(selectedNode.data?.type === 'send_case_acknowledgement' || selectedNode.data?.type === 'send_case_response') && (
+                            <div className="grid gap-4 rounded-xl border bg-card p-4 md:grid-cols-2">
+                                <div className="space-y-2">
+                                    <Label>Channel</Label>
+                                    <Select value={nodeConfig.channel || 'EMAIL'} onValueChange={(value) => setNodeConfig({ ...nodeConfig, channel: value })}>
+                                        <SelectTrigger><SelectValue /></SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="EMAIL">Email</SelectItem>
+                                            <SelectItem value="WHATSAPP">WhatsApp</SelectItem>
+                                            <SelectItem value="SMS">SMS</SelectItem>
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+                                <div className="space-y-2 md:col-span-2">
+                                    <Label>Message (optional -- a sensible default is used if left blank)</Label>
+                                    <Textarea rows={3} value={nodeConfig.body || ''} onChange={(e) => setNodeConfig({ ...nodeConfig, body: e.target.value })} />
+                                </div>
+                            </div>
+                        )}
+
+                        {selectedNode.data?.type === 'apply_case_macro' && (
+                            <div className="space-y-2 rounded-xl border bg-card p-4">
+                                <Label>Macro ID</Label>
+                                <Input placeholder="Copy from Settings > Service Desk > Macros" value={nodeConfig.macroId || ''} onChange={(e) => setNodeConfig({ ...nodeConfig, macroId: e.target.value })} />
+                            </div>
+                        )}
+
+                        {selectedNode.data?.type === 'add_case_to_queue' && (
+                            <div className="space-y-2 rounded-xl border bg-card p-4">
+                                <Label>Queue ID</Label>
+                                <Input placeholder="Copy from Settings > Service Desk > Queues" value={nodeConfig.queueId || ''} onChange={(e) => setNodeConfig({ ...nodeConfig, queueId: e.target.value })} />
+                            </div>
+                        )}
+
+                        {(selectedNode.data?.type === 'pause_case_sla' || selectedNode.data?.type === 'resume_case_sla' || selectedNode.data?.type === 'close_case' || selectedNode.data?.type === 'reopen_case') && (
+                            <Alert variant="info" className="text-[13px]">
+                                <Info className="size-4" />
+                                <AlertDescription>Acts on the triggering case directly -- no configuration needed.</AlertDescription>
+                            </Alert>
+                        )}
+
+                        {(selectedNode.data?.type === 'share_opportunity' || selectedNode.data?.type === 'stop_share_opportunity') && (
+                            <div className="grid gap-4 rounded-xl border bg-card p-4 md:grid-cols-2">
+                                <Alert variant="info" className="text-[13px] md:col-span-2">
+                                    <Info className="size-4" />
+                                    <AlertDescription>
+                                        {selectedNode.data?.type === 'share_opportunity'
+                                            ? "Grants the selected users/teams access to this opportunity, in addition to anyone already shared with it -- doesn't remove existing shares."
+                                            : "Removes just the selected users/teams from this opportunity's sharing. Leave both empty to clear all sharing on this record."}
+                                    </AlertDescription>
+                                </Alert>
+                                <div className="space-y-2">
+                                    <Label>Users</Label>
+                                    <DropdownMenu>
+                                        <DropdownMenuTrigger asChild>
+                                            <Button variant="outline" className="w-full justify-between">
+                                                {(nodeConfig.sharedUserIds ?? []).length === 0 ? "Select users" : `${(nodeConfig.sharedUserIds ?? []).length} selected`}
+                                            </Button>
+                                        </DropdownMenuTrigger>
+                                        <DropdownMenuContent align="start" className="max-h-64 w-72 overflow-y-auto">
+                                            {users.map((option) => {
+                                                const current: string[] = nodeConfig.sharedUserIds ?? [];
+                                                return (
+                                                    <DropdownMenuCheckboxItem
+                                                        key={option.id}
+                                                        checked={current.includes(option.id)}
+                                                        onCheckedChange={(checked) => setNodeConfig({
+                                                            ...nodeConfig,
+                                                            sharedUserIds: checked ? [...new Set([...current, option.id])] : current.filter((id) => id !== option.id),
+                                                        })}
+                                                    >
+                                                        {option.name || option.email}
+                                                    </DropdownMenuCheckboxItem>
+                                                );
+                                            })}
+                                        </DropdownMenuContent>
+                                    </DropdownMenu>
+                                </div>
+                                <div className="space-y-2">
+                                    <Label>Teams</Label>
+                                    <DropdownMenu>
+                                        <DropdownMenuTrigger asChild>
+                                            <Button variant="outline" className="w-full justify-between">
+                                                {(nodeConfig.sharedTeamIds ?? []).length === 0 ? "Select teams" : `${(nodeConfig.sharedTeamIds ?? []).length} selected`}
+                                            </Button>
+                                        </DropdownMenuTrigger>
+                                        <DropdownMenuContent align="start" className="max-h-64 w-72 overflow-y-auto">
+                                            {teams.map((option) => {
+                                                const current: string[] = nodeConfig.sharedTeamIds ?? [];
+                                                return (
+                                                    <DropdownMenuCheckboxItem
+                                                        key={option.id}
+                                                        checked={current.includes(option.id)}
+                                                        onCheckedChange={(checked) => setNodeConfig({
+                                                            ...nodeConfig,
+                                                            sharedTeamIds: checked ? [...new Set([...current, option.id])] : current.filter((id) => id !== option.id),
+                                                        })}
+                                                    >
+                                                        {option.name || option.id}
+                                                    </DropdownMenuCheckboxItem>
+                                                );
+                                            })}
+                                        </DropdownMenuContent>
+                                    </DropdownMenu>
+                                </div>
+                            </div>
+                        )}
+
                         {['add_to_list', 'remove_from_list'].includes(selectedNode.data?.type) && (
                             <div className="space-y-2 rounded-xl border bg-card p-4">
                                 <Label>Lead List</Label>
@@ -2728,6 +3362,64 @@ function AutomationBuilderContent() {
                                     <Label>{selectedNode.data?.type === 'webhook' ? 'Body (JSON)' : 'Message'}</Label>
                                     <Textarea rows={3} value={selectedNode.data?.type === 'webhook' ? nodeConfig.body || '' : nodeConfig.message || nodeConfig.body || ''} onChange={(e) => setNodeConfig(selectedNode.data?.type === 'webhook' ? { ...nodeConfig, body: e.target.value } : { ...nodeConfig, message: e.target.value, body: e.target.value })} />
                                 </div>
+                                {selectedNode.data?.type === 'send_email' && (
+                                    <>
+                                        <div className="space-y-2">
+                                            <Label>Fallback Channel (optional)</Label>
+                                            <Select
+                                                value={nodeConfig.fallbackChannel || 'NONE'}
+                                                onValueChange={(value) => setNodeConfig({ ...nodeConfig, fallbackChannel: value === 'NONE' ? '' : value })}
+                                            >
+                                                <SelectTrigger><SelectValue /></SelectTrigger>
+                                                <SelectContent>
+                                                    <SelectItem value="NONE">None</SelectItem>
+                                                    <SelectItem value="EMAIL">Email</SelectItem>
+                                                    <SelectItem value="WHATSAPP">WhatsApp</SelectItem>
+                                                    <SelectItem value="SMS">SMS</SelectItem>
+                                                </SelectContent>
+                                            </Select>
+                                        </div>
+                                        <div className="space-y-2">
+                                            <Label>Throttle (max sends / minute, optional)</Label>
+                                            <Input
+                                                type="number"
+                                                min={1}
+                                                value={nodeConfig.throttlePerMinute ?? ''}
+                                                onChange={(e) => setNodeConfig({ ...nodeConfig, throttlePerMinute: e.target.value })}
+                                            />
+                                        </div>
+                                        {nodeConfig.fallbackChannel && (
+                                            <>
+                                                <div className="space-y-2 md:col-span-2">
+                                                    <Label>Fallback Message</Label>
+                                                    <Textarea rows={2} value={nodeConfig.fallbackMessage || ''} onChange={(e) => setNodeConfig({ ...nodeConfig, fallbackMessage: e.target.value })} />
+                                                </div>
+                                                <div className="space-y-2">
+                                                    <Label>Fallback Condition</Label>
+                                                    <Select
+                                                        value={nodeConfig.fallbackCondition || 'BLOCKED_OR_FAILED'}
+                                                        onValueChange={(value) => setNodeConfig({ ...nodeConfig, fallbackCondition: value })}
+                                                    >
+                                                        <SelectTrigger><SelectValue /></SelectTrigger>
+                                                        <SelectContent>
+                                                            <SelectItem value="BLOCKED_OR_FAILED">Immediately if blocked, or after send fails</SelectItem>
+                                                            <SelectItem value="FAILED_ONLY">Only after send fails</SelectItem>
+                                                        </SelectContent>
+                                                    </Select>
+                                                </div>
+                                                <div className="space-y-2">
+                                                    <Label>Fallback Delay (minutes)</Label>
+                                                    <Input
+                                                        type="number"
+                                                        min={0}
+                                                        value={nodeConfig.fallbackDelayMinutes ?? ''}
+                                                        onChange={(e) => setNodeConfig({ ...nodeConfig, fallbackDelayMinutes: e.target.value })}
+                                                    />
+                                                </div>
+                                            </>
+                                        )}
+                                    </>
+                                )}
                             </div>
                         )}
 
@@ -2738,6 +3430,75 @@ function AutomationBuilderContent() {
                                     This step uses the matching module configuration when it runs. No extra fields are required on the node.
                                 </AlertDescription>
                             </Alert>
+                        )}
+
+                        {selectedNode.data?.type === 'run_automation' && (
+                            <div className="space-y-2 rounded-xl border bg-card p-4">
+                                <Label>Automation to Run</Label>
+                                <Select value={nodeConfig.targetAutomationId || ''} onValueChange={(value) => setNodeConfig({ ...nodeConfig, targetAutomationId: value })}>
+                                    <SelectTrigger><SelectValue placeholder="Select an automation" /></SelectTrigger>
+                                    <SelectContent>
+                                        {otherAutomations.filter((item) => item.id !== automationId).map((item) => (
+                                            <SelectItem key={item.id} value={item.id}>{item.name}</SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                                <Alert variant="info" className="text-[13px]">
+                                    <Info className="size-4" />
+                                    <AlertDescription>
+                                        Runs the selected automation&apos;s own workflow for this record. A repeat visit back to an automation already running in this chain is silently skipped rather than looping forever.
+                                    </AlertDescription>
+                                </Alert>
+                            </div>
+                        )}
+
+                        {selectedNode.data?.type === 'call_app_action' && (
+                            <div className="space-y-2 rounded-xl border bg-card p-4">
+                                <Label>App Action</Label>
+                                <Select
+                                    value={nodeConfig.appId && nodeConfig.actionKey ? `${nodeConfig.appId}|||${nodeConfig.actionKey}` : ''}
+                                    onValueChange={(value) => {
+                                        const [appId, actionKey] = value.split('|||');
+                                        setNodeConfig({ ...nodeConfig, appId, actionKey, input: {} });
+                                    }}
+                                >
+                                    <SelectTrigger><SelectValue placeholder="Select an app action" /></SelectTrigger>
+                                    <SelectContent>
+                                        {availableAppActions.map((action) => (
+                                            <SelectItem key={action.id} value={`${action.appId}|||${action.key}`}>{action.appName} — {action.name}</SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                                {(availableAppActions.find((a) => a.appId === nodeConfig.appId && a.key === nodeConfig.actionKey)?.inputSchema ?? []).map((field: any) => (
+                                    <div key={field.key} className="space-y-2">
+                                        <Label>{field.label}{field.required ? ' *' : ''}</Label>
+                                        {field.type === 'select' ? (
+                                            <Select
+                                                value={nodeConfig.input?.[field.key] ?? ''}
+                                                onValueChange={(value) => setNodeConfig({ ...nodeConfig, input: { ...nodeConfig.input, [field.key]: value } })}
+                                            >
+                                                <SelectTrigger><SelectValue /></SelectTrigger>
+                                                <SelectContent>
+                                                    {(field.options ?? []).map((option: string) => <SelectItem key={option} value={option}>{option}</SelectItem>)}
+                                                </SelectContent>
+                                            </Select>
+                                        ) : (
+                                            <Input
+                                                type={field.type === 'number' ? 'number' : 'text'}
+                                                value={nodeConfig.input?.[field.key] ?? ''}
+                                                placeholder="Literal value, or {{lead.email}} to pull from the triggering record"
+                                                onChange={(e) => setNodeConfig({ ...nodeConfig, input: { ...nodeConfig.input, [field.key]: e.target.value } })}
+                                            />
+                                        )}
+                                    </div>
+                                ))}
+                                <Alert variant="info" className="text-[13px]">
+                                    <Info className="size-4" />
+                                    <AlertDescription>
+                                        Calls the selected app&apos;s declared action with these inputs, gated by the app&apos;s &quot;automations&quot; write permission grant. The call, its result, and any error are logged to that app&apos;s runtime audit log.
+                                    </AlertDescription>
+                                </Alert>
+                            </div>
                         )}
                     </div>
                 ) : null}

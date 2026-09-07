@@ -17,6 +17,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ ver
     return NextResponse.json(result);
   } catch (error) {
     if (error instanceof Error && error.message === "UNAUTHORIZED") return unauthorized();
+    if (error instanceof Error && error.message.startsWith("MODULE_DISABLED")) return forbidden("Predictive Scoring module is disabled for this tenant");
     if (error instanceof Error && error.message === "SCORING_MODEL_VERSION_NOT_FOUND") return badRequest("Model version not found");
     if (error instanceof Error && error.message === "SCORING_MODEL_NOT_FOUND") return badRequest("Model not found");
     return serverError("Failed to promote scoring model version", error);

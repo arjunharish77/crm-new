@@ -14,10 +14,12 @@ import { ActivitiesMobileList } from "./activities-mobile-list";
 import { CreateActivityDialog } from "./create-activity-dialog";
 import { DataTable } from "@/components/ui/data-table";
 import { buildActivityColumns } from "./columns";
-import { FilterBuilder } from "@/components/filters/filter-builder";
-import { FilterConfig, FilterField } from "@/types/filters";
+import { AdvancedFilterDrawer, FilterGroup } from "@/components/filters/advanced-filter-drawer";
+import { FilterField } from "@/types/filters";
 import { EmptyState } from "@/components/common/empty-state";
+import { ErrorState } from "@/components/common/error-state";
 import { QueueExportButton } from "@/components/exports/queue-export-button";
+import { BulkActionsToolbar } from "@/components/bulk-actions/bulk-toolbar";
 
 const INITIAL_FILTER_FIELDS: FilterField[] = [
     { key: 'notes', label: 'Description', type: 'text' },
@@ -39,6 +41,9 @@ const INITIAL_FILTER_FIELDS: FilterField[] = [
             { label: 'Not Interested', value: 'NOT_INTERESTED' },
         ]
     },
+    { key: 'dueAt', label: 'Due', type: 'date' },
+    { key: 'completedAt', label: 'Completed', type: 'date' },
+    { key: 'createdAt', label: 'Created', type: 'date' },
 ];
 
 export default function ActivitiesPage() {
@@ -53,10 +58,7 @@ export default function ActivitiesPage() {
     const [totalItems, setTotalItems] = useState(0);
     const [selectedRows, setSelectedRows] = useState<string[]>([]);
     const [isAllSelected, setIsAllSelected] = useState(false);
-    const [filters, setFilters] = useState<FilterConfig>({
-        conditions: [],
-        logic: 'AND',
-    });
+    const [filters, setFilters] = useState<FilterGroup[]>([]);
 
     useEffect(() => {
         apiFetch('/activity-types')
@@ -76,24 +78,49 @@ export default function ActivitiesPage() {
             .catch(() => toast.error('Failed to load activity types'));
     }, []);
 
+    // Gap checklist Module 10's universal advanced filter drawer -- serializes the real,
+    // possibly multi-group FilterGroup[] the drawer now produces (upgraded from the single flat
+    // {conditions, logic} object this page used before, whose `logic` the backend silently
+    // ignored anyway -- see buildGroupedFilterClause, query-filters.ts). The quick activity-type
+    // selector is appended as its own extra one-condition group, always ANDed with whatever
+    // groups the drawer itself built, matching its previous "always narrows scope" behavior.
+    const groupsForQuery = useCallback((): FilterGroup[] => {
+        const nonEmpty = filters
+            .map((group) => ({ ...group, conditions: group.conditions.filter((condition) => condition.field) }))
+            .filter((group) => group.conditions.length > 0);
+        if (selectedActivityTypeId !== "ALL") {
+            nonEmpty.push({ id: "quick-activity-type", logic: "AND", conditions: [{ id: "quick-activity-type-c", field: "typeId", operator: "equals", value: selectedActivityTypeId }] });
+        }
+        return nonEmpty;
+    }, [filters, selectedActivityTypeId]);
+
     const buildQueryParams = useCallback(() => {
         const params = new URLSearchParams();
-        if (urlFilters && filters.conditions.length === 0 && selectedActivityTypeId === "ALL") {
+        const groups = groupsForQuery();
+        if (groups.length === 0 && urlFilters) {
             params.set("filters", urlFilters);
             return params.toString();
         }
-        const conditions = [...filters.conditions];
-        if (selectedActivityTypeId !== "ALL") {
-            conditions.push({ id: "quick-activity-type", field: "typeId", operator: "equals", value: selectedActivityTypeId });
-        }
-        if (conditions.length > 0) {
-            params.set('filters', JSON.stringify({ ...filters, conditions }));
-        }
+        if (groups.length > 0) params.set("filters", JSON.stringify(groups));
         return params.toString();
-    }, [filters, selectedActivityTypeId, urlFilters]);
+    }, [groupsForQuery, urlFilters]);
+
+    // "Query preview/count" -- reuses this page's own /activities endpoint with limit=1.
+    const previewFilterCount = useCallback(async (groups: FilterGroup[]) => {
+        const nonEmpty = groups
+            .map((group) => ({ ...group, conditions: group.conditions.filter((condition) => condition.field) }))
+            .filter((group) => group.conditions.length > 0);
+        const params = new URLSearchParams({ page: "1", limit: "1" });
+        if (nonEmpty.length) params.set("filters", JSON.stringify(nonEmpty));
+        const response = await apiFetch<PaginatedResponse<Activity> | Activity[]>(`/activities?${params.toString()}`);
+        return "meta" in response ? response.meta.total : Array.isArray(response) ? response.length : 0;
+    }, []);
+
+    const [fetchError, setFetchError] = useState<string | null>(null);
 
     const fetchData = useCallback(async () => {
         setLoading(true);
+        setFetchError(null);
         try {
             const queryString = buildQueryParams();
             const params = new URLSearchParams(queryString);
@@ -111,6 +138,7 @@ export default function ActivitiesPage() {
             }
         } catch (error) {
             toast.error("Failed to fetch activities");
+            setFetchError("Failed to load activities.");
         } finally {
             setLoading(false);
         }
@@ -130,6 +158,8 @@ export default function ActivitiesPage() {
         setIsAllSelected(false);
     }, [filters, selectedActivityTypeId, urlFilters]);
 
+    const filterConditionCount = useMemo(() => filters.reduce((sum, group) => sum + group.conditions.filter((c) => c.field).length, 0), [filters]);
+
     const handleSelectAllFiltered = () => {
         setSelectedRows(data.map((activity) => activity.id));
         setIsAllSelected(true);
@@ -139,6 +169,20 @@ export default function ActivitiesPage() {
     const clearSelection = () => {
         setSelectedRows([]);
         setIsAllSelected(false);
+    };
+
+    const handleBulkMarkCompleted = async () => {
+        const ids = isAllSelected ? data.map((activity) => activity.id) : selectedRows;
+        if (ids.length === 0) return;
+        try {
+            const completedAt = new Date().toISOString();
+            await Promise.all(ids.map((id) => apiFetch(`/activities/${id}`, { method: "PATCH", body: JSON.stringify({ completedAt }) })));
+            toast.success(`${ids.length} activit${ids.length === 1 ? "y" : "ies"} marked completed`);
+            clearSelection();
+            fetchData();
+        } catch {
+            toast.error("Failed to mark activities completed");
+        }
     };
 
     const activityColumns = useMemo(() => buildActivityColumns({ onFormsSaved: fetchData }), [fetchData]);
@@ -191,15 +235,15 @@ export default function ActivitiesPage() {
                         variant="outline"
                         className={cn(
                             "rounded-[10px]",
-                            filters.conditions.length > 0 && "border-primary bg-primary/5"
+                            filterConditionCount > 0 && "border-primary bg-primary/5"
                         )}
-                        onClick={() => setFilterOpen(!filterOpen)}
+                        onClick={() => setFilterOpen(true)}
                     >
                         <ListFilter className="size-4" />
                         Filters
-                        {filters.conditions.length > 0 && (
+                        {filterConditionCount > 0 && (
                             <span className="flex size-5 items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-foreground">
-                                {filters.conditions.length}
+                                {filterConditionCount}
                             </span>
                         )}
                     </Button>
@@ -207,19 +251,20 @@ export default function ActivitiesPage() {
                 </div>
             </div>
 
-            {/* Filter Builder */}
-            {filterOpen && (
-                <div className="mb-3 rounded-xl border bg-primary/[0.02] p-3">
-                    <FilterBuilder
-                        fields={filterFields}
-                        value={filters}
-                        onChange={setFilters}
-                    />
-                </div>
-            )}
+            <AdvancedFilterDrawer
+                open={filterOpen}
+                onClose={() => setFilterOpen(false)}
+                initialGroups={filters}
+                storageKey="activities"
+                previewCount={previewFilterCount}
+                fields={filterFields}
+                onApply={setFilters}
+            />
 
             {/* Content */}
-            {data.length === 0 && !loading ? (
+            {fetchError && !loading ? (
+                <ErrorState description={fetchError} onRetry={fetchData} />
+            ) : data.length === 0 && !loading ? (
                 <EmptyState
                     icon={<CalendarDays className="size-12 text-muted-foreground opacity-50" />}
                     title="No activities found"
@@ -263,6 +308,13 @@ export default function ActivitiesPage() {
                     </div>
                 </>
             )}
+
+            <BulkActionsToolbar
+                selectedCount={isAllSelected ? totalItems : selectedRows.length}
+                onClearSelection={clearSelection}
+                module="activities"
+                onMarkCompleted={handleBulkMarkCompleted}
+            />
         </div>
     );
 }

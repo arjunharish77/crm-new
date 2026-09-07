@@ -205,8 +205,8 @@ export default function PermissionTemplatesPage() {
         const payload = { name: name.trim(), description, isActive, permissions };
         try {
             if (editing) {
-                await apiFetch(`/permission-templates/${editing.id}`, { method: "PATCH", body: JSON.stringify(payload) });
-                toast.success("Permission template updated");
+                const result = await apiFetch<{ pendingApproval?: boolean }>(`/permission-templates/${editing.id}`, { method: "PATCH", body: JSON.stringify(payload) });
+                toast.success(result?.pendingApproval ? "Change submitted -- a different admin must approve it before it takes effect." : "Permission template updated");
             } else {
                 await apiFetch("/permission-templates", { method: "POST", body: JSON.stringify(payload) });
                 toast.success("Permission template created");

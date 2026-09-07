@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { cloneSavedViewForTenant, deleteSavedViewForTenant, updateSavedViewForTenant } from "@/lib/server/crm";
 import { requireCurrentUser } from "@/lib/server/auth";
-import { serverError, unauthorized } from "@/lib/server/http";
+import { badRequest, forbidden, serverError, unauthorized } from "@/lib/server/http";
 
 export async function PATCH(
   request: Request,
@@ -16,6 +16,15 @@ export async function PATCH(
   } catch (error) {
     if (error instanceof Error && error.message === "UNAUTHORIZED") {
       return unauthorized();
+    }
+    if (error instanceof Error && error.message === "SAVED_VIEW_NOT_FOUND") {
+      return NextResponse.json({ message: "Saved view not found" }, { status: 404 });
+    }
+    if (error instanceof Error && error.message === "FORBIDDEN") {
+      return forbidden("Only this View's owner or a tenant admin can edit it");
+    }
+    if (error instanceof Error && error.message === "OWNER_NOT_FOUND") {
+      return badRequest("That user isn't part of this tenant");
     }
 
     return serverError("Failed to update saved view", error);
@@ -56,6 +65,9 @@ export async function DELETE(
   } catch (error) {
     if (error instanceof Error && error.message === "UNAUTHORIZED") {
       return unauthorized();
+    }
+    if (error instanceof Error && error.message === "FORBIDDEN") {
+      return forbidden("Only this View's owner or a tenant admin can delete it");
     }
 
     return serverError("Failed to delete saved view", error);

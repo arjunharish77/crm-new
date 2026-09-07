@@ -5,9 +5,12 @@ import {
   type PartnerPayoutSettingsInput,
 } from "@/lib/server/payouts";
 import { getPayoutVisiblePartnerUserIds, resolvePartnerRollupTarget } from "@/lib/server/partner-access";
+import { assertFeatureEnabled } from "@/lib/server/entitlements";
 import { query, queryOne } from "@/lib/db/query";
 import { readPrivateFile, writePrivateFile } from "@/lib/storage/file-storage";
 import { getFileObjectForEntity, upsertFileObjectForTenant } from "@/lib/repositories/files-postgres";
+import { generateSignedDownloadToken, verifySignedDownloadToken } from "@/lib/server/signed-urls";
+import { safeContentDispositionFilename } from "@/lib/server/http";
 
 type TenantUser = {
   id: string;
@@ -16,6 +19,11 @@ type TenantUser = {
   isPlatformAdmin?: boolean;
   role?: { permissions?: any } | string | null;
 };
+
+const INVOICE_COLUMNS = `id, "tenantId", "partnerId", "payoutId", "invoiceNumber", "invoiceDate", "supplierSnapshot",
+            "recipientSnapshot", "lineItems", "taxableValue", "cgstAmount", "sgstAmount", "igstAmount",
+            "totalAmount", "isGstInvoice", "pdfStoragePath", "status", "supersedesInvoiceId", "cancelledAt",
+            "cancelledBy", "cancellationReason", "generatedAt", "generatedBy", "createdAt"`;
 
 // --- Pure functions (no I/O) — kept separate and exported for direct unit testing. ---
 
@@ -147,8 +155,13 @@ async function getNextInvoiceNumber(
 // The one-click flow: a partner (or admin on their behalf) turns an APPROVED payout
 // into an invoice. Requires PartnerPayoutSettings' company GST details to be filled
 // in first — errors clearly rather than generating an invoice with blank fields.
-export async function generatePartnerInvoiceForPayout(user: TenantUser, payoutId: string) {
+export async function generatePartnerInvoiceForPayout(
+  user: TenantUser,
+  payoutId: string,
+  opts: { supersedesInvoiceId?: string } = {}
+) {
   if (!user.tenantId) throw new Error("TENANT_CONTEXT_REQUIRED");
+  await assertFeatureEnabled(user.tenantId, "payoutsEnabled", { isPlatformAdmin: user.isPlatformAdmin });
   const payout = await queryOne<any>(
     `select id, "tenantId", "payoutCycleId", "partnerId", "partnerOrganizationId", "totalCommissionAmount", status, "invoiceId"
      from "Payout"
@@ -157,7 +170,9 @@ export async function generatePartnerInvoiceForPayout(user: TenantUser, payoutId
     [user.tenantId, payoutId],
   );
   if (!payout) return null;
-  if (payout.status !== "APPROVED") throw new Error("PAYOUT_NOT_APPROVED");
+  // A reissue (supersedesInvoiceId set) is regenerating the document for an already-
+  // invoiced/paid payout, so the normal "must be APPROVED" gate doesn't apply there.
+  if (!opts.supersedesInvoiceId && payout.status !== "APPROVED") throw new Error("PAYOUT_NOT_APPROVED");
 
   const settings = await getPartnerPayoutSettingsForTenant(user);
   if (!settings?.companyLegalName || !settings?.companyState) throw new Error("COMPANY_GST_DETAILS_NOT_CONFIGURED");
@@ -234,11 +249,9 @@ export async function generatePartnerInvoiceForPayout(user: TenantUser, payoutId
     `insert into "PartnerInvoice"
       (id, "tenantId", "partnerId", "payoutId", "invoiceNumber", "invoiceDate", "supplierSnapshot",
        "recipientSnapshot", "lineItems", "taxableValue", "cgstAmount", "sgstAmount", "igstAmount",
-       "totalAmount", "isGstInvoice", "generatedAt", "generatedBy", "createdAt")
-     values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $16)
-     returning id, "tenantId", "partnerId", "payoutId", "invoiceNumber", "invoiceDate", "supplierSnapshot",
-               "recipientSnapshot", "lineItems", "taxableValue", "cgstAmount", "sgstAmount", "igstAmount",
-               "totalAmount", "isGstInvoice", "pdfStoragePath", "generatedAt", "generatedBy", "createdAt"`,
+       "totalAmount", "isGstInvoice", "status", "supersedesInvoiceId", "generatedAt", "generatedBy", "createdAt")
+     values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, 'ISSUED', $16, $17, $18, $17)
+     returning ${INVOICE_COLUMNS}`,
     [
       randomUUID(),
       user.tenantId,
@@ -255,6 +268,7 @@ export async function generatePartnerInvoiceForPayout(user: TenantUser, payoutId
       taxSplit.igstAmount,
       taxSplit.totalAmount,
       isGstInvoice,
+      opts.supersedesInvoiceId || null,
       createdAt,
       user.id,
     ],
@@ -285,27 +299,97 @@ export async function generatePartnerInvoiceForPayout(user: TenantUser, payoutId
     `update "PartnerInvoice"
      set "pdfStoragePath" = $1
      where "tenantId" = $2 and id = $3
-     returning id, "tenantId", "partnerId", "payoutId", "invoiceNumber", "invoiceDate", "supplierSnapshot",
-               "recipientSnapshot", "lineItems", "taxableValue", "cgstAmount", "sgstAmount", "igstAmount",
-               "totalAmount", "isGstInvoice", "pdfStoragePath", "generatedAt", "generatedBy", "createdAt"`,
+     returning ${INVOICE_COLUMNS}`,
     [storedFile.storageKey, user.tenantId, invoice.id],
   );
   if (!updatedInvoice) throw new Error("PARTNER_INVOICE_UPDATE_FAILED");
-  await query('update "Payout" set "invoiceId" = $1, status = $2, "updatedAt" = $3 where "tenantId" = $4 and id = $5', [
-    invoice.id,
-    "INVOICED",
-    createdAt,
-    user.tenantId,
-    payout.id,
-  ]);
-  await createAuditLog(user as any, "CREATE", "PARTNER_INVOICE", invoice.id, null, updatedInvoice, null);
+  // First-time invoicing moves the payout to INVOICED; a reissue against an already
+  // INVOICED/PAID payout just repoints invoiceId at the new document without touching
+  // the payout's own status (PAID stays PAID -- reissuing the paper trail isn't a payment event).
+  if (payout.status === "APPROVED") {
+    await query('update "Payout" set "invoiceId" = $1, status = $2, "updatedAt" = $3 where "tenantId" = $4 and id = $5', [
+      invoice.id,
+      "INVOICED",
+      createdAt,
+      user.tenantId,
+      payout.id,
+    ]);
+  } else {
+    await query('update "Payout" set "invoiceId" = $1, "updatedAt" = $2 where "tenantId" = $3 and id = $4', [
+      invoice.id,
+      createdAt,
+      user.tenantId,
+      payout.id,
+    ]);
+  }
+  await createAuditLog(user as any, "CREATE", "PARTNER_INVOICE", invoice.id, null, updatedInvoice, opts.supersedesInvoiceId ? { supersedesInvoiceId: opts.supersedesInvoiceId } : null);
   return updatedInvoice;
+}
+
+// Admin-only credit-note flow: cancels a mistakenly-issued invoice and immediately
+// regenerates a fresh one (new invoice number, supersedesInvoiceId pointing at the
+// cancelled one) against the same payout/cycle data. The cancelled invoice's PDF and
+// row are kept forever for audit purposes -- never deleted, only marked CANCELLED.
+export async function cancelAndReissuePartnerInvoice(user: TenantUser, invoiceId: string, reason: string) {
+  if (!user.tenantId) throw new Error("TENANT_CONTEXT_REQUIRED");
+  if (!user.isTenantAdmin && !user.isPlatformAdmin) throw new Error("FORBIDDEN");
+  if (!reason?.trim()) throw new Error("CANCELLATION_REASON_REQUIRED");
+  // Checked here explicitly, not just relied upon via the later generatePartnerInvoiceForPayout
+  // call (line ~162) -- that gate is reached only after the cancellation below has already
+  // committed and been audit-logged, which would let a disabled tenant cancel a live invoice
+  // with no replacement before the gate ever fires.
+  await assertFeatureEnabled(user.tenantId, "payoutsEnabled", { isPlatformAdmin: user.isPlatformAdmin });
+
+  const existing = await queryOne<any>(
+    `select ${INVOICE_COLUMNS} from "PartnerInvoice" where "tenantId" = $1 and id = $2 limit 1`,
+    [user.tenantId, invoiceId],
+  );
+  if (!existing) return null;
+  if (existing.status !== "ISSUED") throw new Error("INVOICE_ALREADY_CANCELLED");
+
+  const now = new Date().toISOString();
+  const cancelled = await queryOne<any>(
+    `update "PartnerInvoice"
+     set "status" = 'CANCELLED', "cancelledAt" = $1, "cancelledBy" = $2, "cancellationReason" = $3
+     where "tenantId" = $4 and id = $5
+     returning ${INVOICE_COLUMNS}`,
+    [now, user.id, reason.trim(), user.tenantId, invoiceId],
+  );
+  if (!cancelled) throw new Error("PARTNER_INVOICE_CANCEL_FAILED");
+  await createAuditLog(user as any, "UPDATE", "PARTNER_INVOICE", invoiceId, existing, cancelled, {
+    cancellation: { reason: reason.trim() },
+  });
+
+  try {
+    const newInvoice = await generatePartnerInvoiceForPayout(user, existing.payoutId, { supersedesInvoiceId: invoiceId });
+    return { cancelledInvoice: cancelled, newInvoice };
+  } catch (error) {
+    // The reissue failed after the cancellation already committed -- leaving the payout
+    // pointed at a CANCELLED invoice with no replacement would strand it (no valid
+    // document, and the PAID-gate re-validation below would then block payment forever).
+    // Revert the cancellation so the original invoice is still usable.
+    await query(
+      `update "PartnerInvoice"
+       set "status" = 'ISSUED', "cancelledAt" = null, "cancelledBy" = null, "cancellationReason" = null
+       where "tenantId" = $1 and id = $2`,
+      [user.tenantId, invoiceId],
+    );
+    throw error;
+  }
+}
+
+export async function listPartnerInvoiceHistoryForPayout(user: TenantUser, payoutId: string) {
+  if (!user.tenantId) return [];
+  return query<any>(
+    `select ${INVOICE_COLUMNS} from "PartnerInvoice" where "tenantId" = $1 and "payoutId" = $2 order by "createdAt" asc`,
+    [user.tenantId, payoutId],
+  );
 }
 
 export async function getPartnerInvoicePdfSignedUrl(user: TenantUser, invoiceId: string) {
   if (!user.tenantId) return null;
   const invoice = await queryOne<any>(
-    `select id, "tenantId", "partnerId", "pdfStoragePath"
+    `select id, "tenantId", "partnerId", "invoiceNumber", "pdfStoragePath"
      from "PartnerInvoice"
      where "tenantId" = $1 and id = $2
      limit 1`,
@@ -318,7 +402,59 @@ export async function getPartnerInvoicePdfSignedUrl(user: TenantUser, invoiceId:
     bucket: "partner-invoices",
   });
   const file = await readPrivateFile(fileObject?.storageKey ?? invoice.pdfStoragePath);
-  return { file, contentType: fileObject?.contentType ?? "application/pdf", partnerId: invoice.partnerId };
+  return {
+    file,
+    contentType: fileObject?.contentType ?? "application/pdf",
+    partnerId: invoice.partnerId,
+    invoiceNumber: invoice.invoiceNumber as string,
+  };
+}
+
+// A genuine expiring signed URL (gap checklist: "true expiring signed URLs"), additive to the
+// function above rather than replacing it -- that one is used for the existing authenticated
+// inline-view route, unchanged, and this is a new, separate capability: a link an authenticated
+// tenant admin or the owning partner can mint and share (e.g. paste into an email to the
+// partner) that itself works without a live session, for exactly as long as the token says.
+// The mint step still does the same ownership check the download route does today
+// (`isTenantAdmin`/`isPlatformAdmin`/`partnerId === user.id`) -- only re-verified here since
+// this is the new function that can hand out access to someone who won't have a session,
+// unlike the existing route where an active session already proved that once per request.
+export async function mintPartnerInvoiceDownloadToken(user: TenantUser, invoiceId: string, expiresInSeconds = 3600) {
+  if (!user.tenantId) throw new Error("TENANT_REQUIRED");
+  const invoice = await queryOne<{ id: string; partnerId: string }>(
+    `select id, "partnerId" from "PartnerInvoice" where "tenantId" = $1 and id = $2 limit 1`,
+    [user.tenantId, invoiceId],
+  );
+  if (!invoice) throw new Error("INVOICE_NOT_FOUND");
+  if (!user.isTenantAdmin && !user.isPlatformAdmin && invoice.partnerId !== user.id) throw new Error("FORBIDDEN");
+  const { token, expiresAt } = generateSignedDownloadToken("partner-invoice", invoiceId, expiresInSeconds);
+  return { token, expiresAt };
+}
+
+// The public, token-verified counterpart -- no session required, identified by invoiceId (a
+// globally unique row id, the same "identified by an unguessable id" precedent the
+// report-delivery public download route already established) plus a signature that proves it
+// was actually minted by someone who passed the ownership check above, not just guessed.
+export async function getPartnerInvoiceDownloadByToken(invoiceId: string, token: string | null) {
+  const verification = verifySignedDownloadToken("partner-invoice", invoiceId, token);
+  if (!verification.valid) throw new Error(`INVALID_TOKEN:${verification.reason}`);
+
+  const invoice = await queryOne<{ id: string; tenantId: string; invoiceNumber: string; pdfStoragePath: string | null }>(
+    `select id, "tenantId", "invoiceNumber", "pdfStoragePath" from "PartnerInvoice" where id = $1 limit 1`,
+    [invoiceId],
+  );
+  if (!invoice?.pdfStoragePath) throw new Error("INVOICE_NOT_FOUND");
+  const fileObject = await getFileObjectForEntity({ tenantId: invoice.tenantId } as TenantUser, {
+    entityType: "PARTNER_INVOICE",
+    entityId: invoice.id,
+    bucket: "partner-invoices",
+  });
+  const file = await readPrivateFile(fileObject?.storageKey ?? invoice.pdfStoragePath);
+  return {
+    file,
+    contentType: fileObject?.contentType ?? "application/pdf",
+    filename: safeContentDispositionFilename(`Invoice-${invoice.invoiceNumber}.pdf`, `invoice-${invoiceId}.pdf`),
+  };
 }
 
 export async function listPartnerInvoicesForPartner(user: TenantUser, partnerId: string) {
@@ -326,9 +462,7 @@ export async function listPartnerInvoicesForPartner(user: TenantUser, partnerId:
   const visiblePartnerUserIds = await getPayoutVisiblePartnerUserIds(user);
   if (!visiblePartnerUserIds.includes(partnerId)) return [];
   return query<any>(
-    `select id, "tenantId", "partnerId", "payoutId", "invoiceNumber", "invoiceDate", "supplierSnapshot",
-            "recipientSnapshot", "lineItems", "taxableValue", "cgstAmount", "sgstAmount", "igstAmount",
-            "totalAmount", "isGstInvoice", "pdfStoragePath", "generatedAt", "generatedBy", "createdAt"
+    `select ${INVOICE_COLUMNS}
      from "PartnerInvoice"
      where "tenantId" = $1 and "partnerId" = any($2::text[])
      order by "createdAt" desc`,
@@ -355,16 +489,21 @@ export async function generateCycleFinanceCsv(user: TenantUser, cycleId: string)
       user.tenantId,
       partnerIds,
     ]),
-    query<any>('select "payoutId", "invoiceNumber" from "PartnerInvoice" where "tenantId" = $1 and "payoutId" = any($2::text[])', [
-      user.tenantId,
-      payouts.map((p: any) => p.id),
-    ]),
+    query<any>(
+      `select "payoutId", "invoiceNumber" from "PartnerInvoice"
+       where "tenantId" = $1 and "payoutId" = any($2::text[]) and "status" = 'ISSUED'`,
+      [user.tenantId, payouts.map((p: any) => p.id)],
+    ),
   ]);
   const userMap = new Map(users.map((row) => [row.id, row]));
   const profileMap = new Map(profiles.map((row) => [row.userId, row]));
   const invoiceMap = new Map(invoices.map((inv) => [inv.payoutId, inv.invoiceNumber]));
 
-  const escapeCsv = (value: unknown) => `"${String(value ?? "").replace(/"/g, '""')}"`;
+  const escapeCsv = (value: unknown) => {
+    const text = String(value ?? "");
+    const safe = /^[=+\-@]/.test(text) ? `'${text}` : text;
+    return `"${safe.replace(/"/g, '""')}"`;
+  };
   const rows = payouts.map((payout: any) => {
     const profile = profileMap.get(payout.partnerId);
     const user2 = userMap.get(payout.partnerId);

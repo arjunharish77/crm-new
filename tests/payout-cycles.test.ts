@@ -380,6 +380,12 @@ describe("Payout status transitions", () => {
     setFixtureDb({ Payout: [draftPayout({ status: "PAID" })] });
     await expect(approvePayout(adminUser, "payout-1")).rejects.toThrow("INVALID_PAYOUT_TRANSITION");
   });
+
+  it("blocks any status transition while impersonating, before even looking up the payout", async () => {
+    setFixtureDb({ Payout: [draftPayout()] });
+    const impersonatingAdmin = { ...adminUser, isImpersonating: true };
+    await expect(approvePayout(impersonatingAdmin, "payout-1")).rejects.toThrow("IMPERSONATION_BLOCKED:payout_approved");
+  });
 });
 
 describe("Payout adjustments", () => {

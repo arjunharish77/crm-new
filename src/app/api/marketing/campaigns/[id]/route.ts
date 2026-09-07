@@ -26,6 +26,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
   } catch (error) {
     if (error instanceof Error && error.message === "UNAUTHORIZED") return unauthorized();
     if (error instanceof Error && error.message === "FORBIDDEN") return forbidden();
+    if (error instanceof Error && error.message.startsWith("MODULE_DISABLED")) return forbidden("Marketing Communications module is disabled for this tenant");
     return serverError("Failed to update marketing campaign", error);
   }
 }

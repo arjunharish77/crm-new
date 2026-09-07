@@ -18,6 +18,9 @@ export async function POST(
     return NextResponse.json(result);
   } catch (error) {
     if (error instanceof Error && error.message === "UNAUTHORIZED") return unauthorized();
+    if (error instanceof Error && error.message.startsWith("FEATURE_DISABLED")) {
+      return badRequest("Automations is not enabled for this workspace");
+    }
     return serverError("Failed to test automation", error);
   }
 }
