@@ -12,7 +12,7 @@ export async function GET(request: Request) {
     return NextResponse.json(views);
   } catch (error) {
     if (error instanceof Error && error.message === "UNAUTHORIZED") return unauthorized();
-    return serverError("Failed to fetch saved views");
+    return serverError("Failed to fetch saved views", error);
   }
 }
 
@@ -27,6 +27,6 @@ export async function POST(request: Request) {
     return NextResponse.json(view);
   } catch (error) {
     if (error instanceof Error && error.message === "UNAUTHORIZED") return unauthorized();
-    return serverError("Failed to create saved view");
+    return serverError("Failed to create saved view", error);
   }
 }

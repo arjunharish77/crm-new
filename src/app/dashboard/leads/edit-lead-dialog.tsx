@@ -6,7 +6,7 @@ import { StandardDialog } from "@/components/common/standard-dialog";
 import { Pencil, Loader2 } from "lucide-react";
 import { LeadForm } from "./lead-form";
 import { apiFetch } from "@/lib/api";
-import { toast } from "sonner";
+import { ErrorState } from "@/components/common/error-state";
 
 import { Lead } from "@/types/leads";
 
@@ -18,27 +18,29 @@ interface EditLeadDialogProps {
 }
 
 export function EditLeadDialog({ open, onOpenChange, lead, onSuccess }: EditLeadDialogProps) {
-    const [fullLead, setFullLead] = useState<Lead | null>(lead);
-    const [loading, setLoading] = useState(false);
+    const [fullLead, setFullLead] = useState<Lead | null>(null);
+    const [loading, setLoading] = useState(true);
+    const [loadError, setLoadError] = useState(false);
+    const [attempt, setAttempt] = useState(0);
 
     useEffect(() => {
         if (!open || !lead?.id) return;
 
         let cancelled = false;
         setLoading(true);
+        setLoadError(false);
+        setFullLead(null);
+        const controller = new AbortController();
 
-        apiFetch<Lead>(`/leads/${lead.id}`)
+        apiFetch<Lead>(`/leads/${lead.id}`, { signal: controller.signal })
             .then((data) => {
                 if (!cancelled) {
-                    setFullLead(data ?? lead);
+                    if (!data) { setLoadError(true); return; }
+                    setFullLead(data);
                 }
             })
-            .catch((error) => {
-                console.error(error);
-                if (!cancelled) {
-                    setFullLead(lead);
-                    toast.error("Failed to load full lead details");
-                }
+            .catch(() => {
+                if (!cancelled) setLoadError(true);
             })
             .finally(() => {
                 if (!cancelled) {
@@ -48,8 +50,9 @@ export function EditLeadDialog({ open, onOpenChange, lead, onSuccess }: EditLead
 
         return () => {
             cancelled = true;
+            controller.abort();
         };
-    }, [open, lead]);
+    }, [open, lead, attempt]);
 
     return (
         <StandardDialog
@@ -59,11 +62,11 @@ export function EditLeadDialog({ open, onOpenChange, lead, onSuccess }: EditLead
             subtitle="Update lead details and classification"
             icon={<Pencil className="size-5" />}
         >
-            {loading && !fullLead ? (
+            {loading ? (
                 <div className="flex min-h-[180px] items-center justify-center">
                     <Loader2 className="size-6 animate-spin text-muted-foreground" />
                 </div>
-            ) : fullLead ? (
+            ) : loadError ? <ErrorState description="Full lead details could not be loaded." onRetry={() => setAttempt(value => value + 1)} /> : fullLead ? (
                 <LeadForm
                     initialData={fullLead}
                     onSuccess={() => {

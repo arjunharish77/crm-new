@@ -10,6 +10,12 @@ vi.mock("@/lib/db/query", () => ({
   execute: executeMock,
 }));
 
+// WP08 (F13): updateLeadForTenant's atomic core now runs inside withTransaction -- see the
+// identical mock/comment in tests/leads-postgres.test.ts.
+vi.mock("@/lib/db/transaction", () => ({
+  withTransaction: (_user: unknown, fn: (client: unknown) => unknown) => fn({}),
+}));
+
 const partnerUser = {
   id: "partner-1",
   tenantId: "tenant-a",
@@ -70,7 +76,11 @@ describe("Partner owner-scoping in direct Postgres lead access", () => {
     queryOneMock
       .mockResolvedValueOnce({ id: "lead-own", name: "Own", ownerId: "partner-1", status: "NEW" })
       .mockResolvedValueOnce({ id: "lead-own", name: "Updated", ownerId: "partner-1", status: "NEW" });
-    queryMock.mockResolvedValueOnce([]);
+    // First: getPredictiveScoreMap (inside fetchRawLead). Second: enqueueWebhookEvent's active-
+    // subscription lookup, now inside the atomic-core transaction (WP08/F13) so an unmocked/
+    // undefined result here throws for real instead of being silently swallowed by a `.catch()`
+    // at the old call site.
+    queryMock.mockResolvedValueOnce([]).mockResolvedValueOnce([]);
 
     const { updateLeadForTenant } = await import("@/lib/repositories/leads-postgres");
     await updateLeadForTenant(partnerUser, "lead-own", { name: "Updated" });

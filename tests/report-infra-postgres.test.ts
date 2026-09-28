@@ -8,6 +8,9 @@ vi.mock("@/lib/db/query", () => ({
   query: queryMock,
   queryOne: queryOneMock,
   execute: executeMock,
+  queryAsSystem: queryMock,
+  queryOneAsSystem: queryOneMock,
+  executeAsSystem: executeMock,
 }));
 
 vi.mock("@/lib/server/inbuilt-reports", () => ({

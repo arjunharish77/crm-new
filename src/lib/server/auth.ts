@@ -3,6 +3,7 @@ import { cookies } from "next/headers";
 import * as pgAuth from "@/lib/repositories/auth-admin-postgres";
 import { assertGeneralRateLimit } from "@/lib/server/rate-limit";
 import { validateSession, touchSessionIfStale } from "@/lib/server/sessions";
+import { enterTenantContext } from "@/lib/db/tenant-context";
 
 type JwtPayload = {
   sub: string;
@@ -89,7 +90,18 @@ export function readBearerToken(request: Request) {
 
 export async function verifyAuthToken(token: string): Promise<JwtPayload | null> {
   try {
-    return jwt.verify(token, getJwtSecret()) as JwtPayload;
+    const payload = jwt.verify(token, getJwtSecret()) as JwtPayload & {
+      mfaPending?: boolean;
+      passwordChangePending?: boolean;
+    };
+    // F01 fix: signMfaPendingToken/signPasswordChangeToken share this same signing secret and
+    // are structurally valid JwtPayloads (both carry "sub"), so without this check a pending
+    // MFA/password-change token would pass signature verification here and authenticate as a
+    // full session -- these two token purposes have their own dedicated, narrowly-scoped
+    // verification functions (verifyMfaPendingToken/verifyPasswordChangeToken) and must never
+    // be accepted on the normal authenticated-request path.
+    if (payload.mfaPending || payload.passwordChangePending) return null;
+    return payload;
   } catch {
     return null;
   }
@@ -110,20 +122,12 @@ export async function getSessionFromCookie() {
   return { token, payload };
 }
 
-export async function getCurrentUser(request?: Request) {
-  const bearerToken = request ? readBearerToken(request) : null;
-  const cookieSession = bearerToken ? null : await getSessionFromCookie();
-  const token = bearerToken ?? cookieSession?.token ?? null;
-
-  if (!token) {
-    return null;
-  }
-
-  const payload = await verifyAuthToken(token);
-  if (!payload) {
-    return null;
-  }
-
+// Shared by getCurrentUser (cookie/bearer path) and the SSE route's query-string token path --
+// F05 fix: the SSE route previously loaded the user straight from the token's "sub" without
+// checking tenant suspension or validating the session row, so a suspended tenant's user or a
+// revoked session could still open a live notification stream. Every consumer of a verified
+// token now goes through the exact same policy.
+async function resolveUserFromPayload(payload: JwtPayload) {
   const user = await pgAuth.getCurrentUserById(payload.sub);
   if (!user) return null;
   // changeTenantStatus (and its suspend/unsuspend API routes) has always updated
@@ -142,12 +146,42 @@ export async function getCurrentUser(request?: Request) {
     touchSessionIfStale(payload.sid, validation.row.lastActiveAt).catch(() => undefined);
   }
 
+  // WP07 (F04): make this request's tenant/user/role visible to the db query layer for the rest
+  // of this async chain (see tenant-context.ts) so query()/queryOne()/execute() can set a
+  // transaction-local "app.tenant_id" for RLS without every one of their ~90 call sites needing a
+  // user argument threaded through. A platform admin with no tenantId simply clears tenant
+  // context (still correct: their cross-tenant reads run on the unrestricted pool, gated
+  // separately -- see getRuntimePool()).
+  enterTenantContext({ tenantId: user.tenantId ?? null, userId: user.id, roleId: user.roleId ?? null });
+
   return {
     ...user,
     isImpersonating: !!payload.isImpersonating,
     impersonatedBy: payload.impersonatedBy ?? null,
     sessionId: payload.sid ?? null,
   };
+}
+
+// Public entry point for callers that already have a raw token from somewhere other than the
+// cookie/Authorization-header convention (currently: the notifications SSE route's query-string
+// token, since EventSource cannot set a custom header). Applies the identical purpose/
+// suspension/session checks as getCurrentUser -- see resolveUserFromPayload.
+export async function getUserFromToken(token: string) {
+  const payload = await verifyAuthToken(token);
+  if (!payload) return null;
+  return resolveUserFromPayload(payload);
+}
+
+export async function getCurrentUser(request?: Request) {
+  const bearerToken = request ? readBearerToken(request) : null;
+  const cookieSession = bearerToken ? null : await getSessionFromCookie();
+  const token = bearerToken ?? cookieSession?.token ?? null;
+
+  if (!token) {
+    return null;
+  }
+
+  return getUserFromToken(token);
 }
 
 export async function requireCurrentUser(request?: Request) {

@@ -59,3 +59,14 @@ next-env.d.ts
 ml-service/.venv/
 ml-service/**/__pycache__/
 ml-service/.cache/
+
+# Production backups contain database records and credentials.
+/deploy/vps/backups/
+
+# Local UI/browser audit captures (hundreds of MB of screenshots) and Python caches.
+/ui-audit-2026-09/
+deploy/vps/scripts/__pycache__/
+
+# Security audit bundles: detailed vulnerability write-ups, kept local only (not published).
+/crm-audit-bundle/
+/crm-audit-bundle-new/

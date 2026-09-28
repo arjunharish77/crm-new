@@ -13,6 +13,13 @@ export function forbidden(message = "Forbidden") {
   return NextResponse.json({ message }, { status: 403 });
 }
 
+// WP08 (F13): a retried request reusing an Idempotency-Key with a different body hash than the
+// original -- distinct from a normal validation failure, so callers can tell "you changed the
+// payload under a key you already used" apart from "this request itself is malformed".
+export function conflict(message = "Conflict") {
+  return NextResponse.json({ message }, { status: 409 });
+}
+
 export function tooManyRequests(message = "Too many requests", retryAfterSeconds?: number) {
   const headers = retryAfterSeconds !== undefined ? { "Retry-After": String(retryAfterSeconds) } : undefined;
   return NextResponse.json({ message }, { status: 429, headers });
@@ -36,6 +43,7 @@ export function safeContentDispositionFilename(filename: string, fallback = "dow
 const API_KEY_AUTH_ERROR_MESSAGES: Record<string, string> = {
   MISSING_CREDENTIALS: "Missing API key credentials",
   API_KEY_NOT_FOUND: "Invalid API key",
+  API_KEY_OWNER_UNAVAILABLE: "The API key creator is unavailable in this workspace. Create a new key using an active workspace administrator.",
   API_KEY_REVOKED: "This API key has been revoked",
   API_KEY_EXPIRED: "This API key has expired",
   FEATURE_DISABLED: "API Access is not enabled for this workspace",
@@ -51,7 +59,7 @@ const API_KEY_AUTH_ERROR_MESSAGES: Record<string, string> = {
 export function apiKeyAuthErrorResponse(reason: string) {
   const message = API_KEY_AUTH_ERROR_MESSAGES[reason] ?? "API key authentication failed";
   if (reason === "RATE_LIMITED") return tooManyRequests(message, 60);
-  if (reason === "IP_NOT_ALLOWED" || reason === "API_KEY_REVOKED" || reason === "FEATURE_DISABLED") return forbidden(message);
+  if (reason === "IP_NOT_ALLOWED" || reason === "API_KEY_REVOKED" || reason === "API_KEY_OWNER_UNAVAILABLE" || reason === "FEATURE_DISABLED") return forbidden(message);
   return unauthorized(message);
 }
 
@@ -76,6 +84,9 @@ const MARKETPLACE_ERROR_MESSAGES: Record<string, string> = {
   INVALID_TRUST_LEVEL: "Invalid trust level",
   APP_BLOCKED_FOR_TENANT: "This app is not available for your workspace",
   APP_TENANT_BLOCK_NOT_FOUND: "This tenant is not blocked from this app",
+  INSTALL_NOT_FOUND: "App install not found",
+  OWNER_USER_ID_REQUIRED_FOR_OWN_OR_TEAM_SCOPE: "An owning user must be selected for OWN or TEAM record scope",
+  OWNER_USER_NOT_FOUND_IN_TENANT: "The selected owning user was not found in this workspace",
   APP_INSTALL_NOT_FOUND: "App install not found",
   SYNC_CONFIG_NOT_FOUND: "Sync settings not found",
   INVALID_SYNC_DIRECTION: "Invalid sync direction",
@@ -157,6 +168,12 @@ export function serverError(message = "Internal server error", error?: unknown) 
   if (error instanceof Error && error.message.startsWith("IMPERSONATION_BLOCKED:")) {
     const action = error.message.split(":")[1]?.replace(/_/g, " ") ?? "this action";
     return forbidden(`This action (${action}) isn't available while impersonating another user.`);
+  }
+
+  if (error instanceof Error && error.message === "IDEMPOTENCY_KEY_CONFLICT") return conflict("This Idempotency-Key was already used with a different request body");
+  if (error instanceof Error && error.message === "INVALID_OPPORTUNITY_REFERENCE") return badRequest("Choose an accessible Lead and a valid Opportunity type and stage from this workspace");
+  if (error instanceof Error && error.message.startsWith("DUPLICATE_RULE_BLOCK: ")) {
+    return NextResponse.json({ code: "DUPLICATE_RULE_BLOCK", message: `Duplicate blocked by rule: ${error.message.slice("DUPLICATE_RULE_BLOCK: ".length)}` }, { status: 409 });
   }
 
   // Without this, every 500 in production is silently swallowed -- nothing in server

@@ -30,24 +30,21 @@ export default function RetentionPage() {
     const [loading, setLoading] = useState(true);
     const [enforcing, setEnforcing] = useState(false);
     const [editingPolicy, setEditingPolicy] = useState<RetentionPolicy | null>(null);
-    const { token, user } = useAuth();
+    const { isAuthenticated, user } = useAuth();
     const isPlatformAdmin = user?.isPlatformAdmin;
 
     useEffect(() => {
-        if (token && isPlatformAdmin) {
+        if (isAuthenticated && isPlatformAdmin) {
             fetchPolicies();
         }
-    }, [token, isPlatformAdmin]);
+    }, [isAuthenticated, isPlatformAdmin]);
 
     const fetchPolicies = async () => {
         setLoading(true);
         try {
-            const res = await fetch(
-                `/api/platform-admin/retention/policies`,
-                {
-                    headers: { Authorization: `Bearer ${token}` },
-                }
-            );
+            // F06 fix (WP05): session auth is now an HttpOnly cookie the browser attaches
+            // automatically for this same-origin request -- no Authorization header to build.
+            const res = await fetch(`/api/platform-admin/retention/policies`);
 
             if (res.ok) {
                 const data = await res.json();
@@ -69,10 +66,7 @@ export default function RetentionPage() {
                 `/api/platform-admin/retention/policy/${tenantId}`,
                 {
                     method: "PATCH",
-                    headers: {
-                        Authorization: `Bearer ${token}`,
-                        "Content-Type": "application/json",
-                    },
+                    headers: { "Content-Type": "application/json" },
                     body: JSON.stringify(values),
                 }
             );
@@ -92,13 +86,7 @@ export default function RetentionPage() {
     const enforceNow = async () => {
         setEnforcing(true);
         try {
-            const res = await fetch(
-                `/api/platform-admin/retention/enforce`,
-                {
-                    method: "POST",
-                    headers: { Authorization: `Bearer ${token}` },
-                }
-            );
+            const res = await fetch(`/api/platform-admin/retention/enforce`, { method: "POST" });
 
             if (res.ok) {
                 const results = await res.json();

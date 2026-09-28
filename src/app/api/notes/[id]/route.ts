@@ -23,7 +23,7 @@ export async function PATCH(
       return unauthorized();
     }
 
-    return serverError("Failed to update note");
+    return serverError("Failed to update note", error);
   }
 }
 
@@ -41,6 +41,6 @@ export async function DELETE(
       return unauthorized();
     }
 
-    return serverError("Failed to delete note");
+    return serverError("Failed to delete note", error);
   }
 }

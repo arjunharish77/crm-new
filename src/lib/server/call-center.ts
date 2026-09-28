@@ -47,12 +47,14 @@ async function listCalls(tenantId: string, agentId: string | null, kind: "LIVE" 
   }
   values.push(limit);
 
+  // Telephony references are UUIDs; core Lead/Opportunity ids are text. Cast the
+  // reference rather than the indexed core id, which also supports non-UUID core ids.
   return query<any>(
     `select tcl.id, tcl.direction, tcl.status, tcl."fromNumber", tcl."toNumber", tcl."agentId", tcl."leadId", tcl."opportunityId",
             tcl."startedAt", l.name as "leadName", o.title as "opportunityTitle"
      from "TelephonyCallLog" tcl
-     left join "Lead" l on l.id = tcl."leadId"
-     left join "Opportunity" o on o.id = tcl."opportunityId"
+     left join "Lead" l on l.id = tcl."leadId"::text
+     left join "Opportunity" o on o.id = tcl."opportunityId"::text
      where ${conditions.join(" and ")}
      order by tcl."startedAt" desc
      limit $${values.length}`,
@@ -113,9 +115,7 @@ async function listMyOpenOpportunities(tenantId: string, ownerId: string, limit:
 // calling agent for every user; a supervisor (tenant/platform admin or modules.admin === "full",
 // the same admin gate every other admin-config feature this session uses) additionally gets a
 // "team" section -- tenant-wide live/missed calls, the existing agent availability roster, and
-// tenant-wide recent dispositions -- rather than a hard 403 on a separate page. "Queue backlog"
-// is deliberately absent: no call-queue concept exists yet in this app (a separate, not-yet-
-// built checklist bullet), so there's nothing here to report.
+// tenant-wide recent dispositions and queue health.
 export async function getCallCenterWorkspaceForTenant(user: TenantUser) {
   const tenantId = requireTenantId(user);
   const isSupervisor = hasCallCenterSupervisorAccess(user);

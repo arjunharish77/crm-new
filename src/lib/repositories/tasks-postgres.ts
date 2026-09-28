@@ -1,5 +1,5 @@
 import { randomUUID } from "crypto";
-import { execute, query, queryOne } from "@/lib/db/query";
+import { execute, query, queryOne, queryAsSystem } from "@/lib/db/query";
 import { withTransaction } from "@/lib/db/transaction";
 import { runAutomationsForEvent } from "@/lib/repositories/automations-postgres";
 import { createUserNotification } from "@/lib/server/notifications";
@@ -854,8 +854,11 @@ export async function deleteTaskForTenant(user: TenantUser, id: string) {
   return existing;
 }
 
+// WP07 (F04): BACKGROUND_JOB, disposition B -- worker-invoked recurring job, discovers due
+// tasks across every tenant at once (per-task updates further down keep the ordinary
+// query()/execute() path in this pass -- see plan doc's noted bounded scope for this category).
 export async function processDueTaskReminders(now = new Date()) {
-  const tasks = await query<any>(
+  const tasks = await queryAsSystem<any>(
     `select ${TASK_COLUMNS} from "Task"
      where status not in ('COMPLETED', 'CANCELLED') and "reminderAt" <= $1
      limit 100`,
@@ -887,8 +890,9 @@ export async function processDueTaskReminders(now = new Date()) {
   return { processed };
 }
 
+// WP07 (F04): BACKGROUND_JOB, disposition B -- same reasoning as processDueTaskReminders above.
 export async function processTaskReminderEscalations(now = new Date()) {
-  const tasks = await query<any>(
+  const tasks = await queryAsSystem<any>(
     `select ${TASK_COLUMNS} from "Task"
      where status not in ('COMPLETED', 'CANCELLED')
        and "escalateAfterMinutes" is not null
@@ -918,8 +922,9 @@ export async function processTaskReminderEscalations(now = new Date()) {
   return { processed };
 }
 
+// WP07 (F04): BACKGROUND_JOB, disposition B -- same reasoning as processDueTaskReminders above.
 export async function processOverdueTaskAutomations(now = new Date()) {
-  const tasks = await query<any>(
+  const tasks = await queryAsSystem<any>(
     `select ${TASK_COLUMNS} from "Task"
      where status not in ('COMPLETED', 'CANCELLED')
        and "dueAt" <= $1
@@ -945,9 +950,10 @@ export async function processOverdueTaskAutomations(now = new Date()) {
 // (in updateTaskForTenant) fires the moment a user acts; this scan fires for tasks nobody
 // acts on at all. slaStatus flips to BREACHED here too so a stale "PENDING" badge doesn't
 // keep showing on a task that has, in fact, already missed its target.
+// WP07 (F04): BACKGROUND_JOB, disposition B -- same reasoning as processDueTaskReminders above.
 export async function processTaskSlaBreaches(now = new Date()) {
   const nowIso = now.toISOString();
-  const firstActionMissed = await query<any>(
+  const firstActionMissed = await queryAsSystem<any>(
     `select ${TASK_COLUMNS} from "Task"
      where status not in ('COMPLETED', 'CANCELLED')
        and "firstActionAt" is null
@@ -962,7 +968,7 @@ export async function processTaskSlaBreaches(now = new Date()) {
     processed.push({ taskId: task.id, breachType: "FIRST_ACTION" });
   }
 
-  const overdueOpen = await query<any>(
+  const overdueOpen = await queryAsSystem<any>(
     `select ${TASK_COLUMNS} from "Task"
      where status not in ('COMPLETED', 'CANCELLED')
        and "slaTarget" is not null

@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { apiFetch } from "@/lib/api";
+import { PageHeader } from "@/components/layout/page-header";
+import { ErrorState } from "@/components/common/error-state";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -46,6 +48,7 @@ export default function CommissionRulesPage() {
     const [partners, setPartners] = useState<any[]>([]);
     const [opportunityTypes, setOpportunityTypes] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
+    const [loadError, setLoadError] = useState(false);
     const [dialogOpen, setDialogOpen] = useState(false);
     const [editing, setEditing] = useState<CommissionRule | null>(null);
     const [form, setForm] = useState(emptyForm);
@@ -53,17 +56,18 @@ export default function CommissionRulesPage() {
 
     const fetchAll = useCallback(async () => {
         setLoading(true);
+        setLoadError(false);
         try {
             const [rulesData, partnersData, typesData] = await Promise.all([
                 apiFetch<CommissionRule[]>("/commission-rules"),
-                apiFetch<any[]>("/partners").catch(() => []),
-                apiFetch<any[]>("/opportunity-types").catch(() => []),
+                apiFetch<any[]>("/partners"),
+                apiFetch<any[]>("/opportunity-types"),
             ]);
             setRules(Array.isArray(rulesData) ? rulesData : []);
             setPartners(Array.isArray(partnersData) ? partnersData : []);
             setOpportunityTypes(Array.isArray(typesData) ? typesData : []);
         } catch {
-            toast.error("Failed to load commission rules");
+            setLoadError(true);
         } finally {
             setLoading(false);
         }
@@ -155,27 +159,17 @@ export default function CommissionRulesPage() {
 
     if (!payoutsEnabled) {
         return (
-            <div className="mx-auto max-w-[1200px] p-4 md:p-6">
+            <div className="@container/finance min-w-0">
                 <EmptyState title="Payouts isn't enabled" description="Enable the Payouts feature flag for this tenant to configure commission rules." />
             </div>
         );
     }
 
+    if (loadError) return <><PageHeader title="Commission Rules" /><ErrorState description="Commission Rules data could not be loaded." onRetry={fetchAll} /></>;
+    if (loading) return <><PageHeader title="Commission Rules" /><TableSkeleton rows={4} columns={3} /></>;
     return (
-        <div className="mx-auto max-w-[1200px] p-4 md:p-6">
-            <div className="mb-4 flex items-center justify-between gap-4">
-                <div>
-                    <h1 className="text-lg font-extrabold tracking-tight">Commission Rules</h1>
-                    <p className="mt-1 text-xs text-muted-foreground">
-                        Tried in priority order (highest first) — the first matching rule wins. Leave partner/product
-                        blank to apply broadly.
-                    </p>
-                </div>
-                <Button onClick={openCreate}>
-                    <Plus className="size-4" />
-                    Add Rule
-                </Button>
-            </div>
+        <div className="@container/finance min-w-0">
+            <PageHeader title="Commission Rules" description="Rules run in priority order; the first match determines commission." actions={<Button onClick={openCreate}><Plus className="size-4" />Add Rule</Button>} />
 
             {loading ? (
                 <TableSkeleton rows={4} columns={3} />
@@ -194,10 +188,10 @@ export default function CommissionRulesPage() {
                 <div className="space-y-3">
                     {rules.map((rule) => (
                         <div key={rule.id} className="rounded-[14px] border bg-card p-4">
-                            <div className="flex items-center justify-between gap-4">
-                                <div>
-                                    <div className="flex items-center gap-2">
-                                        <span className="text-sm font-bold">{rule.name}</span>
+                            <div className="flex min-w-0 flex-wrap items-center justify-between gap-4">
+                                <div className="min-w-0 flex-1 basis-60 break-words">
+                                    <div className="flex min-w-0 flex-wrap items-center gap-2">
+                                        <span className="min-w-0 break-words text-sm font-bold">{rule.name}</span>
                                         <Badge variant="outline" className="rounded-md text-[0.65rem] font-semibold">
                                             priority {rule.priority}
                                         </Badge>
@@ -214,7 +208,7 @@ export default function CommissionRulesPage() {
                                         {rule.conditions?.conditions?.length ? ` · ${rule.conditions.conditions.length} condition(s)` : ""}
                                     </p>
                                 </div>
-                                <div className="flex items-center gap-2">
+                                <div className="flex min-w-0 flex-wrap items-center gap-2">
                                     <span className="text-sm font-bold">
                                         {rule.ruleType === "FLAT" ? `₹${rule.value}` : `${rule.value}%`}
                                     </span>
@@ -247,18 +241,18 @@ export default function CommissionRulesPage() {
             >
                 <div className="space-y-4">
                     <div className="space-y-2">
-                        <Label>Name</Label>
-                        <Input value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} />
+                        <Label htmlFor="commission-rules-field-1">Name</Label>
+                        <Input id="commission-rules-field-1" value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} />
                     </div>
 
                     <div className="grid gap-4 sm:grid-cols-2">
                         <div className="space-y-2">
-                            <Label>Partner (optional)</Label>
+                            <Label htmlFor="commission-rules-field-2">Partner (optional)</Label>
                             <Select
                                 value={form.partnerId || "__any__"}
                                 onValueChange={(v) => setForm((f) => ({ ...f, partnerId: v === "__any__" ? "" : v }))}
                             >
-                                <SelectTrigger className="w-full">
+                                <SelectTrigger id="commission-rules-field-2" className="w-full">
                                     <SelectValue placeholder="Any partner" />
                                 </SelectTrigger>
                                 <SelectContent>
@@ -270,12 +264,12 @@ export default function CommissionRulesPage() {
                             </Select>
                         </div>
                         <div className="space-y-2">
-                            <Label>Product (optional)</Label>
+                            <Label htmlFor="commission-rules-field-3">Product (optional)</Label>
                             <Select
                                 value={form.opportunityTypeId || "__any__"}
                                 onValueChange={(v) => setForm((f) => ({ ...f, opportunityTypeId: v === "__any__" ? "" : v }))}
                             >
-                                <SelectTrigger className="w-full">
+                                <SelectTrigger id="commission-rules-field-3" className="w-full">
                                     <SelectValue placeholder="Any product" />
                                 </SelectTrigger>
                                 <SelectContent>
@@ -288,14 +282,14 @@ export default function CommissionRulesPage() {
                         </div>
                     </div>
 
-                    <div className="grid gap-4 sm:grid-cols-3">
+                    <div className="grid gap-4 @min-[850px]/finance:grid-cols-3">
                         <div className="space-y-2">
-                            <Label>Type</Label>
+                            <Label htmlFor="commission-rules-field-4">Type</Label>
                             <Select
                                 value={form.ruleType}
                                 onValueChange={(v) => setForm((f) => ({ ...f, ruleType: v as "FLAT" | "PERCENTAGE" }))}
                             >
-                                <SelectTrigger className="w-full">
+                                <SelectTrigger id="commission-rules-field-4" className="w-full">
                                     <SelectValue />
                                 </SelectTrigger>
                                 <SelectContent>
@@ -305,16 +299,16 @@ export default function CommissionRulesPage() {
                             </Select>
                         </div>
                         <div className="space-y-2">
-                            <Label>{form.ruleType === "PERCENTAGE" ? "Percentage (%)" : "Flat Amount (₹)"}</Label>
-                            <Input
+                            <Label htmlFor="commission-rules-field-5">{form.ruleType === "PERCENTAGE" ? "Percentage (%)" : "Flat Amount (₹)"}</Label>
+                            <Input id="commission-rules-field-5"
                                 type="number"
                                 value={form.value}
                                 onChange={(e) => setForm((f) => ({ ...f, value: Number(e.target.value) }))}
                             />
                         </div>
                         <div className="space-y-2">
-                            <Label>Priority</Label>
-                            <Input
+                            <Label htmlFor="commission-rules-field-6">Priority</Label>
+                            <Input id="commission-rules-field-6"
                                 type="number"
                                 value={form.priority}
                                 onChange={(e) => setForm((f) => ({ ...f, priority: Number(e.target.value) }))}
@@ -333,7 +327,7 @@ export default function CommissionRulesPage() {
                         onChange={(conditions) => setForm((f) => ({ ...f, conditions }))}
                     />
 
-                    <div className="flex items-center gap-2">
+                    <div className="flex min-w-0 flex-wrap items-center gap-2">
                         <Switch
                             checked={form.isActive}
                             onCheckedChange={(checked) => setForm((f) => ({ ...f, isActive: checked }))}

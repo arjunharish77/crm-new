@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { requireInternalUser } from "@/lib/server/auth";
+import { requireTenantAdmin } from "@/lib/server/auth";
 import {
   createPermissionTemplateForTenant,
   listPermissionTemplatesForTenant,
@@ -8,7 +8,7 @@ import { badRequest, forbidden, serverError, unauthorized } from "@/lib/server/h
 
 export async function GET(request: Request) {
   try {
-    const user = await requireInternalUser(request);
+    const user = await requireTenantAdmin(request);
     if (!user.tenantId) return forbidden("Tenant context required");
     const templates = await listPermissionTemplatesForTenant(user.tenantId);
     return NextResponse.json(templates);
@@ -21,7 +21,7 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    const user = await requireInternalUser(request);
+    const user = await requireTenantAdmin(request);
     if (!user.tenantId) return forbidden("Tenant context required");
     const body = await request.json().catch(() => null);
     if (!body?.name || !body?.permissions) return badRequest("Template name and permissions are required");

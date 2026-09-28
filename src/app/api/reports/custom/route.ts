@@ -10,7 +10,7 @@ export async function GET(request: Request) {
     return NextResponse.json(reports);
   } catch (error) {
     if (error instanceof Error && error.message === "UNAUTHORIZED") return unauthorized();
-    return serverError("Failed to fetch custom reports");
+    return serverError("Failed to fetch custom reports", error);
   }
 }
 

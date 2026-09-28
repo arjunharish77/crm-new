@@ -1,5 +1,5 @@
 import { randomUUID } from "crypto";
-import { execute, query, queryOne, type Queryable } from "@/lib/db/query";
+import { execute, query, queryOne, jsonbParam, queryAsSystem, type Queryable } from "@/lib/db/query";
 import { withAdvisoryLock, withTransaction } from "@/lib/db/transaction";
 import { getTenantTimeZone, normalizeTenantTimeZone } from "@/lib/server/date-format";
 import { assertFeatureEnabled, isFeatureEnabledForTenant } from "@/lib/server/entitlements";
@@ -591,7 +591,7 @@ async function executeAutomationAction(
     await execute(
       `insert into "TaskPlaybookApplication" (id, "tenantId", "playbookId", "leadId", "opportunityId", "taskIds", "appliedBy", source, "createdAt")
        values ($1, $2, $3, $4, $5, $6, $7, 'AUTOMATION', $8)`,
-      [randomUUID(), user.tenantId, playbookId, leadId, opportunityId, taskIds, user.id, now],
+      [randomUUID(), user.tenantId, playbookId, leadId, opportunityId, jsonbParam(taskIds), user.id, now],
       client,
     );
     return;
@@ -910,7 +910,7 @@ async function scheduleAutomationResume(
     `insert into "AutomationQueue"
       (id, "tenantId", "userId", "automationId", "entityType", "entityId", record, "resumeNodeIds", "waitingNodeId", status, "runAt", attempts, "lastError", "createdAt", "updatedAt")
      values ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'PENDING', $10, 0, null, $11, $11)`,
-    [randomUUID(), user.tenantId, user.id, automation.id, entityType, entityId, record, resumeNodeIds, waitingNodeId, runAt.toISOString(), new Date().toISOString()],
+    [randomUUID(), user.tenantId, user.id, automation.id, entityType, entityId, jsonbParam(record), jsonbParam(resumeNodeIds), waitingNodeId, runAt.toISOString(), new Date().toISOString()],
     client,
   );
 }
@@ -1355,11 +1355,17 @@ async function resolveAutomationJobUser(job: any, fallbackUser?: TenantUser, cli
   return user ?? { id: "automation-worker", tenantId: job.tenantId };
 }
 
+// WP07 (F04): this internal helper is shared by two genuinely different callers --
+// processDueAutomationJobsForTenant (a normal authenticated request, real ambient tenant
+// context present, `input.tenantId` set) and processDueAutomationJobs (the worker's own
+// platform-wide sweep, no tenantId, no ambient context at all -- BACKGROUND_JOB, disposition
+// B). Rather than converting the whole shared function (which would incorrectly bypass RLS for
+// the normal per-tenant caller), only the no-tenantId/worker-sweep branch uses the system pool.
 async function processDueAutomationJobsInternal(input: { tenantId?: string; fallbackUser?: TenantUser; limit: number }) {
   const values: unknown[] = [new Date().toISOString(), input.limit];
   const tenantClause = input.tenantId ? ' and "tenantId" = $3' : "";
   if (input.tenantId) values.push(input.tenantId);
-  const jobs = await query<any>(
+  const jobs = await (input.tenantId ? query : queryAsSystem)<any>(
     `select id, "tenantId", "userId", "automationId", "entityType", "entityId", record, "resumeNodeIds", attempts
      from "AutomationQueue"
      where status = 'PENDING' and "runAt" <= $1${tenantClause}

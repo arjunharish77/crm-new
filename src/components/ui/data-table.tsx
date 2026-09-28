@@ -274,7 +274,7 @@ export function DataTable<TData>({
 
   return (
     <div data-slot="data-table" className={cn("overflow-hidden rounded-xl bg-card", className)}>
-      <div className="flex items-center gap-1 border-b px-3 py-1.5">
+      <div className="flex flex-wrap items-center gap-1 border-b px-3 py-1.5">
         {toolbarActions}
         <div className="grow" />
         <div className="flex items-center rounded-md border p-0.5">
@@ -355,7 +355,7 @@ export function DataTable<TData>({
       </Table>
 
       {showSelectAllBanner && (
-        <div className="flex justify-center border-t bg-primary/8 px-3 py-2 text-sm font-medium">
+        <div className="flex flex-wrap justify-center gap-1 border-t bg-primary/8 px-3 py-2 text-sm font-medium">
           All {currentCount} items on this page are selected.
           <button onClick={onSelectAllFiltered} className="ml-1 rounded-sm font-bold text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
             Select all {totalItems} items
@@ -363,7 +363,7 @@ export function DataTable<TData>({
         </div>
       )}
       {isAllSelected && (
-        <div className="flex justify-center border-t bg-primary/12 px-3 py-2 text-sm font-bold text-primary">
+        <div className="flex flex-wrap justify-center gap-1 border-t bg-primary/12 px-3 py-2 text-sm font-bold text-primary">
           All {totalItems} items are selected.
           <button onClick={onClearSelection} className="ml-1 rounded-sm font-bold hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
             Clear selection
@@ -372,14 +372,14 @@ export function DataTable<TData>({
       )}
 
       {onPaginationChange && (
-        <div className="flex items-center justify-between gap-4 border-t px-3 py-2">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-t px-3 py-2">
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
             <span>Rows per page</span>
             <Select
               value={String(pageSize)}
               onValueChange={(value) => onPaginationChange({ pageIndex: 0, pageSize: Number(value) })}
             >
-              <SelectTrigger size="sm" className="w-[64px]">
+              <SelectTrigger size="sm" aria-label="Rows per page" className="h-auto min-h-8 w-20 shrink-0">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>

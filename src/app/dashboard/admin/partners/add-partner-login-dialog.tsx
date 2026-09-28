@@ -1,12 +1,13 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { apiFetch } from "@/lib/api";
 import { toast } from "sonner";
 import { UserPlus } from "lucide-react";
+import { ErrorState } from "@/components/common/error-state";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
@@ -42,6 +43,8 @@ const formSchema = z.object({
 
 export function AddPartnerLoginDialog({ open, onOpenChange, partner, logins, onSuccess }: AddPartnerLoginDialogProps) {
     const [loading, setLoading] = useState(false);
+    const [rolesError, setRolesError] = useState(false);
+    const [rolesLoaded, setRolesLoaded] = useState(false);
     const [partnerRoles, setPartnerRoles] = useState<Role[]>([]);
 
     const { control, handleSubmit, reset, formState: { errors } } = useForm({
@@ -57,15 +60,15 @@ export function AddPartnerLoginDialog({ open, onOpenChange, partner, logins, onS
         },
     });
 
-    useEffect(() => {
-        if (!open) return;
-        apiFetch("/roles")
-            .then((data) => {
-                const roles = Array.isArray(data) ? data : [];
-                setPartnerRoles(roles.filter((role: Role) => role.permissions?.isPartnerRole));
-            })
-            .catch(() => setPartnerRoles([]));
-    }, [open]);
+    const fetchRoles = useCallback(async () => {
+        setRolesError(false); setRolesLoaded(false);
+        try {
+            const data = await apiFetch<Role[]>("/roles");
+            setPartnerRoles((Array.isArray(data) ? data : []).filter((role) => role.permissions?.isPartnerRole));
+            setRolesLoaded(true);
+        } catch { setRolesError(true); }
+    }, []);
+    useEffect(() => { if (open) fetchRoles(); }, [open, fetchRoles]);
 
     const handleClose = () => {
         onOpenChange(false);
@@ -103,33 +106,35 @@ export function AddPartnerLoginDialog({ open, onOpenChange, partner, logins, onS
             actions={
                 <>
                     <Button type="button" variant="ghost" onClick={handleClose}>Cancel</Button>
-                    <Button type="submit" form="add-partner-login-form" disabled={loading || !partner}>
+                    <Button type="submit" form="add-partner-login-form" disabled={loading || !partner || !rolesLoaded || partnerRoles.length === 0}>
                         {loading ? "Creating..." : "Create Login"}
                     </Button>
                 </>
             }
         >
+            {rolesError && <ErrorState description="Partner roles could not be loaded." onRetry={fetchRoles} />}
+            {rolesLoaded && partnerRoles.length === 0 && <p className="text-sm text-muted-foreground">Create a partner role in Roles &amp; Permissions before adding a login.</p>}
             <form id="add-partner-login-form" onSubmit={handleSubmit(onSubmit)}>
                 <div className="space-y-4">
                     <Controller name="name" control={control} render={({ field }) => (
                         <Field label="Login Name" error={errors.name?.message}>
-                            <Input {...field} />
+                            <Input id="add-partner-login-dialog-login-name" {...field} />
                         </Field>
                     )} />
                     <Controller name="email" control={control} render={({ field }) => (
                         <Field label="Email" error={errors.email?.message}>
-                            <Input {...field} type="email" />
+                            <Input id="add-partner-login-dialog-email" {...field} type="email" />
                         </Field>
                     )} />
                     <Controller name="password" control={control} render={({ field }) => (
                         <Field label="Temporary Password" error={errors.password?.message}>
-                            <Input {...field} type="password" />
+                            <Input id="add-partner-login-dialog-temporary-password" {...field} type="password" />
                         </Field>
                     )} />
                     <Controller name="roleId" control={control} render={({ field }) => (
                         <Field label="Partner Role" error={errors.roleId?.message}>
                             <Select value={field.value} onValueChange={field.onChange}>
-                                <SelectTrigger className="w-full"><SelectValue placeholder="Select partner role" /></SelectTrigger>
+                                <SelectTrigger id="add-partner-login-dialog-partner-role" className="w-full"><SelectValue placeholder="Select partner role" /></SelectTrigger>
                                 <SelectContent>
                                     {partnerRoles.map((role) => <SelectItem key={role.id} value={role.id}>{role.name}</SelectItem>)}
                                 </SelectContent>
@@ -140,7 +145,7 @@ export function AddPartnerLoginDialog({ open, onOpenChange, partner, logins, onS
                         <Controller name="partnerLoginRole" control={control} render={({ field }) => (
                             <Field label="Login Role">
                                 <Select value={field.value} onValueChange={field.onChange}>
-                                    <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                                    <SelectTrigger id="add-partner-login-dialog-login-role" className="w-full"><SelectValue /></SelectTrigger>
                                     <SelectContent>
                                         <SelectItem value="MANAGER">Manager</SelectItem>
                                         <SelectItem value="MEMBER">Member</SelectItem>
@@ -152,7 +157,7 @@ export function AddPartnerLoginDialog({ open, onOpenChange, partner, logins, onS
                         <Controller name="parentPartnerProfileId" control={control} render={({ field }) => (
                             <Field label="Reports To">
                                 <Select value={field.value || "__primary__"} onValueChange={(value) => field.onChange(value === "__primary__" ? "" : value)}>
-                                    <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                                    <SelectTrigger id="add-partner-login-dialog-reports-to" className="w-full"><SelectValue /></SelectTrigger>
                                     <SelectContent>
                                         <SelectItem value="__primary__">Primary login</SelectItem>
                                         {logins.map((login) => (
@@ -180,7 +185,7 @@ export function AddPartnerLoginDialog({ open, onOpenChange, partner, logins, onS
 function Field({ label, error, children }: { label: string; error?: string; children: React.ReactNode }) {
     return (
         <div className="space-y-2">
-            <Label>{label}</Label>
+            <Label htmlFor={`add-partner-login-dialog-${label.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`}>{label}</Label>
             {children}
             {error ? <p className="text-xs text-destructive">{error}</p> : null}
         </div>

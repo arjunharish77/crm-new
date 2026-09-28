@@ -6,7 +6,7 @@ import {
 } from "@/lib/server/payouts";
 import { getPayoutVisiblePartnerUserIds, resolvePartnerRollupTarget } from "@/lib/server/partner-access";
 import { assertFeatureEnabled } from "@/lib/server/entitlements";
-import { query, queryOne } from "@/lib/db/query";
+import { query, queryOne, jsonbParam } from "@/lib/db/query";
 import { readPrivateFile, writePrivateFile } from "@/lib/storage/file-storage";
 import { getFileObjectForEntity, upsertFileObjectForTenant } from "@/lib/repositories/files-postgres";
 import { generateSignedDownloadToken, verifySignedDownloadToken } from "@/lib/server/signed-urls";
@@ -261,7 +261,7 @@ export async function generatePartnerInvoiceForPayout(
       createdAt,
       supplierSnapshot,
       recipientSnapshot,
-      lineItems,
+      jsonbParam(lineItems),
       taxableValue,
       taxSplit.cgstAmount,
       taxSplit.sgstAmount,

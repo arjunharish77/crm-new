@@ -1,5 +1,8 @@
 "use client";
 
+import { PageHeader } from "@/components/layout/page-header";
+import { ErrorState } from "@/components/common/error-state";
+
 import { useEffect, useState } from "react";
 import { TimerReset } from "lucide-react";
 import { toast } from "sonner";
@@ -40,8 +43,12 @@ export default function TaskSlaPoliciesSettingsPage() {
         return initial;
     });
     const [loading, setLoading] = useState(true);
+    const [loadError, setLoadError] = useState<string | null>(null);
+    const [retryKey, setRetryKey] = useState(0);
 
     useEffect(() => {
+        setLoading(true);
+        setLoadError(null);
         apiFetch("/settings/task-sla-policies")
             .then((data: any[]) => {
                 setRows((current) => {
@@ -58,9 +65,9 @@ export default function TaskSlaPoliciesSettingsPage() {
                     return next;
                 });
             })
-            .catch(() => toast.error("Failed to load SLA policies"))
+            .catch(() => setLoadError("Failed to load SLA policies. Existing targets could not be retrieved."))
             .finally(() => setLoading(false));
-    }, []);
+    }, [retryKey]);
 
     const updateRow = (priority: Priority, patch: Partial<PolicyRow>) => {
         setRows((current) => ({ ...current, [priority]: { ...current[priority], ...patch } }));
@@ -94,17 +101,11 @@ export default function TaskSlaPoliciesSettingsPage() {
 
     return (
         <div className="space-y-4">
-            <div>
-                <h1 className="text-lg font-bold">Task SLA Policies</h1>
-                <p className="text-sm text-muted-foreground">
-                    Set how quickly a task of each priority should get its first action and be completed. A task without an explicit
-                    due date falls back to these targets; a task with a due date uses the due date as its completion target instead.
-                </p>
-            </div>
+            <PageHeader title="Task SLA Policies" description="Set first-action and completion targets for each task priority." />
 
             {loading ? (
                 <p className="text-sm text-muted-foreground">Loading...</p>
-            ) : (
+            ) : loadError ? <ErrorState description={loadError} onRetry={() => setRetryKey(current => current + 1)} /> : (
                 <Card className="overflow-hidden py-0">
                     <div className="divide-y">
                         {PRIORITIES.map((priority) => {
@@ -116,29 +117,29 @@ export default function TaskSlaPoliciesSettingsPage() {
                                         <span className="font-medium">{PRIORITY_LABELS[priority]}</span>
                                     </div>
                                     <div className="space-y-1">
-                                        <Label className="text-xs">First action within (minutes)</Label>
+                                        <Label htmlFor={`sla-first-${priority}`} className="text-xs">First action within (minutes)</Label>
                                         <Input
                                             type="number"
                                             min={0}
                                             className="w-40"
                                             placeholder="Not tracked"
-                                            value={row.firstActionMinutes}
+                                            id={`sla-first-${priority}`} value={row.firstActionMinutes}
                                             onChange={(e) => updateRow(priority, { firstActionMinutes: e.target.value })}
                                         />
                                     </div>
                                     <div className="space-y-1">
-                                        <Label className="text-xs">Complete within (minutes)</Label>
+                                        <Label htmlFor={`sla-complete-${priority}`} className="text-xs">Complete within (minutes)</Label>
                                         <Input
                                             type="number"
                                             min={0}
                                             className="w-40"
                                             placeholder="Falls back to due date"
-                                            value={row.completionMinutes}
+                                            id={`sla-complete-${priority}`} value={row.completionMinutes}
                                             onChange={(e) => updateRow(priority, { completionMinutes: e.target.value })}
                                         />
                                     </div>
                                     <div className="flex items-center gap-2 pb-1.5">
-                                        <Switch checked={row.isActive} onCheckedChange={(checked) => updateRow(priority, { isActive: checked })} />
+                                        <Switch aria-label={`${PRIORITY_LABELS[priority]} SLA enabled`} checked={row.isActive} onCheckedChange={(checked) => updateRow(priority, { isActive: checked })} />
                                         <Label className="text-xs">Enabled</Label>
                                     </div>
                                     <Button size="sm" disabled={row.saving} onClick={() => saveRow(priority)}>

@@ -1,16 +1,27 @@
 import { randomUUID } from "crypto";
-import { execute, query, queryOne, type Queryable } from "@/lib/db/query";
+import { execute, query, queryOne, jsonbParam, type Queryable } from "@/lib/db/query";
 import { withTransaction, type TransactionClient } from "@/lib/db/transaction";
 import { isModuleEnabledForTenant } from "@/lib/server/module-entitlements";
 import { runAutomationsForEvent } from "@/lib/repositories/automations-postgres";
 import { createUserNotification } from "@/lib/server/notifications";
 import { zonedWallClockParts } from "@/lib/server/date-format";
 import { getEffectiveSecurityPolicy } from "@/lib/server/security-policy";
+import { applyRecordScopeClause } from "@/lib/server/record-scope";
 
 type TenantUser = {
   id: string;
   tenantId: string | null;
   isPlatformAdmin?: boolean;
+};
+
+// Widened variant for the manual-reassignment call chain only (reassignRecordOwner,
+// bulkReassignRecordOwners, executeReassignment, previewReassignmentImpact) -- these need
+// role/teamId to enforce record-access scope (see record-scope.ts); the base TenantUser stays
+// narrow because withTransaction elsewhere expects its own AppUserContext shape, whose `role`
+// is a plain string (an unrelated concept), and widening the shared type would conflict with it.
+type ScopedActor = TenantUser & {
+  teamId?: string | null;
+  role?: { permissions?: any } | string | null;
 };
 
 type EntityType = "LEAD" | "OPPORTUNITY";
@@ -569,7 +580,7 @@ async function writeAssignmentLog(
   await execute(
     `insert into "AssignmentLog" (id, "tenantId", "entityType", "entityId", "assignedToId", "assignedById", "ruleId", reason, trace, "assignedAt")
      values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
-    [randomUUID(), input.tenantId, input.entityType, input.entityId, input.assignedUserId, input.assignedById ?? null, input.ruleId, input.reason, input.trace ?? null, now],
+    [randomUUID(), input.tenantId, input.entityType, input.entityId, input.assignedUserId, input.assignedById ?? null, input.ruleId, input.reason, jsonbParam(input.trace), now],
     client,
   );
 
@@ -824,7 +835,7 @@ export async function simulateDistribution(
   const persisted = await execute(
     `insert into "DistributionSimulation" (id, "tenantId", "entityType", "inputRecord", "draftRuleOverride", result, trace, "runBy", "createdAt")
      values ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
-    [simulationId, tenantId, entityType, record, draftRule ?? null, result, trace, user.id, new Date().toISOString()],
+    [simulationId, tenantId, entityType, record, draftRule ?? null, result, jsonbParam(trace), user.id, new Date().toISOString()],
   ).then(() => true).catch(() => false);
 
   return { result, trace, simulationId: persisted ? simulationId : null };
@@ -850,7 +861,7 @@ export async function listDistributionSimulationsForTenant(user: TenantUser, ent
 // invoked from privileged-actions.ts's approval-execution switch when an approval-gated
 // reassignment request is approved (see reassignRecordOwner below for the gate itself).
 export async function executeReassignment(
-  actor: TenantUser,
+  actor: ScopedActor,
   entityTypeInput: string,
   entityId: string,
   newOwnerId: string,
@@ -859,7 +870,19 @@ export async function executeReassignment(
   const tenantId = tenantIdFor(actor);
   const entityType = normalizeEntityType(entityTypeInput);
   const table = entityType === "OPPORTUNITY" ? '"Opportunity"' : '"Lead"';
-  const existing = await queryOne<any>(`select id, "ownerId" from ${table} where "tenantId" = $1 and id = $2 limit 1`, [tenantId, entityId]);
+  // F03 fix (WP04): previously scoped by tenant only -- an OWN/TEAM-scoped actor (who shouldn't
+  // even be able to SEE most tenant records on the read side, per the same-named fix in
+  // leads-postgres.ts/opportunities-postgres.ts) could still reassign ANY record in the tenant
+  // by id here, bypassing that scoping entirely on this write path. Bulk reassignment
+  // (bulkReassignRecordOwners) calls this per-record, so this one fix covers both.
+  const clauses = ["\"tenantId\" = $1"];
+  const values: unknown[] = [tenantId];
+  applyRecordScopeClause(clauses, values, actor, entityType, 1);
+  values.push(entityId);
+  const existing = await queryOne<any>(
+    `select id, "ownerId" from ${table} where ${clauses.join(" and ")} and id = $${values.length} limit 1`,
+    values,
+  );
   if (!existing) return null;
 
   const newOwner = await queryOne<any>('select id, name, email from "User" where "tenantId" = $1 and id = $2 limit 1', [tenantId, newOwnerId]);
@@ -901,7 +924,7 @@ export async function executeReassignment(
 // does, and notifies the previous owner). Deliberately NOT gated by the DISTRIBUTION module --
 // "preserve basic manual assignment" when the module is off is exactly what this function is for.
 export async function reassignRecordOwner(
-  user: TenantUser,
+  user: ScopedActor,
   entityTypeInput: string,
   entityId: string,
   input: { newOwnerId: string; reason: string },
@@ -959,7 +982,7 @@ export type BulkReassignOutcome = {
 // Sequential, not parallel -- each reassignment is its own small write + notification, and
 // running them one at a time keeps error attribution per-record clean.
 export async function bulkReassignRecordOwners(
-  user: TenantUser,
+  user: ScopedActor,
   entityTypeInput: string,
   entityIds: string[],
   input: { newOwnerId: string; reason: string },
@@ -1005,7 +1028,7 @@ export type ReassignmentImpactPreview = {
 // configured per-user quota for this entity type, and continuity risk signals (how old the
 // record is, how long since it was last touched).
 export async function previewReassignmentImpact(
-  user: TenantUser,
+  user: ScopedActor,
   entityTypeInput: string,
   entityId: string,
   newOwnerId: string,
@@ -1013,9 +1036,15 @@ export async function previewReassignmentImpact(
   const tenantId = tenantIdFor(user);
   const entityType = normalizeEntityType(entityTypeInput);
   const table = entityType === "OPPORTUNITY" ? '"Opportunity"' : '"Lead"';
+  // F03 fix (WP04): same reasoning as executeReassignment above -- don't let this preview leak
+  // owner/workload/age details for a record outside the caller's own record-access scope.
+  const clauses = ["\"tenantId\" = $1"];
+  const values: unknown[] = [tenantId];
+  applyRecordScopeClause(clauses, values, user, entityType, 1);
+  values.push(entityId);
   const record = await queryOne<{ id: string; ownerId: string | null; createdAt: string }>(
-    `select id, "ownerId", "createdAt" from ${table} where "tenantId" = $1 and id = $2 limit 1`,
-    [tenantId, entityId],
+    `select id, "ownerId", "createdAt" from ${table} where ${clauses.join(" and ")} and id = $${values.length} limit 1`,
+    values,
   );
   if (!record) return null;
 

@@ -1,10 +1,13 @@
 "use client";
 
+import { PageHeader } from "@/components/layout/page-header";
+import { ErrorState } from "@/components/common/error-state";
+
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { toast } from "sonner";
-import { Megaphone, PhoneCall, SkipForward } from "lucide-react";
+import { PhoneCall, SkipForward } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -29,6 +32,7 @@ export default function CallCampaignWorkspacePage() {
     const params = useParams();
     const campaignId = params.id as string;
     const [current, setCurrent] = useState<NextCall>(null);
+    const [fetchError, setFetchError] = useState<string | null>(null);
     const [loading, setLoading] = useState(false);
     const [showLogOutcome, setShowLogOutcome] = useState(false);
     const [dispositionGroupId, setDispositionGroupId] = useState<string | null>(null);
@@ -43,6 +47,7 @@ export default function CallCampaignWorkspacePage() {
 
     const getNext = async () => {
         setLoading(true);
+        setFetchError(null);
         try {
             const next = await apiFetch<NextCall>(`/call-campaigns/${campaignId}/next-call`, { method: "POST" });
             if (!next) {
@@ -50,7 +55,7 @@ export default function CallCampaignWorkspacePage() {
             }
             setCurrent(next);
         } catch (error: any) {
-            toast.error(error?.message || "Failed to fetch next call");
+            setFetchError(error?.message || "Failed to fetch next call.");
         } finally {
             setLoading(false);
         }
@@ -71,11 +76,9 @@ export default function CallCampaignWorkspacePage() {
 
     return (
         <div className="space-y-4">
-            <div className="flex items-center gap-2">
-                <Megaphone className="size-5 text-primary" />
-                <h1 className="text-lg font-bold">Call Campaign Workspace</h1>
-            </div>
+            <PageHeader title="Call Campaign Workspace" description="Get the next due record, place a call and log its outcome." actions={<Button variant="outline" asChild><Link href="/dashboard/call-center">Back to Call Center</Link></Button>} />
 
+            {fetchError && <ErrorState description={fetchError} onRetry={getNext} />}
             {!current ? (
                 <Card className="p-6 text-center">
                     <p className="mb-3 text-sm text-muted-foreground">Click below to get the next call due in this campaign.</p>
@@ -86,18 +89,18 @@ export default function CallCampaignWorkspacePage() {
                 </Card>
             ) : (
                 <Card className="p-4">
-                    <div className="flex items-center justify-between">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
                         {recordHref ? (
-                            <Link href={recordHref} className="text-lg font-bold text-primary hover:underline">
+                            <Link href={recordHref} className="min-w-0 break-words text-lg font-bold text-primary hover:underline">
                                 {recordLabel}
                             </Link>
                         ) : (
-                            <span className="text-lg font-bold">{recordLabel}</span>
+                            <span className="min-w-0 break-words text-lg font-bold">{recordLabel}</span>
                         )}
                         <Badge variant="outline">Attempt {current.member.attempts}</Badge>
                     </div>
                     <p className="text-sm text-muted-foreground">{current.record?.phone || current.record?.lead?.phone || "No phone on record"}</p>
-                    <div className="mt-3 flex gap-2">
+                    <div className="mt-3 flex flex-wrap gap-2">
                         <Button disabled={calling} onClick={placeCall}>
                             <PhoneCall className="size-4" />
                             Call

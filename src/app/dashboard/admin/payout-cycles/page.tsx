@@ -1,7 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { apiFetch } from "@/lib/api";
+import { PageHeader } from "@/components/layout/page-header";
+import { ErrorState } from "@/components/common/error-state";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -171,24 +173,34 @@ export default function PayoutCyclesPage() {
     const [salesGroups, setSalesGroups] = useState<TargetOption[]>([]);
     const [partnerOrgs, setPartnerOrgs] = useState<TargetOption[]>([]);
 
+    const [targetsError, setTargetsError] = useState(false);
+    const [targetsLoaded, setTargetsLoaded] = useState(false);
+    const [settingsError, setSettingsError] = useState(false);
+    const [cyclesError, setCyclesError] = useState(false);
+    const [payoutsError, setPayoutsError] = useState(false);
+    const [disputesError, setDisputesError] = useState(false);
+    const payoutRequestVersion = useRef(0);
+
     const fetchSettings = useCallback(async () => {
+        setSettingsLoaded(false);
+        setSettingsError(false);
         try {
             const data = await apiFetch<Partial<PayoutSettings> | null>("/payout-settings");
             if (data) setSettings((s) => ({ ...s, ...data }));
-        } catch {
-            toast.error("Failed to load payout settings");
-        } finally {
             setSettingsLoaded(true);
+        } catch {
+            setSettingsError(true);
         }
     }, []);
 
     const fetchCycles = useCallback(async () => {
         setLoadingCycles(true);
+        setCyclesError(false);
         try {
             const data = await apiFetch<PayoutCycle[]>("/payout-cycles");
             setCycles(Array.isArray(data) ? data : []);
         } catch {
-            toast.error("Failed to load payout cycles");
+            setCyclesError(true);
         } finally {
             setLoadingCycles(false);
         }
@@ -200,18 +212,20 @@ export default function PayoutCyclesPage() {
 
     const fetchDisputes = useCallback(async () => {
         setLoadingDisputes(true);
+        setDisputesError(false);
         try {
             const data = await apiFetch<PayoutDispute[]>("/payout-disputes?status=OPEN");
             setDisputes(Array.isArray(data) ? data : []);
         } catch {
-            toast.error("Failed to load payout disputes");
+            setDisputesError(true);
         } finally {
             setLoadingDisputes(false);
         }
     }, []);
 
     const handleResolveDispute = async (disputeId: string, status: "RESOLVED" | "DISMISSED") => {
-        const notes = window.prompt(status === "RESOLVED" ? "Resolution notes (optional):" : "Dismissal notes (optional):") ?? "";
+        const notes = window.prompt(status === "RESOLVED" ? "Resolution notes (optional):" : "Dismissal notes (optional):");
+        if (notes === null) return;
         setResolvingDispute(disputeId);
         try {
             await apiFetch(`/payout-disputes/${disputeId}`, {
@@ -233,12 +247,14 @@ export default function PayoutCyclesPage() {
         fetchDisputes();
     }, [fetchSettings, fetchCycles, fetchDisputes]);
 
-    useEffect(() => {
-        Promise.all([
-            apiFetch<TargetOption[]>("/users").catch(() => []),
-            apiFetch<TargetOption[]>("/teams").catch(() => []),
-            apiFetch<TargetOption[]>("/sales-groups").catch(() => []),
-            apiFetch<TargetOption[]>("/partners").catch(() => []),
+    const fetchTargets = useCallback(async () => {
+        setTargetsError(false);
+        setTargetsLoaded(false);
+        return Promise.all([
+            apiFetch<TargetOption[]>("/users"),
+            apiFetch<TargetOption[]>("/teams"),
+            apiFetch<TargetOption[]>("/sales-groups"),
+            apiFetch<TargetOption[]>("/partners"),
         ]).then(([userData, teamData, groupData, partnerData]) => {
             setUsers(Array.isArray(userData) ? userData : []);
             setTeams(Array.isArray(teamData) ? teamData : []);
@@ -249,18 +265,24 @@ export default function PayoutCyclesPage() {
                 if (orgId) orgMap.set(orgId, { id: orgId, name: partner.legalBusinessName ?? partner.user?.name ?? orgId });
             }
             setPartnerOrgs([...orgMap.values()]);
-        });
+            setTargetsLoaded(true);
+        }).catch(() => setTargetsError(true));
     }, []);
 
+    useEffect(() => { fetchTargets(); }, [fetchTargets]);
+
     const fetchPayouts = useCallback(async (cycleId: string) => {
+        const version = ++payoutRequestVersion.current;
         setLoadingPayouts(true);
+        setPayoutsError(false);
+        setSelectedPayoutIds([]);
         try {
             const data = await apiFetch<Payout[]>(`/payout-cycles/${cycleId}/payouts`);
-            setPayouts(Array.isArray(data) ? data : []);
+            if (version === payoutRequestVersion.current) setPayouts(Array.isArray(data) ? data : []);
         } catch {
-            toast.error("Failed to load payouts for this cycle");
+            if (version === payoutRequestVersion.current) setPayoutsError(true);
         } finally {
-            setLoadingPayouts(false);
+            if (version === payoutRequestVersion.current) setLoadingPayouts(false);
         }
     }, []);
 
@@ -475,22 +497,19 @@ export default function PayoutCyclesPage() {
 
     if (!payoutsEnabled) {
         return (
-            <div className="mx-auto max-w-[1600px] p-4 md:p-6">
+            <div className="@container/payouts min-w-0">
                 <EmptyState title="Payouts isn't enabled" description="Enable the Payouts feature flag for this tenant to configure cycles, commission, and invoicing." />
             </div>
         );
     }
 
-    return (
-        <div className="mx-auto max-w-[1600px] p-4 md:p-6">
-            <div className="flex flex-wrap items-center gap-3">
-                <h1 className="text-lg font-extrabold tracking-tight">Payout Cycles</h1>
-            </div>
-            <p className="mt-1 text-xs text-muted-foreground">
-                Cycles auto-generate on the interval below. Each cycle sums the commission ledger per partner into a
-                Draft → Approved → Paid payout.
-            </p>
+    if (settingsError) return <div className="min-w-0"><PageHeader title="Payout Cycles" /><ErrorState description="Payout settings could not be loaded." onRetry={fetchSettings} /></div>;
+    if (!settingsLoaded) return <div className="min-w-0"><PageHeader title="Payout Cycles" /><TableSkeleton rows={4} columns={2} /></div>;
 
+    return (
+        <div className="@container/payouts min-w-0">
+            <PageHeader title="Payout Cycles" description="Configure payout periods, review partner payouts and manage disputes." />
+            {targetsError && <ErrorState description="Payout visibility options could not be loaded. Saving is unavailable until they load." onRetry={fetchTargets} />}
             <Tabs defaultValue="configuration" className="mt-4 space-y-4">
                 <div className="overflow-x-auto pb-1">
                     <TabsList className="h-10 min-w-max">
@@ -529,13 +548,13 @@ export default function PayoutCyclesPage() {
                     </div>
                     <div className="grid gap-4 sm:grid-cols-2">
                         <div className="space-y-2">
-                            <Label>Frequency</Label>
+                            <Label htmlFor="payout-field-1">Frequency</Label>
                             <Select
                                 disabled={!settingsLoaded}
                                 value={settings.cycleFrequency}
                                 onValueChange={(v) => setSettings((s) => ({ ...s, cycleFrequency: v as PayoutSettings["cycleFrequency"] }))}
                             >
-                                <SelectTrigger className="w-full">
+                                <SelectTrigger id="payout-field-1" className="w-full">
                                     <SelectValue placeholder="Frequency" />
                                 </SelectTrigger>
                                 <SelectContent>
@@ -546,13 +565,13 @@ export default function PayoutCyclesPage() {
                             </Select>
                         </div>
                         <div className="space-y-2">
-                            <Label>Anchor Day</Label>
+                            <Label htmlFor="payout-field-2">Anchor Day</Label>
                             <Select
                                 disabled={!settingsLoaded}
                                 value={String(settings.cycleAnchorDay ?? 1)}
                                 onValueChange={(value) => setSettings((s) => ({ ...s, cycleAnchorDay: Number(value) }))}
                             >
-                                <SelectTrigger className="w-full">
+                                <SelectTrigger id="payout-field-2" className="w-full">
                                     <SelectValue />
                                 </SelectTrigger>
                                 <SelectContent>
@@ -566,12 +585,12 @@ export default function PayoutCyclesPage() {
                         </div>
                         {settings.cycleFrequency === "CUSTOM_DAYS" && (
                             <div className="space-y-2 sm:col-span-2">
-                                <Label>Custom Interval</Label>
+                                <Label htmlFor="payout-field-3">Custom Interval</Label>
                                 <Select
                                     value={String(settings.customIntervalDays ?? 30)}
                                     onValueChange={(value) => setSettings((s) => ({ ...s, customIntervalDays: Number(value) }))}
                                 >
-                                    <SelectTrigger className="w-full">
+                                    <SelectTrigger id="payout-field-3" className="w-full">
                                         <SelectValue />
                                     </SelectTrigger>
                                     <SelectContent>
@@ -586,7 +605,7 @@ export default function PayoutCyclesPage() {
                         )}
                     </div>
                     <div className="mt-4 flex flex-wrap items-center gap-2">
-                        <Button onClick={handleSaveSettings} disabled={savingSettings || !settingsLoaded}>
+                        <Button onClick={handleSaveSettings} disabled={savingSettings || !settingsLoaded || !targetsLoaded}>
                             {savingSettings ? "Saving..." : "Save Settings"}
                         </Button>
                         <Button variant="outline" onClick={handleGenerateCycle} disabled={generating}>
@@ -610,21 +629,21 @@ export default function PayoutCyclesPage() {
                             </p>
                         </div>
                     </div>
-                    <div className="grid gap-4 sm:grid-cols-3">
+                    <div className="grid gap-4 @min-[850px]/payouts:grid-cols-3">
                         <div className="space-y-2">
-                            <Label>Default HSN/SAC Code</Label>
-                            <Input
+                            <Label htmlFor="payout-field-4">Default HSN/SAC Code</Label>
+                            <Input id="payout-field-4"
                                 value={settings.defaultHsnSacCode}
                                 onChange={(e) => setSettings((s) => ({ ...s, defaultHsnSacCode: e.target.value }))}
                             />
                         </div>
                         <div className="space-y-2">
-                            <Label>GST Rate (%)</Label>
+                            <Label htmlFor="payout-field-5">GST Rate (%)</Label>
                             <Select
                                 value={String(settings.gstRatePercent)}
                                 onValueChange={(value) => setSettings((s) => ({ ...s, gstRatePercent: Number(value) }))}
                             >
-                                <SelectTrigger className="w-full">
+                                <SelectTrigger id="payout-field-5" className="w-full">
                                     <SelectValue />
                                 </SelectTrigger>
                                 <SelectContent>
@@ -635,12 +654,12 @@ export default function PayoutCyclesPage() {
                             </Select>
                         </div>
                         <div className="space-y-2">
-                            <Label>Invoice Number Pattern</Label>
+                            <Label htmlFor="payout-field-6">Invoice Number Pattern</Label>
                             <Select
                                 value={settings.invoiceNumberPattern}
                                 onValueChange={(value) => setSettings((s) => ({ ...s, invoiceNumberPattern: value }))}
                             >
-                                <SelectTrigger className="w-full">
+                                <SelectTrigger id="payout-field-6" className="w-full">
                                     <SelectValue />
                                 </SelectTrigger>
                                 <SelectContent>
@@ -651,7 +670,7 @@ export default function PayoutCyclesPage() {
                             </Select>
                         </div>
                     </div>
-                    <Button className="mt-4" onClick={handleSaveSettings} disabled={savingSettings || !settingsLoaded}>
+                    <Button className="mt-4" onClick={handleSaveSettings} disabled={savingSettings || !settingsLoaded || !targetsLoaded}>
                         {savingSettings ? "Saving..." : "Save Tax Rules"}
                     </Button>
                 </div>
@@ -670,22 +689,22 @@ export default function PayoutCyclesPage() {
                         </p>
                     </div>
                 </div>
-                <div className="grid gap-4 md:grid-cols-4">
+                <div className="grid gap-4 @min-[1000px]/payouts:grid-cols-4">
                     <div className="space-y-2">
-                        <Label>Minimum Payout Amount</Label>
-                        <Input
+                        <Label htmlFor="payout-field-7">Minimum Payout Amount</Label>
+                        <Input id="payout-field-7"
                             type="number"
                             value={settings.minimumPayoutAmount}
                             onChange={(e) => setSettings((s) => ({ ...s, minimumPayoutAmount: Number(e.target.value) || 0 }))}
                         />
                     </div>
                     <div className="space-y-2">
-                        <Label>Approval Mode</Label>
+                        <Label htmlFor="payout-field-8">Approval Mode</Label>
                         <Select
                             value={settings.approvalMode}
                             onValueChange={(value) => setSettings((s) => ({ ...s, approvalMode: value as PayoutSettings["approvalMode"] }))}
                         >
-                            <SelectTrigger className="w-full">
+                            <SelectTrigger id="payout-field-8" className="w-full">
                                 <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
@@ -695,30 +714,30 @@ export default function PayoutCyclesPage() {
                         </Select>
                     </div>
                     <div className="space-y-2">
-                        <Label>Auto-Approve Below</Label>
-                        <Input
+                        <Label htmlFor="payout-field-9">Auto-Approve Below</Label>
+                        <Input id="payout-field-9"
                             type="number"
                             value={settings.autoApproveBelowAmount ?? ""}
                             onChange={(e) => setSettings((s) => ({ ...s, autoApproveBelowAmount: e.target.value ? Number(e.target.value) : null }))}
                         />
                     </div>
                     <div className="space-y-2">
-                        <Label>Hold Reasons</Label>
-                        <Input
+                        <Label htmlFor="payout-field-10">Hold Reasons</Label>
+                        <Input id="payout-field-10"
                             value={(settings.holdReasons ?? []).join(", ")}
                             onChange={(e) => setSettings((s) => ({ ...s, holdReasons: e.target.value.split(",").map((item) => item.trim()).filter(Boolean) }))}
                         />
                     </div>
                 </div>
-                <div className="mt-4 grid gap-4 md:grid-cols-3">
-                    <label className="flex items-center justify-between gap-3 rounded-xl border bg-surface-container-low p-3">
+                <div className="mt-4 grid gap-4 @min-[850px]/payouts:grid-cols-3">
+                    <label className="flex min-w-0 flex-wrap items-center justify-between gap-3 rounded-xl border bg-surface-container-low p-3">
                         <span className="text-sm font-semibold">Require invoice before payment</span>
                         <Switch
                             checked={settings.requireInvoiceBeforePayment}
                             onCheckedChange={(checked) => setSettings((s) => ({ ...s, requireInvoiceBeforePayment: checked }))}
                         />
                     </label>
-                    <label className="flex items-center justify-between gap-3 rounded-xl border bg-surface-container-low p-3">
+                    <label className="flex min-w-0 flex-wrap items-center justify-between gap-3 rounded-xl border bg-surface-container-low p-3">
                         <span className="text-sm font-semibold">Allow partner self-invoice</span>
                         <Switch
                             checked={settings.allowPartnerSelfInvoice}
@@ -726,14 +745,14 @@ export default function PayoutCyclesPage() {
                         />
                     </label>
                     <div className="space-y-2">
-                        <Label>Adjustment Reasons</Label>
-                        <Input
+                        <Label htmlFor="payout-field-11">Adjustment Reasons</Label>
+                        <Input id="payout-field-11"
                             value={(settings.adjustmentReasons ?? []).join(", ")}
                             onChange={(e) => setSettings((s) => ({ ...s, adjustmentReasons: e.target.value.split(",").map((item) => item.trim()).filter(Boolean) }))}
                         />
                     </div>
                 </div>
-                <Button className="mt-4" onClick={handleSaveSettings} disabled={savingSettings || !settingsLoaded}>
+                <Button className="mt-4" onClick={handleSaveSettings} disabled={savingSettings || !settingsLoaded || !targetsLoaded}>
                     {savingSettings ? "Saving..." : "Save Finance Controls"}
                 </Button>
             </div>
@@ -755,7 +774,7 @@ export default function PayoutCyclesPage() {
                     </div>
                 </div>
                 <div className="max-w-sm space-y-2">
-                    <Label>Visibility Mode</Label>
+                    <Label htmlFor="payout-field-12">Visibility Mode</Label>
                     <Select
                         value={settings.payoutVisibilityConfig?.mode ?? "ALL_PARTNERS"}
                         onValueChange={(value) => setSettings((current) => ({
@@ -763,7 +782,7 @@ export default function PayoutCyclesPage() {
                             payoutVisibilityConfig: { ...(current.payoutVisibilityConfig ?? DEFAULT_SETTINGS.payoutVisibilityConfig), mode: value as "ALL_PARTNERS" | "SELECTED" },
                         }))}
                     >
-                        <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                        <SelectTrigger id="payout-field-12" className="w-full"><SelectValue /></SelectTrigger>
                         <SelectContent>
                             <SelectItem value="ALL_PARTNERS">All active partners</SelectItem>
                             <SelectItem value="SELECTED">Selected users, teams, groups, and partner orgs</SelectItem>
@@ -771,14 +790,14 @@ export default function PayoutCyclesPage() {
                     </Select>
                 </div>
                 {settings.payoutVisibilityConfig?.mode === "SELECTED" ? (
-                    <div className="mt-4 grid gap-4 lg:grid-cols-4">
+                    <div className="mt-4 grid gap-4 @min-[1000px]/payouts:grid-cols-2">
                         <TargetChecklist title="Users" items={users} selected={settings.payoutVisibilityConfig.userIds} onToggle={(id, checked) => toggleVisibilityTarget("userIds", id, checked)} />
                         <TargetChecklist title="Teams" items={teams} selected={settings.payoutVisibilityConfig.teamIds} onToggle={(id, checked) => toggleVisibilityTarget("teamIds", id, checked)} />
                         <TargetChecklist title="Sales Groups" items={salesGroups} selected={settings.payoutVisibilityConfig.salesGroupIds} onToggle={(id, checked) => toggleVisibilityTarget("salesGroupIds", id, checked)} />
                         <TargetChecklist title="Partner Organizations" items={partnerOrgs} selected={settings.payoutVisibilityConfig.partnerOrganizationIds} onToggle={(id, checked) => toggleVisibilityTarget("partnerOrganizationIds", id, checked)} />
                     </div>
                 ) : null}
-                <Button className="mt-4" onClick={handleSaveSettings} disabled={savingSettings || !settingsLoaded}>
+                <Button className="mt-4" onClick={handleSaveSettings} disabled={savingSettings || !settingsLoaded || !targetsLoaded}>
                     {savingSettings ? "Saving..." : "Save Visibility"}
                 </Button>
             </div>
@@ -798,28 +817,28 @@ export default function PayoutCyclesPage() {
                     </div>
                 </div>
                 <div className="space-y-4">
-                    <div className="grid gap-4 sm:grid-cols-3">
+                    <div className="grid gap-4 @min-[850px]/payouts:grid-cols-3">
                         <div className="space-y-2">
-                            <Label>Company Legal Name</Label>
-                            <Input
+                            <Label htmlFor="payout-field-13">Company Legal Name</Label>
+                            <Input id="payout-field-13"
                                 value={settings.companyLegalName}
                                 onChange={(e) => setSettings((s) => ({ ...s, companyLegalName: e.target.value }))}
                             />
                         </div>
                         <div className="space-y-2">
-                            <Label>Company GSTIN</Label>
-                            <Input
+                            <Label htmlFor="payout-field-14">Company GSTIN</Label>
+                            <Input id="payout-field-14"
                                 value={settings.companyGstin}
                                 onChange={(e) => setSettings((s) => ({ ...s, companyGstin: e.target.value.toUpperCase() }))}
                             />
                         </div>
                         <div className="space-y-2">
-                            <Label>Company State</Label>
+                            <Label htmlFor="payout-field-15">Company State</Label>
                             <Select
                                 value={settings.companyState || "__none__"}
                                 onValueChange={(value) => setSettings((s) => ({ ...s, companyState: value === "__none__" ? "" : value }))}
                             >
-                                <SelectTrigger className="w-full">
+                                <SelectTrigger id="payout-field-15" className="w-full">
                                     <SelectValue placeholder="Select state" />
                                 </SelectTrigger>
                                 <SelectContent>
@@ -832,37 +851,37 @@ export default function PayoutCyclesPage() {
                             <p className="text-xs text-muted-foreground">Used for CGST+SGST vs IGST place-of-supply logic</p>
                         </div>
                     </div>
-                    <div className="grid gap-4 sm:grid-cols-4">
+                    <div className="grid gap-4 @min-[1000px]/payouts:grid-cols-4">
                         <div className="space-y-2 sm:col-span-2">
-                            <Label>Address Line 1</Label>
-                            <Input
+                            <Label htmlFor="payout-field-16">Address Line 1</Label>
+                            <Input id="payout-field-16"
                                 value={settings.companyAddress?.line1 ?? ""}
                                 onChange={(e) => updateCompanyAddress({ line1: e.target.value })}
                             />
                         </div>
                         <div className="space-y-2 sm:col-span-2">
-                            <Label>Address Line 2</Label>
-                            <Input
+                            <Label htmlFor="payout-field-17">Address Line 2</Label>
+                            <Input id="payout-field-17"
                                 value={settings.companyAddress?.line2 ?? ""}
                                 onChange={(e) => updateCompanyAddress({ line2: e.target.value })}
                             />
                         </div>
                         <div className="space-y-2 sm:col-span-2">
-                            <Label>City</Label>
-                            <Input
+                            <Label htmlFor="payout-field-18">City</Label>
+                            <Input id="payout-field-18"
                                 value={settings.companyAddress?.city ?? ""}
                                 onChange={(e) => updateCompanyAddress({ city: e.target.value })}
                             />
                         </div>
                         <div className="space-y-2 sm:col-span-2">
-                            <Label>Postal Code</Label>
-                            <Input
+                            <Label htmlFor="payout-field-19">Postal Code</Label>
+                            <Input id="payout-field-19"
                                 value={settings.companyAddress?.postalCode ?? ""}
                                 onChange={(e) => updateCompanyAddress({ postalCode: e.target.value })}
                             />
                         </div>
                     </div>
-                    <Button onClick={handleSaveSettings} disabled={savingSettings || !settingsLoaded}>
+                    <Button onClick={handleSaveSettings} disabled={savingSettings || !settingsLoaded || !targetsLoaded}>
                         {savingSettings ? "Saving..." : "Save Billing Identity"}
                     </Button>
                 </div>
@@ -870,10 +889,10 @@ export default function PayoutCyclesPage() {
                 </TabsContent>
 
                 <TabsContent value="cycles">
-            <div className="flex flex-col gap-4 md:flex-row">
-                <div className="w-full shrink-0 md:w-80">
+            <div className="flex flex-col gap-4 @min-[1000px]/payouts:flex-row">
+                <div className="w-full min-w-0 shrink-0 @min-[1000px]/payouts:w-72">
                     <h2 className="mb-2 text-sm font-bold">Cycles</h2>
-                    {loadingCycles ? (
+                    {cyclesError ? <ErrorState description="Payout cycles could not be loaded." onRetry={fetchCycles} /> : loadingCycles ? (
                         <TableSkeleton rows={4} columns={1} />
                     ) : cycles.length === 0 ? (
                         <EmptyState title="No cycles yet" description="Generate the first payout cycle above." />
@@ -889,8 +908,8 @@ export default function PayoutCyclesPage() {
                                         selectedCycleId === cycle.id ? "border-primary bg-primary/[0.06]" : "border-border bg-card hover:bg-accent/50"
                                     )}
                                 >
-                                    <div className="flex items-center justify-between gap-2">
-                                        <span className="text-sm font-semibold">{cycle.cycleLabel}</span>
+                                    <div className="flex min-w-0 flex-wrap items-center justify-between gap-2">
+                                        <span className="min-w-0 break-words text-sm font-semibold">{cycle.cycleLabel}</span>
                                         <Badge variant="outline" className="rounded-md text-[0.65rem] font-semibold">
                                             {cycle.status}
                                         </Badge>
@@ -903,12 +922,12 @@ export default function PayoutCyclesPage() {
 
                 <div className="min-w-0 flex-1">
                     {!selectedCycleId ? (
-                        <EmptyState title="Select a cycle" description="Pick a cycle on the left to review partner payouts." />
+                        <EmptyState title="Select a cycle" description="Pick a cycle to review partner payouts." />
                     ) : (
                         <>
-                            <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                            <div className="mb-3 flex min-w-0 flex-wrap items-center justify-between gap-2">
                                 <h2 className="text-sm font-bold">Payouts</h2>
-                                <div className="flex flex-wrap items-center gap-2">
+                                <div className="flex min-w-0 flex-wrap items-center gap-2">
                                     <QueueExportButton
                                         moduleName="PAYOUTS"
                                         filters={{ exportScope: "CYCLE_FINANCE", payoutCycleId: selectedCycleId }}
@@ -924,7 +943,7 @@ export default function PayoutCyclesPage() {
                                 </div>
                             </div>
 
-                            {loadingPayouts ? (
+                            {payoutsError ? <ErrorState description="Cycle payouts could not be loaded." onRetry={() => selectedCycleId && fetchPayouts(selectedCycleId)} /> : loadingPayouts ? (
                                 <TableSkeleton rows={4} columns={3} />
                             ) : payouts.length === 0 ? (
                                 <EmptyState title="No payouts yet" description="Click 'Recompute from ledger' to sum commission earned in this cycle's date range." />
@@ -932,8 +951,8 @@ export default function PayoutCyclesPage() {
                                 <div className="space-y-3">
                                     {payouts.map((payout) => (
                                         <div key={payout.id} className="rounded-[14px] border bg-card p-4">
-                                            <div className="flex flex-wrap items-center justify-between gap-3">
-                                                <div className="flex items-center gap-3">
+                                            <div className="flex min-w-0 flex-wrap items-center justify-between gap-3">
+                                                <div className="flex min-w-0 flex-wrap items-center gap-3">
                                                     <Checkbox
                                                         checked={selectedPayoutIds.includes(payout.id)}
                                                         onCheckedChange={(checked) => {
@@ -943,14 +962,14 @@ export default function PayoutCyclesPage() {
                                                         }}
                                                         aria-label={`Select payout for ${payout.partner?.legalBusinessName || payout.partner?.name || payout.partnerId}`}
                                                     />
-                                                    <div>
+                                                    <div className="min-w-0 flex-1 basis-48 break-words">
                                                         <p className="text-sm font-bold">
                                                             {payout.partner?.legalBusinessName || payout.partner?.name || payout.partnerId}
                                                         </p>
                                                         <p className="text-xs text-muted-foreground">{payout.partner?.email}</p>
                                                     </div>
                                                 </div>
-                                                <div className="flex flex-wrap items-center gap-2.5">
+                                                <div className="flex min-w-0 flex-wrap items-center gap-2.5">
                                                     <span className="text-sm font-bold">
                                                         ₹{payout.totalCommissionAmount.toLocaleString()}
                                                     </span>
@@ -1051,7 +1070,7 @@ export default function PayoutCyclesPage() {
                                 </p>
                             </div>
                         </div>
-                        {loadingDisputes ? (
+                        {disputesError ? <ErrorState description="Payout disputes could not be loaded." onRetry={fetchDisputes} /> : loadingDisputes ? (
                             <TableSkeleton rows={3} columns={2} />
                         ) : disputes.length === 0 ? (
                             <EmptyState title="No open disputes" description="Partner-raised payout disputes will show up here." />
@@ -1059,12 +1078,12 @@ export default function PayoutCyclesPage() {
                             <div className="space-y-3">
                                 {disputes.map((dispute) => (
                                     <div key={dispute.id} className="rounded-xl border bg-surface-container-low p-3">
-                                        <div className="flex flex-wrap items-center justify-between gap-2">
+                                        <div className="flex min-w-0 flex-wrap items-center justify-between gap-2">
                                             <div>
                                                 <p className="text-sm font-semibold">{dispute.partner?.name || dispute.partner?.email || "Unknown partner"}</p>
                                                 <p className="text-xs text-muted-foreground">{formatWorkspaceDateTime(dispute.createdAt)}</p>
                                             </div>
-                                            <div className="flex items-center gap-2">
+                                            <div className="flex min-w-0 flex-wrap items-center gap-2">
                                                 <Button
                                                     size="sm"
                                                     variant="outline"
@@ -1104,8 +1123,8 @@ export default function PayoutCyclesPage() {
                 }
             >
                 <div className="space-y-2">
-                    <Label>Payment Reference / UTR</Label>
-                    <Input
+                    <Label htmlFor="payout-field-20">Payment Reference / UTR</Label>
+                    <Input id="payout-field-20"
                         placeholder="Enter the bank transfer reference"
                         value={paymentReference}
                         onChange={(e) => setPaymentReference(e.target.value)}
@@ -1127,9 +1146,9 @@ export default function PayoutCyclesPage() {
             >
                 <div className="space-y-3">
                     <div className="space-y-2">
-                        <Label>Hold Reason</Label>
+                        <Label htmlFor="payout-field-21">Hold Reason</Label>
                         <Select value={holdReason || "__custom__"} onValueChange={(value) => setHoldReason(value === "__custom__" ? "" : value)}>
-                            <SelectTrigger className="w-full">
+                            <SelectTrigger id="payout-field-21" className="w-full">
                                 <SelectValue placeholder="Select reason" />
                             </SelectTrigger>
                             <SelectContent>
@@ -1165,9 +1184,9 @@ export default function PayoutCyclesPage() {
                 <div className="space-y-3">
                     <div className="grid gap-3 sm:grid-cols-2">
                         <div className="space-y-2">
-                            <Label>Direction</Label>
+                            <Label htmlFor="payout-field-22">Direction</Label>
                             <Select value={adjustmentDirection} onValueChange={(value) => setAdjustmentDirection(value as "CREDIT" | "DEBIT")}>
-                                <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                                <SelectTrigger id="payout-field-22" className="w-full"><SelectValue /></SelectTrigger>
                                 <SelectContent>
                                     <SelectItem value="CREDIT">Credit partner</SelectItem>
                                     <SelectItem value="DEBIT">Debit partner</SelectItem>
@@ -1175,14 +1194,14 @@ export default function PayoutCyclesPage() {
                             </Select>
                         </div>
                         <div className="space-y-2">
-                            <Label>Amount</Label>
-                            <Input type="number" value={adjustmentAmount} onChange={(e) => setAdjustmentAmount(e.target.value)} />
+                            <Label htmlFor="payout-field-23">Amount</Label>
+                            <Input id="payout-field-23" type="number" value={adjustmentAmount} onChange={(e) => setAdjustmentAmount(e.target.value)} />
                         </div>
                     </div>
                     <div className="space-y-2">
-                        <Label>Reason</Label>
+                        <Label htmlFor="payout-field-24">Reason</Label>
                         <Select value={adjustmentReason || "__custom__"} onValueChange={(value) => setAdjustmentReason(value === "__custom__" ? "" : value)}>
-                            <SelectTrigger className="w-full"><SelectValue placeholder="Select reason" /></SelectTrigger>
+                            <SelectTrigger id="payout-field-24" className="w-full"><SelectValue placeholder="Select reason" /></SelectTrigger>
                             <SelectContent>
                                 {(settings.adjustmentReasons ?? []).map((reason) => (
                                     <SelectItem key={reason} value={reason}>{reason}</SelectItem>
@@ -1218,8 +1237,8 @@ export default function PayoutCyclesPage() {
                         change (use Adjust for that).
                     </p>
                     <div className="space-y-2">
-                        <Label>Reason</Label>
-                        <Input
+                        <Label htmlFor="payout-field-25">Reason</Label>
+                        <Input id="payout-field-25"
                             placeholder="e.g. Incorrect GSTIN on original invoice"
                             value={reissueReason}
                             onChange={(e) => setReissueReason(e.target.value)}

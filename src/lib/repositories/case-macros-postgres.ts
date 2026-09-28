@@ -1,5 +1,5 @@
 import { randomUUID } from "crypto";
-import { execute, query, queryOne } from "@/lib/db/query";
+import { execute, query, queryOne, jsonbParam } from "@/lib/db/query";
 import { assertModuleEnabled } from "@/lib/server/module-entitlements";
 import { addCommentToCase } from "@/lib/repositories/cases-postgres";
 import { queueCommunicationForTenant, renderTemplate } from "@/lib/server/communications";
@@ -46,7 +46,7 @@ export async function createCaseMacroForTenant(user: TenantUser, input: Record<s
       randomUUID(), tenantId, String(input.name).trim(), input.description ? String(input.description) : null,
       input.channel ? String(input.channel) : null, String(input.bodyTemplate),
       input.isInternalNote !== false, input.requiresApprovalForExternalReply === true,
-      Array.isArray(input.restrictedToRoleIds) ? input.restrictedToRoleIds : [], user.id, now,
+      jsonbParam(Array.isArray(input.restrictedToRoleIds) ? input.restrictedToRoleIds : []), user.id, now,
     ],
   );
 }
@@ -55,7 +55,10 @@ export async function updateCaseMacroForTenant(user: TenantUser, id: string, inp
   const tenantId = await assertServiceDeskEnabled(user);
   const patch: Record<string, unknown> = { updatedAt: new Date().toISOString(), updatedBy: user.id };
   for (const key of ["name", "description", "channel", "bodyTemplate", "isInternalNote", "requiresApprovalForExternalReply", "restrictedToRoleIds", "isActive"] as const) {
-    if (input[key] !== undefined) patch[key] = input[key];
+    if (input[key] === undefined) continue;
+    // "restrictedToRoleIds" is a jsonb column storing an array -- a raw array parameter would
+    // be misserialized by node-postgres (see jsonbParam's own doc comment in db/query.ts).
+    patch[key] = key === "restrictedToRoleIds" ? jsonbParam(Array.isArray(input[key]) ? input[key] : []) : input[key];
   }
   const columns = Object.keys(patch);
   const assignments = columns.map((column, index) => `"${column}" = $${index + 1}`).join(", ");

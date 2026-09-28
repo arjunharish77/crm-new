@@ -1,5 +1,9 @@
 "use client";
 
+import { ErrorState } from "@/components/common/error-state";
+
+import { PageHeader } from "@/components/layout/page-header";
+
 import * as React from "react";
 import { Download, Plus, RefreshCcw, Trash2 } from "lucide-react";
 import { toast } from "sonner";
@@ -111,29 +115,36 @@ function formatRecordCount(request: ExportRequest) {
 export default function ExportRequestsPage() {
   const [requests, setRequests] = React.useState<ExportRequest[]>([]);
   const [loading, setLoading] = React.useState(true);
+  const [fetchError, setFetchError] = React.useState<string | null>(null);
+  const [rulesError, setRulesError] = React.useState<string | null>(null);
+  const [rulesLoading, setRulesLoading] = React.useState(true);
   const [sensitiveRules, setSensitiveRules] = React.useState<SensitiveFieldRule[]>([]);
   const [newRuleModule, setNewRuleModule] = React.useState(EXPORT_MODULE_OPTIONS[0]);
   const [newRuleField, setNewRuleField] = React.useState("");
 
   const fetchRequests = React.useCallback(async () => {
     setLoading(true);
+    setFetchError(null);
     try {
       const data = await apiFetch<ExportRequest[]>("/exports");
       setRequests(Array.isArray(data) ? data : []);
     } catch (error) {
-      toast.error("Could not load export history");
+      setFetchError("Could not load export history.");
     } finally {
       setLoading(false);
     }
   }, []);
 
   const fetchSensitiveRules = React.useCallback(async () => {
+    setRulesLoading(true);
+    setRulesError(null);
     try {
       const data = await apiFetch<SensitiveFieldRule[]>("/exports/sensitive-fields");
       setSensitiveRules(Array.isArray(data) ? data : []);
     } catch {
-      // Non-admins may not have access to view/manage these; fail silently rather than
-      // showing an error toast for a card most users will never touch.
+      setRulesError("Sensitive field rules are unavailable. Tenant admin access is required.");
+    } finally {
+      setRulesLoading(false);
     }
   }, []);
 
@@ -198,25 +209,19 @@ export default function ExportRequestsPage() {
   const hasRunning = requests.some((item) => item.status === "QUEUED" || item.status === "RUNNING");
 
   return (
-    <div className="flex min-h-0 flex-col gap-5 p-5">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-xl font-bold">Export Requests</h1>
-          <p className="text-sm text-muted-foreground">Track queued exports and download completed files from the modules where they were requested.</p>
-        </div>
-        <Button variant="outline" onClick={fetchRequests} disabled={loading}>
-          <RefreshCcw className="size-4" />
-          Refresh
-        </Button>
-      </div>
+    <div className="flex min-h-0 min-w-0 flex-col gap-5">
+      <PageHeader title="Export Requests" description="Track requested exports and download completed files." actions={
+        <Button variant="outline" onClick={fetchRequests} disabled={loading}><RefreshCcw className="size-4" />Refresh</Button>
+      } />
 
       <Card className="overflow-hidden">
-        <CardHeader className="flex-row items-center justify-between">
+        <CardHeader className="flex-row flex-wrap items-center justify-between gap-2">
           <CardTitle className="text-base">Request History</CardTitle>
           {hasRunning ? <Badge variant="secondary">Worker pending</Badge> : null}
         </CardHeader>
         <CardContent className="p-0">
-          <Table>
+          <p className="px-4 pb-2 text-xs text-muted-foreground lg:hidden">Scroll the table horizontally to see dates and download actions.</p>
+          {fetchError ? <ErrorState description={fetchError} onRetry={fetchRequests} /> : <Table>
             <TableHeader>
               <TableRow>
                 <TableHead>Module</TableHead>
@@ -252,7 +257,7 @@ export default function ExportRequestsPage() {
                       <Badge variant="outline" className={cn("border", STATUS_CLASS[request.status])}>
                         {request.status.replace(/_/g, " ")}
                       </Badge>
-                      {request.error ? <div className="mt-1 text-xs text-destructive">{request.error}</div> : null}
+                      {request.error ? <div className="mt-1 max-w-72 whitespace-normal break-words text-xs text-destructive">{request.error}</div> : null}
                       {metadata.sensitiveColumns?.length ? (
                         <div className="mt-1 text-xs text-amber-700">Includes: {metadata.sensitiveColumns.join(", ")}</div>
                       ) : null}
@@ -290,11 +295,12 @@ export default function ExportRequestsPage() {
                 })
               )}
             </TableBody>
-          </Table>
+          </Table>}
         </CardContent>
       </Card>
 
-      <Card>
+      <details className="min-w-0 rounded-xl border bg-card">
+        <summary className="cursor-pointer p-4 font-semibold">Sensitive field rules</summary>
         <CardHeader>
           <CardTitle className="text-base">Sensitive Field Rules</CardTitle>
           <CardDescription>
@@ -304,7 +310,7 @@ export default function ExportRequestsPage() {
         <CardContent className="space-y-3">
           <div className="flex flex-wrap gap-2">
             <Select value={newRuleModule} onValueChange={setNewRuleModule}>
-              <SelectTrigger className="w-[160px]">
+              <SelectTrigger aria-label="Sensitive field module" className="w-full sm:w-40">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -315,7 +321,7 @@ export default function ExportRequestsPage() {
             </Select>
             <Input
               className="max-w-[220px]"
-              placeholder="Field key, e.g. ssn"
+              aria-label="Sensitive field key" placeholder="Field key, e.g. ssn"
               value={newRuleField}
               onChange={(event) => setNewRuleField(event.target.value)}
             />
@@ -324,14 +330,14 @@ export default function ExportRequestsPage() {
               Add Rule
             </Button>
           </div>
-          {sensitiveRules.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No sensitive fields flagged yet -- every export runs immediately.</p>
+          {rulesLoading ? <p className="text-sm text-muted-foreground">Loading rules…</p> : rulesError ? <ErrorState description={rulesError} onRetry={fetchSensitiveRules} /> : sensitiveRules.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No sensitive field rules configured. Other export approval policies may still apply.</p>
           ) : (
             <div className="flex flex-wrap gap-2">
               {sensitiveRules.map((rule) => (
-                <Badge key={rule.id} variant="outline" className="gap-1.5 pr-1">
+                <Badge key={rule.id} variant="outline" className="max-w-full whitespace-normal break-all gap-1.5 pr-1">
                   {rule.moduleName}.{rule.fieldKey}
-                  <button type="button" onClick={() => handleDeleteSensitiveRule(rule.id)} className="rounded-full p-0.5 hover:bg-muted">
+                  <button type="button" aria-label={`Remove ${rule.moduleName}.${rule.fieldKey} rule`} onClick={() => handleDeleteSensitiveRule(rule.id)} className="rounded-full p-0.5 hover:bg-muted">
                     <Trash2 className="size-3 text-destructive" />
                   </button>
                 </Badge>
@@ -339,7 +345,7 @@ export default function ExportRequestsPage() {
             </div>
           )}
         </CardContent>
-      </Card>
+      </details>
     </div>
   );
 }

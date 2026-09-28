@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { createLeadForTenant, listLeadsForTenant } from "@/lib/server/crm";
 import { requireCurrentUser } from "@/lib/server/auth";
-import { badRequest, serverError, unauthorized } from "@/lib/server/http";
+import { badRequest, conflict, serverError, unauthorized } from "@/lib/server/http";
 
 export async function GET(request: Request) {
   try {
@@ -19,7 +19,7 @@ export async function GET(request: Request) {
       return unauthorized();
     }
 
-    return serverError("Failed to fetch leads");
+    return serverError("Failed to fetch leads", error);
   }
 }
 
@@ -32,11 +32,15 @@ export async function POST(request: Request) {
       return badRequest("Lead name is required");
     }
 
-    const lead = await createLeadForTenant(user, payload);
+    const idempotencyKey = request.headers.get("idempotency-key");
+    const lead = await createLeadForTenant(user, payload, idempotencyKey);
     return NextResponse.json(lead);
   } catch (error) {
     if (error instanceof Error && error.message === "UNAUTHORIZED") {
       return unauthorized();
+    }
+    if (error instanceof Error && error.message === "IDEMPOTENCY_KEY_CONFLICT") {
+      return conflict("This Idempotency-Key was already used with a different request body");
     }
 
     console.error("Lead create failed", error);

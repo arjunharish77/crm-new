@@ -1,5 +1,8 @@
 "use client";
 
+import { PageHeader } from "@/components/layout/page-header";
+import { ErrorState } from "@/components/common/error-state";
+
 import { useEffect, useState } from "react";
 import { Plus, Pencil, Trash2, ClipboardList, ArrowUp, ArrowDown, X } from "lucide-react";
 import { toast } from "sonner";
@@ -53,6 +56,7 @@ const EMPTY_ITEM: PlaybookItemDraft = {
 export default function TaskPlaybooksSettingsPage() {
     const [playbooks, setPlaybooks] = useState<Playbook[]>([]);
     const [loading, setLoading] = useState(true);
+    const [loadError, setLoadError] = useState<string | null>(null);
     const [dialogOpen, setDialogOpen] = useState(false);
     const [editingId, setEditingId] = useState<string | null>(null);
     const [name, setName] = useState("");
@@ -64,9 +68,10 @@ export default function TaskPlaybooksSettingsPage() {
 
     const fetchPlaybooks = () => {
         setLoading(true);
+        setLoadError(null);
         apiFetch("/settings/task-playbooks")
             .then((data) => setPlaybooks(Array.isArray(data) ? data : []))
-            .catch(() => toast.error("Failed to load task playbooks"))
+            .catch(() => setLoadError("Failed to load task playbooks."))
             .finally(() => setLoading(false));
     };
 
@@ -163,22 +168,18 @@ export default function TaskPlaybooksSettingsPage() {
     };
 
     return (
-        <div className="space-y-4">
-            <div className="flex items-center justify-between">
-                <div>
-                    <h1 className="text-lg font-bold">Task Playbooks</h1>
-                    <p className="text-sm text-muted-foreground">
-                        Reusable sets of follow-up tasks you can apply to a Lead or Opportunity in one click, or trigger automatically from an Automation.
-                    </p>
-                </div>
+        <div className="min-w-0 space-y-4">
+            <PageHeader title="Task Playbooks" description="Create reusable sets of follow-up tasks for leads and opportunities." actions={
                 <Button onClick={openCreate}>
                     <Plus className="size-4" />
                     New Playbook
                 </Button>
-            </div>
+            } />
 
             {loading ? (
                 <p className="text-sm text-muted-foreground">Loading...</p>
+            ) : loadError ? (
+                <ErrorState description={loadError} onRetry={fetchPlaybooks} />
             ) : playbooks.length === 0 ? (
                 <Alert variant="info">
                     <Info />
@@ -188,11 +189,11 @@ export default function TaskPlaybooksSettingsPage() {
                 <Card className="overflow-hidden py-0">
                     <div className="divide-y">
                         {playbooks.map((playbook) => (
-                            <div key={playbook.id} className="flex items-start justify-between gap-3 p-4">
+                            <div key={playbook.id} className="flex flex-wrap items-start justify-between gap-3 p-4">
                                 <div className="flex items-start gap-3">
                                     <ClipboardList className="mt-0.5 size-5 text-primary" />
                                     <div>
-                                        <div className="flex items-center gap-2 font-medium">
+                                        <div className="flex flex-wrap items-center gap-2 font-medium">
                                             {playbook.name}
                                             <Badge variant={playbook.isActive ? "default" : "outline"}>{playbook.isActive ? "Active" : "Off"}</Badge>
                                         </div>
@@ -251,13 +252,13 @@ export default function TaskPlaybooksSettingsPage() {
                         <Label>Description (optional)</Label>
                         <Textarea rows={2} value={description} onChange={(e) => setDescription(e.target.value)} />
                     </div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex flex-wrap items-center gap-2">
                         <Switch checked={isActive} onCheckedChange={setIsActive} />
                         <Label>Playbook enabled</Label>
                     </div>
 
                     <div className="space-y-2">
-                        <div className="flex items-center justify-between">
+                        <div className="flex flex-wrap items-center justify-between">
                             <p className="text-sm font-semibold">Tasks in this playbook</p>
                             <Button variant="outline" size="sm" onClick={addItem}>
                                 <Plus className="size-4" />
@@ -267,7 +268,7 @@ export default function TaskPlaybooksSettingsPage() {
                         <div className="space-y-3">
                             {items.map((item, index) => (
                                 <div key={index} className="space-y-2 rounded-lg border p-3">
-                                    <div className="flex items-center justify-between">
+                                    <div className="flex flex-wrap items-center justify-between">
                                         <span className="text-xs font-semibold text-muted-foreground">Task {index + 1}</span>
                                         <div className="flex items-center gap-1">
                                             <Button variant="ghost" size="icon" className="size-6" disabled={index === 0} onClick={() => moveItem(index, -1)}>
@@ -292,7 +293,7 @@ export default function TaskPlaybooksSettingsPage() {
                                         value={item.description}
                                         onChange={(e) => updateItem(index, { description: e.target.value })}
                                     />
-                                    <div className="grid grid-cols-3 gap-2">
+                                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
                                         <div className="space-y-1">
                                             <Label className="text-xs">Priority</Label>
                                             <Select value={item.priority} onValueChange={(value) => updateItem(index, { priority: value as Priority })}>

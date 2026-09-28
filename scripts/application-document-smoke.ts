@@ -1,0 +1,132 @@
+/** Local-only integration smoke. Creates and removes isolated catalog/application fixtures. */
+import { createRequire } from 'module';
+import { randomUUID } from 'crypto';
+import assert from 'node:assert/strict';
+import { createApplication,getApplication,listApplications,saveNumberingRule,transitionApplication,getApplicationWorkflow,uploadApplicationDocument,reviewApplicationDocument,downloadApplicationDocument } from '../src/lib/repositories/applications-postgres';
+import { getPool } from '../src/lib/db/pool';
+const require=createRequire(import.meta.url);
+const d=require('./db-utils.js');
+async function main(){
+ for(const url of [d.directDatabaseUrl(),d.appDatabaseUrl()])assert.ok(['localhost','127.0.0.1'].includes(new URL(url).hostname),'Local database required');
+ const pool=getPool();const q=(sql:string,args:unknown[]=[])=>pool.query(sql,args);
+ const user=(await q('select id,"tenantId" from "User" where email=$1',['admintest@test.com'])).rows[0];assert.ok(user);const actor={...user,isTenantAdmin:true};
+ const lead=(await q('select id from "Lead" where "tenantId"=$1 limit 1',[user.tenantId])).rows[0];assert.ok(lead,'A local applicant fixture is required');
+ const catalog=randomUUID(),university=randomUUID(),program=randomUUID(),stage=randomUUID();let checks=0;
+ const check=(v:unknown)=>{assert.ok(v);checks++;};
+ try{
+ await q('insert into "ProductCatalog" (id,"tenantId",name) values ($1,$2,$3)',[catalog,user.tenantId,'Application smoke']);
+ await q('insert into "University" (id,"tenantId","catalogId",name) values ($1,$2,$3,$4)',[university,user.tenantId,catalog,'Application smoke university']);
+ await q('insert into "Program" (id,"tenantId","universityId",name) values ($1,$2,$3,$4)',[program,user.tenantId,university,'Application smoke program']);
+ await q('insert into "ApplicationStage" (id,"tenantId","programId",name) values ($1,$2,$3,$4)',[stage,user.tenantId,program,'New']);
+ const rule=await saveNumberingRule(actor,{universityId:university,prefix:'SMOKE-{FY}-'});
+ check(rule.prefix==='SMOKE-{FY}-');
+ const edited=await saveNumberingRule(actor,{universityId:university,prefix:'SMOKE-{YYYY}-'});check(edited.id===rule.id);
+ const input={leadId:lead.id,programId:program,stageId:stage,requestKey:randomUUID()};
+ const duplicates=await Promise.all(Array.from({length:6},()=>createApplication(actor,input)));
+ check(new Set(duplicates.map(r=>r.record.id)).size===1);check(duplicates.filter(r=>!r.replayed).length===1);
+ const distinct=await Promise.all(Array.from({length:6},()=>createApplication(actor,{...input,requestKey:randomUUID()})));
+ check(new Set(distinct.map(r=>r.record.applicationNumber)).size===6);check(distinct.every(r=>r.record.applicationNumber.startsWith('SMOKE-')));
+ await assert.rejects(()=>createApplication(actor,{...input,courseId:'invalid'}),(e:any)=>e.status===409);checks++;
+ await assert.rejects(()=>createApplication(actor,{...input,requestKey:randomUUID(),stageId:'invalid'}),(e:any)=>e.status===400);checks++;
+ await assert.rejects(()=>createApplication(actor,{...input,requestKey:randomUUID(),leadId:'invalid'}),(e:any)=>e.status===400);checks++;
+ const id=duplicates[0].record.id;
+ check(await getApplication({...actor,tenantId:randomUUID()},id)===null);
+ const own={...user,id:randomUUID(),role:{permissions:{recordAccess:'OWN',modules:{applications:{read:true}}}}};
+ check(await getApplication(own,id)===null);check((await listApplications(own,'Application smoke',1)).total===0);
+ await assert.rejects(()=>createApplication(own,input),(e:any)=>e.status===403);checks++;
+ check(Number((await q('select count(*) from "ApplicationStageHistory" where "applicationId"=$1',[id])).rows[0].count)===1);
+ check(Number((await q('select count(*) from "AuditLog" where "entityId"=$1',[id])).rows[0].count)===1);
+
+ const guarded=randomUUID(),closed=randomUUID(),checklist=randomUUID(),document=randomUUID();
+ await q('insert into "ApplicationStage" (id,"tenantId","programId",name,"requiresVerifiedDocuments") values ($1,$2,$3,$4,true)',[guarded,user.tenantId,program,'Review']);
+ await q('insert into "ApplicationStage" (id,"tenantId","programId",name,"isClosed") values ($1,$2,$3,$4,true)',[closed,user.tenantId,program,'Closed']);
+ await q('insert into "ApplicationChecklist" (id,"tenantId","programId",name) values ($1,$2,$3,$4)',[checklist,user.tenantId,program,'Transcript']);
+ const change={expectedStageId:stage,stageId:guarded,reason:'Document review completed'};
+ const status=async()=>(await getApplicationWorkflow(actor,id)).checklist[0].status;
+ check(await status()==='MISSING');
+ await assert.rejects(()=>transitionApplication(actor,id,change),(e:any)=>e.status===409);checks++;
+ await assert.rejects(()=>createApplication(actor,{...input,requestKey:randomUUID(),stageId:guarded}),(e:any)=>e.status===400);checks++;
+ await q('insert into "ApplicationDocument" (id,"tenantId","applicationId","checklistItemId",name,"uploadStatus","fileStoragePath") values ($1,$2,$3,$4,$5,$6,$7)',[document,user.tenantId,id,checklist,'Test transcript','UPLOADED','test-only/no-real-file']);
+ check(await status()==='PENDING');
+ await q('update "ApplicationDocument" set "verificationStatus"=$2,"rejectionReason"=$3 where id=$1',[document,'REJECTED','Unreadable']);
+ check(await status()==='REJECTED');
+ await assert.rejects(()=>transitionApplication(actor,id,change),(e:any)=>e.status===409);checks++;
+ await q('update "ApplicationDocument" set "verificationStatus"=$2,"reviewerId"=$3,"verifiedAt"=now(),"expiryDate"=current_date-1 where id=$1',[document,'VERIFIED',user.id]);
+ check(await status()==='EXPIRED');
+ await assert.rejects(()=>transitionApplication(actor,id,change),(e:any)=>e.status===409);checks++;
+ await q('update "ApplicationDocument" set "expiryDate"=current_date+1 where id=$1',[document]);
+ check(await status()==='VERIFIED');
+ const replacement=randomUUID();
+ await q(`insert into "ApplicationDocument" (id,"tenantId","applicationId","checklistItemId",name,"uploadStatus","verificationStatus","updatedAt") values ($1,$2,$3,$4,$5,$6,$7,now()+interval '1 second')`,[replacement,user.tenantId,id,checklist,'Replacement','UPLOADED','REJECTED']);
+ check(await status()==='REJECTED');
+ await assert.rejects(()=>transitionApplication(actor,id,change),(e:any)=>e.status===409);checks++;
+ await q(`update "ApplicationDocument" set "updatedAt"=now()+interval '2 seconds' where id=$1`,[document]);
+ check(await status()==='REJECTED');
+ await q('delete from "ApplicationDocument" where id=$1',[replacement]);
+ await assert.rejects(()=>transitionApplication({...actor,tenantId:randomUUID()},id,change),(e:any)=>e.status===404);checks++;
+ await assert.rejects(()=>transitionApplication(own,id,change),(e:any)=>e.status===403);checks++;
+ const restricted={...user,role:{permissions:{recordAccess:'OWN',modules:{applications:{read:true,update:true}}}}};
+ await assert.rejects(()=>transitionApplication(restricted,id,{...change,stageId:closed}),(e:any)=>e.status===403);checks++;
+ const attempts=await Promise.allSettled(Array.from({length:6},()=>transitionApplication(actor,id,change)));
+ for(const result of attempts)if(result.status==='rejected')throw result.reason;
+ const moves=attempts.map(result=>(result as PromiseFulfilledResult<any>).value);
+ check(moves.every(r=>r.stageId===guarded));
+ check(Number((await q('select count(*) from "ApplicationStageHistory" where "applicationId"=$1',[id])).rows[0].count)===2);
+ check(Number((await q('select count(*) from "AuditLog" where "entityId"=$1',[id])).rows[0].count)===2);
+ await assert.rejects(()=>transitionApplication(actor,id,{...change,stageId:closed}),(e:any)=>e.status===409);checks++;
+ await assert.rejects(()=>transitionApplication(actor,id,{...change,expectedStageId:guarded,stageId:randomUUID()}),(e:any)=>e.status===400);checks++;
+ await transitionApplication(actor,id,{expectedStageId:guarded,stageId:closed,reason:'Applicant withdrew'});
+ await assert.rejects(()=>transitionApplication(restricted,id,{expectedStageId:closed,stageId:stage,reason:'Reopen application'}),(e:any)=>e.status===403);checks++;
+ const reopened=await transitionApplication(actor,id,{expectedStageId:closed,stageId:stage,reason:'Authorized reopening'});check(reopened.stageId===stage);
+
+ const upload={checklistItemId:checklist,filename:'transcript.pdf',requestKey:randomUUID()};
+ const bytes=Buffer.from('%PDF-1.4\nSynthetic application test file\n%%EOF');
+ const uploaded=await Promise.all(Array.from({length:4},()=>uploadApplicationDocument(actor,id,upload,bytes)));
+ const fileDocument=uploaded[0].id;check(new Set(uploaded.map(d=>d.id)).size===1);
+ check((await downloadApplicationDocument(actor,id,fileDocument)).data.equals(bytes));
+ await assert.rejects(()=>uploadApplicationDocument(actor,id,{...upload,filename:'different.pdf'},bytes),(e:any)=>e.status===409);checks++;
+ await assert.rejects(()=>uploadApplicationDocument(actor,id,{...upload,requestKey:randomUUID()},Buffer.from('invalid')),(e:any)=>e.status===400);checks++;
+ await assert.rejects(()=>downloadApplicationDocument({...actor,tenantId:randomUUID()},id,fileDocument),(e:any)=>e.status===404);checks++;
+ await assert.rejects(()=>reviewApplicationDocument(restricted,id,fileDocument,{version:0,status:'VERIFIED'}),(e:any)=>e.status===403);checks++;
+ const review={version:0,status:'VERIFIED',comments:'Transcript reviewed'};
+ const reviews=await Promise.allSettled([reviewApplicationDocument(actor,id,fileDocument,review),reviewApplicationDocument(actor,id,fileDocument,review)]);
+ check(reviews.filter(r=>r.status==='fulfilled').length===1);check(reviews.filter(r=>r.status==='rejected'&&r.reason.status===409).length===1);
+ check((await getApplicationWorkflow(actor,id)).checklist[0].status==='VERIFIED');
+ const replacementFile=await uploadApplicationDocument(actor,id,{...upload,requestKey:randomUUID()},bytes);
+ check(replacementFile.id!==fileDocument);check((await getApplicationWorkflow(actor,id)).checklist[0].status==='PENDING');
+ await assert.rejects(()=>transitionApplication(actor,id,change),(e:any)=>e.status===409);checks++;
+ await assert.rejects(()=>reviewApplicationDocument(actor,id,fileDocument,{version:1,status:'REJECTED',rejectionReason:'Old file'}),(e:any)=>e.status===409);checks++;
+ await reviewApplicationDocument(actor,id,replacementFile.id,{version:0,status:'REJECTED',rejectionReason:'Missing pages',comments:'Upload all pages'});
+ check((await getApplicationWorkflow(actor,id)).checklist[0].status==='REJECTED');
+ const meta=(await getApplicationWorkflow(actor,id)).checklist[0];check(!('fileStoragePath' in meta));check(meta.comments==='Upload all pages');
+
+ if(process.env.CRM_TEST_API_URL&&process.env.CRM_TEST_PASSWORD){
+ const base=new URL(process.env.CRM_TEST_API_URL);assert.ok(['localhost','127.0.0.1'].includes(base.hostname));
+ const login=await fetch(new URL('/api/auth/login',base),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:'admintest@test.com',password:process.env.CRM_TEST_PASSWORD})});check(login.status===200);
+ const cookie=login.headers.getSetCookie().map(value=>value.split(';')[0]).join('; ');
+ const httpId=distinct[0].record.id;
+ const path=`/api/applications/${httpId}/documents`;
+ const params=new URLSearchParams({checklistItemId:checklist,filename:'http-transcript.pdf',requestKey:randomUUID()});
+ const send=()=>fetch(new URL(path+'?'+params,base),{method:'POST',headers:{Cookie:cookie,'Content-Type':'application/octet-stream'},body:bytes});
+ const response=await send();if(response.status!==201)throw Error(`HTTP upload ${response.status}: ${await response.text()}`);check(response.status===201);const document=await response.json();
+ const replay=await send();check(replay.status===201);check((await replay.json()).id===document.id);
+ const download=await fetch(new URL(path+'/'+document.id,base),{headers:{Cookie:cookie}});check(download.status===200);check(download.headers.get('X-Content-Type-Options')==='nosniff');check(download.headers.get('Cache-Control')==='private, no-store');check(Buffer.from(await download.arrayBuffer()).equals(bytes));
+ const decision=await fetch(new URL(path+'/'+document.id,base),{method:'PATCH',headers:{Cookie:cookie,'Content-Type':'application/json'},body:JSON.stringify({version:0,status:'VERIFIED',comments:'HTTP verified'})});check(decision.status===200);
+ const unauth=await fetch(new URL(path+'/'+document.id,base));check(unauth.status===401);
+ const large=await fetch(new URL(path+'?'+params,base),{method:'POST',headers:{Cookie:cookie,'Content-Type':'application/octet-stream'},body:Buffer.alloc(5*1024*1024+1)});check(large.status===413);
+ }
+ console.log(JSON.stringify({checks,status:'passed',concurrentSameRequest:6,concurrentDistinctRequests:6}));
+ }finally{
+ const stored=(await q('select f.id,f."storageKey" from "FileObject" f join "ApplicationDocument" d on d."fileObjectId"=f.id join "Application" a on a.id=d."applicationId" where a."programId"=$1',[program])).rows;
+ await q('delete from "AuditLog" where "tenantId"=$1 and "entityId" in (select d.id from "ApplicationDocument" d join "Application" a on a.id=d."applicationId" where a."programId"=$2)',[user.tenantId,program]);
+ await q('delete from "AuditLog" where "tenantId"=$1 and ("entityId" in (select id from "Application" where "programId"=$2) or "entityId" in (select id from "ApplicationNumberRule" where "universityId"=$3))',[user.tenantId,program,university]);
+ await q('delete from "ApplicationStageHistory" where "applicationId" in (select id from "Application" where "programId"=$1)',[program]);
+ await q('delete from "Application" where "programId"=$1',[program]);
+ await q('delete from "ApplicationNumberRule" where "universityId"=$1',[university]);
+ await q('delete from "ApplicationStage" where "programId"=$1',[program]);
+ await q('delete from "Program" where id=$1',[program]);await q('delete from "University" where id=$1',[university]);await q('delete from "ProductCatalog" where id=$1',[catalog]);
+ for(const file of stored){await q('delete from "FileObject" where id=$1',[file.id]);const {deletePrivateFile}=await import('../src/lib/storage/file-storage');await deletePrivateFile(file.storageKey);}
+ await pool.end();
+ }
+}
+main().catch(e=>{console.error(e.stack);process.exitCode=1;});

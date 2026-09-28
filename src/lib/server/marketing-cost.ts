@@ -119,7 +119,7 @@ export async function getScopeCostSummary(user: TenantUser, scopeType: "JOURNEY"
           `select coalesce(sum(o.amount), 0)::float as total, count(distinct o.id)::int as count
            from "MarketingAttributionTouch" t
            join "Opportunity" o on o.id = t."recordId" and t."recordType" = 'OPPORTUNITY'
-           join "OpportunityStage" s on s.id = o."stageId"
+           join "StageDefinition" s on s.id = o."stageId"
            where t."tenantId" = $1 and t."journeyId" = $2 and s."isWon" = true`,
           [tenantId, scopeId],
         )

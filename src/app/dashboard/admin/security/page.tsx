@@ -1,6 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { PageHeader } from "@/components/layout/page-header";
+
+import { useEffect, useId, useState } from "react";
 import { toast } from "sonner";
 import { Edit, Loader2, Lock, Save, Shield, X } from "lucide-react";
 import { apiFetch } from "@/lib/api";
@@ -60,10 +62,12 @@ interface NumberFieldProps {
 }
 
 function NumberField({ label, value, disabled, onChange }: NumberFieldProps) {
+    const id = useId();
     return (
         <div className="space-y-2">
-            <Label>{label}</Label>
+            <Label htmlFor={id}>{label}</Label>
             <Input
+                id={id}
                 type="number"
                 value={Number.isFinite(value) ? value : 0}
                 onChange={(event) => onChange(Number.parseInt(event.target.value, 10) || 0)}
@@ -81,10 +85,11 @@ interface PolicySwitchProps {
 }
 
 function PolicySwitch({ label, checked, disabled, onCheckedChange }: PolicySwitchProps) {
+    const id = useId();
     return (
         <div className="flex items-center justify-between gap-4 rounded-md border border-border px-3 py-2">
-            <Label className="text-sm font-medium leading-5">{label}</Label>
-            <Switch checked={checked} onCheckedChange={onCheckedChange} disabled={disabled} />
+            <Label htmlFor={id} className="min-w-0 text-sm font-medium leading-5">{label}</Label>
+            <Switch id={id} checked={checked} onCheckedChange={onCheckedChange} disabled={disabled} />
         </div>
     );
 }
@@ -94,18 +99,20 @@ export default function SecurityPolicyPage() {
     const [selectedPolicy, setSelectedPolicy] = useState<SecurityPolicy | null>(null);
     const [editing, setEditing] = useState(false);
     const [loading, setLoading] = useState(true);
+    const [loadError, setLoadError] = useState(false);
     const [saving, setSaving] = useState(false);
-    const { token, user } = useAuth();
+    const { isAuthenticated, user } = useAuth();
     const isPlatformAdmin = user?.isPlatformAdmin;
 
     useEffect(() => {
-        if (token && isPlatformAdmin) {
+        if (isAuthenticated && isPlatformAdmin) {
             fetchPolicies();
         }
-    }, [token, isPlatformAdmin]);
+    }, [isAuthenticated, isPlatformAdmin]);
 
     const fetchPolicies = async () => {
         setLoading(true);
+        setLoadError(false);
         try {
             const data = await apiFetch("/platform-admin/security/policies");
             setPolicies(data);
@@ -113,7 +120,7 @@ export default function SecurityPolicyPage() {
                 setSelectedPolicy(data[0]);
             }
         } catch (error) {
-            toast.error("Failed to load policies");
+            setLoadError(true);
         } finally {
             setLoading(false);
         }
@@ -162,15 +169,11 @@ export default function SecurityPolicyPage() {
     }
 
     return (
-        <div className="mx-auto max-w-[1200px] px-4 py-4 md:px-6">
-            <div className="flex flex-col gap-4 border-b border-border pb-4 md:flex-row md:items-center md:justify-between">
-                <div>
-                    <h1 className="text-xl font-semibold tracking-normal text-foreground">Security Policies</h1>
-                    <p className="mt-1 text-sm text-muted-foreground">Configure security settings for tenants.</p>
-                </div>
-                {editing ? (
+        <div className="min-w-0">
+            <PageHeader title="Security Policies" description="Configure security settings for tenants." actions={
+                selectedPolicy && !loadError && (editing ? (
                     <div className="flex flex-wrap gap-2">
-                        <Button variant="outline" onClick={() => setEditing(false)}>
+                        <Button variant="outline" disabled={saving} onClick={() => { setSelectedPolicy(policies.find((policy) => (policy.tenantId || "global") === (selectedPolicy?.tenantId || "global")) ?? null); setEditing(false); }}>
                             <X className="h-4 w-4" />
                             Cancel
                         </Button>
@@ -184,20 +187,23 @@ export default function SecurityPolicyPage() {
                         <Edit className="h-4 w-4" />
                         Edit Policy
                     </Button>
-                )}
-            </div>
+                ))
+            } />
+            {loadError && <div role="alert" className="rounded-lg border p-4 text-sm">Unable to load security policies. <Button variant="outline" size="sm" onClick={fetchPolicies}>Retry</Button></div>}
+            {!loadError && !selectedPolicy && <p className="text-sm text-muted-foreground">No security policies found.</p>}
 
             {policies.length > 1 && (
                 <div className="mt-4 max-w-xs space-y-1.5">
-                    <Label className="text-xs font-normal text-muted-foreground">Policy</Label>
+                    <Label htmlFor="security-policy" className="text-xs font-normal text-muted-foreground">Policy</Label>
                     <Select
+                        disabled={editing || saving}
                         value={selectedPolicy?.tenantId || "global"}
                         onValueChange={(value) => {
                             const next = policies.find((p) => (p.tenantId || "global") === value);
                             if (next) { setSelectedPolicy(next); setEditing(false); }
                         }}
                     >
-                        <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                        <SelectTrigger id="security-policy" className="w-full"><SelectValue /></SelectTrigger>
                         <SelectContent>
                             {policies.map((p) => (
                                 <SelectItem key={p.tenantId || "global"} value={p.tenantId || "global"}>
@@ -209,8 +215,8 @@ export default function SecurityPolicyPage() {
                 </div>
             )}
 
-            {selectedPolicy && (
-                <div className="mt-4 grid gap-4 lg:grid-cols-2">
+            {selectedPolicy && !loadError && (
+                <div className="mt-4 grid gap-4 2xl:grid-cols-2">
                     <Card className="h-full gap-4 rounded-lg py-5">
                         <CardHeader className="gap-1 px-5">
                             <CardTitle className="flex items-center gap-2 text-base">
@@ -340,13 +346,13 @@ export default function SecurityPolicyPage() {
                         </CardHeader>
                         <CardContent className="space-y-4 px-5">
                             <div className="space-y-1.5">
-                                <Label className="text-sm">Enforcement Mode</Label>
+                                <Label htmlFor="security-mfa-mode" className="text-sm">Enforcement Mode</Label>
                                 <Select
                                     value={selectedPolicy.mfaEnforcementMode}
                                     onValueChange={(value) => updateField("mfaEnforcementMode", value as SecurityPolicy["mfaEnforcementMode"])}
                                     disabled={!editing}
                                 >
-                                    <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                                    <SelectTrigger id="security-mfa-mode" className="w-full"><SelectValue /></SelectTrigger>
                                     <SelectContent>
                                         <SelectItem value="DISABLED">Disabled -- MFA cannot be enabled by users</SelectItem>
                                         <SelectItem value="OPTIONAL">Optional -- users may enroll if they choose</SelectItem>
@@ -371,12 +377,12 @@ export default function SecurityPolicyPage() {
                         </CardContent>
                     </Card>
 
-                    <Card className="gap-4 rounded-lg py-5 lg:col-span-2">
+                    <Card className="gap-4 rounded-lg py-5 2xl:col-span-2">
                         <CardHeader className="gap-1 px-5">
                             <CardTitle className="text-base">Audit & Compliance</CardTitle>
                             <CardDescription>Saved, but not yet enforced -- audit logging already runs unconditionally app-wide today, and there&apos;s no IP-allowlist mechanism yet for this to gate.</CardDescription>
                         </CardHeader>
-                        <CardContent className="grid gap-3 px-5 md:grid-cols-2">
+                        <CardContent className="grid gap-3 px-5 2xl:grid-cols-2">
                             <PolicySwitch
                                 label="Enforce Audit Logging"
                                 checked={selectedPolicy.enforceAuditLogging}
@@ -392,7 +398,7 @@ export default function SecurityPolicyPage() {
                         </CardContent>
                     </Card>
 
-                    <Card className="gap-4 rounded-lg py-5 lg:col-span-2">
+                    <Card className="gap-4 rounded-lg py-5 2xl:col-span-2">
                         <CardHeader className="gap-1 px-5">
                             <CardTitle className="text-base">Privileged Action Controls</CardTitle>
                             <CardDescription>
@@ -410,7 +416,7 @@ export default function SecurityPolicyPage() {
                         </CardContent>
                     </Card>
 
-                    <Card className="gap-4 rounded-lg py-5 lg:col-span-2">
+                    <Card className="gap-4 rounded-lg py-5 2xl:col-span-2">
                         <CardHeader className="gap-1 px-5">
                             <CardTitle className="text-base">Reassignment Governance</CardTitle>
                             <CardDescription>

@@ -17,6 +17,6 @@ export async function GET(
       return unauthorized();
     }
 
-    return serverError("Failed to fetch governance history");
+    return serverError("Failed to fetch governance history", error);
   }
 }

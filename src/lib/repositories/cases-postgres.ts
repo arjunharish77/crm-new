@@ -1,5 +1,5 @@
 import { randomUUID } from "crypto";
-import { execute, query, queryOne, type Queryable } from "@/lib/db/query";
+import { execute, query, queryOne, queryAsSystem, type Queryable } from "@/lib/db/query";
 import { withTransaction, type TransactionClient } from "@/lib/db/transaction";
 import { DatabaseError } from "@/lib/db/errors";
 import { assertModuleEnabled, isModuleEnabledForTenant } from "@/lib/server/module-entitlements";
@@ -783,11 +783,13 @@ export async function resumeCaseSla(user: TenantUser, caseId: string) {
 // doesn't reuse the PrivilegedActionRequest mechanism the way those two do).
 // Paused cases are skipped entirely from both passes -- the whole point of pausing is that the
 // clock, and therefore any breach/escalation consequence of it, is stopped.
+// WP07 (F04): BACKGROUND_JOB, disposition B -- worker-invoked recurring job; both discovery
+// queries below (warning/breach candidates) run across every tenant at once.
 export async function processCaseSlaEscalations(limit = 200, now = new Date()) {
   const nowIso = now.toISOString();
   const warningThresholdIso = new Date(now.getTime() + 60 * 60_000).toISOString(); // due within the next hour
 
-  const warningCandidates = await query<any>(
+  const warningCandidates = await queryAsSystem<any>(
     `select c.* from "Case" c
      join "CaseStatus" s on s."tenantId" = c."tenantId" and s.id = c."statusId"
      where s."isClosedStatus" = false and c."slaPausedAt" is null and c."slaWarningFiredAt" is null
@@ -805,7 +807,7 @@ export async function processCaseSlaEscalations(limit = 200, now = new Date()) {
     await emitCaseBusEvent(caseRow.tenantId, "CASE_SLA_WARNING", caseRow);
   }
 
-  const breachCandidates = await query<any>(
+  const breachCandidates = await queryAsSystem<any>(
     `select c.* from "Case" c
      join "CaseStatus" s on s."tenantId" = c."tenantId" and s.id = c."statusId"
      where s."isClosedStatus" = false and c."slaPausedAt" is null and c."slaBreachedFiredAt" is null
@@ -905,9 +907,11 @@ export async function getCaseCommunicationHistoryForTenant(user: TenantUser, cas
 // restarts, so instead this simply re-notifies on every run for cases still unassigned --
 // acceptable for a low-volume daily-ish alert, and simpler than adding another timestamp column
 // purely to suppress a repeat notification).
+// WP07 (F04): BACKGROUND_JOB, disposition B -- worker-invoked recurring job, discovers stale
+// unassigned cases across every tenant at once.
 export async function alertStaleUnassignedCases(staleHours = 24, limit = 100) {
   const thresholdIso = new Date(Date.now() - staleHours * 60 * 60_000).toISOString();
-  const staleCases = await query<any>(
+  const staleCases = await queryAsSystem<any>(
     `select c.*, q.name as "queueName" from "Case" c
      join "CaseStatus" s on s."tenantId" = c."tenantId" and s.id = c."statusId"
      left join "CaseQueue" q on q."tenantId" = c."tenantId" and q.id = c."queueId"

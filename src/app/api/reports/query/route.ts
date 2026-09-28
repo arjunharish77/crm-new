@@ -13,7 +13,7 @@ export async function GET(request: Request) {
     return NextResponse.json({ objects: getReportQueryCatalog() });
   } catch (error) {
     if (error instanceof Error && error.message === "UNAUTHORIZED") return unauthorized();
-    return serverError("Failed to fetch report query catalog");
+    return serverError("Failed to fetch report query catalog", error);
   }
 }
 

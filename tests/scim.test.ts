@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const dbMocks = vi.hoisted(() => ({ query: vi.fn(), queryOne: vi.fn(), execute: vi.fn() }));
+const dbMocks = vi.hoisted(() => ({ query: vi.fn(), queryOne: vi.fn(), execute: vi.fn(), jsonbParam: (v: unknown) => v }));
 const adminMocks = vi.hoisted(() => ({
   createTenantScopedUser: vi.fn(),
   updateTenantScopedUser: vi.fn(),

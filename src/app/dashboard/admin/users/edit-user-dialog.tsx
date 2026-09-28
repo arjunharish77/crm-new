@@ -59,14 +59,15 @@ type EditUserFormValues = z.infer<typeof formSchema>;
 
 interface FieldProps {
     label: string;
+    htmlFor?: string;
     error?: string;
     children: ReactNode;
 }
 
-function Field({ label, error, children }: FieldProps) {
+function Field({ label, htmlFor, error, children }: FieldProps) {
     return (
         <div className="space-y-2">
-            <Label>{label}</Label>
+            <Label htmlFor={htmlFor}>{label}</Label>
             {children}
             {error ? <p className="text-xs text-destructive">{error}</p> : null}
         </div>
@@ -271,13 +272,13 @@ export function EditUserDialog({
             }
         >
             <form id="edit-user-form" onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-                <div className="grid gap-4 sm:grid-cols-2">
+                <div className="grid min-w-0 gap-4 sm:grid-cols-2">
                     <Controller
                         name="name"
                         control={control}
                         render={({ field }) => (
-                            <Field label="Full Name" error={errors.name?.message}>
-                                <Input {...field} />
+                            <Field htmlFor="edit-full-name" label="Full Name" error={errors.name?.message}>
+                                <Input id="edit-full-name" {...field} />
                             </Field>
                         )}
                     />
@@ -285,8 +286,8 @@ export function EditUserDialog({
                         name="email"
                         control={control}
                         render={({ field }) => (
-                            <Field label="Email">
-                                <Input {...field} disabled />
+                            <Field htmlFor="edit-email" label="Email">
+                                <Input id="edit-email" {...field} disabled />
                             </Field>
                         )}
                     />
@@ -296,9 +297,9 @@ export function EditUserDialog({
                     name="roleId"
                     control={control}
                     render={({ field }) => (
-                        <Field label="Role" error={errors.roleId?.message}>
+                        <Field htmlFor="edit-role" label="Role" error={errors.roleId?.message}>
                             <Select value={field.value} onValueChange={field.onChange}>
-                                <SelectTrigger>
+                                <SelectTrigger id="edit-role" className="w-full">
                                     <SelectValue placeholder="Select role" />
                                 </SelectTrigger>
                                 <SelectContent>
@@ -317,12 +318,12 @@ export function EditUserDialog({
                     name="permissionTemplateId"
                     control={control}
                     render={({ field }) => (
-                        <Field label="Permission Template Override">
+                        <Field htmlFor="edit-permission-template-override" label="Permission Template Override">
                             <Select
                                 value={field.value || NONE_VALUE}
                                 onValueChange={(value) => field.onChange(value === NONE_VALUE ? "" : value)}
                             >
-                                <SelectTrigger>
+                                <SelectTrigger id="edit-permission-template-override" className="w-full">
                                     <SelectValue />
                                 </SelectTrigger>
                                 <SelectContent>
@@ -338,17 +339,17 @@ export function EditUserDialog({
                     )}
                 />
 
-                <div className="grid gap-4 sm:grid-cols-2">
+                <div className="grid min-w-0 gap-4 sm:grid-cols-2">
                     <Controller
                         name="teamId"
                         control={control}
                         render={({ field }) => (
-                            <Field label="Team">
+                            <Field htmlFor="edit-team" label="Team">
                                 <Select
                                     value={field.value || NONE_VALUE}
                                     onValueChange={(value) => field.onChange(value === NONE_VALUE ? "" : value)}
                                 >
-                                    <SelectTrigger>
+                                    <SelectTrigger id="edit-team" className="w-full">
                                         <SelectValue />
                                     </SelectTrigger>
                                     <SelectContent>
@@ -367,12 +368,12 @@ export function EditUserDialog({
                         name="managerId"
                         control={control}
                         render={({ field }) => (
-                            <Field label="Manager">
+                            <Field htmlFor="edit-manager" label="Manager">
                                 <Select
                                     value={field.value || NONE_VALUE}
                                     onValueChange={(value) => field.onChange(value === NONE_VALUE ? "" : value)}
                                 >
-                                    <SelectTrigger>
+                                    <SelectTrigger id="edit-manager" className="w-full">
                                         <SelectValue />
                                     </SelectTrigger>
                                     <SelectContent>
@@ -406,7 +407,7 @@ export function EditUserDialog({
                 />
 
                 <div className="rounded-lg border border-border p-4">
-                    <div className="mb-4 flex items-center justify-between gap-3">
+                    <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
                         <h2 className="text-sm font-semibold">Assignment Skills</h2>
                         <Button type="button" size="sm" variant="outline" onClick={() => append({ category: "", values: [] })}>
                             <Plus className="h-4 w-4" />

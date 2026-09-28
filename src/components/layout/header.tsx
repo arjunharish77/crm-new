@@ -13,7 +13,7 @@ import {
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
-import { Keyboard, LogOut, Plus, Search, Settings } from 'lucide-react';
+import { Keyboard, LogOut, Menu, Plus, Search, Settings } from 'lucide-react';
 import { useAuth } from '@/providers/auth-provider';
 import { useFeature } from '@/components/auth/feature-gate';
 import { NotificationBell } from './notification-bell';
@@ -25,7 +25,7 @@ import { CreateActivityDialog } from '@/app/dashboard/activities/create-activity
 import { contextualRecordDefaults } from '@/lib/contextual-defaults';
 import { useRegisterShortcut, useKeyboardShortcutsHelp } from '@/lib/keyboard-shortcuts';
 
-export function Header() {
+export function Header({ onToggleNavigation, navigationOpen }: { onToggleNavigation: () => void; navigationOpen: boolean }) {
     const { user, logout } = useAuth();
     const router = useRouter();
     const pathname = usePathname();
@@ -78,22 +78,23 @@ export function Header() {
     const initials = user?.email?.substring(0, 2).toUpperCase() || 'U';
 
     return (
-        <header className="sticky top-0 z-50 border-b bg-background text-foreground">
-            <div className="flex min-h-16 items-center justify-between px-4 md:px-8">
-                <div className="flex grow items-center gap-4">
-                    <div className="font-bold text-primary md:hidden">
-                        Unnatify
-                    </div>
+        <header className="border-b bg-background text-foreground">
+            <div className="flex min-h-14 min-w-0 flex-wrap items-center justify-between gap-2 px-3 py-2 md:px-6">
+                <div className="flex min-w-0 flex-1 items-center gap-2">
+                    <Button id="mobile-navigation-trigger" variant="ghost" size="icon" className="shrink-0 md:hidden" aria-label="Open navigation" aria-expanded={navigationOpen} onClick={onToggleNavigation}>
+                        <Menu className="size-5" />
+                    </Button>
 
                     {/* Global Search */}
-                    <div className="mx-0 flex grow justify-center md:mx-4">
+                    <div className="flex min-w-0 flex-1 md:mr-4">
                         <button
                             type="button"
+                            aria-label="Search or run a command"
                             onClick={() => setSearchOpen(true)}
-                            className="flex w-full max-w-[600px] items-center rounded-full border border-transparent bg-muted px-4 py-2 text-left transition-colors hover:bg-accent/70 focus-visible:border-primary focus-visible:bg-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/20"
+                            className="flex h-10 min-w-0 w-full max-w-[600px] items-center rounded-lg border border-transparent bg-muted px-4 py-2 text-left transition-colors hover:bg-accent/70 focus-visible:border-primary focus-visible:bg-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/20"
                         >
-                            <Search className="mr-2 size-5 text-muted-foreground" />
-                            <span className="grow text-[0.9375rem] text-muted-foreground">
+                            <Search className="size-5 shrink-0 text-muted-foreground sm:mr-2" />
+                            <span className="hidden min-w-0 flex-1 truncate text-sm text-muted-foreground sm:block">
                                 Search or run a command...
                             </span>
                             <span className="hidden shrink-0 rounded-md border bg-background px-1.5 py-0.5 text-xs font-medium text-muted-foreground sm:inline-block">
@@ -103,13 +104,13 @@ export function Header() {
                     </div>
                 </div>
 
-                <div className="flex items-center gap-1">
+                <div className="flex min-w-0 max-w-full flex-wrap items-center gap-1">
                     {/* Quick Create */}
                     <DropdownMenu open={createMenuOpen} onOpenChange={setCreateMenuOpen}>
                         <DropdownMenuTrigger asChild>
-                            <Button className="hidden sm:inline-flex">
+                            <Button size="sm" className="px-2 sm:px-3" aria-label="Create record">
                                 <Plus className="size-4" />
-                                Create
+                                <span className="hidden sm:inline">Create</span>
                             </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
@@ -140,7 +141,7 @@ export function Header() {
 
                     <Tooltip>
                         <TooltipTrigger asChild>
-                            <Button variant="ghost" size="icon" onClick={openHelp} aria-label="Keyboard shortcuts">
+                            <Button variant="ghost" size="icon" className="hidden lg:inline-flex" onClick={openHelp} aria-label="Keyboard shortcuts">
                                 <Keyboard className="size-4" />
                             </Button>
                         </TooltipTrigger>
@@ -149,23 +150,21 @@ export function Header() {
 
                     <NotificationBell />
 
-                    <div className="mx-2 h-8 w-px bg-border" />
+                    <div className="mx-1 hidden h-8 w-px bg-border md:block" />
 
                     <div className="ml-1 flex items-center gap-3">
-                        <div className="hidden text-right md:block">
+                        <div className="hidden max-w-36 truncate text-right xl:block">
                             <div className="text-sm font-semibold">
                                 {user?.email?.split('@')[0]}
                             </div>
-                            <div className="text-xs text-muted-foreground">
-                                {user?.tenantId?.substring(0, 8)}...
-                            </div>
+
                         </div>
 
                         <DropdownMenu>
                             <Tooltip>
                                 <TooltipTrigger asChild>
                                     <DropdownMenuTrigger asChild>
-                                        <button className="rounded-full p-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/20">
+                                        <button aria-label="Account menu" className="rounded-full p-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/20">
                                             <Avatar className="size-9">
                                                 <AvatarFallback className="bg-primary text-primary-foreground text-sm font-semibold">
                                                     {initials}

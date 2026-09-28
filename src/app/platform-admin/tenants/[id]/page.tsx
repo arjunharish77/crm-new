@@ -1,7 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
+import { SettingsSections } from "@/components/layout/settings-sections";
+import { ErrorState } from "@/components/common/error-state";
 import { apiFetch } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
@@ -66,11 +68,12 @@ const FEATURE_FLAG_LABELS: Record<keyof TenantFeatureFlags, string> = {
 export default function TenantDetailPage() {
     const params = useParams();
     const router = useRouter();
-    const { token, login } = useAuth();
+    const { login } = useAuth();
     const tenantId = params.id as string;
 
     const [config, setConfig] = useState<any>(null);
     const [users, setUsers] = useState<any[]>([]);
+    const [loadError, setLoadError] = useState(false);
     const [loading, setLoading] = useState(true);
     const [featureFlags, setFeatureFlags] = useState<TenantFeatureFlags | null>(null);
     const [savingFlag, setSavingFlag] = useState<string | null>(null);
@@ -88,24 +91,25 @@ export default function TenantDetailPage() {
     const [resettingDemo, setResettingDemo] = useState(false);
 
     const fetchModules = () => {
-        apiFetch<ModuleEntitlement[]>(`/platform-admin/tenants/${tenantId}/modules`).then(setModules).catch(() => setModules([]));
+        apiFetch<ModuleEntitlement[]>(`/platform-admin/tenants/${tenantId}/modules`).then(setModules).catch(() => setLoadError(true));
     };
 
     const fetchDemoStatus = () => {
         apiFetch<{ leadCount: number; opportunityCount: number }>(`/platform-admin/tenants/${tenantId}/demo-data`)
             .then(setDemoStatus)
-            .catch(() => setDemoStatus(null));
+            .catch(() => setLoadError(true));
     };
 
-    useEffect(() => {
+    const loadTenant = useCallback(() => {
         if (tenantId) {
             setLoading(true);
+            setLoadError(false);
             Promise.all([
                 apiFetch(`/platform-admin/tenants/${tenantId}/config`),
                 apiFetch(`/platform-admin/tenants/${tenantId}/users`),
-                apiFetch<TenantFeatureFlags>(`/platform-admin/tenants/${tenantId}/feature-flags`).catch(() => null),
-                apiFetch<ModuleEntitlement[]>(`/platform-admin/tenants/${tenantId}/modules`).catch(() => []),
-                apiFetch<{ leadCount: number; opportunityCount: number }>(`/platform-admin/tenants/${tenantId}/demo-data`).catch(() => null),
+                apiFetch<TenantFeatureFlags>(`/platform-admin/tenants/${tenantId}/feature-flags`),
+                apiFetch<ModuleEntitlement[]>(`/platform-admin/tenants/${tenantId}/modules`),
+                apiFetch<{ leadCount: number; opportunityCount: number }>(`/platform-admin/tenants/${tenantId}/demo-data`),
             ]).then(([configData, usersData, flagsData, moduleData, demoData]: any[]) => {
                 setConfig(configData);
                 setMaintenanceDraft({ active: !!configData?.maintenanceActive, message: configData?.maintenanceMessage || "" });
@@ -113,10 +117,12 @@ export default function TenantDetailPage() {
                 setFeatureFlags(flagsData);
                 setModules(moduleData);
                 setDemoStatus(demoData);
-            }).catch(() => toast.error("Failed to load tenant details"))
+            }).catch(() => setLoadError(true))
                 .finally(() => setLoading(false));
         }
     }, [tenantId]);
+
+    useEffect(() => { loadTenant(); }, [loadTenant]);
 
     const handleSeedDemoData = async () => {
         setSeedingDemo(true);
@@ -251,13 +257,13 @@ export default function TenantDetailPage() {
                 return;
             }
 
-            // Save admin token
-            if (token) {
-                sessionStorage.setItem('adminToken', token);
-            }
-
-            // Login as user
-            login(data.token);
+            // F06 fix (WP05): the impersonate route now sets the impersonation session as an
+            // HttpOnly cookie directly on its own response (overwriting this admin's own
+            // session cookie) -- no raw token to stash in sessionStorage or hand to login()
+            // anymore. Exiting impersonation later is handled server-side by
+            // /api/platform-admin/exit-impersonation, which knows how to return to this admin
+            // via the impersonation session's own `impersonatedBy` reference.
+            await login();
             toast.success(`Impersonating ${data.user.email}`);
 
             // Redirect to dashboard
@@ -279,21 +285,22 @@ export default function TenantDetailPage() {
         }
     };
 
+    if (loadError) return <ErrorState description="Tenant details could not be loaded." onRetry={loadTenant} />;
     if (loading) return <div className="p-8">Loading...</div>;
     if (!config) return <div className="p-8">Tenant not found</div>;
 
     const { tenant } = config;
 
     return (
-        <div className="space-y-6">
-            <div className="flex items-center justify-between gap-4">
-                <div className="flex items-center gap-4">
-                    <Button variant="ghost" size="icon" onClick={() => router.back()}>
+        <div className="@container/tenant min-w-0 space-y-6">
+            <div className="flex min-w-0 flex-wrap items-center justify-between gap-4">
+                <div className="flex min-w-0 flex-wrap items-center gap-4">
+                    <Button variant="ghost" size="icon" aria-label="Back to tenants" onClick={() => router.push("/platform-admin/tenants")}>
                         <ArrowLeft className="h-4 w-4" />
                     </Button>
-                    <div>
-                        <h2 className="text-2xl font-bold tracking-tight">{tenant.name}</h2>
-                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <div className="min-w-0 flex-1 basis-48">
+                        <h1 className="break-words text-2xl font-bold tracking-tight">{tenant.name}</h1>
+                        <div className="flex min-w-0 flex-wrap items-center gap-2 text-sm text-muted-foreground">
                             <Badge variant={tenant.status === 'ACTIVE' ? 'default' : 'destructive'}>
                                 {tenant.status}
                             </Badge>
@@ -312,21 +319,23 @@ export default function TenantDetailPage() {
                 </Button>
             </div>
 
-            <Card>
+            <SettingsSections key={tenantId} label="Tenant section" sections={[
+                { id: "operations", label: "Environment & demo", content: <div className="min-w-0 space-y-4">
+            <Card className="min-w-0">
                 <CardHeader>
-                    <CardTitle className="flex items-center gap-2 text-sm font-medium">
+                    <CardTitle className="flex min-w-0 flex-wrap items-center gap-2 text-sm font-medium">
                         <Wrench className="h-4 w-4" />
                         Environment &amp; Maintenance
                     </CardTitle>
                 </CardHeader>
-                <CardContent className="space-y-4">
-                    <div className="flex items-center justify-between gap-4">
+                <CardContent className="min-w-0 space-y-4">
+                    <div className="flex min-w-0 flex-wrap items-center justify-between gap-4">
                         <div>
-                            <Label>Environment</Label>
+                            <Label htmlFor="tenant-environment">Environment</Label>
                             <p className="text-xs text-muted-foreground">Classifies this tenant for reporting/billing exclusion of sandbox and test workspaces.</p>
                         </div>
                         <Select value={tenant.environment || 'PRODUCTION'} disabled={savingEnvironment} onValueChange={handleEnvironmentChange}>
-                            <SelectTrigger className="w-40"><SelectValue /></SelectTrigger>
+                            <SelectTrigger id="tenant-environment" className="w-40"><SelectValue /></SelectTrigger>
                             <SelectContent>
                                 <SelectItem value="PRODUCTION">Production</SelectItem>
                                 <SelectItem value="SANDBOX">Sandbox</SelectItem>
@@ -334,19 +343,19 @@ export default function TenantDetailPage() {
                             </SelectContent>
                         </Select>
                     </div>
-                    <div className="flex items-center justify-between gap-4">
+                    <div className="flex min-w-0 flex-wrap items-center justify-between gap-4">
                         <div>
-                            <Label>Maintenance Banner</Label>
+                            <Label htmlFor="tenant-maintenance">Maintenance Banner</Label>
                             <p className="text-xs text-muted-foreground">Shows an informational banner to this tenant&apos;s users without blocking access.</p>
                         </div>
-                        <Switch
+                        <Switch id="tenant-maintenance"
                             checked={maintenanceDraft.active}
                             onCheckedChange={(checked) => setMaintenanceDraft({ ...maintenanceDraft, active: checked })}
                         />
                     </div>
                     {maintenanceDraft.active && (
                         <Input
-                            placeholder="Message shown to this tenant's users"
+                            aria-label="Maintenance message" placeholder="Message shown to this tenant's users"
                             value={maintenanceDraft.message}
                             onChange={(e) => setMaintenanceDraft({ ...maintenanceDraft, message: e.target.value })}
                         />
@@ -357,9 +366,9 @@ export default function TenantDetailPage() {
                 </CardContent>
             </Card>
 
-            <Card>
+            <Card className="min-w-0">
                 <CardHeader>
-                    <CardTitle className="flex items-center gap-2 text-sm font-medium">
+                    <CardTitle className="flex min-w-0 flex-wrap items-center gap-2 text-sm font-medium">
                         <FlaskConical className="h-4 w-4" />
                         Demo Data
                     </CardTitle>
@@ -368,7 +377,7 @@ export default function TenantDetailPage() {
                     <p className="text-xs text-muted-foreground">
                         Seeds a small set of clearly-labeled sample leads (and opportunities, if a pipeline is already configured) for exploring this workspace. Every seeded record is flagged internally so it can be safely removed later without touching any real data.
                     </p>
-                    <div className="flex items-center justify-between gap-4 rounded-xl border p-3">
+                    <div className="flex min-w-0 flex-wrap items-center justify-between gap-4 rounded-xl border p-3">
                         <div className="text-sm">
                             {demoStatus ? (
                                 <span>
@@ -379,7 +388,7 @@ export default function TenantDetailPage() {
                                 <span className="text-muted-foreground">Demo data status unavailable</span>
                             )}
                         </div>
-                        <div className="flex gap-2">
+                        <div className="flex min-w-0 flex-wrap gap-2">
                             <Button size="sm" variant="outline" disabled={seedingDemo} onClick={handleSeedDemoData}>
                                 {seedingDemo ? "Seeding..." : "Seed Demo Data"}
                             </Button>
@@ -396,8 +405,10 @@ export default function TenantDetailPage() {
                 </CardContent>
             </Card>
 
-            <div className="grid gap-4 md:grid-cols-3">
-                <Card>
+                </div> },
+                { id: "users", label: "Users & usage", content: <div className="min-w-0 space-y-4">
+            <div className="grid gap-4 @min-[700px]/tenant:grid-cols-2">
+                <Card className="min-w-0">
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                         <CardTitle className="text-sm font-medium">Provisioned Users</CardTitle>
                         <Users className="h-4 w-4 text-muted-foreground" />
@@ -409,13 +420,13 @@ export default function TenantDetailPage() {
                         </p>
                     </CardContent>
                 </Card>
-                <Card>
+                <Card className="min-w-0">
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                         <CardTitle className="text-sm font-medium">Storage Used</CardTitle>
                         <Activity className="h-4 w-4 text-muted-foreground" />
                     </CardHeader>
                     <CardContent>
-                        <div className="text-2xl font-bold">0 GB</div>
+                        <div className="text-2xl font-bold">Unavailable</div>
                         <p className="text-xs text-muted-foreground">
                             Quota: {config.storageQuota || 1} GB
                         </p>
@@ -423,7 +434,7 @@ export default function TenantDetailPage() {
                 </Card>
             </div>
 
-            <Card>
+            <Card className="min-w-0">
                 <CardHeader>
                     <CardTitle>User Management</CardTitle>
                 </CardHeader>
@@ -463,9 +474,11 @@ export default function TenantDetailPage() {
                 </CardContent>
             </Card>
 
-            <Card>
+                </div> },
+                { id: "features", label: "Feature flags", content: <div className="min-w-0 space-y-4">
+            <Card className="min-w-0">
                 <CardHeader>
-                    <CardTitle className="flex items-center gap-2">
+                    <CardTitle className="flex min-w-0 flex-wrap items-center gap-2">
                         <Flag className="h-4 w-4" />
                         Feature Flags
                     </CardTitle>
@@ -474,11 +487,11 @@ export default function TenantDetailPage() {
                     {!featureFlags ? (
                         <p className="text-sm text-muted-foreground">Failed to load feature flags.</p>
                     ) : (
-                        <div className="grid gap-3 sm:grid-cols-2">
+                        <div className="grid gap-3 @min-[700px]/tenant:grid-cols-2">
                             {(Object.keys(FEATURE_FLAG_LABELS) as (keyof TenantFeatureFlags)[]).map((key) => (
-                                <label key={key} className="flex items-center justify-between gap-3 rounded-xl border p-3">
+                                <label key={key} className="flex min-w-0 flex-wrap items-center justify-between gap-3 rounded-xl border p-3">
                                     <Label className="text-sm font-medium">{FEATURE_FLAG_LABELS[key]}</Label>
-                                    <Switch
+                                    <Switch aria-label={FEATURE_FLAG_LABELS[key]}
                                         checked={!!featureFlags[key]}
                                         disabled={savingFlag === key}
                                         onCheckedChange={(checked) => handleToggleFlag(key, checked)}
@@ -490,23 +503,25 @@ export default function TenantDetailPage() {
                 </CardContent>
             </Card>
 
-            <Card>
+                </div> },
+                { id: "modules", label: "Modules", content: <div className="min-w-0 space-y-4">
+            <Card className="min-w-0">
                 <CardHeader>
-                    <CardTitle className="flex items-center gap-2">
+                    <CardTitle className="flex min-w-0 flex-wrap items-center gap-2">
                         <LayoutGrid className="h-4 w-4" />
                         Modules
                     </CardTitle>
                 </CardHeader>
                 <CardContent>
                     {modules.length === 0 ? (
-                        <p className="text-sm text-muted-foreground">Failed to load module entitlements.</p>
+                        <p className="text-sm text-muted-foreground">No module entitlements are available.</p>
                     ) : (
                         <div className="space-y-2">
                             {modules.map((module) => (
-                                <div key={module.key} className="flex items-center justify-between gap-3 rounded-xl border p-3">
-                                    <div>
-                                        <div className="flex items-center gap-2">
-                                            <span className="text-sm font-medium">{module.name}</span>
+                                <div key={module.key} className="flex min-w-0 flex-wrap items-center justify-between gap-3 rounded-xl border p-3">
+                                    <div className="min-w-0 flex-1 basis-48 break-words">
+                                        <div className="flex min-w-0 flex-wrap items-center gap-2">
+                                            <span className="min-w-0 max-w-full break-words text-sm font-medium">{module.name}</span>
                                             <Badge variant="outline" className={cn("rounded-md text-[0.65rem] font-semibold", MODULE_STATUS_BADGE[module.status])}>
                                                 {module.status}
                                             </Badge>
@@ -519,7 +534,7 @@ export default function TenantDetailPage() {
                                         disabled={module.isCore || savingModule === module.key}
                                         onValueChange={(value) => handleModuleStatusChange(module, value as ModuleEntitlement["status"])}
                                     >
-                                        <SelectTrigger className="w-[140px]"><SelectValue /></SelectTrigger>
+                                        <SelectTrigger aria-label={`${module.name} status`} className="w-full sm:w-[140px]"><SelectValue /></SelectTrigger>
                                         <SelectContent>
                                             <SelectItem value="ENABLED">Enabled</SelectItem>
                                             <SelectItem value="TRIAL">Trial</SelectItem>
@@ -533,6 +548,9 @@ export default function TenantDetailPage() {
                     )}
                 </CardContent>
             </Card>
+
+                </div> }
+            ]} />
 
             <StandardDialog
                 open={!!impersonateTarget}

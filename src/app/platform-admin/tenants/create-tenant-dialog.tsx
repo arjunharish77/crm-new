@@ -31,6 +31,7 @@ interface CreateTenantDialogProps {
 
 export function CreateTenantDialog({ onSuccess }: CreateTenantDialogProps) {
     const [open, setOpen] = useState(false);
+    const [submitError, setSubmitError] = useState("");
     const [loading, setLoading] = useState(false);
 
     const [form, setForm] = useState({
@@ -44,6 +45,8 @@ export function CreateTenantDialog({ onSuccess }: CreateTenantDialogProps) {
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
+        if (loading) return;
+        setSubmitError("");
         setLoading(true);
 
         try {
@@ -63,27 +66,28 @@ export function CreateTenantDialog({ onSuccess }: CreateTenantDialogProps) {
             });
             onSuccess();
         } catch (error: any) {
-            toast.error(error.message || "Failed to provision tenant");
+            setSubmitError(error.message || "Failed to provision tenant");
         } finally {
             setLoading(false);
         }
     };
 
     return (
-        <Dialog open={open} onOpenChange={setOpen}>
+        <Dialog open={open} onOpenChange={(next) => { if (!loading) setOpen(next); }}>
             <DialogTrigger asChild>
                 <Button>
                     <Plus className="mr-2 h-4 w-4" /> Create Tenant
                 </Button>
             </DialogTrigger>
-            <DialogContent className="sm:max-w-[425px]">
+            <DialogContent showCloseButton={!loading} className="sm:max-w-[425px]">
                 <DialogHeader>
                     <DialogTitle>Provision New Tenant</DialogTitle>
                     <DialogDescription>
                         Create a new tenant workspace and its first admin user.
                     </DialogDescription>
                 </DialogHeader>
-                <form onSubmit={handleSubmit} className="space-y-4">
+                <form onSubmit={handleSubmit}>
+                    <fieldset disabled={loading} className="min-w-0 space-y-4">
                     <div className="grid gap-2">
                         <Label htmlFor="name">Tenant Name</Label>
                         <Input
@@ -97,10 +101,11 @@ export function CreateTenantDialog({ onSuccess }: CreateTenantDialogProps) {
                     <div className="grid gap-2">
                         <Label htmlFor="plan">Plan</Label>
                         <Select
+                            disabled={loading}
                             value={form.plan}
                             onValueChange={(value) => setForm({ ...form, plan: value })}
                         >
-                            <SelectTrigger>
+                            <SelectTrigger id="plan">
                                 <SelectValue placeholder="Select plan" />
                             </SelectTrigger>
                             <SelectContent>
@@ -112,8 +117,8 @@ export function CreateTenantDialog({ onSuccess }: CreateTenantDialogProps) {
                     </div>
 
                     <div className="flex items-center justify-between space-x-2 py-2 border-t pt-4">
-                        <div className="space-y-0.5">
-                            <Label htmlFor="opportunity-toggle" className="flex items-center gap-2">
+                        <div className="min-w-0 space-y-0.5">
+                            <Label htmlFor="opportunity-toggle" className="flex flex-wrap items-center gap-2">
                                 <Sparkles className="h-4 w-4 text-primary" />
                                 Opportunities Module
                             </Label>
@@ -122,6 +127,7 @@ export function CreateTenantDialog({ onSuccess }: CreateTenantDialogProps) {
                             </p>
                         </div>
                         <Switch
+                            disabled={loading}
                             id="opportunity-toggle"
                             checked={form.opportunityEnabled}
                             onCheckedChange={(checked) => setForm({ ...form, opportunityEnabled: checked })}
@@ -157,6 +163,7 @@ export function CreateTenantDialog({ onSuccess }: CreateTenantDialogProps) {
                                 <Input
                                     id="adminPassword"
                                     required
+                                    autoComplete="new-password"
                                     type="password"
                                     placeholder="*******"
                                     value={form.adminPassword}
@@ -166,12 +173,15 @@ export function CreateTenantDialog({ onSuccess }: CreateTenantDialogProps) {
                         </div>
                     </div>
 
+                    {submitError && <p role="alert" className="break-words text-sm text-destructive">{submitError}</p>}
                     <DialogFooter>
+                        <Button type="button" variant="outline" disabled={loading} onClick={() => setOpen(false)}>Cancel</Button>
                         <Button type="submit" disabled={loading}>
                             {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                            Provision Tenant
+                            {loading ? "Provisioning…" : "Provision Tenant"}
                         </Button>
                     </DialogFooter>
+                    </fieldset>
                 </form>
             </DialogContent>
         </Dialog>

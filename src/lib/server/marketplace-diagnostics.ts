@@ -2,6 +2,7 @@ import { randomUUID, createHmac } from "crypto";
 import { query, queryOne } from "@/lib/db/query";
 import { APP_EVENT_TYPES, getAppHealthForTenant, getAppUsageForTenant, listAppDeliveriesForTenant } from "@/lib/server/marketplace-events";
 import { decryptSecretAtRestOrNull } from "@/lib/server/secret-encryption";
+import { assertSafeOutboundUrl } from "@/lib/server/outbound-request-guard";
 
 type TenantUser = { id: string; tenantId: string | null };
 
@@ -42,7 +43,10 @@ export async function sendTestAppEvent(user: TenantUser, appId: string, eventTyp
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
   try {
-    const response = await fetch(app.webhookUrl, { method: "POST", headers, body: rawBody, signal: controller.signal });
+    // F07 fix (WP06): same read-oracle exposure as sendTestWebhookDelivery -- this echoes the
+    // raw response body straight back to the caller.
+    await assertSafeOutboundUrl(app.webhookUrl);
+    const response = await fetch(app.webhookUrl, { method: "POST", headers, body: rawBody, signal: controller.signal, redirect: "manual" });
     const responseBody = (await response.text().catch(() => "")).slice(0, 2000);
     return { request: { url: app.webhookUrl, headers, body: rawBody }, httpStatus: response.status, responseBody, error: response.ok ? null : `HTTP ${response.status}` };
   } catch (error) {

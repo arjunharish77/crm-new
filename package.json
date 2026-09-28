@@ -2,6 +2,10 @@
   "name": "crm",
   "version": "0.1.0",
   "private": true,
+  "engines": {
+    "node": ">=20.9.0 <21.0.0",
+    "npm": ">=10.0.0 <11.0.0"
+  },
   "scripts": {
     "dev": "next dev",
     "build": "next build --webpack",
@@ -13,6 +17,7 @@
     "db:setup:local": "node scripts/db-setup-local.js",
     "db:export:supabase": "node scripts/db-export-supabase.js",
     "db:migrate:local": "node scripts/db-migrate-local.js",
+    "db:setup:tenant-role:local": "node scripts/db-setup-tenant-role-local.js",
     "db:check-migrations": "node scripts/check-migrations-applied.js",
     "db:import:local-data": "node scripts/db-import-local-data.js",
     "db:seed:local": "node scripts/db-seed-local.js",

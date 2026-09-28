@@ -1,5 +1,6 @@
 import { queryOne } from "@/lib/db/query";
-import { getCrmQueue } from "@/lib/server/job-queue";
+import { getQueueByClass } from "@/lib/server/job-queue";
+import { QUEUE_NAME_BY_CLASS, type JobQueueClass } from "@/lib/server/job-registry";
 import { getFileStorageDriver, storageRoot } from "@/lib/storage/file-storage";
 import { listWebhooksForTenant, getTelephonySettingsForTenant } from "@/lib/server/crm";
 import { listCommunicationProvidersForTenant } from "@/lib/server/communications";
@@ -38,32 +39,56 @@ async function checkDatabase(): Promise<ConnectorHealthCheck> {
   }
 }
 
-async function checkRedisAndQueue(): Promise<[ConnectorHealthCheck, ConnectorHealthCheck]> {
+// WP10 (F18): FOUR independent BullMQ queues now (realtime/operational/heavy/ml -- see
+// job-registry.ts), each with its own Worker concurrency budget, so this reports each queue's own
+// backlog/failure counts separately -- a large "waiting" count on the heavy queue (e.g.
+// mid-import) is expected and not itself a problem, whereas the same on the realtime queue means
+// dispatch-critical work is backed up.
+const QUEUE_HEALTH_LABEL_BY_CLASS: Record<JobQueueClass, string> = {
+  realtime: "Worker Queue - Realtime (BullMQ)",
+  operational: "Worker Queue - Operational (BullMQ)",
+  heavy: "Worker Queue - Heavy/Export-Import-Report (BullMQ)",
+  ml: "Worker Queue - ML (BullMQ)",
+};
+const QUEUE_HEALTH_CLASSES: JobQueueClass[] = ["realtime", "operational", "heavy", "ml"];
+
+async function checkRedisAndQueue(): Promise<[ConnectorHealthCheck, ...ConnectorHealthCheck[]]> {
+  const queueChecksNotConfigured = () =>
+    QUEUE_HEALTH_CLASSES.map(
+      (queueClass): ConnectorHealthCheck => ({
+        key: `worker_queue_${queueClass}`,
+        label: QUEUE_HEALTH_LABEL_BY_CLASS[queueClass],
+        status: "not_configured",
+        detail: "REDIS_URL is not set",
+      }),
+    );
   if (!process.env.REDIS_URL) {
-    return [
-      { key: "redis", label: "Redis", status: "not_configured", detail: "REDIS_URL is not set" },
-      { key: "worker_queue", label: "Worker Queue (BullMQ)", status: "not_configured", detail: "REDIS_URL is not set" },
-    ];
+    return [{ key: "redis", label: "Redis", status: "not_configured", detail: "REDIS_URL is not set" }, ...queueChecksNotConfigured()];
   }
   try {
-    const queue = getCrmQueue();
-    const { result: redisClient, latencyMs: connectLatencyMs } = await timed(() => queue.client);
+    const queues = QUEUE_HEALTH_CLASSES.map((queueClass) => ({ queueClass, queue: getQueueByClass(queueClass) }));
+    const { result: redisClient, latencyMs: connectLatencyMs } = await timed(() => queues[0].queue.client);
     const { latencyMs: pingLatencyMs } = await timed(() => redisClient.ping());
     const redisCheck: ConnectorHealthCheck = { key: "redis", label: "Redis", status: "ok", latencyMs: connectLatencyMs + pingLatencyMs };
 
-    const counts = await queue.getJobCounts("waiting", "active", "completed", "failed", "delayed");
-    const queueCheck: ConnectorHealthCheck = {
-      key: "worker_queue",
-      label: "Worker Queue (BullMQ)",
-      status: (counts.failed ?? 0) > 0 ? "degraded" : "ok",
-      detail: `waiting: ${counts.waiting ?? 0}, active: ${counts.active ?? 0}, failed: ${counts.failed ?? 0}, delayed: ${counts.delayed ?? 0}`,
-    };
-    return [redisCheck, queueCheck];
+    const allCounts = await Promise.all(queues.map(({ queue }) => queue.getJobCounts("waiting", "active", "completed", "failed", "delayed")));
+    const queueChecks: ConnectorHealthCheck[] = queues.map(({ queueClass }, index) => {
+      const counts = allCounts[index];
+      return {
+        key: `worker_queue_${queueClass}`,
+        label: QUEUE_HEALTH_LABEL_BY_CLASS[queueClass],
+        status: (counts.failed ?? 0) > 0 ? "degraded" : "ok",
+        detail: `waiting: ${counts.waiting ?? 0}, active: ${counts.active ?? 0}, failed: ${counts.failed ?? 0}, delayed: ${counts.delayed ?? 0}`,
+      };
+    });
+    return [redisCheck, ...queueChecks];
   } catch (error) {
     const detail = errorMessage(error);
     return [
       { key: "redis", label: "Redis", status: "error", detail },
-      { key: "worker_queue", label: "Worker Queue (BullMQ)", status: "error", detail },
+      ...QUEUE_HEALTH_CLASSES.map(
+        (queueClass): ConnectorHealthCheck => ({ key: `worker_queue_${queueClass}`, label: QUEUE_HEALTH_LABEL_BY_CLASS[queueClass], status: "error", detail }),
+      ),
     ];
   }
 }
@@ -152,7 +177,7 @@ function errorMessage(error: unknown) {
 }
 
 export async function getConnectorHealthForTenant(user: TenantUser): Promise<ConnectorHealthCheck[]> {
-  const [database, [redis, workerQueue], mlService, storage, channels, telephony, webhooks] = await Promise.all([
+  const [database, redisAndQueues, mlService, storage, channels, telephony, webhooks] = await Promise.all([
     checkDatabase(),
     checkRedisAndQueue(),
     checkMlService(),
@@ -161,5 +186,5 @@ export async function getConnectorHealthForTenant(user: TenantUser): Promise<Con
     checkTelephony(user),
     checkWebhooks(user),
   ]);
-  return [database, redis, workerQueue, mlService, storage, ...channels, telephony, webhooks];
+  return [database, ...redisAndQueues, mlService, storage, ...channels, telephony, webhooks];
 }

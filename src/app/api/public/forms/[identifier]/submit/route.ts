@@ -25,6 +25,6 @@ export async function POST(
     if (error instanceof Error && error.message.startsWith("FEATURE_DISABLED")) {
       return badRequest("This form is not currently accepting submissions");
     }
-    return serverError("Failed to submit form");
+    return serverError("Failed to submit form", error);
   }
 }

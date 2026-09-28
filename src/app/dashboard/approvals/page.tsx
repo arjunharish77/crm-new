@@ -1,5 +1,7 @@
 "use client";
 
+import { PageHeader } from "@/components/layout/page-header";
+
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { CheckCircle2, Inbox, XCircle } from "lucide-react";
@@ -83,18 +85,8 @@ export default function ApprovalInboxPage() {
     };
 
     return (
-        <div className="mx-auto max-w-4xl px-3 py-4">
-            <div className="mb-4 flex items-center gap-3">
-                <div className="flex items-center justify-center rounded-[10px] bg-primary/10 p-2 text-primary">
-                    <Inbox className="size-4" />
-                </div>
-                <div>
-                    <h1 className="text-xl font-extrabold tracking-tight">Approval Inbox</h1>
-                    <p className="text-sm text-muted-foreground">
-                        Everything across the workspace currently waiting on your review, in one place.
-                    </p>
-                </div>
-            </div>
+        <div className="mx-auto min-w-0 max-w-4xl">
+            <PageHeader title="Approval Inbox" description="Review requests waiting for your decision." />
 
             {loading ? (
                 <TableSkeleton rows={4} columns={1} hasToolbar={false} />
@@ -114,10 +106,10 @@ export default function ApprovalInboxPage() {
                             const busy = busyKey === key;
                             return (
                                 <div key={key} className="flex flex-wrap items-center justify-between gap-3 p-3">
-                                    <div className="min-w-0">
-                                        <div className="flex items-center gap-2">
+                                    <div className="min-w-0 flex-1 basis-64 break-words">
+                                        <div className="flex flex-wrap items-center gap-2">
                                             <Badge variant="outline">{ENTITY_TYPE_LABELS[item.entityType]}</Badge>
-                                            <p className="truncate text-sm font-medium">{item.title}</p>
+                                            <p data-slot="approval-title" className="w-full min-w-0 break-words text-sm font-medium">{item.title}</p>
                                         </div>
                                         <p className="text-xs text-muted-foreground">{item.summary}</p>
                                         <p className="text-xs text-muted-foreground">
@@ -125,7 +117,7 @@ export default function ApprovalInboxPage() {
                                             {formatWorkspaceRelativeTime(item.requestedAt)}
                                         </p>
                                     </div>
-                                    <div className="flex items-center gap-1.5">
+                                    <div className="flex flex-wrap items-center gap-1.5">
                                         {item.canReject && (
                                             <Button variant="outline" size="sm" disabled={busy} onClick={() => decide(item, "REJECT")}>
                                                 <XCircle className="size-3.5" />

@@ -1,7 +1,8 @@
 import { randomUUID, createHmac } from "crypto";
-import { query, queryOne, execute } from "@/lib/db/query";
+import { query, queryOne, execute, queryAsSystem, queryOneAsSystem, type Queryable } from "@/lib/db/query";
 import { createUserNotification } from "@/lib/server/notifications";
 import { checkRateLimitWithAlert } from "@/lib/server/rate-limit";
+import { assertSafeOutboundUrl } from "@/lib/server/outbound-request-guard";
 
 type TenantUser = {
   id: string;
@@ -56,12 +57,24 @@ function signPayload(secret: string, timestamp: string, rawBody: string) {
 // opportunities-postgres.ts) -- fans out to every active subscription actually listening
 // for this event, one WebhookOutbox row per (event, subscription) so each endpoint has its
 // own independent delivery lifecycle (one endpoint being down doesn't block another).
-export async function enqueueWebhookEvent(tenantId: string | null, eventType: WebhookEventType, payload: Record<string, unknown>) {
+// WP08 (F13): optional `client` -- when passed (e.g. createLeadForTenant's atomic core), this
+// insert commits or rolls back together with the record change and its audit row instead of
+// being a separately-fallible write. Every existing caller already wraps its own call site in
+// `.catch(() => undefined)`, so no longer swallowing the insert error internally here doesn't
+// change their behavior -- it only stops masking the failure from a caller (the new atomic-core
+// path) that needs it to actually propagate and roll back.
+export async function enqueueWebhookEvent(
+  tenantId: string | null,
+  eventType: WebhookEventType,
+  payload: Record<string, unknown>,
+  client?: Queryable,
+) {
   if (!tenantId) return;
   const subscriptions = await query<{ id: string }>(
     `select id from "WebhookSubscription"
      where "tenantId" = $1 and "isActive" = true and events @> $2::jsonb`,
     [tenantId, JSON.stringify([eventType])],
+    client,
   );
   if (!subscriptions.length) return;
   const now = new Date().toISOString();
@@ -70,7 +83,8 @@ export async function enqueueWebhookEvent(tenantId: string | null, eventType: We
       `insert into "WebhookOutbox" (id, "tenantId", "subscriptionId", "eventType", "eventVersion", payload, status, "retryCount", "nextRetryAt", "createdAt", "updatedAt")
        values ($1, $2, $3, $4, 1, $5, 'PENDING', 0, $6, $6, $6)`,
       [randomUUID(), tenantId, subscription.id, eventType, payload, now],
-    ).catch(() => undefined);
+      client,
+    );
   }
 }
 
@@ -88,7 +102,7 @@ async function deliverOne(row: {
     [row.subscriptionId],
   );
   if (!subscription || !subscription.isActive) {
-    await execute(`update "WebhookOutbox" set status = 'CANCELLED', "updatedAt" = $1 where id = $2`, [new Date().toISOString(), row.id]);
+    await execute(`update "WebhookOutbox" set status = 'CANCELLED', "leaseExpiresAt" = null, "updatedAt" = $1 where id = $2`, [new Date().toISOString(), row.id]);
     return;
   }
 
@@ -107,7 +121,7 @@ async function deliverOne(row: {
   });
   if (!throttle.allowed) {
     await execute(
-      `update "WebhookOutbox" set status = 'PENDING', "nextRetryAt" = $1, "updatedAt" = $1 where id = $2`,
+      `update "WebhookOutbox" set status = 'PENDING', "nextRetryAt" = $1, "leaseExpiresAt" = null, "updatedAt" = $1 where id = $2`,
       [new Date(Date.now() + 15_000).toISOString(), row.id],
     );
     return;
@@ -122,9 +136,13 @@ async function deliverOne(row: {
   let responseBody: string | null = null;
   let errorMessage: string | null = null;
   try {
+    // F07 fix (WP06): revalidated immediately before every actual delivery attempt, not only at
+    // save time -- the subscription's own hostname could resolve to a private/internal address
+    // by the time a queued event is actually delivered, even if it didn't when first saved.
+    await assertSafeOutboundUrl(subscription.url);
     const headers: Record<string, string> = { "content-type": "application/json", "x-webhook-timestamp": timestamp, "x-webhook-event": row.eventType };
     if (subscription.secret) headers["x-webhook-signature"] = signPayload(subscription.secret, timestamp, rawBody);
-    const response = await fetch(subscription.url, { method: "POST", headers, body: rawBody, signal: controller.signal });
+    const response = await fetch(subscription.url, { method: "POST", headers, body: rawBody, signal: controller.signal, redirect: "manual" });
     httpStatus = response.status;
     responseBody = (await response.text().catch(() => "")).slice(0, 2000);
     if (!response.ok) errorMessage = `HTTP ${response.status}`;
@@ -137,7 +155,7 @@ async function deliverOne(row: {
   const now = new Date().toISOString();
   if (!errorMessage) {
     await execute(
-      `update "WebhookOutbox" set status = 'DELIVERED', "httpStatus" = $1, "responseBody" = $2, "processedAt" = $3, "updatedAt" = $3, error = null where id = $4`,
+      `update "WebhookOutbox" set status = 'DELIVERED', "httpStatus" = $1, "responseBody" = $2, "processedAt" = $3, "leaseExpiresAt" = null, "updatedAt" = $3, error = null where id = $4`,
       [httpStatus, responseBody, now, row.id],
     );
     return;
@@ -146,7 +164,7 @@ async function deliverOne(row: {
   const nextRetryCount = row.retryCount + 1;
   if (nextRetryCount >= MAX_ATTEMPTS) {
     await execute(
-      `update "WebhookOutbox" set status = 'FAILED', "retryCount" = $1, "httpStatus" = $2, "responseBody" = $3, error = $4, "updatedAt" = $5 where id = $6`,
+      `update "WebhookOutbox" set status = 'FAILED', "retryCount" = $1, "httpStatus" = $2, "responseBody" = $3, error = $4, "leaseExpiresAt" = null, "updatedAt" = $5 where id = $6`,
       [nextRetryCount, httpStatus, responseBody, errorMessage, now, row.id],
     );
     const owner = await queryOne<{ id: string }>(`select id from "User" where "tenantId" = $1 order by "createdAt" asc limit 1`, [row.tenantId]);
@@ -164,25 +182,45 @@ async function deliverOne(row: {
   }
 
   await execute(
-    `update "WebhookOutbox" set status = 'PENDING', "retryCount" = $1, "nextRetryAt" = $2, "httpStatus" = $3, "responseBody" = $4, error = $5, "updatedAt" = $6 where id = $7`,
+    `update "WebhookOutbox" set status = 'PENDING', "retryCount" = $1, "nextRetryAt" = $2, "httpStatus" = $3, "responseBody" = $4, error = $5, "leaseExpiresAt" = null, "updatedAt" = $6 where id = $7`,
     [nextRetryCount, new Date(Date.now() + backoffMs(nextRetryCount)).toISOString(), httpStatus, responseBody, errorMessage, now, row.id],
   );
 }
 
-// Worker-invoked recurring job: claims due rows (PENDING and past their nextRetryAt) one at
-// a time via an atomic claim so two overlapping worker ticks can't double-send the same
-// delivery, then dispatches each in turn.
+// F14 fix (WP10): how long a claim is honored before another drain tick is allowed to treat it
+// as abandoned and reclaim it. Comfortably larger than REQUEST_TIMEOUT_MS (15s) plus the rest of
+// deliverOne's own DB writes, so a healthy in-flight delivery is never reclaimed out from under
+// itself -- only a worker that crashed/was killed between claim and its final status update
+// leaves a row here long enough to be reclaimed.
+const LEASE_DURATION_MS = 5 * 60 * 1000;
+
+// Worker-invoked recurring job: claims due rows (PENDING-and-due, OR SENDING-with-an-expired-
+// lease) one at a time via an atomic claim so two overlapping worker ticks can't double-send the
+// same delivery, then dispatches each in turn. The SENDING-with-expired-lease branch is the F14
+// fix: previously a row claimed into SENDING had no expiry at all, so a worker crash between the
+// claim and deliverOne's final status update left it stuck in SENDING forever with no recovery.
+// WP07 (F04): BACKGROUND_JOB, disposition B -- worker-invoked recurring job with no ambient
+// tenant context; discovers/claims due deliveries across every tenant at once.
 export async function processWebhookOutbox(limit = 25) {
   const now = new Date().toISOString();
-  const due = await query<{ id: string }>(
-    `select id from "WebhookOutbox" where status = 'PENDING' and ("nextRetryAt" is null or "nextRetryAt" <= $1) order by "createdAt" asc limit $2`,
+  const due = await queryAsSystem<{ id: string }>(
+    `select id from "WebhookOutbox"
+     where (status = 'PENDING' and ("nextRetryAt" is null or "nextRetryAt" <= $1))
+        or (status = 'SENDING' and "leaseExpiresAt" is not null and "leaseExpiresAt" <= $1)
+     order by "createdAt" asc limit $2`,
     [now, limit],
   );
   let processed = 0;
   for (const item of due) {
-    const claimed = await queryOne<any>(
-      `update "WebhookOutbox" set status = 'SENDING', "updatedAt" = $1 where id = $2 and status = 'PENDING' returning id, "tenantId", "subscriptionId", "eventType", "eventVersion", payload, "retryCount"`,
-      [new Date().toISOString(), item.id],
+    const claimTime = new Date().toISOString();
+    const leaseExpiresAt = new Date(Date.now() + LEASE_DURATION_MS).toISOString();
+    const claimed = await queryOneAsSystem<any>(
+      `update "WebhookOutbox"
+       set status = 'SENDING', "leaseExpiresAt" = $1, "updatedAt" = $2
+       where id = $3
+         and (status = 'PENDING' or (status = 'SENDING' and "leaseExpiresAt" is not null and "leaseExpiresAt" <= $2))
+       returning id, "tenantId", "subscriptionId", "eventType", "eventVersion", payload, "retryCount"`,
+      [leaseExpiresAt, claimTime, item.id],
     );
     if (!claimed) continue;
     await deliverOne(claimed);
@@ -230,7 +268,11 @@ export async function sendTestWebhookDelivery(user: TenantUser, subscriptionId: 
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
   try {
-    const response = await fetch(subscription.url, { method: "POST", headers, body: rawBody, signal: controller.signal });
+    // F07 fix (WP06): this console is the audit's own worst-case citation for this finding -- it
+    // echoes the raw response body straight back to the caller, i.e. an unauthenticated read
+    // oracle for anything the server could reach before this check existed.
+    await assertSafeOutboundUrl(subscription.url);
+    const response = await fetch(subscription.url, { method: "POST", headers, body: rawBody, signal: controller.signal, redirect: "manual" });
     const responseBody = (await response.text().catch(() => "")).slice(0, 2000);
     return { request: { url: subscription.url, headers, body: rawBody }, httpStatus: response.status, responseBody, error: response.ok ? null : `HTTP ${response.status}` };
   } catch (error) {

@@ -28,10 +28,15 @@ export function normalizeTenantTimeZone(value: unknown) {
 
 // Wall-clock day-of-week/hour/minute a UTC instant corresponds to in a given IANA zone --
 // for time-window comparisons (e.g. "is it currently within this team's working hours"),
-// not display formatting like the rest of this file.
+// not display formatting like the rest of this file. Also returns year/month/day (WP10/F16)
+// so a caller can construct another instant on the correct calendar day in this same zone
+// (see zonedWallClockToUTC below) without a second, separate Intl.DateTimeFormat call.
 export function zonedWallClockParts(date: Date, timeZone: string) {
   const parts = new Intl.DateTimeFormat("en-US", {
     timeZone: normalizeTenantTimeZone(timeZone),
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
     weekday: "short",
     hour: "2-digit",
     minute: "2-digit",
@@ -40,10 +45,39 @@ export function zonedWallClockParts(date: Date, timeZone: string) {
   const get = (type: string) => parts.find((part) => part.type === type)?.value ?? "";
   const WEEKDAY_INDEX: Record<string, number> = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
   return {
+    year: Number(get("year") || 0),
+    month: Number(get("month") || 0),
+    day: Number(get("day") || 0),
     dayOfWeek: WEEKDAY_INDEX[get("weekday")] ?? date.getUTCDay(),
     hour: Number(get("hour") || 0),
     minute: Number(get("minute") || 0),
   };
+}
+
+// WP10 (F16): the inverse of zonedWallClockParts -- given a Y-M-D-H-M wall-clock reading in
+// `timeZone`, returns the concrete UTC instant it represents. Used for scheduling decisions
+// (e.g. "the next moment quiet hours end") where a tenant-local wall-clock deadline needs to
+// become a real, storable, comparable UTC instant rather than staying implicitly tied to
+// whatever timezone the process happens to run under.
+export function zonedWallClockToUTC(year: number, month1to12: number, day: number, hour: number, minute: number, timeZone: string): Date {
+  const zone = normalizeTenantTimeZone(timeZone);
+  const guess = new Date(Date.UTC(year, month1to12 - 1, day, hour, minute, 0));
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: zone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(guess);
+  const get = (type: string) => Number(parts.find((part) => part.type === type)?.value ?? 0);
+  const wallAsUTC = Date.UTC(get("year"), get("month") - 1, get("day"), get("hour"), get("minute"), get("second"));
+  const offsetMs = wallAsUTC - guess.getTime();
+  // `guess` shifted back by the zone's own offset at this instant is the real UTC instant whose
+  // wall-clock reading IN `timeZone` is exactly year-month1to12-day hour:minute:00.
+  return new Date(guess.getTime() - offsetMs);
 }
 
 export function timeZoneFromFeatureFlags(featureFlags: unknown) {

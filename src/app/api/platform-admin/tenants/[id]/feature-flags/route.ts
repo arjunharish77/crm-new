@@ -15,7 +15,7 @@ export async function GET(
   } catch (error) {
     if (error instanceof Error && error.message === "UNAUTHORIZED") return unauthorized();
     if (error instanceof Error && error.message === "FORBIDDEN") return forbidden();
-    return serverError("Failed to fetch feature flags");
+    return serverError("Failed to fetch feature flags", error);
   }
 }
 
@@ -35,6 +35,6 @@ export async function PATCH(
   } catch (error) {
     if (error instanceof Error && error.message === "UNAUTHORIZED") return unauthorized();
     if (error instanceof Error && error.message === "FORBIDDEN") return forbidden();
-    return serverError("Failed to update feature flags");
+    return serverError("Failed to update feature flags", error);
   }
 }

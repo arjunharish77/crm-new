@@ -1,11 +1,13 @@
 'use client';
 
+import { PageHeader } from "@/components/layout/page-header";
+
 import React, { useEffect, useState } from 'react';
 import {
     Plus,
+    Gauge,
     Trash2,
     Pencil,
-    Gauge,
     Play,
     TrendingUp,
     TrendingDown,
@@ -164,6 +166,8 @@ const DEFAULT_SELF_LEARNING_SETTINGS: SelfLearningSettings = {
 };
 
 export default function LeadScoringAdminPage() {
+    const [activeSection, setActiveSection] = useState('self-learning');
+    const [loadErrors, setLoadErrors] = useState<Record<string, boolean>>({});
     const [rules, setRules] = useState<ScoringRule[]>([]);
     const [loading, setLoading] = useState(true);
     const [dialogOpen, setDialogOpen] = useState(false);
@@ -183,22 +187,26 @@ export default function LeadScoringAdminPage() {
     const [profilingFeatures, setProfilingFeatures] = useState(false);
 
     const fetchModelVersions = async () => {
+        setLoadingModels(true);
+        setLoadErrors(current => ({ ...current, models: false }));
         try {
             const data = await apiFetch<ScoringModelSummary[]>('/lead-scoring/self-learning/models');
             setModelSummaries(Array.isArray(data) ? data : []);
         } catch {
-            toast.error('Failed to load scoring model versions');
+            setLoadErrors(current => ({ ...current, models: true }));
         } finally {
             setLoadingModels(false);
         }
     };
 
     const fetchFeatureCatalog = async () => {
+        setLoadingFeatureCatalog(true);
+        setLoadErrors(current => ({ ...current, features: false }));
         try {
             const data = await apiFetch<FeatureCatalogItem[]>('/lead-scoring/self-learning/feature-catalog');
             setFeatureCatalog(Array.isArray(data) ? data : []);
         } catch {
-            toast.error('Failed to load scoring feature catalog');
+            setLoadErrors(current => ({ ...current, features: true }));
         } finally {
             setLoadingFeatureCatalog(false);
         }
@@ -251,22 +259,26 @@ export default function LeadScoringAdminPage() {
     };
 
     const fetchRules = async () => {
+        setLoading(true);
+        setLoadErrors(current => ({ ...current, rules: false }));
         try {
             const data = await apiFetch<ScoringRule[]>('/lead-scoring/rules');
             setRules(Array.isArray(data) ? data : []);
         } catch {
-            toast.error('Failed to load scoring rules');
+            setLoadErrors(current => ({ ...current, rules: true }));
         } finally {
             setLoading(false);
         }
     };
 
     const fetchSelfLearningSettings = async () => {
+        setLoadingSelfLearning(true);
+        setLoadErrors(current => ({ ...current, settings: false }));
         try {
             const data = await apiFetch<SelfLearningSettings>('/lead-scoring/self-learning/settings');
             setSelfLearningSettings({ ...DEFAULT_SELF_LEARNING_SETTINGS, ...data });
         } catch {
-            toast.error('Failed to load predictive scoring settings');
+            setLoadErrors(current => ({ ...current, settings: true }));
         } finally {
             setLoadingSelfLearning(false);
         }
@@ -420,19 +432,9 @@ export default function LeadScoringAdminPage() {
 
     return (
         <div>
-            {/* Header */}
-            <div className="mb-6 flex items-center justify-between gap-2">
-                <div className="flex items-center gap-3">
-                    <Gauge className="size-7 text-primary" />
-                    <div>
-                        <h1 className="text-xl font-extrabold">Lead Scoring</h1>
-                        <p className="text-sm text-muted-foreground">
-                            Define rules to automatically score leads based on their attributes.
-                        </p>
-                    </div>
-                </div>
-                <div className="flex gap-2">
-                    <Button variant="outline" onClick={handleRecomputeAll} disabled={recomputing}>
+            <PageHeader title="Lead Scoring" description="Configure predictive scoring and fallback rules." actions={
+                <div className="flex max-w-full flex-wrap gap-2">
+                    <Button variant="outline" onClick={handleRecomputeAll} disabled={recomputing || loading || !!loadErrors.rules}>
                         {recomputing ? <Loader2 className="size-4 animate-spin" /> : <Play className="size-4" />}
                         Recompute All
                     </Button>
@@ -441,16 +443,16 @@ export default function LeadScoringAdminPage() {
                         Add Rule
                     </Button>
                 </div>
-            </div>
+            } />
 
-            <Tabs defaultValue="self-learning" className="space-y-4">
+            <Tabs value={activeSection} onValueChange={setActiveSection} className="space-y-4">
                 <TabsList>
-                    <TabsTrigger value="self-learning">Predictive Scoring</TabsTrigger>
+                    <TabsTrigger value="self-learning">Predictive</TabsTrigger>
                     <TabsTrigger value="features">Features</TabsTrigger>
-                    <TabsTrigger value="rules">Rule Fallback</TabsTrigger>
+                    <TabsTrigger value="rules">Rules</TabsTrigger>
                 </TabsList>
 
-                <TabsContent value="self-learning" className="space-y-4">
+                <TabsContent value="self-learning" forceMount hidden={activeSection !== "self-learning"} className="space-y-4">
                     <Alert variant="info">
                         <BrainCircuit />
                         <AlertDescription>
@@ -462,16 +464,19 @@ export default function LeadScoringAdminPage() {
                         <div className="flex justify-center py-12">
                             <Loader2 className="size-6 animate-spin text-primary" />
                         </div>
+                    ) : loadErrors.settings ? (
+                        <div role="alert" className="rounded-lg border p-4 text-sm">Failed to load predictive scoring settings. <Button variant="outline" size="sm" onClick={fetchSelfLearningSettings}>Retry</Button></div>
                     ) : (
-                        <div className="grid gap-4 xl:grid-cols-[1fr_0.8fr]">
+                        <div className="grid gap-4 2xl:grid-cols-[minmax(0,1fr)_minmax(0,0.8fr)]">
                             <div className="rounded-xl border bg-card p-4">
-                                <div className="mb-4 flex items-start justify-between gap-4">
+                                <div className="mb-4 flex flex-wrap items-start justify-between gap-4">
                                     <div>
                                         <h2 className="text-sm font-bold">Predictive Scoring Controls</h2>
                                         <p className="mt-1 text-xs text-muted-foreground">Enable scoring, choose target modules, and configure the historical data window.</p>
                                     </div>
                                     <div className="flex items-center gap-2">
                                         <Switch
+                                            aria-label="Enable predictive scoring"
                                             checked={selfLearningSettings.isEnabled}
                                             onCheckedChange={(checked) => setSelfLearningSettings((current) => ({ ...current, isEnabled: checked }))}
                                         />
@@ -479,18 +484,18 @@ export default function LeadScoringAdminPage() {
                                     </div>
                                 </div>
 
-                                <div className="grid gap-4 md:grid-cols-2">
+                                <div className="grid min-w-0 gap-4 2xl:grid-cols-2">
                                     <div className="space-y-2">
                                         <Label>Target Modules</Label>
                                         <div className="grid gap-2 rounded-lg border p-3">
-                                            <label className="flex items-center justify-between gap-3 text-sm">
+                                            <label className="flex flex-wrap items-center justify-between gap-3 text-sm">
                                                 Leads
                                                 <Switch
                                                     checked={selfLearningSettings.targetModules.includes('LEAD')}
                                                     onCheckedChange={(checked) => toggleTargetModule('LEAD', checked)}
                                                 />
                                             </label>
-                                            <label className="flex items-center justify-between gap-3 text-sm">
+                                            <label className="flex flex-wrap items-center justify-between gap-3 text-sm">
                                                 Opportunities
                                                 <Switch
                                                     checked={selfLearningSettings.targetModules.includes('OPPORTUNITY')}
@@ -500,12 +505,12 @@ export default function LeadScoringAdminPage() {
                                         </div>
                                     </div>
                                     <div className="space-y-2">
-                                        <Label>Objective</Label>
+                                        <Label htmlFor="scoring-objective">Objective</Label>
                                         <Select
                                             value={selfLearningSettings.objective}
                                             onValueChange={(value) => setSelfLearningSettings((current) => ({ ...current, objective: value as SelfLearningSettings['objective'] }))}
                                         >
-                                            <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                                            <SelectTrigger id="scoring-objective" className="w-full"><SelectValue /></SelectTrigger>
                                             <SelectContent>
                                                 <SelectItem value="CONVERSION">Lead conversion</SelectItem>
                                                 <SelectItem value="OPPORTUNITY_CREATED">Opportunity creation</SelectItem>
@@ -515,8 +520,8 @@ export default function LeadScoringAdminPage() {
                                         </Select>
                                     </div>
                                     <div className="space-y-2">
-                                        <Label>Minimum Historical Records</Label>
-                                        <Input
+                                        <Label htmlFor="scoring-minimum-historical-records">Minimum Historical Records</Label>
+                                        <Input id="scoring-minimum-historical-records"
                                             type="number"
                                             min={1}
                                             value={selfLearningSettings.minimumHistoricalRecords}
@@ -524,12 +529,12 @@ export default function LeadScoringAdminPage() {
                                         />
                                     </div>
                                     <div className="space-y-2">
-                                        <Label>Lookback Window</Label>
+                                        <Label htmlFor="scoring-lookback-window">Lookback Window</Label>
                                         <Select
                                             value={String(selfLearningSettings.lookbackDays)}
                                             onValueChange={(value) => setSelfLearningSettings((current) => ({ ...current, lookbackDays: Number(value) }))}
                                         >
-                                            <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                                            <SelectTrigger id="scoring-lookback-window" className="w-full"><SelectValue /></SelectTrigger>
                                             <SelectContent>
                                                 <SelectItem value="90">Last 90 days</SelectItem>
                                                 <SelectItem value="180">Last 180 days</SelectItem>
@@ -539,12 +544,12 @@ export default function LeadScoringAdminPage() {
                                         </Select>
                                     </div>
                                     <div className="space-y-2">
-                                        <Label>Retrain Cadence</Label>
+                                        <Label htmlFor="scoring-retrain-cadence">Retrain Cadence</Label>
                                         <Select
                                             value={selfLearningSettings.retrainCadence}
                                             onValueChange={(value) => setSelfLearningSettings((current) => ({ ...current, retrainCadence: value as SelfLearningSettings['retrainCadence'] }))}
                                         >
-                                            <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                                            <SelectTrigger id="scoring-retrain-cadence" className="w-full"><SelectValue /></SelectTrigger>
                                             <SelectContent>
                                                 <SelectItem value="MANUAL">Manual</SelectItem>
                                                 <SelectItem value="WEEKLY">Weekly</SelectItem>
@@ -553,12 +558,12 @@ export default function LeadScoringAdminPage() {
                                         </Select>
                                     </div>
                                     <div className="space-y-2">
-                                        <Label>Fallback Mode</Label>
+                                        <Label htmlFor="scoring-fallback-mode">Fallback Mode</Label>
                                         <Select
                                             value={selfLearningSettings.fallbackMode}
                                             onValueChange={(value) => setSelfLearningSettings((current) => ({ ...current, fallbackMode: value as SelfLearningSettings['fallbackMode'] }))}
                                         >
-                                            <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                                            <SelectTrigger id="scoring-fallback-mode" className="w-full"><SelectValue /></SelectTrigger>
                                             <SelectContent>
                                                 <SelectItem value="RULE_SCORE">Use rule score</SelectItem>
                                                 <SelectItem value="KEEP_EXISTING">Keep existing score</SelectItem>
@@ -567,12 +572,12 @@ export default function LeadScoringAdminPage() {
                                         </Select>
                                     </div>
                                     <div className="space-y-2">
-                                        <Label>Promotion Approval</Label>
+                                        <Label htmlFor="scoring-promotion-approval">Promotion Approval</Label>
                                         <Select
                                             value={selfLearningSettings.approvalMode ?? 'MANUAL'}
                                             onValueChange={(value) => setSelfLearningSettings((current) => ({ ...current, approvalMode: value as SelfLearningSettings['approvalMode'] }))}
                                         >
-                                            <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                                            <SelectTrigger id="scoring-promotion-approval" className="w-full"><SelectValue /></SelectTrigger>
                                             <SelectContent>
                                                 <SelectItem value="MANUAL">Manual review</SelectItem>
                                                 <SelectItem value="AUTO_PROMOTE_IF_BETTER">Auto-promote if better</SelectItem>
@@ -580,8 +585,8 @@ export default function LeadScoringAdminPage() {
                                         </Select>
                                     </div>
                                     <div className="space-y-2">
-                                        <Label>Feature Retention Days</Label>
-                                        <Input
+                                        <Label htmlFor="scoring-feature-retention-days">Feature Retention Days</Label>
+                                        <Input id="scoring-feature-retention-days"
                                             type="number"
                                             min={30}
                                             value={selfLearningSettings.featureRetentionDays ?? 365}
@@ -597,7 +602,7 @@ export default function LeadScoringAdminPage() {
                                     </Button>
                                     <Button variant="outline" onClick={handleSelfLearningRecompute} disabled={recomputingSelfLearning || selfLearningSettings.targetModules.length === 0}>
                                         {recomputingSelfLearning ? <Loader2 className="size-4 animate-spin" /> : <Play className="size-4" />}
-                                        Recompute Predictive Scores
+                                        Recompute Scores
                                     </Button>
                                 </div>
                             </div>
@@ -608,15 +613,15 @@ export default function LeadScoringAdminPage() {
                                     <h2 className="text-sm font-bold">Current State</h2>
                                 </div>
                                 <div className="space-y-3 text-sm">
-                                    <div className="flex items-center justify-between gap-3">
+                                    <div className="flex flex-wrap items-center justify-between gap-3">
                                         <span className="text-muted-foreground">Status</span>
                                         <Badge variant={selfLearningSettings.isEnabled ? 'default' : 'outline'}>{selfLearningSettings.isEnabled ? 'Enabled' : 'Fallback only'}</Badge>
                                     </div>
-                                    <div className="flex items-center justify-between gap-3">
+                                    <div className="flex flex-wrap items-center justify-between gap-3">
                                         <span className="text-muted-foreground">Modules</span>
                                         <span className="font-semibold">{selfLearningSettings.targetModules.join(', ') || 'None'}</span>
                                     </div>
-                                    <div className="flex items-center justify-between gap-3">
+                                    <div className="flex flex-wrap items-center justify-between gap-3">
                                         <span className="text-muted-foreground">Last recomputed</span>
                                         <span className="text-right font-semibold">{selfLearningSettings.lastRecomputedAt ? formatWorkspaceDateTime(selfLearningSettings.lastRecomputedAt) : 'Never'}</span>
                                     </div>
@@ -640,7 +645,9 @@ export default function LeadScoringAdminPage() {
                             <div className="flex justify-center py-8">
                                 <Loader2 className="size-5 animate-spin text-muted-foreground" />
                             </div>
-                        ) : modelSummaries.length === 0 ? (
+                        ) : loadErrors.models ? (
+                        <div role="alert" className="rounded-lg border p-4 text-sm">Failed to load scoring model versions. <Button variant="outline" size="sm" onClick={fetchModelVersions}>Retry</Button></div>
+                    ) : modelSummaries.length === 0 ? (
                             <p className="py-6 text-center text-sm text-muted-foreground">No model versions yet — run a predictive score recompute to train the first one.</p>
                         ) : (
                             <div className="space-y-6">
@@ -742,7 +749,7 @@ export default function LeadScoringAdminPage() {
                     </div>
                 </TabsContent>
 
-                <TabsContent value="features" className="space-y-4">
+                <TabsContent value="features" forceMount hidden={activeSection !== "features"} className="space-y-4">
                     <div className="rounded-xl border bg-card p-4">
                         <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
                             <div>
@@ -761,7 +768,9 @@ export default function LeadScoringAdminPage() {
                             <div className="flex justify-center py-8">
                                 <Loader2 className="size-5 animate-spin text-muted-foreground" />
                             </div>
-                        ) : featureCatalog.length === 0 ? (
+                        ) : loadErrors.features ? (
+                        <div role="alert" className="rounded-lg border p-4 text-sm">Failed to load scoring feature catalog. <Button variant="outline" size="sm" onClick={fetchFeatureCatalog}>Retry</Button></div>
+                    ) : featureCatalog.length === 0 ? (
                             <div className="rounded-lg border border-dashed p-6 text-center">
                                 <p className="text-sm font-semibold">No profiled features yet</p>
                                 <p className="mt-1 text-xs text-muted-foreground">Run a predictive recompute, then profile coverage to inspect available model inputs.</p>
@@ -821,7 +830,7 @@ export default function LeadScoringAdminPage() {
                     </div>
                 </TabsContent>
 
-                <TabsContent value="rules" className="space-y-4">
+                <TabsContent value="rules" forceMount hidden={activeSection !== "rules"} className="space-y-4">
                     <Alert variant="info">
                         <Info />
                         <AlertDescription>
@@ -833,6 +842,8 @@ export default function LeadScoringAdminPage() {
                         <div className="flex justify-center py-12">
                             <Loader2 className="size-6 animate-spin text-primary" />
                         </div>
+                    ) : loadErrors.rules ? (
+                        <div role="alert" className="rounded-lg border p-4 text-sm">Failed to load scoring rules. <Button variant="outline" size="sm" onClick={fetchRules}>Retry</Button></div>
                     ) : (
                         <div className="overflow-hidden rounded-xl border">
                             <Table>
@@ -959,14 +970,14 @@ export default function LeadScoringAdminPage() {
                     </div>
 
                     <p className="pt-1 text-sm font-bold">Condition</p>
-                    <div className="flex gap-3">
-                        <div className="flex-1 space-y-2">
-                            <Label>Field</Label>
+                    <div className="grid min-w-0 gap-3 sm:grid-cols-2">
+                        <div className="min-w-0 space-y-2">
+                            <Label htmlFor="scoring-field">Field</Label>
                             <Select
                                 value={form.fieldKey}
                                 onValueChange={value => setForm(f => ({ ...f, fieldKey: value }))}
                             >
-                                <SelectTrigger className="w-full">
+                                <SelectTrigger id="scoring-field" className="w-full">
                                     <SelectValue />
                                 </SelectTrigger>
                                 <SelectContent>
@@ -976,13 +987,13 @@ export default function LeadScoringAdminPage() {
                                 </SelectContent>
                             </Select>
                         </div>
-                        <div className="flex-[1.5] space-y-2">
-                            <Label>Operator</Label>
+                        <div className="min-w-0 space-y-2">
+                            <Label htmlFor="scoring-operator">Operator</Label>
                             <Select
                                 value={form.operator}
                                 onValueChange={value => setForm(f => ({ ...f, operator: value }))}
                             >
-                                <SelectTrigger className="w-full">
+                                <SelectTrigger id="scoring-operator" className="w-full">
                                     <SelectValue />
                                 </SelectTrigger>
                                 <SelectContent>
@@ -1006,7 +1017,7 @@ export default function LeadScoringAdminPage() {
                     )}
 
                     <p className="pt-1 text-sm font-bold">Score Impact</p>
-                    <div className="flex items-center gap-4">
+                    <div className="flex flex-wrap items-center gap-4">
                         <div className="w-40 space-y-2">
                             <Label htmlFor="rule-score-change">Score change</Label>
                             <Input

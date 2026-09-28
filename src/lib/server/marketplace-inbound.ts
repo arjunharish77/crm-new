@@ -1,8 +1,10 @@
 import { randomUUID, timingSafeEqual } from "crypto";
-import { query, queryOne, execute } from "@/lib/db/query";
+import { query, queryOne, execute, queryOneAsSystem, queryAsSystem } from "@/lib/db/query";
 import { checkRateLimit } from "@/lib/server/rate-limit";
 import { decryptSecretAtRestOrNull } from "@/lib/server/secret-encryption";
 import { runAutomationsForEvent } from "@/lib/repositories/automations-postgres";
+import type { RecordAccessLevel } from "@/lib/server/record-scope";
+import { enterTenantContext } from "@/lib/db/tenant-context";
 
 type PermissionScope = "read" | "write";
 
@@ -80,7 +82,10 @@ export async function authenticateMarketplaceAppRequest(request: Request) {
   const appId = token.slice(0, separatorIndex);
   const secret = token.slice(separatorIndex + 1);
 
-  const app = await queryOne<{ id: string; isActive: boolean; rateLimitPerMinute: number }>(
+  // WP07 (F04): DELEGATED_API, disposition B -- which tenant installed this app is exactly what
+  // the secret-matching step below discovers; genuinely pre-tenant, like a login-by-email
+  // lookup. See 25_AUDIT_REMEDIATION_PLAN.md "## WP07 pre-auth/system path inventory".
+  const app = await queryOneAsSystem<{ id: string; isActive: boolean; rateLimitPerMinute: number }>(
     `select id, "isActive", "rateLimitPerMinute" from "MarketplaceApp" where id = $1 limit 1`,
     [appId],
   );
@@ -91,7 +96,7 @@ export async function authenticateMarketplaceAppRequest(request: Request) {
   // this correctly blocks every installing tenant at once regardless of the rework above.
   if (!app.isActive) throw new MarketplaceAppAuthenticationError("APP_SUSPENDED");
 
-  const secretRowsEncrypted = await query<{ tenantId: string; secret: string; previousSecret: string | null; previousSecretExpiresAt: string | null }>(
+  const secretRowsEncrypted = await queryAsSystem<{ tenantId: string; secret: string; previousSecret: string | null; previousSecretExpiresAt: string | null }>(
     `select "tenantId", secret, "previousSecret", "previousSecretExpiresAt" from "TenantAppSecret" where "appId" = $1`,
     [appId],
   );
@@ -104,7 +109,20 @@ export async function authenticateMarketplaceAppRequest(request: Request) {
   if (!matchedSecretRow) throw new MarketplaceAppAuthenticationError("INVALID_SECRET");
   const tenantId = matchedSecretRow.tenantId;
 
-  const install = await queryOne<{ id: string }>(`select id from "TenantAppInstall" where "tenantId" = $1 and "appId" = $2 and status = 'INSTALLED' limit 1`, [tenantId, appId]);
+  // WP07 (F04): DELEGATED_API -- the installing tenant is now known (read off the matched
+  // TenantAppSecret row), so ambient tenant context is entered here, before the (tenant-scoped)
+  // install lookup right below and everything this authenticated request goes on to do --
+  // mirroring what resolveUserFromPayload does for the normal cookie-session path. Strictly
+  // more correct than routing this request's later CRUD (listLeadsForTenant et al, shared with
+  // the normal session-authenticated path) through the system pool, which would permanently
+  // disable RLS's defense-in-depth for every /api/v1/apps/** request instead of just letting it
+  // work correctly.
+  enterTenantContext({ tenantId, userId: null, roleId: null });
+
+  const install = await queryOne<{ id: string; recordAccess: RecordAccessLevel; ownerUserId: string | null; fieldPermissions: Record<string, unknown> | null }>(
+    `select id, "recordAccess", "ownerUserId", "fieldPermissions" from "TenantAppInstall" where "tenantId" = $1 and "appId" = $2 and status = 'INSTALLED' limit 1`,
+    [tenantId, appId],
+  );
   if (!install) throw new MarketplaceAppAuthenticationError("APP_NOT_INSTALLED");
 
   // Per-installing-tenant budget against the app's own configured rate limit -- keying only by
@@ -119,13 +137,59 @@ export async function authenticateMarketplaceAppRequest(request: Request) {
 
   incrementRequestCount(tenantId, appId).catch(() => undefined);
 
-  return { appId, tenantId, installId: install.id, permissions };
+  return {
+    appId,
+    tenantId,
+    installId: install.id,
+    permissions,
+    recordAccess: install.recordAccess,
+    ownerUserId: install.ownerUserId,
+    fieldPermissions: install.fieldPermissions,
+  };
 }
 
 export function hasAppPermission(permissions: Record<string, PermissionScope>, moduleKey: string, action: "read" | "write") {
   const scope = permissions[moduleKey];
   if (!scope) return false;
   return action === "read" ? scope === "read" || scope === "write" : scope === "write";
+}
+
+// WP04 fix: builds the "user" object every /api/v1/apps/* route passes into the shared
+// leads-postgres.ts/opportunities-postgres.ts repository functions. `id`/`tenantId` are unchanged
+// (an app's own identity, used for audit/createdBy attribution exactly as before) -- the only new
+// behavior is that when a tenant admin has configured this install with OWN/TEAM record-scope
+// and/or field-permission masking, those now actually apply, via the exact same
+// recordAccessLevel/fieldPermissionMap functions an internal user's role goes through. Default
+// (recordAccess "ALL", no fieldPermissions) reproduces today's unrestricted behavior exactly, so
+// an install nobody has explicitly configured is completely unaffected by this fix.
+// `fieldPermissions` (the install's own column) is expected in the same shape as
+// Role.permissions.fieldPermissions -- keyed by the plural module name ("leads"/"opportunities"),
+// e.g. `{ "leads": { "email": "hidden" } }` -- so it flows straight through field-permissions.ts's
+// existing "legacy" (role-level, not permission-template-level) lookup path unchanged.
+export async function buildAppScopedActor(auth: {
+  appId: string;
+  tenantId: string;
+  recordAccess: RecordAccessLevel;
+  ownerUserId: string | null;
+  fieldPermissions: Record<string, unknown> | null;
+}) {
+  let ownerTeamId: string | null = null;
+  if (auth.recordAccess === "TEAM" && auth.ownerUserId) {
+    const owner = await queryOne<{ teamId: string | null }>(`select "teamId" from "User" where id = $1 and "tenantId" = $2`, [auth.ownerUserId, auth.tenantId]);
+    ownerTeamId = owner?.teamId ?? null;
+  }
+  return {
+    id: auth.appId,
+    tenantId: auth.tenantId,
+    teamId: ownerTeamId,
+    recordScopeActorId: auth.recordAccess === "ALL" ? undefined : auth.ownerUserId,
+    role: {
+      permissions: {
+        recordAccess: auth.recordAccess,
+        fieldPermissions: auth.fieldPermissions ?? undefined,
+      },
+    },
+  };
 }
 
 // Gap checklist Module 16's app event bus, "triggers" half (an external app originating a CRM

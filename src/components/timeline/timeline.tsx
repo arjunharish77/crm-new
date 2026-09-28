@@ -183,14 +183,14 @@ export function Timeline({ activities }: TimelineProps) {
                                             toggleExpanded(activity.id);
                                         }
                                     }}
-                                    className="cursor-pointer rounded-2xl border bg-card p-3 transition-[border-color,box-shadow,background-color] duration-150 hover:shadow-[0_10px_28px_var(--tw-shadow-color)]"
+                                    className="min-w-0 break-words cursor-pointer rounded-2xl border bg-card p-3 transition-[border-color,box-shadow,background-color] duration-150 hover:shadow-[0_10px_28px_var(--tw-shadow-color)]"
                                     style={{
                                         borderColor: withAlpha(accent, 18),
                                         "--tw-shadow-color": withAlpha(accent, 8),
                                     } as React.CSSProperties}
                                 >
                                     <div className="flex items-start gap-3">
-                                        <div className="w-[52px] min-w-[52px] pt-0.5 text-center">
+                                        <div className="w-16 shrink-0 pt-0.5 text-center">
                                             <div
                                                 className="mx-auto mb-1 flex size-8 items-center justify-center rounded-full border"
                                                 style={{
@@ -233,7 +233,7 @@ export function Timeline({ activities }: TimelineProps) {
                                                 </div>
 
                                                 <div className="flex items-center gap-2">
-                                                    <span className="text-xs text-muted-foreground">
+                                                    <span className="min-w-0 max-w-full break-words text-xs text-muted-foreground">
                                                         {formatWorkspaceRelativeTime(activity.createdAt)}
                                                     </span>
                                                     <div
@@ -260,22 +260,22 @@ export function Timeline({ activities }: TimelineProps) {
 
                                             <div className="flex flex-wrap gap-3">
                                                 {activity.lead && (
-                                                    <span className="text-xs text-muted-foreground">
+                                                    <span className="min-w-0 max-w-full break-words text-xs text-muted-foreground">
                                                         Lead: <strong>{activity.lead.name}</strong>
                                                     </span>
                                                 )}
                                                 {activity.opportunity && (
-                                                    <span className="text-xs text-muted-foreground">
+                                                    <span className="min-w-0 max-w-full break-words text-xs text-muted-foreground">
                                                         Opportunity: <strong>{activity.opportunity.title}</strong>
                                                     </span>
                                                 )}
                                                 {activity.user && (
-                                                    <span className="text-xs text-muted-foreground">
+                                                    <span className="min-w-0 max-w-full break-words text-xs text-muted-foreground">
                                                         by {activity.user.name || activity.user.email}
                                                     </span>
                                                 )}
                                                 {auditEvents.length > 0 && (
-                                                    <span className="text-xs text-muted-foreground">
+                                                    <span className="min-w-0 max-w-full break-words text-xs text-muted-foreground">
                                                         {auditEvents.length} modification{auditEvents.length === 1 ? "" : "s"} tracked
                                                     </span>
                                                 )}
@@ -302,7 +302,7 @@ export function Timeline({ activities }: TimelineProps) {
                                                                         </span>
                                                                         <div className="flex flex-col gap-1">
                                                                             {changes.map((change) => (
-                                                                                <span key={`${event.id}-${change.field}`} className="text-xs text-muted-foreground">
+                                                                                <span key={`${event.id}-${change.field}`} className="min-w-0 max-w-full break-words text-xs text-muted-foreground">
                                                                                     <strong>{activityFieldLabel(change.field)}</strong>: {formatAuditActivityValue(change.before, change.field, event)} -&gt; {formatAuditActivityValue(change.after, change.field, event)}
                                                                                 </span>
                                                                             ))}

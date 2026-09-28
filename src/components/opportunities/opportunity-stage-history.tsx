@@ -25,32 +25,33 @@ export function OpportunityStageHistoryList({ history }: OpportunityStageHistory
             {history.map((item) => (
                 <div
                     key={item.id}
+                    data-stage-history-item
                     className="rounded-xl border border-border bg-surface-container-lowest p-3 transition-colors hover:border-primary/10 hover:bg-primary/[0.02]"
                 >
-                    <div className="flex items-center gap-3">
-                        <Avatar className="size-7.5">
+                    <div className="flex min-w-0 items-start gap-3">
+                        <Avatar className="size-7.5 shrink-0">
                             <AvatarFallback className="bg-secondary-container text-on-secondary-container">
                                 <History className="size-4" />
                             </AvatarFallback>
                         </Avatar>
 
-                        <div className="flex-1">
+                        <div className="min-w-0 flex-1 break-words">
                             <div className="mb-0.5 flex flex-wrap items-center gap-1.5">
                                 {item.fromStage ? (
-                                    <span className="text-sm font-bold text-muted-foreground">{item.fromStage.name}</span>
+                                    <span className="min-w-0 max-w-full break-words text-sm font-bold text-muted-foreground">{item.fromStage.name}</span>
                                 ) : (
                                     <span className="text-sm font-bold text-muted-foreground/60">Initial</span>
                                 )}
 
                                 <ArrowRight className="size-3.5 text-muted-foreground/60" />
 
-                                <span className="text-sm font-extrabold text-primary">{item.toStage.name}</span>
+                                <span className="min-w-0 max-w-full break-words text-sm font-extrabold text-primary">{item.toStage.name}</span>
                             </div>
 
-                            <div className="flex items-center gap-1.5">
-                                <div className="flex items-center gap-1">
-                                    <User className="size-3 text-muted-foreground/60" />
-                                    <span className="text-xs text-muted-foreground">{item.changedBy.name}</span>
+                            <div className="flex flex-wrap items-center gap-1.5">
+                                <div className="flex min-w-0 max-w-full items-start gap-1">
+                                    <User className="size-3 shrink-0 text-muted-foreground/60" />
+                                    <span className="min-w-0 break-words text-xs text-muted-foreground">{item.changedBy.name}</span>
                                 </div>
                                 <span className="text-xs text-muted-foreground/60">•</span>
                                 <span className="text-xs text-muted-foreground">{formatWorkspaceRelativeTime(item.changedAt)}</span>
@@ -60,7 +61,7 @@ export function OpportunityStageHistoryList({ history }: OpportunityStageHistory
 
                     {item.notes && (
                         <div className="mt-2.5 pl-[42px]">
-                            <p className="text-sm text-muted-foreground italic">&quot;{item.notes}&quot;</p>
+                            <p className="break-words text-sm text-muted-foreground italic">&quot;{item.notes}&quot;</p>
                         </div>
                     )}
                 </div>

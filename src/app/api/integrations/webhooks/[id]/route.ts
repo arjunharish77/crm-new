@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { requireCurrentUser } from "@/lib/server/auth";
 import { deleteWebhookForTenant, updateWebhookForTenant } from "@/lib/server/crm";
 import { badRequest, serverError, unauthorized } from "@/lib/server/http";
+import { UnsafeDestinationError } from "@/lib/server/outbound-request-guard";
 
 type Params = {
   params: Promise<{ id: string }>;
@@ -18,6 +19,7 @@ export async function PATCH(request: Request, { params }: Params) {
   } catch (error) {
     if (error instanceof Error && error.message === "UNAUTHORIZED") return unauthorized();
     if (error instanceof Error && error.message === "WEBHOOK_NOT_FOUND") return badRequest("Webhook not found");
+    if (error instanceof UnsafeDestinationError) return badRequest(error.message);
     return serverError("Failed to update webhook", error);
   }
 }

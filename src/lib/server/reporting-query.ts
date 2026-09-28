@@ -1,5 +1,7 @@
 import { query } from "@/lib/db/query";
 import { assertFeatureEnabled } from "@/lib/server/entitlements";
+import { maskFieldsForUser } from "@/lib/server/field-permissions";
+import { recordAccessLevel } from "@/lib/server/record-scope";
 
 export type ReportObject =
   | "lead"
@@ -65,6 +67,7 @@ export type ReportQueryDefinition = {
 type TenantUser = {
   id: string;
   tenantId: string | null;
+  teamId?: string | null;
   role?: { permissions?: any } | string | null;
   permissionTemplates?: any[];
   isPlatformAdmin?: boolean;
@@ -614,8 +617,27 @@ function dependenciesForObject(object: ReportObject): ReportObject[] {
   return [];
 }
 
+// F03 fix (WP04): the report builder had its own third, separate OWN-vs-everything-else check
+// (isOwnScoped, removed below) -- "TEAM Records" fell through to unrestricted tenant-wide report
+// data, exactly the same bug already fixed in leads-postgres.ts/opportunities-postgres.ts/
+// exports.ts. Resolves to an ownerId equality filter (single id for OWN, or every team member's
+// id for TEAM) consumed by fetchTenantRowsPostgres's extraEquals -- that helper only expresses
+// equality/IN, not the fuller RecordShare-aware clause the other three surfaces use, so an
+// explicitly-shared-but-not-owned record is not surfaced here; this is a narrower guarantee than
+// those surfaces, called out explicitly rather than silently assumed equivalent.
+async function resolveOwnerIdScope(user: TenantUser): Promise<string[] | null> {
+  const level = recordAccessLevel(user);
+  if (level === "ALL") return null;
+  if (level === "OWN" || !user.teamId) return [user.id];
+  const members = await query<{ id: string }>(
+    'select id from "User" where "tenantId" = $1 and "teamId"::text = $2',
+    [user.tenantId, user.teamId],
+  );
+  return members.map((member) => member.id);
+}
+
 async function fetchDataSets(user: TenantUser, root: ReportQueryDefinition["root"], neededObjects: Set<ReportObject>): Promise<DataSets> {
-  const ownScoped = isOwnScoped(user);
+  const ownerIdScope = await resolveOwnerIdScope(user);
   const needLeads = neededObjects.has("lead") || neededObjects.has("leadOwner") || root === "lead";
   const needOpportunities = neededObjects.has("opportunity") || neededObjects.has("opportunityOwner") || neededObjects.has("stage") || root === "opportunity";
   const needActivities = neededObjects.has("activity") || neededObjects.has("activityType") || neededObjects.has("activityCreator") || root === "activity";
@@ -636,8 +658,8 @@ async function fetchDataSets(user: TenantUser, root: ReportQueryDefinition["root
     tasks, telephonyCalls, cases, caseTypes, caseStatuses, casePriorities,
     commissionLedgers, payouts, communications, journeyEnrollments, recordScores, customFieldValues,
   ] = await Promise.all([
-    needLeads ? fetchTenantRowsPostgres(user, "leads", ownScoped ? { ownerId: user.id } : null) : [],
-    needOpportunities ? fetchTenantRowsPostgres(user, "opportunities", ownScoped ? { ownerId: user.id } : null) : [],
+    needLeads ? fetchTenantRowsPostgres(user, "leads", ownerIdScope ? { ownerId: ownerIdScope } : null) : [],
+    needOpportunities ? fetchTenantRowsPostgres(user, "opportunities", ownerIdScope ? { ownerId: ownerIdScope } : null) : [],
     needActivities ? fetchTenantRowsPostgres(user, "activities", null) : [],
     neededObjects.has("stage") ? fetchTenantRowsPostgres(user, "stages", null) : [],
     neededObjects.has("activityType") ? fetchTenantRowsPostgres(user, "activityTypes", null) : [],
@@ -659,60 +681,63 @@ async function fetchDataSets(user: TenantUser, root: ReportQueryDefinition["root
 
   const leadIds = new Set(leads.map((lead: any) => lead.id));
   const opportunityIds = new Set(opportunities.map((opportunity: any) => opportunity.id));
-  const scopedActivities = ownScoped
+  // F03 fix: these all used to check "=== user.id" (OWN-only); now checked against the full
+  // resolved scope (self for OWN, every team member's id for TEAM) so TEAM scoping is consistent
+  // across every dataset here, not just leads/opportunities themselves.
+  const scopedActivities = ownerIdScope
     ? activities.filter((activity: any) =>
-      activity.createdBy === user.id ||
+      ownerIdScope.includes(activity.createdBy) ||
       (activity.leadId && leadIds.has(activity.leadId)) ||
       (activity.opportunityId && opportunityIds.has(activity.opportunityId))
     )
     : activities;
-  const scopedAssignmentLogs = ownScoped
+  const scopedAssignmentLogs = ownerIdScope
     ? assignmentLogs.filter((log: any) =>
-      log.assignedToId === user.id ||
+      ownerIdScope.includes(log.assignedToId) ||
       (log.entityType === "LEAD" && leadIds.has(log.entityId)) ||
       (log.entityType === "OPPORTUNITY" && opportunityIds.has(log.entityId))
     )
     : assignmentLogs;
-  const scopedTasks = ownScoped
+  const scopedTasks = ownerIdScope
     ? tasks.filter((task: any) =>
-      task.ownerId === user.id ||
+      ownerIdScope.includes(task.ownerId) ||
       (task.leadId && leadIds.has(task.leadId)) ||
       (task.opportunityId && opportunityIds.has(task.opportunityId))
     )
     : tasks;
-  const scopedTelephonyCalls = ownScoped
+  const scopedTelephonyCalls = ownerIdScope
     ? telephonyCalls.filter((call: any) =>
-      call.agentId === user.id ||
+      ownerIdScope.includes(call.agentId) ||
       (call.leadId && leadIds.has(call.leadId)) ||
       (call.opportunityId && opportunityIds.has(call.opportunityId))
     )
     : telephonyCalls;
-  const scopedCases = ownScoped
+  const scopedCases = ownerIdScope
     ? cases.filter((caseRow: any) =>
-      caseRow.ownerId === user.id ||
+      ownerIdScope.includes(caseRow.ownerId) ||
       (caseRow.leadId && leadIds.has(caseRow.leadId)) ||
       (caseRow.opportunityId && opportunityIds.has(caseRow.opportunityId))
     )
     : cases;
-  const scopedCommissionLedgers = ownScoped
-    ? commissionLedgers.filter((entry: any) => entry.partnerId === user.id || (entry.opportunityId && opportunityIds.has(entry.opportunityId)))
+  const scopedCommissionLedgers = ownerIdScope
+    ? commissionLedgers.filter((entry: any) => ownerIdScope.includes(entry.partnerId) || (entry.opportunityId && opportunityIds.has(entry.opportunityId)))
     : commissionLedgers;
   // Payout has no lead/opportunity link at all (only partnerId) -- own-scoping is purely
   // "is this my own payout," matching the object's own "matched by partner" join semantics.
-  const scopedPayouts = ownScoped ? payouts.filter((payout: any) => payout.partnerId === user.id) : payouts;
-  const scopedCommunications = ownScoped
+  const scopedPayouts = ownerIdScope ? payouts.filter((payout: any) => ownerIdScope.includes(payout.partnerId)) : payouts;
+  const scopedCommunications = ownerIdScope
     ? communications.filter((row: any) =>
       (row.entityType === "LEAD" && leadIds.has(row.entityId)) ||
       (row.entityType === "OPPORTUNITY" && opportunityIds.has(row.entityId))
     )
     : communications;
-  const scopedJourneyEnrollments = ownScoped
+  const scopedJourneyEnrollments = ownerIdScope
     ? journeyEnrollments.filter((row: any) =>
       (row.recordType === "LEAD" && leadIds.has(row.recordId)) ||
       (row.recordType === "OPPORTUNITY" && opportunityIds.has(row.recordId))
     )
     : journeyEnrollments;
-  const scopedRecordScores = ownScoped
+  const scopedRecordScores = ownerIdScope
     ? recordScores.filter((row: any) =>
       (row.recordType === "LEAD" && leadIds.has(row.recordId)) ||
       (row.recordType === "OPPORTUNITY" && opportunityIds.has(row.recordId))
@@ -720,15 +745,15 @@ async function fetchDataSets(user: TenantUser, root: ReportQueryDefinition["root
     : recordScores;
   // CustomFieldValue has no recordType of its own -- recordId is scoped by simply checking it
   // against whichever of the (already tenant/owner-scoped) lead or opportunity id sets matches.
-  const scopedCustomFieldValues = ownScoped
+  const scopedCustomFieldValues = ownerIdScope
     ? customFieldValues.filter((row: any) => leadIds.has(row.recordId) || opportunityIds.has(row.recordId))
     : customFieldValues;
 
   return {
-    leads: leads.map((row: any) => maskFieldsForUser(user, "leads", row)),
-    opportunities: opportunities.map((row: any) => maskFieldsForUser(user, "opportunities", row)),
+    leads: leads.map((row: any) => maskRecordForUser(user, "leads", row)),
+    opportunities: opportunities.map((row: any) => maskRecordForUser(user, "opportunities", row)),
     stages,
-    activities: scopedActivities.map((row: any) => maskFieldsForUser(user, "activities", row)),
+    activities: scopedActivities.map((row: any) => maskRecordForUser(user, "activities", row)),
     activityTypes,
     users,
     assignmentLogs: scopedAssignmentLogs,
@@ -778,7 +803,10 @@ const SQL_SELECT_BY_DATASET = {
 async function fetchTenantRowsPostgres(
   user: TenantUser,
   dataset: keyof typeof TABLE_BY_DATASET,
-  extraEquals: Record<string, string> | null
+  // A value can be an array (F03 fix, WP04: TEAM scope needs "ownerId is one of these team
+  // members' ids", which a single-value equality can't express) -- rendered as "= any(...)"
+  // instead of "= $N" in that case.
+  extraEquals: Record<string, string | string[]> | null
 ) {
   const values: unknown[] = [];
   const clauses: string[] = [];
@@ -790,7 +818,7 @@ async function fetchTenantRowsPostgres(
   }
   for (const [field, value] of Object.entries(extraEquals ?? {})) {
     values.push(value);
-    clauses.push(`"${field}" = $${values.length}`);
+    clauses.push(Array.isArray(value) ? `"${field}" = any($${values.length}::text[])` : `"${field}" = $${values.length}`);
   }
   values.push(MAX_LIMIT);
   return query<any>(
@@ -810,39 +838,13 @@ function needsUsers(objects: Set<ReportObject>) {
     objects.has("partner");
 }
 
-function isOwnScoped(user: TenantUser) {
-  const permissions = user.role && typeof user.role === "object" ? user.role.permissions : null;
-  return !!permissions?.isPartnerRole || permissions?.recordAccess === "OWN";
-}
 
-function fieldPermissionMap(user: TenantUser, module: "leads" | "opportunities" | "activities", typeId?: string | null) {
-  const role = user.role && typeof user.role === "object" ? user.role : null;
-  const legacy = role?.permissions?.fieldPermissions?.[module];
-  const next: Record<string, string> = legacy && typeof legacy === "object" ? { ...(legacy as Record<string, string>) } : {};
-  const baseScope = module === "leads" ? "lead" : module === "opportunities" ? "opportunity" : "activity";
-  const typeScope = typeId && module !== "leads" ? `${baseScope}:${typeId}` : null;
-  const templates = Array.isArray(user.permissionTemplates) ? user.permissionTemplates : [];
-  for (const template of templates) {
-    const fieldPermissions = template?.permissions?.fieldPermissions;
-    if (!fieldPermissions || typeof fieldPermissions !== "object") continue;
-    const base = fieldPermissions[baseScope];
-    const typed = typeScope ? fieldPermissions[typeScope] : null;
-    if (base && typeof base === "object") Object.assign(next, base);
-    if (typed && typeof typed === "object") Object.assign(next, typed);
-  }
-  return next;
-}
-
-function maskFieldsForUser<T extends Record<string, any>>(user: TenantUser, module: "leads" | "opportunities" | "activities", record: T): T {
-  const permissions = fieldPermissionMap(user, module, record.opportunityTypeId ?? record.typeId ?? null);
-  const masked: Record<string, any> = { ...record };
-  for (const [field, access] of Object.entries(permissions)) {
-    if (access === "hidden" && field in masked) {
-      masked[field] = null;
-      masked[`${field}Hidden`] = true;
-    }
-  }
-  return masked as T;
+// fieldPermissionMap/maskFieldsForUser moved to src/lib/server/field-permissions.ts (WP04) so
+// the same field-hiding policy also applies to the core Lead/Opportunity CRUD APIs, not just
+// this report-query path. This local wrapper preserves the by-record typeId resolution this
+// file's call sites relied on.
+function maskRecordForUser<T extends Record<string, any>>(user: TenantUser, module: "leads" | "opportunities" | "activities", record: T): T {
+  return maskFieldsForUser(user, module, record, record.opportunityTypeId ?? record.typeId ?? null);
 }
 
 type JoinMaps = {
@@ -1082,6 +1084,7 @@ function compareValue(actual: unknown, operator: ReportOperator, expected: unkno
 }
 
 function coerceComparable(value: unknown) {
+  if (value instanceof Date) return Number.isFinite(value.getTime()) ? value.getTime() : null;
   if (typeof value === "number") return value;
   if (typeof value === "string") {
     const numeric = Number(value);

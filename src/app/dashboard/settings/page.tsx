@@ -49,6 +49,7 @@ const MUTABLE_NOTIFICATION_CATEGORIES: Array<{ value: string; label: string }> =
     { value: "TASKS", label: "Task reminders & SLA alerts" },
     { value: "REASSIGNMENT", label: "Record reassignment" },
     { value: "CASES", label: "Case updates" },
+    { value: "APPLICATIONS", label: "Application document reminders" },
     { value: "VIEWS", label: "Shared Smart View activity" },
     { value: "NBA", label: "Next-best-action approvals" },
     { value: "INTEGRATIONS", label: "Integration/webhook failures" },

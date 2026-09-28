@@ -14,6 +14,6 @@ export async function GET(
     return NextResponse.json(executions);
   } catch (error) {
     if (error instanceof Error && error.message === "UNAUTHORIZED") return unauthorized();
-    return serverError("Failed to fetch automation executions");
+    return serverError("Failed to fetch automation executions", error);
   }
 }

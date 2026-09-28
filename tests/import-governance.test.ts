@@ -1,6 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const dbMocks = vi.hoisted(() => ({ query: vi.fn(), queryOne: vi.fn(), execute: vi.fn() }));
+const dbMocks = vi.hoisted(() => {
+  const query = vi.fn();
+  const queryOne = vi.fn();
+  const execute = vi.fn();
+  return { query, queryOne, execute, queryAsSystem: query, queryOneAsSystem: queryOne, executeAsSystem: execute, jsonbParam: (v: unknown) => v };
+});
 const leadsRepoMocks = vi.hoisted(() => ({ createLeadForTenant: vi.fn(), createAuditLog: vi.fn().mockResolvedValue(undefined) }));
 const authAdminMocks = vi.hoisted(() => ({ getCurrentUserById: vi.fn() }));
 const jobQueueMocks = vi.hoisted(() => ({ enqueueImportJob: vi.fn().mockResolvedValue(undefined) }));
@@ -27,7 +32,9 @@ const user = { id: "user-1", tenantId: "tenant-a" };
 
 describe("import governance", () => {
   beforeEach(() => {
-    Object.values(dbMocks).forEach((mock) => mock.mockReset());
+    // jsonbParam is a plain passthrough function, not a vi.fn() -- excluded from this reset
+    // sweep since mockReset() only applies to actual mock functions.
+    Object.entries(dbMocks).forEach(([key, mock]) => { if (key !== "jsonbParam") (mock as ReturnType<typeof vi.fn>).mockReset(); });
     leadsRepoMocks.createLeadForTenant.mockReset();
     leadsRepoMocks.createAuditLog.mockReset().mockResolvedValue(undefined);
     authAdminMocks.getCurrentUserById.mockReset();
@@ -160,7 +167,7 @@ describe("import governance", () => {
       dbMocks.queryOne.mockResolvedValueOnce({ id: "job-1", status: "QUEUED" });
       const job = await approveImportJob(user, "job-1");
       expect(job.status).toBe("QUEUED");
-      expect(jobQueueMocks.enqueueImportJob).toHaveBeenCalledWith("job-1");
+      expect(jobQueueMocks.enqueueImportJob).toHaveBeenCalledWith("job-1", "tenant-a");
     });
 
     it("rejects a pending-approval job without enqueueing it", async () => {

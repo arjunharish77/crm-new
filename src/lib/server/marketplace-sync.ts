@@ -1,9 +1,10 @@
 import { randomUUID, createHmac } from "crypto";
-import { query, queryOne, execute } from "@/lib/db/query";
+import { query, queryOne, execute, queryAsSystem } from "@/lib/db/query";
 import { assertModuleEnabled } from "@/lib/server/module-entitlements";
 import { getLeadForTenant, getOpportunityForTenant, updateLeadForTenant, updateOpportunityForTenant, listLeadsForTenant, listOpportunitiesForTenant } from "@/lib/server/crm";
 import { createUserNotification } from "@/lib/server/notifications";
 import { decryptSecretAtRestOrNull } from "@/lib/server/secret-encryption";
+import { assertSafeOutboundUrl } from "@/lib/server/outbound-request-guard";
 
 type TenantUser = { id: string; tenantId: string | null };
 type SyncModule = "leads" | "opportunities";
@@ -145,9 +146,13 @@ async function sendSyncBatch(webhookUrl: string, signingSecret: string | null, m
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
   try {
+    // F07 fix (WP06): this sends real tenant record data (leads/opportunities) to an app-
+    // supplied URL -- an SSRF here doesn't just probe internal services, it exfiltrates tenant
+    // data to wherever the destination actually resolves.
+    await assertSafeOutboundUrl(webhookUrl);
     const headers: Record<string, string> = { "content-type": "application/json", "x-app-timestamp": timestamp, "x-app-event": "sync" };
     if (signingSecret) headers["x-app-signature"] = signPayload(signingSecret, timestamp, rawBody);
-    const response = await fetch(webhookUrl, { method: "POST", headers, body: rawBody, signal: controller.signal });
+    const response = await fetch(webhookUrl, { method: "POST", headers, body: rawBody, signal: controller.signal, redirect: "manual" });
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
   } finally {
     clearTimeout(timeout);
@@ -234,8 +239,10 @@ export async function runSyncForInstall(installId: string) {
 // Worker-invoked recurring job: finds every sync config whose cadence has elapsed and runs it.
 // A config with syncCadenceMinutes null is manual-only (triggered via sync-now), never picked
 // up here.
+// WP07 (F04): BACKGROUND_JOB, disposition B -- worker-invoked recurring job, discovers due
+// sync configs across every tenant at once.
 export async function processDueAppSyncs(limit = 25) {
-  const due = await query<{ installId: string }>(
+  const due = await queryAsSystem<{ installId: string }>(
     `select "installId" from "TenantAppSyncConfig"
      where "syncCadenceMinutes" is not null
        and ("lastSyncedAt" is null or "lastSyncedAt" < now() - ("syncCadenceMinutes" || ' minutes')::interval)

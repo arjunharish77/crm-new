@@ -1,6 +1,7 @@
+import { apiOpportunityCreate, createApiRecords, validIdempotencyKey } from "@/lib/server/create-records";
 import { NextResponse } from "next/server";
-import { ApiKeyAuthenticationError, authenticateApiKeyRequest, hasApiKeyPermission } from "@/lib/server/api-keys";
-import { createOpportunityForTenant, listOpportunitiesForTenant } from "@/lib/server/crm";
+import { buildApiKeyWriteActor, ApiKeyAuthenticationError, authenticateApiKeyRequest, hasApiKeyPermission } from "@/lib/server/api-keys";
+import { listOpportunitiesForTenant } from "@/lib/server/crm";
 import { apiKeyAuthErrorResponse, badRequest, forbidden, serverError } from "@/lib/server/http";
 
 // Second endpoint in the developer-facing API surface, alongside /api/v1/leads -- same
@@ -33,7 +34,11 @@ export async function POST(request: Request) {
     }
     const body = rawBody ? JSON.parse(rawBody) : {};
     if (!body?.title || typeof body.title !== "string" || !body.title.trim()) return badRequest("title is required");
-    const opportunity = await createOpportunityForTenant({ id: apiKey.id, tenantId }, body);
+    const parsed = apiOpportunityCreate.safeParse(body);
+    if (!parsed.success) return badRequest(parsed.error.issues[0].message);
+    const key = request.headers.get("idempotency-key");
+    if (!validIdempotencyKey(key)) return badRequest("Invalid Idempotency-Key (maximum 200 printable characters)");
+    const opportunity = await createApiRecords(await buildApiKeyWriteActor(apiKey,tenantId), "opportunity", parsed.data, key);
     return NextResponse.json(opportunity, { status: 201 });
   } catch (error) {
     if (error instanceof ApiKeyAuthenticationError) return apiKeyAuthErrorResponse(error.reason);

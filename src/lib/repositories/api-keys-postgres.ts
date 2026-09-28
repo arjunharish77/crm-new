@@ -1,9 +1,10 @@
 import { randomUUID, randomBytes, createHmac, timingSafeEqual } from "crypto";
-import { execute, query, queryOne } from "@/lib/db/query";
+import { execute, query, queryOne, queryOneAsSystem, executeAsSystem } from "@/lib/db/query";
 import { DatabaseError } from "@/lib/db/errors";
 import { checkRateLimit, clientIpFromRequest } from "@/lib/server/rate-limit";
 import { assertFeatureEnabled, isFeatureEnabledForTenant } from "@/lib/server/entitlements";
 import { assertNotImpersonating } from "@/lib/server/sessions";
+import { enterTenantContext } from "@/lib/db/tenant-context";
 
 type TenantUser = {
   id: string;
@@ -195,6 +196,7 @@ export type ApiKeyAuthError =
   | "MISSING_CREDENTIALS"
   | "API_KEY_NOT_FOUND"
   | "API_KEY_REVOKED"
+  | "API_KEY_OWNER_UNAVAILABLE"
   | "API_KEY_EXPIRED"
   | "FEATURE_DISABLED"
   | "INVALID_SECRET"
@@ -272,7 +274,9 @@ export async function authenticateApiKeyRequest(
   }
   if (!keyId) throw new ApiKeyAuthenticationError("MISSING_CREDENTIALS");
 
-  const row = await queryOne<ApiKeyRow>(`select ${COLUMNS} from "ApiKey" where id = $1 limit 1`, [keyId]);
+  // WP07 (F04): DELEGATED_API, disposition B -- the key's own tenant is exactly what this
+  // lookup discovers; genuinely pre-tenant, like a login-by-email lookup.
+  const row = await queryOneAsSystem<ApiKeyRow>(`select ${COLUMNS} from "ApiKey" where id = $1 limit 1`, [keyId]);
   if (!row) throw new ApiKeyAuthenticationError("API_KEY_NOT_FOUND");
   if (!row.isActive) throw new ApiKeyAuthenticationError("API_KEY_REVOKED");
   if (row.expiresAt && new Date(row.expiresAt).getTime() <= Date.now()) throw new ApiKeyAuthenticationError("API_KEY_EXPIRED");
@@ -300,7 +304,19 @@ export async function authenticateApiKeyRequest(
   if (!rateLimit.allowed) throw new ApiKeyAuthenticationError("RATE_LIMITED");
 
   const now = new Date().toISOString();
-  execute(`update "ApiKey" set "lastUsedAt" = $1, "lastUsedIp" = $2 where id = $3`, [now, ip, row.id]).catch(() => undefined);
+  executeAsSystem(`update "ApiKey" set "lastUsedAt" = $1, "lastUsedIp" = $2 where id = $3`, [now, ip, row.id]).catch(() => undefined);
+
+  // WP07 (F04): DELEGATED_API -- this is the ONE production entry point (besides
+  // resolveUserFromPayload's normal cookie-session path) that now enters ambient tenant
+  // context, immediately after fully authenticating the caller. Every route that authenticates
+  // via authenticateApiKeyRequest -- /api/v1/leads, /api/v1/opportunities, and (through
+  // authenticateScim) every /api/scim/v2/** route -- already knows its exact single tenant at
+  // this point (row.tenantId, read off the ApiKey row itself), so entering context here is
+  // strictly MORE correct than routing their subsequent tenant-scoped work through the system
+  // pool: it lets RLS keep acting as a real defense-in-depth backstop for these delegated
+  // callers instead of being permanently bypassed for them. See 25_AUDIT_REMEDIATION_PLAN.md
+  // "## WP07 pre-auth/system path inventory".
+  enterTenantContext({ tenantId: row.tenantId ?? null, userId: null, roleId: null });
 
   return { apiKey: toPublicApiKey(row), tenantId: row.tenantId, mode };
 }

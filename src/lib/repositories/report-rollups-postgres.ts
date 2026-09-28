@@ -1,5 +1,5 @@
 import { randomUUID } from "crypto";
-import { execute, query, queryOne } from "@/lib/db/query";
+import { execute, query, queryOne, queryAsSystem } from "@/lib/db/query";
 import { createUserNotification } from "@/lib/server/notifications";
 
 type TenantUser = {
@@ -151,8 +151,10 @@ export async function updateReportRefreshPolicyForTenant(
 // read it. This scans for states that are due (or have never completed) and don't already
 // have a job in flight, and enqueues a 'SCHEDULED' job for each -- reusing the exact same
 // processPendingReportRefreshJobs consumer, not a second refresh pipeline.
+// WP07 (F04): BACKGROUND_JOB, disposition B -- worker-invoked recurring job, discovers due
+// rollup states across every tenant at once.
 export async function processDueReportRollupRefreshes(limit = 50) {
-  const due = await query<any>(
+  const due = await queryAsSystem<any>(
     `select s."tenantId", s."reportKey", s."scopeType", s."scopeId"
      from "ReportRefreshState" s
      where s.status <> 'REFRESHING'
@@ -209,8 +211,10 @@ async function notifyReportRollupRefreshFailed(job: any, message: string) {
   });
 }
 
+// WP07 (F04): BACKGROUND_JOB, disposition B -- worker-invoked recurring job, discovers pending
+// jobs across every tenant at once.
 export async function processPendingReportRefreshJobs(limit = 25) {
-  const jobs = await query<any>(
+  const jobs = await queryAsSystem<any>(
     `select ${JOB_COLUMNS}
      from "ReportRefreshJob"
      where status = 'PENDING'

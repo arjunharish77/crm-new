@@ -18,13 +18,13 @@ const crmMocks = vi.hoisted(() => ({
 // on the SQL text rather than sequenced mockResolvedValueOnce calls: the exact call order/count
 // across createUserSession -> enforceMaxConcurrentSessions -> (later) validateSession isn't
 // this file's concern, only that each table-shaped query gets a plausible answer.
-const dbMocks = vi.hoisted(() => ({
-  query: vi.fn(async (sql: string): Promise<any[]> => {
+const dbMocks = vi.hoisted(() => {
+  const query = vi.fn(async (sql: string): Promise<any[]> => {
     if (sql.includes('"UserSession"')) return []; // enforceMaxConcurrentSessions: no other active sessions to evict
     if (sql.includes('"SecurityPolicy"')) return []; // getEffectiveSecurityPolicy: no tenant/global row -> DEFAULT_SECURITY_POLICY
     return [];
-  }),
-  queryOne: vi.fn(async (sql: string) => {
+  });
+  const queryOne = vi.fn(async (sql: string) => {
     if (sql.includes('"UserSession"')) {
       return {
         id: "session-1",
@@ -43,9 +43,14 @@ const dbMocks = vi.hoisted(() => ({
       };
     }
     return null;
-  }),
-  execute: vi.fn().mockResolvedValue(undefined),
-}));
+  });
+  const execute = vi.fn().mockResolvedValue(undefined);
+  // WP07 (F04) follow-up: createUserSession/enforceMaxConcurrentSessions/validateSession/
+  // touchSessionIfStale now call the *AsSystem variants (see 25_AUDIT_REMEDIATION_PLAN.md "##
+  // WP07 pre-auth/system path inventory") -- aliased to the same fn references so this mock's
+  // existing SQL-shape-based branching covers both call paths identically.
+  return { query, queryOne, execute, queryAsSystem: query, queryOneAsSystem: queryOne, executeAsSystem: execute };
+});
 
 vi.mock("@/lib/db/query", () => dbMocks);
 
@@ -66,7 +71,7 @@ vi.mock("@/lib/db/access-mode", () => ({
 }));
 
 import { POST } from "@/app/api/auth/login/route";
-import { getCurrentUser, verifyAuthToken } from "@/lib/server/auth";
+import { getCurrentUser, verifyAuthToken, getUserFromToken, signMfaPendingToken, signPasswordChangeToken, signAuthToken } from "@/lib/server/auth";
 
 const PASSWORD = "correct-password123";
 let passwordHash: string;
@@ -108,18 +113,24 @@ function loginRequest(body: unknown) {
 }
 
 describe("POST /api/auth/login", () => {
-  it("accepts correct credentials and returns a verifiable token + user", async () => {
+  it("accepts correct credentials, sets an HttpOnly session cookie, and returns the user (no token in the JSON body)", async () => {
     const res = await POST(loginRequest({ email: "test@example.com", password: PASSWORD }));
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body.user).toMatchObject({ id: "user-1", email: "test@example.com", tenantId: "tenant-a" });
+    // F06 fix (WP05): the session token must never appear in the JSON response body.
+    expect(body.access_token).toBeUndefined();
 
-    const payload = await verifyAuthToken(body.access_token);
+    const cookie = res.cookies.get("token");
+    expect(cookie).toBeDefined();
+    expect(cookie!.httpOnly).toBe(true);
+
+    const payload = await verifyAuthToken(cookie!.value);
     expect(payload?.sub).toBe("user-1");
     expect(payload?.tenantId).toBe("tenant-a");
 
     const authedRequest = new Request("http://localhost/api/auth/me", {
-      headers: { authorization: `Bearer ${body.access_token}` },
+      headers: { authorization: `Bearer ${cookie!.value}` },
     });
     const user = await getCurrentUser(authedRequest);
     expect(user?.id).toBe("user-1");
@@ -306,7 +317,9 @@ describe("POST /api/auth/login", () => {
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body.passwordExpired).toBeUndefined();
-    expect(body.access_token).toEqual(expect.any(String));
+    // F06 fix (WP05): the session lives in the HttpOnly cookie, not the JSON body.
+    expect(body.access_token).toBeUndefined();
+    expect(res.cookies.get("token")?.value).toEqual(expect.any(String));
   });
 
   it("writes a LOGIN_FAILED audit log for a wrong password against a known user", async () => {
@@ -344,7 +357,7 @@ describe("getCurrentUser tenant-suspension enforcement (session level)", () => {
 
   it("cuts off an already-issued session once its tenant becomes suspended", async () => {
     const login = await POST(loginRequest({ email: "test@example.com", password: PASSWORD }));
-    const { access_token } = await login.json();
+    const access_token = login.cookies.get("token")?.value as string;
 
     authRepoMocks.getCurrentUserById.mockResolvedValueOnce({
       id: "user-1", email: "test@example.com", name: "Test User", tenantId: "tenant-a", roleId: null, role: null,
@@ -357,7 +370,7 @@ describe("getCurrentUser tenant-suspension enforcement (session level)", () => {
 
   it("does not cut off a platform admin's session even if their tenant is suspended", async () => {
     const login = await POST(loginRequest({ email: "test@example.com", password: PASSWORD }));
-    const { access_token } = await login.json();
+    const access_token = login.cookies.get("token")?.value as string;
 
     authRepoMocks.getCurrentUserById.mockResolvedValueOnce({
       id: "user-1", email: "test@example.com", name: "Test User", tenantId: "tenant-a", roleId: null, role: null,
@@ -366,5 +379,84 @@ describe("getCurrentUser tenant-suspension enforcement (session level)", () => {
 
     const user = await getCurrentUser(authedRequest(access_token));
     expect(user?.id).toBe("user-1");
+  });
+});
+
+// F01 fix (WP02): pending MFA / password-change tokens previously authenticated as a full
+// session because verifyAuthToken never checked the mfaPending/passwordChangePending claims --
+// see auth-reproduction.test.ts in crm-audit-bundle/ for the original vulnerable-outcome
+// evidence this replaces. These are the inverted, permanent regression tests.
+describe("F01: pending MFA/password-change tokens must never authenticate as a session", () => {
+  function bearerRequest(token: string) {
+    return new Request("http://localhost/api/auth/me", { headers: { authorization: `Bearer ${token}` } });
+  }
+
+  it("rejects an MFA-pending token on verifyAuthToken directly", async () => {
+    const token = await signMfaPendingToken("user-1");
+    expect(await verifyAuthToken(token)).toBeNull();
+  });
+
+  it("rejects a password-change-pending token on verifyAuthToken directly", async () => {
+    const token = await signPasswordChangeToken("user-1");
+    expect(await verifyAuthToken(token)).toBeNull();
+  });
+
+  it("rejects an MFA-pending token presented as a normal Bearer session token", async () => {
+    const token = await signMfaPendingToken("user-1");
+    const user = await getCurrentUser(bearerRequest(token));
+    expect(user).toBeNull();
+    // The vulnerable behavior queried the user by "sub" regardless of token purpose -- confirm
+    // the fix short-circuits before that lookup even happens.
+    expect(authRepoMocks.getCurrentUserById).not.toHaveBeenCalled();
+  });
+
+  it("rejects a password-change-pending token presented as a normal Bearer session token", async () => {
+    const token = await signPasswordChangeToken("user-1");
+    const user = await getCurrentUser(bearerRequest(token));
+    expect(user).toBeNull();
+    expect(authRepoMocks.getCurrentUserById).not.toHaveBeenCalled();
+  });
+
+  it("a real session token (signAuthToken) is unaffected by the purpose check", async () => {
+    const token = await signAuthToken({ sub: "user-1", email: "test@example.com", tenantId: "tenant-a" });
+    const payload = await verifyAuthToken(token);
+    expect(payload?.sub).toBe("user-1");
+  });
+});
+
+// F05 fix (WP02, session-policy part): getUserFromToken is now the single policy shared by the
+// cookie/bearer path (getCurrentUser) and the notifications SSE route's query-string token path
+// -- previously the SSE route loaded the user straight from the token's "sub" and skipped both
+// of the checks covered here.
+describe("F05: getUserFromToken applies the same suspension/session checks as getCurrentUser", () => {
+  it("rejects a token whose user belongs to a suspended tenant", async () => {
+    const token = await signAuthToken({ sub: "user-1", email: "test@example.com", tenantId: "tenant-a" });
+    authRepoMocks.getCurrentUserById.mockResolvedValueOnce({
+      id: "user-1", email: "test@example.com", name: "Test User", tenantId: "tenant-a", roleId: null, role: null,
+      isPlatformAdmin: false, platformAdminId: null, tenantStatus: "SUSPENDED",
+    });
+    expect(await getUserFromToken(token)).toBeNull();
+  });
+
+  it("rejects a token whose session has been revoked", async () => {
+    const token = await signAuthToken({ sub: "user-1", email: "test@example.com", tenantId: "tenant-a", sid: "session-1" });
+    dbMocks.queryOne.mockResolvedValueOnce({
+      id: "session-1", tenantId: "tenant-a", userId: "user-1", isImpersonation: false,
+      createdAt: new Date().toISOString(), lastActiveAt: new Date().toISOString(),
+      expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+      revokedAt: new Date().toISOString(), revokedBy: "user-1", revokedReason: "USER_REVOKED",
+    } as any);
+    expect(await getUserFromToken(token)).toBeNull();
+  });
+
+  it("accepts a token whose tenant is active and session is live", async () => {
+    const token = await signAuthToken({ sub: "user-1", email: "test@example.com", tenantId: "tenant-a", sid: "session-1" });
+    const user = await getUserFromToken(token);
+    expect(user?.id).toBe("user-1");
+  });
+
+  it("still rejects an MFA-pending token routed through getUserFromToken", async () => {
+    const token = await signMfaPendingToken("user-1");
+    expect(await getUserFromToken(token)).toBeNull();
   });
 });

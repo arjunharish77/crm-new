@@ -1,7 +1,7 @@
 import { randomUUID, randomBytes, createHash } from "crypto";
 import bcrypt from "bcryptjs";
 import QRCode from "qrcode";
-import { query, queryOne, execute } from "@/lib/db/query";
+import { query, queryOne, execute, queryOneAsSystem, executeAsSystem } from "@/lib/db/query";
 import { generateTotpSecret, generateTotpUri, verifyTotpToken, generateBackupCodes } from "@/lib/server/totp";
 import { getEffectiveSecurityPolicy } from "@/lib/server/security-policy";
 import { createAuditLog } from "@/lib/server/crm";
@@ -122,8 +122,11 @@ async function consumeBackupCodeIfValid(userId: string, rawCode: string): Promis
   return false;
 }
 
+// WP07 (F04): PRE_AUTH, disposition B -- its one caller (auth/mfa/verify/route.ts) runs entirely
+// pre-session. (consumeBackupCodeIfValid below is NOT converted -- it's shared with the
+// post-auth disableMfa/resetMfaForUserAsAdmin callers; see plan doc open question.)
 export async function verifyMfaLoginCode(user: TenantUser, code: string): Promise<{ valid: boolean; usedBackupCode: boolean }> {
-  const row = await queryOne<{ mfaSecret: string | null }>(`select "mfaSecret" from "User" where id = $1`, [user.id]);
+  const row = await queryOneAsSystem<{ mfaSecret: string | null }>(`select "mfaSecret" from "User" where id = $1`, [user.id]);
   if (!row?.mfaSecret) return { valid: false, usedBackupCode: false };
   if (verifyTotpToken(row.mfaSecret, code)) {
     await createAuditLog(user as any, "MFA_VERIFIED", "USER", user.id, null, null, null).catch(() => undefined);
@@ -165,11 +168,13 @@ export async function regenerateBackupCodes(user: TenantUser, token: string) {
 // Remembered devices
 // ---------------------------------------------------------------------------------------------
 
+// WP07 (F04): PRE_AUTH, disposition B -- its one caller (auth/mfa/verify/route.ts, when
+// rememberDevice is set) runs pre-session.
 export async function createTrustedDevice(user: TenantUser, userAgent: string | null, ipAddress: string | null) {
   const rawToken = randomBytes(32).toString("hex");
   const now = new Date();
   const expiresAt = new Date(now.getTime() + TRUSTED_DEVICE_DAYS * 24 * 60 * 60 * 1000).toISOString();
-  await execute(
+  await executeAsSystem(
     `insert into "TrustedDevice" (id, "userId", "tenantId", "tokenHash", "userAgent", "ipAddress", "createdAt", "lastUsedAt", "expiresAt")
      values ($1, $2, $3, $4, $5, $6, $7, $7, $8)`,
     [randomUUID(), user.id, user.tenantId, hashToken(rawToken), userAgent, ipAddress, now.toISOString(), expiresAt],
@@ -177,14 +182,16 @@ export async function createTrustedDevice(user: TenantUser, userAgent: string | 
   return { token: rawToken, expiresInSeconds: TRUSTED_DEVICE_DAYS * 24 * 60 * 60 };
 }
 
+// WP07 (F04): PRE_AUTH, disposition B -- its one caller (auth/login/route.ts) checks this
+// before a session exists, to decide whether MFA can be skipped for this device.
 export async function isTrustedDevice(userId: string, rawToken: string | null): Promise<boolean> {
   if (!rawToken) return false;
-  const row = await queryOne<{ id: string }>(
+  const row = await queryOneAsSystem<{ id: string }>(
     `select id from "TrustedDevice" where "userId" = $1 and "tokenHash" = $2 and "expiresAt" > now()`,
     [userId, hashToken(rawToken)],
   );
   if (!row) return false;
-  await execute(`update "TrustedDevice" set "lastUsedAt" = $1 where id = $2`, [new Date().toISOString(), row.id]).catch(() => undefined);
+  await executeAsSystem(`update "TrustedDevice" set "lastUsedAt" = $1 where id = $2`, [new Date().toISOString(), row.id]).catch(() => undefined);
   return true;
 }
 

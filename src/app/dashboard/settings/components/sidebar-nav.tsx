@@ -1,6 +1,8 @@
 "use client";
 
-import { usePathname } from "next/navigation";
+import { useState } from "react";
+import { Input } from "@/components/ui/input";
+import { usePathname, useRouter } from "next/navigation";
 import Link from "next/link";
 import {
     Settings,
@@ -39,6 +41,9 @@ import { cn } from "@/lib/utils";
 import { useFeature, useModuleEnabled } from "@/components/auth/feature-gate";
 
 const sidebarNavItems = [
+    { title: "Duplicate rules", href: "/dashboard/settings/duplicate-rules", icon: ShieldCheck },
+    { title: "Audit logs", href: "/dashboard/settings/governance/audit-logs", icon: FileText },
+    { title: "Data Privacy", href: "/dashboard/settings/governance/gdpr", icon: ShieldCheck },
     {
         title: "General",
         href: "/dashboard/settings",
@@ -229,6 +234,8 @@ const sidebarNavItems = [
 
 export function SettingsSidebar() {
     const pathname = usePathname();
+    const router = useRouter();
+    const [search, setSearch] = useState("");
     const payoutsEnabled = useFeature("payoutsEnabled");
     const gamificationEnabled = useFeature("gamificationEnabled");
     const nextBestActionEnabled = useModuleEnabled("NEXT_BEST_ACTION");
@@ -252,31 +259,48 @@ export function SettingsSidebar() {
         return true;
     });
 
+    const groups = [
+        { title: "Workspace", keys: ["settings"] },
+        { title: "People & access", keys: ["teams", "users", "roles", "partners", "sales-groups", "permission-templates"] },
+        { title: "Sales configuration", keys: ["opportunity-types", "catalog", "activity-types", "custom-fields", "assignment-rules", "lead-scoring", "next-best-action", "ai-assistant"] },
+        { title: "Tasks & service", keys: ["task-playbooks", "task-sla-policies", "call-dispositions", "agent-availability", "call-scripts", "call-campaigns", "service-desk"] },
+        { title: "Finance & rewards", keys: ["payout-cycles", "commission-rules", "gamification"] },
+        { title: "Integrations & data", keys: ["integrations", "api-keys", "scim", "duplicate-rules", "dedupe", "marketplace"] },
+        { title: "Security", keys: ["security", "sessions", "mfa", "password", "privileged-actions", "audit-logs", "gdpr"] },
+    ];
+    const itemsFor = (keys: string[]) => visibleItems.filter(item => keys.includes(item.href.split("/").at(-1)!));
+    const activeItem = [...sidebarNavItems].sort((a, b) => b.href.length - a.href.length).find(item => pathname === item.href || pathname.startsWith(item.href + "/"));
     return (
-        <nav className="overflow-y-auto pr-1 pb-8 lg:max-h-[calc(100vh-210px)]">
-            <ul className="flex flex-col gap-[3px]">
-                {visibleItems.map((item) => {
-                    const Icon = item.icon;
-                    const active = pathname === item.href;
-
-                    return (
-                        <li key={item.href}>
-                            <Link
-                                href={item.href}
-                                className={cn(
-                                    "flex items-center gap-2.5 rounded-xl px-3 py-2 text-sm transition-all",
-                                    active
-                                        ? "bg-primary/10 font-bold text-primary"
-                                        : "font-medium text-muted-foreground hover:translate-x-1 hover:bg-accent hover:text-accent-foreground"
-                                )}
-                            >
-                                <Icon className={cn("size-[19px] shrink-0", active ? "opacity-100" : "opacity-70")} />
-                                <span className="truncate">{item.title}</span>
-                            </Link>
-                        </li>
-                    );
-                })}
-            </ul>
+        <nav aria-label="Settings sections" className="min-w-0 self-start xl:sticky xl:top-[calc(var(--app-header-offset)+16px)]">
+            <label className="grid gap-2 text-sm font-medium xl:hidden">
+                Settings section
+                <select value={activeItem?.href || "/dashboard/settings"} onChange={event => router.push(event.target.value)} className="h-11 w-full min-w-0 rounded-lg border border-input bg-background px-3 text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                    {activeItem && !visibleItems.some(item => item.href === activeItem.href) && <option value={activeItem.href} disabled>{activeItem.title}</option>}
+                    {groups.map(group => <optgroup key={group.title} label={group.title}>
+                        {itemsFor(group.keys).map(item => <option key={item.href} value={item.href}>{item.title}</option>)}
+                    </optgroup>)}
+                </select>
+            </label>
+            <div className="hidden xl:block">
+                <Input aria-label="Search settings" placeholder="Find a setting…" value={search} onChange={event => setSearch(event.target.value)} className="mb-3" />
+                <div className="max-h-[calc(100dvh-var(--app-header-offset)-120px)] overflow-y-auto overscroll-contain pr-2">
+                    {groups.map(group => {
+                        const items = itemsFor(group.keys).filter(item => item.title.toLowerCase().includes(search.toLowerCase()));
+                        if (!items.length) return null;
+                        return <div key={group.title} className="mb-4">
+                            <p className="mb-1 px-2 text-xs font-semibold text-muted-foreground">{group.title}</p>
+                            <ul className="space-y-1">{items.map(item => {
+                                const Icon = item.icon;
+                                const active = activeItem?.href === item.href;
+                                return <li key={item.href}><Link href={item.href} aria-current={active ? "page" : undefined} className={cn("flex min-h-10 items-center gap-2 rounded-lg px-2 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring", active ? "bg-primary/10 font-semibold text-primary" : "text-muted-foreground hover:bg-accent hover:text-foreground")}>
+                                    <Icon className="size-4 shrink-0" /><span>{item.title}</span>
+                                </Link></li>;
+                            })}</ul>
+                        </div>;
+                    })}
+                    {!visibleItems.some(item => item.title.toLowerCase().includes(search.toLowerCase())) && <p className="px-2 py-4 text-sm text-muted-foreground">No matching settings. Try a different name.</p>}
+                </div>
+            </div>
         </nav>
     );
 }

@@ -245,18 +245,18 @@ export async function listCallDispositionsForTenant(
   filter: { leadId?: string | null; opportunityId?: string | null; callLogId?: string | null; createdBy?: string | null } = {},
 ) {
   const tenantId = requireTenantId(user);
-  const conditions = [`"tenantId" = $1`];
+  const conditions = [`cd."tenantId" = $1`];
   const values: unknown[] = [tenantId];
   if (filter.leadId) {
-    conditions.push(`"leadId" = $${values.length + 1}`);
+    conditions.push(`cd."leadId" = $${values.length + 1}`);
     values.push(filter.leadId);
   }
   if (filter.opportunityId) {
-    conditions.push(`"opportunityId" = $${values.length + 1}`);
+    conditions.push(`cd."opportunityId" = $${values.length + 1}`);
     values.push(filter.opportunityId);
   }
   if (filter.callLogId) {
-    conditions.push(`"callLogId" = $${values.length + 1}`);
+    conditions.push(`cd."callLogId" = $${values.length + 1}`);
     values.push(filter.callLogId);
   }
   if (filter.createdBy) {

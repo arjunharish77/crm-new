@@ -1,6 +1,10 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { SettingsSections } from "@/components/layout/settings-sections";
+import { PageHeader } from "@/components/layout/page-header";
+import { ErrorState } from "@/components/common/error-state";
+
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { apiFetch } from "@/lib/api";
 import { formatWorkspaceDate, formatWorkspaceRelativeTime } from "@/lib/date-format";
 import { Button } from "@/components/ui/button";
@@ -47,12 +51,27 @@ import {
 } from "@/components/ui/dropdown-menu";
 import type { MetricQueryResult } from "@/lib/server/reporting-query";
 
+const REPORT_SECTIONS = [["overview", "Overview"], ["inbuilt", "Inbuilt Reports"], ["saved", "Saved Reports"], ["builder", "Builder"], ["schedules", "Schedules"], ["annotations", "Annotations"], ["catalog", "Data Catalog"], ["metrics", "Metrics"], ["compare", "Compare"]];
+
 export default function ReportsPage() {
     const [leadsData, setLeadsData] = useState<any>(null);
     const [oppsData, setOppsData] = useState<any>(null);
     const [activitiesData, setActivitiesData] = useState<any>(null);
     const [loading, setLoading] = useState(true);
     const [activeTab, setActiveTab] = useState("overview");
+    const [visited, setVisited] = useState(() => new Set(["overview"]));
+    const [selectedReport, setSelectedReport] = useState<any>(null);
+    useEffect(() => { setVisited(current => new Set([...current, activeTab])); }, [activeTab]);
+    useEffect(() => {
+        const edit = (event: Event) => {
+            setSelectedReport((event as CustomEvent).detail);
+            setActiveTab("builder");
+        };
+        window.addEventListener("custom-report-edit", edit);
+        return () => window.removeEventListener("custom-report-edit", edit);
+    }, []);
+    const [overviewError, setOverviewError] = useState<string | null>(null);
+    const [retryKey, setRetryKey] = useState(0);
 
     // Lets the global create menu (header.tsx) open the Builder tab for a new custom report, or a
     // ?reportId= deep-link (from global search's Recent/Favorites) open it for editing an existing
@@ -70,6 +89,8 @@ export default function ReportsPage() {
 
     useEffect(() => {
         const fetchAll = async () => {
+            setLoading(true);
+            setOverviewError(null);
             try {
                 const [l, o, a] = await Promise.all([
                     apiFetch("/reports/leads"),
@@ -80,71 +101,35 @@ export default function ReportsPage() {
                 setOppsData(o);
                 setActivitiesData(a);
             } catch (error) {
+                setOverviewError("Report data is unavailable. Retry to load the latest totals.");
                 toast.error("Failed to load reports");
             } finally {
                 setLoading(false);
             }
         };
         fetchAll();
-    }, []);
-
-    if (loading) {
-        return (
-            <div className="space-y-4 p-4 md:p-8">
-                <div className="mb-2 flex justify-between">
-                    <div className="space-y-2">
-                        <Skeleton className="h-10 w-[300px]" />
-                        <Skeleton className="h-5 w-[200px]" />
-                    </div>
-                    <Skeleton className="h-12 w-[150px] rounded-full" />
-                </div>
-                <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-                    {[1, 2, 3].map((i) => (
-                        <Skeleton key={i} className="h-[160px] rounded-2xl" />
-                    ))}
-                    <div className="md:col-span-2">
-                        <Skeleton className="h-[400px] rounded-2xl" />
-                    </div>
-                    <Skeleton className="h-[400px] rounded-2xl" />
-                </div>
-            </div>
-        );
-    }
+    }, [retryKey]);
 
     const revenue = formatCurrency(oppsData?.totalRevenue || 0, undefined, { maximumFractionDigits: 0 });
 
     return (
-        <div className="p-0 pb-8 sm:p-4">
-            <div className="mb-4 flex flex-col items-start justify-between gap-4 sm:flex-row sm:items-center">
-                <div>
-                    <div className="flex flex-wrap items-center gap-3">
-                        <h1 className="text-3xl font-extrabold tracking-[-1px]">
-                            Reports & Analytics
-                        </h1>
-                    </div>
-                    <p className="text-muted-foreground">
-                        Overview of your sales performance across all modules.
-                    </p>
+        <div className="@container/reports min-w-0 pb-8">
+            <PageHeader title="Reports & Analytics" description="Explore performance, build reports and manage scheduled delivery." actions={<QueueExportButton moduleName="REPORTS" label="Export Data" />} />
+            <Tabs value={activeTab} onValueChange={setActiveTab} className="min-w-0 space-y-4">
+                <div className="space-y-1 @min-[1000px]/reports:hidden">
+                    <Label htmlFor="report-section">Report section</Label>
+                    <select id="report-section" value={activeTab} onChange={event => setActiveTab(event.target.value)} className="h-10 w-full min-w-0 rounded-md border border-input bg-background px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                        {REPORT_SECTIONS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+                    </select>
                 </div>
-                <QueueExportButton moduleName="REPORTS" label="Export Data" />
-            </div>
+                <TabsList className="hidden h-auto w-full flex-wrap justify-start @min-[1000px]/reports:flex">
+                    {REPORT_SECTIONS.map(([value, label]) => <TabsTrigger key={value} value={value}>{label}</TabsTrigger>)}
+                </TabsList>
 
-            <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
-                <div className="overflow-x-auto pb-1">
-                    <TabsList className="h-10 min-w-max">
-                        <TabsTrigger value="overview">Overview</TabsTrigger>
-                        <TabsTrigger value="inbuilt">Inbuilt Reports</TabsTrigger>
-                        <TabsTrigger value="saved">Saved Reports</TabsTrigger>
-                        <TabsTrigger value="builder">Builder</TabsTrigger>
-                        <TabsTrigger value="schedules">Schedules</TabsTrigger>
-                        <TabsTrigger value="annotations">Annotations</TabsTrigger>
-                        <TabsTrigger value="catalog">Data Catalog</TabsTrigger>
-                        <TabsTrigger value="metrics">Metrics</TabsTrigger>
-                        <TabsTrigger value="compare">Compare</TabsTrigger>
-                    </TabsList>
-                </div>
+                <TabsContent value="overview" forceMount hidden={activeTab !== "overview"} className="space-y-4">
+                    {(visited.has("overview") || activeTab === "overview") && <>
+                    {loading ? <Skeleton className="h-80 w-full" /> : overviewError ? <ErrorState description={overviewError} onRetry={() => setRetryKey(k => k + 1)} /> : <>
 
-                <TabsContent value="overview" className="space-y-4">
                     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3">
                         <MetricCard
                             title="Total Leads"
@@ -202,13 +187,13 @@ export default function ReportsPage() {
                                 <h2 className="mb-1 text-lg font-bold">Leads by Source</h2>
                                 <p className="mb-6 text-sm text-muted-foreground">Distribution of incoming leads</p>
 
-                                <div className="space-y-2">
+                                <div className="min-w-0 space-y-2">
                                     {leadsData?.bySource?.map((item: any) => (
                                         <div
                                             key={item.source}
-                                            className="flex items-center justify-between rounded-xl bg-surface-container-low p-3 transition-transform hover:translate-x-1"
+                                            className="flex min-w-0 flex-wrap items-center justify-between rounded-xl bg-surface-container-low p-3 transition-transform hover:translate-x-1"
                                         >
-                                            <div className="flex items-center gap-2">
+                                            <div className="flex min-w-0 flex-wrap items-center gap-2">
                                                 <div className="size-2 rounded-full bg-primary" />
                                                 <span className="text-sm font-semibold">{item.source}</span>
                                             </div>
@@ -219,39 +204,60 @@ export default function ReportsPage() {
                             </CardContent>
                         </Card>
                     </div>
+
+                    </>}
+</>}
                 </TabsContent>
 
-                <TabsContent value="inbuilt">
+                <TabsContent value="inbuilt" forceMount hidden={activeTab !== "inbuilt"}>
+                    {(visited.has("inbuilt") || activeTab === "inbuilt") && <>
                     <InbuiltReportsSection />
+                </>}
                 </TabsContent>
 
-                <TabsContent value="saved">
+                <TabsContent value="saved" forceMount hidden={activeTab !== "saved"}>
+                    {(visited.has("saved") || activeTab === "saved") && <>
                     <CustomReportsSection />
+                </>}
                 </TabsContent>
 
-                <TabsContent value="builder">
-                    <CustomReportBuilder />
+                <TabsContent value="builder" forceMount hidden={activeTab !== "builder"}>
+                    {(visited.has("builder") || activeTab === "builder") && <>
+                    <CustomReportBuilder selectedReport={selectedReport} />
+                </>}
                 </TabsContent>
 
-                <TabsContent value="schedules">
+                <TabsContent value="schedules" forceMount hidden={activeTab !== "schedules"}>
+                    {(visited.has("schedules") || activeTab === "schedules") && <>
                     <ReportSchedulesSection />
+                </>}
                 </TabsContent>
 
-                <TabsContent value="annotations">
+                <TabsContent value="annotations" forceMount hidden={activeTab !== "annotations"}>
+                    {(visited.has("annotations") || activeTab === "annotations") && <>
                     <ReportAnnotationsSection />
+                </>}
                 </TabsContent>
 
-                <TabsContent value="catalog">
+                <TabsContent value="catalog" forceMount hidden={activeTab !== "catalog"}>
+                    {(visited.has("catalog") || activeTab === "catalog") && <>
                     <DataCatalogSection />
+                </>}
                 </TabsContent>
 
-                <TabsContent value="metrics" className="space-y-4">
-                    <MetricsSection />
-                    <CalculatedMetricsSection />
+                <TabsContent value="metrics" forceMount hidden={activeTab !== "metrics"} className="space-y-4">
+                    {(visited.has("metrics") || activeTab === "metrics") && <>
+                    <SettingsSections label="Metric section" sections={[
+                        { id: "metrics", label: "Metrics", content: <MetricsSection /> },
+                        { id: "calculated", label: "Calculated metrics", content: <CalculatedMetricsSection /> },
+                    ]} />
+                </>}
                 </TabsContent>
 
-                <TabsContent value="compare">
+                <TabsContent value="compare" forceMount hidden={activeTab !== "compare"}>
+                    {(visited.has("compare") || activeTab === "compare") && <>
                     <SegmentComparisonSection />
+                </>}
                 </TabsContent>
             </Tabs>
         </div>
@@ -275,7 +281,7 @@ function MetricCard({ title, value, subtitle, icon, color }: MetricCardProps) {
             <CardContent className="p-6">
                 <div className="mb-4 flex justify-between">
                     <div
-                        className="flex items-center justify-center rounded-xl p-3"
+                        className="flex min-w-0 flex-wrap items-center justify-center rounded-xl p-3"
                         style={{ backgroundColor: `color-mix(in srgb, ${color} 8%, transparent)`, color }}
                     >
                         {icon}
@@ -769,10 +775,10 @@ function InbuiltReportsSection() {
 
     return (
         <Card className="mb-4 rounded-2xl">
-            <CardContent className="space-y-5 p-6">
-                <div className="flex flex-col justify-between gap-3 md:flex-row md:items-start">
+            <CardContent className="min-w-0 space-y-5 p-4 sm:p-6">
+                <div className="flex min-w-0 flex-wrap justify-between gap-3">
                     <div>
-                        <div className="flex items-center gap-2">
+                        <div className="flex min-w-0 flex-wrap items-center gap-2">
                             <TrendingUp className="size-5 text-primary" />
                             <h2 className="text-lg font-bold">Inbuilt Reports</h2>
                             <Badge variant="outline" className="rounded-md">{reportOptions.length} reports</Badge>
@@ -820,8 +826,8 @@ function InbuiltReportsSection() {
                     </div>
                 </div>
 
-                <div className="grid gap-4 lg:grid-cols-[360px_1fr]">
-                    <div className="space-y-2">
+                <div className="grid gap-4 @min-[1100px]/reports:grid-cols-[320px_minmax(0,1fr)]">
+                    <div className="min-w-0 space-y-2">
                         {reportOptions.map((option) => (
                             <button
                                 key={option.value}
@@ -832,7 +838,7 @@ function InbuiltReportsSection() {
                                     selectedKey === option.value ? "border-primary bg-primary/[0.06]" : "border-border bg-card hover:bg-accent/50"
                                 )}
                             >
-                                <div className="flex items-center justify-between gap-2">
+                                <div className="flex min-w-0 flex-wrap items-center justify-between gap-2">
                                     <span className="text-sm font-bold">{option.label}</span>
                                     <Badge variant="outline" className="rounded-md text-[0.65rem] font-semibold">
                                         {option.category}
@@ -849,7 +855,7 @@ function InbuiltReportsSection() {
                                 <div className="text-sm font-bold">{selected.label}</div>
                                 <p className="text-xs text-muted-foreground">{selected.description}</p>
                             </div>
-                            <div className="flex items-center gap-2">
+                            <div className="flex min-w-0 flex-wrap items-center gap-2">
                                 {selected.value === "marketing_attribution_summary" || selected.value === "attribution_explorer" ? (
                                     <Select value={attributionModel} onValueChange={setAttributionModel}>
                                         <SelectTrigger className="h-8 w-[220px]">
@@ -961,9 +967,10 @@ function InbuiltReportsSection() {
     );
 }
 
-function CustomReportBuilder() {
+function CustomReportBuilder({ selectedReport }: { selectedReport: any }) {
     const [catalog, setCatalog] = useState<Record<string, string[]>>({});
     const [loadingCatalog, setLoadingCatalog] = useState(true);
+    const [catalogError, setCatalogError] = useState(false);
     const [editingReportId, setEditingReportId] = useState<string | null>(null);
     const [name, setName] = useState("Lead activity report");
     const [root, setRoot] = useState<ReportRoot>("lead");
@@ -983,8 +990,9 @@ function CustomReportBuilder() {
     // populates the same builder state a human editing the form would, and shows the same
     // preview, so the generated definition is fully reviewable/editable before Save.
     const runAiReportPrompt = async () => {
-        if (!aiPrompt.trim()) return;
+        if (!aiPrompt.trim() || aiGenerating) return;
         setAiGenerating(true);
+        setPreview(null);
         try {
             const response = await apiFetch<{ definition: any; preview: any }>("/ai/nl-report", {
                 method: "POST",
@@ -994,8 +1002,9 @@ function CustomReportBuilder() {
             setRoot(definition.root);
             setFields(Array.isArray(definition.fields) ? definition.fields : []);
             setFilters(Array.isArray(definition.filters) ? definition.filters : []);
-            if (definition.orderBy) setOrderBy(definition.orderBy);
-            if (definition.limit) setLimit(definition.limit);
+            setOrderBy(definition.orderBy ?? { object: definition.fields[0].object, field: definition.fields[0].field, direction: "asc" });
+            setLimit(definition.limit ?? 200);
+            setSavedViewId("__all__");
             setPreview(response.preview);
             toast.success("Report definition generated -- review before saving");
         } catch (error: any) {
@@ -1008,11 +1017,16 @@ function CustomReportBuilder() {
     const [savedViews, setSavedViews] = useState<any[]>([]);
     const [savedViewId, setSavedViewId] = useState("__all__");
 
-    useEffect(() => {
+    const fetchCatalog = () => {
+        setLoadingCatalog(true);
+        setCatalogError(false);
         apiFetch<{ objects: Record<string, string[]> }>("/reports/query")
             .then((data) => setCatalog(data.objects ?? {}))
-            .catch(() => toast.error("Failed to load report builder catalog"))
+            .catch(() => setCatalogError(true))
             .finally(() => setLoadingCatalog(false));
+    };
+    useEffect(() => {
+        fetchCatalog();
         apiFetch<any[]>("/users").then((data) => setUsers(Array.isArray(data) ? data : [])).catch(() => setUsers([]));
         apiFetch<any[]>("/opportunity-types").then((data) => setOpportunityTypes(Array.isArray(data) ? data : [])).catch(() => setOpportunityTypes([]));
         apiFetch<any[]>("/activity-types").then((data) => setActivityTypes(Array.isArray(data) ? data : [])).catch(() => setActivityTypes([]));
@@ -1036,9 +1050,8 @@ function CustomReportBuilder() {
             setPreview(null);
             document.getElementById("custom-report-builder")?.scrollIntoView({ behavior: "smooth", block: "start" });
         };
-        window.addEventListener("custom-report-edit", loadReport);
-        return () => window.removeEventListener("custom-report-edit", loadReport);
-    }, []);
+        if (selectedReport) loadReport(new CustomEvent("custom-report-edit", { detail: selectedReport }));
+    }, [selectedReport]);
 
     // Deep-link support (?reportId=), from the global search "Recent"/"Favorites" sections --
     // fetches independently rather than relying on CustomReportsSection's own list, since that
@@ -1163,27 +1176,15 @@ function CustomReportBuilder() {
         }
     };
 
+    if (catalogError) return <ErrorState description="Report fields could not be loaded." onRetry={fetchCatalog} />;
     if (loadingCatalog) return <Skeleton className="mb-4 h-[360px] rounded-2xl" />;
 
     return (
         <Card id="custom-report-builder" className="mb-4 rounded-2xl">
-            <CardContent className="space-y-5 p-6">
-                <div className="flex flex-col gap-2 rounded-xl border border-dashed p-3 md:flex-row md:items-center">
-                    <Sparkles className="hidden size-4 shrink-0 text-muted-foreground md:block" />
-                    <Input
-                        placeholder="Ask AI to build a report, e.g. Leads from Website in the last 30 days grouped by status (requires AI Assistant to be configured in Settings)"
-                        value={aiPrompt}
-                        onChange={(e) => setAiPrompt(e.target.value)}
-                        onKeyDown={(e) => { if (e.key === "Enter") runAiReportPrompt(); }}
-                    />
-                    <Button variant="outline" size="sm" disabled={aiGenerating || !aiPrompt.trim()} onClick={runAiReportPrompt}>
-                        <Sparkles className="size-4" />
-                        {aiGenerating ? "Generating..." : "Ask AI"}
-                    </Button>
-                </div>
-                <div className="flex flex-col justify-between gap-3 md:flex-row md:items-start">
+            <CardContent className="min-w-0 space-y-5 p-4 sm:p-6">
+                <div className="flex min-w-0 flex-wrap justify-between gap-3">
                     <div>
-                        <div className="flex items-center gap-2">
+                        <div className="flex min-w-0 flex-wrap items-center gap-2">
                             <h2 className="text-lg font-bold">Custom Report Builder</h2>
                             <Badge variant="outline" className="rounded-md">Cross-object</Badge>
                             {editingReportId ? <Badge variant="secondary" className="rounded-md">Editing</Badge> : null}
@@ -1192,7 +1193,7 @@ function CustomReportBuilder() {
                             Build joined reports from CRM objects with validated fields, filters, sorting, and preview rows.
                         </p>
                     </div>
-                    <div className="flex gap-2">
+                    <div className="flex max-w-full flex-wrap gap-2">
                         <Button variant="outline" onClick={runPreview} disabled={running || fields.length === 0}>
                             <Play className="size-4" />
                             {running ? "Running..." : "Run Preview"}
@@ -1209,6 +1210,25 @@ function CustomReportBuilder() {
                     </div>
                 </div>
 
+                <details className="rounded-lg border p-3">
+                    <summary className="cursor-pointer text-sm font-medium">Build with AI</summary>
+                    <p className="my-2 text-sm text-muted-foreground">Describe a record list with filters and one sort field. For grouped counts or totals, use Metrics. Requires AI Assistant in Settings; review before saving.</p>
+                <div className="flex flex-col gap-2 rounded-xl border border-dashed p-3 md:flex-row md:items-center">
+                    <Sparkles className="hidden size-4 shrink-0 text-muted-foreground md:block" />
+                    <Input
+                        aria-label="Describe your report for AI"
+                        placeholder="e.g. Website leads from the last 30 days"
+                        value={aiPrompt}
+                        onChange={(e) => setAiPrompt(e.target.value)}
+                        onKeyDown={(e) => { if (e.key === "Enter") runAiReportPrompt(); }}
+                    />
+                    <Button variant="outline" size="sm" disabled={aiGenerating || !aiPrompt.trim()} onClick={runAiReportPrompt}>
+                        <Sparkles className="size-4" />
+                        {aiGenerating ? "Generating..." : "Ask AI"}
+                    </Button>
+                </div>
+                </details>
+
                 <Tabs defaultValue="setup" className="space-y-4">
                     <div className="overflow-x-auto pb-1">
                         <TabsList className="h-10 min-w-max">
@@ -1220,15 +1240,15 @@ function CustomReportBuilder() {
                     </div>
 
                     <TabsContent value="setup">
-                <div className="grid gap-4 md:grid-cols-[1.2fr_0.8fr_0.8fr_0.6fr]">
-                    <div className="space-y-2">
-                        <Label>Report Name</Label>
-                        <Input value={name} onChange={(event) => setName(event.target.value)} />
+                <div className="grid gap-4 @min-[600px]/reports:grid-cols-2 @min-[1100px]/reports:grid-cols-[minmax(0,1.2fr)_repeat(3,minmax(0,0.8fr))]">
+                    <div className="min-w-0 space-y-2">
+                        <Label htmlFor="report-report-name-1">Report Name</Label>
+                        <Input id="report-report-name-1" value={name} onChange={(event) => setName(event.target.value)} />
                     </div>
-                    <div className="space-y-2">
-                        <Label>Root Object</Label>
+                    <div className="min-w-0 space-y-2">
+                        <Label htmlFor="report-root-object-2">Root Object</Label>
                         <Select value={root} onValueChange={(value) => changeRoot(value as ReportRoot)}>
-                            <SelectTrigger className="w-full">
+                            <SelectTrigger id="report-root-object-2" className="w-full">
                                 <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
@@ -1238,10 +1258,10 @@ function CustomReportBuilder() {
                             </SelectContent>
                         </Select>
                     </div>
-                    <div className="space-y-2">
-                        <Label>Record Source</Label>
+                    <div className="min-w-0 space-y-2">
+                        <Label htmlFor="report-record-source-3">Record Source</Label>
                         <Select value={savedViewId} onValueChange={setSavedViewId}>
-                            <SelectTrigger className="w-full">
+                            <SelectTrigger id="report-record-source-3" className="w-full">
                                 <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
@@ -1254,25 +1274,25 @@ function CustomReportBuilder() {
                             </SelectContent>
                         </Select>
                     </div>
-                    <div className="space-y-2">
-                        <Label>Row Limit</Label>
-                        <Input type="number" min={1} max={1000} value={limit} onChange={(event) => setLimit(Number(event.target.value))} />
+                    <div className="min-w-0 space-y-2">
+                        <Label htmlFor="report-row-limit-4">Row Limit</Label>
+                        <Input id="report-row-limit-4" type="number" min={1} max={1000} value={limit} onChange={(event) => setLimit(Number(event.target.value))} />
                     </div>
                 </div>
                     </TabsContent>
 
                     <TabsContent value="columns">
                 <div className="space-y-3">
-                    <div className="flex items-center justify-between">
+                    <div className="flex min-w-0 flex-wrap items-center justify-between">
                         <Label className="text-xs font-bold uppercase text-muted-foreground">Columns</Label>
                         <Button type="button" variant="outline" size="sm" onClick={addField}>
                             <Plus className="size-4" />
                             Add Column
                         </Button>
                     </div>
-                    <div className="space-y-2">
+                    <div className="min-w-0 space-y-2">
                         {fields.map((field, index) => (
-                            <div key={index} className="grid gap-2 rounded-lg border bg-surface-container-low p-2 md:grid-cols-[1fr_1fr_1fr_auto]">
+                            <div key={index} className="grid gap-2 rounded-lg border bg-surface-container-low p-2 @min-[900px]/reports:grid-cols-[repeat(3,minmax(0,1fr))_auto]">
                                 <Select
                                     value={field.object}
                                     onValueChange={(object) => {
@@ -1280,7 +1300,7 @@ function CustomReportBuilder() {
                                         updateField(index, { object, field: nextField, label: `${OBJECT_LABELS[object] ?? object} ${formatFieldLabel(nextField)}` });
                                     }}
                                 >
-                                    <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                                    <SelectTrigger aria-label={`Column ${index + 1} object`} className="w-full"><SelectValue /></SelectTrigger>
                                     <SelectContent>
                                         {availableObjects.map((object) => (
                                             <SelectItem key={object} value={object}>{OBJECT_LABELS[object] ?? object}</SelectItem>
@@ -1288,7 +1308,7 @@ function CustomReportBuilder() {
                                     </SelectContent>
                                 </Select>
                                 <Select value={field.field} onValueChange={(value) => updateField(index, { field: value })}>
-                                    <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                                    <SelectTrigger aria-label={`Column ${index + 1} field`} className="w-full"><SelectValue /></SelectTrigger>
                                     <SelectContent>
                                         {reportFieldOptions(field.object).map((item) => (
                                             <SelectItem key={item} value={item}>{formatFieldLabel(item)}</SelectItem>
@@ -1297,6 +1317,7 @@ function CustomReportBuilder() {
                                 </Select>
                                 <Input
                                     value={field.label ?? ""}
+                                    aria-label={`Column ${index + 1} display label`}
                                     placeholder="Display label"
                                     onChange={(event) => updateField(index, { label: event.target.value })}
                                 />
@@ -1311,7 +1332,7 @@ function CustomReportBuilder() {
 
                     <TabsContent value="filters">
                 <div className="space-y-3">
-                    <div className="flex items-center justify-between">
+                    <div className="flex min-w-0 flex-wrap items-center justify-between">
                         <Label className="text-xs font-bold uppercase text-muted-foreground">Filters</Label>
                         <Button type="button" variant="outline" size="sm" onClick={addFilter}>
                             <Plus className="size-4" />
@@ -1323,16 +1344,16 @@ function CustomReportBuilder() {
                             No filters. Preview will use the full permission-scoped dataset.
                         </div>
                     ) : (
-                        <div className="space-y-2">
+                        <div className="min-w-0 space-y-2">
                             {filters.map((filter, index) => {
                                 const valueDisabled = filter.operator === "is_empty" || filter.operator === "is_not_empty";
                                 return (
-                                    <div key={index} className="grid gap-2 rounded-lg border bg-surface-container-low p-2 md:grid-cols-[1fr_1fr_1fr_1fr_auto]">
+                                    <div key={index} className="grid gap-2 rounded-lg border bg-surface-container-low p-2 @min-[1100px]/reports:grid-cols-[repeat(4,minmax(0,1fr))_auto]">
                                         <Select
                                             value={filter.object}
                                             onValueChange={(object) => updateFilter(index, { object, field: defaultFieldForObject(object), value: "" })}
                                         >
-                                            <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                                            <SelectTrigger aria-label={`Filter ${index + 1} object`} className="w-full"><SelectValue /></SelectTrigger>
                                             <SelectContent>
                                                 {availableObjects.map((object) => (
                                                     <SelectItem key={object} value={object}>{OBJECT_LABELS[object] ?? object}</SelectItem>
@@ -1340,7 +1361,7 @@ function CustomReportBuilder() {
                                             </SelectContent>
                                         </Select>
                                         <Select value={filter.field} onValueChange={(value) => updateFilter(index, { field: value })}>
-                                            <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                                            <SelectTrigger aria-label={`Filter ${index + 1} field`} className="w-full"><SelectValue /></SelectTrigger>
                                             <SelectContent>
                                                 {reportFieldOptions(filter.object).map((item) => (
                                                     <SelectItem key={item} value={item}>{formatFieldLabel(item)}</SelectItem>
@@ -1348,7 +1369,7 @@ function CustomReportBuilder() {
                                             </SelectContent>
                                         </Select>
                                         <Select value={filter.operator} onValueChange={(operator) => updateFilter(index, { operator })}>
-                                            <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                                            <SelectTrigger aria-label={`Filter ${index + 1} operator`} className="w-full"><SelectValue /></SelectTrigger>
                                             <SelectContent>
                                                 {REPORT_OPERATORS.map((operator) => (
                                                     <SelectItem key={operator.value} value={operator.value}>{operator.label}</SelectItem>
@@ -1357,7 +1378,7 @@ function CustomReportBuilder() {
                                         </Select>
                                         {valueOptionsForFilter(filter).length > 0 && !valueDisabled ? (
                                             <Select value={String(filter.value ?? "__none__")} onValueChange={(value) => updateFilter(index, { value: value === "__none__" ? "" : value })}>
-                                                <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                                                <SelectTrigger aria-label={`Filter ${index + 1} value`} className="w-full"><SelectValue /></SelectTrigger>
                                                 <SelectContent>
                                                     <SelectItem value="__none__">Select value</SelectItem>
                                                     {valueOptionsForFilter(filter).map((option) => (
@@ -1367,6 +1388,7 @@ function CustomReportBuilder() {
                                             </Select>
                                         ) : (
                                             <Input
+                                                aria-label={`Filter ${index + 1} value`}
                                                 value={valueDisabled ? "" : String(filter.value ?? "")}
                                                 disabled={valueDisabled}
                                                 placeholder={valueDisabled ? "Not required" : "Value"}
@@ -1383,11 +1405,11 @@ function CustomReportBuilder() {
                     )}
                 </div>
 
-                <div className="grid gap-4 md:grid-cols-[1fr_1fr_0.7fr]">
-                    <div className="space-y-2">
-                        <Label>Sort Object</Label>
+                <div className="grid gap-4 @min-[800px]/reports:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,0.7fr)]">
+                    <div className="min-w-0 space-y-2">
+                        <Label htmlFor="report-sort-object-5">Sort Object</Label>
                         <Select value={orderBy.object} onValueChange={(object) => setOrderBy({ object, field: defaultFieldForObject(object), direction: orderBy.direction })}>
-                            <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                            <SelectTrigger id="report-sort-object-5" className="w-full"><SelectValue /></SelectTrigger>
                             <SelectContent>
                                 {availableObjects.map((object) => (
                                     <SelectItem key={object} value={object}>{OBJECT_LABELS[object] ?? object}</SelectItem>
@@ -1395,10 +1417,10 @@ function CustomReportBuilder() {
                             </SelectContent>
                         </Select>
                     </div>
-                    <div className="space-y-2">
-                        <Label>Sort Field</Label>
+                    <div className="min-w-0 space-y-2">
+                        <Label htmlFor="report-sort-field-6">Sort Field</Label>
                         <Select value={orderBy.field} onValueChange={(field) => setOrderBy({ ...orderBy, field })}>
-                            <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                            <SelectTrigger id="report-sort-field-6" className="w-full"><SelectValue /></SelectTrigger>
                             <SelectContent>
                                 {reportFieldOptions(orderBy.object).map((field) => (
                                     <SelectItem key={field} value={field}>{formatFieldLabel(field)}</SelectItem>
@@ -1406,10 +1428,10 @@ function CustomReportBuilder() {
                             </SelectContent>
                         </Select>
                     </div>
-                    <div className="space-y-2">
-                        <Label>Direction</Label>
+                    <div className="min-w-0 space-y-2">
+                        <Label htmlFor="report-direction-7">Direction</Label>
                         <Select value={orderBy.direction} onValueChange={(direction) => setOrderBy({ ...orderBy, direction: direction as "asc" | "desc" })}>
-                            <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                            <SelectTrigger id="report-direction-7" className="w-full"><SelectValue /></SelectTrigger>
                             <SelectContent>
                                 <SelectItem value="desc">Descending</SelectItem>
                                 <SelectItem value="asc">Ascending</SelectItem>
@@ -1422,7 +1444,7 @@ function CustomReportBuilder() {
                     <TabsContent value="preview">
                 {preview ? (
                     <div className="rounded-xl border">
-                        <div className="flex items-center justify-between border-b px-4 py-3">
+                        <div className="flex min-w-0 flex-wrap items-center justify-between border-b px-4 py-3">
                             <div className="text-sm font-bold">Preview</div>
                             <div className="text-xs text-muted-foreground">
                                 {preview.meta?.returnedRows ?? 0} of {preview.meta?.totalRows ?? 0} rows
@@ -1588,6 +1610,8 @@ function ReportSchedulesSection() {
     const [schedules, setSchedules] = useState<any[]>([]);
     const [customReports, setCustomReports] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
+    const [loadError, setLoadError] = useState(false);
+    const [customState, setCustomState] = useState("loading");
     const [saving, setSaving] = useState(false);
     const [scheduleSource, setScheduleSource] = useState<"inbuilt" | "custom">("inbuilt");
     const [reportKey, setReportKey] = useState(INBUILT_REPORT_OPTIONS[0].value);
@@ -1601,26 +1625,29 @@ function ReportSchedulesSection() {
 
     const fetchSchedules = async () => {
         setLoading(true);
+        setLoadError(false);
         try {
             const data = await apiFetch<any[]>("/reports/schedules");
             setSchedules(Array.isArray(data) ? data : []);
         } catch {
-            toast.error("Failed to load report schedules");
+            setLoadError(true);
         } finally {
             setLoading(false);
         }
     };
 
-    useEffect(() => {
-        fetchSchedules();
+    const fetchCustomReports = () => {
+        setCustomState("loading");
         apiFetch<any[]>("/reports/custom")
             .then((data) => {
                 const reports = Array.isArray(data) ? data : [];
                 setCustomReports(reports);
                 setCustomReportId((current) => current || reports[0]?.id || "");
+                setCustomState("ready");
             })
-            .catch(() => null);
-    }, []);
+            .catch(() => setCustomState("error"));
+    };
+    useEffect(() => { fetchSchedules(); fetchCustomReports(); }, []);
 
     const createSchedule = async () => {
         setSaving(true);
@@ -1670,10 +1697,10 @@ function ReportSchedulesSection() {
 
     return (
         <Card className="mb-4 rounded-2xl">
-            <CardContent className="space-y-5 p-6">
-                <div className="flex flex-col justify-between gap-3 md:flex-row md:items-start">
+            <CardContent className="min-w-0 space-y-5 p-4 sm:p-6">
+                <div className="flex min-w-0 flex-wrap justify-between gap-3">
                     <div>
-                        <div className="flex items-center gap-2">
+                        <div className="flex min-w-0 flex-wrap items-center gap-2">
                             <CalendarClock className="size-5 text-primary" />
                             <h2 className="text-lg font-bold">Report Scheduling</h2>
                             <Badge variant="outline" className="rounded-md">Recurring</Badge>
@@ -1682,7 +1709,7 @@ function ReportSchedulesSection() {
                             Schedule inbuilt reports for recurring delivery. Until mail transport is connected, due runs create pending delivery records.
                         </p>
                     </div>
-                    <Button onClick={createSchedule} disabled={saving || !recipients.trim() || (scheduleSource === "custom" && !customReportId)}>
+                    <Button onClick={createSchedule} disabled={saving || (scheduleSource === "custom" && customState !== "ready") || !recipients.trim() || (scheduleSource === "custom" && !customReportId)}>
                         <Plus className="size-4" />
                         {saving ? "Creating..." : "Create Schedule"}
                     </Button>
@@ -1695,11 +1722,12 @@ function ReportSchedulesSection() {
                     </TabsList>
 
                     <TabsContent value="create">
-                <div className="grid gap-4 lg:grid-cols-[0.8fr_1.1fr_0.8fr_0.7fr_1.2fr]">
-                    <div className="space-y-2">
-                        <Label>Source</Label>
+                        {scheduleSource === "custom" && customState === "error" ? <ErrorState description="Saved reports for scheduling could not be loaded." onRetry={fetchCustomReports} /> : null}
+                <div className="grid gap-4 @min-[600px]/reports:grid-cols-2 @min-[1100px]/reports:grid-cols-3">
+                    <div className="min-w-0 space-y-2">
+                        <Label htmlFor="report-source-8">Source</Label>
                         <Select value={scheduleSource} onValueChange={(value) => setScheduleSource(value as "inbuilt" | "custom")}>
-                            <SelectTrigger className="w-full">
+                            <SelectTrigger id="report-source-8" className="w-full">
                                 <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
@@ -1708,11 +1736,11 @@ function ReportSchedulesSection() {
                             </SelectContent>
                         </Select>
                     </div>
-                    <div className="space-y-2">
-                        <Label>Report</Label>
+                    <div className="min-w-0 space-y-2">
+                        <Label htmlFor="report-report-9">Report</Label>
                         {scheduleSource === "custom" ? (
-                            <Select value={customReportId} onValueChange={setCustomReportId}>
-                                <SelectTrigger className="w-full">
+                            <Select value={customReportId} onValueChange={setCustomReportId} disabled={customState !== "ready"}>
+                                <SelectTrigger id="report-report-9" className="w-full">
                                     <SelectValue placeholder="Select custom report" />
                                 </SelectTrigger>
                                 <SelectContent>
@@ -1723,7 +1751,7 @@ function ReportSchedulesSection() {
                             </Select>
                         ) : (
                             <Select value={reportKey} onValueChange={setReportKey}>
-                                <SelectTrigger className="w-full">
+                                <SelectTrigger id="report-report-9" className="w-full">
                                     <SelectValue />
                                 </SelectTrigger>
                                 <SelectContent>
@@ -1734,10 +1762,10 @@ function ReportSchedulesSection() {
                             </Select>
                         )}
                     </div>
-                    <div className="space-y-2">
-                        <Label>Frequency</Label>
+                    <div className="min-w-0 space-y-2">
+                        <Label htmlFor="report-frequency-10">Frequency</Label>
                         <Select value={frequency} onValueChange={(value) => setFrequency(value as "DAILY" | "WEEKLY" | "MONTHLY")}>
-                            <SelectTrigger className="w-full">
+                            <SelectTrigger id="report-frequency-10" className="w-full">
                                 <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
@@ -1747,10 +1775,10 @@ function ReportSchedulesSection() {
                             </SelectContent>
                         </Select>
                     </div>
-                    <div className="space-y-2">
-                        <Label>{frequency === "MONTHLY" ? "Day of Month" : "Day of Week"}</Label>
+                    <div className="min-w-0 space-y-2">
+                        <Label htmlFor="report-frequency-monthly-day-of-month-day-of-week-11">{frequency === "MONTHLY" ? "Day of Month" : "Day of Week"}</Label>
                         {frequency === "DAILY" ? (
-                            <Input value="Every day" disabled />
+                            <Input id="report-frequency-monthly-day-of-month-day-of-week-11" value="Every day" disabled />
                         ) : frequency === "MONTHLY" ? (
                             <Select value={dayOfMonth} onValueChange={setDayOfMonth}>
                                 <SelectTrigger className="w-full">
@@ -1775,18 +1803,18 @@ function ReportSchedulesSection() {
                             </Select>
                         )}
                     </div>
-                    <div className="space-y-2">
-                        <Label>Recipients</Label>
-                        <Input
+                    <div className="min-w-0 space-y-2">
+                        <Label htmlFor="report-recipients-12">Recipients</Label>
+                        <Input id="report-recipients-12"
                             value={recipients}
                             onChange={(event) => setRecipients(event.target.value)}
                             placeholder="ops@example.com, sales@example.com"
                         />
                     </div>
                     <div className="space-y-2 lg:col-span-1">
-                        <Label>Format</Label>
+                        <Label htmlFor="report-format-13">Format</Label>
                         <Select value={format} onValueChange={(value) => setFormat(value as "LINK" | "CSV" | "PDF" | "XLSX")}>
-                            <SelectTrigger className="w-full">
+                            <SelectTrigger id="report-format-13" className="w-full">
                                 <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
@@ -1803,17 +1831,17 @@ function ReportSchedulesSection() {
                     <TabsContent value="existing">
                 {loading ? (
                     <Skeleton className="h-[120px] rounded-xl" />
-                ) : schedules.length === 0 ? (
+                ) : loadError ? <ErrorState description="Report schedules could not be loaded." onRetry={fetchSchedules} /> : schedules.length === 0 ? (
                     <div className="rounded-lg border border-dashed bg-muted/20 px-3 py-4 text-sm text-muted-foreground">
                         No recurring schedules yet.
                     </div>
                 ) : (
-                    <div className="space-y-2">
+                    <div className="min-w-0 space-y-2">
                         {schedules.map((schedule) => (
-                            <div key={schedule.id} className="flex flex-col justify-between gap-3 rounded-xl border bg-card p-3 md:flex-row md:items-center">
-                                <div>
+                            <div key={schedule.id} className="flex min-w-0 flex-wrap items-start justify-between gap-3 rounded-xl border bg-card p-3">
+                                <div className="min-w-0 flex-1 basis-60 break-words">
                                     <div className="flex flex-wrap items-center gap-2">
-                                        <span className="text-sm font-bold">
+                                        <span className="min-w-0 break-words text-sm font-bold">
                                             {reportScheduleLabel(schedule, customReports)}
                                         </span>
                                         <Badge variant="outline" className="rounded-md text-[0.65rem] font-semibold">{schedule.frequency}</Badge>
@@ -1829,7 +1857,7 @@ function ReportSchedulesSection() {
                                         </p>
                                     ) : null}
                                 </div>
-                                <div className="flex items-center gap-2">
+                                <div className="flex min-w-0 flex-wrap items-center gap-2">
                                     <Switch
                                         checked={schedule.isActive}
                                         onCheckedChange={(checked) => updateSchedule(schedule.id, { isActive: checked })}
@@ -1923,7 +1951,7 @@ function ReportAnnotationsSection() {
 
     return (
         <Card className="rounded-2xl">
-            <CardContent className="space-y-5 p-6">
+            <CardContent className="min-w-0 space-y-5 p-4 sm:p-6">
                 <div>
                     <h2 className="text-lg font-bold">Analytics Annotations</h2>
                     <p className="mt-1 text-sm text-muted-foreground">
@@ -1931,15 +1959,15 @@ function ReportAnnotationsSection() {
                     </p>
                 </div>
 
-                <div className="grid gap-3 rounded-xl border bg-muted/30 p-4 md:grid-cols-2 lg:grid-cols-5">
+                <div className="grid gap-3 rounded-xl border bg-muted/30 p-4 @min-[600px]/reports:grid-cols-2 @min-[1100px]/reports:grid-cols-3">
                     <div className="space-y-1.5 lg:col-span-2">
-                        <Label>Label</Label>
-                        <Input value={label} onChange={(e) => setLabel(e.target.value)} placeholder="Fall intake launch" />
+                        <Label htmlFor="report-label-14">Label</Label>
+                        <Input id="report-label-14" value={label} onChange={(e) => setLabel(e.target.value)} placeholder="Fall intake launch" />
                     </div>
                     <div className="space-y-1.5">
-                        <Label>Category</Label>
+                        <Label htmlFor="report-category-15">Category</Label>
                         <Select value={category} onValueChange={setCategory}>
-                            <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                            <SelectTrigger id="report-category-15" className="w-full"><SelectValue /></SelectTrigger>
                             <SelectContent>
                                 {ANNOTATION_CATEGORIES.map((option) => (
                                     <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
@@ -1948,8 +1976,8 @@ function ReportAnnotationsSection() {
                         </Select>
                     </div>
                     <div className="space-y-1.5">
-                        <Label>Date</Label>
-                        <Input type="date" value={occurredAt} onChange={(e) => setOccurredAt(e.target.value)} />
+                        <Label htmlFor="report-date-16">Date</Label>
+                        <Input id="report-date-16" type="date" value={occurredAt} onChange={(e) => setOccurredAt(e.target.value)} />
                     </div>
                     <div className="flex items-end">
                         <Button onClick={createAnnotation} disabled={saving} className="w-full">
@@ -1958,8 +1986,8 @@ function ReportAnnotationsSection() {
                         </Button>
                     </div>
                     <div className="space-y-1.5 md:col-span-2 lg:col-span-5">
-                        <Label>Description (optional)</Label>
-                        <Input value={description} onChange={(e) => setDescription(e.target.value)} placeholder="What happened, and why it matters for this metric" />
+                        <Label htmlFor="report-description-optional-17">Description (optional)</Label>
+                        <Input id="report-description-optional-17" value={description} onChange={(e) => setDescription(e.target.value)} placeholder="What happened, and why it matters for this metric" />
                     </div>
                 </div>
 
@@ -2061,7 +2089,7 @@ function DataCatalogSection() {
 
     return (
         <Card className="rounded-2xl">
-            <CardContent className="space-y-5 p-6">
+            <CardContent className="min-w-0 space-y-5 p-4 sm:p-6">
                 <div>
                     <h2 className="text-lg font-bold">Data Catalog</h2>
                     <p className="mt-1 text-sm text-muted-foreground">
@@ -2151,6 +2179,8 @@ function MetricsSection() {
     const [metrics, setMetrics] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
+    const [listError, setListError] = useState(false);
+    const [metadataState, setMetadataState] = useState("loading");
     const [editingId, setEditingId] = useState<string | null>(null);
     const [form, setForm] = useState(EMPTY_METRIC_FORM);
     const [filters, setFilters] = useState<MetricFilterState[]>([]);
@@ -2160,25 +2190,30 @@ function MetricsSection() {
 
     const loadMetrics = async () => {
         setLoading(true);
+        setListError(false);
         try {
             const data = await apiFetch<any[]>("/metrics");
             setMetrics(Array.isArray(data) ? data : []);
         } catch (error: any) {
-            toast.error(error.message || "Failed to load metrics");
+            setListError(true);
         } finally {
             setLoading(false);
         }
     };
 
-    useEffect(() => {
-        apiFetch<{ objects: Record<string, string[]> }>("/reports/query")
-            .then((data) => setCatalog(data.objects ?? {}))
-            .catch(() => toast.error("Failed to load the metric field catalog"));
-        apiFetch<Array<{ id: string; name: string }>>("/teams")
-            .then((result) => setTeams(Array.isArray(result) ? result : []))
-            .catch(() => undefined);
-        loadMetrics();
-    }, []);
+    const loadMetadata = async () => {
+        setMetadataState("loading");
+        try {
+            const [data, teamData] = await Promise.all([
+                apiFetch<{ objects: Record<string, string[]> }>("/reports/query"),
+                apiFetch<Array<{ id: string; name: string }>>("/teams"),
+            ]);
+            setCatalog(data.objects ?? {});
+            setTeams(Array.isArray(teamData) ? teamData : []);
+            setMetadataState("ready");
+        } catch { setMetadataState("error"); }
+    };
+    useEffect(() => { loadMetadata(); loadMetrics(); }, []);
 
     const availableObjects = useMemo(
         () => OBJECTS_BY_ROOT[form.root].filter((object) => catalog[object]?.length),
@@ -2312,8 +2347,8 @@ function MetricsSection() {
 
     return (
         <div className="space-y-4">
-            <Card className="rounded-2xl" id="metric-builder">
-                <CardContent className="space-y-5 p-6">
+            {metadataState === "loading" ? <Skeleton className="h-80 w-full" /> : metadataState === "error" ? <ErrorState description="Metric fields and teams could not be loaded." onRetry={loadMetadata} /> : <Card className="rounded-2xl" id="metric-builder">
+                <CardContent className="min-w-0 space-y-5 p-4 sm:p-6">
                     <div>
                         <h2 className="text-lg font-bold">{editingId ? "Edit Metric" : "New Metric"}</h2>
                         <p className="mt-1 text-sm text-muted-foreground">
@@ -2321,51 +2356,51 @@ function MetricsSection() {
                         </p>
                     </div>
 
-                    <div className="grid gap-3 md:grid-cols-2">
-                        <div className="space-y-1.5">
-                            <Label>Name</Label>
-                            <Input value={form.name} onChange={(e) => setForm((current) => ({ ...current, name: e.target.value }))} placeholder="Open pipeline value" />
+                    <div className="grid gap-3 @min-[650px]/reports:grid-cols-2">
+                        <div className="min-w-0 space-y-1.5">
+                            <Label htmlFor="report-name-18">Name</Label>
+                            <Input id="report-name-18" value={form.name} onChange={(e) => setForm((current) => ({ ...current, name: e.target.value }))} placeholder="Open pipeline value" />
                         </div>
-                        <div className="space-y-1.5">
-                            <Label>Description (optional)</Label>
-                            <Input value={form.description} onChange={(e) => setForm((current) => ({ ...current, description: e.target.value }))} placeholder="What this metric means and when to use it" />
+                        <div className="min-w-0 space-y-1.5">
+                            <Label htmlFor="report-description-optional-19">Description (optional)</Label>
+                            <Input id="report-description-optional-19" value={form.description} onChange={(e) => setForm((current) => ({ ...current, description: e.target.value }))} placeholder="What this metric means and when to use it" />
                         </div>
                     </div>
 
-                    <div className="grid gap-3 md:grid-cols-3">
-                        <div className="space-y-1.5">
-                            <Label>Root</Label>
+                    <div className="grid gap-3 @min-[850px]/reports:grid-cols-3">
+                        <div className="min-w-0 space-y-1.5">
+                            <Label htmlFor="report-root-20">Root</Label>
                             <Select value={form.root} onValueChange={(value) => changeRoot(value as ReportRoot)}>
-                                <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                                <SelectTrigger id="report-root-20" className="w-full"><SelectValue /></SelectTrigger>
                                 <SelectContent>
                                     {ROOT_OPTIONS.map((option) => <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>)}
                                 </SelectContent>
                             </Select>
                         </div>
-                        <div className="space-y-1.5">
-                            <Label>Aggregation</Label>
+                        <div className="min-w-0 space-y-1.5">
+                            <Label htmlFor="report-aggregation-21">Aggregation</Label>
                             <Select value={form.aggregation} onValueChange={(value) => setForm((current) => ({ ...current, aggregation: value }))}>
-                                <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                                <SelectTrigger id="report-aggregation-21" className="w-full"><SelectValue /></SelectTrigger>
                                 <SelectContent>
                                     {METRIC_AGGREGATIONS.map((option) => <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>)}
                                 </SelectContent>
                             </Select>
                         </div>
                         {form.aggregation !== "COUNT" ? (
-                            <div className="space-y-1.5">
-                                <Label>Field to aggregate</Label>
-                                <div className="grid grid-cols-2 gap-1.5">
+                            <div className="min-w-0 space-y-1.5">
+                                <Label htmlFor="report-field-to-aggregate-22">Field to aggregate</Label>
+                                <div className="grid gap-1.5">
                                     <Select
                                         value={form.aggregateObject}
                                         onValueChange={(object) => setForm((current) => ({ ...current, aggregateObject: object, aggregateField: fieldsForObject(object)[0] ?? "" }))}
                                     >
-                                        <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                                        <SelectTrigger id="report-field-to-aggregate-22" className="w-full"><SelectValue /></SelectTrigger>
                                         <SelectContent>
                                             {availableObjects.map((object) => <SelectItem key={object} value={object}>{OBJECT_LABELS[object] ?? object}</SelectItem>)}
                                         </SelectContent>
                                     </Select>
                                     <Select value={form.aggregateField} onValueChange={(field) => setForm((current) => ({ ...current, aggregateField: field }))}>
-                                        <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                                        <SelectTrigger aria-label="Aggregate field" className="w-full"><SelectValue /></SelectTrigger>
                                         <SelectContent>
                                             {fieldsForObject(form.aggregateObject).map((field) => <SelectItem key={field} value={field}>{formatFieldLabel(field)}</SelectItem>)}
                                         </SelectContent>
@@ -2377,14 +2412,14 @@ function MetricsSection() {
                         )}
                     </div>
 
-                    <div className="space-y-1.5">
-                        <Label>Group by (optional)</Label>
-                        <div className="grid grid-cols-2 gap-1.5 md:w-2/3">
+                    <div className="min-w-0 space-y-1.5">
+                        <Label htmlFor="report-group-by-optional-23">Group by (optional)</Label>
+                        <div className="grid gap-1.5 @min-[650px]/reports:grid-cols-2">
                             <Select
                                 value={form.groupByObject}
                                 onValueChange={(object) => setForm((current) => ({ ...current, groupByObject: object, groupByField: object === "__none__" ? "" : fieldsForObject(object)[0] ?? "", grain: object === "__none__" ? current.grain : "__none__" }))}
                             >
-                                <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                                <SelectTrigger id="report-group-by-optional-23" className="w-full"><SelectValue /></SelectTrigger>
                                 <SelectContent>
                                     <SelectItem value="__none__">No grouping</SelectItem>
                                     {availableObjects.map((object) => <SelectItem key={object} value={object}>{OBJECT_LABELS[object] ?? object}</SelectItem>)}
@@ -2392,7 +2427,7 @@ function MetricsSection() {
                             </Select>
                             {form.groupByObject !== "__none__" ? (
                                 <Select value={form.groupByField} onValueChange={(field) => setForm((current) => ({ ...current, groupByField: field }))}>
-                                    <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                                    <SelectTrigger aria-label="Group by field" className="w-full"><SelectValue /></SelectTrigger>
                                     <SelectContent>
                                         {fieldsForObject(form.groupByObject).map((field) => <SelectItem key={field} value={field}>{formatFieldLabel(field)}</SelectItem>)}
                                     </SelectContent>
@@ -2401,13 +2436,13 @@ function MetricsSection() {
                         </div>
                     </div>
 
-                    <div className="space-y-1.5">
-                        <Label>Grain</Label>
+                    <div className="min-w-0 space-y-1.5">
+                        <Label htmlFor="report-grain-24">Grain</Label>
                         <Select
                             value={form.grain}
                             onValueChange={(grain) => setForm((current) => ({ ...current, grain: grain as typeof current.grain, groupByObject: grain === "__none__" ? current.groupByObject : "__none__", groupByField: grain === "__none__" ? current.groupByField : "" }))}
                         >
-                            <SelectTrigger className="w-full md:w-1/3"><SelectValue /></SelectTrigger>
+                            <SelectTrigger id="report-grain-24" className="w-full md:w-1/3"><SelectValue /></SelectTrigger>
                             <SelectContent>
                                 {METRIC_GRAIN_OPTIONS.map((option) => <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>)}
                             </SelectContent>
@@ -2415,8 +2450,8 @@ function MetricsSection() {
                         <p className="text-xs text-muted-foreground">Tracks this metric&apos;s value over time instead of only its live total. Requires no group-by dimension.</p>
                     </div>
 
-                    <div className="space-y-2">
-                        <div className="flex items-center justify-between">
+                    <div className="min-w-0 space-y-2">
+                        <div className="flex min-w-0 flex-wrap items-center justify-between">
                             <Label className="text-xs font-bold uppercase text-muted-foreground">Filters</Label>
                             <Button type="button" variant="outline" size="sm" onClick={addFilter}>
                                 <Plus className="size-4" />
@@ -2427,26 +2462,26 @@ function MetricsSection() {
                             <div className="rounded-lg border border-dashed bg-muted/20 px-3 py-3 text-sm text-muted-foreground">No filters -- uses the full dataset for this root.</div>
                         ) : (
                             filters.map((filter, index) => (
-                                <div key={index} className="grid gap-2 rounded-lg border bg-surface-container-low p-2 md:grid-cols-[1fr_1fr_1fr_1fr_auto]">
+                                <div key={index} className="grid gap-2 rounded-lg border bg-surface-container-low p-2 @min-[1100px]/reports:grid-cols-[repeat(4,minmax(0,1fr))_auto]">
                                     <Select value={filter.object} onValueChange={(object) => updateFilter(index, { object, field: fieldsForObject(object)[0] ?? "id" })}>
-                                        <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                                        <SelectTrigger aria-label={`Metric filter ${index + 1} object`} className="w-full"><SelectValue /></SelectTrigger>
                                         <SelectContent>
                                             {availableObjects.map((object) => <SelectItem key={object} value={object}>{OBJECT_LABELS[object] ?? object}</SelectItem>)}
                                         </SelectContent>
                                     </Select>
                                     <Select value={filter.field} onValueChange={(field) => updateFilter(index, { field })}>
-                                        <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                                        <SelectTrigger aria-label={`Metric filter ${index + 1} field`} className="w-full"><SelectValue /></SelectTrigger>
                                         <SelectContent>
                                             {fieldsForObject(filter.object).map((field) => <SelectItem key={field} value={field}>{formatFieldLabel(field)}</SelectItem>)}
                                         </SelectContent>
                                     </Select>
                                     <Select value={filter.operator} onValueChange={(operator) => updateFilter(index, { operator })}>
-                                        <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                                        <SelectTrigger aria-label={`Metric filter ${index + 1} operator`} className="w-full"><SelectValue /></SelectTrigger>
                                         <SelectContent>
                                             {REPORT_OPERATORS.map((operator) => <SelectItem key={operator.value} value={operator.value}>{operator.label}</SelectItem>)}
                                         </SelectContent>
                                     </Select>
-                                    <Input
+                                    <Input aria-label={`Metric filter ${index + 1} value`}
                                         value={filter.operator === "is_empty" || filter.operator === "is_not_empty" ? "" : filter.value}
                                         disabled={filter.operator === "is_empty" || filter.operator === "is_not_empty"}
                                         placeholder={filter.operator === "is_empty" || filter.operator === "is_not_empty" ? "Not required" : "Value"}
@@ -2460,11 +2495,11 @@ function MetricsSection() {
                         )}
                     </div>
 
-                    <div className="space-y-1.5">
-                        <Label>Sharing</Label>
-                        <div className="grid gap-1.5 md:w-2/3 md:grid-cols-2">
+                    <div className="min-w-0 space-y-1.5">
+                        <Label htmlFor="report-sharing-25">Sharing</Label>
+                        <div className="grid gap-1.5 @min-[650px]/reports:grid-cols-2">
                             <Select value={form.visibility} onValueChange={(value) => setForm((current) => ({ ...current, visibility: value as "PRIVATE" | "TEAM" | "TENANT" }))}>
-                                <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                                <SelectTrigger id="report-sharing-25" className="w-full"><SelectValue /></SelectTrigger>
                                 <SelectContent>
                                     <SelectItem value="PRIVATE">Only me</SelectItem>
                                     <SelectItem value="TEAM">My team</SelectItem>
@@ -2473,7 +2508,7 @@ function MetricsSection() {
                             </Select>
                             {form.visibility === "TEAM" ? (
                                 <Select value={form.sharedWithTeamId} onValueChange={(value) => setForm((current) => ({ ...current, sharedWithTeamId: value }))}>
-                                    <SelectTrigger className="w-full"><SelectValue placeholder="Select a team" /></SelectTrigger>
+                                    <SelectTrigger aria-label="Metric team" className="w-full"><SelectValue placeholder="Select a team" /></SelectTrigger>
                                     <SelectContent>
                                         {teams.map((team) => <SelectItem key={team.id} value={team.id}>{team.name}</SelectItem>)}
                                     </SelectContent>
@@ -2491,14 +2526,14 @@ function MetricsSection() {
                         </Button>
                     </div>
                 </CardContent>
-            </Card>
+            </Card>}
 
             <Card className="rounded-2xl">
                 <CardContent className="space-y-4 p-6">
                     <h2 className="text-lg font-bold">Metrics</h2>
                     {loading ? (
                         <Skeleton className="h-32 w-full rounded-xl" />
-                    ) : metrics.length === 0 ? (
+                    ) : listError ? <ErrorState description="Metrics could not be loaded." onRetry={loadMetrics} /> : metrics.length === 0 ? (
                         <p className="text-sm text-muted-foreground">No metrics defined yet.</p>
                     ) : (
                         <Table>
@@ -2642,27 +2677,25 @@ function CalculatedMetricsSection() {
     const [calculatedMetrics, setCalculatedMetrics] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
+    const [loadError, setLoadError] = useState(false);
     const [name, setName] = useState("");
     const [steps, setSteps] = useState<CalculatedMetricStepDraft[]>([]);
     const [values, setValues] = useState<Record<string, number | null | undefined>>({});
     const [computingId, setComputingId] = useState<string | null>(null);
 
     const loadCalculatedMetrics = async () => {
-        try {
-            const data = await apiFetch<any[]>("/calculated-metrics");
-            setCalculatedMetrics(Array.isArray(data) ? data : []);
-        } catch (error: any) {
-            toast.error(error.message || "Failed to load calculated metrics");
-        }
-    };
-
-    useEffect(() => {
         setLoading(true);
-        Promise.all([
-            apiFetch<any[]>("/metrics").then((data) => setMetrics(Array.isArray(data) ? data : [])).catch(() => setMetrics([])),
-            loadCalculatedMetrics(),
-        ]).finally(() => setLoading(false));
-    }, []);
+        setLoadError(false);
+        try {
+            const [base, calculated] = await Promise.all([
+                apiFetch<any[]>("/metrics"), apiFetch<any[]>("/calculated-metrics"),
+            ]);
+            setMetrics(Array.isArray(base) ? base : []);
+            setCalculatedMetrics(Array.isArray(calculated) ? calculated : []);
+        } catch { setLoadError(true); }
+        finally { setLoading(false); }
+    };
+    useEffect(() => { loadCalculatedMetrics(); }, []);
 
     const metricLabel = (id: string) => metrics.find((m) => m.id === id)?.name ?? id;
 
@@ -2724,11 +2757,12 @@ function CalculatedMetricsSection() {
     const expressionFor = (metricSteps: CalculatedMetricStepDraft[]) =>
         metricSteps.map((step, i) => (i === 0 ? metricLabel(step.metricId) : `${step.operator} ${metricLabel(step.metricId)}`)).join(" ");
 
+    if (loadError) return <ErrorState description="Calculated metrics and source metrics could not be loaded." onRetry={loadCalculatedMetrics} />;
     if (loading) return <Skeleton className="h-32 w-full rounded-xl" />;
 
     return (
         <Card className="rounded-2xl">
-            <CardContent className="space-y-5 p-6">
+            <CardContent className="min-w-0 space-y-5 p-4 sm:p-6">
                 <div>
                     <h2 className="text-lg font-bold">Calculated Metrics</h2>
                     <p className="mt-1 text-sm text-muted-foreground">Chain existing metrics with +, −, ×, ÷ -- no free-text formulas.</p>
@@ -2736,22 +2770,22 @@ function CalculatedMetricsSection() {
 
                 <div className="space-y-3 rounded-xl border bg-muted/20 p-4">
                     <div className="space-y-1.5">
-                        <Label>Name</Label>
-                        <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Net Revenue per Lead" />
+                        <Label htmlFor="report-name-26">Name</Label>
+                        <Input id="report-name-26" value={name} onChange={(e) => setName(e.target.value)} placeholder="Net Revenue per Lead" />
                     </div>
-                    <div className="space-y-2">
+                    <div className="min-w-0 space-y-2">
                         {steps.map((step, index) => (
-                            <div key={index} className="flex items-center gap-2">
+                            <div key={index} className="flex min-w-0 flex-wrap items-center gap-2">
                                 {index > 0 ? (
                                     <Select value={step.operator ?? "+"} onValueChange={(operator) => updateStep(index, { operator })}>
-                                        <SelectTrigger className="w-16"><SelectValue /></SelectTrigger>
+                                        <SelectTrigger aria-label={`Step ${index + 1} operator`} className="w-16"><SelectValue /></SelectTrigger>
                                         <SelectContent>
                                             {CALCULATED_METRIC_OPERATORS.map((op) => <SelectItem key={op.value} value={op.value}>{op.label}</SelectItem>)}
                                         </SelectContent>
                                     </Select>
                                 ) : <span className="w-16 text-center text-sm text-muted-foreground">Start</span>}
                                 <Select value={step.metricId} onValueChange={(metricId) => updateStep(index, { metricId })}>
-                                    <SelectTrigger className="w-full"><SelectValue placeholder="Choose a metric" /></SelectTrigger>
+                                    <SelectTrigger aria-label={`Step ${index + 1} metric`} className="min-w-0 flex-1 basis-40"><SelectValue placeholder="Choose a metric" /></SelectTrigger>
                                     <SelectContent>
                                         {metrics.map((m) => <SelectItem key={m.id} value={m.id}>{m.name}</SelectItem>)}
                                     </SelectContent>
@@ -2765,10 +2799,10 @@ function CalculatedMetricsSection() {
                             <Plus className="size-4" />
                             Add Metric
                         </Button>
-                        {!metrics.length ? <p className="text-xs text-muted-foreground">Create a metric first (Metrics section above).</p> : null}
+                        {!metrics.length ? <p className="text-xs text-muted-foreground">Create a metric in the Metrics section first.</p> : null}
                     </div>
                     <div className="flex justify-end">
-                        <Button onClick={save} disabled={saving}>{saving ? "Saving..." : "Create Calculated Metric"}</Button>
+                        <Button className="h-auto min-h-9 whitespace-normal" onClick={save} disabled={saving || !name.trim() || steps.length === 0}>{saving ? "Saving..." : "Create Calculated Metric"}</Button>
                     </div>
                 </div>
 
@@ -2842,26 +2876,27 @@ type ComparisonSegmentDraft = { level: "LEAD" | "OPPORTUNITY"; dimension: string
 const EMPTY_SEGMENT_DRAFT: ComparisonSegmentDraft = { level: "LEAD", dimension: "SOURCE", value: "" };
 
 function SegmentBuilder({ label, segment, onChange }: { label: string; segment: ComparisonSegmentDraft; onChange: (next: ComparisonSegmentDraft) => void }) {
+    const id = useId();
     const dimensionOptions = segment.level === "LEAD" ? LEAD_DIMENSIONS : OPPORTUNITY_DIMENSIONS;
     return (
-        <div className="space-y-2 rounded-xl border p-3">
-            <Label className="text-xs font-bold uppercase text-muted-foreground">{label}</Label>
-            <div className="grid gap-2 sm:grid-cols-3">
-                <Select value={segment.level} onValueChange={(level) => onChange({ level: level as "LEAD" | "OPPORTUNITY", dimension: level === "LEAD" ? "SOURCE" : "SOURCE", value: "" })}>
-                    <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+        <fieldset className="@container/segment min-w-0 space-y-2 rounded-xl border p-3">
+            <legend className="px-1 text-sm font-semibold">{label}</legend>
+            <div className="grid gap-3 @min-[520px]/segment:grid-cols-3">
+                <div className="min-w-0 space-y-1"><Label htmlFor={`${id}-level`}>Records</Label><Select value={segment.level} onValueChange={(level) => onChange({ level: level as "LEAD" | "OPPORTUNITY", dimension: level === "LEAD" ? "SOURCE" : "SOURCE", value: "" })}>
+                    <SelectTrigger id={`${id}-level`} className="w-full"><SelectValue /></SelectTrigger>
                     <SelectContent>
                         {COMPARISON_LEVELS.map((option) => <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>)}
                     </SelectContent>
-                </Select>
-                <Select value={segment.dimension} onValueChange={(dimension) => onChange({ ...segment, dimension, value: "" })}>
-                    <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                </Select></div>
+                <div className="min-w-0 space-y-1"><Label htmlFor={`${id}-dimension`}>Group by</Label><Select value={segment.dimension} onValueChange={(dimension) => onChange({ ...segment, dimension, value: "" })}>
+                    <SelectTrigger id={`${id}-dimension`} className="w-full"><SelectValue /></SelectTrigger>
                     <SelectContent>
                         {dimensionOptions.map((option) => <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>)}
                     </SelectContent>
-                </Select>
-                <Input value={segment.value} onChange={(e) => onChange({ ...segment, value: e.target.value })} placeholder="Exact value, e.g. Website" />
+                </Select></div>
+                <div className="min-w-0 space-y-1"><Label htmlFor={`${id}-value`}>Exact value</Label><Input id={`${id}-value`} value={segment.value} onChange={(e) => onChange({ ...segment, value: e.target.value })} placeholder="e.g. Website" /></div>
             </div>
-        </div>
+        </fieldset>
     );
 }
 
@@ -2870,30 +2905,42 @@ function SegmentComparisonSection() {
     const [segmentB, setSegmentB] = useState<ComparisonSegmentDraft>({ ...EMPTY_SEGMENT_DRAFT });
     const [result, setResult] = useState<any>(null);
     const [loading, setLoading] = useState(false);
+    const [compareError, setCompareError] = useState(false);
+    const requestVersion = useRef(0);
+    const changeSegment = (which: "A" | "B", next: ComparisonSegmentDraft) => {
+        requestVersion.current += 1;
+        setLoading(false);
+        setCompareError(false);
+        setResult(null);
+        if (which === "A") setSegmentA(next); else setSegmentB(next);
+    };
 
     const compare = async () => {
         if (!segmentA.value.trim() || !segmentB.value.trim()) {
             toast.error("Both segments need a value to compare");
             return;
         }
+        const version = ++requestVersion.current;
         setLoading(true);
+        setCompareError(false);
+        setResult(null);
         try {
             const params = new URLSearchParams({
                 levelA: segmentA.level, dimensionA: segmentA.dimension, valueA: segmentA.value.trim(),
                 levelB: segmentB.level, dimensionB: segmentB.dimension, valueB: segmentB.value.trim(),
             });
             const data = await apiFetch(`/reports/inbuilt/segment-comparison?${params.toString()}`);
-            setResult(data);
+            if (requestVersion.current === version) setResult(data);
         } catch (error: any) {
-            toast.error(error.message || "Failed to compare segments");
+            if (requestVersion.current === version) setCompareError(true);
         } finally {
-            setLoading(false);
+            if (requestVersion.current === version) setLoading(false);
         }
     };
 
     return (
         <Card className="rounded-2xl">
-            <CardContent className="space-y-5 p-6">
+            <CardContent className="min-w-0 space-y-5 p-4 sm:p-6">
                 <div>
                     <h2 className="text-lg font-bold">Compare Segments</h2>
                     <p className="mt-1 text-sm text-muted-foreground">
@@ -2902,14 +2949,15 @@ function SegmentComparisonSection() {
                 </div>
 
                 <div className="grid gap-3 md:grid-cols-2">
-                    <SegmentBuilder label="Segment A" segment={segmentA} onChange={setSegmentA} />
-                    <SegmentBuilder label="Segment B" segment={segmentB} onChange={setSegmentB} />
+                    <SegmentBuilder label="Segment A" segment={segmentA} onChange={next => changeSegment("A", next)} />
+                    <SegmentBuilder label="Segment B" segment={segmentB} onChange={next => changeSegment("B", next)} />
                 </div>
 
                 <div className="flex justify-end">
-                    <Button onClick={compare} disabled={loading}>{loading ? "Comparing..." : "Compare"}</Button>
+                    <Button onClick={compare} disabled={loading || !segmentA.value.trim() || !segmentB.value.trim()}>{loading ? "Comparing..." : "Compare"}</Button>
                 </div>
 
+                {compareError ? <ErrorState description="Segments could not be compared. Your inputs have been kept." onRetry={compare} /> : null}
                 {result ? (
                     <Table>
                         <TableHeader>
@@ -2959,15 +3007,17 @@ function smartViewModuleForReportRoot(root: ReportRoot) {
 function CustomReportsSection() {
     const [reports, setReports] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
+    const [loadError, setLoadError] = useState(false);
     // Gap checklist Module 17 ("dashboard/report versioning" -- change history + rollback).
     const [historyReportId, setHistoryReportId] = useState<string | null>(null);
     const [favoriteReportIds, setFavoriteReportIds] = useState<string[]>([]);
 
     const fetchReports = () => {
         setLoading(true);
+        setLoadError(false);
         apiFetch("/reports/custom")
             .then(setReports)
-            .catch(console.error)
+            .catch(() => setLoadError(true))
             .finally(() => setLoading(false));
     };
 
@@ -3050,6 +3100,7 @@ function CustomReportsSection() {
         }
     };
 
+    if (loadError) return <ErrorState description="Saved reports could not be loaded." onRetry={fetchReports} />;
     if (loading) return <Skeleton className="mb-4 h-[100px] rounded-2xl" />;
 
     return (
@@ -3061,10 +3112,10 @@ function CustomReportsSection() {
                 ) : (
                     <div className="space-y-3">
                         {reports.map((report) => (
-                            <div key={report.id} className="flex items-center justify-between rounded-lg bg-accent p-3">
-                                <div>
-                                    <div className="flex items-center gap-1.5 text-sm font-bold">
-                                        {report.name}
+                            <div key={report.id} className="flex min-w-0 flex-wrap items-center justify-between gap-3 rounded-lg border p-3">
+                                <div className="min-w-0 flex-1 basis-60">
+                                    <div className="flex min-w-0 flex-wrap items-center gap-1.5 text-sm font-bold">
+                                        <span className="min-w-0 break-words">{report.name}</span>
                                         {report.deprecationStatus === "DEPRECATED" ? <Badge variant="outline" className="py-0 text-[10px]">Deprecated</Badge> : null}
                                     </div>
                                     <div className="text-xs text-muted-foreground">
@@ -3073,7 +3124,7 @@ function CustomReportsSection() {
                                         {(report.viewCount ?? 0) > 0 ? ` • Opened ${report.viewCount}x` : ""}
                                     </div>
                                 </div>
-                                <div className="flex items-center gap-2">
+                                <div className="flex min-w-0 flex-wrap items-center gap-2">
                                     <Button
                                         size="icon-sm"
                                         variant="ghost"
@@ -3174,7 +3225,7 @@ function ReportVersionHistoryDialog({ reportId, onClose, onRestored }: { reportI
             ) : (
                 <div className="space-y-2 p-4">
                     {versions.map((version) => (
-                        <div key={version.id} className="flex items-center justify-between rounded-lg bg-accent p-3">
+                        <div key={version.id} className="flex min-w-0 flex-wrap items-center justify-between rounded-lg bg-accent p-3">
                             <div>
                                 <div className="text-sm font-bold">Version {version.version}</div>
                                 <div className="text-xs text-muted-foreground">

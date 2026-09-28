@@ -1,5 +1,5 @@
 import { randomUUID } from "crypto";
-import { execute, query, queryOne } from "@/lib/db/query";
+import { execute, query, queryOne, jsonbParam, queryOneAsSystem } from "@/lib/db/query";
 import * as pgActivities from "@/lib/repositories/activities-postgres";
 import * as pgAutomations from "@/lib/repositories/automations-postgres";
 import * as pgForms from "@/lib/repositories/forms-postgres";
@@ -13,6 +13,7 @@ import { SmartViewTab } from "@/types/smart-views";
 import { formatExportDateValue, formatTenantDate, getTenantTimeZone } from "@/lib/server/date-format";
 import { getCurrentUserById } from "@/lib/repositories/auth-admin-postgres";
 import { enqueueImportJob } from "@/lib/server/job-queue";
+import { assertSafeOutboundUrl } from "@/lib/server/outbound-request-guard";
 import { createUserNotification } from "@/lib/server/notifications";
 import { DatabaseError } from "@/lib/db/errors";
 
@@ -25,6 +26,8 @@ type TenantUser = {
   role?: { permissions?: any } | string | null;
   isTenantAdmin?: boolean;
   isPlatformAdmin?: boolean;
+  // WP04 fix: see record-scope.ts's ScopedUser.
+  recordScopeActorId?: string | null;
 };
 
 type ActivityFilterCondition = {
@@ -134,9 +137,10 @@ export async function createAuditLog(
   entityId: string,
   before: unknown,
   after: unknown,
-  diff: Record<string, unknown> | null
+  diff: Record<string, unknown> | null,
+  client?: Parameters<typeof pgLeads.createAuditLog>[7]
 ) {
-  return pgLeads.createAuditLog(user, action, entityType, entityId, before, after, diff);
+  return pgLeads.createAuditLog(user, action, entityType, entityId, before, after, diff, client);
 }
 
 const AUDIT_SKIP_FIELDS = new Set([
@@ -349,8 +353,8 @@ async function countLeadsForTenant(user: TenantUser, filters: LeadFilterInput[] 
   return result.meta.total;
 }
 
-export async function createLeadForTenant(user: TenantUser, payload: Record<string, unknown>) {
-  return pgLeads.createLeadForTenant(user, payload);
+export async function createLeadForTenant(user: TenantUser, payload: Record<string, unknown>, idempotencyKey?: string | null) {
+  return pgLeads.createLeadForTenant(user, payload, idempotencyKey);
 }
 
 export async function getLeadForTenant(user: TenantUser, id: string) {
@@ -1700,16 +1704,16 @@ export async function queueImportForTenant(user: TenantUser, input: ImportInput)
       user.id,
       importModule,
       initialStatus,
-      { fields: input.mappings ?? [], duplicateMode },
-      rows,
-      { total: rows.length, processed: 0, created: 0, updated: 0, skipped: 0, failed: 0 },
-      [],
+      jsonbParam({ fields: input.mappings ?? [], duplicateMode }),
+      jsonbParam(rows),
+      jsonbParam({ total: rows.length, processed: 0, created: 0, updated: 0, skipped: 0, failed: 0 }),
+      jsonbParam([]),
       now,
     ],
   );
   await createAuditLog(user, "CREATE", "IMPORT_JOB", jobId, null, { module: importModule, duplicateMode, rowCount: rows.length, status: initialStatus }, null);
 
-  if (!isDestructive) await enqueueImportJob(jobId).catch(() => undefined);
+  if (!isDestructive) await enqueueImportJob(jobId, user.tenantId).catch(() => undefined);
 
   return queryOne<any>(`select ${IMPORT_JOB_COLUMNS} from "ImportJob" where id = $1`, [jobId]);
 }
@@ -1724,7 +1728,7 @@ export async function approveImportJob(user: TenantUser, jobId: string) {
   );
   if (!job) throw new Error("IMPORT_JOB_NOT_PENDING_APPROVAL");
   await createAuditLog(user, "UPDATE", "IMPORT_JOB", jobId, null, null, { status: { before: "PENDING_APPROVAL", after: "QUEUED" } });
-  await enqueueImportJob(jobId).catch(() => undefined);
+  await enqueueImportJob(jobId, user.tenantId).catch(() => undefined);
   return job;
 }
 
@@ -1771,8 +1775,11 @@ export async function cancelImportJob(user: TenantUser, jobId: string) {
 // Worker-invoked: atomically claims the job (QUEUED -> PROCESSING) so a duplicate/retried
 // job message can't double-process the same rows, then runs the same per-row mapping +
 // duplicate-detection + create/update logic the old synchronous runImportForTenant used.
+// WP07 (F04): BACKGROUND_JOB, disposition B -- its one caller is the worker's own
+// "imports.process" dynamic job, with no ambient tenant context; the ImportJob row is claimed
+// by id alone, tenant unknown until the row resolves it.
 export async function processImportJob(importJobId: string) {
-  const claimed = await queryOne<any>(
+  const claimed = await queryOneAsSystem<any>(
     `update "ImportJob"
      set status = 'PROCESSING', "updatedAt" = $1
      where id = $2 and status = 'QUEUED'
@@ -1796,7 +1803,7 @@ export async function processImportJob(importJobId: string) {
 
   for (const [index, row] of rows.entries()) {
     if (index % 25 === 0) {
-      const current = await queryOne<{ cancelRequested: boolean }>(`select "cancelRequested" from "ImportJob" where id = $1`, [importJobId]);
+      const current = await queryOneAsSystem<{ cancelRequested: boolean }>(`select "cancelRequested" from "ImportJob" where id = $1`, [importJobId]);
       if (current?.cancelRequested) {
         cancelled = true;
         break;
@@ -1830,7 +1837,7 @@ export async function processImportJob(importJobId: string) {
      set status = $1, stats = $2, errors = $3, rows = null, "updatedAt" = $4
      where id = $5
      returning ${IMPORT_JOB_COLUMNS}`,
-    [finalStatus, stats, rowErrors, new Date().toISOString(), importJobId],
+    [finalStatus, jsonbParam(stats), jsonbParam(rowErrors), new Date().toISOString(), importJobId],
   );
   if (!data) throw new Error("IMPORT_JOB_NOT_FOUND");
   await createAuditLog(user, "UPDATE", "IMPORT_JOB", importJobId, null, data, stats);
@@ -1867,7 +1874,7 @@ export async function createImportTemplateForTenant(
       `insert into "ImportTemplate" (id, "tenantId", name, module, mapping, "duplicateMode", "createdBy", "createdAt", "updatedAt")
        values ($1, $2, $3, $4, $5, $6, $7, $8, $8)
        returning id, name, module, mapping, "duplicateMode", "createdAt", "updatedAt"`,
-      [randomUUID(), user.tenantId, name, importModule, input.mappings ?? [], input.duplicateMode ?? "SKIP", user.id, now],
+      [randomUUID(), user.tenantId, name, importModule, jsonbParam(input.mappings ?? []), input.duplicateMode ?? "SKIP", user.id, now],
     );
     if (!template) throw new Error("IMPORT_TEMPLATE_INSERT_FAILED");
     return template;
@@ -1906,6 +1913,9 @@ export async function createWebhookForTenant(user: TenantUser, input: WebhookInp
   const name = String(input.name ?? "").trim();
   const url = String(input.url ?? "").trim();
   if (!name || !url) throw new Error("WEBHOOK_NAME_URL_REQUIRED");
+  // F07 fix (WP06): rejected at save time with a clear error, in addition to the delivery-time
+  // recheck in webhook-outbox.ts (a hostname's DNS record can change between the two).
+  await assertSafeOutboundUrl(url);
   const now = new Date().toISOString();
   const rateLimitPerMinute = Number.isFinite(input.rateLimitPerMinute) && Number(input.rateLimitPerMinute) > 0 ? Math.round(Number(input.rateLimitPerMinute)) : 60;
   const webhook = await queryOne<any>(
@@ -1940,6 +1950,10 @@ export async function updateWebhookForTenant(user: TenantUser, id: string, input
   if (!existing) throw new Error("WEBHOOK_NOT_FOUND");
 
   const nextUrl = input.url !== undefined ? String(input.url).trim() : existing.url;
+  // F07 fix (WP06): only revalidate when the URL is actually being changed -- an existing,
+  // already-delivering subscription's unchanged URL shouldn't suddenly fail to save because a
+  // different field was edited.
+  if (input.url !== undefined) await assertSafeOutboundUrl(nextUrl);
   const nextEvents = Array.isArray(input.events) && input.events.length > 0 ? input.events : existing.events;
   const nextIsActive = input.isActive !== undefined ? Boolean(input.isActive) : existing.isActive;
   const nextSecret = input.secret !== undefined ? (input.secret ? String(input.secret) : null) : existing.secret;

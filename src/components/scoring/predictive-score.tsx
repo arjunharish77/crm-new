@@ -83,7 +83,7 @@ export function PredictiveScorePanel({
 
     if (!score) {
         return (
-            <Card className="rounded-xl p-3">
+            <Card className="@container/score min-w-0 break-words rounded-xl p-3">
                 <div className="flex items-center gap-2">
                     <BrainCircuit className="size-4 text-muted-foreground" />
                     <h3 className="text-sm font-extrabold">Predictive Scoring</h3>
@@ -146,7 +146,7 @@ export function PredictiveScorePanel({
     };
 
     return (
-        <Card className="rounded-xl p-3">
+        <Card className="@container/score min-w-0 break-words rounded-xl p-3">
             <div className="flex items-start justify-between gap-3">
                 <div>
                     <div className="flex items-center gap-2">
@@ -165,7 +165,7 @@ export function PredictiveScorePanel({
                 ) : null}
             </div>
 
-            <div className="mt-3 grid grid-cols-2 gap-2">
+            <div className="mt-3 grid grid-cols-1 gap-2 @min-[16rem]/score:grid-cols-2">
                 <ScoreMetric label={primaryLabel} value={`${primaryValue ?? 0}%`} />
                 <ScoreMetric label="Confidence" value={`${score.confidence ?? 0}%`} />
                 <ScoreMetric label="Fit" value={`${score.fitScore ?? 0}`} />
@@ -261,7 +261,7 @@ function TextList({ title, items, empty }: { title: string; items: string[]; emp
 
 function ScoreMetric({ label, value }: { label: string; value: string }) {
     return (
-        <div className="rounded-lg border bg-surface-container-lowest p-2">
+        <div className="min-w-0 break-words rounded-lg border bg-surface-container-lowest p-2">
             <p className="text-[0.68rem] font-bold uppercase tracking-wide text-muted-foreground">{label}</p>
             <p className="mt-0.5 text-sm font-extrabold">{value}</p>
         </div>

@@ -1,5 +1,5 @@
 import { randomUUID, randomBytes } from "crypto";
-import { query, queryOne, execute } from "@/lib/db/query";
+import { query, queryOne, execute, jsonbParam } from "@/lib/db/query";
 import { createTenantScopedUser, updateTenantScopedUser } from "@/lib/server/admin";
 import { createTeamForTenant, updateTeamForTenant, deleteTeamForTenant, addTeamMemberForTenant, removeTeamMemberForTenant } from "@/lib/server/admin-modules";
 
@@ -47,7 +47,7 @@ async function logScimSync(
   await execute(
     `insert into "ScimSyncLog" (id, "tenantId", "resourceType", "resourceId", action, payload, status, "errorMessage", "createdAt")
      values ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
-    [randomUUID(), tenantId, resourceType, resourceId, action, payload, status, errorMessage, new Date().toISOString()],
+    [randomUUID(), tenantId, resourceType, resourceId, action, jsonbParam(payload), status, errorMessage, new Date().toISOString()],
   ).catch(() => undefined);
 }
 

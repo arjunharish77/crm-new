@@ -102,6 +102,8 @@ function pushRule(rule: {
 }
 
 vi.mock("@/lib/db/query", () => ({
+  // Identity passthrough -- see the identical comment in tests/ai-assistant.test.ts.
+  jsonbParam: (v: unknown) => v,
   query: vi.fn(async (sql: string, params: any[] = []) => {
     if (sql.includes('from "AssignmentRule"') && sql.includes('"entityType" = $2')) {
       return state.rules
@@ -185,8 +187,12 @@ vi.mock("@/lib/db/query", () => ({
       return state.salesGroups.find((group) => group.tenantId === params[0] && group.id === params[1]) ?? null;
     }
     if (sql.includes('select id, "ownerId" from')) {
+      // F03 fix (WP04): this lookup now optionally includes an OWN/TEAM record-scope clause
+      // (see record-scope.ts), pushing extra bound values BEFORE the entity id -- which is
+      // always the LAST parameter regardless of how many scope values preceded it, so this
+      // stays correct for every scope level rather than assuming a fixed position.
       const table = tableForEntity(sql.includes('"Opportunity"') ? "OPPORTUNITY" : "LEAD");
-      return table.find((row) => row.tenantId === params[0] && row.id === params[1]) ?? null;
+      return table.find((row) => row.tenantId === params[0] && row.id === params[params.length - 1]) ?? null;
     }
     if (sql.includes('select "ownerId" from "Lead" where "tenantId" = $1 and id = $2')) {
       const lead = state.leads.find((row) => row.tenantId === params[0] && row.id === params[1]);
@@ -209,7 +215,7 @@ vi.mock("@/lib/db/query", () => ({
     }
     if (sql.includes('select id, "ownerId", "createdAt" from')) {
       const table = tableForEntity(sql.includes('"Opportunity"') ? "OPPORTUNITY" : "LEAD");
-      return table.find((row) => row.tenantId === params[0] && row.id === params[1]) ?? null;
+      return table.find((row) => row.tenantId === params[0] && row.id === params[params.length - 1]) ?? null;
     }
     if (sql.includes('"createdAt" from "Activity"')) {
       return null;
@@ -1100,6 +1106,70 @@ describe("direct Postgres distribution engine", () => {
       reassignRecordOwner({ id: "admin-1", tenantId: "tenant-1" }, "LEAD", "lead-1", { newOwnerId: "user-2", reason: "One too many" }),
     ).rejects.toThrow("REASSIGNMENT_LIMIT_EXCEEDED");
     expect(state.leads[0].ownerId).toBe("user-1");
+  });
+
+  // F03 fix (WP04): executeReassignment/previewReassignmentImpact previously scoped their
+  // existing-record lookup by tenant only -- an OWN/TEAM-scoped actor (who shouldn't even be
+  // able to SEE most tenant records on the read side) could still reassign or preview any
+  // record in the tenant by id. Confirms the same record-scope.ts clause used by
+  // leads-postgres.ts/opportunities-postgres.ts is now applied here too.
+  describe("F03 fix: record-scope enforcement on reassignment", () => {
+    it("scopes executeReassignment's lookup to the actor's own records for an OWN-access role", async () => {
+      state.leads.push({ id: "lead-1", tenantId: "tenant-1", ownerId: "user-1" });
+      state.users.push({ id: "user-1", name: "Old Owner" }, { id: "user-2", name: "New Owner" });
+
+      const { reassignRecordOwner } = await import("@/lib/server/distribution-engine");
+      await reassignRecordOwner(
+        { id: "admin-1", tenantId: "tenant-1", role: { permissions: { recordAccess: "OWN" } } },
+        "LEAD",
+        "lead-1",
+        { newOwnerId: "user-2", reason: "Scope check" },
+      );
+
+      const queryOneCalls = (await import("@/lib/db/query")).queryOne as any;
+      const lookup = queryOneCalls.mock.calls.find((call: any[]) => String(call[0]).includes('select id, "ownerId" from'));
+      expect(lookup).toBeDefined();
+      expect(lookup[0]).toContain('"ownerId" = $2');
+      expect(lookup[1]).toEqual(["tenant-1", "admin-1", "lead-1"]);
+    });
+
+    it("scopes the lookup to team membership for a TEAM-access role", async () => {
+      state.leads.push({ id: "lead-1", tenantId: "tenant-1", ownerId: "user-1" });
+      state.users.push({ id: "user-1", name: "Old Owner" }, { id: "user-2", name: "New Owner" });
+
+      const { previewReassignmentImpact } = await import("@/lib/server/distribution-engine");
+      await previewReassignmentImpact(
+        { id: "admin-1", tenantId: "tenant-1", teamId: "team-1", role: { permissions: { recordAccess: "TEAM" } } },
+        "LEAD",
+        "lead-1",
+        "user-2",
+      );
+
+      const queryOneCalls = (await import("@/lib/db/query")).queryOne as any;
+      const lookup = queryOneCalls.mock.calls.find((call: any[]) => String(call[0]).includes('select id, "ownerId", "createdAt" from'));
+      expect(lookup).toBeDefined();
+      expect(lookup[0]).toContain('"ownerId" in (select id from "User" where "tenantId" = $1 and "teamId"::text = $3)');
+      expect(lookup[1]).toEqual(["tenant-1", "admin-1", "team-1", "lead-1"]);
+    });
+
+    it("cannot reassign a record the scoped query does not return (out-of-scope record)", async () => {
+      const { queryOne } = await import("@/lib/db/query");
+      // Simulates what a real, scope-enforcing Postgres query would return for a record this
+      // OWN-scoped actor does not own -- null, exactly as if the row didn't match the WHERE
+      // clause at all (the shared in-memory mock above only simulates tenantId+id matching, not
+      // the ownerId condition itself, so this override stands in for real DB filtering).
+      (queryOne as any).mockImplementationOnce(async () => null);
+
+      const { reassignRecordOwner } = await import("@/lib/server/distribution-engine");
+      const outcome = await reassignRecordOwner(
+        { id: "admin-1", tenantId: "tenant-1", role: { permissions: { recordAccess: "OWN" } } },
+        "LEAD",
+        "someone-elses-lead",
+        { newOwnerId: "user-2", reason: "Should not be reachable" },
+      );
+
+      expect(outcome).toBeNull();
+    });
   });
 
   it("previewReassignmentImpact reports the new owner's workload before/after and flags a quota that would be exceeded", async () => {

@@ -48,8 +48,10 @@ export async function POST(request: Request) {
     ipAddress: ip,
   });
 
+  // F06 fix (WP05): the session token no longer appears in the JSON body at all -- only as the
+  // HttpOnly cookie below. login/page.tsx doesn't read access_token anymore; it just
+  // re-fetches /auth/me after this response, which the browser sends with the new cookie.
   const response = NextResponse.json({
-    access_token: accessToken,
     user: {
       id: user.id,
       email: user.email,
@@ -62,7 +64,7 @@ export async function POST(request: Request) {
   });
 
   response.cookies.set("token", accessToken, {
-    httpOnly: false,
+    httpOnly: true,
     sameSite: "lax",
     secure: process.env.NODE_ENV === "production",
     path: "/",

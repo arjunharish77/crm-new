@@ -1,3 +1,5 @@
+> **Existing VPS upgrades:** use [VPS_UPGRADE_2026_09.md](VPS_UPGRADE_2026_09.md). The historical first-install/wipe instructions below are not an upgrade procedure and must not be used on the live database.
+
 # VPS Deployment Runbook — Unnatify CRM
 
 This is a complete, start-to-finish runbook for taking this app from "nothing running"
@@ -430,10 +432,11 @@ curl -sI https://app.unnatify.com | grep -iE 'strict-transport|x-frame|x-content
 
 The very first start needs the app's schema (all the checked-in `migrations/*.sql`
 files, tracked via the `SchemaMigration` table) applied against the fresh `postgres`
-container:
+container. On a brand-new server only, pass `--bootstrap` (without it the script refuses to
+touch a database that has no CRM schema yet):
 
 ```bash
-deploy/vps/scripts/migrate-postgres.sh
+deploy/vps/scripts/migrate-postgres.sh --bootstrap
 ```
 
 Since you're starting completely fresh (no existing data to import), the checked-in

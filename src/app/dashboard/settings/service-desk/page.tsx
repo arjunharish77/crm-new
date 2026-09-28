@@ -1,5 +1,8 @@
 "use client";
 
+import { PageHeader } from "@/components/layout/page-header";
+import { ErrorState } from "@/components/common/error-state";
+
 import { useCallback, useEffect, useState } from "react";
 import { LifeBuoy, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
@@ -11,13 +14,13 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { SettingsSections } from "@/components/layout/settings-sections";
 
 function SettingsRow({ children, onDelete }: { children: React.ReactNode; onDelete: () => void }) {
     return (
-        <div className="flex items-center justify-between gap-3 rounded-lg border px-3 py-2">
-            <div className="flex flex-wrap items-center gap-2 text-sm">{children}</div>
-            <Button variant="ghost" size="icon-sm" className="text-destructive hover:bg-destructive/10 hover:text-destructive" onClick={onDelete}>
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border px-3 py-2">
+            <div className="min-w-0 flex-1 flex flex-wrap items-center gap-2 break-words text-sm">{children}</div>
+            <Button variant="ghost" size="icon-sm" aria-label="Delete item" className="text-destructive hover:bg-destructive/10 hover:text-destructive" onClick={onDelete}>
                 <Trash2 className="size-4" />
             </Button>
         </div>
@@ -25,11 +28,13 @@ function SettingsRow({ children, onDelete }: { children: React.ReactNode; onDele
 }
 
 function TypesTab() {
+    const [loadError, setLoadError] = useState<string | null>(null);
     const [types, setTypes] = useState<any[]>([]);
     const [name, setName] = useState("");
 
     const load = useCallback(() => {
-        apiFetch<any[]>("/case-types").then((data) => setTypes(Array.isArray(data) ? data : [])).catch(() => toast.error("Failed to load case types"));
+        setLoadError(null);
+        apiFetch<any[]>("/case-types").then((data) => setTypes(Array.isArray(data) ? data : [])).catch(() => setLoadError("Failed to load case types."));
     }, []);
     useEffect(() => { load(); }, [load]);
 
@@ -53,6 +58,8 @@ function TypesTab() {
         }
     };
 
+    if (loadError) return <ErrorState description={loadError} onRetry={load} />;
+
     return (
         <div className="space-y-3">
             {types.map((type) => (
@@ -61,8 +68,8 @@ function TypesTab() {
                     {type.description && <span className="text-muted-foreground">{type.description}</span>}
                 </SettingsRow>
             ))}
-            <div className="flex gap-2">
-                <Input placeholder="New case type name" value={name} onChange={(e) => setName(e.target.value)} />
+            <div className="flex flex-wrap gap-2">
+                <Input aria-label="New case type name" placeholder="New case type name" value={name} onChange={(e) => setName(e.target.value)} />
                 <Button onClick={add}><Plus className="size-4" />Add</Button>
             </div>
         </div>
@@ -72,12 +79,14 @@ function TypesTab() {
 const STATUS_CATEGORIES = ["OPEN", "PENDING", "RESOLVED", "CLOSED"];
 
 function StatusesTab() {
+    const [loadError, setLoadError] = useState<string | null>(null);
     const [statuses, setStatuses] = useState<any[]>([]);
     const [name, setName] = useState("");
     const [category, setCategory] = useState("OPEN");
 
     const load = useCallback(() => {
-        apiFetch<any[]>("/case-statuses").then((data) => setStatuses(Array.isArray(data) ? data : [])).catch(() => toast.error("Failed to load case statuses"));
+        setLoadError(null);
+        apiFetch<any[]>("/case-statuses").then((data) => setStatuses(Array.isArray(data) ? data : [])).catch(() => setLoadError("Failed to load case statuses."));
     }, []);
     useEffect(() => { load(); }, [load]);
 
@@ -110,6 +119,8 @@ function StatusesTab() {
         }
     };
 
+    if (loadError) return <ErrorState description={loadError} onRetry={load} />;
+
     return (
         <div className="space-y-3">
             {statuses.map((status) => (
@@ -125,7 +136,7 @@ function StatusesTab() {
                 </SettingsRow>
             ))}
             <div className="flex flex-wrap gap-2">
-                <Input placeholder="New status name" value={name} onChange={(e) => setName(e.target.value)} className="max-w-[220px]" />
+                <Input aria-label="New status name" placeholder="New status name" value={name} onChange={(e) => setName(e.target.value)} className="max-w-[220px]" />
                 <Select value={category} onValueChange={setCategory}>
                     <SelectTrigger className="w-[160px]"><SelectValue /></SelectTrigger>
                     <SelectContent>
@@ -139,12 +150,14 @@ function StatusesTab() {
 }
 
 function PrioritiesTab() {
+    const [loadError, setLoadError] = useState<string | null>(null);
     const [priorities, setPriorities] = useState<any[]>([]);
     const [name, setName] = useState("");
     const [level, setLevel] = useState("1");
 
     const load = useCallback(() => {
-        apiFetch<any[]>("/case-priorities").then((data) => setPriorities(Array.isArray(data) ? data : [])).catch(() => toast.error("Failed to load case priorities"));
+        setLoadError(null);
+        apiFetch<any[]>("/case-priorities").then((data) => setPriorities(Array.isArray(data) ? data : [])).catch(() => setLoadError("Failed to load case priorities."));
     }, []);
     useEffect(() => { load(); }, [load]);
 
@@ -168,6 +181,8 @@ function PrioritiesTab() {
         }
     };
 
+    if (loadError) return <ErrorState description={loadError} onRetry={load} />;
+
     return (
         <div className="space-y-3">
             {priorities.map((priority) => (
@@ -177,8 +192,8 @@ function PrioritiesTab() {
                     {priority.isDefault && <Badge>Default</Badge>}
                 </SettingsRow>
             ))}
-            <div className="flex gap-2">
-                <Input placeholder="New priority name" value={name} onChange={(e) => setName(e.target.value)} className="max-w-[220px]" />
+            <div className="flex flex-wrap gap-2">
+                <Input aria-label="New priority name" placeholder="New priority name" value={name} onChange={(e) => setName(e.target.value)} className="max-w-[220px]" />
                 <Input type="number" min={1} placeholder="Level" value={level} onChange={(e) => setLevel(e.target.value)} className="w-[100px]" />
                 <Button onClick={add}><Plus className="size-4" />Add</Button>
             </div>
@@ -187,12 +202,14 @@ function PrioritiesTab() {
 }
 
 function QueuesTab() {
+    const [loadError, setLoadError] = useState<string | null>(null);
     const [queues, setQueues] = useState<any[]>([]);
     const [users, setUsers] = useState<any[]>([]);
     const [name, setName] = useState("");
 
     const load = useCallback(() => {
-        apiFetch<any[]>("/case-queues").then((data) => setQueues(Array.isArray(data) ? data : [])).catch(() => toast.error("Failed to load case queues"));
+        setLoadError(null);
+        apiFetch<any[]>("/case-queues").then((data) => setQueues(Array.isArray(data) ? data : [])).catch(() => setLoadError("Failed to load case queues."));
         apiFetch<any[]>("/users").then((data) => setUsers(Array.isArray(data) ? data : [])).catch(() => undefined);
     }, []);
     useEffect(() => { load(); }, [load]);
@@ -229,20 +246,22 @@ function QueuesTab() {
         }
     };
 
+    if (loadError) return <ErrorState description={loadError} onRetry={load} />;
+
     return (
-        <div className="space-y-4">
+        <div className="min-w-0 space-y-4">
             {queues.map((queue) => (
                 <Card key={queue.id} className="space-y-2 p-3">
-                    <div className="flex items-center justify-between">
+                    <div className="flex flex-wrap items-center justify-between">
                         <span className="font-semibold">{queue.name}{queue.isDefault && <Badge className="ml-2">Default</Badge>}</span>
-                        <Button variant="ghost" size="icon-sm" className="text-destructive hover:bg-destructive/10 hover:text-destructive" onClick={() => remove(queue.id)}>
+                        <Button variant="ghost" size="icon-sm" aria-label="Delete item" className="text-destructive hover:bg-destructive/10 hover:text-destructive" onClick={() => remove(queue.id)}>
                             <Trash2 className="size-4" />
                         </Button>
                     </div>
                     <p className="text-xs font-semibold text-muted-foreground">Members (round-robin assigns among these)</p>
                     <div className="grid grid-cols-2 gap-1 md:grid-cols-3">
                         {users.map((user) => (
-                            <label key={user.id} className="flex items-center gap-2 text-sm">
+                            <label key={user.id} className="flex flex-wrap items-center gap-2 text-sm">
                                 <Checkbox
                                     checked={(queue.memberUserIds ?? []).includes(user.id)}
                                     onCheckedChange={(checked) => toggleMember(queue, user.id, !!checked)}
@@ -253,8 +272,8 @@ function QueuesTab() {
                     </div>
                 </Card>
             ))}
-            <div className="flex gap-2">
-                <Input placeholder="New queue name" value={name} onChange={(e) => setName(e.target.value)} className="max-w-[220px]" />
+            <div className="flex flex-wrap gap-2">
+                <Input aria-label="New queue name" placeholder="New queue name" value={name} onChange={(e) => setName(e.target.value)} className="max-w-[220px]" />
                 <Button onClick={add}><Plus className="size-4" />Add Queue</Button>
             </div>
         </div>
@@ -262,6 +281,7 @@ function QueuesTab() {
 }
 
 function SlaPoliciesTab() {
+    const [loadError, setLoadError] = useState<string | null>(null);
     const [policies, setPolicies] = useState<any[]>([]);
     const [types, setTypes] = useState<any[]>([]);
     const [priorities, setPriorities] = useState<any[]>([]);
@@ -274,7 +294,8 @@ function SlaPoliciesTab() {
     const NONE = "__none__";
 
     const load = useCallback(() => {
-        apiFetch<any[]>("/case-sla-policies").then((data) => setPolicies(Array.isArray(data) ? data : [])).catch(() => toast.error("Failed to load SLA policies"));
+        setLoadError(null);
+        apiFetch<any[]>("/case-sla-policies").then((data) => setPolicies(Array.isArray(data) ? data : [])).catch(() => setLoadError("Failed to load SLA policies."));
         apiFetch<any[]>("/case-types").then((data) => setTypes(Array.isArray(data) ? data : [])).catch(() => undefined);
         apiFetch<any[]>("/case-priorities").then((data) => setPriorities(Array.isArray(data) ? data : [])).catch(() => undefined);
     }, []);
@@ -312,6 +333,8 @@ function SlaPoliciesTab() {
         }
     };
 
+    if (loadError) return <ErrorState description={loadError} onRetry={load} />;
+
     return (
         <div className="space-y-3">
             <p className="text-xs text-muted-foreground">
@@ -328,8 +351,8 @@ function SlaPoliciesTab() {
                 </SettingsRow>
             ))}
             <div className="grid gap-2 md:grid-cols-2">
-                <Input placeholder="Policy name" value={name} onChange={(e) => setName(e.target.value)} />
-                <div className="grid grid-cols-2 gap-2">
+                <Input aria-label="Policy name" placeholder="Policy name" value={name} onChange={(e) => setName(e.target.value)} />
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                     <Select value={typeId || NONE} onValueChange={setTypeId}>
                         <SelectTrigger className="w-full"><SelectValue placeholder="Any type" /></SelectTrigger>
                         <SelectContent>
@@ -360,6 +383,7 @@ function SlaPoliciesTab() {
 }
 
 function MacrosTab() {
+    const [loadError, setLoadError] = useState<string | null>(null);
     const [macros, setMacros] = useState<any[]>([]);
     const [name, setName] = useState("");
     const [channel, setChannel] = useState("__none__");
@@ -367,7 +391,8 @@ function MacrosTab() {
     const [requiresApproval, setRequiresApproval] = useState(false);
 
     const load = useCallback(() => {
-        apiFetch<any[]>("/case-macros").then((data) => setMacros(Array.isArray(data) ? data : [])).catch(() => toast.error("Failed to load macros"));
+        setLoadError(null);
+        apiFetch<any[]>("/case-macros").then((data) => setMacros(Array.isArray(data) ? data : [])).catch(() => setLoadError("Failed to load macros."));
     }, []);
     useEffect(() => { load(); }, [load]);
 
@@ -399,6 +424,8 @@ function MacrosTab() {
         }
     };
 
+    if (loadError) return <ErrorState description={loadError} onRetry={load} />;
+
     return (
         <div className="space-y-3">
             <p className="text-xs text-muted-foreground">
@@ -413,7 +440,7 @@ function MacrosTab() {
                 </SettingsRow>
             ))}
             <div className="grid gap-2 md:grid-cols-2">
-                <Input placeholder="Macro name" value={name} onChange={(e) => setName(e.target.value)} />
+                <Input aria-label="Macro name" placeholder="Macro name" value={name} onChange={(e) => setName(e.target.value)} />
                 <Select value={channel} onValueChange={setChannel}>
                     <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
                     <SelectContent>
@@ -432,7 +459,7 @@ function MacrosTab() {
                 onChange={(e) => setBodyTemplate(e.target.value)}
             />
             {channel !== "__none__" && (
-                <label className="flex items-center gap-2 text-sm">
+                <label className="flex flex-wrap items-center gap-2 text-sm">
                     <Checkbox checked={requiresApproval} onCheckedChange={(checked) => setRequiresApproval(!!checked)} />
                     Require a second admin&apos;s approval before this reply is actually sent
                 </label>
@@ -443,12 +470,14 @@ function MacrosTab() {
 }
 
 function KnowledgeBaseTab() {
+    const [loadError, setLoadError] = useState<string | null>(null);
     const [articles, setArticles] = useState<any[]>([]);
     const [title, setTitle] = useState("");
     const [body, setBody] = useState("");
 
     const load = useCallback(() => {
-        apiFetch<any[]>("/knowledge-base/articles").then((data) => setArticles(Array.isArray(data) ? data : [])).catch(() => toast.error("Failed to load articles"));
+        setLoadError(null);
+        apiFetch<any[]>("/knowledge-base/articles").then((data) => setArticles(Array.isArray(data) ? data : [])).catch(() => setLoadError("Failed to load articles."));
     }, []);
     useEffect(() => { load(); }, [load]);
 
@@ -472,21 +501,23 @@ function KnowledgeBaseTab() {
         }
     };
 
+    if (loadError) return <ErrorState description={loadError} onRetry={load} />;
+
     return (
         <div className="space-y-3">
             <p className="text-xs text-muted-foreground">
                 Editing an existing article (same title) saves a new version rather than overwriting -- the highest-numbered active version is what&apos;s suggested on case detail pages.
             </p>
             {articles.map((article) => (
-                <div key={article.id} className="flex items-center justify-between gap-3 rounded-lg border px-3 py-2 text-sm">
+                <div key={article.id} className="flex flex-wrap items-center justify-between gap-3 rounded-lg border px-3 py-2 text-sm">
                     <span>{article.title} <span className="text-xs text-muted-foreground">v{article.version} · {article.visibility}</span></span>
-                    <div className="flex items-center gap-2">
+                    <div className="flex flex-wrap items-center gap-2">
                         <Badge variant={article.isActive ? "secondary" : "outline"}>{article.isActive ? "Active" : "Inactive"}</Badge>
                         <Button variant="outline" size="sm" onClick={() => toggleActive(article)}>{article.isActive ? "Deactivate" : "Activate"}</Button>
                     </div>
                 </div>
             ))}
-            <Input placeholder="Article title" value={title} onChange={(e) => setTitle(e.target.value)} />
+            <Input aria-label="Article title" placeholder="Article title" value={title} onChange={(e) => setTitle(e.target.value)} />
             <textarea className="w-full rounded-md border p-2 text-sm" rows={4} placeholder="Article body" value={body} onChange={(e) => setBody(e.target.value)} />
             <Button onClick={add}><Plus className="size-4" />Save Article</Button>
         </div>
@@ -494,12 +525,14 @@ function KnowledgeBaseTab() {
 }
 
 function InboundAddressesTab() {
+    const [loadError, setLoadError] = useState<string | null>(null);
     const [addresses, setAddresses] = useState<any[]>([]);
     const [address, setAddress] = useState("");
     const [channel, setChannel] = useState("EMAIL");
 
     const load = useCallback(() => {
-        apiFetch<any[]>("/case-inbound-addresses").then((data) => setAddresses(Array.isArray(data) ? data : [])).catch(() => toast.error("Failed to load inbound addresses"));
+        setLoadError(null);
+        apiFetch<any[]>("/case-inbound-addresses").then((data) => setAddresses(Array.isArray(data) ? data : [])).catch(() => setLoadError("Failed to load inbound addresses."));
     }, []);
     useEffect(() => { load(); }, [load]);
 
@@ -523,6 +556,8 @@ function InboundAddressesTab() {
         }
     };
 
+    if (loadError) return <ErrorState description={loadError} onRetry={load} />;
+
     return (
         <div className="space-y-3">
             <p className="text-xs text-muted-foreground">
@@ -536,7 +571,7 @@ function InboundAddressesTab() {
                     <Badge variant="outline">{row.channel}</Badge>
                 </SettingsRow>
             ))}
-            <div className="flex gap-2">
+            <div className="flex flex-wrap gap-2">
                 <Select value={channel} onValueChange={setChannel}>
                     <SelectTrigger className="w-32"><SelectValue /></SelectTrigger>
                     <SelectContent>
@@ -545,7 +580,7 @@ function InboundAddressesTab() {
                         <SelectItem value="SMS">SMS</SelectItem>
                     </SelectContent>
                 </Select>
-                <Input placeholder="support@yourcompany.com" value={address} onChange={(e) => setAddress(e.target.value)} />
+                <Input aria-label="support@yourcompany.com" placeholder="support@yourcompany.com" value={address} onChange={(e) => setAddress(e.target.value)} />
                 <Button onClick={add}><Plus className="size-4" />Add</Button>
             </div>
         </div>
@@ -554,37 +589,18 @@ function InboundAddressesTab() {
 
 export default function ServiceDeskSettingsPage() {
     return (
-        <div className="mx-auto max-w-[900px] p-3 md:p-4">
-            <div className="mb-4 flex items-center gap-3">
-                <div className="flex rounded-[10px] bg-primary/10 p-2 text-primary">
-                    <LifeBuoy className="size-5" />
-                </div>
-                <div>
-                    <h1 className="text-lg font-extrabold">Service Desk</h1>
-                    <p className="text-xs text-muted-foreground">Configure case types, statuses, priorities, queues, and SLA policies.</p>
-                </div>
-            </div>
-
-            <Tabs defaultValue="types">
-                <TabsList>
-                    <TabsTrigger value="types">Types</TabsTrigger>
-                    <TabsTrigger value="statuses">Statuses</TabsTrigger>
-                    <TabsTrigger value="priorities">Priorities</TabsTrigger>
-                    <TabsTrigger value="queues">Queues</TabsTrigger>
-                    <TabsTrigger value="sla">SLA Policies</TabsTrigger>
-                    <TabsTrigger value="macros">Macros</TabsTrigger>
-                    <TabsTrigger value="kb">Knowledge Base</TabsTrigger>
-                    <TabsTrigger value="inbound">Inbound Addresses</TabsTrigger>
-                </TabsList>
-                <TabsContent value="types"><TypesTab /></TabsContent>
-                <TabsContent value="statuses"><StatusesTab /></TabsContent>
-                <TabsContent value="priorities"><PrioritiesTab /></TabsContent>
-                <TabsContent value="queues"><QueuesTab /></TabsContent>
-                <TabsContent value="sla"><SlaPoliciesTab /></TabsContent>
-                <TabsContent value="macros"><MacrosTab /></TabsContent>
-                <TabsContent value="kb"><KnowledgeBaseTab /></TabsContent>
-                <TabsContent value="inbound"><InboundAddressesTab /></TabsContent>
-            </Tabs>
+        <div className="min-w-0">
+            <PageHeader title="Service Desk" description="Configure support queues, response targets and case handling." />
+            <SettingsSections label="Service Desk section" sections={[
+                { id: "types", label: "Types", content: <TypesTab /> },
+                { id: "statuses", label: "Statuses", content: <StatusesTab /> },
+                { id: "priorities", label: "Priorities", content: <PrioritiesTab /> },
+                { id: "queues", label: "Queues", content: <QueuesTab /> },
+                { id: "sla", label: "SLA Policies", content: <SlaPoliciesTab /> },
+                { id: "macros", label: "Macros", content: <MacrosTab /> },
+                { id: "kb", label: "Knowledge Base", content: <KnowledgeBaseTab /> },
+                { id: "inbound", label: "Inbound Addresses", content: <InboundAddressesTab /> },
+            ]} />
         </div>
     );
 }

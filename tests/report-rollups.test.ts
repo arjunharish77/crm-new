@@ -1,6 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const dbMocks = vi.hoisted(() => ({ query: vi.fn(), queryOne: vi.fn(), execute: vi.fn() }));
+const dbMocks = vi.hoisted(() => {
+  const query = vi.fn();
+  const queryOne = vi.fn();
+  const execute = vi.fn();
+  return { query, queryOne, execute, queryAsSystem: query, queryOneAsSystem: queryOne, executeAsSystem: execute };
+});
 const notificationsMocks = vi.hoisted(() => ({ createUserNotification: vi.fn().mockResolvedValue(undefined) }));
 
 vi.mock("@/lib/db/query", () => dbMocks);

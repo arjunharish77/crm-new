@@ -215,6 +215,27 @@ export function applyFilterCondition(
 type ConditionLike = { field?: string; operator?: string; value?: unknown };
 type GroupLike = ConditionLike | { logic?: "AND" | "OR"; conditions?: ConditionLike[] };
 
+// WP09 (F12): a field whose real data doesn't live on the table being filtered (predictive
+// scores live in "RecordScore", keyed by recordId/recordType, not on "Lead"/"Opportunity"
+// directly). Previously leads-postgres.ts/opportunities-postgres.ts resolved these fields into a
+// record-id list via a SEPARATE query, then ANDed that list onto the WHOLE where clause at the
+// top level -- which silently turns a top-level OR group mixing a normal field and a score field
+// into an intersection (the audit's own example: "source = web OR predictiveScoreBand = HOT"
+// became "source = web AND id IN <score-matched ids>"). Registering the field here instead, with
+// a `subquery` descriptor, lets it compile to an ordinary `id in (select ...)` boolean leaf
+// condition at exactly the position it appears in the AND/OR tree -- so the SAME group-logic
+// handling below (which already wraps a group's conditions in its own AND/OR and joins groups
+// with AND) applies to it for free, with no separate resolve-then-intersect step.
+export type FilterColumnEntry = {
+  column: string;
+  kind: FilterValueKind;
+  subquery?: {
+    table: string; // already-quoted, e.g. `"RecordScore"`
+    matchColumn: string; // already-quoted, e.g. `"recordId"`
+    recordType: string; // fixed literal for this columnMap (e.g. "LEAD"), not user input
+  };
+};
+
 // Real bug found and fixed while unifying the three modules' filter builders: every module's own
 // buildWhere-style function flattened EVERY group's conditions and joined them ALL with a single
 // hardcoded "and", completely ignoring each group's own `logic` field -- a user picking "Match
@@ -230,8 +251,9 @@ export function buildGroupedFilterClause(
   clauses: string[],
   values: unknown[],
   groups: GroupLike[] | null | undefined,
-  columnMap: Map<string, { column: string; kind: FilterValueKind }>,
+  columnMap: Map<string, FilterColumnEntry>,
   timeZone: string = DEFAULT_SERVER_TIME_ZONE,
+  subqueryTenantId?: string | null,
 ) {
   for (const group of Array.isArray(groups) ? groups : []) {
     const conditions: ConditionLike[] =
@@ -242,6 +264,21 @@ export function buildGroupedFilterClause(
       if (!condition?.field) continue;
       const entry = columnMap.get(condition.field);
       if (!entry) continue;
+      if (entry.subquery) {
+        const innerClauses: string[] = [];
+        pushClause(innerClauses, values, `"recordType" = ?`, entry.subquery.recordType);
+        if (subqueryTenantId) pushClause(innerClauses, values, `"tenantId" = ?`, subqueryTenantId);
+        else innerClauses.push(`"tenantId" is null`);
+        const before = innerClauses.length;
+        applyFilterCondition(innerClauses, values, entry.column, condition.operator, condition.value, entry.kind, timeZone);
+        // An operator/value combination applyFilterCondition doesn't recognize adds nothing --
+        // without this guard the subquery would silently match every scored record (recordType +
+        // tenantId alone) instead of contributing no real constraint, which is the exact kind of
+        // "unsupported operator silently broadens the result" bug this same finding warns about.
+        if (innerClauses.length === before) continue;
+        groupClauses.push(`id in (select ${entry.subquery.matchColumn} from ${entry.subquery.table} where ${innerClauses.join(" and ")})`);
+        continue;
+      }
       applyFilterCondition(groupClauses, values, entry.column, condition.operator, condition.value, entry.kind, timeZone);
     }
     if (groupClauses.length === 0) continue;

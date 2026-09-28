@@ -1,5 +1,7 @@
 "use client";
 
+import { PageHeader } from "@/components/layout/page-header";
+
 import { useEffect, useState, useCallback, useMemo } from "react";
 import { apiFetch } from "@/lib/api";
 import { formatWorkspaceRelativeTime } from "@/lib/date-format";
@@ -20,6 +22,7 @@ const NO_TEMPLATE_VALUE = "__none__";
 
 export default function SalesGroupsPage() {
     const [groups, setGroups] = useState<any[]>([]);
+    const [loadError, setLoadError] = useState(false);
     const [loading, setLoading] = useState(true);
     const [selectedGroup, setSelectedGroup] = useState<any>(null);
     const [templates, setTemplates] = useState<any[]>([]);
@@ -27,6 +30,7 @@ export default function SalesGroupsPage() {
 
     const fetchGroups = useCallback(async () => {
         setLoading(true);
+        setLoadError(false);
         try {
             const data = await apiFetch("/sales-groups");
             setGroups(data);
@@ -37,7 +41,7 @@ export default function SalesGroupsPage() {
                 }
             }
         } catch (error) {
-            toast.error("Failed to load sales groups");
+            setLoadError(true);
         } finally {
             setLoading(false);
         }
@@ -193,19 +197,12 @@ export default function SalesGroupsPage() {
             variants={fadeInUp}
             initial="initial"
             animate="animate"
-            className="mx-auto max-w-[1200px] px-4 py-4 md:px-6"
+            className="min-w-0"
         >
-            <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-                <div>
-                    <h1 className="text-xl font-semibold tracking-normal text-foreground">Sales Groups</h1>
-                    <p className="mt-1 text-sm text-muted-foreground">
-                        Organize your sales team into units for intelligent routing and reporting
-                    </p>
-                </div>
-                <SalesGroupDialog onSuccess={fetchGroups} />
-            </div>
+            <PageHeader title="Sales Groups" description="Organize users for routing and reporting." actions={<SalesGroupDialog onSuccess={fetchGroups} />} />
+            {loadError && <div role="alert" className="mb-4 rounded-lg border p-4 text-sm">Unable to load sales groups. <Button variant="outline" size="sm" onClick={fetchGroups}>Retry</Button></div>}
 
-            <div className="overflow-hidden rounded-xl border border-border bg-card">
+            <div hidden={loadError} className="min-w-0 overflow-hidden rounded-xl border border-border bg-card">
                 <div className="flex items-center gap-3 border-b border-border bg-primary/5 p-4">
                     <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10 text-primary">
                         <Users className="size-5" />

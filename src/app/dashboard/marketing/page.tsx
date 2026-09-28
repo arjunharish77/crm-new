@@ -1,8 +1,11 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ArrowLeft, BarChart3, CheckCircle2, ChevronDown, ChevronRight, Columns2, Eye, Mail, Maximize2, Megaphone, MessageSquareText, Pause, Play, Plus, RefreshCw, Send, ShieldCheck, Star } from "lucide-react";
 import { toast } from "sonner";
+import { PageHeader } from "@/components/layout/page-header";
+import { SettingsSections } from "@/components/layout/settings-sections";
+import { ErrorState } from "@/components/common/error-state";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -104,20 +107,41 @@ export default function MarketingPage() {
         setFavoriteCampaignIds(updated.filter((record) => record.type === "campaign").map((record) => record.id));
     };
     const [draft, setDraft] = useState<any>(emptyCampaign);
+    const [manualRecipients, setManualRecipients] = useState("");
     const [audiencePreview, setAudiencePreview] = useState<{ count: number; sample: any[]; recipientsWithPendingNba?: number; sampledLeadCount?: number } | null>(null);
     const [expandedRecipientKey, setExpandedRecipientKey] = useState<string | null>(null);
     const [testRecipient, setTestRecipient] = useState("");
     const [suppressAddress, setSuppressAddress] = useState("");
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
+    const [loadError, setLoadError] = useState(false);
+    const [activeSection, setActiveSection] = useState("campaigns");
+    const [journeysVisited, setJourneysVisited] = useState(false);
+    const initialized = useRef(false);
+    useEffect(() => { if (activeSection === "journeys") setJourneysVisited(true); }, [activeSection]);
 
     const selected = useMemo(() => campaigns.find((campaign) => campaign.id === selectedId) ?? null, [campaigns, selectedId]);
     const channelTemplates = templates.filter((template) => template.channel === draft.channel);
     const channelProviders = providers.filter((provider) => provider.channel === draft.channel);
     const channelSenders = senders.filter((sender) => sender.channel === draft.channel);
 
+    const selectCampaign = useCallback((campaign: Campaign) => {
+        recordRecentView("campaign", campaign.id, campaign.name);
+        setSelectedId(campaign.id);
+        setManualRecipients((campaign.audienceConfig?.recipients ?? []).join("\n"));
+        setDraft({
+            ...emptyCampaign,
+            ...campaign,
+            subject: campaign.subject ?? "",
+            audienceConfig: campaign.audienceConfig ?? {},
+            quietHours: campaign.quietHours ?? emptyCampaign.quietHours,
+        });
+        setAudiencePreview(null);
+    }, []);
+
     const fetchAll = useCallback(async () => {
         setLoading(true);
+        setLoadError(false);
         try {
             const [campaignData, templateData, providerData, senderData, listData, viewData, outboxData, suppressionData] = await Promise.all([
                 apiFetch<Campaign[]>("/marketing/campaigns"),
@@ -143,38 +167,30 @@ export default function MarketingPage() {
             // in a Suspense boundary.
             const deepLinkCampaignId = new URLSearchParams(window.location.search).get("campaignId");
             const deepLinkCampaign = deepLinkCampaignId && Array.isArray(campaignData) ? campaignData.find((c: Campaign) => c.id === deepLinkCampaignId) : null;
+            if (!initialized.current) {
+            initialized.current = true;
             if (deepLinkCampaign) {
                 selectCampaign(deepLinkCampaign);
-            } else if (!selectedId && Array.isArray(campaignData) && campaignData[0]) {
+            } else if (Array.isArray(campaignData) && campaignData[0]) {
                 selectCampaign(campaignData[0]);
             }
+            }
         } catch {
-            toast.error("Failed to load marketing communications");
+            setLoadError(true);
         } finally {
             setLoading(false);
         }
-    }, [selectedId]);
+    }, [selectCampaign]);
 
     useEffect(() => {
         fetchAll();
     }, [fetchAll]);
 
-    const selectCampaign = (campaign: Campaign) => {
-        recordRecentView("campaign", campaign.id, campaign.name);
-        setSelectedId(campaign.id);
-        setDraft({
-            ...emptyCampaign,
-            ...campaign,
-            subject: campaign.subject ?? "",
-            audienceConfig: campaign.audienceConfig ?? {},
-            quietHours: campaign.quietHours ?? emptyCampaign.quietHours,
-        });
-        setAudiencePreview(null);
-    };
-
     const startNew = () => {
+        setActiveSection("composer");
         setSelectedId(null);
         setDraft(emptyCampaign);
+        setManualRecipients("");
         setAudiencePreview(null);
     };
 
@@ -275,27 +291,13 @@ export default function MarketingPage() {
     );
 
     return (
-        <div className="mx-auto flex max-w-[1480px] flex-col gap-4 px-3 py-3 md:px-4 md:py-4">
-            <div className="flex flex-col justify-between gap-3 md:flex-row md:items-center">
-                <div>
-                    <h1 className="text-lg font-extrabold">Marketing Communications</h1>
-                    <p className="text-sm text-muted-foreground">
-                        Build nurture campaigns, approve messages, queue delivery, and track engagement across Email, WhatsApp, and SMS.
-                    </p>
-                </div>
-                <div className="flex flex-wrap gap-2">
-                    <Button variant="outline" onClick={fetchAll}>
-                        <RefreshCw className="size-4" />
-                        Refresh
-                    </Button>
-                    <Button onClick={startNew}>
-                        <Plus className="size-4" />
-                        New Campaign
-                    </Button>
-                </div>
-            </div>
-
-            <div className="grid gap-3 md:grid-cols-4">
+        <div className="@container/marketing min-w-0 space-y-4">
+            <PageHeader title="Marketing Communications" description="Build campaigns, manage audiences and track delivery across Email, WhatsApp and SMS." actions={<>
+                <Button variant="outline" onClick={fetchAll} disabled={loading}><RefreshCw className="size-4" />Refresh</Button>
+                {marketingEnabled && <Button onClick={startNew} disabled={loading || loadError}><Plus className="size-4" />New Campaign</Button>}
+            </>} />
+            {loadError && <ErrorState description="Marketing data could not be loaded. Your draft has been kept." onRetry={fetchAll} />}
+            {marketingEnabled && (activeSection === "campaigns" || activeSection === "analytics") && <div className="grid grid-cols-2 gap-3 @min-[900px]/marketing:grid-cols-4">
                 {([
                     ["Campaigns", campaigns.length, Megaphone],
                     ["Audience", stats.recipients, Eye],
@@ -303,7 +305,7 @@ export default function MarketingPage() {
                     ["Clicks", stats.clicked, BarChart3],
                 ] as const).map(([label, value, Icon]) => (
                     <Card key={String(label)} className="rounded-xl">
-                        <CardContent className="flex items-center justify-between p-4">
+                        <CardContent className="flex min-w-0 flex-wrap items-center justify-between p-4">
                             <div>
                                 <p className="text-xs font-bold uppercase tracking-[0.04em] text-muted-foreground">{String(label)}</p>
                                 <p className="text-2xl font-extrabold">{Number(value).toLocaleString()}</p>
@@ -312,9 +314,9 @@ export default function MarketingPage() {
                         </CardContent>
                     </Card>
                 ))}
-            </div>
+            </div>}
 
-            <Tabs defaultValue={marketingEnabled ? "campaigns" : "journeys"} className="space-y-3">
+            <Tabs value={marketingEnabled ? activeSection : "journeys"} onValueChange={setActiveSection} className="min-w-0 space-y-3">
                 <TabsList className="h-auto flex-wrap justify-start">
                     {marketingEnabled && <TabsTrigger value="campaigns">Campaigns</TabsTrigger>}
                     {marketingEnabled && <TabsTrigger value="composer">Composer</TabsTrigger>}
@@ -331,14 +333,14 @@ export default function MarketingPage() {
 
                 {marketingEnabled && (
                 <>
-                <TabsContent value="campaigns" className={layoutMode === "split" ? "grid gap-3 lg:grid-cols-[minmax(360px,0.9fr)_minmax(0,1.1fr)]" : "grid gap-3"}>
+                <TabsContent value="campaigns" className={layoutMode === "split" ? "grid gap-3 @min-[1100px]/marketing:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]" : "grid gap-3"}>
                     {(layoutMode === "split" || !selectedId) && (
                     <Card className="rounded-xl">
-                        <CardHeader className="flex-row items-center justify-between gap-3 space-y-0">
+                        <CardHeader className="min-w-0 flex-row flex-wrap items-center justify-between gap-3 space-y-0">
                             <CardTitle className="text-base">Campaign List</CardTitle>
-                            <div className="flex items-center gap-2">
+                            <div className="flex min-w-0 flex-wrap items-center gap-2">
                                 <Badge variant="outline">{loading ? "Loading" : `${campaigns.length} total`}</Badge>
-                                <div className="flex items-center gap-1 rounded-md border p-0.5">
+                                <div className="flex min-w-0 flex-wrap items-center gap-1 rounded-md border p-0.5">
                                     <Button
                                         type="button"
                                         size="icon-sm"
@@ -377,9 +379,9 @@ export default function MarketingPage() {
                                     }}
                                     className={`w-full cursor-pointer rounded-lg border p-3 text-left transition-colors hover:bg-accent ${selectedId === campaign.id ? "border-primary bg-primary/5" : "border-border"}`}
                                 >
-                                    <div className="flex items-start justify-between gap-2">
-                                        <div>
-                                            <div className="font-extrabold">{campaign.name}</div>
+                                    <div className="flex min-w-0 flex-wrap items-start justify-between gap-2">
+                                        <div className="min-w-0 flex-1 basis-40">
+                                            <div className="min-w-0 break-words font-semibold">{campaign.name}</div>
                                             <div className="text-xs text-muted-foreground">{campaign.channel} · {campaign.campaignType}</div>
                                         </div>
                                         <div className="flex shrink-0 items-center gap-1">
@@ -402,44 +404,44 @@ export default function MarketingPage() {
                                     </div>
                                 </div>
                             ))}
-                            {!campaigns.length && !loading ? <div className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">No campaigns yet.</div> : null}
+                            {!campaigns.length && !loading && !loadError ? <div className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">No campaigns yet.</div> : null}
                         </CardContent>
                     </Card>
                     )}
 
                     {(layoutMode === "split" || selectedId) && (
                     <Card className="rounded-xl">
-                        <CardHeader className="flex-row items-center justify-between gap-3 space-y-0">
-                            <div>
+                        <CardHeader className="min-w-0 flex-row flex-wrap items-center justify-between gap-3 space-y-0">
+                            <div className="min-w-0 flex-1 basis-40">
                                 {layoutMode === "full" && selectedId ? (
                                     <Button size="sm" variant="ghost" className="mb-1 -ml-2" onClick={() => setSelectedId(null)}>
                                         <ArrowLeft className="size-4" />
                                         Back to list
                                     </Button>
                                 ) : null}
-                                <CardTitle className="text-base">{selected ? selected.name : "Campaign Actions"}</CardTitle>
+                                <CardTitle className="min-w-0 break-words text-base">{selected ? selected.name : "Campaign Actions"}</CardTitle>
                                 <p className="text-sm text-muted-foreground">Approval, testing, and launch controls.</p>
                             </div>
                             {selected ? <Badge variant="outline" className={statusClassName(selected.status)}>{selected.status.replaceAll("_", " ")}</Badge> : null}
                         </CardHeader>
                         <CardContent className="grid gap-3 md:grid-cols-2">
                             <div className="rounded-lg border p-3">
-                                <Label>Test recipient</Label>
-                                <div className="mt-2 flex gap-2">
-                                    <Input value={testRecipient} onChange={(event) => setTestRecipient(event.target.value)} placeholder={draft.channel === "EMAIL" ? "person@example.com" : "+919999999999"} />
-                                    <Button disabled={!selectedId} onClick={sendTest}>Test</Button>
+                                <Label htmlFor="campaign-field-1">Test recipient</Label>
+                                <div className="mt-2 flex min-w-0 flex-wrap gap-2">
+                                    <Input id="campaign-field-1" value={testRecipient} onChange={(event) => setTestRecipient(event.target.value)} placeholder={draft.channel === "EMAIL" ? "person@example.com" : "+919999999999"} />
+                                    <Button disabled={!selectedId || loading || loadError} onClick={sendTest}>Test</Button>
                                 </div>
                             </div>
                             <div className="rounded-lg border p-3">
                                 <Label>Launch workflow</Label>
                                 <div className="mt-2 flex flex-wrap gap-2">
-                                    <Button disabled={!selectedId} variant="outline" onClick={() => updateStatus("PENDING_APPROVAL")}>Request approval</Button>
-                                    <Button disabled={!selectedId} variant="outline" onClick={() => updateStatus("APPROVED")}>Approve</Button>
-                                    <Button disabled={!selectedId} onClick={launchCampaign}>
+                                    <Button disabled={!selectedId || loading || loadError} variant="outline" onClick={() => updateStatus("PENDING_APPROVAL")}>Request approval</Button>
+                                    <Button disabled={!selectedId || loading || loadError} variant="outline" onClick={() => updateStatus("APPROVED")}>Approve</Button>
+                                    <Button disabled={!selectedId || loading || loadError} onClick={launchCampaign}>
                                         <Play className="size-4" />
                                         Launch
                                     </Button>
-                                    <Button disabled={!selectedId} variant="outline" onClick={() => updateStatus("PAUSED")}>
+                                    <Button disabled={!selectedId || loading || loadError} variant="outline" onClick={() => updateStatus("PAUSED")}>
                                         <Pause className="size-4" />
                                         Pause
                                     </Button>
@@ -450,38 +452,40 @@ export default function MarketingPage() {
                     )}
                 </TabsContent>
 
-                <TabsContent value="composer">
+                <TabsContent value="composer" forceMount hidden={activeSection !== "composer"}>
                     <Card className="rounded-xl">
                         <CardHeader>
                             <CardTitle className="text-base">Campaign Builder</CardTitle>
                         </CardHeader>
-                        <CardContent className="grid gap-4 xl:grid-cols-[320px_minmax(0,1fr)_360px]">
-                            <div className="space-y-3">
-                                <div>
-                                    <Label>Name</Label>
-                                    <Input value={draft.name} onChange={(event) => setDraft({ ...draft, name: event.target.value })} />
+                        <CardContent>
+                            <SettingsSections label="Composer section" sections={[
+                                { id: "audience", label: "1. Audience", content: (
+                            <div className="min-w-0 space-y-3">
+                                <div className="min-w-0 space-y-1">
+                                    <Label htmlFor="campaign-field-2">Name</Label>
+                                    <Input id="campaign-field-2" value={draft.name} onChange={(event) => setDraft({ ...draft, name: event.target.value })} />
                                 </div>
-                                <div>
-                                    <Label>Channel</Label>
+                                <div className="min-w-0 space-y-1">
+                                    <Label htmlFor="campaign-field-3">Channel</Label>
                                     <Select value={draft.channel} onValueChange={(value) => setDraft({ ...draft, channel: value as Channel, templateId: null, providerConfigId: null, senderIdentityId: null })}>
-                                        <SelectTrigger><SelectValue /></SelectTrigger>
+                                        <SelectTrigger className="w-full" id="campaign-field-3"><SelectValue /></SelectTrigger>
                                         <SelectContent>{CHANNELS.map(({ value, label }) => <SelectItem key={value} value={value}>{label}</SelectItem>)}</SelectContent>
                                     </Select>
                                 </div>
-                                <div>
-                                    <Label>Campaign type</Label>
+                                <div className="min-w-0 space-y-1">
+                                    <Label htmlFor="campaign-field-4">Campaign type</Label>
                                     <Select value={draft.campaignType} onValueChange={(value) => setDraft({ ...draft, campaignType: value })}>
-                                        <SelectTrigger><SelectValue /></SelectTrigger>
+                                        <SelectTrigger className="w-full" id="campaign-field-4"><SelectValue /></SelectTrigger>
                                         <SelectContent>
                                             <SelectItem value="BROADCAST">One-time broadcast</SelectItem>
                                             <SelectItem value="DRIP">Drip / nurture journey</SelectItem>
                                         </SelectContent>
                                     </Select>
                                 </div>
-                                <div>
-                                    <Label>Audience</Label>
-                                    <Select value={draft.audienceType} onValueChange={(value) => setDraft({ ...draft, audienceType: value as AudienceType, audienceConfig: {} })}>
-                                        <SelectTrigger><SelectValue /></SelectTrigger>
+                                <div className="min-w-0 space-y-1">
+                                    <Label htmlFor="campaign-field-5">Audience</Label>
+                                    <Select value={draft.audienceType} onValueChange={(value) => { setManualRecipients(""); setDraft({ ...draft, audienceType: value as AudienceType, audienceConfig: {} }); }}>
+                                        <SelectTrigger className="w-full" id="campaign-field-5"><SelectValue /></SelectTrigger>
                                         <SelectContent>
                                             <SelectItem value="LEAD_LIST">Lead list</SelectItem>
                                             <SelectItem value="SAVED_VIEW">View</SelectItem>
@@ -491,20 +495,21 @@ export default function MarketingPage() {
                                 </div>
                                 {draft.audienceType === "LEAD_LIST" ? (
                                     <Select value={draft.audienceConfig?.leadListId ?? ""} onValueChange={(value) => setDraft({ ...draft, audienceConfig: { leadListId: value } })}>
-                                        <SelectTrigger><SelectValue placeholder="Select list" /></SelectTrigger>
+                                        <SelectTrigger className="w-full" aria-label="Audience lead list"><SelectValue placeholder="Select list" /></SelectTrigger>
                                         <SelectContent>{lists.map((list) => <SelectItem key={list.id} value={list.id}>{list.name}</SelectItem>)}</SelectContent>
                                     </Select>
                                 ) : null}
                                 {draft.audienceType === "SAVED_VIEW" ? (
                                     <Select value={draft.audienceConfig?.savedViewId ?? ""} onValueChange={(value) => setDraft({ ...draft, audienceConfig: { savedViewId: value } })}>
-                                        <SelectTrigger><SelectValue placeholder="Select view" /></SelectTrigger>
+                                        <SelectTrigger className="w-full" aria-label="Audience saved view"><SelectValue placeholder="Select view" /></SelectTrigger>
                                         <SelectContent>{views.map((view) => <SelectItem key={view.id} value={view.id}>{view.name}</SelectItem>)}</SelectContent>
                                     </Select>
                                 ) : null}
                                 {draft.audienceType === "MANUAL" ? (
                                     <Textarea
-                                        value={(draft.audienceConfig?.recipients ?? []).join("\n")}
-                                        onChange={(event) => setDraft({ ...draft, audienceConfig: { recipients: event.target.value.split(/\n|,/).map((item) => item.trim()).filter(Boolean) } })}
+                                        aria-label="Manual recipients"
+                                        value={manualRecipients}
+                                        onChange={(event) => { setManualRecipients(event.target.value); setDraft({ ...draft, audienceConfig: { recipients: event.target.value.split(/\n|,/).map((item) => item.trim()).filter(Boolean) } }); }}
                                         placeholder="One email or phone per line"
                                     />
                                 ) : null}
@@ -514,22 +519,24 @@ export default function MarketingPage() {
                                 </Button>
                             </div>
 
-                            <div className="space-y-3">
+                                ) },
+                                { id: "message", label: "2. Message", content: (
+                            <div className="min-w-0 space-y-3">
                                 <div className="grid gap-3 md:grid-cols-2">
-                                    <div>
-                                        <Label>Template</Label>
+                                    <div className="min-w-0 space-y-1">
+                                        <Label htmlFor="campaign-field-6">Template</Label>
                                         <Select value={draft.templateId || "NONE"} onValueChange={(value) => setDraft({ ...draft, templateId: value === "NONE" ? null : value })}>
-                                            <SelectTrigger><SelectValue /></SelectTrigger>
+                                            <SelectTrigger className="w-full" id="campaign-field-6"><SelectValue /></SelectTrigger>
                                             <SelectContent>
                                                 <SelectItem value="NONE">No template</SelectItem>
                                                 {channelTemplates.map((template) => <SelectItem key={template.id} value={template.id}>{template.name}</SelectItem>)}
                                             </SelectContent>
                                         </Select>
                                     </div>
-                                    <div>
-                                        <Label>Provider</Label>
+                                    <div className="min-w-0 space-y-1">
+                                        <Label htmlFor="campaign-field-7">Provider</Label>
                                         <Select value={draft.providerConfigId || "AUTO"} onValueChange={(value) => setDraft({ ...draft, providerConfigId: value === "AUTO" ? null : value })}>
-                                            <SelectTrigger><SelectValue /></SelectTrigger>
+                                            <SelectTrigger className="w-full" id="campaign-field-7"><SelectValue /></SelectTrigger>
                                             <SelectContent>
                                                 <SelectItem value="AUTO">Auto select active provider</SelectItem>
                                                 {channelProviders.map((provider) => <SelectItem key={provider.id} value={provider.id}>{provider.name}</SelectItem>)}
@@ -537,10 +544,10 @@ export default function MarketingPage() {
                                         </Select>
                                     </div>
                                 </div>
-                                <div>
-                                    <Label>Sender</Label>
+                                <div className="min-w-0 space-y-1">
+                                    <Label htmlFor="campaign-field-8">Sender</Label>
                                     <Select value={draft.senderIdentityId || "AUTO"} onValueChange={(value) => setDraft({ ...draft, senderIdentityId: value === "AUTO" ? null : value })}>
-                                        <SelectTrigger><SelectValue /></SelectTrigger>
+                                        <SelectTrigger className="w-full" id="campaign-field-8"><SelectValue /></SelectTrigger>
                                         <SelectContent>
                                             <SelectItem value="AUTO">Default sender</SelectItem>
                                             {channelSenders.map((sender) => <SelectItem key={sender.id} value={sender.id}>{sender.name} · {sender.address}</SelectItem>)}
@@ -548,34 +555,36 @@ export default function MarketingPage() {
                                     </Select>
                                 </div>
                                 {draft.channel === "EMAIL" ? (
-                                    <div>
-                                        <Label>Subject</Label>
-                                        <Input value={draft.subject ?? ""} onChange={(event) => setDraft({ ...draft, subject: event.target.value })} />
+                                    <div className="min-w-0 space-y-1">
+                                        <Label htmlFor="campaign-field-9">Subject</Label>
+                                        <Input id="campaign-field-9" value={draft.subject ?? ""} onChange={(event) => setDraft({ ...draft, subject: event.target.value })} />
                                     </div>
                                 ) : null}
-                                <div>
-                                    <Label>Message</Label>
-                                    <Textarea className="min-h-[220px]" value={draft.body} onChange={(event) => setDraft({ ...draft, body: event.target.value })} />
+                                <div className="min-w-0 space-y-1">
+                                    <Label htmlFor="campaign-field-10">Message</Label>
+                                    <Textarea id="campaign-field-10" className="min-h-[220px]" value={draft.body} onChange={(event) => setDraft({ ...draft, body: event.target.value })} />
                                     <p className="mt-1 text-xs text-muted-foreground">Available tokens: {"{{name}}, {{email}}, {{phone}}, {{source}}, {{status}}, {{score}}"}</p>
                                 </div>
                                 <div className="grid gap-3 md:grid-cols-3">
-                                    <div>
-                                        <Label>Throttle / minute</Label>
-                                        <Input type="number" value={draft.throttlePerMinute ?? 60} onChange={(event) => setDraft({ ...draft, throttlePerMinute: Number(event.target.value || 0) })} />
+                                    <div className="min-w-0 space-y-1">
+                                        <Label htmlFor="campaign-field-11">Throttle / minute</Label>
+                                        <Input id="campaign-field-11" type="number" value={draft.throttlePerMinute ?? 60} onChange={(event) => setDraft({ ...draft, throttlePerMinute: Number(event.target.value || 0) })} />
                                     </div>
-                                    <div>
-                                        <Label>Quiet start</Label>
-                                        <Input value={draft.quietHours?.start ?? "21:00"} onChange={(event) => setDraft({ ...draft, quietHours: { ...draft.quietHours, start: event.target.value } })} />
+                                    <div className="min-w-0 space-y-1">
+                                        <Label htmlFor="campaign-field-12">Quiet start</Label>
+                                        <Input id="campaign-field-12" value={draft.quietHours?.start ?? "21:00"} onChange={(event) => setDraft({ ...draft, quietHours: { ...draft.quietHours, start: event.target.value } })} />
                                     </div>
-                                    <div>
-                                        <Label>Quiet end</Label>
-                                        <Input value={draft.quietHours?.end ?? "09:00"} onChange={(event) => setDraft({ ...draft, quietHours: { ...draft.quietHours, end: event.target.value } })} />
+                                    <div className="min-w-0 space-y-1">
+                                        <Label htmlFor="campaign-field-13">Quiet end</Label>
+                                        <Input id="campaign-field-13" value={draft.quietHours?.end ?? "09:00"} onChange={(event) => setDraft({ ...draft, quietHours: { ...draft.quietHours, end: event.target.value } })} />
                                     </div>
                                 </div>
-                                <Button disabled={saving} onClick={saveCampaign}>{saving ? "Saving..." : "Save Campaign"}</Button>
+                                <Button disabled={saving || loading || loadError} onClick={saveCampaign}>{saving ? "Saving..." : "Save Campaign"}</Button>
                             </div>
 
-                            <div className="space-y-3">
+                                ) },
+                                { id: "preview", label: "3. Preview", content: (
+                            <div className="min-w-0 space-y-3">
                                 <div className="rounded-lg border p-3">
                                     <div className="mb-2 flex items-center justify-between">
                                         <div className="font-extrabold">Audience Preview</div>
@@ -601,11 +610,11 @@ export default function MarketingPage() {
                                                     >
                                                         {isLead ? (isExpanded ? <ChevronDown className="size-3.5 shrink-0 text-muted-foreground" /> : <ChevronRight className="size-3.5 shrink-0 text-muted-foreground" />) : <span className="size-3.5 shrink-0" />}
                                                         <div className="min-w-0 flex-1">
-                                                            <div className="flex items-center gap-1.5">
-                                                                <span className="font-bold">{item.record?.name ?? item.recipient}</span>
+                                                            <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+                                                                <span className="min-w-0 break-words font-bold">{item.record?.name ?? item.recipient}</span>
                                                                 {nbaEnabled && isLead && <NbaCountChip count={item.pendingNbaCount} />}
                                                             </div>
-                                                            <div className="text-xs text-muted-foreground">{item.recipient}</div>
+                                                            <div className="break-words text-xs text-muted-foreground">{item.recipient}</div>
                                                         </div>
                                                     </button>
                                                     {/* Real per-record NBA surface, not just a summary -- the same panel every
@@ -626,10 +635,12 @@ export default function MarketingPage() {
                                     <div className="mb-2 font-extrabold">Rendered Preview</div>
                                     <div className="rounded-md bg-muted/50 p-3 text-sm">
                                         {draft.channel === "EMAIL" ? <div className="mb-2 font-bold">{draft.subject || "No subject"}</div> : null}
-                                        <pre className="whitespace-pre-wrap font-sans">{draft.body || "No message body"}</pre>
+                                        <pre className="whitespace-pre-wrap break-words font-sans">{draft.body || "No message body"}</pre>
                                     </div>
                                 </div>
                             </div>
+                                ) },
+                            ]} />
                         </CardContent>
                     </Card>
                 </TabsContent>
@@ -655,9 +666,9 @@ export default function MarketingPage() {
                     </Card>
                     <Card className="rounded-xl">
                         <CardHeader><CardTitle className="text-base">Suppression List</CardTitle></CardHeader>
-                        <CardContent className="space-y-3">
-                            <div className="flex gap-2">
-                                <Input value={suppressAddress} onChange={(event) => setSuppressAddress(event.target.value)} placeholder="Email or phone" />
+                        <CardContent className="min-w-0 space-y-3">
+                            <div className="flex min-w-0 flex-wrap gap-2">
+                                <Input aria-label="Address to suppress" value={suppressAddress} onChange={(event) => setSuppressAddress(event.target.value)} placeholder="Email or phone" />
                                 <Button onClick={suppressRecipient}>
                                     <ShieldCheck className="size-4" />
                                     Suppress
@@ -699,8 +710,8 @@ export default function MarketingPage() {
                 </>
                 )}
 
-                <TabsContent value="journeys">
-                    <JourneysPanel />
+                <TabsContent value="journeys" forceMount hidden={marketingEnabled && activeSection !== "journeys"}>
+                    {(journeysVisited || activeSection === "journeys" || !marketingEnabled) && <JourneysPanel />}
                 </TabsContent>
             </Tabs>
         </div>

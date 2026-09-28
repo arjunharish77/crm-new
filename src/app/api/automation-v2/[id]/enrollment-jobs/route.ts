@@ -14,6 +14,6 @@ export async function GET(
     return NextResponse.json(jobs);
   } catch (error) {
     if (error instanceof Error && error.message === "UNAUTHORIZED") return unauthorized();
-    return serverError("Failed to fetch enrollment jobs");
+    return serverError("Failed to fetch enrollment jobs", error);
   }
 }

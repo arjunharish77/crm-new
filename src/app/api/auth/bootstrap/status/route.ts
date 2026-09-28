@@ -6,7 +6,7 @@ export async function GET() {
   try {
     const status = await getBootstrapStatus();
     return NextResponse.json(status);
-  } catch {
-    return serverError("Failed to check bootstrap status");
+  } catch (error) {
+    return serverError("Failed to check bootstrap status", error);
   }
 }

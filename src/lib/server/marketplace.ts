@@ -133,6 +133,18 @@ export async function listPermissionGrantsForInstall(user: TenantUser, installId
   return pgMarketplace.listPermissionGrantsForInstall(user, installId);
 }
 
+export async function getAppRecordScopeForInstall(user: TenantUser, installId: string) {
+  return pgMarketplace.getAppRecordScopeForInstall(user, installId);
+}
+
+export async function updateAppRecordScopeForInstall(
+  user: TenantUser,
+  installId: string,
+  input: { recordAccess: "OWN" | "TEAM" | "ALL"; ownerUserId: string | null; fieldPermissions: Record<string, unknown> | null },
+) {
+  return pgMarketplace.updateAppRecordScopeForInstall(user, installId, input);
+}
+
 export async function rotateAppSecret(user: TenantUser, appId: string) {
   return pgMarketplace.rotateAppSecret(user, appId);
 }

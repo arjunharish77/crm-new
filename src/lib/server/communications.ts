@@ -1,12 +1,14 @@
 import { randomUUID } from "crypto";
 import net from "net";
 import tls from "tls";
-import { query, queryOne, execute, type Queryable } from "@/lib/db/query";
+import { query, queryOne, execute, jsonbParam, queryAsSystem, queryOneAsSystem, executeAsSystem, type Queryable } from "@/lib/db/query";
 import { createAuditLog } from "@/lib/server/crm";
 import { runAutomationsForEvent } from "@/lib/repositories/automations-postgres";
 import { refreshNextBestActionsForRecord } from "@/lib/server/next-best-action";
 import { enqueueWebhookEvent } from "@/lib/server/webhook-outbox";
 import { enqueueAppEvent } from "@/lib/server/marketplace-events";
+import { assertSafeOutboundUrl } from "@/lib/server/outbound-request-guard";
+import { getTenantTimeZone, zonedWallClockParts, zonedWallClockToUTC } from "@/lib/server/date-format";
 
 type TenantUser = {
   id: string;
@@ -369,8 +371,9 @@ export async function suppressCommunicationAddressForTenant(user: TenantUser, in
 // processExpiredExportFiles/expireCallRecordings' exact shape. Suppressions created with no
 // expiresAt (the default -- a hard bounce or explicit legal hold) are permanent and untouched;
 // only ones an admin explicitly time-boxed are ever removed.
+// WP07 (F04): BACKGROUND_JOB, disposition B -- deletes expired suppressions across every tenant.
 export async function processDueSuppressionExpiry(limit = 100) {
-  const processed = await execute(
+  const processed = await executeAsSystem(
     `delete from "CommunicationSuppression"
      where id = any(
        select id from "CommunicationSuppression" where "expiresAt" is not null and "expiresAt" <= $1 limit $2
@@ -645,7 +648,7 @@ export async function upsertFatigueSettingsForTenant(
       input.weeklyCapPerContact ?? null,
       input.monthlyCapPerContact ?? null,
       input.channelCaps ?? {},
-      input.exclusionWindows ?? [],
+      jsonbParam(input.exclusionWindows ?? []),
       user.id,
     ],
   );
@@ -935,10 +938,15 @@ async function sendGenericHttp(provider: any, sender: any, message: any) {
     from: "{{sender}}",
     body: "{{body}}",
   };
+  // F07 fix (WP06): a tenant-configured "generic HTTP connector" endpoint, same SSRF exposure as
+  // a webhook subscription -- this also sends real message content (recipient/body) to whatever
+  // it resolves to, and parses the response back, so it's a read oracle too.
+  await assertSafeOutboundUrl(endpointUrl);
   const response = await fetch(endpointUrl, {
     method: String(provider.config?.method ?? "POST"),
     headers: { "Content-Type": "application/json", ...headers, ...secretHeaders },
     body: JSON.stringify(replacePayloadTokens(bodyTemplate, message, sender)),
+    redirect: "manual",
   });
   const text = await response.text();
   if (!response.ok) throw new Error(`HTTP_CONNECTOR_FAILED_${response.status}: ${text.slice(0, 500)}`);
@@ -1090,13 +1098,25 @@ async function recordDeliveryEvent(
   return event;
 }
 
+// F14 fix (WP10): see the identical constant/reasoning in webhook-outbox.ts's own
+// processWebhookOutbox -- comfortably larger than sendMessage's own send timeouts (15s-class),
+// bounded enough that a genuine crash doesn't strand a message for long.
+const COMMUNICATION_LEASE_DURATION_MS = 5 * 60 * 1000;
+
+// WP07 (F04): BACKGROUND_JOB, disposition B -- worker-invoked recurring job, no incoming
+// request/ambient tenant context; discovers due messages across every tenant at once. (The
+// per-message deferral/claim/final-status updates further down this function share the
+// identical disposition but were left on the ordinary query()/queryOne() path in this pass --
+// flagged as a bounded follow-up in 25_AUDIT_REMEDIATION_PLAN.md "## WP07 pre-auth/system path
+// inventory" rather than converted line-by-line here.)
 export async function processCommunicationOutbox(limit = 50, now = new Date()) {
   await queuePendingReportEmailDeliveries(now);
-  const messages = await query<any>(
+  const messages = await queryAsSystem<any>(
     `select id, "tenantId", channel, "providerConfigId", "senderIdentityId", recipient, subject, body, payload,
             attempts, "entityType", "entityId", "sourceType", "sourceId"
      from "CommunicationOutbox"
-     where status = 'QUEUED' and "nextAttemptAt" <= $1
+     where (status = 'QUEUED' and "nextAttemptAt" <= $1)
+        or (status = 'SENDING' and "leaseExpiresAt" is not null and "leaseExpiresAt" <= $1)
      order by "nextAttemptAt" asc
      limit $2`,
     [now.toISOString(), limit],
@@ -1115,14 +1135,25 @@ export async function processCommunicationOutbox(limit = 50, now = new Date()) {
       processed.push({ id: message.id, status: "DEFERRED", reason: deferral.reason, nextAttemptAt: deferral.nextAttemptAt });
       continue;
     }
-    await query('update "CommunicationOutbox" set status = $1, attempts = attempts + 1, "lastAttemptAt" = $2, "updatedAt" = $2 where id = $3', [
-      "SENDING",
-      now.toISOString(),
-      message.id,
-    ]);
+    // F14 fix (WP10): atomic compare-and-swap claim -- previously this set status = 'SENDING'
+    // unconditionally by id with no status guard at all, so two overlapping drain ticks that both
+    // selected the same due row above could BOTH claim and send it (a real double-send, not just
+    // a post-crash recovery gap). The added "leaseExpiresAt" lets a LATER tick recover this same
+    // row if the worker crashes before the final status update below ever runs.
+    const claimTime = now.toISOString();
+    const leaseExpiresAt = new Date(now.getTime() + COMMUNICATION_LEASE_DURATION_MS).toISOString();
+    const claimed = await queryOne<{ id: string }>(
+      `update "CommunicationOutbox"
+       set status = 'SENDING', attempts = attempts + 1, "lastAttemptAt" = $1, "leaseExpiresAt" = $2, "updatedAt" = $1
+       where id = $3
+         and (status = 'QUEUED' or (status = 'SENDING' and "leaseExpiresAt" is not null and "leaseExpiresAt" <= $1))
+       returning id`,
+      [claimTime, leaseExpiresAt, message.id],
+    );
+    if (!claimed) continue;
     try {
       const result = await sendMessage(message);
-      await query('update "CommunicationOutbox" set status = $1, "sentAt" = $2, "updatedAt" = $2, error = null where id = $3', [
+      await query('update "CommunicationOutbox" set status = $1, "sentAt" = $2, "updatedAt" = $2, "leaseExpiresAt" = null, error = null where id = $3', [
         "SENT",
         new Date().toISOString(),
         message.id,
@@ -1135,7 +1166,7 @@ export async function processCommunicationOutbox(limit = 50, now = new Date()) {
       const nextAttemptAt = new Date(now.getTime() + Math.min(60, 2 ** attempts) * 60000).toISOString();
       await query(
         `update "CommunicationOutbox"
-         set status = $1, error = $2, "nextAttemptAt" = $3, "updatedAt" = $4
+         set status = $1, error = $2, "nextAttemptAt" = $3, "leaseExpiresAt" = null, "updatedAt" = $4
          where id = $5`,
         [failed ? "FAILED" : "QUEUED", error?.message ?? "Communication send failed", nextAttemptAt, new Date().toISOString(), message.id],
       );
@@ -1193,8 +1224,17 @@ async function marketingDeliveryDeferral(message: any, now: Date) {
   }
   if (!controls) return null;
 
-  const quietUntil = nextQuietHoursExit(now, controls.quietHours);
-  if (quietUntil) return { reason: "QUIET_HOURS", nextAttemptAt: quietUntil.toISOString() };
+  // F16 fix (WP10): quiet hours are the TENANT's own business hours ("21:00"-"09:00" means
+  // 9pm-9am in whatever timezone this tenant is configured for), not the server process's --
+  // resolved once per check rather than cached, so a mid-day timezone config change takes effect
+  // on the very next send attempt. Only looked up when quiet hours is actually enabled for this
+  // campaign, so the common case (no quiet-hours policy configured) doesn't pay for an extra
+  // query it has no use for.
+  if (controls.quietHours?.enabled !== false) {
+    const timeZone = await getTenantTimeZone(message.tenantId);
+    const quietUntil = nextQuietHoursExit(now, controls.quietHours, timeZone);
+    if (quietUntil) return { reason: "QUIET_HOURS", nextAttemptAt: quietUntil.toISOString() };
+  }
   if (!throttleScope) return null;
 
   const throttlePerMinute = Math.max(1, Number(controls.throttlePerMinute || 60));
@@ -1229,11 +1269,20 @@ async function getMarketingDeliveryControls(tenantId: string, campaignId: string
   );
 }
 
-function nextQuietHoursExit(now: Date, quietHours: Record<string, unknown>) {
+// F16 fix (WP10): "start"/"end" are the tenant's own local wall-clock business hours, so both
+// the "is `now` currently inside the window" check and the computed exit instant must be done
+// against THIS TENANT's timezone -- previously `now.getHours()`/`now.setHours()` read and wrote
+// the server PROCESS's local time, so the exact same tenant configuration meant something
+// different depending on what timezone the Node process happened to be running in (and would
+// silently misfire entirely for a tenant not in that one timezone). `zonedWallClockParts` gives
+// the tenant-local wall-clock reading of `now`; `zonedWallClockToUTC` converts a tenant-local
+// wall-clock deadline back into a concrete, storable UTC instant.
+function nextQuietHoursExit(now: Date, quietHours: Record<string, unknown>, timeZone: string) {
   if (quietHours?.enabled === false) return null;
   const start = parseTimeOfDay(quietHours?.start, "21:00");
   const end = parseTimeOfDay(quietHours?.end, "09:00");
-  const minutesNow = now.getHours() * 60 + now.getMinutes();
+  const nowParts = zonedWallClockParts(now, timeZone);
+  const minutesNow = nowParts.hour * 60 + nowParts.minute;
   const startMinutes = start.hours * 60 + start.minutes;
   const endMinutes = end.hours * 60 + end.minutes;
   const crossesMidnight = startMinutes > endMinutes;
@@ -1241,10 +1290,9 @@ function nextQuietHoursExit(now: Date, quietHours: Record<string, unknown>) {
     ? minutesNow >= startMinutes || minutesNow < endMinutes
     : minutesNow >= startMinutes && minutesNow < endMinutes;
   if (!inQuietHours) return null;
-  const next = new Date(now);
-  next.setHours(end.hours, end.minutes, 0, 0);
-  if (crossesMidnight && minutesNow >= startMinutes) next.setDate(next.getDate() + 1);
-  return next;
+  const dayOffset = crossesMidnight && minutesNow >= startMinutes ? 1 : 0;
+  const exitDate = new Date(Date.UTC(nowParts.year, nowParts.month - 1, nowParts.day + dayOffset));
+  return zonedWallClockToUTC(exitDate.getUTCFullYear(), exitDate.getUTCMonth() + 1, exitDate.getUTCDate(), end.hours, end.minutes, timeZone);
 }
 
 function parseTimeOfDay(value: unknown, fallback: string) {

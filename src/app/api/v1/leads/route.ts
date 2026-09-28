@@ -1,7 +1,8 @@
+import { apiLeadCreate, validIdempotencyKey } from "@/lib/server/create-records";
 import { NextResponse } from "next/server";
-import { ApiKeyAuthenticationError, authenticateApiKeyRequest, hasApiKeyPermission } from "@/lib/server/api-keys";
+import { buildApiKeyWriteActor, ApiKeyAuthenticationError, authenticateApiKeyRequest, hasApiKeyPermission } from "@/lib/server/api-keys";
 import { createLeadForTenant, listLeadsForTenant } from "@/lib/server/crm";
-import { apiKeyAuthErrorResponse, badRequest, forbidden, serverError } from "@/lib/server/http";
+import { apiKeyAuthErrorResponse, badRequest, conflict, forbidden, serverError } from "@/lib/server/http";
 
 // First real endpoint in this app's new developer-facing API surface (see the "API management
 // console" checklist item) -- authenticated exclusively via API key (no session/JWT fallback,
@@ -39,11 +40,21 @@ export async function POST(request: Request) {
     }
     const body = rawBody ? JSON.parse(rawBody) : {};
     if (!body?.name || typeof body.name !== "string" || !body.name.trim()) return badRequest("name is required");
-    const lead = await createLeadForTenant({ id: apiKey.id, tenantId }, body);
+    // WP08 (F13): external API callers are the classic case for retry-on-timeout, so an
+    // Idempotency-Key here (standard REST convention) lets a retried POST return the original
+    // lead instead of creating a duplicate.
+    const idempotencyKey = request.headers.get("idempotency-key");
+    if (!validIdempotencyKey(idempotencyKey)) return badRequest("Invalid Idempotency-Key (maximum 200 printable characters)");
+    const parsed = apiLeadCreate.safeParse(body);
+    if (!parsed.success) return badRequest(parsed.error.issues[0].message);
+    const lead = await createLeadForTenant(await buildApiKeyWriteActor(apiKey,tenantId), parsed.data, idempotencyKey);
     return NextResponse.json(lead, { status: 201 });
   } catch (error) {
     if (error instanceof ApiKeyAuthenticationError) return apiKeyAuthErrorResponse(error.reason);
     if (error instanceof SyntaxError) return badRequest("Request body must be valid JSON");
+    if (error instanceof Error && error.message === "IDEMPOTENCY_KEY_CONFLICT") {
+      return conflict("This Idempotency-Key was already used with a different request body");
+    }
     return serverError("Failed to create lead", error);
   }
 }

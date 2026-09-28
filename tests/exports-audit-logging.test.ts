@@ -1,10 +1,19 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const dbMocks = vi.hoisted(() => ({
-  query: vi.fn(),
-  queryOne: vi.fn(),
-  execute: vi.fn(),
-}));
+const dbMocks = vi.hoisted(() => {
+  const query = vi.fn();
+  const queryOne = vi.fn();
+  const execute = vi.fn();
+  return {
+    query,
+    queryOne,
+    execute,
+    queryAsSystem: query,
+    queryOneAsSystem: queryOne,
+    executeAsSystem: execute,
+    jsonbParam: (v: unknown) => v,
+  };
+});
 
 const storageMocks = vi.hoisted(() => ({
   writePrivateFile: vi.fn(),
@@ -46,7 +55,9 @@ const user = { id: "user-1", tenantId: "tenant-a" };
 
 describe("exports.ts audit logging", () => {
   beforeEach(() => {
-    Object.values(dbMocks).forEach((mock) => mock.mockReset());
+    // jsonbParam is a plain passthrough function, not a vi.fn() -- excluded from this reset
+    // sweep since mockReset() only applies to actual mock functions.
+    Object.entries(dbMocks).forEach(([key, mock]) => { if (key !== "jsonbParam") (mock as ReturnType<typeof vi.fn>).mockReset(); });
     Object.values(storageMocks).forEach((mock) => mock.mockReset());
     storageMocks.deletePrivateFile.mockResolvedValue(undefined);
     jobQueueMocks.enqueueExportJob.mockReset().mockResolvedValue(undefined);
@@ -186,7 +197,7 @@ describe("exports.ts audit logging", () => {
       dbMocks.queryOne.mockResolvedValueOnce({ id: "export-1", status: "QUEUED" });
       const result = await approveExportRequest(user, "export-1");
       expect(result.status).toBe("QUEUED");
-      expect(jobQueueMocks.enqueueExportJob).toHaveBeenCalledWith("export-1");
+      expect(jobQueueMocks.enqueueExportJob).toHaveBeenCalledWith("export-1", "tenant-a");
     });
 
     it("throws when approving an export that isn't pending approval", async () => {

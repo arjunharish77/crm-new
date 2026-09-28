@@ -1,6 +1,7 @@
 'use client';
 
 import React from 'react';
+import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -33,49 +34,63 @@ function optionLabel(opt: any) {
 
 export function MuiDynamicField({ field, value, onChange, error, helperText }: MuiDynamicFieldProps) {
     const label = `${field.label}${field.required ? ' *' : ''}`;
-    const fieldId = `dynamic-field-${field.key}`;
+    const instanceId = React.useId();
+    const fieldId = `dynamic-field-${instanceId}-${field.key}`;
+    const messageId = `${fieldId}-message`;
     const message = error || helperText;
 
     switch (field.type) {
         case 'TEXT':
             return (
-                <div className="space-y-1.5">
-                    <Label htmlFor={fieldId}>{label}</Label>
+                <div className="min-w-0 space-y-1.5">
+                    <Label htmlFor={fieldId} className="break-words">{label}</Label>
                     <Input
                         id={fieldId}
                         value={value || ''}
                         onChange={(e) => onChange(e.target.value)}
                         aria-invalid={!!error}
+                        aria-describedby={message ? messageId : undefined}
                     />
                     {message && (
-                        <p className={cn('text-xs', error ? 'text-destructive' : 'text-muted-foreground')}>{message}</p>
+                        <p id={messageId} className={cn('break-words text-xs', error ? 'text-destructive' : 'text-muted-foreground')}>{message}</p>
                     )}
+                </div>
+            );
+
+        case 'TEXTAREA':
+            return (
+                <div className="min-w-0 space-y-1.5">
+                    <Label htmlFor={fieldId} className="break-words">{label}</Label>
+                    <Textarea id={fieldId} rows={4} value={value || ''} onChange={(event) => onChange(event.target.value)} aria-invalid={!!error} aria-describedby={message ? messageId : undefined} />
+                    {message && <p id={messageId} className={cn('break-words text-xs', error ? 'text-destructive' : 'text-muted-foreground')}>{message}</p>}
                 </div>
             );
 
         case 'NUMBER':
             return (
-                <div className="space-y-1.5">
-                    <Label htmlFor={fieldId}>{label}</Label>
+                <div className="min-w-0 space-y-1.5">
+                    <Label htmlFor={fieldId} className="break-words">{label}</Label>
                     <Input
                         id={fieldId}
                         type="number"
                         value={value !== undefined && value !== null ? value : ''}
                         onChange={(e) => onChange(e.target.value === '' ? null : Number(e.target.value))}
                         aria-invalid={!!error}
+                        aria-describedby={message ? messageId : undefined}
                     />
                     {message && (
-                        <p className={cn('text-xs', error ? 'text-destructive' : 'text-muted-foreground')}>{message}</p>
+                        <p id={messageId} className={cn('break-words text-xs', error ? 'text-destructive' : 'text-muted-foreground')}>{message}</p>
                     )}
                 </div>
             );
 
         case 'DROPDOWN':
             return (
-                <div className="space-y-1.5">
-                    <Label htmlFor={fieldId}>{label}</Label>
+                <div className="min-w-0 space-y-1.5">
+                    <Label htmlFor={fieldId} className="break-words">{label}</Label>
                     <Select value={value || undefined} onValueChange={onChange}>
-                        <SelectTrigger id={fieldId} className="w-full" aria-invalid={!!error}>
+                        <SelectTrigger id={fieldId} className="w-full" aria-invalid={!!error}
+                        aria-describedby={message ? messageId : undefined}>
                             <SelectValue placeholder="None" />
                         </SelectTrigger>
                         <SelectContent>
@@ -87,7 +102,7 @@ export function MuiDynamicField({ field, value, onChange, error, helperText }: M
                         </SelectContent>
                     </Select>
                     {message && (
-                        <p className={cn('text-xs', error ? 'text-destructive' : 'text-muted-foreground')}>{message}</p>
+                        <p id={messageId} className={cn('break-words text-xs', error ? 'text-destructive' : 'text-muted-foreground')}>{message}</p>
                     )}
                 </div>
             );
@@ -102,7 +117,7 @@ export function MuiDynamicField({ field, value, onChange, error, helperText }: M
                 );
             };
             return (
-                <div className="space-y-1.5">
+                <div className="min-w-0 space-y-1.5">
                     <Label>{label}</Label>
                     <div className={cn('space-y-2 rounded-md border p-3', error && 'border-destructive')}>
                         {Array.isArray(field.options) && field.options.length > 0 ? (
@@ -123,7 +138,7 @@ export function MuiDynamicField({ field, value, onChange, error, helperText }: M
                         )}
                     </div>
                     {message && (
-                        <p className={cn('text-xs', error ? 'text-destructive' : 'text-muted-foreground')}>{message}</p>
+                        <p id={messageId} className={cn('break-words text-xs', error ? 'text-destructive' : 'text-muted-foreground')}>{message}</p>
                     )}
                 </div>
             );
@@ -131,7 +146,7 @@ export function MuiDynamicField({ field, value, onChange, error, helperText }: M
 
         case 'BOOLEAN':
             return (
-                <div className="space-y-1.5">
+                <div className="min-w-0 space-y-1.5">
                     <label className="flex items-center gap-2 text-sm font-medium">
                         <Checkbox
                             checked={!!value}
@@ -140,57 +155,60 @@ export function MuiDynamicField({ field, value, onChange, error, helperText }: M
                         {label}
                     </label>
                     {message && (
-                        <p className={cn('text-xs', error ? 'text-destructive' : 'text-muted-foreground')}>{message}</p>
+                        <p id={messageId} className={cn('break-words text-xs', error ? 'text-destructive' : 'text-muted-foreground')}>{message}</p>
                     )}
                 </div>
             );
 
         case 'DATE':
             return (
-                <div className="space-y-1.5">
-                    <Label htmlFor={fieldId}>{label}</Label>
+                <div className="min-w-0 space-y-1.5">
+                    <Label htmlFor={fieldId} className="break-words">{label}</Label>
                     <Input
                         id={fieldId}
                         type="date"
                         value={formatWorkspaceDateInput(value)}
                         onChange={(e) => onChange(workspaceDateInputToIso(e.target.value))}
                         aria-invalid={!!error}
+                        aria-describedby={message ? messageId : undefined}
                     />
                     {message && (
-                        <p className={cn('text-xs', error ? 'text-destructive' : 'text-muted-foreground')}>{message}</p>
+                        <p id={messageId} className={cn('break-words text-xs', error ? 'text-destructive' : 'text-muted-foreground')}>{message}</p>
                     )}
                 </div>
             );
 
         case 'DATETIME':
             return (
-                <div className="space-y-1.5">
-                    <Label htmlFor={fieldId}>{label}</Label>
+                <div className="min-w-0 space-y-1.5">
+                    <Label htmlFor={fieldId} className="break-words">{label}</Label>
                     <Input
                         id={fieldId}
                         type="datetime-local"
                         value={formatWorkspaceDateTimeInput(value)}
                         onChange={(e) => onChange(workspaceDateTimeInputToIso(e.target.value))}
                         aria-invalid={!!error}
+                        aria-describedby={message ? messageId : undefined}
                     />
                     {message && (
-                        <p className={cn('text-xs', error ? 'text-destructive' : 'text-muted-foreground')}>{message}</p>
+                        <p id={messageId} className={cn('break-words text-xs', error ? 'text-destructive' : 'text-muted-foreground')}>{message}</p>
                     )}
                 </div>
             );
 
         default:
             return (
-                <div className="space-y-1.5">
-                    <Label htmlFor={fieldId}>{label}</Label>
+                <div className="min-w-0 space-y-1.5">
+                    <Label htmlFor={fieldId} className="break-words">{label}</Label>
                     <Input
                         id={fieldId}
                         value={value || ''}
                         onChange={(e) => onChange(e.target.value)}
                         aria-invalid={!!error}
+                        aria-describedby={message ? messageId : undefined}
                     />
                     {message && (
-                        <p className={cn('text-xs', error ? 'text-destructive' : 'text-muted-foreground')}>{message}</p>
+                        <p id={messageId} className={cn('break-words text-xs', error ? 'text-destructive' : 'text-muted-foreground')}>{message}</p>
                     )}
                 </div>
             );

@@ -12,6 +12,7 @@ import {
     SelectTrigger,
     SelectValue,
 } from '@/components/ui/select';
+import { ErrorState } from '@/components/common/error-state';
 import { apiFetch } from '@/lib/api';
 import { formatWorkspaceDateInput, workspaceDateInputToIso } from '@/lib/date-format';
 import { PaginatedResponse } from '@/types/common';
@@ -40,11 +41,18 @@ export function OpportunityForm({ initialData, onSuccess, onCancel }: Opportunit
     const [types, setTypes] = useState<OpportunityType[]>([]);
     const [selectedType, setSelectedType] = useState<OpportunityType | null>(null);
 
+    const [loadingOptions, setLoadingOptions] = useState(true);
+    const [optionsError, setOptionsError] = useState(false);
+    const [attempt, setAttempt] = useState(0);
     useEffect(() => {
+        let active = true;
+        setLoadingOptions(true);
+        setOptionsError(false);
         Promise.all([
             apiFetch<PaginatedResponse<Lead> | Lead[]>('/leads?limit=100'),
             apiFetch<OpportunityType[]>('/opportunity-types'),
         ]).then(([leadsResponse, typesResponse]) => {
+            if (!active) return;
             let leadsData: Lead[] = [];
             if ('data' in leadsResponse && Array.isArray(leadsResponse.data)) {
                 leadsData = leadsResponse.data;
@@ -61,8 +69,9 @@ export function OpportunityForm({ initialData, onSuccess, onCancel }: Opportunit
                 const t = typesData.find(x => x.id === initialData.opportunityTypeId);
                 setSelectedType(t || null);
             }
-        });
-    }, [initialData]);
+        }).catch(() => { if (active) setOptionsError(true); }).finally(() => { if (active) setLoadingOptions(false); });
+        return () => { active = false; };
+    }, [initialData, attempt]);
 
     const fieldOverrides = {
         // Lead selector
@@ -72,9 +81,9 @@ export function OpportunityForm({ initialData, onSuccess, onCancel }: Opportunit
                 control={control}
                 render={({ field: hookField }) => (
                     <div className="space-y-2">
-                        <Label>Lead *</Label>
-                        <Select value={hookField.value || undefined} onValueChange={hookField.onChange}>
-                            <SelectTrigger aria-invalid={!!errors.leadId} className="w-full">
+                        <Label htmlFor="opportunity-form-lead">Lead *</Label>
+                        <Select value={hookField.value || undefined} onValueChange={(value) => { if (value) hookField.onChange(value); }}>
+                            <SelectTrigger id="opportunity-form-lead" aria-invalid={!!errors.leadId} className="w-full">
                                 <SelectValue placeholder="Select a lead" />
                             </SelectTrigger>
                             <SelectContent>
@@ -96,10 +105,13 @@ export function OpportunityForm({ initialData, onSuccess, onCancel }: Opportunit
                 control={control}
                 render={({ field: hookField }) => (
                     <div className="space-y-2">
-                        <Label>Opportunity Type *</Label>
+                        <Label htmlFor="opportunity-form-type">Opportunity Type *</Label>
                         <Select
                             value={hookField.value || NONE_VALUE}
                             onValueChange={(value) => {
+                                // Ignore the hidden native select's transient empty value during reset.
+                                // Clearing a type is an explicit selection of the None option.
+                                if (!value) return;
                                 const nextValue = value === NONE_VALUE ? '' : value;
                                 hookField.onChange(nextValue);
                                 const type = types.find(t => t.id === nextValue) || null;
@@ -109,7 +121,7 @@ export function OpportunityForm({ initialData, onSuccess, onCancel }: Opportunit
                                 setValue('stageId', firstStage ? firstStage.id : '');
                             }}
                         >
-                            <SelectTrigger aria-invalid={!!errors.opportunityTypeId} className="w-full">
+                            <SelectTrigger id="opportunity-form-type" aria-invalid={!!errors.opportunityTypeId} className="w-full">
                                 <SelectValue placeholder="Select a type" />
                             </SelectTrigger>
                             <SelectContent>
@@ -132,13 +144,13 @@ export function OpportunityForm({ initialData, onSuccess, onCancel }: Opportunit
                 control={control}
                 render={({ field: hookField }) => (
                     <div className="space-y-2">
-                        <Label>Stage</Label>
+                        <Label htmlFor="opportunity-form-stage">Stage</Label>
                         <Select
                             value={hookField.value || undefined}
-                            onValueChange={hookField.onChange}
+                            onValueChange={(value) => { if (value) hookField.onChange(value); }}
                             disabled={!selectedType}
                         >
-                            <SelectTrigger aria-invalid={!!errors.stageId} className="w-full">
+                            <SelectTrigger id="opportunity-form-stage" aria-invalid={!!errors.stageId} className="w-full">
                                 <SelectValue placeholder="Select a stage" />
                             </SelectTrigger>
                             <SelectContent>
@@ -168,8 +180,8 @@ export function OpportunityForm({ initialData, onSuccess, onCancel }: Opportunit
 
                     return (
                         <div className="space-y-2">
-                            <Label>Expected Close Date</Label>
-                            <Input
+                            <Label htmlFor="opportunity-form-close-date">Expected Close Date</Label>
+                            <Input id="opportunity-form-close-date"
                                 type="date"
                                 value={inputValue}
                                 aria-invalid={!!errors.expectedCloseDate}
@@ -187,6 +199,9 @@ export function OpportunityForm({ initialData, onSuccess, onCancel }: Opportunit
             />
         ),
     };
+
+    if (loadingOptions) return <p role="status" className="text-sm text-muted-foreground">Loading lead and opportunity options…</p>;
+    if (optionsError) return <ErrorState description="Lead and opportunity options could not be loaded." onRetry={() => setAttempt(value => value + 1)} />;
 
     return (
         <DynamicFormRenderer

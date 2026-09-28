@@ -1,5 +1,5 @@
 import { randomUUID, randomBytes, createHmac } from "crypto";
-import { execute, query, queryOne } from "@/lib/db/query";
+import { execute, query, queryOne, jsonbParam, executeAsSystem, queryAsSystem, queryOneAsSystem } from "@/lib/db/query";
 import { DatabaseError } from "@/lib/db/errors";
 import { createAuditLog } from "@/lib/server/crm";
 import { assertModuleEnabled } from "@/lib/server/module-entitlements";
@@ -795,7 +795,7 @@ export async function approveAppInstall(user: TenantUser, installId: string) {
 // is a platform-level capability, the same reasoning every other platform-admin marketplace
 // function in this file already follows.
 export async function approvePlatformWritePermissions(platformAdminUser: { id: string }, tenantId: string, installId: string) {
-  const install = await queryOne<{ id: string; appId: string; pendingPlatformPermissions: unknown }>(
+  const install = await queryOneAsSystem<{ id: string; appId: string; pendingPlatformPermissions: unknown }>(
     `select id, "appId", "pendingPlatformPermissions" from "TenantAppInstall" where "tenantId" = $1 and id = $2 limit 1`,
     [tenantId, installId],
   );
@@ -803,13 +803,13 @@ export async function approvePlatformWritePermissions(platformAdminUser: { id: s
   const now = new Date().toISOString();
   const pending = normalizePermissions(install.pendingPlatformPermissions);
   for (const [moduleKey, scope] of Object.entries(pending)) {
-    await execute(
+    await executeAsSystem(
       `insert into "TenantAppPermissionGrant" (id, "tenantId", "installId", "moduleKey", scope, "grantedAt")
        values ($1, $2, $3, $4, $5, $6) on conflict ("installId", "moduleKey") do update set scope = excluded.scope`,
       [randomUUID(), tenantId, installId, moduleKey, scope, now],
     );
   }
-  await execute(`update "TenantAppInstall" set "pendingPlatformPermissions" = null, "updatedAt" = $1 where id = $2`, [now, installId]);
+  await executeAsSystem(`update "TenantAppInstall" set "pendingPlatformPermissions" = null, "updatedAt" = $1 where id = $2`, [now, installId]);
   await bumpInstalledVersionToLatestApproved(install.appId, installId, now);
   await createAuditLog({ id: platformAdminUser.id, tenantId } as any, "APPROVE_PLATFORM_PERMISSIONS", "TENANT_APP_INSTALL", installId, null, pending, {}).catch(() => undefined);
   return { installId, grantedPermissions: pending };
@@ -817,7 +817,7 @@ export async function approvePlatformWritePermissions(platformAdminUser: { id: s
 
 export async function rejectPlatformWritePermissions(platformAdminUser: { id: string }, tenantId: string, installId: string) {
   const now = new Date().toISOString();
-  const install = await queryOne<{ id: string }>(
+  const install = await queryOneAsSystem<{ id: string }>(
     `update "TenantAppInstall" set "pendingPlatformPermissions" = null, "updatedAt" = $1 where "tenantId" = $2 and id = $3 and "pendingPlatformPermissions" is not null returning id`,
     [now, tenantId, installId],
   );
@@ -829,7 +829,7 @@ export async function rejectPlatformWritePermissions(platformAdminUser: { id: st
 // Cross-tenant queue for a platform admin to review, mirroring listPendingVersionsForPlatformAdmin's
 // own shape exactly.
 export async function listPendingPlatformPermissionChangesForPlatformAdmin() {
-  return query<any>(
+  return queryAsSystem<any>(
     `select i.id, i."tenantId", i."appId", a.name as "appName", i."pendingPlatformPermissions", i."updatedAt"
      from "TenantAppInstall" i
      join "MarketplaceApp" a on a.id = i."appId"
@@ -938,6 +938,52 @@ export async function listPermissionGrantsForInstall(user: TenantUser, installId
   );
 }
 
+// WP04 fix: the module-level grants above answer "can this app touch leads/opportunities at
+// all" -- this is the additional, opt-in "which records/fields can it see" constraint a tenant
+// admin can layer on top, enforced via the exact same recordAccessLevel/fieldPermissionMap an
+// internal user's role goes through (see marketplace-inbound.ts's buildAppScopedActor). Defaults
+// (recordAccess "ALL", no fieldPermissions) are what every existing install already has, so this
+// is purely additive -- nothing changes for an install nobody has explicitly configured.
+export async function getAppRecordScopeForInstall(user: TenantUser, installId: string) {
+  await assertMarketplaceEnabled(user);
+  const install = await queryOne<{ recordAccess: string; ownerUserId: string | null; fieldPermissions: Record<string, unknown> | null }>(
+    `select i."recordAccess", i."ownerUserId", i."fieldPermissions" from "TenantAppInstall" i where i."tenantId" = $1 and i.id = $2`,
+    [user.tenantId, installId],
+  );
+  if (!install) throw new DatabaseError("INSTALL_NOT_FOUND");
+  return install;
+}
+
+export async function updateAppRecordScopeForInstall(
+  user: TenantUser,
+  installId: string,
+  input: { recordAccess: "OWN" | "TEAM" | "ALL"; ownerUserId: string | null; fieldPermissions: Record<string, unknown> | null },
+) {
+  await assertMarketplaceEnabled(user);
+  if (input.recordAccess !== "ALL" && !input.ownerUserId) {
+    throw new DatabaseError("OWNER_USER_ID_REQUIRED_FOR_OWN_OR_TEAM_SCOPE");
+  }
+  if (input.ownerUserId) {
+    // The designated "acts as owner" user must be a real member of the SAME tenant as the
+    // install -- otherwise an admin could point an app at another tenant's user id, and the
+    // record-scope check in record-scope.ts would silently compare against a cross-tenant id
+    // that can never legitimately own a row here (harmless in practice since it'd just mean "no
+    // records visible," but rejected outright so a misconfiguration is caught at save time
+    // rather than silently producing an app that can never see anything).
+    const owner = await queryOne<{ id: string }>(`select id from "User" where id = $1 and "tenantId" = $2`, [input.ownerUserId, user.tenantId]);
+    if (!owner) throw new DatabaseError("OWNER_USER_NOT_FOUND_IN_TENANT");
+  }
+  const updated = await queryOne<any>(
+    `update "TenantAppInstall" set "recordAccess" = $1, "ownerUserId" = $2, "fieldPermissions" = $3, "updatedAt" = now()
+     where "tenantId" = $4 and id = $5
+     returning id, "recordAccess", "ownerUserId", "fieldPermissions"`,
+    [input.recordAccess, input.ownerUserId, jsonbParam(input.fieldPermissions), user.tenantId, installId],
+  );
+  if (!updated) throw new DatabaseError("INSTALL_NOT_FOUND");
+  await createAuditLog(user as any, "UPDATE", "TENANT_APP_INSTALL_RECORD_SCOPE", installId, null, updated, {}).catch(() => undefined);
+  return updated;
+}
+
 // Secret is only ever returned in plaintext here (registration/rotation) -- every other read
 // path gets the masked list view instead, matching the ApiKey "shown once" convention already
 // established this session.
@@ -984,8 +1030,19 @@ export async function listAppSecretsMaskedForTenant(user: TenantUser) {
 // tenant's own install and silently ignored every other installing tenant), this returns a
 // real per-app install count broken out by status, and a separate row per (app, installing
 // tenant) via the lateral join so a platform admin can act on any specific tenant's install.
+// WP07 (F04) CROSS_TENANT_ADMIN, disposition B: every function from here down to
+// listAppTenantBlocksForPlatformAdmin (and approvePlatformWritePermissions/
+// rejectPlatformWritePermissions/listPendingPlatformPermissionChangesForPlatformAdmin above)
+// is a dedicated platform-admin-only entry point -- either a genuine cross-tenant read (joins
+// "Tenant"/"MarketplaceApp"/etc with no tenant filter, e.g. this function and
+// listPendingVersionsForPlatformAdmin/listAppTenantBlocksForPlatformAdmin), or acts on an
+// explicit tenantId/appId supplied by the platform admin that is NOT the admin's own ambient
+// (typically null) tenantId. None of these has a tenant-facing equivalent caller, so converting
+// them to the system pool cannot bypass RLS for any ordinary per-tenant request path -- unlike,
+// e.g., listTenantUsers (see auth-admin-postgres.ts), which is shared and was deliberately left
+// alone. See 25_AUDIT_REMEDIATION_PLAN.md "## WP07 pre-auth/system path inventory".
 export async function listMarketplaceAppsForPlatformAdmin() {
-  return query<any>(
+  return queryAsSystem<any>(
     `select a.id, a."tenantId" as "ownerTenantId", t.name as "ownerTenantName", a.name, a.category, a."isActive", a."createdAt", a."publishStatus", a."trustLevel",
             i."tenantId", it.name as "tenantName", i.status as "installStatus"
      from "MarketplaceApp" a
@@ -1005,12 +1062,12 @@ export async function listMarketplaceAppsForPlatformAdmin() {
 // reinstateAppInstall path, since that only flips TenantAppInstall.status, not this.
 export async function suspendAppAsPlatformAdmin(platformAdminUser: { id: string }, appId: string, reason: string | null) {
   const now = new Date().toISOString();
-  const app = await queryOne<{ id: string; tenantId: string; name: string }>(
+  const app = await queryOneAsSystem<{ id: string; tenantId: string; name: string }>(
     `update "MarketplaceApp" set "isActive" = false, "updatedAt" = $1 where id = $2 returning id, "tenantId", name`,
     [now, appId],
   );
   if (!app) throw new Error("MARKETPLACE_APP_NOT_FOUND");
-  await execute(
+  await executeAsSystem(
     `update "TenantAppInstall" set status = 'SUSPENDED', "suspendedAt" = $1, "suspendedReason" = $2, "updatedAt" = $1 where "appId" = $3 and status = 'INSTALLED'`,
     [now, reason || "Suspended by platform admin", appId],
   );
@@ -1029,14 +1086,14 @@ export async function suspendAppAsPlatformAdmin(platformAdminUser: { id: string 
 // app's secret" is ambiguous without saying whose install -- the platform-admin apps list
 // already returns each row's tenantId, so the caller always has it on hand.
 export async function rotateAppSecretAsPlatformAdmin(platformAdminUser: { id: string }, appId: string, tenantId: string) {
-  const app = await queryOne<{ tenantId: string }>(`select "tenantId" from "MarketplaceApp" where id = $1`, [appId]);
+  const app = await queryOneAsSystem<{ tenantId: string }>(`select "tenantId" from "MarketplaceApp" where id = $1`, [appId]);
   if (!app) throw new Error("MARKETPLACE_APP_NOT_FOUND");
-  const existing = await queryOne<any>(`select ${SECRET_COLUMNS} from "TenantAppSecret" where "tenantId" = $1 and "appId" = $2`, [tenantId, appId]);
+  const existing = await queryOneAsSystem<any>(`select ${SECRET_COLUMNS} from "TenantAppSecret" where "tenantId" = $1 and "appId" = $2`, [tenantId, appId]);
   if (!existing) throw new Error("APP_SECRET_NOT_FOUND");
 
   const now = new Date();
   const secret = randomBytes(24).toString("hex");
-  const updated = await queryOne<any>(
+  const updated = await queryOneAsSystem<any>(
     `update "TenantAppSecret"
      set secret = $1, "previousSecret" = $2, "previousSecretExpiresAt" = $3, "lastRotatedAt" = $4, "rotatedBy" = $5
      where id = $6
@@ -1052,7 +1109,7 @@ export async function rotateAppSecretAsPlatformAdmin(platformAdminUser: { id: st
 // versions" sub-items) ---
 
 export async function listPendingVersionsForPlatformAdmin() {
-  return query<any>(
+  return queryAsSystem<any>(
     `select v.id, v."appId", a.name as "appName", t.name as "ownerTenantName", v.version, v."changeNotes", v."createdAt", a."publishStatus"
      from "MarketplaceAppVersion" v
      join "MarketplaceApp" a on a.id = v."appId"
@@ -1070,7 +1127,7 @@ export async function listPendingVersionsForPlatformAdmin() {
 // mechanism for both cases rather than two separate ones.
 export async function approveAppVersion(platformAdminUser: { id: string }, versionId: string) {
   const now = new Date().toISOString();
-  const version = await queryOne<any>(
+  const version = await queryOneAsSystem<any>(
     `update "MarketplaceAppVersion" set "approvalStatus" = 'APPROVED', "approvedBy" = $1, "approvedAt" = $2, "rejectedReason" = null
      where id = $3 and "approvalStatus" = 'PENDING'
      returning ${VERSION_COLUMNS}`,
@@ -1078,10 +1135,10 @@ export async function approveAppVersion(platformAdminUser: { id: string }, versi
   );
   if (!version) throw new Error("APP_VERSION_NOT_PENDING");
 
-  const app = await queryOne<{ id: string; tenantId: string; publishStatus: string }>(`select id, "tenantId", "publishStatus" from "MarketplaceApp" where id = $1`, [version.appId]);
+  const app = await queryOneAsSystem<{ id: string; tenantId: string; publishStatus: string }>(`select id, "tenantId", "publishStatus" from "MarketplaceApp" where id = $1`, [version.appId]);
   let publishedApp = null;
   if (app?.publishStatus === "PENDING_REVIEW") {
-    publishedApp = await queryOne<any>(
+    publishedApp = await queryOneAsSystem<any>(
       `update "MarketplaceApp" set "publishStatus" = 'PUBLISHED', "isPrivate" = false, "publishedAt" = $1, "publishedBy" = $2, "updatedAt" = $1 where id = $3 returning ${APP_COLUMNS}`,
       [now, platformAdminUser.id, version.appId],
     );
@@ -1094,7 +1151,7 @@ export async function approveAppVersion(platformAdminUser: { id: string }, versi
 
 export async function rejectAppVersion(platformAdminUser: { id: string }, versionId: string, reason: string | null) {
   const now = new Date().toISOString();
-  const version = await queryOne<any>(
+  const version = await queryOneAsSystem<any>(
     `update "MarketplaceAppVersion" set "approvalStatus" = 'REJECTED', "rejectedReason" = $1
      where id = $2 and "approvalStatus" = 'PENDING'
      returning ${VERSION_COLUMNS}`,
@@ -1102,10 +1159,10 @@ export async function rejectAppVersion(platformAdminUser: { id: string }, versio
   );
   if (!version) throw new Error("APP_VERSION_NOT_PENDING");
 
-  const app = await queryOne<{ id: string; tenantId: string; publishStatus: string }>(`select id, "tenantId", "publishStatus" from "MarketplaceApp" where id = $1`, [version.appId]);
+  const app = await queryOneAsSystem<{ id: string; tenantId: string; publishStatus: string }>(`select id, "tenantId", "publishStatus" from "MarketplaceApp" where id = $1`, [version.appId]);
   let rejectedApp = null;
   if (app?.publishStatus === "PENDING_REVIEW") {
-    rejectedApp = await queryOne<any>(
+    rejectedApp = await queryOneAsSystem<any>(
       `update "MarketplaceApp" set "publishStatus" = 'REJECTED', "publishRejectedReason" = $1, "updatedAt" = $2 where id = $3 returning ${APP_COLUMNS}`,
       [reason ?? null, now, version.appId],
     );
@@ -1119,7 +1176,7 @@ export async function rejectAppVersion(platformAdminUser: { id: string }, versio
 // rather than an oversight, since this pass doesn't build per-install version pinning either.
 export async function unpublishApp(platformAdminUser: { id: string }, appId: string, reason: string | null) {
   const now = new Date().toISOString();
-  const app = await queryOne<any>(
+  const app = await queryOneAsSystem<any>(
     `update "MarketplaceApp" set "publishStatus" = 'UNPUBLISHED', "isPrivate" = true, "unpublishedAt" = $1, "unpublishedBy" = $2, "updatedAt" = $1
      where id = $3 and "publishStatus" = 'PUBLISHED'
      returning ${APP_COLUMNS}`,
@@ -1140,7 +1197,7 @@ export async function unpublishApp(platformAdminUser: { id: string }, appId: str
 export async function setAppTrustLevel(platformAdminUser: { id: string }, appId: string, trustLevel: string) {
   if (!["UNVERIFIED", "VERIFIED", "TRUSTED"].includes(trustLevel)) throw new Error("INVALID_TRUST_LEVEL");
   const now = new Date().toISOString();
-  const app = await queryOne<any>(
+  const app = await queryOneAsSystem<any>(
     `update "MarketplaceApp" set "trustLevel" = $1, "trustLevelSetBy" = $2, "trustLevelSetAt" = $3, "updatedAt" = $3 where id = $4 returning ${APP_COLUMNS}`,
     [trustLevel, platformAdminUser.id, now, appId],
   );
@@ -1153,10 +1210,10 @@ export async function setAppTrustLevel(platformAdminUser: { id: string }, appId:
 // matching unpublishApp's own scope decision, an existing install (if this tenant already had
 // one) is untouched.
 export async function blockAppForTenant(platformAdminUser: { id: string }, tenantId: string, appId: string, reason: string | null) {
-  const app = await queryOne<{ id: string; tenantId: string }>(`select id, "tenantId" from "MarketplaceApp" where id = $1`, [appId]);
+  const app = await queryOneAsSystem<{ id: string; tenantId: string }>(`select id, "tenantId" from "MarketplaceApp" where id = $1`, [appId]);
   if (!app) throw new Error("MARKETPLACE_APP_NOT_FOUND");
   const now = new Date().toISOString();
-  await execute(
+  await executeAsSystem(
     `insert into "MarketplaceAppTenantBlock" (id, "tenantId", "appId", reason, "blockedBy", "createdAt")
      values ($1, $2, $3, $4, $5, $6)
      on conflict ("tenantId", "appId") do update set reason = excluded.reason, "blockedBy" = excluded."blockedBy", "createdAt" = excluded."createdAt"`,
@@ -1169,9 +1226,9 @@ export async function blockAppForTenant(platformAdminUser: { id: string }, tenan
 }
 
 export async function unblockAppForTenant(platformAdminUser: { id: string }, tenantId: string, appId: string) {
-  const removed = await execute(`delete from "MarketplaceAppTenantBlock" where "tenantId" = $1 and "appId" = $2`, [tenantId, appId]);
+  const removed = await executeAsSystem(`delete from "MarketplaceAppTenantBlock" where "tenantId" = $1 and "appId" = $2`, [tenantId, appId]);
   if (!removed) throw new Error("APP_TENANT_BLOCK_NOT_FOUND");
-  const app = await queryOne<{ tenantId: string }>(`select "tenantId" from "MarketplaceApp" where id = $1`, [appId]);
+  const app = await queryOneAsSystem<{ tenantId: string }>(`select "tenantId" from "MarketplaceApp" where id = $1`, [appId]);
   await createAuditLog({ id: platformAdminUser.id, tenantId: app?.tenantId } as any, "UNBLOCK_TENANT", "MARKETPLACE_APP", appId, null, null, { unblockedTenantId: tenantId }).catch(
     () => undefined,
   );
@@ -1179,7 +1236,7 @@ export async function unblockAppForTenant(platformAdminUser: { id: string }, ten
 }
 
 export async function listAppTenantBlocksForPlatformAdmin() {
-  return query<any>(
+  return queryAsSystem<any>(
     `select b.id, b."appId", a.name as "appName", b."tenantId", t.name as "tenantName", b.reason, b."createdAt"
      from "MarketplaceAppTenantBlock" b
      join "MarketplaceApp" a on a.id = b."appId"
@@ -1250,7 +1307,7 @@ export async function createAppAction(user: TenantUser, appId: string, input: { 
       `insert into "MarketplaceAppAction" (id, "tenantId", "appId", key, name, description, "inputSchema", "createdBy", "createdAt", "updatedAt")
        values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $9)
        returning ${APP_ACTION_COLUMNS}`,
-      [randomUUID(), tenantId, appId, key, name, input.description ?? null, normalizeInputSchema(input.inputSchema), user.id, new Date().toISOString()],
+      [randomUUID(), tenantId, appId, key, name, input.description ?? null, jsonbParam(normalizeInputSchema(input.inputSchema)), user.id, new Date().toISOString()],
     );
   } catch (error) {
     if (error instanceof DatabaseError && error.code === "23505") throw new Error("DUPLICATE_APP_ACTION_KEY");
@@ -1273,7 +1330,7 @@ export async function updateAppAction(
   const patch: Record<string, unknown> = { updatedAt: new Date().toISOString() };
   if (input.name !== undefined) patch.name = String(input.name).trim();
   if (input.description !== undefined) patch.description = input.description;
-  if (input.inputSchema !== undefined) patch.inputSchema = normalizeInputSchema(input.inputSchema);
+  if (input.inputSchema !== undefined) patch.inputSchema = jsonbParam(normalizeInputSchema(input.inputSchema));
   if (input.isActive !== undefined) patch.isActive = Boolean(input.isActive);
 
   const columns = Object.keys(patch);
@@ -1472,7 +1529,7 @@ export async function createAppReport(
       `insert into "MarketplaceAppReport" (id, "tenantId", "appId", key, name, description, "columnSchema", "cacheTtlMinutes", "createdBy", "createdAt", "updatedAt")
        values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $10)
        returning ${APP_REPORT_COLUMNS}`,
-      [randomUUID(), tenantId, appId, key, name, input.description ?? null, normalizeColumnSchema(input.columnSchema), cacheTtlMinutes, user.id, new Date().toISOString()],
+      [randomUUID(), tenantId, appId, key, name, input.description ?? null, jsonbParam(normalizeColumnSchema(input.columnSchema)), cacheTtlMinutes, user.id, new Date().toISOString()],
     );
   } catch (error) {
     if (error instanceof DatabaseError && error.code === "23505") throw new Error("DUPLICATE_APP_REPORT_KEY");
@@ -1495,7 +1552,7 @@ export async function updateAppReport(
   const patch: Record<string, unknown> = { updatedAt: new Date().toISOString() };
   if (input.name !== undefined) patch.name = String(input.name).trim();
   if (input.description !== undefined) patch.description = input.description;
-  if (input.columnSchema !== undefined) patch.columnSchema = normalizeColumnSchema(input.columnSchema);
+  if (input.columnSchema !== undefined) patch.columnSchema = jsonbParam(normalizeColumnSchema(input.columnSchema));
   if (input.cacheTtlMinutes !== undefined && Number.isFinite(input.cacheTtlMinutes) && Number(input.cacheTtlMinutes) > 0) patch.cacheTtlMinutes = Math.floor(Number(input.cacheTtlMinutes));
   if (input.isActive !== undefined) patch.isActive = Boolean(input.isActive);
 
@@ -1602,7 +1659,7 @@ export async function getAppReportData(user: TenantUser, appId: string, reportKe
     `insert into "MarketplaceAppReportCache" (id, "tenantId", "appId", "reportKey", rows, status, "errorMessage", "fetchedAt", "expiresAt")
      values ($1, $2, $3, $4, $5, $6, $7, $8, $9)
      on conflict ("tenantId", "appId", "reportKey") do update set rows = excluded.rows, status = excluded.status, "errorMessage" = excluded."errorMessage", "fetchedAt" = excluded."fetchedAt", "expiresAt" = excluded."expiresAt"`,
-    [randomUUID(), tenantId, appId, reportKey, rows, status, errorMessage, now.toISOString(), expiresAt],
+    [randomUUID(), tenantId, appId, reportKey, jsonbParam(rows), status, errorMessage, now.toISOString(), expiresAt],
   );
 
   return { rows, columnSchema: report.columnSchema, status, errorMessage, fetchedAt: now.toISOString(), fromCache: false };

@@ -17,6 +17,6 @@ export async function POST(
       return unauthorized();
     }
 
-    return serverError("Failed to toggle note pin");
+    return serverError("Failed to toggle note pin", error);
   }
 }

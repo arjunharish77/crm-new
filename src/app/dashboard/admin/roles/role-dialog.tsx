@@ -236,12 +236,12 @@ export function RoleDialog({
                     control={control}
                     render={({ field }) => (
                         <div className="space-y-2">
-                            <Label>Permission Template</Label>
+                            <Label htmlFor="role-template">Permission Template</Label>
                             <Select
                                 value={field.value || NO_TEMPLATE_VALUE}
                                 onValueChange={(value) => field.onChange(value === NO_TEMPLATE_VALUE ? "" : value)}
                             >
-                                <SelectTrigger className="w-full">
+                                <SelectTrigger id="role-template" className="w-full min-w-0">
                                     <SelectValue />
                                 </SelectTrigger>
                                 <SelectContent>
@@ -281,7 +281,7 @@ export function RoleDialog({
                     <h3 className="text-sm font-semibold">Module Permissions</h3>
                     <p className="mb-3 text-sm text-muted-foreground">Set access levels for each module</p>
 
-                    <div className="grid gap-4 sm:grid-cols-2">
+                    <div className="grid gap-4">
                         {modules.map((module) => (
                             <Controller
                                 key={module.key}
@@ -289,15 +289,15 @@ export function RoleDialog({
                                 control={control}
                                 render={({ field }) => (
                                     <div className="space-y-2">
-                                        <Label>{module.label}</Label>
+                                        <Label htmlFor={`role-${module.key}`}>{module.label}</Label>
                                         <Select value={field.value as string} onValueChange={field.onChange}>
-                                            <SelectTrigger className="w-full">
-                                                <SelectValue />
+                                            <SelectTrigger id={`role-${module.key}`} className="w-full min-w-0">
+                                                <SelectValue>{permissionLevels.find((level) => level.value === field.value)?.label}</SelectValue>
                                             </SelectTrigger>
                                             <SelectContent>
                                                 {permissionLevels.map((level) => (
                                                     <SelectItem key={level.value} value={level.value}>
-                                                        <div className="flex flex-col">
+                                                        <div className="flex min-w-0 flex-col whitespace-normal break-words">
                                                             <span>{level.label}</span>
                                                             <span className="text-xs text-muted-foreground">{level.description}</span>
                                                         </div>
@@ -317,15 +317,15 @@ export function RoleDialog({
                     control={control}
                     render={({ field }) => (
                         <div className="space-y-2">
-                            <Label>Record Access Scope</Label>
+                            <Label htmlFor="role-record-access">Record Access Scope</Label>
                             <Select value={field.value} onValueChange={field.onChange}>
-                                <SelectTrigger className="w-full">
-                                    <SelectValue />
+                                <SelectTrigger id="role-record-access" className="w-full min-w-0">
+                                    <SelectValue>{recordAccessLevels.find((level) => level.value === field.value)?.label}</SelectValue>
                                 </SelectTrigger>
                                 <SelectContent>
                                     {recordAccessLevels.map((level) => (
                                         <SelectItem key={level.value} value={level.value}>
-                                            <div className="flex flex-col">
+                                            <div className="flex min-w-0 flex-col whitespace-normal break-words">
                                                 <span>{level.label}</span>
                                                 <span className="text-xs text-muted-foreground">{level.description}</span>
                                             </div>

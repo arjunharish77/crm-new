@@ -1,7 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { apiFetch } from "@/lib/api";
+import { PageHeader } from "@/components/layout/page-header";
+import { ErrorState } from "@/components/common/error-state";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -87,6 +89,7 @@ export default function MyPayoutsPage() {
     const [payouts, setPayouts] = useState<Payout[]>([]);
     const [ledger, setLedger] = useState<LedgerEntry[]>([]);
     const [loading, setLoading] = useState(true);
+    const [loadError, setLoadError] = useState(false);
     const [generatingFor, setGeneratingFor] = useState<string | null>(null);
 
     const [template, setTemplate] = useState<InvoiceTemplate>({ logoUrl: "", footerNotes: "", signatoryName: "" });
@@ -103,6 +106,8 @@ export default function MyPayoutsPage() {
     const [breakdownTarget, setBreakdownTarget] = useState<Payout | null>(null);
     const [breakdown, setBreakdown] = useState<PayoutBreakdown | null>(null);
     const [loadingBreakdown, setLoadingBreakdown] = useState(false);
+    const [breakdownError, setBreakdownError] = useState(false);
+    const breakdownRequest = useRef(0);
     const [disputes, setDisputes] = useState<PayoutDispute[]>([]);
 
     const [disputeTarget, setDisputeTarget] = useState<Payout | null>(null);
@@ -110,15 +115,17 @@ export default function MyPayoutsPage() {
     const [submittingDispute, setSubmittingDispute] = useState(false);
 
     const fetchPayouts = useCallback(() => {
-        return apiFetch<Payout[]>("/partners/me/payouts").catch(() => []);
+        return apiFetch<Payout[]>("/partners/me/payouts");
     }, []);
 
-    useEffect(() => {
+    const loadPayoutWorkspace = useCallback(() => {
+        setLoading(true);
+        setLoadError(false);
         Promise.all([
             fetchPayouts(),
-            apiFetch<LedgerEntry[]>("/partners/me/commission-ledger").catch(() => []),
-            apiFetch<InvoiceTemplate | null>("/partners/me/invoice-template").catch(() => null),
-            apiFetch<PartnerProfile | null>("/partners/me").catch(() => null),
+            apiFetch<LedgerEntry[]>("/partners/me/commission-ledger"),
+            apiFetch<InvoiceTemplate | null>("/partners/me/invoice-template"),
+            apiFetch<PartnerProfile | null>("/partners/me"),
         ])
             .then(([payoutsData, ledgerData, templateData, profileData]) => {
                 setPayouts(Array.isArray(payoutsData) ? payoutsData : []);
@@ -132,10 +139,11 @@ export default function MyPayoutsPage() {
                 }
                 setProfile(profileData ?? null);
             })
-            .catch(() => toast.error("Failed to load payout history"))
+            .catch(() => setLoadError(true))
             .finally(() => setLoading(false));
         apiFetch<PartnerChangeRequest[]>("/partners/me/change-requests").then((data) => setMyChangeRequests(Array.isArray(data) ? data : [])).catch(() => undefined);
     }, [fetchPayouts]);
+    useEffect(() => { loadPayoutWorkspace(); }, [loadPayoutWorkspace]);
 
     const openChangeRequest = () => {
         setChangeRequestForm({
@@ -167,20 +175,24 @@ export default function MyPayoutsPage() {
     const pendingChangeRequest = myChangeRequests.find((request) => request.status === "PENDING");
 
     const openBreakdown = async (payout: Payout) => {
+        const version = ++breakdownRequest.current;
         setBreakdownTarget(payout);
+        setBreakdown(null);
+        setDisputes([]);
+        setBreakdownError(false);
         setLoadingBreakdown(true);
         try {
             const [breakdownData, disputeData] = await Promise.all([
                 apiFetch<PayoutBreakdown>(`/payouts/${payout.id}/breakdown`),
-                apiFetch<PayoutDispute[]>(`/payouts/${payout.id}/disputes`).catch(() => []),
+                apiFetch<PayoutDispute[]>(`/payouts/${payout.id}/disputes`),
             ]);
+            if (version !== breakdownRequest.current) return;
             setBreakdown(breakdownData);
             setDisputes(Array.isArray(disputeData) ? disputeData : []);
         } catch (error: any) {
-            toast.error(error.message || "Failed to load payout breakdown");
-            setBreakdownTarget(null);
+            if (version === breakdownRequest.current) setBreakdownError(true);
         } finally {
-            setLoadingBreakdown(false);
+            if (version === breakdownRequest.current) setLoadingBreakdown(false);
         }
     };
 
@@ -248,13 +260,11 @@ export default function MyPayoutsPage() {
         );
     }
 
+    if (loadError) return <><PageHeader title="My Payouts" /><ErrorState description="Payout history and profile details could not be loaded." onRetry={loadPayoutWorkspace} /></>;
+    if (loading) return <><PageHeader title="My Payouts" /><TableSkeleton rows={3} columns={2} /></>;
     return (
-        <div className="mx-auto max-w-[1200px] p-4 md:p-6">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-                <h1 className="text-lg font-extrabold tracking-tight">My Payouts</h1>
-                <QueueExportButton moduleName="PAYOUTS" />
-            </div>
-            <p className="mt-1 text-xs text-muted-foreground">Your commission and payout history.</p>
+        <div className="min-w-0">
+            <PageHeader title="My Payouts" description="Your commission and payout history." actions={<QueueExportButton moduleName="PAYOUTS" />} />
 
             {taxReadiness && !taxReady && (
                 <Alert variant="destructive" className="mt-4">
@@ -274,10 +284,10 @@ export default function MyPayoutsPage() {
             )}
 
             {profile && !(taxReadiness && !taxReady) && (
-                <div className="mt-4 flex items-center justify-between rounded-[14px] border bg-card p-3">
-                    <div>
+                <div className="mt-4 flex min-w-0 flex-wrap items-center justify-between gap-3 rounded-[14px] border bg-card p-3">
+                    <div className="min-w-0 flex-1 basis-40">
                         <p className="text-sm font-medium">My Profile</p>
-                        <p className="text-xs text-muted-foreground">{profile.legalBusinessName || "No business name on file"}</p>
+                        <p className="break-words text-xs text-muted-foreground">{profile.legalBusinessName || "No business name on file"}</p>
                     </div>
                     <Button size="sm" variant="outline" onClick={openChangeRequest} disabled={!!pendingChangeRequest}>
                         {pendingChangeRequest ? "Change request pending" : "Request Profile Change"}
@@ -300,29 +310,29 @@ export default function MyPayoutsPage() {
                 }
             >
                 <div className="space-y-3 py-2">
-                    <div className="space-y-1.5">
-                        <Label>Legal Business Name</Label>
-                        <Input value={changeRequestForm.legalBusinessName} onChange={(e) => setChangeRequestForm((f) => ({ ...f, legalBusinessName: e.target.value }))} />
+                    <div className="min-w-0 space-y-1.5">
+                        <Label htmlFor="payout-field-1">Legal Business Name</Label>
+                        <Input id="payout-field-1" value={changeRequestForm.legalBusinessName} onChange={(e) => setChangeRequestForm((f) => ({ ...f, legalBusinessName: e.target.value }))} />
                     </div>
                     <div className="grid gap-3 sm:grid-cols-2">
-                        <div className="space-y-1.5">
-                            <Label>GSTIN</Label>
-                            <Input value={changeRequestForm.gstin} onChange={(e) => setChangeRequestForm((f) => ({ ...f, gstin: e.target.value }))} />
+                        <div className="min-w-0 space-y-1.5">
+                            <Label htmlFor="payout-field-2">GSTIN</Label>
+                            <Input id="payout-field-2" value={changeRequestForm.gstin} onChange={(e) => setChangeRequestForm((f) => ({ ...f, gstin: e.target.value }))} />
                         </div>
-                        <div className="space-y-1.5">
-                            <Label>PAN Number</Label>
-                            <Input value={changeRequestForm.panNumber} onChange={(e) => setChangeRequestForm((f) => ({ ...f, panNumber: e.target.value }))} />
+                        <div className="min-w-0 space-y-1.5">
+                            <Label htmlFor="payout-field-3">PAN Number</Label>
+                            <Input id="payout-field-3" value={changeRequestForm.panNumber} onChange={(e) => setChangeRequestForm((f) => ({ ...f, panNumber: e.target.value }))} />
                         </div>
                     </div>
-                    <div className="space-y-1.5">
-                        <Label>Registered State</Label>
-                        <Input value={changeRequestForm.registeredState} onChange={(e) => setChangeRequestForm((f) => ({ ...f, registeredState: e.target.value }))} />
+                    <div className="min-w-0 space-y-1.5">
+                        <Label htmlFor="payout-field-4">Registered State</Label>
+                        <Input id="payout-field-4" value={changeRequestForm.registeredState} onChange={(e) => setChangeRequestForm((f) => ({ ...f, registeredState: e.target.value }))} />
                     </div>
                     {myChangeRequests.length > 0 && (
                         <div className="space-y-1.5 border-t pt-3">
                             <p className="text-xs font-bold uppercase tracking-wide text-muted-foreground">Your requests</p>
                             {myChangeRequests.slice(0, 5).map((request) => (
-                                <div key={request.id} className="flex items-center justify-between text-xs">
+                                <div key={request.id} className="flex min-w-0 flex-wrap items-center justify-between text-xs">
                                     <span className="text-muted-foreground">{formatWorkspaceDateTime(request.createdAt)}</span>
                                     <Badge variant="outline" className={cn(
                                         request.status === "APPROVED" && "border-primary/20 bg-primary/10 text-primary",
@@ -347,25 +357,25 @@ export default function MyPayoutsPage() {
                             <p className="mb-4 text-xs text-muted-foreground">
                                 Customize the branding on invoices you generate. The layout itself stays GST-compliant.
                             </p>
-                            <div className="space-y-4">
+                            <div className="min-w-0 space-y-4 break-words">
                                 <div className="space-y-2">
-                                    <Label>Logo URL (optional)</Label>
-                                    <Input
+                                    <Label htmlFor="payout-field-5">Logo URL (optional)</Label>
+                                    <Input id="payout-field-5"
                                         value={template.logoUrl ?? ""}
                                         onChange={(e) => setTemplate((t) => ({ ...t, logoUrl: e.target.value }))}
                                     />
                                 </div>
                                 <div className="space-y-2">
-                                    <Label>Footer Notes (optional)</Label>
-                                    <Textarea
+                                    <Label htmlFor="payout-field-6">Footer Notes (optional)</Label>
+                                    <Textarea id="payout-field-6"
                                         rows={2}
                                         value={template.footerNotes ?? ""}
                                         onChange={(e) => setTemplate((t) => ({ ...t, footerNotes: e.target.value }))}
                                     />
                                 </div>
                                 <div className="space-y-2">
-                                    <Label>Signatory Name (optional)</Label>
-                                    <Input
+                                    <Label htmlFor="payout-field-7">Signatory Name (optional)</Label>
+                                    <Input id="payout-field-7"
                                         value={template.signatoryName ?? ""}
                                         onChange={(e) => setTemplate((t) => ({ ...t, signatoryName: e.target.value }))}
                                     />
@@ -391,10 +401,10 @@ export default function MyPayoutsPage() {
                             {payouts.map((payout) => (
                                 <div key={payout.id} className="rounded-[14px] border bg-card p-4">
                                     <div className="flex flex-wrap items-center justify-between gap-3">
-                                        <span className="text-xs text-muted-foreground">
+                                        <span className="break-words text-xs text-muted-foreground">
                                             {formatWorkspaceDateTime(payout.createdAt)}
                                         </span>
-                                        <div className="flex items-center gap-2.5">
+                                        <div className="flex min-w-0 flex-wrap items-center gap-2.5">
                                             <span className="text-sm font-bold">
                                                 ₹{payout.totalCommissionAmount.toLocaleString()}
                                             </span>
@@ -427,7 +437,7 @@ export default function MyPayoutsPage() {
                                         </div>
                                     </div>
                                     {payout.paymentReference && (
-                                        <p className="mt-1 text-xs text-muted-foreground">Ref: {payout.paymentReference}</p>
+                                        <p className="mt-1 break-words text-xs text-muted-foreground">Ref: {payout.paymentReference}</p>
                                     )}
                                 </div>
                             ))}
@@ -443,10 +453,10 @@ export default function MyPayoutsPage() {
                         <div className="space-y-2">
                             {ledger.map((entry) => (
                                 <div key={entry.id} className="rounded-xl border bg-card p-3">
-                                    <div className="flex items-center justify-between gap-4">
+                                    <div className="flex min-w-0 flex-wrap items-center justify-between gap-4">
                                         <div>
                                             <p className="text-sm font-semibold">{entry.entryType}</p>
-                                            <p className="text-xs text-muted-foreground">
+                                            <p className="break-words text-xs text-muted-foreground">
                                                 {formatWorkspaceDateTime(entry.createdAt)} {entry.triggerEvent ? `· ${entry.triggerEvent}` : ""}
                                             </p>
                                         </div>
@@ -488,8 +498,8 @@ export default function MyPayoutsPage() {
             >
                 {loadingBreakdown ? (
                     <TableSkeleton rows={3} columns={2} />
-                ) : breakdown ? (
-                    <div className="space-y-4">
+                ) : breakdownError ? <ErrorState description="Payout details could not be loaded." onRetry={() => breakdownTarget && openBreakdown(breakdownTarget)} /> : breakdown ? (
+                    <div className="min-w-0 space-y-4 break-words">
                         <div>
                             <p className="text-xs font-bold uppercase text-muted-foreground">Cycle</p>
                             <p className="text-sm">{breakdown.cycle.cycleLabel}</p>
@@ -500,7 +510,7 @@ export default function MyPayoutsPage() {
                                 <p className="text-xs font-bold uppercase text-muted-foreground">Disputes</p>
                                 {disputes.map((dispute) => (
                                     <div key={dispute.id} className="rounded-lg border bg-surface-container-low p-2 text-xs">
-                                        <div className="flex items-center justify-between gap-2">
+                                        <div className="flex min-w-0 flex-wrap items-center justify-between gap-2">
                                             <span className="font-semibold">{dispute.reason}</span>
                                             <Badge variant="outline" className="rounded-md text-[0.65rem]">{dispute.status}</Badge>
                                         </div>
@@ -513,11 +523,11 @@ export default function MyPayoutsPage() {
                         <div>
                             <p className="mb-1 text-xs font-bold uppercase text-muted-foreground">Included Conversions</p>
                             {breakdown.ledgerEntries.length === 0 ? (
-                                <p className="text-xs text-muted-foreground">No ledger entries in this cycle.</p>
+                                <p className="break-words text-xs text-muted-foreground">No ledger entries in this cycle.</p>
                             ) : (
-                                <div className="space-y-1.5">
+                                <div className="min-w-0 space-y-1.5">
                                     {breakdown.ledgerEntries.map((entry) => (
-                                        <div key={entry.id} className="flex items-center justify-between gap-2 rounded-lg border bg-card p-2 text-xs">
+                                        <div key={entry.id} className="flex min-w-0 flex-wrap items-center justify-between gap-2 rounded-lg border bg-card p-2 text-xs">
                                             <span>
                                                 {entry.entryType}
                                                 {entry.triggerEvent ? ` · ${entry.triggerEvent}` : ""}
@@ -536,9 +546,9 @@ export default function MyPayoutsPage() {
                         <div>
                             <p className="mb-1 text-xs font-bold uppercase text-muted-foreground">History</p>
                             {breakdown.history.length === 0 ? (
-                                <p className="text-xs text-muted-foreground">No status changes recorded yet.</p>
+                                <p className="break-words text-xs text-muted-foreground">No status changes recorded yet.</p>
                             ) : (
-                                <div className="space-y-1.5">
+                                <div className="min-w-0 space-y-1.5">
                                     {breakdown.history.map((event) => (
                                         <div key={event.id} className="rounded-lg border bg-card p-2 text-xs">
                                             <span className="text-muted-foreground">{formatWorkspaceDateTime(event.createdAt)} · </span>
@@ -571,8 +581,8 @@ export default function MyPayoutsPage() {
                 }
             >
                 <div className="space-y-2">
-                    <Label>What looks wrong about this payout?</Label>
-                    <Textarea
+                    <Label htmlFor="payout-field-8">What looks wrong about this payout?</Label>
+                    <Textarea id="payout-field-8"
                         rows={3}
                         placeholder="e.g. Missing commission for opportunity X"
                         value={disputeReason}

@@ -1,5 +1,6 @@
 "use client";
 
+import { BuilderWorkspace } from "@/components/layout/builder-workspace";
 import { useEffect, useMemo, useState } from "react";
 import {
     DndContext,
@@ -188,6 +189,7 @@ function moduleLabel(module: SourceModule) {
 
 export function FormEditor({ initialForm }: EditorProps) {
     const opportunityEnabled = useFeature("opportunityEnabled");
+    const [activePanel, setActivePanel] = useState("canvas");
     const [fields, setFields] = useState<FormField[]>(initialForm.config?.fields || []);
     const [selectedFieldId, setSelectedFieldId] = useState<string | null>(null);
     const [activeDragItem, setActiveDragItem] = useState<any>(null);
@@ -349,15 +351,10 @@ export function FormEditor({ initialForm }: EditorProps) {
         setActiveDragItem(active.data.current);
     };
 
-    const handleDragEnd = (event: DragEndEvent) => {
-        const { active, over } = event;
-        setActiveDragItem(null);
-
-        if (!over) return;
-
+    const addLibraryField = (tool: any) => {
         // Dropped generic tool onto canvas
-        if (active.data.current?.isTool && over.id === 'canvas-droppable') {
-            const type = active.data.current.type;
+        if (tool.isTool) {
+            const type = tool.type;
             const newField: FormField = {
                 id: nanoid(),
                 type,
@@ -370,12 +367,12 @@ export function FormEditor({ initialForm }: EditorProps) {
             };
             setFields([...fields, newField]);
             setSelectedFieldId(newField.id);
+            setActivePanel("inspector");
             setActiveTab("field"); // Switch to field tab to edit immediately
             return;
         }
 
-        if (active.data.current?.isModuleField && over.id === 'canvas-droppable') {
-            const tool = active.data.current;
+        if (tool.isModuleField) {
             if (isModuleFieldAlreadyUsed(tool.sourceModule, tool.key)) {
                 toast.error("This module field is already on the form");
                 return;
@@ -401,7 +398,21 @@ export function FormEditor({ initialForm }: EditorProps) {
             };
             setFields([...fields, newField]);
             setSelectedFieldId(newField.id);
+            setActivePanel("inspector");
             setActiveTab("field");
+            return;
+        }
+
+    };
+
+    const handleDragEnd = (event: DragEndEvent) => {
+        const { active, over } = event;
+        setActiveDragItem(null);
+
+        if (!over) return;
+
+        if ((active.data.current?.isTool || active.data.current?.isModuleField) && over.id === 'canvas-droppable') {
+            addLibraryField(active.data.current);
             return;
         }
 
@@ -577,15 +588,15 @@ export function FormEditor({ initialForm }: EditorProps) {
 
     return (
         <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd} collisionDetection={closestCenter}>
-            <div className="flex h-[calc(100vh-240px)] min-h-[720px] overflow-hidden bg-background">
+            <BuilderWorkspace activePanel={activePanel} onPanelChange={setActivePanel} panels={[{ id: "library", label: "Fields" }, { id: "canvas", label: "Canvas" }, { id: "inspector", label: "Properties" }]} actions={<Button size="sm" onClick={handleSave} disabled={saving}><SaveIcon className="size-4" />{saving ? "Saving…" : "Save Form"}</Button>}>
                 {/* Left Sidebar: Tools */}
-                <div className="z-[2] flex w-60 flex-col border-r bg-background/50 backdrop-blur-sm">
+                <div className="builder-panel builder-library border-r bg-background" data-active={activePanel === "library"}>
                     <div className="border-b p-3.5">
                         <p className="text-xs font-bold tracking-wide text-muted-foreground uppercase">
                             Field Library
                         </p>
                         <p className="text-xs text-muted-foreground">
-                            Drag module fields or generic blocks into the form
+                            Select a field to add it, or drag it into the canvas
                         </p>
                     </div>
                     <div className="space-y-2 px-3 pt-3">
@@ -647,6 +658,7 @@ export function FormEditor({ initialForm }: EditorProps) {
                                 sourceModule={fieldLibraryModule}
                                 field={field}
                                 disabled={isModuleFieldAlreadyUsed(fieldLibraryModule, field.key)}
+                                onAdd={() => addLibraryField({ ...field, sourceModule: fieldLibraryModule, isModuleField: true })}
                             />
                         ))}
                         <Separator className="my-3" />
@@ -654,15 +666,15 @@ export function FormEditor({ initialForm }: EditorProps) {
                             Special Fields
                         </p>
                         {FIELD_TYPES.map(t => (
-                            <DraggableTool key={t.type} type={t.type} label={t.label} icon={t.icon} />
+                            <DraggableTool key={t.type} type={t.type} label={t.label} icon={t.icon} onAdd={() => addLibraryField({ ...t, isTool: true })} />
                         ))}
                     </div>
                 </div>
 
                 {/* Center: Canvas */}
-                <div className="relative flex flex-1 flex-col items-center gap-4 overflow-y-auto bg-primary/[0.02] p-4">
+                <div className="builder-panel builder-canvas items-center gap-4 overflow-y-auto bg-primary/[0.02] p-4" data-active={activePanel === "canvas"}>
                     {/* Toolbar */}
-                    <div className="flex w-full max-w-[800px] items-center justify-between rounded-xl border bg-card p-3 shadow-[0_4px_20px_rgba(0,0,0,0.05)]">
+                    <div className="flex w-full max-w-[800px] flex-wrap items-center justify-between gap-3 rounded-xl border bg-card p-3 shadow-[0_4px_20px_rgba(0,0,0,0.05)]">
                         <div>
                             <p className="text-xs tracking-wider text-muted-foreground uppercase">
                                 Canvas Preview
@@ -670,7 +682,7 @@ export function FormEditor({ initialForm }: EditorProps) {
                             <h2 className="text-[1.1rem] font-bold">{initialForm.name}</h2>
                             {initialForm.description && <p className="text-xs text-muted-foreground">{initialForm.description}</p>}
                         </div>
-                        <div className="flex items-center gap-2">
+                        <div className="flex flex-wrap items-center gap-2">
                             <Button variant="outline" size="sm" onClick={addTab}>
                                 <AddIcon className="size-4" />
                                 Tab
@@ -683,10 +695,7 @@ export function FormEditor({ initialForm }: EditorProps) {
                                 <CodeIcon className="size-4" />
                                 Embed
                             </Button>
-                            <Button size="sm" onClick={handleSave} disabled={saving}>
-                                <SaveIcon className="size-4" />
-                                {saving ? "Saving..." : "Save"}
-                            </Button>
+
                         </div>
                     </div>
 
@@ -694,7 +703,7 @@ export function FormEditor({ initialForm }: EditorProps) {
                     <DroppableCanvas
                         fields={fields}
                         selectedId={selectedFieldId}
-                        onSelect={setSelectedFieldId}
+                        onSelect={(id: string) => { setSelectedFieldId(id); setActivePanel("inspector"); }}
                         columns={settings.layoutColumns}
                         tabs={settings.tabs}
                         sections={settings.sections}
@@ -709,7 +718,7 @@ export function FormEditor({ initialForm }: EditorProps) {
                 </div>
 
                 {/* Right Sidebar: Properties */}
-                <div className="z-[2] flex w-80 flex-col border-l">
+                <div className="builder-panel builder-inspector border-l" data-active={activePanel === "inspector"}>
                     <div className="border-b">
                         <div className="px-4 pt-3">
                             <p className="text-xs tracking-wider text-muted-foreground uppercase">
@@ -1198,7 +1207,7 @@ export function FormEditor({ initialForm }: EditorProps) {
                         )}
                     </div>
                 </div>
-            </div>
+            </BuilderWorkspace>
 
             <DragOverlay>
                 {activeDragItem ? (
@@ -1219,7 +1228,7 @@ export function FormEditor({ initialForm }: EditorProps) {
     );
 }
 
-function DraggableTool({ type, label, icon: Icon }: any) {
+function DraggableTool({ type, label, icon: Icon, onAdd }: any) {
     const { attributes, listeners, setNodeRef } = useDraggable({
         id: `tool-${type}`,
         data: { type, label, isTool: true }
@@ -1231,6 +1240,7 @@ function DraggableTool({ type, label, icon: Icon }: any) {
             ref={setNodeRef}
             {...listeners}
             {...attributes}
+            onClick={onAdd}
             className="mb-2 flex w-full cursor-grab items-center gap-2.5 rounded-[10px] border px-2.5 py-2 text-left transition-colors hover:border-primary hover:bg-primary/[0.04] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
             <Icon className="size-4 shrink-0 text-muted-foreground" />
@@ -1239,7 +1249,7 @@ function DraggableTool({ type, label, icon: Icon }: any) {
     );
 }
 
-function DraggableModuleField({ sourceModule, field, disabled }: any) {
+function DraggableModuleField({ sourceModule, field, disabled, onAdd }: any) {
     const { attributes, listeners, setNodeRef } = useDraggable({
         id: `module-${sourceModule}-${field.key}`,
         data: { ...field, sourceModule, isModuleField: true }
@@ -1248,9 +1258,11 @@ function DraggableModuleField({ sourceModule, field, disabled }: any) {
     return (
         <button
             type="button"
+            disabled={disabled}
             ref={setNodeRef}
             {...listeners}
             {...attributes}
+            onClick={onAdd}
             className={cn(
                 "mb-2 flex w-full cursor-grab items-center gap-2 rounded-lg border bg-card/70 px-2.5 py-2 text-left transition-colors hover:border-primary hover:bg-primary/[0.04] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                 disabled && "pointer-events-none opacity-45"
@@ -1291,7 +1303,7 @@ function DroppableCanvas({
         <div
             ref={setNodeRef}
             className={cn(
-                "mb-6 min-h-[600px] w-full max-w-[920px] flex-none rounded-xl border bg-card p-5 shadow-md transition-all",
+                "mb-6 min-h-[280px] w-full max-w-[920px] flex-none rounded-xl border bg-card p-5 shadow-md transition-all",
                 fields.length === 0 && "flex items-center justify-center border-dashed"
             )}
         >
@@ -1299,7 +1311,7 @@ function DroppableCanvas({
                 {fields.length === 0 ? (
                     <div className="text-center text-muted-foreground">
                         <AddIcon className="mx-auto mb-2 size-12 opacity-20" />
-                        <p className="text-sm">Drag fields here from the left sidebar</p>
+                        <p className="text-sm">Add a field from Fields, or drag one here on a wide screen</p>
                     </div>
                 ) : (
                     <div>

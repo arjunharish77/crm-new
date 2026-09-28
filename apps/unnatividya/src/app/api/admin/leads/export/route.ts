@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { getAdminSession } from "@/lib/admin-auth";
 import { query } from "@/lib/db";
 
 type LeadRow = {
@@ -20,9 +21,18 @@ function csvCell(value: string) {
   return value;
 }
 
-// Reachable only with a valid admin session -- src/proxy.ts already gates every /api/admin/*
-// route (including this one) and returns 401 before this handler ever runs otherwise.
+// F26 fix (WP16): src/proxy.ts gates every /api/admin/* route, but only checks the cookie's own
+// signature+expiry (it can't reach Postgres from the edge runtime) -- it never notices a
+// deactivated admin or a forced revocation. This bulk PII export (name/email/phone for up to
+// 2000 leads) is the single most sensitive route in this app, so it gets its own authoritative,
+// DB-backed check on top rather than relying on proxy.ts alone. See getAdminSession's own comment
+// in src/lib/admin-auth.ts for the full reasoning.
 export async function GET() {
+  const session = await getAdminSession();
+  if (!session) {
+    return NextResponse.json({ error: "CMS admin login required" }, { status: 401 });
+  }
+
   const leads = await query<LeadRow>(
     `select id, name, email, phone, city, course_id, university_id, email_otp_verified, phone_otp_verified, crm_sync_status, created_at
      from lead_capture

@@ -1,6 +1,6 @@
 import { randomUUID, randomBytes, createHash } from "crypto";
 import bcrypt from "bcryptjs";
-import { query, queryOne, execute } from "@/lib/db/query";
+import { query, queryOne, execute, queryAsSystem, queryOneAsSystem, executeAsSystem } from "@/lib/db/query";
 import { getEffectiveSecurityPolicy } from "@/lib/server/security-policy";
 import { createAuditLog } from "@/lib/server/crm";
 import { createUserNotification } from "@/lib/server/notifications";
@@ -122,8 +122,10 @@ export async function adminGeneratePasswordResetToken(adminUser: TenantUser, tar
   return { token: rawToken, expiresAt, expiresInSeconds: RESET_TOKEN_HOURS * 60 * 60 };
 }
 
+// WP07 (F04): PRE_AUTH, disposition B -- the token is opaque; which tenant it belongs to is
+// exactly what this lookup discovers, so it must search across every tenant with no context.
 export async function resetPasswordWithToken(rawToken: string, newPassword: string) {
-  const row = await queryOne<{ id: string; userId: string; tenantId: string | null }>(
+  const row = await queryOneAsSystem<{ id: string; userId: string; tenantId: string | null }>(
     `select id, "userId", "tenantId" from "PasswordResetToken" where "tokenHash" = $1 and "usedAt" is null and "expiresAt" > now()`,
     [hashToken(rawToken)],
   );
@@ -132,7 +134,10 @@ export async function resetPasswordWithToken(rawToken: string, newPassword: stri
   const user = { id: row.userId, tenantId: row.tenantId };
   const policy = await assertPasswordMeetsPolicy(user.tenantId, newPassword);
   await applyNewPassword(user, newPassword, policy);
-  await execute(`update "PasswordResetToken" set "usedAt" = $1 where id = $2`, [new Date().toISOString(), row.id]);
+  // Exclusive to this pre-auth flow (unlike applyNewPassword/assertPasswordMeetsPolicy above,
+  // which are shared with changeOwnPassword's normal authenticated call path and are
+  // deliberately NOT converted here -- see plan doc open question).
+  await executeAsSystem(`update "PasswordResetToken" set "usedAt" = $1 where id = $2`, [new Date().toISOString(), row.id]);
   // The old password may have been compromised (that's the whole reason a reset was needed) --
   // every existing session for this user is invalidated, same as a full account takeover
   // response, not just the device performing the reset.
@@ -147,12 +152,15 @@ export async function resetPasswordWithToken(rawToken: string, newPassword: stri
 // as "a session from this IP" and never fire.
 // ---------------------------------------------------------------------------------------------
 
+// WP07 (F04): PRE_AUTH, disposition B -- its single caller, login-flow.ts's
+// issueSessionForUser, runs entirely pre-session (both the plain-login and post-MFA success
+// paths call it before any tenant context is established).
 export async function checkSuspiciousLogin(user: TenantUser, ip: string | null) {
   if (!ip) return;
-  const priorSessions = await query<{ id: string }>(`select id from "UserSession" where "userId" = $1 limit 1`, [user.id]);
+  const priorSessions = await queryAsSystem<{ id: string }>(`select id from "UserSession" where "userId" = $1 limit 1`, [user.id]);
   if (priorSessions.length === 0) return; // first-ever login -- nothing to compare against yet
 
-  const seenBefore = await queryOne<{ id: string }>(
+  const seenBefore = await queryOneAsSystem<{ id: string }>(
     `select id from "UserSession" where "userId" = $1 and "ipAddress" = $2 limit 1`,
     [user.id, ip],
   );

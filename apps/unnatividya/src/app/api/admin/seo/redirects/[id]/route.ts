@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { getAdminSession } from "@/lib/admin-auth";
 import { query } from "@/lib/db";
 
 const patchSchema = z.object({
@@ -7,6 +8,13 @@ const patchSchema = z.object({
 });
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
+  // F26 fix (WP16): DB-backed session check -- see getAdminSession in src/lib/admin-auth.ts for
+  // why proxy.ts's cookie-only check on /api/admin/* isn't sufficient by itself.
+  const session = await getAdminSession();
+  if (!session) {
+    return NextResponse.json({ error: "CMS admin login required" }, { status: 401 });
+  }
+
   const { id } = await params;
   const body = await request.json().catch(() => null);
   const parsed = patchSchema.safeParse(body);
@@ -33,6 +41,11 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 }
 
 export async function DELETE(_request: Request, { params }: { params: Promise<{ id: string }> }) {
+  const session = await getAdminSession();
+  if (!session) {
+    return NextResponse.json({ error: "CMS admin login required" }, { status: 401 });
+  }
+
   const { id } = await params;
   const deleted = await query<{ id: string }>(
     `delete from seo_redirect where id = $1 returning id`,

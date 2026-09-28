@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { CheckCircle2, RotateCw, ShieldOff, XCircle } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -13,6 +13,10 @@ import {
     TableHeader,
     TableRow,
 } from '@/components/ui/table';
+import { SettingsSections } from '@/components/layout/settings-sections';
+import { PageHeader } from '@/components/layout/page-header';
+import { ErrorState } from '@/components/common/error-state';
+import { Input } from '@/components/ui/input';
 import { apiFetch } from '@/lib/api';
 import { formatWorkspaceRelativeTime } from '@/lib/date-format';
 import { toast } from 'sonner';
@@ -103,7 +107,12 @@ export default function PlatformMarketplacePage() {
     const [permissionReviewingId, setPermissionReviewingId] = useState<string | null>(null);
     const [trustSavingId, setTrustSavingId] = useState<string | null>(null);
 
-    const load = () => {
+    const [loadError, setLoadError] = useState(false);
+    const [search, setSearch] = useState('');
+    const requestVersion = useRef(0);
+    const load = useCallback(() => {
+        const version = ++requestVersion.current;
+        setLoadError(false);
         setLoading(true);
         Promise.all([
             apiFetch<PlatformAdminApp[]>('/platform-admin/marketplace/apps'),
@@ -115,6 +124,7 @@ export default function PlatformMarketplacePage() {
             apiFetch<TenantSummary[]>('/platform-admin/tenants'),
         ])
             .then(([appsData, healthData, versionsData, permissionChangesData, outagesData, blocksData, tenantsData]) => {
+                if (version !== requestVersion.current) return;
                 setApps(Array.isArray(appsData) ? appsData : []);
                 setHealthOverview(healthData);
                 setPendingVersions(Array.isArray(versionsData) ? versionsData : []);
@@ -123,11 +133,11 @@ export default function PlatformMarketplacePage() {
                 setBlocks(Array.isArray(blocksData) ? blocksData : []);
                 setTenants(Array.isArray(tenantsData) ? tenantsData : []);
             })
-            .catch(() => toast.error('Failed to load marketplace data'))
-            .finally(() => setLoading(false));
-    };
+            .catch(() => { if (version === requestVersion.current) setLoadError(true); })
+            .finally(() => { if (version === requestVersion.current) setLoading(false); });
+    }, []);
 
-    useEffect(load, []);
+    useEffect(() => { load(); return () => { requestVersion.current++; }; }, [load]);
 
     const changeTrustLevel = async (app: PlatformAdminApp, trustLevel: string) => {
         setTrustSavingId(app.id);
@@ -154,7 +164,8 @@ export default function PlatformMarketplacePage() {
             toast.error("Can't block an app's own owning tenant");
             return;
         }
-        const reason = window.prompt('Reason (shown in the audit trail)?') ?? '';
+        const reason = window.prompt('Reason (shown in the audit trail)?');
+        if (reason === null) return;
         setBusyId(`block:${app.id}`);
         try {
             await apiFetch(`/platform-admin/marketplace/apps/${app.id}/blocks`, { method: 'POST', body: JSON.stringify({ tenantId: tenant.id, reason: reason || null }) });
@@ -183,7 +194,8 @@ export default function PlatformMarketplacePage() {
     const reviewVersion = async (version: PendingVersion, action: 'approve' | 'reject') => {
         let reason: string | null = null;
         if (action === 'reject') {
-            reason = window.prompt(`Reason for rejecting "${version.appName}" v${version.version}?`) ?? '';
+            reason = window.prompt(`Reason for rejecting "${version.appName}" v${version.version}?`);
+            if (reason === null) return;
             if (!reason && !window.confirm('Reject without a reason?')) return;
         }
         setReviewingId(version.id);
@@ -227,7 +239,8 @@ export default function PlatformMarketplacePage() {
     };
 
     const unpublishApp = async (app: PlatformAdminApp) => {
-        const reason = window.prompt(`Reason for unpublishing "${app.name}" (existing installs are unaffected)?`) ?? '';
+        const reason = window.prompt(`Reason for unpublishing "${app.name}" (existing installs are unaffected)?`);
+        if (reason === null) return;
         if (!reason && !window.confirm('Unpublish without a reason?')) return;
         setBusyId(`unpublish:${app.id}`);
         try {
@@ -242,7 +255,8 @@ export default function PlatformMarketplacePage() {
     };
 
     const suspendApp = async (app: PlatformAdminApp) => {
-        const reason = window.prompt(`Reason for suspending "${app.name}" (shown in the audit trail)?`) ?? '';
+        const reason = window.prompt(`Reason for suspending "${app.name}" (shown in the audit trail)?`);
+        if (reason === null) return;
         if (!reason && !window.confirm('Suspend without a reason?')) return;
         setBusyId(app.id);
         try {
@@ -273,17 +287,14 @@ export default function PlatformMarketplacePage() {
         }
     };
 
-    return (
-        <div className="mx-auto max-w-[1200px] space-y-4 p-4">
-            <div>
-                <h1 className="mb-1 text-lg font-bold">Marketplace</h1>
-                <p className="text-sm text-muted-foreground">
-                    Cross-tenant oversight of registered apps -- inspect installs, force-suspend a compromised app, or
-                    force-rotate its credential without needing tenant-admin access.
-                </p>
-            </div>
+    const visibleApps = apps.filter(app => [app.name, app.ownerTenantName, app.tenantName, app.category].some(value => value?.toLowerCase().includes(search.trim().toLowerCase())));
 
-            <Card>
+    return (
+        <div className="min-w-0 space-y-4">
+            <PageHeader title="Marketplace" description="Review app publishing and permissions, manage installations, and monitor platform health." />
+            {loading ? <p role="status" className="text-sm text-muted-foreground">Loading marketplace…</p> : loadError ? <ErrorState description="Marketplace could not be loaded." onRetry={load} /> : <SettingsSections label="Marketplace section" sections={[
+            { id: 'reviews', label: `Reviews (${pendingVersions.length + pendingPlatformPermissions.length})`, content: <div className="min-w-0 space-y-4">
+            <Card className="min-w-0">
                 <CardHeader>
                     <CardTitle className="text-base">Pending Publish Reviews</CardTitle>
                     <CardDescription>
@@ -291,18 +302,18 @@ export default function PlatformMarketplacePage() {
                         re-approves a published app&apos;s edit (every review after that).
                     </CardDescription>
                 </CardHeader>
-                <CardContent>
+                <CardContent className="min-w-0">
                     {pendingVersions.length === 0 ? (
                         <p className="p-4 text-center text-sm text-muted-foreground">Nothing awaiting review.</p>
                     ) : (
                         <div className="divide-y">
                             {pendingVersions.map((version) => (
-                                <div key={version.id} className="flex flex-wrap items-center justify-between gap-3 py-2.5">
-                                    <div>
-                                        <div className="flex items-center gap-2">
-                                            <p className="text-sm font-medium">{version.appName}</p>
+                                <div key={version.id} className="flex min-w-0 flex-wrap items-center justify-between gap-3 py-2.5">
+                                    <div className="min-w-0 max-w-full break-words">
+                                        <div className="flex min-w-0 flex-wrap items-center gap-2">
+                                            <p className="min-w-0 max-w-full break-words text-sm font-medium">{version.appName}</p>
                                             <Badge variant="outline">v{version.version}</Badge>
-                                            <Badge variant="outline">{version.ownerTenantName}</Badge>
+                                            <Badge variant="outline" className="max-w-full whitespace-normal break-all">{version.ownerTenantName}</Badge>
                                             {version.publishStatus === 'PENDING_REVIEW' && <Badge>First publish</Badge>}
                                         </div>
                                         {version.changeNotes && <p className="text-xs text-muted-foreground">{version.changeNotes}</p>}
@@ -325,7 +336,7 @@ export default function PlatformMarketplacePage() {
                 </CardContent>
             </Card>
 
-            <Card>
+            <Card className="min-w-0">
                 <CardHeader>
                     <CardTitle className="text-base">Pending Write-Permission Approvals</CardTitle>
                     <CardDescription>
@@ -333,17 +344,17 @@ export default function PlatformMarketplacePage() {
                         separate platform-admin sign-off -- read-only grants are approvable by the tenant admin alone.
                     </CardDescription>
                 </CardHeader>
-                <CardContent>
+                <CardContent className="min-w-0">
                     {pendingPlatformPermissions.length === 0 ? (
                         <p className="p-4 text-center text-sm text-muted-foreground">Nothing awaiting review.</p>
                     ) : (
                         <div className="divide-y">
                             {pendingPlatformPermissions.map((change) => (
-                                <div key={change.id} className="flex flex-wrap items-center justify-between gap-3 py-2.5">
-                                    <div>
-                                        <div className="flex items-center gap-2">
-                                            <p className="text-sm font-medium">{change.appName}</p>
-                                            <Badge variant="outline">{tenants.find((t) => t.id === change.tenantId)?.name ?? change.tenantId}</Badge>
+                                <div key={change.id} className="flex min-w-0 flex-wrap items-center justify-between gap-3 py-2.5">
+                                    <div className="min-w-0 max-w-full break-words">
+                                        <div className="flex min-w-0 flex-wrap items-center gap-2">
+                                            <p className="min-w-0 max-w-full break-words text-sm font-medium">{change.appName}</p>
+                                            <Badge variant="outline" className="max-w-full whitespace-normal break-all">{tenants.find((t) => t.id === change.tenantId)?.name ?? change.tenantId}</Badge>
                                         </div>
                                         <p className="text-xs text-muted-foreground">
                                             Requested write access: {Object.keys(change.pendingPlatformPermissions).join(", ")}
@@ -367,7 +378,8 @@ export default function PlatformMarketplacePage() {
                 </CardContent>
             </Card>
 
-            <Card>
+            </div> },
+            { id: 'blocks', label: `Blocked installs (${blocks.length})`, content: <Card className="min-w-0">
                 <CardHeader>
                     <CardTitle className="text-base">Blocked Installs</CardTitle>
                     <CardDescription>
@@ -375,14 +387,14 @@ export default function PlatformMarketplacePage() {
                         requests -- an install the tenant already had is unaffected.
                     </CardDescription>
                 </CardHeader>
-                <CardContent>
+                <CardContent className="min-w-0">
                     {blocks.length === 0 ? (
                         <p className="p-4 text-center text-sm text-muted-foreground">No blocks configured.</p>
                     ) : (
                         <div className="divide-y">
                             {blocks.map((block) => (
-                                <div key={block.id} className="flex flex-wrap items-center justify-between gap-3 py-2">
-                                    <div>
+                                <div key={block.id} className="flex min-w-0 flex-wrap items-center justify-between gap-3 py-2">
+                                    <div className="min-w-0 max-w-full break-words">
                                         <p className="text-sm">
                                             <span className="font-medium">{block.tenantName}</span> blocked from{' '}
                                             <span className="font-medium">{block.appName}</span>
@@ -399,15 +411,16 @@ export default function PlatformMarketplacePage() {
                 </CardContent>
             </Card>
 
-            <Card>
+             },
+            { id: 'health', label: 'App health', content: <Card className="min-w-0">
                 <CardHeader>
                     <CardTitle className="text-base">Platform-wide App Health</CardTitle>
                     <CardDescription>
                         Aggregate counts only -- no tenant, app, or record data is shown here.
                     </CardDescription>
                 </CardHeader>
-                <CardContent>
-                    <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+                <CardContent className="min-w-0">
+                    <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
                         {healthOverview && Object.entries(healthOverview).map(([status, count]) => (
                             <div key={status}>
                                 <Badge variant="outline" className={HEALTH_STATUS_CLASSNAMES[status] ?? ''}>{status}</Badge>
@@ -419,7 +432,7 @@ export default function PlatformMarketplacePage() {
                         <div className="mt-4 space-y-2 border-t pt-4">
                             <p className="text-xs font-medium text-muted-foreground">Suspected provider-wide outages</p>
                             {suspectedOutages.map((outage) => (
-                                <div key={outage.hostname} className="flex items-center justify-between rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm">
+                                <div key={outage.hostname} className="flex min-w-0 flex-wrap items-center justify-between gap-2 break-all rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm">
                                     <span className="font-medium">{outage.hostname}</span>
                                     <span className="text-xs text-muted-foreground">{outage.affectedAppCount} apps currently failing (cross-tenant)</span>
                                 </div>
@@ -429,17 +442,21 @@ export default function PlatformMarketplacePage() {
                 </CardContent>
             </Card>
 
-            <Card>
+             },
+            { id: 'apps', label: `Registered apps (${apps.length})`, content: <Card className="min-w-0">
                 <CardHeader>
                     <CardTitle className="text-base">All Registered Apps</CardTitle>
                 </CardHeader>
-                <CardContent>
-                    {loading ? (
-                        <p className="text-sm text-muted-foreground">Loading...</p>
-                    ) : apps.length === 0 ? (
-                        <p className="p-4 text-center text-sm text-muted-foreground">No apps registered on this platform yet.</p>
+                <CardContent className="min-w-0">
+                    <div className="mb-4 space-y-1">
+                        <label htmlFor="app-search" className="text-sm font-medium">Search registered apps</label>
+                        <Input id="app-search" value={search} onChange={event => setSearch(event.target.value)} placeholder="App, owner, installing tenant or category" />
+                        <p className="text-xs text-muted-foreground">One row per installation. {visibleApps.length} of {apps.length} rows shown.</p>
+                    </div>
+                    {visibleApps.length === 0 ? (
+                        <p className="p-4 text-center text-sm text-muted-foreground">{apps.length ? 'No apps match your search.' : 'No apps registered on this platform yet.'}</p>
                     ) : (
-                        <Table>
+                        <Table className="min-w-[1000px]">
                             <TableHeader>
                                 <TableRow>
                                     <TableHead>App</TableHead>
@@ -453,11 +470,11 @@ export default function PlatformMarketplacePage() {
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
-                                {apps.map((app) => (
+                                {visibleApps.map((app) => (
                                     <TableRow key={`${app.id}:${app.tenantId ?? 'no-install'}`}>
-                                        <TableCell className="font-medium">{app.name}</TableCell>
-                                        <TableCell>{app.ownerTenantName}</TableCell>
-                                        <TableCell>{app.tenantName ?? '--'}</TableCell>
+                                        <TableCell className="max-w-60 whitespace-normal break-all font-medium">{app.name}</TableCell>
+                                        <TableCell className="max-w-60 whitespace-normal break-all">{app.ownerTenantName}</TableCell>
+                                        <TableCell className="max-w-60 whitespace-normal break-all">{app.tenantName ?? '--'}</TableCell>
                                         <TableCell>{app.category}</TableCell>
                                         <TableCell>
                                             <Badge variant={app.isActive ? 'outline' : 'destructive'}>
@@ -467,6 +484,7 @@ export default function PlatformMarketplacePage() {
                                         <TableCell>
                                             <select
                                                 className={`rounded-md border px-2 py-1 text-xs ${TRUST_LEVEL_CLASSNAMES[app.trustLevel ?? 'UNVERIFIED'] ?? ''}`}
+                                                aria-label={`Trust level for ${app.name}`}
                                                 value={app.trustLevel ?? 'UNVERIFIED'}
                                                 disabled={trustSavingId === app.id}
                                                 onChange={(e) => changeTrustLevel(app, e.target.value)}
@@ -521,7 +539,8 @@ export default function PlatformMarketplacePage() {
                         </Table>
                     )}
                 </CardContent>
-            </Card>
+            </Card> }
+            ]} />}
         </div>
     );
 }

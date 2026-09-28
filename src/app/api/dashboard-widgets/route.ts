@@ -13,7 +13,7 @@ export async function GET(request: Request) {
       return unauthorized();
     }
 
-    return serverError("Failed to fetch dashboard widgets");
+    return serverError("Failed to fetch dashboard widgets", error);
   }
 }
 
@@ -36,6 +36,6 @@ export async function POST(request: Request) {
       return badRequest("Advanced Reporting is not enabled for this workspace");
     }
 
-    return serverError("Failed to create dashboard widget");
+    return serverError("Failed to create dashboard widget", error);
   }
 }

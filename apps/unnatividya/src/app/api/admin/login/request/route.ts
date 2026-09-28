@@ -10,6 +10,7 @@ import {
 import { query } from "@/lib/db";
 import { createOtp, hashOtp } from "@/lib/otp";
 import { verifyPassword } from "@/lib/password";
+import { checkRateLimit, clientIp } from "@/lib/rate-limit";
 import { sendOtpEmail } from "@/lib/zeptomail";
 
 const schema = z.object({
@@ -22,6 +23,14 @@ export async function POST(request: Request) {
   const parsed = schema.safeParse(body);
   if (!parsed.success) {
     return NextResponse.json({ error: "Invalid login details" }, { status: 400 });
+  }
+
+  // F26 fix (WP16): unthrottled password guessing against a known admin email -- 10 attempts per
+  // 15 minutes per IP+email pair is enough for a real admin who mistypes a password a few times,
+  // tight enough to make brute-forcing impractical.
+  const limit = checkRateLimit("admin-login", `${clientIp(request)}:${parsed.data.email.toLowerCase()}`, 10, 15 * 60 * 1000);
+  if (!limit.allowed) {
+    return NextResponse.json({ error: "Too many login attempts. Please try again later." }, { status: 429 });
   }
 
   const user = await findCmsUserByEmail(parsed.data.email);

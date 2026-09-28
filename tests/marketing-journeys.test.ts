@@ -70,7 +70,7 @@ vi.mock("@/lib/db/query", () => ({
     if (sql.includes('from "MarketingAttributionTouch"')) {
       return state.touches.filter((t) => t.tenantId === params[0]);
     }
-    if (sql.includes('from "Opportunity" o') && sql.includes('join "OpportunityStage" s')) {
+    if (sql.includes('from "Opportunity" o') && sql.includes('join "StageDefinition" s')) {
       const [tenantId, ids] = params;
       return state.opportunities.filter((o: any) => o.tenantId === tenantId && ids.includes(o.id));
     }

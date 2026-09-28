@@ -5,9 +5,9 @@ import { OnboardingChecklistBanner } from "@/components/dashboard/onboarding-che
 
 export default function DashboardPage() {
     return (
-        <div className="mx-auto max-w-[1536px] px-4 py-8">
+        <div id="dashboard-workspace" className="min-w-0 space-y-4">
             <OnboardingChecklistBanner />
-            <div className="flex-grow">
+            <div className="min-w-0">
                 <DashboardManager />
             </div>
         </div>

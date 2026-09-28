@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { requireInternalUser } from "@/lib/server/auth";
+import { requireTenantAdmin } from "@/lib/server/auth";
 import {
   deletePermissionTemplateForTenant,
   updatePermissionTemplateForTenant,
@@ -13,7 +13,7 @@ type RouteContext = {
 
 export async function PATCH(request: Request, context: RouteContext) {
   try {
-    const user = await requireInternalUser(request);
+    const user = await requireTenantAdmin(request);
     if (!user.tenantId) return forbidden("Tenant context required");
     const { id } = await context.params;
     const body = await request.json().catch(() => null);
@@ -42,7 +42,7 @@ export async function PATCH(request: Request, context: RouteContext) {
 
 export async function DELETE(request: Request, context: RouteContext) {
   try {
-    const user = await requireInternalUser(request);
+    const user = await requireTenantAdmin(request);
     if (!user.tenantId) return forbidden("Tenant context required");
     const { id } = await context.params;
     await deletePermissionTemplateForTenant(user.tenantId, id);

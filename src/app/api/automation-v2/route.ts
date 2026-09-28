@@ -11,7 +11,7 @@ export async function GET(request: Request) {
   } catch (error) {
     if (error instanceof Error && error.message === "UNAUTHORIZED") return unauthorized();
     if (error instanceof Error && error.message === "FORBIDDEN") return forbidden();
-    return serverError("Failed to fetch automations");
+    return serverError("Failed to fetch automations", error);
   }
 }
 
@@ -28,6 +28,6 @@ export async function POST(request: Request) {
     if (error instanceof Error && error.message.startsWith("FEATURE_DISABLED")) {
       return badRequest("Automations is not enabled for this workspace");
     }
-    return serverError("Failed to create automation");
+    return serverError("Failed to create automation", error);
   }
 }

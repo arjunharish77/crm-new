@@ -1,15 +1,17 @@
 "use client";
 
-import { useEffect, useState, useCallback, useMemo } from "react";
+import { PageHeader } from "@/components/layout/page-header";
+
+import { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import { apiFetch } from "@/lib/api";
 import { ColumnDef } from "@tanstack/react-table";
-import { Copy, KeyRound, Laptop, Pencil, Shield, ShieldOff, UserPlus, UserX, Users } from "lucide-react";
+import { Copy, MoreHorizontal, KeyRound, Laptop, Pencil, Shield, ShieldOff, UserPlus, UserX, Users } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { DataTable } from "@/components/ui/data-table";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button, Button as IconButton } from "@/components/ui/button";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { toast } from "sonner";
 import { formatWorkspaceDateTime, formatWorkspaceRelativeTime } from "@/lib/date-format";
 import { User } from "@/types/user";
@@ -22,11 +24,15 @@ import { StandardDialog } from "@/components/common/standard-dialog";
 export default function UsersPage() {
     const [users, setUsers] = useState<User[]>([]);
     const [loading, setLoading] = useState(true);
+    const [loadError, setLoadError] = useState(false);
+    const [sessionsError, setSessionsError] = useState(false);
     const [dialogOpen, setDialogOpen] = useState(false);
     const [editDialogOpen, setEditDialogOpen] = useState(false);
     const [userToEdit, setUserToEdit] = useState<User | null>(null);
     const [selectedRows, setSelectedRows] = useState<string[]>([]);
     const [isAllSelected, setIsAllSelected] = useState(false);
+    const [deactivating, setDeactivating] = useState(false);
+    const deactivationPending = useRef(false);
     const [totalItems, setTotalItems] = useState(0);
     const [sessionsFor, setSessionsFor] = useState<User | null>(null);
     const [sessions, setSessions] = useState<any[]>([]);
@@ -38,6 +44,7 @@ export default function UsersPage() {
 
     const fetchUsers = useCallback(async () => {
         setLoading(true);
+        setLoadError(false);
         try {
             const data = await apiFetch<User[]>("/users");
             // Stub data enhancement for missing fields till backend is ready
@@ -45,12 +52,12 @@ export default function UsersPage() {
                 ...u,
                 team: u.team || { id: 'unassigned', name: 'Unassigned' },
                 manager: u.manager || undefined,
-                lastLoginAt: u.lastLoginAt || new Date().toISOString(), // Mock
+                lastLoginAt: u.lastLoginAt,
             }));
             setUsers(enhancedData);
             setTotalItems(enhancedData.length); // Assuming no pagination for now, or get from meta if available
         } catch (error: any) {
-            toast.error("Failed to fetch users");
+            setLoadError(true);
             console.error("Users fetch error:", error);
         } finally {
             setLoading(false);
@@ -69,11 +76,13 @@ export default function UsersPage() {
     const viewSessions = async (user: User) => {
         setSessionsFor(user);
         setLoadingSessions(true);
+        setSessions([]);
+        setSessionsError(false);
         try {
             const data = await apiFetch<any[]>(`/admin/users/${user.id}/sessions`);
             setSessions(Array.isArray(data) ? data : []);
         } catch (error: any) {
-            toast.error(error?.message || "Failed to load sessions");
+            setSessionsError(true);
         } finally {
             setLoadingSessions(false);
         }
@@ -123,38 +132,34 @@ export default function UsersPage() {
     };
 
     const handleDeactivate = async (ids: string[]) => {
-        if (!confirm(`Are you sure you want to deactivate ${ids.length} user(s)?`)) return;
+        const targets = [...new Set(ids)];
+        if (!targets.length || deactivationPending.current) return;
+        if (!confirm(`Are you sure you want to deactivate ${targets.length} user(s)?`)) return;
 
+        deactivationPending.current = true;
+        setDeactivating(true);
         try {
-            await Promise.all(ids.map(id =>
+            const results = await Promise.allSettled(targets.map(id =>
                 apiFetch(`/users/${id}`, {
                     method: "PATCH",
                     body: JSON.stringify({ status: "INACTIVE" }),
                 })
             ));
-            toast.success("Users deactivated");
-            fetchUsers();
-            setSelectedRows([]);
+            const failedIds = targets.filter((_, index) => results[index].status === "rejected");
+            const completed = targets.length - failedIds.length;
+            await fetchUsers();
+            setSelectedRows(failedIds);
             setIsAllSelected(false);
-        } catch (error: any) {
-            toast.error("Failed to deactivate users");
+            if (failedIds.length) {
+                toast.error(`${completed} of ${targets.length} users deactivated. ${failedIds.length} failed and remain selected for retry.`);
+            } else {
+                toast.success(`${completed} users deactivated`);
+            }
+        } finally {
+            deactivationPending.current = false;
+            setDeactivating(false);
         }
     };
-
-    const handleDelete = async (ids: string[]) => {
-        if (!confirm(`Are you sure you want to permanently delete ${ids.length} user(s)?`)) return;
-
-        try {
-            // Mock delete for now as API might not support bulk delete yet
-            toast.success("Users deleted");
-            setUsers(prev => prev.filter(u => !ids.includes(u.id)));
-            setSelectedRows([]);
-            setIsAllSelected(false);
-        } catch (error: any) {
-            toast.error("Failed to delete users");
-        }
-    };
-
 
     const handleSelectAllFiltered = () => {
         setSelectedRows(users.map((user) => user.id));
@@ -250,111 +255,33 @@ export default function UsersPage() {
             size: 110,
             cell: ({ row }) => (
                 <div className="flex gap-1">
-                    <Tooltip>
-                        <TooltipTrigger asChild>
-                            <IconButton
-                                variant="ghost"
-                                size="icon-sm"
-                                onClick={(event) => {
-                                    event.stopPropagation();
-                                    handleEdit(row.original);
-                                }}
-                            >
-                                <Pencil className="size-4" />
-                            </IconButton>
-                        </TooltipTrigger>
-                        <TooltipContent>Edit User</TooltipContent>
-                    </Tooltip>
-                    <Tooltip>
-                        <TooltipTrigger asChild>
-                            <IconButton
-                                variant="ghost"
-                                size="icon-sm"
-                                onClick={(event) => {
-                                    event.stopPropagation();
-                                    viewSessions(row.original);
-                                }}
-                            >
-                                <Laptop className="size-4" />
-                            </IconButton>
-                        </TooltipTrigger>
-                        <TooltipContent>Active Sessions</TooltipContent>
-                    </Tooltip>
-                    <Tooltip>
-                        <TooltipTrigger asChild>
-                            <IconButton
-                                variant="ghost"
-                                size="icon-sm"
-                                disabled={resettingMfaId === row.original.id}
-                                onClick={(event) => {
-                                    event.stopPropagation();
-                                    resetUserMfa(row.original);
-                                }}
-                            >
-                                <ShieldOff className="size-4" />
-                            </IconButton>
-                        </TooltipTrigger>
-                        <TooltipContent>Reset MFA</TooltipContent>
-                    </Tooltip>
-                    <Tooltip>
-                        <TooltipTrigger asChild>
-                            <IconButton
-                                variant="ghost"
-                                size="icon-sm"
-                                disabled={generatingResetLinkId === row.original.id}
-                                onClick={(event) => {
-                                    event.stopPropagation();
-                                    generatePasswordResetLink(row.original);
-                                }}
-                            >
-                                <KeyRound className="size-4" />
-                            </IconButton>
-                        </TooltipTrigger>
-                        <TooltipContent>Generate Password Reset Link</TooltipContent>
-                    </Tooltip>
-                    {row.original.status === 'ACTIVE' && (
-                        <Tooltip>
-                            <TooltipTrigger asChild>
-                                <IconButton
-                                    variant="ghost"
-                                    size="icon-sm"
-                                    className="text-tertiary hover:bg-tertiary/10 hover:text-tertiary"
-                                    onClick={(event) => {
-                                        event.stopPropagation();
-                                        handleDeactivate([row.original.id]);
-                                    }}
-                                >
-                                    <UserX className="size-4" />
-                                </IconButton>
-                            </TooltipTrigger>
-                            <TooltipContent>Deactivate</TooltipContent>
-                        </Tooltip>
-                    )}
+                    <Button variant="ghost" size="sm" onClick={() => handleEdit(row.original)}><Pencil className="size-4" />Edit</Button>
+                    <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" size="icon-sm" aria-label={`More actions for ${row.original.name || row.original.email}`}><MoreHorizontal className="size-4" /></Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                            <DropdownMenuItem onSelect={() => viewSessions(row.original)}><Laptop className="size-4" />View active sessions</DropdownMenuItem>
+                            <DropdownMenuItem disabled={generatingResetLinkId === row.original.id} onSelect={() => generatePasswordResetLink(row.original)}><KeyRound className="size-4" />Generate password reset link</DropdownMenuItem>
+                            <DropdownMenuItem disabled={resettingMfaId === row.original.id} onSelect={() => resetUserMfa(row.original)}><ShieldOff className="size-4" />Reset MFA</DropdownMenuItem>
+                            {row.original.status === 'ACTIVE' && <DropdownMenuItem disabled={deactivating} onSelect={() => handleDeactivate([row.original.id])}><UserX className="size-4" />Deactivate user</DropdownMenuItem>}
+                        </DropdownMenuContent>
+                    </DropdownMenu>
                 </div>
             ),
         },
-    ], [handleDeactivate, resettingMfaId, generatingResetLinkId]);
+    ], [handleDeactivate, resettingMfaId, generatingResetLinkId, deactivating]);
 
     const [assignManagerDialogOpen, setAssignManagerDialogOpen] = useState(false);
 
     return (
-        <div className="mx-auto max-w-[1600px] px-4 py-4 md:px-6">
-            <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-                <div>
-                    <h1 className="text-xl font-semibold tracking-normal text-foreground">Users</h1>
-                    <p className="mt-1 text-sm text-muted-foreground">
-                        Manage access, roles, and team assignments.
-                    </p>
-                </div>
-                <IconButton
-                    onClick={() => setDialogOpen(true)}
-                >
-                    <UserPlus className="size-4" />
-                    Invite User
-                </IconButton>
-            </div>
+        <div className="min-w-0">
+            <PageHeader title="Users" description="Manage access, roles, and team assignments." actions={
+                <Button onClick={() => setDialogOpen(true)}><UserPlus className="size-4" />Invite User</Button>
+            } />
+            {loadError && <div role="alert" className="mb-4 rounded-lg border p-4 text-sm">Unable to load users. <Button variant="outline" size="sm" onClick={fetchUsers}>Retry</Button></div>}
 
-            <div className="flex w-full flex-col overflow-hidden rounded-xl border border-border bg-card">
+            <div hidden={loadError} className="flex w-full min-w-0 flex-col overflow-hidden rounded-xl border border-border bg-card">
                 <DataTable
                     storageKey="admin-users-table"
                     data={users}
@@ -390,21 +317,10 @@ export default function UsersPage() {
                 selectedCount={isAllSelected ? totalItems : selectedRows.length}
                 onClearSelection={clearSelection}
                 module="users"
-                onActivateDeactivate={() => {
-                    if (isAllSelected) {
-                        handleDeactivate([/* all ids */]);
-                    } else {
-                        handleDeactivate(selectedRows);
-                    }
-                }}
+                disabled={deactivating}
+                activateDeactivateLabel={deactivating ? "Deactivating…" : "Deactivate"}
+                onActivateDeactivate={() => handleDeactivate(selectedRows)}
                 onAssignManager={() => setAssignManagerDialogOpen(true)}
-                onDelete={() => {
-                    if (isAllSelected) {
-                        handleDelete([/* all ids */]);
-                    } else {
-                        handleDelete(selectedRows);
-                    }
-                }}
             />
 
             <InviteUserDialog
@@ -450,12 +366,14 @@ export default function UsersPage() {
                 <div className="space-y-2 py-2">
                     {loadingSessions ? (
                         <p className="text-sm text-muted-foreground">Loading...</p>
+                    ) : sessionsError ? (
+                        <div role="alert" className="text-sm">Unable to load sessions. <Button variant="outline" size="sm" onClick={() => sessionsFor && viewSessions(sessionsFor)}>Retry</Button></div>
                     ) : sessions.length === 0 ? (
                         <p className="text-sm text-muted-foreground">No active sessions.</p>
                     ) : (
                         sessions.map((session) => (
-                            <div key={session.id} className="flex items-center justify-between gap-3 rounded-lg border p-3">
-                                <div>
+                            <div key={session.id} className="flex flex-wrap items-center justify-between gap-3 rounded-lg border p-3">
+                                <div className="min-w-0 flex-1 basis-48 break-words">
                                     <p className="text-sm font-medium">{session.userAgent || "Unknown device"}</p>
                                     <p className="text-xs text-muted-foreground">
                                         {session.ipAddress || "Unknown IP"} -- last active {formatWorkspaceRelativeTime(session.lastActiveAt)}
@@ -489,10 +407,11 @@ export default function UsersPage() {
                             reset emails. It expires {formatWorkspaceDateTime(resetLink.expiresAt)} and can only be used once.
                         </p>
                         <div className="flex gap-2">
-                            <Input readOnly value={resetLink.url} className="font-mono text-xs" onFocus={(event) => event.target.select()} />
+                            <Input aria-label="Password reset link" readOnly value={resetLink.url} className="font-mono text-xs" onFocus={(event) => event.target.select()} />
                             <Button
                                 variant="outline"
                                 size="icon"
+                                aria-label="Copy password reset link"
                                 onClick={() => navigator.clipboard.writeText(resetLink.url).then(() => toast.success("Link copied"))}
                             >
                                 <Copy className="size-4" />

@@ -3,32 +3,32 @@
 
 import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import Cookies from 'js-cookie';
-import { jwtDecode } from 'jwt-decode';
 import { User, AuthContextType } from '../types/auth';
+import { EditorDraftProvider } from './editor-draft-provider';
+import { AiMessageDraftProvider } from './ai-message-draft-provider';
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 const API_URL = '/api';
 
+// F06 fix (WP05): this provider used to read/write the session token itself via js-cookie
+// (`Cookies.get('token')`, jwt-decode'd client-side as a fallback) and hand raw token values
+// around for impersonation. The session is now an HttpOnly cookie the server sets directly on
+// login/impersonate/exit-impersonate responses -- the browser attaches it automatically to
+// every same-origin request, and no client-side code ever sees or stores the raw value.
+// `login()`/`refreshUser()` (same function) just asks the server who's currently authenticated.
 export function AuthProvider({ children }: { children: React.ReactNode }) {
     const [user, setUser] = useState<User | null>(null);
-    const [token, setToken] = useState<string | null>(null);
     // isLoading starts true and only becomes false AFTER the profile fetch settles
     const [isLoading, setIsLoading] = useState(true);
-    const [isImpersonating, setIsImpersonating] = useState(false);
-    const [originalToken, setOriginalToken] = useState<string | null>(null);
     const router = useRouter();
     const initRef = useRef(false);
 
-    const fetchMe = async (authToken: string): Promise<User | null> => {
+    const fetchMe = async (): Promise<User | null> => {
         try {
-            const res = await fetch(`${API_URL}/auth/me`, {
-                headers: { 'Authorization': `Bearer ${authToken}` }
-            });
+            const res = await fetch(`${API_URL}/auth/me`);
             if (res.ok) {
-                const data = await res.json();
-                return data;
+                return await res.json();
             }
             return null;
         } catch (e) {
@@ -42,145 +42,40 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         initRef.current = true;
 
         const init = async () => {
-            const storedToken = Cookies.get('token');
-            if (storedToken) {
-                try {
-                    const decoded = jwtDecode<any>(storedToken);
-                    // Check expiry
-                    if (decoded.exp && decoded.exp * 1000 > Date.now()) {
-                        setToken(storedToken);
-                        // Fetch full profile — WAIT for this before clearing isLoading
-                        // This prevents premature redirect in SuperAdminGuard
-                        const profile = await fetchMe(storedToken);
-                        if (profile) {
-                            setUser(profile);
-                        } else {
-                            // Fall back to decoded JWT as minimal user object
-                            setUser({
-                                id: decoded.sub,
-                                email: decoded.email,
-                                tenantId: decoded.tenantId,
-                                roleId: decoded.roleId,
-                                role: decoded.role,
-                                isPlatformAdmin: decoded.isPlatformAdmin ?? false,
-                                platformAdminId: decoded.platformAdminId,
-                                name: decoded.name || decoded.email,
-                            });
-                        }
-                    } else {
-                        // Token expired
-                        Cookies.remove('token');
-                    }
-                } catch (e) {
-                    console.error('[Auth] Invalid token on init:', e);
-                    Cookies.remove('token');
-                }
-            }
-            // Only set loading to false AFTER everything is resolved
+            const profile = await fetchMe();
+            setUser(profile);
             setIsLoading(false);
         };
 
         init();
     }, []);
 
-    const login = async (newToken: string) => {
-        Cookies.set('token', newToken, { expires: 1 });
-        setToken(newToken);
-        // Fetch full profile after login
-        const profile = await fetchMe(newToken);
-        if (profile) {
-            setUser(profile);
-        } else {
-            const decoded = jwtDecode<any>(newToken);
-            setUser({
-                id: decoded.sub,
-                email: decoded.email,
-                tenantId: decoded.tenantId,
-                roleId: decoded.roleId,
-                role: decoded.role,
-                isPlatformAdmin: decoded.isPlatformAdmin ?? false,
-                platformAdminId: decoded.platformAdminId,
-                name: decoded.name || decoded.email,
-            });
-        }
+    // Called once a server route (login, MFA verify, expired-password change, impersonate,
+    // exit-impersonate) has already set the session cookie on its own response -- this just
+    // re-reads "who am I now" from the server so the UI reflects the new session.
+    const login = async () => {
+        const profile = await fetchMe();
+        setUser(profile);
     };
 
     const logout = () => {
         fetch(`${API_URL}/auth/logout`, { method: 'POST' }).catch(() => undefined);
-        Cookies.remove('token');
         setUser(null);
-        setToken(null);
-        setIsImpersonating(false);
-        setOriginalToken(null);
         router.push('/login');
-    };
-
-    const impersonate = async (userId: string) => {
-        try {
-            const response = await fetch(`${API_URL}/auth/impersonate`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${token}`,
-                },
-                body: JSON.stringify({ userId }),
-            });
-
-            if (!response.ok) {
-                throw new Error('Failed to impersonate user');
-            }
-
-            const data = await response.json();
-            setOriginalToken(token); // Store CURRENT token as original before switching
-            Cookies.set('token', data.access_token, { expires: 1 });
-            setToken(data.access_token);
-            const profile = await fetchMe(data.access_token);
-            setUser(profile || jwtDecode<any>(data.access_token));
-            setIsImpersonating(true);
-        } catch (error) {
-            console.error('[Auth] Impersonation error:', error);
-            throw error;
-        }
-    };
-
-    const exitImpersonate = async () => {
-        try {
-            if (!originalToken) throw new Error('No original token found');
-
-            const response = await fetch(`${API_URL}/auth/exit-impersonate`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ originalToken }),
-            });
-
-            if (!response.ok) throw new Error('Failed to exit impersonation');
-
-            const data = await response.json();
-            Cookies.set('token', data.access_token, { expires: 1 });
-            setToken(data.access_token);
-            const profile = await fetchMe(data.access_token);
-            setUser(profile || jwtDecode<any>(data.access_token));
-            setIsImpersonating(false);
-            setOriginalToken(null);
-        } catch (error) {
-            console.error('[Auth] Exit impersonation error:', error);
-            throw error;
-        }
     };
 
     return (
         <AuthContext.Provider value={{
             user,
-            token,
             login,
             logout,
             isAuthenticated: !!user,
             isLoading,
-            isImpersonating,
-            impersonate,
-            exitImpersonate,
+            isImpersonating: !!user?.isImpersonating,
         }}>
-            {children}
+            <AiMessageDraftProvider key={JSON.stringify([user?.tenantId, user?.id, user?.isImpersonating])}>
+                <EditorDraftProvider>{children}</EditorDraftProvider>
+            </AiMessageDraftProvider>
         </AuthContext.Provider>
     );
 }

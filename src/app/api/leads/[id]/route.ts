@@ -22,7 +22,7 @@ export async function GET(
       return unauthorized();
     }
 
-    return serverError("Failed to fetch lead");
+    return serverError("Failed to fetch lead", error);
   }
 }
 
@@ -51,6 +51,6 @@ export async function PATCH(
       return unauthorized();
     }
 
-    return serverError("Failed to update lead");
+    return serverError("Failed to update lead", error);
   }
 }

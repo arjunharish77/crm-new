@@ -1,8 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { UserCog, CheckCircle2 } from "lucide-react";
+import { PageHeader } from "@/components/layout/page-header";
+import { ErrorState } from "@/components/common/error-state";
 import { apiFetch } from "@/lib/api";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -30,6 +32,8 @@ type ImpersonationSession = {
 
 export default function ImpersonationReviewPage() {
     const [sessions, setSessions] = useState<ImpersonationSession[]>([]);
+    const [loadError, setLoadError] = useState(false);
+    const requestVersion = useRef(0);
     const [loading, setLoading] = useState(true);
     const [filter, setFilter] = useState<"pending" | "reviewed" | "all">("pending");
     const [reviewingSession, setReviewingSession] = useState<ImpersonationSession | null>(null);
@@ -37,12 +41,14 @@ export default function ImpersonationReviewPage() {
     const [submitting, setSubmitting] = useState(false);
 
     const load = () => {
+        const version = ++requestVersion.current;
         setLoading(true);
+        setLoadError(false);
         const query = filter === "pending" ? "?reviewed=false" : filter === "reviewed" ? "?reviewed=true" : "";
         apiFetch<ImpersonationSession[]>(`/platform-admin/impersonation-sessions${query}`)
-            .then((data) => setSessions(Array.isArray(data) ? data : []))
-            .catch(() => toast.error("Failed to load impersonation sessions"))
-            .finally(() => setLoading(false));
+            .then((data) => { if (version === requestVersion.current) setSessions(Array.isArray(data) ? data : []); })
+            .catch(() => version === requestVersion.current && setLoadError(true))
+            .finally(() => { if (version === requestVersion.current) setLoading(false); });
     };
 
     useEffect(load, [filter]);
@@ -67,35 +73,29 @@ export default function ImpersonationReviewPage() {
     };
 
     return (
-        <div className="space-y-6">
-            <div>
-                <h1 className="flex items-center gap-2 text-xl font-bold">
-                    <UserCog className="size-5" />
-                    Impersonation Review
-                </h1>
-                <p className="text-sm text-muted-foreground">Every impersonation session, with the reason it was started and how many actions were taken.</p>
-            </div>
+        <div className="min-w-0 space-y-6">
+            <PageHeader title="Impersonation Review" description="Review platform access and privileged activity." />
 
             <Tabs value={filter} onValueChange={(v) => setFilter(v as typeof filter)}>
-                <TabsList>
+                <TabsList className="h-auto flex-wrap">
                     <TabsTrigger value="pending">Pending Review</TabsTrigger>
                     <TabsTrigger value="reviewed">Reviewed</TabsTrigger>
                     <TabsTrigger value="all">All</TabsTrigger>
                 </TabsList>
             </Tabs>
 
-            <Card className="overflow-hidden py-0">
-                {loading ? (
+            <Card className="min-w-0 overflow-hidden py-0">
+                {loadError ? <ErrorState description="Impersonation Review could not be loaded." onRetry={load} /> : loading ? (
                     <p className="p-4 text-sm text-muted-foreground">Loading...</p>
                 ) : sessions.length === 0 ? (
                     <p className="p-4 text-sm text-muted-foreground">No impersonation sessions.</p>
                 ) : (
                     <div className="divide-y">
                         {sessions.map((session) => (
-                            <div key={session.id} className="flex flex-wrap items-start justify-between gap-3 p-4">
-                                <div>
-                                    <div className="flex items-center gap-2">
-                                        <p className="text-sm font-medium">
+                            <div key={session.id} className="flex min-w-0 flex-wrap items-start justify-between gap-3 p-4">
+                                <div className="min-w-0 flex-1 basis-64 break-words">
+                                    <div className="flex min-w-0 flex-wrap items-center gap-2">
+                                        <p className="min-w-0 max-w-full break-words text-sm font-medium">
                                             {session.impersonatedByName ?? "Unknown admin"} impersonated {session.userName} ({session.userEmail})
                                         </p>
                                         {session.reviewedAt && (
@@ -141,7 +141,7 @@ export default function ImpersonationReviewPage() {
             >
                 <div className="space-y-2 py-2">
                     <p className="text-sm text-muted-foreground">Optional note (e.g. confirmation the actions taken match the stated reason).</p>
-                    <Textarea rows={3} value={reviewNote} onChange={(e) => setReviewNote(e.target.value)} placeholder="Reviewed -- actions consistent with stated reason." />
+                    <Textarea aria-label="Review note" rows={3} value={reviewNote} onChange={(e) => setReviewNote(e.target.value)} placeholder="Reviewed -- actions consistent with stated reason." />
                 </div>
             </StandardDialog>
         </div>

@@ -1,6 +1,19 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const dbMocks = vi.hoisted(() => ({ query: vi.fn(), queryOne: vi.fn(), execute: vi.fn() }));
+const dbMocks = vi.hoisted(() => {
+  const query = vi.fn();
+  const queryOne = vi.fn();
+  const execute = vi.fn();
+  return {
+    query,
+    queryOne,
+    execute,
+    queryAsSystem: query,
+    queryOneAsSystem: queryOne,
+    executeAsSystem: execute,
+    jsonbParam: (value: unknown) => JSON.stringify(value ?? null),
+  };
+});
 const crmMocks = vi.hoisted(() => ({ createAuditLog: vi.fn().mockResolvedValue(undefined) }));
 const moduleMocks = vi.hoisted(() => ({ assertModuleEnabled: vi.fn().mockResolvedValue(undefined), isModuleEnabledForTenant: vi.fn().mockResolvedValue(true) }));
 
@@ -47,6 +60,8 @@ import {
   checkAppCompatibilityForTenant,
   rollbackAppToVersion,
   setAppDeprecation,
+  getAppRecordScopeForInstall,
+  updateAppRecordScopeForInstall,
 } from "@/lib/repositories/marketplace-postgres";
 import { DatabaseError } from "@/lib/db/errors";
 import { encryptSecretAtRest } from "@/lib/server/secret-encryption";
@@ -549,6 +564,76 @@ describe("read paths", () => {
     const grants = await listPermissionGrantsForInstall(user, "install-1");
     expect(grants).toHaveLength(1);
     expect(dbMocks.query.mock.calls[0][1]).toEqual(["tenant-a", "install-1"]);
+  });
+});
+
+// WP04 fix: the opt-in per-install record-scope/field-masking config a tenant admin can layer
+// on top of an app's existing module-level grants (see marketplace-inbound.ts's buildAppScopedActor
+// for where this is actually enforced).
+describe("getAppRecordScopeForInstall / updateAppRecordScopeForInstall", () => {
+  beforeEach(() => {
+    dbMocks.query.mockReset();
+    dbMocks.queryOne.mockReset();
+    moduleMocks.assertModuleEnabled.mockReset().mockResolvedValue(undefined);
+  });
+
+  it("getAppRecordScopeForInstall scopes the read by tenant and install, and throws when not found", async () => {
+    dbMocks.queryOne.mockResolvedValueOnce(null);
+    await expect(getAppRecordScopeForInstall(user, "install-1")).rejects.toThrow("INSTALL_NOT_FOUND");
+    expect(dbMocks.queryOne.mock.calls[0][1]).toEqual(["tenant-a", "install-1"]);
+  });
+
+  it("getAppRecordScopeForInstall returns the stored config", async () => {
+    dbMocks.queryOne.mockResolvedValueOnce({ recordAccess: "OWN", ownerUserId: "user-42", fieldPermissions: null });
+    const result = await getAppRecordScopeForInstall(user, "install-1");
+    expect(result).toEqual({ recordAccess: "OWN", ownerUserId: "user-42", fieldPermissions: null });
+  });
+
+  it("rejects OWN/TEAM scope with no ownerUserId before ever touching the database", async () => {
+    await expect(
+      updateAppRecordScopeForInstall(user, "install-1", { recordAccess: "OWN", ownerUserId: null, fieldPermissions: null }),
+    ).rejects.toThrow("OWNER_USER_ID_REQUIRED_FOR_OWN_OR_TEAM_SCOPE");
+    await expect(
+      updateAppRecordScopeForInstall(user, "install-1", { recordAccess: "TEAM", ownerUserId: null, fieldPermissions: null }),
+    ).rejects.toThrow("OWNER_USER_ID_REQUIRED_FOR_OWN_OR_TEAM_SCOPE");
+    expect(dbMocks.queryOne).not.toHaveBeenCalled();
+  });
+
+  it("rejects an ownerUserId that isn't a real member of this tenant", async () => {
+    dbMocks.queryOne.mockResolvedValueOnce(null); // the owner lookup finds nobody
+    await expect(
+      updateAppRecordScopeForInstall(user, "install-1", { recordAccess: "OWN", ownerUserId: "user-from-another-tenant", fieldPermissions: null }),
+    ).rejects.toThrow("OWNER_USER_NOT_FOUND_IN_TENANT");
+    expect(dbMocks.queryOne.mock.calls[0][1]).toEqual(["user-from-another-tenant", "tenant-a"]);
+  });
+
+  it("allows ALL scope with no ownerUserId at all, and never runs the owner-lookup query", async () => {
+    dbMocks.queryOne.mockResolvedValueOnce({ id: "install-1", recordAccess: "ALL", ownerUserId: null, fieldPermissions: null });
+    await updateAppRecordScopeForInstall(user, "install-1", { recordAccess: "ALL", ownerUserId: null, fieldPermissions: null });
+    expect(dbMocks.queryOne).toHaveBeenCalledTimes(1); // only the update itself, no owner lookup
+  });
+
+  it("throws INSTALL_NOT_FOUND when the update matches no row for this tenant", async () => {
+    dbMocks.queryOne.mockResolvedValueOnce({ id: "user-42" }); // owner lookup succeeds
+    dbMocks.queryOne.mockResolvedValueOnce(null); // update matches nothing
+    await expect(
+      updateAppRecordScopeForInstall(user, "install-1", { recordAccess: "OWN", ownerUserId: "user-42", fieldPermissions: null }),
+    ).rejects.toThrow("INSTALL_NOT_FOUND");
+  });
+
+  it("persists a valid OWN-scope update, scoped to this tenant", async () => {
+    dbMocks.queryOne.mockResolvedValueOnce({ id: "user-42" });
+    dbMocks.queryOne.mockResolvedValueOnce({ id: "install-1", recordAccess: "OWN", ownerUserId: "user-42", fieldPermissions: { leads: { email: "hidden" } } });
+
+    const result = await updateAppRecordScopeForInstall(user, "install-1", {
+      recordAccess: "OWN",
+      ownerUserId: "user-42",
+      fieldPermissions: { leads: { email: "hidden" } },
+    });
+
+    expect(result).toEqual({ id: "install-1", recordAccess: "OWN", ownerUserId: "user-42", fieldPermissions: { leads: { email: "hidden" } } });
+    const updateCallArgs = dbMocks.queryOne.mock.calls[1][1];
+    expect(updateCallArgs).toEqual(["OWN", "user-42", JSON.stringify({ leads: { email: "hidden" } }), "tenant-a", "install-1"]);
   });
 });
 

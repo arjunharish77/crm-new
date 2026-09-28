@@ -3,6 +3,7 @@ import { resolveNotificationLink } from "@/components/layout/notification-bell";
 
 // Gap checklist Module 10's tests bullet -- "notification deep links."
 describe("resolveNotificationLink", () => {
+  it("links application reminders with encoded record IDs", () => { expect(resolveNotificationLink({entityType:"APPLICATION",entityId:"a/b"})).toBe("/dashboard/applications/a%2Fb"); });
   it("returns null for null/undefined/non-object data", () => {
     expect(resolveNotificationLink(null)).toBeNull();
     expect(resolveNotificationLink(undefined)).toBeNull();

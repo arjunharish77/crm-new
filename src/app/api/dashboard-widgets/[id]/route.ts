@@ -26,7 +26,7 @@ export async function PATCH(
       return badRequest("Advanced Reporting is not enabled for this workspace");
     }
 
-    return serverError("Failed to update dashboard widget");
+    return serverError("Failed to update dashboard widget", error);
   }
 }
 
@@ -47,6 +47,6 @@ export async function DELETE(
       return badRequest("Advanced Reporting is not enabled for this workspace");
     }
 
-    return serverError("Failed to delete dashboard widget");
+    return serverError("Failed to delete dashboard widget", error);
   }
 }

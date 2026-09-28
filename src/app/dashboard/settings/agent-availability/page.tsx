@@ -1,9 +1,12 @@
 "use client";
 
+import { PageHeader } from "@/components/layout/page-header";
+
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Circle, Coffee, CircleOff } from "lucide-react";
 import { apiFetch } from "@/lib/api";
+import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -40,13 +43,15 @@ const STATUS_META = {
 
 export default function AgentAvailabilitySettingsPage() {
     const [agents, setAgents] = useState<AgentRow[]>([]);
+    const [loadError, setLoadError] = useState(false);
     const [loading, setLoading] = useState(true);
 
     const load = () => {
         setLoading(true);
+        setLoadError(false);
         apiFetch<AgentRow[]>("/agent-availability")
             .then((data) => setAgents(Array.isArray(data) ? data : []))
-            .catch(() => toast.error("Failed to load agent availability"))
+            .catch(() => setLoadError(true))
             .finally(() => setLoading(false));
     };
 
@@ -63,17 +68,13 @@ export default function AgentAvailabilitySettingsPage() {
     };
 
     return (
-        <div className="space-y-4">
-            <div>
-                <h1 className="text-lg font-bold">Agent Availability</h1>
-                <p className="text-sm text-muted-foreground">
-                    See who&apos;s online, on break, or offline, their working hours, and how close they are to their daily call and
-                    assignment caps. Overriding a status or cap here applies immediately.
-                </p>
-            </div>
+        <div className="min-w-0 space-y-4">
+            <PageHeader title="Agent Availability" description="Review availability, working hours and workload limits. Changes apply immediately." />
 
             {loading ? (
                 <p className="text-sm text-muted-foreground">Loading...</p>
+            ) : loadError ? (
+                <div role="alert" className="rounded-lg border p-4 text-sm">Unable to load agent availability. <Button variant="outline" size="sm" onClick={load}>Retry</Button></div>
             ) : agents.length === 0 ? (
                 <Card className="p-6 text-center text-sm text-muted-foreground">No agents found.</Card>
             ) : (
@@ -84,15 +85,15 @@ export default function AgentAvailabilitySettingsPage() {
                             const Icon = Meta.icon;
                             return (
                                 <div key={agent.userId} className="flex flex-wrap items-center gap-3 p-3">
-                                    <div className="min-w-[10rem]">
+                                    <div className="min-w-0 flex-1 basis-full break-words">
                                         <p className="text-sm font-medium">{agent.name}</p>
                                         <p className="text-xs text-muted-foreground">{agent.email}</p>
                                     </div>
 
                                     <Select value={agent.status} onValueChange={(value) => updateAgent(agent.userId, { status: value })}>
-                                        <SelectTrigger className="w-36">
+                                        <SelectTrigger aria-label={`Status for ${agent.name}`} className="w-36">
                                             <SelectValue>
-                                                <span className="flex items-center gap-1.5">
+                                                <span className="flex flex-wrap items-center gap-1.5">
                                                     <Icon className={`size-3 fill-current ${Meta.className}`} />
                                                     {Meta.label}
                                                 </span>
@@ -109,8 +110,9 @@ export default function AgentAvailabilitySettingsPage() {
 
                                     <div className="space-y-1">
                                         <Label className="text-xs">Working Hours</Label>
-                                        <div className="flex items-center gap-1.5">
+                                        <div className="flex flex-wrap items-center gap-1.5">
                                             <Switch
+                                                aria-label={`Enable working hours for ${agent.name}`}
                                                 checked={agent.workingHours?.enabled ?? false}
                                                 onCheckedChange={(checked) =>
                                                     updateAgent(agent.userId, { workingHours: { ...agent.workingHours, enabled: checked } })
@@ -120,6 +122,7 @@ export default function AgentAvailabilitySettingsPage() {
                                                 type="time"
                                                 className="w-28"
                                                 disabled={!agent.workingHours?.enabled}
+                                                aria-label={`Working hours start for ${agent.name}`}
                                                 defaultValue={agent.workingHours?.start ?? "09:00"}
                                                 onBlur={(e) =>
                                                     updateAgent(agent.userId, { workingHours: { ...agent.workingHours, start: e.target.value } })
@@ -129,6 +132,7 @@ export default function AgentAvailabilitySettingsPage() {
                                                 type="time"
                                                 className="w-28"
                                                 disabled={!agent.workingHours?.enabled}
+                                                aria-label={`Working hours end for ${agent.name}`}
                                                 defaultValue={agent.workingHours?.end ?? "18:00"}
                                                 onBlur={(e) =>
                                                     updateAgent(agent.userId, { workingHours: { ...agent.workingHours, end: e.target.value } })
@@ -144,12 +148,13 @@ export default function AgentAvailabilitySettingsPage() {
 
                                     <div className="space-y-1">
                                         <Label className="text-xs">Daily Call Cap</Label>
-                                        <div className="flex items-center gap-1.5">
+                                        <div className="flex flex-wrap items-center gap-1.5">
                                             <Input
                                                 type="number"
                                                 min={0}
                                                 className="w-20"
                                                 placeholder="None"
+                                                aria-label={`Daily call cap for ${agent.name}`}
                                                 defaultValue={agent.dailyCallCap ?? ""}
                                                 onBlur={(e) => updateAgent(agent.userId, { dailyCallCap: e.target.value })}
                                             />
@@ -159,12 +164,13 @@ export default function AgentAvailabilitySettingsPage() {
 
                                     <div className="space-y-1">
                                         <Label className="text-xs">Max Simultaneous Assignments</Label>
-                                        <div className="flex items-center gap-1.5">
+                                        <div className="flex flex-wrap items-center gap-1.5">
                                             <Input
                                                 type="number"
                                                 min={0}
                                                 className="w-20"
                                                 placeholder="None"
+                                                aria-label={`Max simultaneous assignments for ${agent.name}`}
                                                 defaultValue={agent.maxSimultaneousAssignments ?? ""}
                                                 onBlur={(e) => updateAgent(agent.userId, { maxSimultaneousAssignments: e.target.value })}
                                             />

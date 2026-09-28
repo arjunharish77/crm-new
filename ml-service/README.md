@@ -21,9 +21,15 @@ npm run ml-service:dev
 ```
 
 It reads the same `.env`/`.env.local` the rest of the app uses (see `app/config.py`) --
-no separate env file needed in local dev. It just needs `DATABASE_URL` or
-`DIRECT_DATABASE_URL` to be set. If `ML_SERVICE_SECRET` isn't set, auth is skipped
-(convenient for local `curl`ing); the VPS deployment always sets it.
+no separate env file needed in local dev. It needs `DATABASE_URL` or `DIRECT_DATABASE_URL`
+to be set, and **also needs `ML_SERVICE_SECRET` set (to any non-empty value)** -- this
+service has no prod/dev distinction, so it fails closed and refuses to start at all
+(`RuntimeError: Missing env var: ML_SERVICE_SECRET`) rather than ever running with
+`/train`/`/score`/`/nba-score-batch` unauthenticated. Set the same value in your
+`.env.local` that the Node app's `ML_SERVICE_SECRET` uses, so `self-learning-scoring.ts`'s
+requests authenticate; without a matching value on the Node side, calls will 401 and
+recompute falls back to the JS candidates (see below) rather than actually using this
+service, so for local `curl`ing pass `-H "X-Internal-Auth: <your ML_SERVICE_SECRET value>"`.
 
 Check it's up:
 

@@ -2,8 +2,6 @@ services:
   postgres:
     image: postgres:16-alpine
     restart: unless-stopped
-    env_file:
-      - .env
     environment:
       POSTGRES_DB: ${POSTGRES_DB}
       POSTGRES_USER: ${POSTGRES_USER}
@@ -16,6 +14,8 @@ services:
       interval: 10s
       timeout: 5s
       retries: 10
+    networks:
+      - data-pg
 
   redis:
     image: redis:7-alpine
@@ -28,7 +28,15 @@ services:
       interval: 10s
       timeout: 5s
       retries: 10
+    networks:
+      - data-redis
 
+  # web and worker are the main CRM app: they legitimately need most CRM-related secrets
+  # (JWT signing, webhook/cron signing secrets, Redis, Postgres, the ML service secret) --
+  # of every service here they're the least in need of narrowing (F19), so they keep the
+  # single shared `.env` wholesale via `env_file:` rather than an enumerated `environment:`
+  # list. `deploy/vps/.env` stays the one file an operator edits for values; per-service
+  # narrowing below is done by NOT giving every other service that same wholesale env_file.
   web:
     build:
       context: ../..
@@ -51,6 +59,11 @@ services:
       interval: 30s
       timeout: 10s
       retries: 10
+    networks:
+      - data-pg
+      - data-redis
+      - ml-net
+      - edge
 
   worker:
     build:
@@ -67,15 +80,31 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+    networks:
+      - data-pg
+      - data-redis
+      - ml-net
+      # Not on `edge`: worker has no HTTP server for Caddy to front, and doesn't need to be
+      # reachable from it.
 
   ml-service:
     build:
       context: ../../ml-service
       dockerfile: Dockerfile
     restart: unless-stopped
-    env_file:
-      - .env
+    # F19 fix (WP06): this used to be `env_file: [.env]`, handing this Python service the
+    # full CRM secret set -- JWT_SECRET, every cron/webhook signing secret, REDIS_URL/
+    # REDIS_PASSWORD, POSTGRES_*, UNNATIVIDYA_* secrets, etc. -- none of which
+    # ml-service/app/config.py or anything it imports (db.py, storage.py, embeddings.py,
+    # model.py, nba.py, features.py) ever reads (confirmed by grepping every
+    # os.environ.get/getenv in ml-service/app). It only ever reads DATABASE_URL,
+    # DIRECT_DATABASE_URL, ML_SERVICE_SECRET, and FILE_STORAGE_ROOT (ML_EMBEDDING_MODEL and
+    # ML_SERVICE_PORT are read too but have code-level defaults and aren't in .env.example,
+    # so they're deliberately left out here rather than pinned to an empty string).
     environment:
+      DATABASE_URL: ${DATABASE_URL}
+      DIRECT_DATABASE_URL: ${DIRECT_DATABASE_URL}
+      ML_SERVICE_SECRET: ${ML_SERVICE_SECRET}
       FILE_STORAGE_ROOT: /app/storage
     volumes:
       - app-storage:/app/storage
@@ -89,6 +118,11 @@ services:
       retries: 10
     # Internal-only: no ports published, not reachable outside this Compose network.
     # web/worker call it over the internal DNS name "ml-service" -- see ML_SERVICE_URL.
+    networks:
+      - data-pg
+      - ml-net
+      # Not on `data-redis` (doesn't use Redis) or `edge` (Caddy never talks to it
+      # directly -- only web/worker do, over `ml-net`).
 
   unnatividya-web:
     build:
@@ -102,12 +136,34 @@ services:
         INDEXNOW_ENABLED: ${INDEXNOW_ENABLED}
         INDEXNOW_KEY: ${INDEXNOW_KEY}
     restart: unless-stopped
-    env_file:
-      - .env
+    # F19 fix (WP06): narrowed from `env_file: [.env]` the same way as ml-service above.
+    # Confirmed by grepping every process.env.* read under apps/unnatividya/src: this app
+    # only ever reads NODE_ENV, NEXT_PUBLIC_UNNATIVIDYA_SITE_URL, UNNATIVIDYA_DATABASE_URL,
+    # UNNATIVIDYA_SESSION_SECRET, UNNATIVIDYA_CMS_SETUP_TOKEN, the ZEPTOMAIL_* vars, and the
+    # site-verification/analytics/IndexNow vars (also passed as build `args` above for
+    # values baked in at build time). It never reads JWT_SECRET, WEBHOOK_SIGNING_SECRET, any
+    # *_CRON_SECRET, REDIS_URL/REDIS_PASSWORD, POSTGRES_* (raw), the main app's DATABASE_URL,
+    # TENANT_DATABASE_URL, MARKETPLACE_SECRET_ENCRYPTION_KEY, FILE_DOWNLOAD_SIGNING_SECRET,
+    # or ML_SERVICE_* -- all of which the old wholesale env_file handed it regardless.
     environment:
       PORT: 3100
       HOSTNAME: 0.0.0.0
+      NODE_ENV: ${NODE_ENV}
       NEXT_PUBLIC_UNNATIVIDYA_SITE_URL: https://${UNNATIVIDYA_DOMAIN}
+      UNNATIVIDYA_DATABASE_URL: ${UNNATIVIDYA_DATABASE_URL}
+      UNNATIVIDYA_SESSION_SECRET: ${UNNATIVIDYA_SESSION_SECRET}
+      UNNATIVIDYA_CMS_SETUP_TOKEN: ${UNNATIVIDYA_CMS_SETUP_TOKEN}
+      ZEPTOMAIL_API_URL: ${ZEPTOMAIL_API_URL}
+      ZEPTOMAIL_API_KEY: ${ZEPTOMAIL_API_KEY}
+      ZEPTOMAIL_FROM_EMAIL: ${ZEPTOMAIL_FROM_EMAIL}
+      ZEPTOMAIL_FROM_NAME: ${ZEPTOMAIL_FROM_NAME}
+      GOOGLE_SITE_VERIFICATION: ${GOOGLE_SITE_VERIFICATION}
+      BING_SITE_VERIFICATION: ${BING_SITE_VERIFICATION}
+      NEXT_PUBLIC_GA_ID: ${NEXT_PUBLIC_GA_ID}
+      NEXT_PUBLIC_GTM_ID: ${NEXT_PUBLIC_GTM_ID}
+      INDEXNOW_ENABLED: ${INDEXNOW_ENABLED}
+      INDEXNOW_KEY: ${INDEXNOW_KEY}
+      INDEXNOW_KEY_LOCATION: ${INDEXNOW_KEY_LOCATION}
     depends_on:
       postgres:
         condition: service_healthy
@@ -116,6 +172,11 @@ services:
       interval: 30s
       timeout: 10s
       retries: 10
+    networks:
+      - data-pg
+      - edge
+      # Not on `data-redis` or `ml-net`: this app doesn't use Redis or the ML service at
+      # all (confirmed by the grep above), so it can't reach either at the network level.
 
   unnatividya-crm-worker:
     build:
@@ -124,18 +185,39 @@ services:
     restart: unless-stopped
     profiles:
       - unnatividya-crm-sync
-    env_file:
-      - .env
+    # F19 fix (WP06): narrowed from `env_file: [.env]`. Confirmed by grepping
+    # apps/unnatividya/scripts/crm-sync-worker.js: it only ever reads
+    # UNNATIVIDYA_DATABASE_URL, UNNATIVIDYA_CRM_SYNC_WORKER_ENABLED,
+    # UNNATIVIDYA_CRM_SYNC_INTERVAL_MS, and UNNATIVIDYA_CRM_SYNC_BATCH_SIZE -- not even
+    # UNNATIVIDYA_SESSION_SECRET or ZEPTOMAIL_*, which unnatividya-web needs but this
+    # worker doesn't.
+    environment:
+      UNNATIVIDYA_DATABASE_URL: ${UNNATIVIDYA_DATABASE_URL}
+      UNNATIVIDYA_CRM_SYNC_WORKER_ENABLED: ${UNNATIVIDYA_CRM_SYNC_WORKER_ENABLED}
+      UNNATIVIDYA_CRM_SYNC_INTERVAL_MS: ${UNNATIVIDYA_CRM_SYNC_INTERVAL_MS}
+      UNNATIVIDYA_CRM_SYNC_BATCH_SIZE: ${UNNATIVIDYA_CRM_SYNC_BATCH_SIZE}
     command: ["node", "scripts/crm-sync-worker.js"]
     depends_on:
       postgres:
         condition: service_healthy
+    networks:
+      - data-pg
+      # Not on `edge`, `data-redis`, or `ml-net`: this is a background sync job, never
+      # fronted by Caddy, and doesn't touch Redis or the ML service.
 
   caddy:
     image: caddy:2-alpine
     restart: unless-stopped
-    env_file:
-      - .env
+    # F19 fix (WP06): narrowed from `env_file: [.env]`. The Caddyfile
+    # (deploy/vps/caddy/Caddyfile) only interpolates these four domain/ACME vars
+    # (`{$APP_DOMAIN}`, `{$API_DOMAIN}`, `{$UNNATIVIDYA_DOMAIN}`, `{$ACME_EMAIL}`) --
+    # confirmed by reading it. Caddy proxies to web/unnatividya-web only; it has no reason
+    # to hold Postgres/Redis/JWT/webhook/cron secrets at all.
+    environment:
+      APP_DOMAIN: ${APP_DOMAIN}
+      API_DOMAIN: ${API_DOMAIN}
+      UNNATIVIDYA_DOMAIN: ${UNNATIVIDYA_DOMAIN}
+      ACME_EMAIL: ${ACME_EMAIL}
     ports:
       - "80:80"
       - "443:443"
@@ -148,6 +230,40 @@ services:
         condition: service_healthy
       unnatividya-web:
         condition: service_healthy
+    networks:
+      - edge
+      # Not on `data-pg`, `data-redis`, or `ml-net`: Caddy is a reverse proxy, it has no
+      # business reaching Postgres/Redis/ml-service directly -- only the app containers it
+      # forwards HTTP to on `edge`.
+
+# F19 fix (WP06): "All Compose services share one env file / network". Networks are now
+# segmented so that a container can only reach, at the Docker-network level, the other
+# containers it actually has a legitimate reason to talk to -- narrowing what a compromise
+# of any one container (most plausibly ml-service or the public-facing unnatividya-web/
+# unnatividya-crm-worker, both of which handle more untrusted input than the main app) can
+# reach next, on top of (not instead of) each container's own now-narrowed env vars above.
+#
+#   data-pg:    postgres, plus every service that needs a direct Postgres connection
+#               (web, worker, ml-service, unnatividya-web, unnatividya-crm-worker).
+#   data-redis: redis, plus only web/worker (BullMQ queues) -- nothing else uses Redis.
+#   ml-net:     ml-service, plus only web/worker, which call it over HTTP as
+#               ML_SERVICE_URL=http://ml-service:8000 -- Caddy and the unnatividya-*
+#               services never reach it.
+#   edge:       caddy, plus only the two HTTP services it reverse-proxies to
+#               (web, unnatividya-web) -- worker and unnatividya-crm-worker aren't fronted
+#               by Caddy and don't need to be reachable from it.
+#
+# Every network is declared explicitly on every service (none rely on Compose's implicit
+# "default" network), and Docker's per-network internal DNS still resolves service names
+# normally for every connection that legitimately remains (e.g. web -> postgres, web ->
+# ml-service, caddy -> web) -- segmentation here only removes the pairs that have no
+# legitimate reason to talk to each other (e.g. caddy -> postgres, unnatividya-web ->
+# redis, unnatividya-web -> ml-service).
+networks:
+  data-pg:
+  data-redis:
+  ml-net:
+  edge:
 
 volumes:
   postgres-data:

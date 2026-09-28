@@ -11,6 +11,7 @@ import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { StandardDialog } from "@/components/common/standard-dialog";
 import { TableSkeleton } from "@/components/common/skeletons";
+import { ErrorState } from "@/components/common/error-state";
 import { EmptyState } from "@/components/common/empty-state";
 import { Plus, ExternalLink, Play, Pause, Send, History, RotateCcw, UploadCloud } from "lucide-react";
 import { toast } from "sonner";
@@ -67,7 +68,11 @@ export function JourneysPanel() {
     const [journeys, setJourneys] = useState<Journey[]>([]);
     const [leadLists, setLeadLists] = useState<Array<{ id: string; name: string }>>([]);
     const [savedViews, setSavedViews] = useState<Array<{ id: string; name: string }>>([]);
+    const [viewsState, setViewsState] = useState("loading");
+    const [viewRetry, setViewRetry] = useState(0);
     const [loading, setLoading] = useState(true);
+    const [loadError, setLoadError] = useState(false);
+    const [creating, setCreating] = useState(false);
     const [createOpen, setCreateOpen] = useState(false);
     const [form, setForm] = useState(EMPTY_FORM);
     const [busyId, setBusyId] = useState<string | null>(null);
@@ -83,11 +88,12 @@ export function JourneysPanel() {
 
     const fetchJourneys = useCallback(async () => {
         setLoading(true);
+        setLoadError(false);
         try {
             const data = await apiFetch<Journey[]>("/marketing/journeys");
             setJourneys(Array.isArray(data) ? data : []);
         } catch {
-            toast.error("Failed to load marketing journeys");
+            setLoadError(true);
         } finally {
             setLoading(false);
         }
@@ -106,15 +112,28 @@ export function JourneysPanel() {
     // "match everything" (fixed separately), but keeping the picker itself scoped closes
     // the footgun at the source rather than relying only on the server-side fallback fix.
     useEffect(() => {
+        let current = true;
+        setSavedViews([]);
+        setViewsState("loading");
         const savedViewModule = form.targetModule === "OPPORTUNITY" ? "OPPORTUNITIES" : "LEADS";
-        apiFetch<any[]>(`/saved-views?module=${savedViewModule}`).then((data) => setSavedViews(Array.isArray(data) ? data : [])).catch(() => setSavedViews([]));
-    }, [form.targetModule]);
+        apiFetch<any[]>(`/saved-views?module=${savedViewModule}`).then((data) => {
+            if (!current) return;
+            setSavedViews(Array.isArray(data) ? data : []);
+            setViewsState("ready");
+        }).catch(() => { if (current) setViewsState("error"); });
+        return () => { current = false; };
+    }, [form.targetModule, viewRetry]);
+
+    const audienceReady = form.audienceType === "LEAD_LIST" ? !!form.audienceConfig.leadListId
+        : form.audienceType === "SAVED_VIEW" ? viewsState === "ready" && !!form.audienceConfig.savedViewId
+        : (form.audienceConfig.recordIds?.length ?? 0) > 0;
 
     const handleCreate = async () => {
         if (!form.name.trim()) {
             toast.error("Journey name is required");
             return;
         }
+        setCreating(true);
         try {
             await apiFetch("/marketing/journeys", { method: "POST", body: JSON.stringify(form) });
             toast.success("Journey created — add its workflow, then approve and activate it");
@@ -123,7 +142,7 @@ export function JourneysPanel() {
             fetchJourneys();
         } catch (error: any) {
             toast.error(error.message || "Failed to create journey");
-        }
+        } finally { setCreating(false); }
     };
 
     const advanceStatus = async (journey: Journey) => {
@@ -220,11 +239,12 @@ export function JourneysPanel() {
         return <EmptyState title="Journey Orchestration isn't enabled" description="Ask a platform admin to enable this module for your tenant." />;
     }
 
+    if (loadError) return <ErrorState description="Marketing journeys could not be loaded." onRetry={fetchJourneys} />;
     if (loading) return <TableSkeleton rows={3} columns={2} />;
 
     return (
         <div className="space-y-4">
-            <div className="flex items-center justify-between gap-3">
+            <div className="flex min-w-0 flex-wrap items-center justify-between gap-3">
                 <div>
                     <h2 className="text-sm font-bold">Marketing Journeys</h2>
                     <p className="mt-0.5 text-xs text-muted-foreground">
@@ -259,9 +279,9 @@ export function JourneysPanel() {
                     {journeys.map((journey) => (
                         <div key={journey.id} className="rounded-[14px] border bg-card p-4">
                             <div className="flex flex-wrap items-center justify-between gap-3">
-                                <div>
-                                    <div className="flex items-center gap-2">
-                                        <span className="text-sm font-bold">{journey.name}</span>
+                                <div className="min-w-0 flex-1 basis-60 break-words">
+                                    <div className="flex min-w-0 flex-wrap items-center gap-2">
+                                        <span className="min-w-0 break-words text-sm font-bold">{journey.name}</span>
                                         <Badge variant="outline" className={cn("rounded-md text-[0.65rem] font-semibold", STATUS_CLASSNAMES[journey.status])}>
                                             {journey.status}
                                         </Badge>
@@ -333,34 +353,34 @@ export function JourneysPanel() {
                 actions={
                     <>
                         <Button variant="ghost" onClick={() => setCreateOpen(false)}>Cancel</Button>
-                        <Button onClick={handleCreate}>Create Journey</Button>
+                        <Button disabled={creating || !form.name.trim() || !audienceReady} onClick={handleCreate}>{creating ? "Creating..." : "Create Journey"}</Button>
                     </>
                 }
             >
                 <div className="space-y-4">
-                    <div className="space-y-1.5">
-                        <Label>Name</Label>
-                        <Input value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} />
+                    <div className="min-w-0 space-y-1.5">
+                        <Label htmlFor="journey-field-1">Name</Label>
+                        <Input id="journey-field-1" value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} />
                     </div>
-                    <div className="space-y-1.5">
-                        <Label>Description (optional)</Label>
-                        <Input value={form.description} onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))} />
+                    <div className="min-w-0 space-y-1.5">
+                        <Label htmlFor="journey-field-2">Description (optional)</Label>
+                        <Input id="journey-field-2" value={form.description} onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))} />
                     </div>
                     <div className="grid gap-3 sm:grid-cols-2">
-                        <div className="space-y-1.5">
-                            <Label>Target Module</Label>
-                            <Select value={form.targetModule} onValueChange={(value) => setForm((f) => ({ ...f, targetModule: value as Journey["targetModule"] }))}>
-                                <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                        <div className="min-w-0 space-y-1.5">
+                            <Label htmlFor="journey-field-3">Target Module</Label>
+                            <Select value={form.targetModule} onValueChange={(value) => setForm((f) => ({ ...f, targetModule: value as Journey["targetModule"], audienceType: value === "OPPORTUNITY" && f.audienceType === "LEAD_LIST" ? "SAVED_VIEW" : f.audienceType, audienceConfig: {} }))}>
+                                <SelectTrigger id="journey-field-3" className="w-full"><SelectValue /></SelectTrigger>
                                 <SelectContent>
                                     <SelectItem value="LEAD">Leads</SelectItem>
                                     <SelectItem value="OPPORTUNITY">Opportunities</SelectItem>
                                 </SelectContent>
                             </Select>
                         </div>
-                        <div className="space-y-1.5">
-                            <Label>Audience Source</Label>
+                        <div className="min-w-0 space-y-1.5">
+                            <Label htmlFor="journey-field-4">Audience Source</Label>
                             <Select value={form.audienceType} onValueChange={(value) => setForm((f) => ({ ...f, audienceType: value as Journey["audienceType"], audienceConfig: {} }))}>
-                                <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                                <SelectTrigger id="journey-field-4" className="w-full"><SelectValue /></SelectTrigger>
                                 <SelectContent>
                                     <SelectItem value="LEAD_LIST" disabled={form.targetModule !== "LEAD"}>Lead List</SelectItem>
                                     <SelectItem value="SAVED_VIEW">Saved View</SelectItem>
@@ -370,10 +390,10 @@ export function JourneysPanel() {
                         </div>
                     </div>
                     {form.audienceType === "LEAD_LIST" && (
-                        <div className="space-y-1.5">
-                            <Label>Lead List</Label>
+                        <div className="min-w-0 space-y-1.5">
+                            <Label htmlFor="journey-field-5">Lead List</Label>
                             <Select value={form.audienceConfig.leadListId || ""} onValueChange={(value) => setForm((f) => ({ ...f, audienceConfig: { leadListId: value } }))}>
-                                <SelectTrigger className="w-full"><SelectValue placeholder="Select a list" /></SelectTrigger>
+                                <SelectTrigger id="journey-field-5" className="w-full"><SelectValue placeholder="Select a list" /></SelectTrigger>
                                 <SelectContent>
                                     {leadLists.map((list) => (
                                         <SelectItem key={list.id} value={list.id}>{list.name}</SelectItem>
@@ -383,28 +403,30 @@ export function JourneysPanel() {
                         </div>
                     )}
                     {form.audienceType === "SAVED_VIEW" && (
-                        <div className="space-y-1.5">
-                            <Label>Saved View</Label>
-                            <Select value={form.audienceConfig.savedViewId || ""} onValueChange={(value) => setForm((f) => ({ ...f, audienceConfig: { savedViewId: value } }))}>
-                                <SelectTrigger className="w-full"><SelectValue placeholder="Select a view" /></SelectTrigger>
+                        <div className="min-w-0 space-y-1.5">
+                            <Label htmlFor="journey-field-6">Saved View</Label>
+                            <Select disabled={viewsState !== "ready"} value={form.audienceConfig.savedViewId || ""} onValueChange={(value) => setForm((f) => ({ ...f, audienceConfig: { savedViewId: value } }))}>
+                                <SelectTrigger id="journey-field-6" className="w-full"><SelectValue placeholder="Select a view" /></SelectTrigger>
                                 <SelectContent>
                                     {savedViews.map((view) => (
                                         <SelectItem key={view.id} value={view.id}>{view.name}</SelectItem>
                                     ))}
                                 </SelectContent>
                             </Select>
+                            {viewsState === "error" && <ErrorState description="Audience views could not be loaded." onRetry={() => setViewRetry(value => value + 1)} />}
                         </div>
                     )}
                     {form.audienceType === "MANUAL" && (
-                        <div className="space-y-1.5">
-                            <Label>Record Ids (comma-separated)</Label>
-                            <Input
-                                placeholder="lead-1, lead-2"
+                        <div className="min-w-0 space-y-1.5">
+                            <Label htmlFor="journey-field-7">Record Ids (comma-separated)</Label>
+                            <Input id="journey-field-7"
+                                defaultValue={(form.audienceConfig.recordIds ?? []).join(", ")}
+                                placeholder="record-id-1, record-id-2"
                                 onChange={(e) => setForm((f) => ({ ...f, audienceConfig: { recordIds: e.target.value.split(",").map((v) => v.trim()).filter(Boolean) } }))}
                             />
                         </div>
                     )}
-                    <label className="flex items-center gap-2 text-sm font-medium">
+                    <label className="flex min-w-0 flex-wrap items-center gap-2 text-sm font-medium">
                         <Switch checked={form.continuousEnrollment} onCheckedChange={(checked) => setForm((f) => ({ ...f, continuousEnrollment: checked }))} />
                         Continuously enroll new matching records (worker re-checks the audience periodically)
                     </label>
@@ -419,7 +441,7 @@ export function JourneysPanel() {
                 actions={<Button variant="ghost" onClick={() => setVersionsJourney(null)}>Close</Button>}
             >
                 <div className="space-y-4">
-                    <div className="flex items-center justify-between gap-3 rounded-[12px] border bg-muted/40 p-3">
+                    <div className="flex min-w-0 flex-wrap items-center justify-between gap-3 rounded-[12px] border bg-muted/40 p-3">
                         <p className="text-xs text-muted-foreground">
                             Publish the workflow currently open in the editor as a new version, so it becomes a restore point.
                         </p>
@@ -436,9 +458,9 @@ export function JourneysPanel() {
                     ) : (
                         <div className="space-y-2">
                             {versions.map((v) => (
-                                <div key={v.id} className="flex items-center justify-between gap-3 rounded-[12px] border p-3">
+                                <div key={v.id} className="flex min-w-0 flex-wrap items-center justify-between gap-3 rounded-[12px] border p-3">
                                     <div>
-                                        <div className="flex items-center gap-2">
+                                        <div className="flex min-w-0 flex-wrap items-center gap-2">
                                             <span className="text-sm font-bold">v{v.version}</span>
                                             {versionsJourney?.currentVersion === v.version && (
                                                 <Badge variant="outline" className="rounded-md text-[0.65rem]">Current</Badge>

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Loader2, Users, Database, TrendingUp, Zap, CheckCircle, XCircle } from "lucide-react";
+import { Loader2, Users, Database, TrendingUp, Zap, CheckCircle, XCircle, Info } from "lucide-react";
 import { useAuth } from "@/providers/auth-provider";
 import { toast } from "sonner";
 
@@ -43,24 +43,27 @@ export default function UsagePage() {
     const [usage, setUsage] = useState<UsageOverview | null>(null);
     const [automation, setAutomation] = useState<AutomationStats | null>(null);
     const [loading, setLoading] = useState(true);
-    const { token, user } = useAuth();
+    // F23 fix (WP11): this page previously called two API routes that didn't exist at all,
+    // silently falling back to 0 for every figure on a failed fetch -- indistinguishable from a
+    // real zero. Both routes now exist and return real platform-wide data; this flag only
+    // covers a genuine failure (network/auth/transient error) going forward.
+    const [unavailable, setUnavailable] = useState(false);
+    const { isAuthenticated, user } = useAuth();
 
     useEffect(() => {
-        if (token) {
+        if (isAuthenticated) {
             fetchData();
         }
-    }, [token]);
+    }, [isAuthenticated]);
 
     const fetchData = async () => {
         setLoading(true);
         try {
+            // F06 fix (WP05): session auth is now an HttpOnly cookie the browser attaches
+            // automatically for these same-origin requests -- no Authorization header to build.
             const [usageRes, automationRes] = await Promise.all([
-                fetch(`/api/platform-admin/usage/overview`, {
-                    headers: { Authorization: `Bearer ${token}` },
-                }),
-                fetch(`/api/platform-admin/automation/stats`, {
-                    headers: { Authorization: `Bearer ${token}` },
-                }),
+                fetch(`/api/platform-admin/usage/overview`),
+                fetch(`/api/platform-admin/automation/stats`),
             ]);
 
             if (usageRes.ok && automationRes.ok) {
@@ -70,10 +73,13 @@ export default function UsagePage() {
                 ]);
                 setUsage(usageData);
                 setAutomation(automationData);
+                setUnavailable(false);
             } else {
+                setUnavailable(true);
                 toast.error("Failed to fetch usage data");
             }
         } catch (error) {
+            setUnavailable(true);
             toast.error("Failed to load usage data");
         } finally {
             setLoading(false);
@@ -101,6 +107,18 @@ export default function UsagePage() {
             <div className="flex items-center justify-between space-y-2">
                 <h2 className="text-3xl font-bold tracking-tight">Usage Monitoring</h2>
             </div>
+
+            {unavailable && (
+                <Card className="border-yellow-500/50">
+                    <CardContent className="flex items-center gap-3 pt-6">
+                        <Info className="h-5 w-5 text-yellow-500 shrink-0" />
+                        <p className="text-sm text-muted-foreground">
+                            Usage data is unavailable right now -- the figures below are stale or empty, not
+                            necessarily zero. Try refreshing the page.
+                        </p>
+                    </CardContent>
+                </Card>
+            )}
 
             {/* Tenant Stats */}
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">

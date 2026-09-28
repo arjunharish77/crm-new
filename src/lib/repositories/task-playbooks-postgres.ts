@@ -1,5 +1,5 @@
 import { randomUUID } from "crypto";
-import { execute, query, queryOne, type Queryable } from "@/lib/db/query";
+import { execute, query, queryOne, jsonbParam, type Queryable } from "@/lib/db/query";
 import { createTaskForTenant } from "@/lib/repositories/tasks-postgres";
 
 type TenantUser = {
@@ -206,7 +206,7 @@ export async function applyTaskPlaybookForTenant(
       playbook.id,
       leadId,
       opportunityId,
-      createdTasks.map((task) => task.id),
+      jsonbParam(createdTasks.map((task) => task.id)),
       user.id,
       input.source ?? "MANUAL",
       new Date().toISOString(),

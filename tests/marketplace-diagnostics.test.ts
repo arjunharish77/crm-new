@@ -1,3 +1,5 @@
+// Keep delivery tests independent of real DNS; destination guard has its own security tests.
+vi.mock("node:dns/promises", () => ({ default: { lookup: vi.fn().mockResolvedValue([{ address: "93.184.216.34", family: 4 }]) } }));
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const dbMocks = vi.hoisted(() => ({ query: vi.fn(), queryOne: vi.fn() }));

@@ -14,7 +14,7 @@ export async function GET(
     return NextResponse.json(form);
   } catch (error) {
     if (error instanceof Error && error.message === "UNAUTHORIZED") return unauthorized();
-    return serverError("Failed to fetch form");
+    return serverError("Failed to fetch form", error);
   }
 }
 
@@ -33,7 +33,7 @@ export async function PATCH(
     if (error instanceof Error && error.message.startsWith("FEATURE_DISABLED")) {
       return badRequest("Form Builder is not enabled for this workspace");
     }
-    return serverError("Failed to update form");
+    return serverError("Failed to update form", error);
   }
 }
 
@@ -48,6 +48,6 @@ export async function DELETE(
     return NextResponse.json({ success: true });
   } catch (error) {
     if (error instanceof Error && error.message === "UNAUTHORIZED") return unauthorized();
-    return serverError("Failed to delete form");
+    return serverError("Failed to delete form", error);
   }
 }

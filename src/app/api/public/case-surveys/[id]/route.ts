@@ -11,7 +11,7 @@ export async function GET(_request: Request, { params }: Params) {
   try {
     const { id } = await params;
     const survey = await getCaseSurveyForPublic(id);
-    if (!survey) return badRequest("Survey not found");
+    if (!survey) return NextResponse.json({ message: "Survey not found" }, { status: 404 });
     return NextResponse.json(survey);
   } catch (error) {
     return serverError("Failed to load survey", error);

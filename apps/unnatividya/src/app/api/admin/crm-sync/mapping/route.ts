@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { getAdminSession } from "@/lib/admin-auth";
 import { crmSyncTokens, getActiveMapping } from "@/lib/crm-sync";
 import { query } from "@/lib/db";
 
@@ -9,6 +10,13 @@ const mappingSchema = z.object({
 });
 
 export async function GET() {
+  // F26 fix (WP16): DB-backed session check -- see getAdminSession in src/lib/admin-auth.ts for
+  // why proxy.ts's cookie-only check on /api/admin/* isn't sufficient by itself.
+  const session = await getAdminSession();
+  if (!session) {
+    return NextResponse.json({ error: "CMS admin login required" }, { status: 401 });
+  }
+
   const active = await getActiveMapping();
   return NextResponse.json({
     tokens: crmSyncTokens,
@@ -23,6 +31,11 @@ export async function GET() {
 }
 
 export async function PATCH(request: Request) {
+  const session = await getAdminSession();
+  if (!session) {
+    return NextResponse.json({ error: "CMS admin login required" }, { status: 401 });
+  }
+
   const body = await request.json().catch(() => null);
   const parsed = mappingSchema.safeParse(body);
   if (!parsed.success) {

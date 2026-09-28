@@ -1,3 +1,5 @@
+> **Existing VPS upgrades:** use [VPS_UPGRADE_2026_09.md](../../docs/VPS_UPGRADE_2026_09.md). The historical first-install/wipe instructions below are not an upgrade procedure and must not be used on the live database.
+
 # CRM VPS Deployment
 
 This deployment runs the CRM on a VPS with direct Postgres, a separate worker process, and Caddy as the HTTPS reverse proxy.

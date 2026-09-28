@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useState, useCallback, useMemo } from "react";
+import { PageHeader } from "@/components/layout/page-header";
+import { ErrorState } from "@/components/common/error-state";
 import { apiFetch } from "@/lib/api";
 import { Card } from "@/components/ui/card";
 import { ColumnDef } from "@tanstack/react-table";
@@ -16,20 +18,21 @@ import { BulkActionsToolbar } from "@/components/bulk-actions/bulk-toolbar";
 
 export default function TenantsPage() {
     const [tenants, setTenants] = useState<any[]>([]);
+    const [loadError, setLoadError] = useState(false);
     const [loading, setLoading] = useState(true);
     const [selectedRows, setSelectedRows] = useState<string[]>([]);
     const [isAllSelected, setIsAllSelected] = useState(false);
     const [totalItems, setTotalItems] = useState(0);
 
     const fetchTenants = useCallback(() => {
-        setLoading(true);
+        setLoading(true); setLoadError(false);
         apiFetch('/platform-admin/tenants')
             .then((data) => {
                 const safeData = Array.isArray(data) ? data : [];
                 setTenants(safeData);
                 setTotalItems(safeData.length);
             })
-            .catch(() => toast.error("Failed to load tenants"))
+            .catch(() => setLoadError(true))
             .finally(() => setLoading(false));
     }, []);
 
@@ -53,15 +56,6 @@ export default function TenantsPage() {
         } catch (error) {
             toast.error(`Failed to ${action} tenant`);
         }
-    };
-
-    const handleBulkDelete = async () => {
-        if (!confirm(`Are you sure you want to delete ${selectedRows.length} tenants?`)) return;
-        // Mock bulk delete
-        toast.success("Tenants deleted (mock)");
-        setTenants(prev => prev.filter(t => !selectedRows.includes(t.id)));
-        setSelectedRows([]);
-        setIsAllSelected(false);
     };
 
     const handleSelectAllFiltered = () => {
@@ -146,6 +140,7 @@ export default function TenantsPage() {
                             <IconButton
                                 variant="ghost"
                                 size="icon-sm"
+                                aria-label={row.original.status === "SUSPENDED" ? "Unsuspend tenant" : "Suspend tenant"}
                                 className={row.original.status === 'SUSPENDED' ? "text-primary hover:bg-primary/10" : "text-tertiary hover:bg-tertiary/10"}
                                 onClick={(event) => {
                                     event.stopPropagation();
@@ -163,18 +158,10 @@ export default function TenantsPage() {
     ], [handleSuspend]);
 
     return (
-        <div className="mx-auto max-w-[1600px] p-6">
-            <div className="mb-8 flex items-center justify-between">
-                <div>
-                    <h1 className="text-2xl font-bold tracking-[-0.5px]">Tenants</h1>
-                    <p className="mt-1 text-sm text-muted-foreground">
-                        Manage workspaces and subscriptions.
-                    </p>
-                </div>
-                <CreateTenantDialog onSuccess={fetchTenants} />
-            </div>
-
-            <Card className="h-[600px] w-full overflow-hidden">
+        <div className="min-w-0">
+            <PageHeader title="Tenants" description="Manage workspaces and subscriptions." actions={<CreateTenantDialog onSuccess={fetchTenants} />} />
+            {loadError ? <ErrorState description="Tenants could not be loaded." onRetry={fetchTenants} /> :
+            <Card className="h-[min(600px,75dvh)] min-h-80 min-w-0 w-full overflow-hidden">
                 <DataTable
                     storageKey="platform-admin-tenants-table"
                     data={tenants || []}
@@ -197,13 +184,12 @@ export default function TenantsPage() {
                         description: "Create a tenant to start managing workspaces.",
                     }}
                 />
-            </Card>
+            </Card>}
 
             <BulkActionsToolbar
                 selectedCount={isAllSelected ? totalItems : selectedRows.length}
                 onClearSelection={clearSelection}
                 module="tenants"
-                onDelete={handleBulkDelete}
             />
         </div>
     );

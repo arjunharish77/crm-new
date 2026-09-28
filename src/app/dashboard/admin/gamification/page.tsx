@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { apiFetch } from "@/lib/api";
+import { PageHeader } from "@/components/layout/page-header";
+import { ErrorState } from "@/components/common/error-state";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -174,6 +176,7 @@ export default function GamificationSettingsPage() {
     const [opportunityTypes, setOpportunityTypes] = useState<any[]>([]);
     const [activityTypes, setActivityTypes] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
+    const [loadError, setLoadError] = useState(false);
 
     const [ruleDialogOpen, setRuleDialogOpen] = useState(false);
     const [editingRule, setEditingRule] = useState<GamificationRule | null>(null);
@@ -185,18 +188,19 @@ export default function GamificationSettingsPage() {
 
     const fetchAll = useCallback(async () => {
         setLoading(true);
+        setLoadError(false);
         try {
             const [rulesData, badgesData, settingsData, redemptionsData, partnersData, typesData, activityTypesData, usersData, teamsData, salesGroupsData] = await Promise.all([
                 apiFetch<GamificationRule[]>("/gamification-rules"),
                 apiFetch<Badge[]>("/badges"),
-                apiFetch<Partial<GamificationSettings> | null>("/gamification-settings").catch(() => null),
-                apiFetch<Redemption[]>("/gamification-redemptions").catch(() => []),
-                apiFetch<any[]>("/partners").catch(() => []),
-                apiFetch<any[]>("/opportunity-types").catch(() => []),
-                apiFetch<any[]>("/activity-types").catch(() => []),
-                apiFetch<TargetOption[]>("/users").catch(() => []),
-                apiFetch<TargetOption[]>("/teams").catch(() => []),
-                apiFetch<TargetOption[]>("/sales-groups").catch(() => []),
+                apiFetch<Partial<GamificationSettings> | null>("/gamification-settings"),
+                apiFetch<Redemption[]>("/gamification-redemptions"),
+                apiFetch<any[]>("/partners"),
+                apiFetch<any[]>("/opportunity-types"),
+                apiFetch<any[]>("/activity-types"),
+                apiFetch<TargetOption[]>("/users"),
+                apiFetch<TargetOption[]>("/teams"),
+                apiFetch<TargetOption[]>("/sales-groups"),
             ]);
             setRules(Array.isArray(rulesData) ? rulesData : []);
             setBadges(Array.isArray(badgesData) ? badgesData : []);
@@ -215,7 +219,7 @@ export default function GamificationSettingsPage() {
             }
             setPartnerOrgs([...orgMap.values()]);
         } catch {
-            toast.error("Failed to load gamification settings");
+            setLoadError(true);
         } finally {
             setLoading(false);
         }
@@ -429,38 +433,35 @@ export default function GamificationSettingsPage() {
 
     if (!gamificationEnabled) {
         return (
-            <div className="mx-auto max-w-[1200px] p-4 md:p-6">
+            <div className="@container/finance min-w-0">
                 <EmptyState title="Gamification isn't enabled" description="Enable the Gamification feature flag for this tenant to configure rules, badges, and rewards." />
             </div>
         );
     }
 
+    if (loadError) return <><PageHeader title="Gamification" /><ErrorState description="Gamification data could not be loaded." onRetry={fetchAll} /></>;
+    if (loading) return <><PageHeader title="Gamification" /><TableSkeleton rows={4} columns={3} /></>;
     return (
-        <div className="mx-auto max-w-[1200px] p-4 md:p-6">
-            <h1 className="text-lg font-extrabold tracking-tight">Gamification</h1>
-            <p className="mt-1 text-xs text-muted-foreground">
-                Point rules award points when their trigger event and audience match — every matching rule fires (they
-                stack). Badges count points-ledger entries for a trigger event against a threshold, optionally within a
-                rolling window.
-            </p>
+        <div className="@container/finance min-w-0">
+            <PageHeader title="Gamification" description="Matching point rules stack. Manage badges, levels, leaderboards and rewards." />
 
             <div className="mt-4 grid gap-3 md:grid-cols-3">
                 <div className="rounded-xl border bg-card p-3">
-                    <div className="flex items-center gap-2">
+                    <div className="flex min-w-0 flex-wrap items-center gap-2">
                         <Award className="size-4 text-primary" />
                         <span className="text-xs font-bold uppercase text-muted-foreground">Active Rules</span>
                     </div>
                     <div className="mt-2 text-2xl font-extrabold">{rules.filter((rule) => rule.isActive).length}</div>
                 </div>
                 <div className="rounded-xl border bg-card p-3">
-                    <div className="flex items-center gap-2">
+                    <div className="flex min-w-0 flex-wrap items-center gap-2">
                         <Trophy className="size-4 text-tertiary" />
                         <span className="text-xs font-bold uppercase text-muted-foreground">Active Badges</span>
                     </div>
                     <div className="mt-2 text-2xl font-extrabold">{badges.filter((badge) => badge.isActive).length}</div>
                 </div>
                 <div className="rounded-xl border bg-card p-3">
-                    <div className="flex items-center gap-2">
+                    <div className="flex min-w-0 flex-wrap items-center gap-2">
                         <Target className="size-4 text-secondary" />
                         <span className="text-xs font-bold uppercase text-muted-foreground">Conditional Rules</span>
                     </div>
@@ -482,7 +483,7 @@ export default function GamificationSettingsPage() {
 
                 <TabsContent value="settings">
             <div className="rounded-xl border bg-card p-4">
-                <div className="mb-4 flex items-center justify-between gap-3">
+                <div className="mb-4 flex min-w-0 flex-wrap items-center justify-between gap-3">
                     <div>
                         <h2 className="text-sm font-bold">Advanced Gamification Settings</h2>
                         <p className="mt-0.5 text-xs text-muted-foreground">
@@ -507,7 +508,7 @@ export default function GamificationSettingsPage() {
 
                     <TabsContent value="levels">
                     <div className="space-y-3 rounded-xl border bg-surface-container-low p-3">
-                        <div className="flex items-center justify-between">
+                        <div className="flex min-w-0 flex-wrap items-center justify-between">
                             <Label className="text-xs font-bold uppercase text-muted-foreground">Levels</Label>
                             <Button variant="outline" size="sm" onClick={addLevel}>
                                 <Plus className="size-4" />
@@ -515,10 +516,10 @@ export default function GamificationSettingsPage() {
                             </Button>
                         </div>
                         {settings.levels.map((level, index) => (
-                            <div key={index} className="grid gap-2 sm:grid-cols-[1fr_120px_96px_auto]">
-                                <Input value={level.name} onChange={(e) => updateLevel(index, { name: e.target.value })} />
-                                <Input type="number" value={level.minPoints} onChange={(e) => updateLevel(index, { minPoints: Number(e.target.value) || 0 })} />
-                                <Input value={level.color ?? ""} onChange={(e) => updateLevel(index, { color: e.target.value })} />
+                            <div key={index} className="grid items-end gap-2 @min-[850px]/finance:grid-cols-[minmax(0,1fr)_120px_96px_auto]">
+                                <div className="min-w-0 space-y-2"><Label htmlFor={`gamification-level-name-${index}`}>Name</Label><Input id={`gamification-level-name-${index}`} aria-label={`Level ${index + 1} name`} value={level.name} onChange={(e) => updateLevel(index, { name: e.target.value })} /></div>
+                                <div className="min-w-0 space-y-2"><Label htmlFor={`gamification-level-minimum-points-${index}`}>Minimum points</Label><Input id={`gamification-level-minimum-points-${index}`} aria-label={`Level ${index + 1} minimum points`} type="number" value={level.minPoints} onChange={(e) => updateLevel(index, { minPoints: Number(e.target.value) || 0 })} /></div>
+                                <div className="min-w-0 space-y-2"><Label htmlFor={`gamification-level-color-${index}`}>Color</Label><Input id={`gamification-level-color-${index}`} aria-label={`Level ${index + 1} color`} value={level.color ?? ""} onChange={(e) => updateLevel(index, { color: e.target.value })} /></div>
                                 <Button
                                     variant="ghost"
                                     size="icon-sm"
@@ -537,7 +538,7 @@ export default function GamificationSettingsPage() {
                         <Label className="text-xs font-bold uppercase text-muted-foreground">Leaderboard</Label>
                         <div className="grid gap-3 sm:grid-cols-2">
                             <div className="space-y-2">
-                                <Label>Scope</Label>
+                                <Label htmlFor="gamification-field-1">Scope</Label>
                                 <Select
                                     value={settings.leaderboardConfig.scope ?? "INTERNAL"}
                                     onValueChange={(value) => setSettings((current) => ({
@@ -545,7 +546,7 @@ export default function GamificationSettingsPage() {
                                         leaderboardConfig: { ...current.leaderboardConfig, scope: value as any },
                                     }))}
                                 >
-                                    <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                                    <SelectTrigger id="gamification-field-1" className="w-full"><SelectValue /></SelectTrigger>
                                     <SelectContent>
                                         <SelectItem value="INTERNAL">Internal only</SelectItem>
                                         <SelectItem value="PARTNER">Partners only</SelectItem>
@@ -554,7 +555,7 @@ export default function GamificationSettingsPage() {
                                 </Select>
                             </div>
                             <div className="space-y-2">
-                                <Label>Period</Label>
+                                <Label htmlFor="gamification-field-2">Period</Label>
                                 <Select
                                     value={settings.leaderboardConfig.period ?? "MONTHLY"}
                                     onValueChange={(value) => setSettings((current) => ({
@@ -562,7 +563,7 @@ export default function GamificationSettingsPage() {
                                         leaderboardConfig: { ...current.leaderboardConfig, period: value as any },
                                     }))}
                                 >
-                                    <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                                    <SelectTrigger id="gamification-field-2" className="w-full"><SelectValue /></SelectTrigger>
                                     <SelectContent>
                                         <SelectItem value="WEEKLY">Weekly</SelectItem>
                                         <SelectItem value="MONTHLY">Monthly</SelectItem>
@@ -573,7 +574,7 @@ export default function GamificationSettingsPage() {
                             </div>
                         </div>
                         <div className="grid gap-3 sm:grid-cols-2">
-                            <label className="flex items-center justify-between rounded-lg border bg-card p-3 text-sm font-semibold">
+                            <label className="flex min-w-0 flex-wrap items-center justify-between rounded-lg border bg-card p-3 text-sm font-semibold">
                                 Include partners
                                 <Switch
                                     checked={!!settings.leaderboardConfig.includePartners}
@@ -583,7 +584,7 @@ export default function GamificationSettingsPage() {
                                     }))}
                                 />
                             </label>
-                            <label className="flex items-center justify-between rounded-lg border bg-card p-3 text-sm font-semibold">
+                            <label className="flex min-w-0 flex-wrap items-center justify-between rounded-lg border bg-card p-3 text-sm font-semibold">
                                 Anonymize partners
                                 <Switch
                                     checked={!!settings.leaderboardConfig.anonymizePartners}
@@ -599,7 +600,7 @@ export default function GamificationSettingsPage() {
 
                     <TabsContent value="rewards">
                     <div className="space-y-3 rounded-xl border bg-surface-container-low p-3">
-                        <div className="flex items-center justify-between">
+                        <div className="flex min-w-0 flex-wrap items-center justify-between">
                             <Label className="text-xs font-bold uppercase text-muted-foreground">Reward Catalog</Label>
                             <Button
                                 variant="outline"
@@ -616,17 +617,17 @@ export default function GamificationSettingsPage() {
                         {settings.redemptionCatalog.length === 0 ? (
                             <p className="rounded-lg border border-dashed bg-card p-3 text-xs text-muted-foreground">No rewards configured.</p>
                         ) : settings.redemptionCatalog.map((reward, index) => (
-                            <div key={index} className="grid gap-2 sm:grid-cols-[1fr_110px_150px_auto]">
-                                <Input value={reward.name} onChange={(e) => updateRedemption(index, { name: e.target.value })} />
-                                <Input type="number" value={reward.pointsCost} onChange={(e) => updateRedemption(index, { pointsCost: Number(e.target.value) || 0 })} />
-                                <Select value={reward.rewardType} onValueChange={(value) => updateRedemption(index, { rewardType: value as any })}>
-                                    <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                            <div key={index} className="grid items-end gap-2 @min-[850px]/finance:grid-cols-[minmax(0,1fr)_110px_150px_auto]">
+                                <div className="min-w-0 space-y-2"><Label htmlFor={`gamification-reward-name-${index}`}>Name</Label><Input id={`gamification-reward-name-${index}`} aria-label={`Reward ${index + 1} name`} value={reward.name} onChange={(e) => updateRedemption(index, { name: e.target.value })} /></div>
+                                <div className="min-w-0 space-y-2"><Label htmlFor={`gamification-reward-points-cost-${index}`}>Points cost</Label><Input id={`gamification-reward-points-cost-${index}`} aria-label={`Reward ${index + 1} points cost`} type="number" value={reward.pointsCost} onChange={(e) => updateRedemption(index, { pointsCost: Number(e.target.value) || 0 })} /></div>
+                                <div className="min-w-0 space-y-2"><Label htmlFor={`gamification-reward-type-${index}`}>Reward type</Label><Select value={reward.rewardType} onValueChange={(value) => updateRedemption(index, { rewardType: value as any })}>
+                                    <SelectTrigger id={`gamification-reward-type-${index}`} aria-label={`Reward ${index + 1} type`} className="w-full"><SelectValue /></SelectTrigger>
                                     <SelectContent>
                                         <SelectItem value="INTERNAL_PERK">Internal perk</SelectItem>
                                         <SelectItem value="MONETARY">Monetary</SelectItem>
                                         <SelectItem value="THIRD_PARTY_REWARD">Third-party reward</SelectItem>
                                     </SelectContent>
-                                </Select>
+                                </Select></div>
                                 <Button
                                     variant="ghost"
                                     size="icon-sm"
@@ -643,10 +644,10 @@ export default function GamificationSettingsPage() {
                     <TabsContent value="guardrails">
                     <div className="space-y-3 rounded-xl border bg-surface-container-low p-3">
                         <Label className="text-xs font-bold uppercase text-muted-foreground">Anti-Gaming Rules</Label>
-                        <div className="grid gap-3 sm:grid-cols-3">
+                        <div className="grid gap-3 @min-[850px]/finance:grid-cols-3">
                             <div className="space-y-2">
-                                <Label>Daily Cap</Label>
-                                <Input
+                                <Label htmlFor="gamification-field-3">Daily Cap</Label>
+                                <Input id="gamification-field-3"
                                     type="number"
                                     value={settings.antiGamingRules.maxPointsPerUserPerDay ?? 0}
                                     onChange={(e) => setSettings((current) => ({
@@ -656,8 +657,8 @@ export default function GamificationSettingsPage() {
                                 />
                             </div>
                             <div className="space-y-2">
-                                <Label>Duplicate Window</Label>
-                                <Input
+                                <Label htmlFor="gamification-field-4">Duplicate Window</Label>
+                                <Input id="gamification-field-4"
                                     type="number"
                                     value={settings.antiGamingRules.duplicateEventWindowMinutes ?? 0}
                                     onChange={(e) => setSettings((current) => ({
@@ -667,8 +668,8 @@ export default function GamificationSettingsPage() {
                                 />
                             </div>
                             <div className="space-y-2">
-                                <Label>Review Above</Label>
-                                <Input
+                                <Label htmlFor="gamification-field-5">Review Above</Label>
+                                <Input id="gamification-field-5"
                                     type="number"
                                     value={settings.antiGamingRules.requireManagerReviewAbovePoints ?? 0}
                                     onChange={(e) => setSettings((current) => ({
@@ -705,7 +706,7 @@ export default function GamificationSettingsPage() {
                             </Select>
                         </div>
                         {settings.participantConfig?.mode === "SELECTED" ? (
-                            <div className="grid gap-3 lg:grid-cols-4">
+                            <div className="grid gap-3 @min-[850px]/finance:grid-cols-2">
                                 <TargetChecklist title="Users" items={users} selected={settings.participantConfig.userIds} onToggle={(id, checked) => toggleParticipantTarget("userIds", id, checked)} />
                                 <TargetChecklist title="Teams" items={teams} selected={settings.participantConfig.teamIds} onToggle={(id, checked) => toggleParticipantTarget("teamIds", id, checked)} />
                                 <TargetChecklist title="Sales Groups" items={salesGroups} selected={settings.participantConfig.salesGroupIds} onToggle={(id, checked) => toggleParticipantTarget("salesGroupIds", id, checked)} />
@@ -720,7 +721,7 @@ export default function GamificationSettingsPage() {
 
                 <TabsContent value="redemptions">
             <div className="rounded-xl border bg-card p-4">
-                <div className="mb-4 flex items-center justify-between gap-3">
+                <div className="mb-4 flex min-w-0 flex-wrap items-center justify-between gap-3">
                     <div>
                         <h2 className="text-sm font-bold">Redemption Queue</h2>
                         <p className="mt-0.5 text-xs text-muted-foreground">
@@ -749,7 +750,7 @@ export default function GamificationSettingsPage() {
                                             <p className="text-xs text-destructive">{redemption.failureReason}</p>
                                         ) : null}
                                     </div>
-                                    <div className="flex items-center gap-2">
+                                    <div className="flex min-w-0 flex-wrap items-center gap-2">
                                         <Badge variant="outline" className="rounded-md text-[0.65rem] font-semibold">
                                             {redemption.status}
                                         </Badge>
@@ -799,7 +800,7 @@ export default function GamificationSettingsPage() {
                         <div key={rule.id} className="rounded-xl border bg-card p-3.5">
                             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                                 <div className="flex flex-wrap items-center gap-1.5">
-                                    <span className="text-sm font-bold">{rule.name}</span>
+                                    <span className="min-w-0 break-words text-sm font-bold">{rule.name}</span>
                                     <Badge variant="outline" className="rounded-md text-[0.6rem] font-semibold">
                                         {rule.triggerEventType}
                                     </Badge>
@@ -851,7 +852,7 @@ export default function GamificationSettingsPage() {
                     {badges.map((badge) => (
                         <div key={badge.id} className="rounded-xl border bg-card p-3.5">
                             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                                <div className="flex items-center gap-3">
+                                <div className="flex min-w-0 flex-wrap items-center gap-3">
                                     <span className="text-2xl leading-none">{badge.iconEmoji}</span>
                                     <div>
                                         <div className="text-sm font-bold">{badge.name}</div>
@@ -862,7 +863,7 @@ export default function GamificationSettingsPage() {
                                         </p>
                                     </div>
                                 </div>
-                                <div className="flex items-center gap-1">
+                                <div className="flex min-w-0 flex-wrap items-center gap-1">
                                     <Button variant="ghost" size="icon-sm" onClick={() => openEditBadge(badge)} aria-label={`Edit ${badge.name}`}>
                                         <Pencil className="size-4" />
                                     </Button>
@@ -892,13 +893,13 @@ export default function GamificationSettingsPage() {
             >
                 <div className="space-y-4">
                     <div className="space-y-2">
-                        <Label>Name</Label>
-                        <Input value={ruleForm.name} onChange={(e) => setRuleForm((f) => ({ ...f, name: e.target.value }))} />
+                        <Label htmlFor="gamification-field-6">Name</Label>
+                        <Input id="gamification-field-6" value={ruleForm.name} onChange={(e) => setRuleForm((f) => ({ ...f, name: e.target.value }))} />
                     </div>
                     <div className="space-y-2">
-                        <Label>Trigger Event</Label>
+                        <Label htmlFor="gamification-field-7">Trigger Event</Label>
                         <Select value={ruleForm.triggerEventType} onValueChange={(v) => setRuleForm((f) => ({ ...f, triggerEventType: v }))}>
-                            <SelectTrigger className="w-full">
+                            <SelectTrigger id="gamification-field-7" className="w-full">
                                 <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
@@ -907,9 +908,9 @@ export default function GamificationSettingsPage() {
                         </Select>
                     </div>
                     <div className="space-y-2">
-                        <Label>Audience</Label>
+                        <Label htmlFor="gamification-field-8">Audience</Label>
                         <Select value={ruleForm.audienceScope} onValueChange={(v) => setRuleForm((f) => ({ ...f, audienceScope: v as AudienceScope }))}>
-                            <SelectTrigger className="w-full">
+                            <SelectTrigger id="gamification-field-8" className="w-full">
                                 <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
@@ -921,14 +922,14 @@ export default function GamificationSettingsPage() {
                     </div>
                     <div className="grid gap-4 sm:grid-cols-2">
                         <div className="space-y-2">
-                            <Label>Points Preset</Label>
+                            <Label htmlFor="gamification-field-9">Points Preset</Label>
                             <Select
                                 value={POINT_PRESETS.some((preset) => Number(preset.value) === ruleForm.pointsAwarded) ? String(ruleForm.pointsAwarded) : "__custom__"}
                                 onValueChange={(value) => {
                                     if (value !== "__custom__") setRuleForm((f) => ({ ...f, pointsAwarded: Number(value) }));
                                 }}
                             >
-                                <SelectTrigger className="w-full">
+                                <SelectTrigger id="gamification-field-9" className="w-full">
                                     <SelectValue />
                                 </SelectTrigger>
                                 <SelectContent>
@@ -940,14 +941,14 @@ export default function GamificationSettingsPage() {
                             </Select>
                         </div>
                         <div className="space-y-2">
-                            <Label>Priority Preset</Label>
+                            <Label htmlFor="gamification-field-10">Priority Preset</Label>
                             <Select
                                 value={PRIORITY_PRESETS.some((preset) => Number(preset.value) === ruleForm.priority) ? String(ruleForm.priority) : "__custom__"}
                                 onValueChange={(value) => {
                                     if (value !== "__custom__") setRuleForm((f) => ({ ...f, priority: Number(value) }));
                                 }}
                             >
-                                <SelectTrigger className="w-full">
+                                <SelectTrigger id="gamification-field-10" className="w-full">
                                     <SelectValue />
                                 </SelectTrigger>
                                 <SelectContent>
@@ -961,12 +962,12 @@ export default function GamificationSettingsPage() {
                     </div>
                     <div className="grid gap-4 sm:grid-cols-2">
                         <div className="space-y-2">
-                            <Label>Custom Points</Label>
-                            <Input type="number" value={ruleForm.pointsAwarded} onChange={(e) => setRuleForm((f) => ({ ...f, pointsAwarded: Number(e.target.value) }))} />
+                            <Label htmlFor="gamification-field-11">Custom Points</Label>
+                            <Input id="gamification-field-11" type="number" value={ruleForm.pointsAwarded} onChange={(e) => setRuleForm((f) => ({ ...f, pointsAwarded: Number(e.target.value) }))} />
                         </div>
                         <div className="space-y-2">
-                            <Label>Custom Priority</Label>
-                            <Input type="number" value={ruleForm.priority} onChange={(e) => setRuleForm((f) => ({ ...f, priority: Number(e.target.value) }))} />
+                            <Label htmlFor="gamification-field-12">Custom Priority</Label>
+                            <Input id="gamification-field-12" type="number" value={ruleForm.priority} onChange={(e) => setRuleForm((f) => ({ ...f, priority: Number(e.target.value) }))} />
                         </div>
                     </div>
                     <ConditionBuilder
@@ -978,7 +979,7 @@ export default function GamificationSettingsPage() {
                         onLogicChange={(conditionLogic) => setRuleForm((f) => ({ ...f, conditionLogic }))}
                         onChange={(conditions) => setRuleForm((f) => ({ ...f, conditions }))}
                     />
-                    <div className="flex items-center gap-2">
+                    <div className="flex min-w-0 flex-wrap items-center gap-2">
                         <Switch checked={ruleForm.isActive} onCheckedChange={(checked) => setRuleForm((f) => ({ ...f, isActive: checked }))} id="rule-active" />
                         <Label htmlFor="rule-active">Active</Label>
                     </div>
@@ -998,11 +999,11 @@ export default function GamificationSettingsPage() {
                 }
             >
                 <div className="space-y-4">
-                    <div className="flex gap-4">
-                        <div className="w-36 space-y-2">
-                            <Label>Icon</Label>
+                    <div className="grid gap-4 sm:grid-cols-[144px_minmax(0,1fr)]">
+                        <div className="min-w-0 space-y-2">
+                            <Label htmlFor="gamification-field-13">Icon</Label>
                             <Select value={badgeForm.iconEmoji} onValueChange={(value) => setBadgeForm((f) => ({ ...f, iconEmoji: value }))}>
-                                <SelectTrigger className="w-full">
+                                <SelectTrigger id="gamification-field-13" className="w-full">
                                     <SelectValue />
                                 </SelectTrigger>
                                 <SelectContent>
@@ -1013,18 +1014,18 @@ export default function GamificationSettingsPage() {
                             </Select>
                         </div>
                         <div className="flex-1 space-y-2">
-                            <Label>Name</Label>
-                            <Input value={badgeForm.name} onChange={(e) => setBadgeForm((f) => ({ ...f, name: e.target.value }))} />
+                            <Label htmlFor="gamification-field-14">Name</Label>
+                            <Input id="gamification-field-14" value={badgeForm.name} onChange={(e) => setBadgeForm((f) => ({ ...f, name: e.target.value }))} />
                         </div>
                     </div>
                     <div className="space-y-2">
-                        <Label>Description (optional)</Label>
-                        <Input value={badgeForm.description} onChange={(e) => setBadgeForm((f) => ({ ...f, description: e.target.value }))} />
+                        <Label htmlFor="gamification-field-15">Description (optional)</Label>
+                        <Input id="gamification-field-15" value={badgeForm.description} onChange={(e) => setBadgeForm((f) => ({ ...f, description: e.target.value }))} />
                     </div>
                     <div className="space-y-2">
-                        <Label>Counts Trigger Event</Label>
+                        <Label htmlFor="gamification-field-16">Counts Trigger Event</Label>
                         <Select value={badgeForm.eventType} onValueChange={(v) => setBadgeForm((f) => ({ ...f, eventType: v }))}>
-                            <SelectTrigger className="w-full">
+                            <SelectTrigger id="gamification-field-16" className="w-full">
                                 <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
@@ -1038,14 +1039,14 @@ export default function GamificationSettingsPage() {
                     </p>
                     <div className="grid gap-4 sm:grid-cols-2">
                         <div className="space-y-2">
-                            <Label>Threshold Preset</Label>
+                            <Label htmlFor="gamification-field-17">Threshold Preset</Label>
                             <Select
                                 value={BADGE_THRESHOLD_PRESETS.some((preset) => Number(preset.value) === badgeForm.threshold) ? String(badgeForm.threshold) : "__custom__"}
                                 onValueChange={(value) => {
                                     if (value !== "__custom__") setBadgeForm((f) => ({ ...f, threshold: Number(value) }));
                                 }}
                             >
-                                <SelectTrigger className="w-full">
+                                <SelectTrigger id="gamification-field-17" className="w-full">
                                     <SelectValue />
                                 </SelectTrigger>
                                 <SelectContent>
@@ -1057,12 +1058,12 @@ export default function GamificationSettingsPage() {
                             </Select>
                         </div>
                         <div className="space-y-2">
-                            <Label>Window</Label>
+                            <Label htmlFor="gamification-field-18">Window</Label>
                             <Select
                                 value={badgeForm.windowDays ? String(badgeForm.windowDays) : "__all_time__"}
                                 onValueChange={(value) => setBadgeForm((f) => ({ ...f, windowDays: value === "__all_time__" ? "" : Number(value) }))}
                             >
-                                <SelectTrigger className="w-full">
+                                <SelectTrigger id="gamification-field-18" className="w-full">
                                     <SelectValue />
                                 </SelectTrigger>
                                 <SelectContent>
@@ -1075,18 +1076,18 @@ export default function GamificationSettingsPage() {
                     </div>
                     <div className="grid gap-4 sm:grid-cols-2">
                         <div className="space-y-2">
-                            <Label>Custom Threshold</Label>
-                            <Input type="number" value={badgeForm.threshold} onChange={(e) => setBadgeForm((f) => ({ ...f, threshold: Number(e.target.value) }))} />
+                            <Label htmlFor="gamification-field-19">Custom Threshold</Label>
+                            <Input id="gamification-field-19" type="number" value={badgeForm.threshold} onChange={(e) => setBadgeForm((f) => ({ ...f, threshold: Number(e.target.value) }))} />
                         </div>
                         <div className="space-y-2">
-                            <Label>Custom Window Days</Label>
-                            <Input type="number" value={badgeForm.windowDays} onChange={(e) => setBadgeForm((f) => ({ ...f, windowDays: e.target.value }))} />
+                            <Label htmlFor="gamification-field-20">Custom Window Days</Label>
+                            <Input id="gamification-field-20" type="number" value={badgeForm.windowDays} onChange={(e) => setBadgeForm((f) => ({ ...f, windowDays: e.target.value }))} />
                         </div>
                     </div>
                     <div className="space-y-2">
-                        <Label>Audience</Label>
+                        <Label htmlFor="gamification-field-21">Audience</Label>
                         <Select value={badgeForm.audienceScope} onValueChange={(v) => setBadgeForm((f) => ({ ...f, audienceScope: v as AudienceScope }))}>
-                            <SelectTrigger className="w-full">
+                            <SelectTrigger id="gamification-field-21" className="w-full">
                                 <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
@@ -1096,7 +1097,7 @@ export default function GamificationSettingsPage() {
                             </SelectContent>
                         </Select>
                     </div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex min-w-0 flex-wrap items-center gap-2">
                         <Switch checked={badgeForm.isActive} onCheckedChange={(checked) => setBadgeForm((f) => ({ ...f, isActive: checked }))} id="badge-active" />
                         <Label htmlFor="badge-active">Active</Label>
                     </div>

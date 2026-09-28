@@ -16,6 +16,9 @@ vi.mock("@/lib/db/query", () => ({
   query: pgQueryMock,
   queryOne: pgQueryOneMock,
   execute: pgExecuteMock,
+  queryAsSystem: pgQueryMock,
+  queryOneAsSystem: pgQueryOneMock,
+  executeAsSystem: pgExecuteMock,
 }));
 
 vi.mock("@/lib/server/crm", () => ({
@@ -242,6 +245,34 @@ describe("direct Postgres inbuilt report helper lookups", () => {
     expect(pgExecuteMock.mock.calls[1][1][1]).toBe("tenant-2");
   });
 
+  // Real bug found while verifying WP10 (F18) against a real running worker: node-postgres
+  // serializes a plain object query parameter as JSON automatically, but a plain ARRAY parameter
+  // is instead converted to a Postgres array literal ("{...,...}") -- not valid JSON syntax --
+  // which a jsonb column rejects with "invalid input syntax for type json". report.issues is an
+  // array, so the insert must JSON.stringify it explicitly (confirmed against real Postgres:
+  // the un-stringified array param reproduces the exact error; JSON.stringify fixes it).
+  it("JSON-stringifies the issues array before inserting into the jsonb column (real Postgres would otherwise reject it)", async () => {
+    pgQueryMock.mockImplementation(async (sql: string) => {
+      if (String(sql).includes('from "Tenant"')) return [{ id: "tenant-1" }];
+      return [];
+    });
+    pgQueryOneMock.mockResolvedValue(null);
+    listLeadsMock.mockResolvedValue({
+      data: [{ id: "seed-lead-duplicate-a", email: "dup@example.com" }, { id: "seed-lead-duplicate-b", email: "dup@example.com" }],
+    });
+    listActivitiesMock.mockResolvedValue({ data: [] });
+    listOpportunitiesMock.mockResolvedValue({ data: [] });
+    listOpportunityTypesMock.mockResolvedValue([]);
+
+    const { runScheduledDataQualityScan } = await import("@/lib/server/inbuilt-reports");
+    await runScheduledDataQualityScan(10);
+
+    const issuesParam = pgExecuteMock.mock.calls[0][1][5];
+    expect(typeof issuesParam).toBe("string");
+    expect(() => JSON.parse(issuesParam)).not.toThrow();
+    expect(JSON.parse(issuesParam)).toEqual(expect.arrayContaining([expect.objectContaining({ type: "duplicate_email" })]));
+  });
+
   it("lists persisted scorecard history newest-first for a tenant", async () => {
     pgQueryMock.mockResolvedValueOnce([
       { id: "scorecard-2", generatedAt: "2026-01-02T00:00:00.000Z", staleDays: 30, totals: {}, issues: [] },
@@ -366,11 +397,15 @@ describe("direct Postgres inbuilt report helper lookups", () => {
         getLeadSourceRoiReportForTenant({ id: "rep-1", tenantId: "tenant-1", role: { permissions: { modules: {}, recordAccess: "OWN" } } })
       ).rejects.toThrow("SENSITIVE_REPORT_ACCESS_DENIED");
       expect(listLeadsMock).not.toHaveBeenCalled();
+      expect(pgQueryMock).not.toHaveBeenCalled();
     });
 
     it("allows a tenant admin (recordAccess ALL) through", async () => {
-      listLeadsMock.mockResolvedValueOnce({ data: [] });
-      listOpportunitiesMock.mockResolvedValueOnce({ data: [] });
+      // WP09 (F11): getLeadSourceRoiReportForTenant now runs its own real SQL aggregate queries
+      // (getLeadSourceRoiAggregateForTenant) directly against "@/lib/db/query", not
+      // listLeadsForTenant/listOpportunitiesForTenant -- two `query` calls (lead-source counts,
+      // then the opportunity/lead join), both empty for this "no data" case.
+      pgQueryMock.mockResolvedValueOnce([]).mockResolvedValueOnce([]);
       const { getLeadSourceRoiReportForTenant } = await import("@/lib/server/inbuilt-reports");
       await expect(
         getLeadSourceRoiReportForTenant({ id: "admin-1", tenantId: "tenant-1", role: { permissions: { modules: {}, recordAccess: "ALL" } } })
@@ -378,8 +413,7 @@ describe("direct Postgres inbuilt report helper lookups", () => {
     });
 
     it("allows a platform admin through regardless of role permissions", async () => {
-      listLeadsMock.mockResolvedValueOnce({ data: [] });
-      listOpportunitiesMock.mockResolvedValueOnce({ data: [] });
+      pgQueryMock.mockResolvedValueOnce([]).mockResolvedValueOnce([]);
       const { getLeadSourceRoiReportForTenant } = await import("@/lib/server/inbuilt-reports");
       await expect(getLeadSourceRoiReportForTenant({ id: "pa-1", tenantId: "tenant-1", isPlatformAdmin: true })).resolves.toBeTruthy();
     });
@@ -454,6 +488,87 @@ describe("direct Postgres inbuilt report helper lookups", () => {
           { level: "OPPORTUNITY", dimension: "STAGE", value: "Enrolled" },
         ),
       ).rejects.toThrow("Unsupported lead comparison dimension");
+    });
+  });
+
+  // WP09 (F11): these three reports were rewritten from "fetch up to 1000 leads/opportunities
+  // tenant-wide, reduce in JS" to real SQL aggregation over the FULL matching set (see
+  // 25_AUDIT_REMEDIATION_PLAN.md WP09 tracking record). These tests confirm the wrapper functions
+  // now call the new aggregate repository functions (real SQL group-by/count/sum queries)
+  // instead of listLeadsForTenant/listOpportunitiesForTenant -- the real Postgres-scale
+  // verification (>1000 rows, old-vs-new comparison) was run separately against a live local
+  // Postgres database, not as part of this mocked suite.
+  describe("WP09 (F11) SQL-aggregation rewrites", () => {
+    it("getFunnelByStageReportForTenant aggregates via SQL (group by stageId), not listOpportunitiesForTenant", async () => {
+      pgQueryMock.mockResolvedValueOnce([
+        { stageId: "stage-new", stage: "New", count: 3, value: 300, isWon: false, isClosed: false, order: 0 },
+        { stageId: "stage-won", stage: "Won", count: 2, value: 400, isWon: true, isClosed: true, order: 1 },
+      ]);
+
+      const { getFunnelByStageReportForTenant } = await import("@/lib/server/inbuilt-reports");
+      const report = await getFunnelByStageReportForTenant({ id: "user-1", tenantId: "tenant-1" });
+
+      expect(report.totalOpportunities).toBe(5);
+      expect(report.totalValue).toBe(700);
+      expect(report.rows[0]).toMatchObject({ stageId: "stage-new", count: 3, conversionFromFirst: 1 });
+      expect(report.rows[1]).toMatchObject({ stageId: "stage-won", count: 2, conversionFromFirst: 2 / 3, conversionFromPrevious: 2 / 3 });
+      // Never touches the old capped list-then-reduce path.
+      expect(listOpportunitiesMock).not.toHaveBeenCalled();
+      expect(pgQueryMock.mock.calls[0][0]).toContain("with scoped_opportunities as");
+      expect(pgQueryMock.mock.calls[0][0]).toContain('group by o."stageId"');
+    });
+
+    it("getLeadSourceRoiReportForTenant aggregates via SQL joins, not listLeadsForTenant/listOpportunitiesForTenant", async () => {
+      pgQueryMock
+        .mockResolvedValueOnce([{ source: "Website", leads: 10 }])
+        .mockResolvedValueOnce([{ source: "Website", opportunities: 4, pipelineValue: 4000, wonOpportunities: 1, wonValue: 1000 }]);
+
+      const { getLeadSourceRoiReportForTenant } = await import("@/lib/server/inbuilt-reports");
+      const report = await getLeadSourceRoiReportForTenant({ id: "admin-1", tenantId: "tenant-1", role: { permissions: { recordAccess: "ALL" } } });
+
+      expect(report.rows).toEqual([
+        {
+          source: "Website",
+          leads: 10,
+          opportunities: 4,
+          wonOpportunities: 1,
+          pipelineValue: 4000,
+          wonValue: 1000,
+          spend: null,
+          roi: null,
+          opportunityConversionRate: 0.4,
+          wonConversionRate: 0.1,
+        },
+      ]);
+      expect(listLeadsMock).not.toHaveBeenCalled();
+      expect(listOpportunitiesMock).not.toHaveBeenCalled();
+      expect(pgQueryMock.mock.calls[0][0]).toContain("group by source");
+      expect(pgQueryMock.mock.calls[1][0]).toContain("with scoped_opportunities as");
+    });
+
+    it("getPeriodComparisonReportForTenant aggregates via SQL count/sum filter queries, not a capped fetch-then-JS-filter", async () => {
+      pgQueryOneMock
+        .mockResolvedValueOnce({ current: 5, previous: 20 }) // leads
+        .mockResolvedValueOnce({
+          currentCount: 3,
+          previousCount: 10,
+          currentWonCount: 1,
+          previousWonCount: 4,
+          currentWonValue: 500,
+          previousWonValue: 2000,
+        }); // opportunities
+
+      const { getPeriodComparisonReportForTenant } = await import("@/lib/server/inbuilt-reports");
+      const report = await getPeriodComparisonReportForTenant({ id: "user-1", tenantId: "tenant-1" }, "THIS_MONTH_VS_LAST");
+
+      expect(report.current).toMatchObject({ leadsCreated: 5, opportunitiesCreated: 3, opportunitiesWon: 1, wonValue: 500, winRate: 0.3333 });
+      expect(report.previous).toMatchObject({ leadsCreated: 20, opportunitiesCreated: 10, opportunitiesWon: 4, wonValue: 2000, winRate: 0.4 });
+      expect(report.percentChange.leadsCreated).toBe(-75);
+      // Never touches the old capped list-then-reduce path.
+      expect(listLeadsMock).not.toHaveBeenCalled();
+      expect(listOpportunitiesMock).not.toHaveBeenCalled();
+      expect(pgQueryOneMock.mock.calls[0][0]).toContain("count(*) filter");
+      expect(pgQueryOneMock.mock.calls[1][0]).toContain("with scoped_opportunities as");
     });
   });
 

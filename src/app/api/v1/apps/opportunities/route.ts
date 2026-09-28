@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { MarketplaceAppAuthenticationError, authenticateMarketplaceAppRequest, hasAppPermission } from "@/lib/server/marketplace-inbound";
+import { MarketplaceAppAuthenticationError, authenticateMarketplaceAppRequest, buildAppScopedActor, hasAppPermission } from "@/lib/server/marketplace-inbound";
 import { createOpportunityForTenant, listOpportunitiesForTenant } from "@/lib/server/crm";
 import { prepareIncomingPayload } from "@/lib/server/marketplace-sync";
 import { badRequest, forbidden, marketplaceAppAuthErrorResponse, serverError } from "@/lib/server/http";
@@ -9,12 +9,12 @@ import { badRequest, forbidden, marketplaceAppAuthErrorResponse, serverError } f
 export async function GET(request: Request) {
   try {
     const url = new URL(request.url);
-    const { appId, tenantId, permissions } = await authenticateMarketplaceAppRequest(request);
-    if (!hasAppPermission(permissions, "opportunities", "read")) {
+    const auth = await authenticateMarketplaceAppRequest(request);
+    if (!hasAppPermission(auth.permissions, "opportunities", "read")) {
       return forbidden("This app does not have permission to read opportunities");
     }
     const limit = Number(url.searchParams.get("limit") ?? "25");
-    const result = await listOpportunitiesForTenant({ id: appId, tenantId }, limit);
+    const result = await listOpportunitiesForTenant(await buildAppScopedActor(auth), limit);
     return NextResponse.json(result);
   } catch (error) {
     if (error instanceof MarketplaceAppAuthenticationError) return marketplaceAppAuthErrorResponse(error.reason);
@@ -25,14 +25,14 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     const rawBody = await request.text();
-    const { appId, tenantId, installId, permissions } = await authenticateMarketplaceAppRequest(request);
-    if (!hasAppPermission(permissions, "opportunities", "write")) {
+    const auth = await authenticateMarketplaceAppRequest(request);
+    if (!hasAppPermission(auth.permissions, "opportunities", "write")) {
       return forbidden("This app does not have permission to create opportunities");
     }
     const rawParsed = rawBody ? JSON.parse(rawBody) : {};
-    const body = await prepareIncomingPayload(installId, "opportunities", rawParsed);
+    const body = await prepareIncomingPayload(auth.installId, "opportunities", rawParsed);
     if (!body?.title || typeof body.title !== "string" || !body.title.trim()) return badRequest("title is required");
-    const opportunity = await createOpportunityForTenant({ id: appId, tenantId }, body);
+    const opportunity = await createOpportunityForTenant(await buildAppScopedActor(auth), body);
     return NextResponse.json(opportunity, { status: 201 });
   } catch (error) {
     if (error instanceof MarketplaceAppAuthenticationError) return marketplaceAppAuthErrorResponse(error.reason);

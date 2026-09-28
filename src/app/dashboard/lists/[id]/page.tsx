@@ -1,5 +1,8 @@
 "use client";
 
+import { PageHeader } from "@/components/layout/page-header";
+import { ErrorState } from "@/components/common/error-state";
+
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
@@ -48,8 +51,11 @@ export default function LeadListDetailPage() {
     const router = useRouter();
     const listId = params.id;
     const [list, setList] = useState<LeadListDetail | null>(null);
+    const [leadsLoading, setLeadsLoading] = useState(false);
+    const [leadsError, setLeadsError] = useState<string | null>(null);
     const [allLeads, setAllLeads] = useState<LeadRecord[]>([]);
     const [loading, setLoading] = useState(true);
+    const [fetchError, setFetchError] = useState<string | null>(null);
     const [addOpen, setAddOpen] = useState(false);
     const [selectedToAdd, setSelectedToAdd] = useState<LeadRecord[]>([]);
     const [search, setSearch] = useState("");
@@ -58,29 +64,37 @@ export default function LeadListDetailPage() {
 
     const fetchList = useCallback(async () => {
         setLoading(true);
+        setFetchError(null);
         try {
             const data = await apiFetch<LeadListDetail>(`/lead-lists/${listId}`);
             setList(data);
         } catch {
-            toast.error("Failed to load list");
+            setFetchError("Failed to load this list.");
         } finally {
             setLoading(false);
         }
     }, [listId]);
 
     const fetchAllLeads = useCallback(async () => {
+        setLeadsLoading(true);
+        setLeadsError(null);
         try {
             const response = await apiFetch<any>("/leads?page=1&limit=5000");
             setAllLeads(Array.isArray(response) ? response : response.data ?? []);
         } catch {
-            toast.error("Failed to load leads");
+            setLeadsError("Failed to load available leads.");
+        } finally {
+            setLeadsLoading(false);
         }
     }, []);
 
     useEffect(() => {
         fetchList();
-        fetchAllLeads();
-    }, [fetchList, fetchAllLeads]);
+    }, [fetchList]);
+
+    useEffect(() => {
+        if (addOpen) fetchAllLeads();
+    }, [addOpen, fetchAllLeads]);
 
     const existingLeadIds = useMemo(() => new Set((list?.leads ?? []).map((lead) => lead.id)), [list?.leads]);
     const addableLeads = useMemo(() => allLeads.filter((lead) => !existingLeadIds.has(lead.id)), [allLeads, existingLeadIds]);
@@ -246,28 +260,30 @@ export default function LeadListDetailPage() {
         },
     ], [list?.type, removeLead]);
 
+    if (fetchError && !list) return <div><PageHeader title="Lead List" actions={<Button variant="outline" onClick={() => router.push("/dashboard/lists")}>Back to lists</Button>} /><ErrorState description={fetchError} onRetry={fetchList} /></div>;
+
     return (
-        <div className="mx-auto max-w-[1500px] px-3 py-3 md:px-4 md:py-4">
+        <div className="min-w-0">
             <div className="space-y-3">
                 <div className="flex flex-col justify-between gap-3 md:flex-row md:items-center">
-                    <div className="flex items-center gap-2">
-                        <Button variant="ghost" size="icon-sm" onClick={() => router.push("/dashboard/lists")}>
+                    <div className="flex min-w-0 flex-wrap items-center gap-2">
+                        <Button variant="ghost" size="icon-sm" aria-label="Back to lists" onClick={() => router.push("/dashboard/lists")}>
                             <ArrowLeft className="size-4" />
                         </Button>
-                        <div>
+                        <div className="min-w-0 flex-1">
                             <div className="flex flex-wrap items-center gap-2">
-                                <h1 className="text-lg font-black">{list?.name ?? "Lead List"}</h1>
+                                <h1 className="[overflow-wrap:anywhere] break-words text-2xl font-semibold">{list?.name ?? "Lead List"}</h1>
                                 <Badge className={list?.type === "SMART" ? "font-extrabold" : "font-extrabold"} variant={list?.type === "SMART" ? "default" : "secondary"}>
                                     {list?.type === "SMART" ? "Smart list" : "Static list"}
                                 </Badge>
-                                <Badge variant="outline" className="font-extrabold">{`${list?.count ?? 0} leads`}</Badge>
+                                <Badge variant="outline" className="font-extrabold">{loading || fetchError ? "— leads" : `${list?.count ?? 0} leads`}</Badge>
                             </div>
-                            <p className="text-sm text-muted-foreground">
+                            <p className="break-words text-sm text-muted-foreground">
                                 {list?.description || "Search, review, and manage leads in this list."}
                             </p>
                         </div>
                     </div>
-                    <div className="flex justify-end gap-2">
+                    <div className="flex flex-wrap gap-2">
                         <Button variant="outline" onClick={fetchList}>
                             <RefreshCw className="size-4" />
                             Refresh
@@ -285,7 +301,7 @@ export default function LeadListDetailPage() {
                     <div className="relative">
                         <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
                         <Input
-                            placeholder="Search leads in this list"
+                            aria-label="Search leads in this list" placeholder="Search leads in this list"
                             value={search}
                             onChange={(event) => setSearch(event.target.value)}
                             className="pl-9"
@@ -299,6 +315,8 @@ export default function LeadListDetailPage() {
                         data={paginatedLeads}
                         columns={columns}
                         loading={loading}
+                        error={fetchError}
+                        onRetry={fetchList}
                         getRowId={(row) => row.id}
                         enableRowSelection
                         rowSelectionIds={selectedRows}
@@ -332,11 +350,12 @@ export default function LeadListDetailPage() {
                 actions={
                     <>
                         <Button variant="ghost" onClick={() => setAddOpen(false)}>Cancel</Button>
-                        <Button onClick={addLeads} disabled={selectedToAdd.length === 0}>Add To List</Button>
+                        <Button onClick={addLeads} disabled={selectedToAdd.length === 0 || leadsLoading || !!leadsError}>Add To List</Button>
                     </>
                 }
             >
                 <div className="space-y-2">
+                    {leadsError && <ErrorState description={leadsError} onRetry={fetchAllLeads} />}
                     <Popover>
                         <PopoverTrigger asChild>
                             <button
@@ -363,11 +382,11 @@ export default function LeadListDetailPage() {
                                 )}
                             </button>
                         </PopoverTrigger>
-                        <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
+                        <PopoverContent className="w-[var(--radix-popover-trigger-width)] max-w-[calc(100dvw-2rem)] p-0" align="start">
                             <Command>
                                 <CommandInput placeholder="Search leads..." />
                                 <CommandList>
-                                    <CommandEmpty>No leads found.</CommandEmpty>
+                                    <CommandEmpty>{leadsLoading ? "Loading leads…" : leadsError || "No leads found."}</CommandEmpty>
                                     <CommandGroup>
                                         {addableLeads.map((lead) => {
                                             const isSelected = selectedToAdd.some((item) => item.id === lead.id);

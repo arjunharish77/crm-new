@@ -1,5 +1,5 @@
 import { randomUUID } from "crypto";
-import { execute, query, queryOne } from "@/lib/db/query";
+import { execute, query, queryOne, queryAsSystem } from "@/lib/db/query";
 import { assertFeatureEnabled, isFeatureEnabledForTenant } from "@/lib/server/entitlements";
 import { createExportRequestForUser, processExportRequest } from "@/lib/server/exports";
 import { queueCommunicationForTenant } from "@/lib/server/communications";
@@ -162,8 +162,10 @@ function nextRetryState(delivery: { status: string; error?: string | null }, pre
   return { retryCount: nextCount, nextRetryAt: new Date(now.getTime() + backoffMinutes * 60_000).toISOString() };
 }
 
+// WP07 (F04): BACKGROUND_JOB, disposition B -- worker-invoked recurring job, discovers due
+// schedules across every tenant at once.
 export async function processDueReportSchedules(now = new Date()) {
-  const schedules = await query<any>(
+  const schedules = await queryAsSystem<any>(
     `select ${SCHEDULE_COLUMNS}
      from "ReportSchedule"
      where "isActive" = true and "nextRunAt" <= $1
@@ -213,8 +215,9 @@ export async function processDueReportSchedules(now = new Date()) {
 // scans schedules with pending retry state (retryCount > 0, past nextRetryAt) rather than due
 // schedules, and never touches lastRunAt/nextRunAt, so a retry attempt has zero effect on the
 // schedule's normal cadence.
+// WP07 (F04): BACKGROUND_JOB, disposition B -- same reasoning as processDueReportSchedules above.
 export async function retryFailedReportSchedules(now = new Date()) {
-  const schedules = await query<any>(
+  const schedules = await queryAsSystem<any>(
     `select ${SCHEDULE_COLUMNS}
      from "ReportSchedule"
      where "isActive" = true and "retryCount" > 0 and "nextRetryAt" <= $1

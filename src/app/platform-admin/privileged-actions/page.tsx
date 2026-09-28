@@ -1,8 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { ShieldAlert, Check, X, LogIn } from "lucide-react";
+import { PageHeader } from "@/components/layout/page-header";
+import { ErrorState } from "@/components/common/error-state";
 import { apiFetch } from "@/lib/api";
 import { useAuth } from "@/providers/auth-provider";
 import { Card } from "@/components/ui/card";
@@ -31,24 +34,30 @@ const ACTION_LABELS: Record<string, string> = {
 
 export default function PrivilegedActionsPage() {
     const { user, login } = useAuth();
+    const router = useRouter();
     const [requests, setRequests] = useState<PrivilegedActionRequest[]>([]);
+    const [loadError, setLoadError] = useState(false);
+    const requestVersion = useRef(0);
     const [loading, setLoading] = useState(true);
     const [approvalRequired, setApprovalRequired] = useState(false);
     const [savingToggle, setSavingToggle] = useState(false);
     const [actingId, setActingId] = useState<string | null>(null);
 
     const load = () => {
+        const version = ++requestVersion.current;
         setLoading(true);
+        setLoadError(false);
         Promise.all([
             apiFetch<PrivilegedActionRequest[]>("/privileged-action-requests"),
             apiFetch<{ privilegedActionApprovalRequired: boolean }>("/platform-admin/security/platform-settings"),
         ])
             .then(([reqs, settings]) => {
+                if (version !== requestVersion.current) return;
                 setRequests(Array.isArray(reqs) ? reqs : []);
                 setApprovalRequired(!!settings?.privilegedActionApprovalRequired);
             })
-            .catch(() => toast.error("Failed to load privileged action requests"))
-            .finally(() => setLoading(false));
+            .catch(() => version === requestVersion.current && setLoadError(true))
+            .finally(() => { if (version === requestVersion.current) setLoading(false); });
     };
 
     useEffect(load, []);
@@ -98,9 +107,12 @@ export default function PrivilegedActionsPage() {
     const claim = async (request: PrivilegedActionRequest) => {
         setActingId(request.id);
         try {
-            const result = await apiFetch<{ token: string }>(`/privileged-action-requests/${request.id}/claim`, { method: "POST" });
-            login(result.token);
+            // F06 fix (WP05): the claim route now sets the impersonation session as an HttpOnly
+            // cookie directly on its own response -- login() just re-reads "who am I now".
+            await apiFetch(`/privileged-action-requests/${request.id}/claim`, { method: "POST" });
+            await login();
             toast.success("Impersonation session started");
+            router.push("/dashboard");
         } catch (error: any) {
             toast.error(error?.message || "Failed to start impersonation");
         } finally {
@@ -109,27 +121,19 @@ export default function PrivilegedActionsPage() {
     };
 
     return (
-        <div className="space-y-6">
-            <div>
-                <h1 className="flex items-center gap-2 text-xl font-bold">
-                    <ShieldAlert className="size-5" />
-                    Privileged Actions
-                </h1>
-                <p className="text-sm text-muted-foreground">
-                    Requests to suspend/unsuspend a tenant or start impersonating a user, and the approval requirement for them.
-                </p>
-            </div>
+        <div className="min-w-0 space-y-6">
+            <PageHeader title="Privileged Actions" description="Review platform access and privileged activity." />
 
-            <Card className="flex items-center justify-between gap-4 p-4">
+            {!loading && !loadError && <Card className="flex min-w-0 flex-wrap items-center justify-between gap-4 p-4">
                 <div>
-                    <Label className="text-sm font-medium">Require a second platform admin&apos;s approval</Label>
+                    <Label htmlFor="approval-required" className="text-sm font-medium">Require a second platform admin&apos;s approval</Label>
                     <p className="text-xs text-muted-foreground">When on, tenant suspend/unsuspend and impersonation requests need a different admin to approve before they take effect.</p>
                 </div>
-                <Switch checked={approvalRequired} onCheckedChange={toggleApprovalRequired} disabled={savingToggle} />
-            </Card>
+                <Switch id="approval-required" checked={approvalRequired} onCheckedChange={toggleApprovalRequired} disabled={savingToggle || loading || loadError} />
+            </Card>}
 
-            <Card className="overflow-hidden py-0">
-                {loading ? (
+            <Card className="min-w-0 overflow-hidden py-0">
+                {loadError ? <ErrorState description="Privileged Actions could not be loaded." onRetry={load} /> : loading ? (
                     <p className="p-4 text-sm text-muted-foreground">Loading...</p>
                 ) : requests.length === 0 ? (
                     <p className="p-4 text-sm text-muted-foreground">No privileged action requests.</p>
@@ -138,9 +142,9 @@ export default function PrivilegedActionsPage() {
                         {requests.map((request) => {
                             const isOwn = request.requestedBy === user?.id;
                             return (
-                                <div key={request.id} className="flex flex-wrap items-center justify-between gap-3 p-4">
-                                    <div>
-                                        <div className="flex items-center gap-2">
+                                <div key={request.id} className="flex min-w-0 flex-wrap items-center justify-between gap-3 p-4">
+                                    <div className="min-w-0 flex-1 basis-64 break-words">
+                                        <div className="flex min-w-0 flex-wrap items-center gap-2">
                                             <p className="text-sm font-medium">{ACTION_LABELS[request.actionType] ?? request.actionType}</p>
                                             <Badge variant="outline">{request.status}</Badge>
                                         </div>

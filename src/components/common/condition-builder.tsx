@@ -128,13 +128,13 @@ export function ConditionBuilder({
   const removeCondition = (index: number) => onChange(conditions.filter((_, conditionIndex) => conditionIndex !== index));
 
   return (
-    <div className={cn("space-y-2", className)}>
-      <div className="flex items-start justify-between gap-3">
+    <div className={cn("@container/conditions min-w-0 space-y-2", className)}>
+      <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <Label className="text-xs font-bold uppercase text-muted-foreground">{title}</Label>
           {description ? <p className="mt-1 text-xs text-muted-foreground">{description}</p> : null}
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           {onLogicChange ? (
             <Select value={logic} onValueChange={(value) => onLogicChange(value as "AND" | "OR")}>
               <SelectTrigger size="sm" className="w-[142px]">
@@ -164,7 +164,7 @@ export function ConditionBuilder({
             const values = selectedValues(condition.value);
 
             return (
-              <div key={index} className="grid gap-2 rounded-lg border bg-surface-container-low p-2 md:grid-cols-[minmax(180px,1.3fr)_minmax(160px,1fr)_minmax(160px,1fr)_auto] md:items-end">
+              <div key={index} className="grid gap-2 rounded-lg border bg-surface-container-low p-2 @min-[640px]/conditions:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)_minmax(0,1fr)_auto] @min-[640px]/conditions:items-end">
                 <div className="space-y-1.5">
                   <Label>Field</Label>
                   <Select

@@ -99,10 +99,7 @@ export function BulkAssignManagerDialog({
             handleClose();
             onSuccess();
         } catch (error: any) {
-            console.warn("API might be missing, simulating success");
-            toast.success("Manager assigned successfully (Mock)");
-            handleClose();
-            onSuccess();
+            toast.error(error?.message || "Failed to assign manager. Your selection has been kept; try again.");
         } finally {
             setLoading(false);
         }

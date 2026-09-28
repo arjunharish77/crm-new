@@ -6,7 +6,7 @@ import { Opportunity } from "@/types/opportunities";
 import { StandardDialog } from "@/components/common/standard-dialog";
 import { OpportunityForm } from "./opportunity-form";
 import { apiFetch } from "@/lib/api";
-import { toast } from "sonner";
+import { ErrorState } from "@/components/common/error-state";
 
 interface EditOpportunityDialogProps {
     opportunity: Opportunity;
@@ -24,8 +24,10 @@ export function EditOpportunityDialog({
     onOpenChange: controlledOnOpenChange,
 }: EditOpportunityDialogProps) {
     const [internalOpen, setInternalOpen] = useState(false);
-    const [fullOpportunity, setFullOpportunity] = useState<Opportunity | null>(opportunity);
-    const [loading, setLoading] = useState(false);
+    const [fullOpportunity, setFullOpportunity] = useState<Opportunity | null>(null);
+    const [loading, setLoading] = useState(true);
+    const [loadError, setLoadError] = useState(false);
+    const [attempt, setAttempt] = useState(0);
 
     const open = controlledOpen !== undefined ? controlledOpen : internalOpen;
     const setOpen = controlledOnOpenChange !== undefined ? controlledOnOpenChange : setInternalOpen;
@@ -37,19 +39,19 @@ export function EditOpportunityDialog({
 
         let cancelled = false;
         setLoading(true);
+        setLoadError(false);
+        setFullOpportunity(null);
+        const controller = new AbortController();
 
-        apiFetch<Opportunity>(`/opportunities/${opportunity.id}`)
+        apiFetch<Opportunity>(`/opportunities/${opportunity.id}`, { signal: controller.signal })
             .then((data) => {
                 if (!cancelled) {
-                    setFullOpportunity(data ?? opportunity);
+                    if (!data) { setLoadError(true); return; }
+                    setFullOpportunity(data);
                 }
             })
-            .catch((error) => {
-                console.error(error);
-                if (!cancelled) {
-                    setFullOpportunity(opportunity);
-                    toast.error("Failed to load full opportunity details");
-                }
+            .catch(() => {
+                if (!cancelled) setLoadError(true);
             })
             .finally(() => {
                 if (!cancelled) {
@@ -59,8 +61,9 @@ export function EditOpportunityDialog({
 
         return () => {
             cancelled = true;
+            controller.abort();
         };
-    }, [open, opportunity]);
+    }, [open, opportunity, attempt]);
 
     return (
         <StandardDialog
@@ -71,11 +74,11 @@ export function EditOpportunityDialog({
             icon={<Pencil className="size-4" />}
         >
             <div style={{ padding: '8px 0' }}>
-                {loading && !fullOpportunity ? (
+                {loading ? (
                     <div className="flex min-h-[180px] items-center justify-center">
                         <Loader2 className="size-6 animate-spin text-primary" />
                     </div>
-                ) : fullOpportunity ? (
+                ) : loadError ? <ErrorState description="Full opportunity details could not be loaded." onRetry={() => setAttempt(value => value + 1)} /> : fullOpportunity ? (
                     <OpportunityForm
                         initialData={fullOpportunity}
                         onSuccess={(updated) => {

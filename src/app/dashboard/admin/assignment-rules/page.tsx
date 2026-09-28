@@ -1,5 +1,7 @@
 "use client";
 
+import { PageHeader } from "@/components/layout/page-header";
+
 import { useEffect, useState, useCallback } from "react";
 import { apiFetch } from "@/lib/api";
 import {
@@ -38,8 +40,8 @@ function SortableRuleRow({ rule, folderName, onEdit, onDelete }: { rule: any; fo
 
     return (
         <div ref={setNodeRef} style={style}>
-            <Card className={cn("flex-row items-center justify-between gap-3 rounded-xl px-4 py-3", isDragging && "border-primary shadow-md")}>
-                <div className="flex min-w-0 items-center gap-3">
+            <Card className={cn("flex-row flex-wrap items-center justify-between gap-3 rounded-xl px-4 py-3", isDragging && "border-primary shadow-md")}>
+                <div className="flex min-w-0 flex-1 basis-52 items-center gap-3">
                     <button
                         type="button"
                         className="cursor-grab rounded-md p-1 text-muted-foreground outline-none hover:text-primary focus-visible:ring-2 focus-visible:ring-primary/30"
@@ -51,16 +53,16 @@ function SortableRuleRow({ rule, folderName, onEdit, onDelete }: { rule: any; fo
                     </button>
                     <div className="min-w-0">
                         <div className="flex flex-wrap items-center gap-2">
-                            <p className="truncate text-sm font-bold">{rule.name}</p>
+                            <p className="break-words text-sm font-semibold">{rule.name}</p>
                             <Badge variant="outline" className="rounded-md">{rule.entityType}</Badge>
                             {folderName && (
-                                <Badge variant="outline" className="gap-1 rounded-md">
+                                <Badge variant="outline" className="max-w-full gap-1 whitespace-normal break-all rounded-md">
                                     <FolderIcon className="size-3" />
                                     {folderName}
                                 </Badge>
                             )}
                             {rule.isDefault && (
-                                <Badge variant="secondary" className="gap-1 rounded-md">
+                                <Badge variant="secondary" className="max-w-full gap-1 whitespace-normal break-all rounded-md">
                                     <Star className="size-3" />
                                     Default
                                 </Badge>
@@ -75,15 +77,15 @@ function SortableRuleRow({ rule, folderName, onEdit, onDelete }: { rule: any; fo
                                 {rule.isActive ? "Active" : "Paused"}
                             </Badge>
                         </div>
-                        {rule.description && <p className="mt-0.5 truncate text-xs text-muted-foreground">{rule.description}</p>}
+                        {rule.description && <p className="mt-0.5 break-words text-xs text-muted-foreground">{rule.description}</p>}
                     </div>
                 </div>
                 <div className="flex shrink-0 items-center gap-1">
                     <span className="mr-1 inline-flex rounded-md border border-primary/20 bg-primary/10 px-2.5 py-1 text-xs font-extrabold text-primary">P{rule.priority}</span>
-                    <Button variant="ghost" size="icon-sm" onClick={onEdit}>
+                    <Button variant="ghost" size="icon-sm" aria-label={`Edit ${rule.name}`} onClick={onEdit}>
                         <Pencil className="size-4" />
                     </Button>
-                    <Button variant="ghost" size="icon-sm" className="text-destructive hover:bg-destructive/10 hover:text-destructive" onClick={onDelete}>
+                    <Button variant="ghost" size="icon-sm" className="text-destructive hover:bg-destructive/10 hover:text-destructive" aria-label={`Delete ${rule.name}`} onClick={onDelete}>
                         <Trash2 className="size-4" />
                     </Button>
                 </div>
@@ -99,7 +101,8 @@ export default function AssignmentSettingsPage() {
     const [rules, setRules] = useState<any[]>([]);
     const [ruleSets, setRuleSets] = useState<any[]>([]);
     const [folderFilter, setFolderFilter] = useState(ALL_FOLDERS);
-    const [loading, setLoading] = useState(false);
+    const [loading, setLoading] = useState(true);
+    const [loadError, setLoadError] = useState(false);
     const [isBuilderOpen, setIsBuilderOpen] = useState(false);
     const [selectedRule, setSelectedRule] = useState<any>(null);
     const [simulateOpen, setSimulateOpen] = useState(false);
@@ -108,11 +111,12 @@ export default function AssignmentSettingsPage() {
 
     const fetchRules = useCallback(async () => {
         setLoading(true);
+        setLoadError(false);
         try {
             const data = await apiFetch("/assignment/rules");
             setRules(data);
         } catch (error) {
-            toast.error("Failed to load assignment rules");
+            setLoadError(true);
         } finally {
             setLoading(false);
         }
@@ -194,17 +198,11 @@ export default function AssignmentSettingsPage() {
     };
 
     return (
-        <motion.div variants={fadeInUp} initial="initial" animate="animate" className="mx-auto max-w-[1200px] p-3 md:p-4">
-            <div className="mb-4 flex items-center justify-between">
-                <div>
-                    <h1 className="text-lg font-extrabold">Assignment Rules</h1>
-                    <p className="mt-1 text-xs text-muted-foreground">
-                        Configure dynamic logic for routing leads and opportunities based on criteria. Drag to reorder priority.
-                    </p>
-                </div>
-                <div className="flex gap-2">
+        <motion.div variants={fadeInUp} initial="initial" animate="animate" className="min-w-0">
+            <PageHeader title="Assignment Rules" description="Route leads and opportunities using conditions. Drag rules to change their priority." actions={
+                <div className="flex max-w-full flex-wrap gap-2">
                     <Select value={folderFilter} onValueChange={setFolderFilter}>
-                        <SelectTrigger className="w-44">
+                        <SelectTrigger aria-label="Rule folder" className="w-44 max-w-full">
                             <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
@@ -224,9 +222,9 @@ export default function AssignmentSettingsPage() {
                         Create Rule
                     </Button>
                 </div>
-            </div>
+            } />
 
-            <div className="overflow-hidden rounded-3xl border bg-card">
+            <div className="overflow-hidden rounded-xl border bg-card">
                 <div className="flex items-center gap-3 bg-primary/[0.02] p-4">
                     <div className="flex rounded-[10px] bg-primary/10 p-2 text-primary">
                         <Workflow className="size-4" />
@@ -237,6 +235,8 @@ export default function AssignmentSettingsPage() {
                 <div className="p-3">
                     {loading ? (
                         <p className="p-4 text-sm text-muted-foreground">Loading...</p>
+                    ) : loadError ? (
+                        <div role="alert" className="p-4 text-sm">Unable to load assignment rules. <Button variant="outline" size="sm" onClick={fetchRules}>Retry</Button></div>
                     ) : visibleRules.length === 0 ? (
                         <EmptyState
                             icon={<Route className="size-10 text-muted-foreground opacity-50" />}
@@ -266,28 +266,28 @@ export default function AssignmentSettingsPage() {
                         // hidden rules' relative position in a way the user can't see.
                         <div className="space-y-2">
                             {visibleRules.map((rule) => (
-                                <Card key={rule.id} className="flex-row items-center justify-between gap-3 rounded-xl px-4 py-3">
-                                    <div className="flex min-w-0 items-center gap-3 pl-[26px]">
+                                <Card key={rule.id} className="flex-row flex-wrap items-center justify-between gap-3 rounded-xl px-4 py-3">
+                                    <div className="flex min-w-0 flex-1 basis-52 items-center gap-3 pl-[26px]">
                                         <div className="min-w-0">
                                             <div className="flex flex-wrap items-center gap-2">
-                                                <p className="truncate text-sm font-bold">{rule.name}</p>
+                                                <p className="break-words text-sm font-semibold">{rule.name}</p>
                                                 <Badge variant="outline" className="rounded-md">{rule.entityType}</Badge>
                                                 {rule.isDefault && (
-                                                    <Badge variant="secondary" className="gap-1 rounded-md">
+                                                    <Badge variant="secondary" className="max-w-full gap-1 whitespace-normal break-all rounded-md">
                                                         <Star className="size-3" />
                                                         Default
                                                     </Badge>
                                                 )}
                                             </div>
-                                            {rule.description && <p className="mt-0.5 truncate text-xs text-muted-foreground">{rule.description}</p>}
+                                            {rule.description && <p className="mt-0.5 break-words text-xs text-muted-foreground">{rule.description}</p>}
                                         </div>
                                     </div>
                                     <div className="flex shrink-0 items-center gap-1">
                                         <span className="mr-1 inline-flex rounded-md border border-primary/20 bg-primary/10 px-2.5 py-1 text-xs font-extrabold text-primary">P{rule.priority}</span>
-                                        <Button variant="ghost" size="icon-sm" onClick={() => handleEdit(rule)}>
+                                        <Button variant="ghost" size="icon-sm" aria-label={`Edit ${rule.name}`} onClick={() => handleEdit(rule)}>
                                             <Pencil className="size-4" />
                                         </Button>
-                                        <Button variant="ghost" size="icon-sm" className="text-destructive hover:bg-destructive/10 hover:text-destructive" onClick={() => handleDelete(rule.id)}>
+                                        <Button variant="ghost" size="icon-sm" className="text-destructive hover:bg-destructive/10 hover:text-destructive" aria-label={`Delete ${rule.name}`} onClick={() => handleDelete(rule.id)}>
                                             <Trash2 className="size-4" />
                                         </Button>
                                     </div>

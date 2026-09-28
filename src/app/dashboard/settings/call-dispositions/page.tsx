@@ -1,5 +1,8 @@
 "use client";
 
+import { PageHeader } from "@/components/layout/page-header";
+import { ErrorState } from "@/components/common/error-state";
+
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { PhoneCall, Plus, Pencil, Trash2, ChevronUp, ChevronDown, ChevronRight } from "lucide-react";
@@ -43,6 +46,7 @@ const REQUIRABLE_FIELDS: { key: string; label: string }[] = [
 export default function CallDispositionsSettingsPage() {
     const [groups, setGroups] = useState<Group[]>([]);
     const [loading, setLoading] = useState(true);
+    const [loadError, setLoadError] = useState<string | null>(null);
     const [expanded, setExpanded] = useState<Record<string, boolean>>({});
     const [groupDialog, setGroupDialog] = useState<{ open: boolean; group: Group | null }>({ open: false, group: null });
     const [outcomeDialog, setOutcomeDialog] = useState<{ open: boolean; groupId: string; outcome: Outcome | null }>({
@@ -53,9 +57,10 @@ export default function CallDispositionsSettingsPage() {
 
     const load = () => {
         setLoading(true);
+        setLoadError(null);
         apiFetch<Group[]>("/disposition-groups")
             .then((data) => setGroups(Array.isArray(data) ? data : []))
-            .catch(() => toast.error("Failed to load call dispositions"))
+            .catch(() => setLoadError("Failed to load call dispositions."))
             .finally(() => setLoading(false));
     };
 
@@ -124,23 +129,18 @@ export default function CallDispositionsSettingsPage() {
     };
 
     return (
-        <div className="space-y-4">
-            <div className="flex items-center justify-between">
-                <div>
-                    <h1 className="text-lg font-bold">Call Dispositions</h1>
-                    <p className="text-sm text-muted-foreground">
-                        Define the outcome groups and outcomes agents choose from after a call, which fields are required for each, and
-                        callback/interest capture used when logging a call.
-                    </p>
-                </div>
+        <div className="min-w-0 space-y-4">
+            <PageHeader title="Call Dispositions" description="Configure call outcomes and the information agents must capture." actions={
                 <Button onClick={() => setGroupDialog({ open: true, group: null })}>
                     <Plus className="size-4" />
                     Add Group
                 </Button>
-            </div>
+            } />
 
             {loading ? (
                 <p className="text-sm text-muted-foreground">Loading...</p>
+            ) : loadError ? (
+                <ErrorState description={loadError} onRetry={load} />
             ) : groups.length === 0 ? (
                 <Card className="p-6 text-center text-sm text-muted-foreground">
                     No disposition groups configured yet. Add one to let agents log structured call outcomes.
@@ -153,7 +153,7 @@ export default function CallDispositionsSettingsPage() {
                             const topLevelOutcomes = group.outcomes.filter((o) => !o.parentOutcomeId).sort((a, b) => a.order - b.order);
                             return (
                                 <Card key={group.id} className="overflow-hidden py-0">
-                                    <div className="flex items-center justify-between gap-2 border-b p-3">
+                                    <div className="flex flex-wrap items-center justify-between gap-2 border-b p-3">
                                         <button
                                             type="button"
                                             className="flex min-w-0 items-center gap-2 text-left"
@@ -190,7 +190,7 @@ export default function CallDispositionsSettingsPage() {
                                                 <p className="p-3 text-sm text-muted-foreground">No outcomes in this group yet.</p>
                                             ) : (
                                                 topLevelOutcomes.map((outcome, outcomeIndex) => (
-                                                    <div key={outcome.id} className="flex items-center justify-between gap-2 p-3 pl-9">
+                                                    <div key={outcome.id} className="flex flex-wrap items-center justify-between gap-2 p-3 pl-9">
                                                         <div className="flex min-w-0 items-center gap-2">
                                                             <span className="truncate font-medium">{outcome.name}</span>
                                                             {!outcome.isActive && <Badge variant="outline">Inactive</Badge>}
@@ -319,12 +319,12 @@ function GroupDialog({ group, onClose, onSaved }: { group: Group | null; onClose
                 </>
             }
         >
-            <div className="space-y-3 p-[18px] pt-1">
+            <div className="space-y-3">
                 <div className="space-y-1.5">
-                    <Label>Name</Label>
-                    <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Sales Call Outcomes" />
+                    <Label htmlFor="disposition-group-name">Name</Label>
+                    <Input id="disposition-group-name" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Sales Call Outcomes" />
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2">
                     <Switch checked={isActive} onCheckedChange={setIsActive} />
                     <Label>Active</Label>
                 </div>
@@ -392,10 +392,10 @@ function OutcomeDialog({
                 </>
             }
         >
-            <div className="space-y-3 p-[18px] pt-1">
+            <div className="space-y-3">
                 <div className="space-y-1.5">
-                    <Label>Name</Label>
-                    <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Interested -- Follow Up" />
+                    <Label htmlFor="disposition-outcome-name">Name</Label>
+                    <Input id="disposition-outcome-name" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Interested -- Follow Up" />
                 </div>
                 {parentOptions.length > 0 && (
                     <div className="space-y-1.5">
@@ -418,16 +418,16 @@ function OutcomeDialog({
                 )}
                 <div className="space-y-1.5">
                     <Label>Required fields when this outcome is selected</Label>
-                    <div className="grid grid-cols-2 gap-2">
+                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                         {REQUIRABLE_FIELDS.map((field) => (
-                            <label key={field.key} className="flex items-center gap-2 text-sm">
+                            <label key={field.key} className="flex flex-wrap items-center gap-2 text-sm">
                                 <Checkbox checked={requiredFields.includes(field.key)} onCheckedChange={() => toggleField(field.key)} />
                                 {field.label}
                             </label>
                         ))}
                     </div>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2">
                     <Switch checked={isActive} onCheckedChange={setIsActive} />
                     <Label>Active</Label>
                 </div>

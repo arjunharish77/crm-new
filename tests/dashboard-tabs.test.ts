@@ -10,6 +10,7 @@ vi.mock("@/lib/db/query", () => ({
   query: queryMock,
   queryOne: queryOneMock,
   execute: executeMock,
+  jsonbParam: (v: unknown) => JSON.stringify(v ?? null),
 }));
 
 import {
@@ -170,7 +171,14 @@ describe("saved dashboard layout snapshots", () => {
 
     const insertCall = queryOneMock.mock.calls.find((call) => String(call[0]).includes('insert into "DashboardLayoutSnapshot"'));
     const snapshotArg = insertCall![1][4];
-    expect(snapshotArg).toEqual([
+    // Real bug found while verifying WP10 (F18) against a real running worker (see
+    // 25_AUDIT_REMEDIATION_PLAN.md WP11): a raw array parameter for a jsonb column is
+    // misserialized by node-postgres, so the snapshot array must be JSON.stringify'd (via
+    // jsonbParam) before being passed as a query parameter -- asserting on the parsed string
+    // here (rather than the raw array) proves that actually happened, not just that the
+    // in-memory computation of the snapshot itself was correct.
+    expect(typeof snapshotArg).toBe("string");
+    expect(JSON.parse(snapshotArg)).toEqual([
       { widgetId: "widget-1", tabId: "tab-1", layout: { x: 0, y: 0, w: 4, h: 3 } },
       { widgetId: "widget-2", tabId: "tab-2", layout: { x: 4, y: 0, w: 8, h: 3 } },
     ]);

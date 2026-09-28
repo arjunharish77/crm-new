@@ -1,5 +1,7 @@
 "use client";
 
+import { PageHeader } from "@/components/layout/page-header";
+
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -192,7 +194,7 @@ export default function CasesPage() {
 
     if (!serviceDeskEnabled) {
         return (
-            <div className="mx-auto max-w-[1200px] p-3 md:p-4">
+            <div className="min-w-0">
                 <EmptyState
                     icon={<LifeBuoy className="size-10 text-muted-foreground opacity-50" />}
                     title="Service Desk is not enabled"
@@ -203,39 +205,32 @@ export default function CasesPage() {
     }
 
     return (
-        <div className="mx-auto max-w-[1400px] p-3 md:p-4">
-            <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-                <div>
-                    <h1 className="text-lg font-bold tracking-[-0.5px]">Cases</h1>
-                    <p className="text-xs text-muted-foreground">Track and resolve support cases</p>
-                </div>
-                <div className="flex flex-wrap items-center gap-2">
-                    <Select value={statusFilter} onValueChange={setStatusFilter}>
-                        <SelectTrigger className="w-[160px]"><SelectValue placeholder="Status" /></SelectTrigger>
+        <div className="min-w-0">
+            <PageHeader title="Cases" description="Track and resolve support cases." actions={
+                <Button onClick={() => setCreateOpen(true)}><Plus className="size-4" />Create Case</Button>
+            } />
+            <div className="mb-4 flex flex-wrap gap-2" role="group" aria-label="Case filters">
+                    <Select value={statusFilter} onValueChange={(value) => { setStatusFilter(value); setPaginationModel(current => ({ ...current, page: 0 })); }}>
+                        <SelectTrigger aria-label="Status filter" className="w-full sm:w-40"><SelectValue placeholder="Status" /></SelectTrigger>
                         <SelectContent>
                             <SelectItem value={ALL}>All statuses</SelectItem>
                             {statuses.map((s) => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
                         </SelectContent>
                     </Select>
-                    <Select value={priorityFilter} onValueChange={setPriorityFilter}>
-                        <SelectTrigger className="w-[150px]"><SelectValue placeholder="Priority" /></SelectTrigger>
+                    <Select value={priorityFilter} onValueChange={(value) => { setPriorityFilter(value); setPaginationModel(current => ({ ...current, page: 0 })); }}>
+                        <SelectTrigger aria-label="Priority filter" className="w-full sm:w-40"><SelectValue placeholder="Priority" /></SelectTrigger>
                         <SelectContent>
                             <SelectItem value={ALL}>All priorities</SelectItem>
                             {priorities.map((p) => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
                         </SelectContent>
                     </Select>
-                    <Select value={queueFilter} onValueChange={setQueueFilter}>
-                        <SelectTrigger className="w-[160px]"><SelectValue placeholder="Queue" /></SelectTrigger>
+                    <Select value={queueFilter} onValueChange={(value) => { setQueueFilter(value); setPaginationModel(current => ({ ...current, page: 0 })); }}>
+                        <SelectTrigger aria-label="Queue filter" className="w-full sm:w-40"><SelectValue placeholder="Queue" /></SelectTrigger>
                         <SelectContent>
                             <SelectItem value={ALL}>All queues</SelectItem>
                             {queues.map((q) => <SelectItem key={q.id} value={q.id}>{q.name}</SelectItem>)}
                         </SelectContent>
                     </Select>
-                    <Button onClick={() => setCreateOpen(true)}>
-                        <Plus className="size-4" />
-                        Create Case
-                    </Button>
-                </div>
             </div>
 
             <Card className="overflow-hidden rounded-xl">
@@ -278,14 +273,14 @@ export default function CasesPage() {
             >
                 <div className="space-y-3">
                     <div className="space-y-1.5">
-                        <Label>Subject</Label>
-                        <Input value={form.subject} onChange={(e) => setForm({ ...form, subject: e.target.value })} placeholder="Brief summary of the issue" />
+                        <Label htmlFor="case-subject">Subject</Label>
+                        <Input id="case-subject" value={form.subject} onChange={(e) => setForm({ ...form, subject: e.target.value })} placeholder="Brief summary of the issue" />
                     </div>
                     <div className="space-y-1.5">
-                        <Label>Description</Label>
-                        <Textarea rows={3} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} placeholder="More detail about the request" />
+                        <Label htmlFor="case-description">Description</Label>
+                        <Textarea id="case-description" rows={3} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} placeholder="More detail about the request" />
                     </div>
-                    <div className="grid grid-cols-2 gap-3">
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                         <div className="space-y-1.5">
                             <Label>Type</Label>
                             <Select value={form.typeId} onValueChange={(value) => setForm({ ...form, typeId: value })}>
@@ -314,14 +309,14 @@ export default function CasesPage() {
                             </SelectContent>
                         </Select>
                     </div>
-                    <div className="grid grid-cols-2 gap-3">
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                         <div className="space-y-1.5">
-                            <Label>Requester name</Label>
-                            <Input value={form.requesterName} onChange={(e) => setForm({ ...form, requesterName: e.target.value })} />
+                            <Label htmlFor="case-requesterName">Requester name</Label>
+                            <Input id="case-requesterName" value={form.requesterName} onChange={(e) => setForm({ ...form, requesterName: e.target.value })} />
                         </div>
                         <div className="space-y-1.5">
-                            <Label>Requester email</Label>
-                            <Input type="email" value={form.requesterEmail} onChange={(e) => setForm({ ...form, requesterEmail: e.target.value })} />
+                            <Label htmlFor="case-requesterEmail">Requester email</Label>
+                            <Input type="email" id="case-requesterEmail" value={form.requesterEmail} onChange={(e) => setForm({ ...form, requesterEmail: e.target.value })} />
                         </div>
                     </div>
                 </div>

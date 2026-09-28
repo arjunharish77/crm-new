@@ -2,52 +2,52 @@
 
 import { useEffect, useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Loader2, Shield, AlertTriangle, TrendingDown } from "lucide-react";
+import { Loader2, Shield, AlertTriangle, Info } from "lucide-react";
 import { useAuth } from "@/providers/auth-provider";
 import { toast } from "sonner";
 
-interface RateLimitStats {
-    totalBlocked: number;
-    last24h: number;
-    topTenants: {
-        tenantId: string;
-        tenantName: string;
-        violationCount: number;
-    }[];
-    topEndpoints: {
-        endpoint: string;
-        violationCount: number;
-    }[];
+// F23 fix (WP11): this page previously called an API route that didn't exist at all
+// (/api/platform-admin/rate-limits/stats), silently falling back to 0 for every figure --
+// indistinguishable from "genuinely zero violations." The route now exists and returns real
+// data, but there is no PERSISTENT rate-limit violation log in this app (the underlying Redis
+// counters are intentionally ephemeral, ~10-minute windows) -- so this shows a live snapshot of
+// currently-active violations, explicitly labeled as such, rather than fabricating an "all
+// time"/"last 24h" history this system doesn't actually track.
+interface RateLimitSnapshot {
+    live: boolean;
+    scanned: boolean;
+    totalActive: number;
+    byTenant: { tenantId: string; tenantName: string; violationCount: number }[];
+    byCategory: { category: string; violationCount: number }[];
 }
 
 export default function RateLimitsPage() {
-    const [stats, setStats] = useState<RateLimitStats | null>(null);
+    const [stats, setStats] = useState<RateLimitSnapshot | null>(null);
     const [loading, setLoading] = useState(true);
-    const { token, user } = useAuth();
+    const [unavailable, setUnavailable] = useState(false);
+    const { isAuthenticated, user } = useAuth();
 
     useEffect(() => {
-        if (token) {
+        if (isAuthenticated) {
             fetchStats();
         }
-    }, [token]);
+    }, [isAuthenticated]);
 
     const fetchStats = async () => {
         setLoading(true);
         try {
-            const res = await fetch(
-                `/api/platform-admin/rate-limits/stats`,
-                {
-                    headers: { Authorization: `Bearer ${token}` },
-                }
-            );
+            const res = await fetch(`/api/platform-admin/rate-limits/stats`);
 
             if (res.ok) {
                 const data = await res.json();
                 setStats(data);
+                setUnavailable(!data.scanned);
             } else {
+                setUnavailable(true);
                 toast.error("Failed to fetch rate limit stats");
             }
         } catch (error) {
+            setUnavailable(true);
             toast.error("Failed to load rate limit stats");
         } finally {
             setLoading(false);
@@ -72,38 +72,53 @@ export default function RateLimitsPage() {
                 <h2 className="text-3xl font-bold tracking-tight">Rate Limiting Dashboard</h2>
             </div>
 
+            {unavailable && (
+                <Card className="border-yellow-500/50">
+                    <CardContent className="flex items-center gap-3 pt-6">
+                        <Info className="h-5 w-5 text-yellow-500 shrink-0" />
+                        <p className="text-sm text-muted-foreground">
+                            Live violation data is unavailable right now (Redis unreachable, or not configured in
+                            this environment). This is not the same as zero violations -- the underlying rate
+                            limiter itself still fails safe independently of this dashboard.
+                        </p>
+                    </CardContent>
+                </Card>
+            )}
+
+            {!unavailable && (
+                <Card className="border-blue-500/30">
+                    <CardContent className="flex items-center gap-3 pt-6">
+                        <Info className="h-5 w-5 text-blue-500 shrink-0" />
+                        <p className="text-sm text-muted-foreground">
+                            This is a <strong>live snapshot</strong> of currently-active violation counters
+                            (roughly the last 10 minutes) -- this app does not keep a persistent, longer-term
+                            rate-limit violation log.
+                        </p>
+                    </CardContent>
+                </Card>
+            )}
+
             {/* Overview Cards */}
-            <div className="grid gap-4 md:grid-cols-3">
+            <div className="grid gap-4 md:grid-cols-2">
                 <Card>
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Total Violations</CardTitle>
+                        <CardTitle className="text-sm font-medium">Active Violations</CardTitle>
                         <Shield className="h-4 w-4 text-muted-foreground" />
                     </CardHeader>
                     <CardContent>
-                        <div className="text-2xl font-bold">{stats?.totalBlocked || 0}</div>
-                        <p className="text-xs text-muted-foreground">All time</p>
+                        <div className="text-2xl font-bold">{unavailable ? "—" : stats?.totalActive ?? 0}</div>
+                        <p className="text-xs text-muted-foreground">Right now, across all tenants</p>
                     </CardContent>
                 </Card>
 
                 <Card>
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Last 24 Hours</CardTitle>
+                        <CardTitle className="text-sm font-medium">Tenants Affected</CardTitle>
                         <AlertTriangle className="h-4 w-4 text-yellow-500" />
                     </CardHeader>
                     <CardContent>
-                        <div className="text-2xl font-bold">{stats?.last24h || 0}</div>
-                        <p className="text-xs text-muted-foreground">Recent violations</p>
-                    </CardContent>
-                </Card>
-
-                <Card>
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Rate Limit</CardTitle>
-                        <TrendingDown className="h-4 w-4 text-muted-foreground" />
-                    </CardHeader>
-                    <CardContent>
-                        <div className="text-2xl font-bold">100/min</div>
-                        <p className="text-xs text-muted-foreground">Requests per minute</p>
+                        <div className="text-2xl font-bold">{unavailable ? "—" : stats?.byTenant.length ?? 0}</div>
+                        <p className="text-xs text-muted-foreground">Currently over a rate limit</p>
                     </CardContent>
                 </Card>
             </div>
@@ -111,13 +126,13 @@ export default function RateLimitsPage() {
             {/* Top Violating Tenants */}
             <Card>
                 <CardHeader>
-                    <CardTitle>Top Violating Tenants</CardTitle>
-                    <CardDescription>Tenants with the most rate limit violations</CardDescription>
+                    <CardTitle>Tenants With Active Violations</CardTitle>
+                    <CardDescription>Live, not a historical ranking</CardDescription>
                 </CardHeader>
                 <CardContent>
-                    {stats?.topTenants && stats.topTenants.length > 0 ? (
+                    {stats?.byTenant && stats.byTenant.length > 0 ? (
                         <div className="space-y-2">
-                            {stats.topTenants.map((tenant) => (
+                            {stats.byTenant.map((tenant) => (
                                 <div
                                     key={tenant.tenantId}
                                     className="flex items-center justify-between p-3 rounded-lg bg-muted/50"
@@ -130,44 +145,47 @@ export default function RateLimitsPage() {
                                         <p className="text-sm font-bold text-red-500">
                                             {tenant.violationCount}
                                         </p>
-                                        <p className="text-xs text-muted-foreground">violations</p>
+                                        <p className="text-xs text-muted-foreground">active violations</p>
                                     </div>
                                 </div>
                             ))}
                         </div>
                     ) : (
                         <p className="text-sm text-muted-foreground text-center py-4">
-                            No violations recorded
+                            {unavailable ? "Unavailable" : "No active violations right now"}
                         </p>
                     )}
                 </CardContent>
             </Card>
 
-            {/* Top Rate-Limited Endpoints */}
+            {/* By Category */}
             <Card>
                 <CardHeader>
-                    <CardTitle>Most Rate-Limited Endpoints</CardTitle>
-                    <CardDescription>Endpoints with the most violations</CardDescription>
+                    <CardTitle>By Category</CardTitle>
+                    <CardDescription>
+                        Which limiter is being hit (e.g. general per-user/per-tenant, login, OTP) -- not a
+                        per-endpoint breakdown, since limits in this app are scoped to a category, not a URL.
+                    </CardDescription>
                 </CardHeader>
                 <CardContent>
-                    {stats?.topEndpoints && stats.topEndpoints.length > 0 ? (
+                    {stats?.byCategory && stats.byCategory.length > 0 ? (
                         <div className="space-y-2">
-                            {stats.topEndpoints.map((endpoint, index) => (
+                            {stats.byCategory.map((row) => (
                                 <div
-                                    key={index}
+                                    key={row.category}
                                     className="flex items-center justify-between p-3 rounded-lg bg-muted/50"
                                 >
-                                    <p className="text-sm font-mono">{endpoint.endpoint}</p>
+                                    <p className="text-sm font-mono">{row.category}</p>
                                     <div className="text-right">
-                                        <p className="text-sm font-bold">{endpoint.violationCount}</p>
-                                        <p className="text-xs text-muted-foreground">violations</p>
+                                        <p className="text-sm font-bold">{row.violationCount}</p>
+                                        <p className="text-xs text-muted-foreground">active violations</p>
                                     </div>
                                 </div>
                             ))}
                         </div>
                     ) : (
                         <p className="text-sm text-muted-foreground text-center py-4">
-                            No violations recorded
+                            {unavailable ? "Unavailable" : "No active violations right now"}
                         </p>
                     )}
                 </CardContent>

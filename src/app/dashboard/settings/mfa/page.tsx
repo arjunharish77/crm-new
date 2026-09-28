@@ -3,6 +3,8 @@
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { ShieldCheck, ShieldOff, KeyRound, Smartphone, Loader2, CheckCircle2, Copy, Trash2 } from "lucide-react";
+import { PageHeader } from "@/components/layout/page-header";
+import { ErrorState } from "@/components/common/error-state";
 import { apiFetch } from "@/lib/api";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -39,20 +41,30 @@ function EnrollDialog({ open, onClose, onEnrolled }: { open: boolean; onClose: (
     const [confirming, setConfirming] = useState(false);
     const [backupCodes, setBackupCodes] = useState<string[]>([]);
 
+    const [startError, setStartError] = useState(false);
+    const [attempt, setAttempt] = useState(0);
+    const [confirmError, setConfirmError] = useState("");
     useEffect(() => {
         if (!open) return;
+        let active = true;
+        setStartError(false);
+        setConfirmError("");
+        setSecret(null);
+        setQrCodeDataUri(null);
         setStep("scan");
         setCode("");
         setBackupCodes([]);
         setStarting(true);
         apiFetch<{ secret: string; qrCodeDataUri: string }>("/mfa/enroll/start", { method: "POST" })
-            .then((data) => { setQrCodeDataUri(data.qrCodeDataUri); setSecret(data.secret); })
-            .catch((error: any) => toast.error(error?.message || "Failed to start enrollment"))
-            .finally(() => setStarting(false));
-    }, [open]);
+            .then((data) => { if (!active) return; setQrCodeDataUri(data.qrCodeDataUri); setSecret(data.secret); })
+            .catch(() => { if (active) setStartError(true); })
+            .finally(() => { if (active) setStarting(false); });
+        return () => { active = false; };
+    }, [open, attempt]);
 
     const confirm = async () => {
-        if (code.trim().length < 6) return;
+        if (confirming || code.trim().length < 6) return;
+        setConfirmError("");
         setConfirming(true);
         try {
             const result = await apiFetch<{ backupCodes: string[] }>("/mfa/enroll/confirm", {
@@ -62,7 +74,7 @@ function EnrollDialog({ open, onClose, onEnrolled }: { open: boolean; onClose: (
             setBackupCodes(result.backupCodes);
             setStep("backup-codes");
         } catch (error: any) {
-            toast.error(error?.message || "Invalid code");
+            setConfirmError(error?.message || "Invalid code");
         } finally {
             setConfirming(false);
         }
@@ -79,12 +91,12 @@ function EnrollDialog({ open, onClose, onEnrolled }: { open: boolean; onClose: (
     };
 
     return (
-        <StandardDialog open={open} onClose={onClose} title="Enable Two-Factor Authentication" icon={<ShieldCheck className="size-4" />} maxWidth="sm">
+        <StandardDialog open={open} onClose={() => { if (!confirming) onClose(); }} title="Enable Two-Factor Authentication" icon={<ShieldCheck className="size-4" />} maxWidth="sm">
             {step === "scan" ? (
                 <div className="space-y-4 py-2">
                     {starting ? (
                         <div className="flex justify-center py-8"><Loader2 className="size-6 animate-spin text-muted-foreground" /></div>
-                    ) : (
+                    ) : startError ? <ErrorState description="Enrollment could not be started." onRetry={() => setAttempt(value => value + 1)} /> : (
                         <>
                             <p className="text-sm text-muted-foreground">
                                 Scan this QR code with an authenticator app (Google Authenticator, Authy, 1Password, etc.).
@@ -101,8 +113,8 @@ function EnrollDialog({ open, onClose, onEnrolled }: { open: boolean; onClose: (
                                 </div>
                             )}
                             <div className="space-y-1.5">
-                                <Label>Enter the 6-digit code from your app</Label>
-                                <Input
+                                <Label htmlFor="enroll-code">Enter the 6-digit code from your app</Label>
+                                <Input id="enroll-code" autoComplete="one-time-code" disabled={confirming}
                                     value={code}
                                     onChange={(event) => setCode(event.target.value.replace(/\D/g, "").slice(0, 6))}
                                     placeholder="000000"
@@ -111,6 +123,7 @@ function EnrollDialog({ open, onClose, onEnrolled }: { open: boolean; onClose: (
                                     className="max-w-[160px] text-center text-lg tracking-widest"
                                 />
                             </div>
+                            {confirmError && <p role="alert" className="break-words text-sm text-destructive">{confirmError}</p>}
                             <div className="flex justify-end">
                                 <Button onClick={confirm} disabled={confirming || code.trim().length < 6}>
                                     {confirming && <Loader2 className="size-4 animate-spin" />}
@@ -129,12 +142,12 @@ function EnrollDialog({ open, onClose, onEnrolled }: { open: boolean; onClose: (
                             your authenticator app. They will not be shown again.
                         </AlertDescription>
                     </Alert>
-                    <div className="grid grid-cols-2 gap-2 rounded-md border border-border bg-muted/40 p-4 font-mono text-sm">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 rounded-md border border-border bg-muted/40 p-4 font-mono text-sm">
                         {backupCodes.map((backupCode) => (
-                            <span key={backupCode}>{backupCode}</span>
+                            <span className="break-all" key={backupCode}>{backupCode}</span>
                         ))}
                     </div>
-                    <div className="flex justify-between">
+                    <div className="flex flex-wrap justify-between gap-2">
                         <Button variant="outline" onClick={copyBackupCodes}>
                             <Copy className="size-3.5" />
                             Copy Codes
@@ -163,34 +176,38 @@ function CodePromptDialog({
     onConfirm: (token: string) => Promise<void>;
 }) {
     const [code, setCode] = useState("");
+    const [error, setError] = useState("");
     const [submitting, setSubmitting] = useState(false);
 
-    useEffect(() => { if (open) setCode(""); }, [open]);
+    useEffect(() => { if (open) { setCode(""); setError(""); } }, [open]);
 
     const submit = async () => {
-        if (code.trim().length < 6) return;
+        if (submitting || code.trim().length < 6) return;
+        setError("");
         setSubmitting(true);
         try {
             await onConfirm(code.trim());
             onClose();
         } catch (error: any) {
-            toast.error(error?.message || "Invalid code");
+            setError(error?.message || "Invalid code");
         } finally {
             setSubmitting(false);
         }
     };
 
     return (
-        <StandardDialog open={open} onClose={onClose} title={title} icon={<KeyRound className="size-4" />} maxWidth="xs">
+        <StandardDialog open={open} onClose={() => { if (!submitting) onClose(); }} title={title} icon={<KeyRound className="size-4" />} maxWidth="xs">
             <div className="space-y-4 py-2">
                 <p className="text-sm text-muted-foreground">{description}</p>
-                <Input
+                <Label htmlFor="mfa-confirm-code">Authentication code</Label>
+                <Input id="mfa-confirm-code" autoComplete="one-time-code" disabled={submitting}
                     value={code}
                     onChange={(event) => setCode(event.target.value.replace(/\s/g, "").slice(0, 12))}
                     placeholder="6-digit code or backup code"
                     className="text-center text-lg tracking-widest"
                     autoFocus
                 />
+                {error && <p role="alert" className="break-words text-sm text-destructive">{error}</p>}
                 <div className="flex justify-end">
                     <Button variant="destructive" onClick={submit} disabled={submitting || code.trim().length < 6}>
                         {submitting && <Loader2 className="size-4 animate-spin" />}
@@ -206,19 +223,22 @@ export default function MfaSettingsPage() {
     const [status, setStatus] = useState<MfaStatus | null>(null);
     const [devices, setDevices] = useState<TrustedDevice[]>([]);
     const [loading, setLoading] = useState(true);
+    const [loadError, setLoadError] = useState(false);
+    const [newBackupCodes, setNewBackupCodes] = useState<string[]>([]);
     const [enrollOpen, setEnrollOpen] = useState(false);
     const [disableOpen, setDisableOpen] = useState(false);
     const [regenerateOpen, setRegenerateOpen] = useState(false);
     const [revokingId, setRevokingId] = useState<string | null>(null);
 
     const load = () => {
+        setLoadError(false);
         setLoading(true);
         Promise.all([
             apiFetch<MfaStatus>("/mfa/status"),
-            apiFetch<TrustedDevice[]>("/mfa/trusted-devices").catch(() => []),
+            apiFetch<TrustedDevice[]>("/mfa/trusted-devices"),
         ])
             .then(([statusData, deviceData]) => { setStatus(statusData); setDevices(Array.isArray(deviceData) ? deviceData : []); })
-            .catch(() => toast.error("Failed to load MFA settings"))
+            .catch(() => setLoadError(true))
             .finally(() => setLoading(false));
     };
 
@@ -235,7 +255,7 @@ export default function MfaSettingsPage() {
             method: "POST",
             body: JSON.stringify({ token }),
         });
-        toast.success(`New backup codes generated: ${result.backupCodes.join(", ")}`, { duration: 15000 });
+        setNewBackupCodes(result.backupCodes);
         load();
     };
 
@@ -252,23 +272,16 @@ export default function MfaSettingsPage() {
         }
     };
 
-    if (loading) {
-        return <div className="p-6 text-sm text-muted-foreground">Loading...</div>;
-    }
+    if (loading) return <p role="status" className="text-sm text-muted-foreground">Loading MFA settings…</p>;
+    if (loadError) return <ErrorState description="MFA settings could not be loaded." onRetry={load} />;
 
     return (
-        <div className="space-y-6 p-6">
-            <div>
-                <h1 className="flex items-center gap-2 text-xl font-bold">
-                    <ShieldCheck className="size-5" />
-                    Two-Factor Authentication
-                </h1>
-                <p className="text-sm text-muted-foreground">Add an extra layer of security to your account.</p>
-            </div>
+        <div className="min-w-0 space-y-6">
+            <PageHeader title="Two-Factor Authentication" description="Add an extra layer of security to your account." />
 
-            <Card>
+            <Card className="min-w-0">
                 <CardHeader>
-                    <CardTitle className="flex items-center gap-2 text-base">
+                    <CardTitle className="flex min-w-0 flex-wrap items-center gap-2 text-base">
                         {status?.mfaEnabled ? <ShieldCheck className="size-4 text-emerald-600" /> : <ShieldOff className="size-4 text-muted-foreground" />}
                         {status?.mfaEnabled ? "Enabled" : "Not Enabled"}
                     </CardTitle>
@@ -281,17 +294,17 @@ export default function MfaSettingsPage() {
                 <CardContent className="flex flex-wrap gap-2">
                     {status?.mfaEnabled ? (
                         <>
-                            <Button variant="outline" onClick={() => setRegenerateOpen(true)}>
+                            <Button className="h-auto min-h-9 min-w-0 max-w-full whitespace-normal" variant="outline" onClick={() => setRegenerateOpen(true)}>
                                 <KeyRound className="size-3.5" />
                                 Regenerate Backup Codes
                             </Button>
-                            <Button variant="destructive" onClick={() => setDisableOpen(true)}>
+                            <Button className="h-auto min-h-9 min-w-0 max-w-full whitespace-normal" variant="destructive" onClick={() => setDisableOpen(true)}>
                                 <ShieldOff className="size-3.5" />
                                 Disable Two-Factor Authentication
                             </Button>
                         </>
                     ) : (
-                        <Button onClick={() => setEnrollOpen(true)}>
+                        <Button className="h-auto min-h-9 min-w-0 max-w-full whitespace-normal" onClick={() => setEnrollOpen(true)}>
                             <ShieldCheck className="size-3.5" />
                             Enable Two-Factor Authentication
                         </Button>
@@ -300,9 +313,9 @@ export default function MfaSettingsPage() {
             </Card>
 
             {status?.mfaEnabled && (
-                <Card className="overflow-hidden py-0">
+                <Card className="min-w-0 overflow-hidden py-0">
                     <CardHeader className="pt-5">
-                        <CardTitle className="flex items-center gap-2 text-base">
+                        <CardTitle className="flex min-w-0 flex-wrap items-center gap-2 text-base">
                             <Smartphone className="size-4" />
                             Remembered Devices
                         </CardTitle>
@@ -314,7 +327,7 @@ export default function MfaSettingsPage() {
                         <div className="divide-y border-t border-border">
                             {devices.map((device) => (
                                 <div key={device.id} className="flex flex-wrap items-center justify-between gap-3 p-4">
-                                    <div>
+                                    <div className="min-w-0 max-w-full break-words">
                                         <p className="text-sm font-medium">{describeDevice(device.userAgent)}</p>
                                         <p className="text-xs text-muted-foreground">
                                             {device.ipAddress || "Unknown IP"} -- trusted {formatWorkspaceDateTime(device.createdAt)}
@@ -332,6 +345,13 @@ export default function MfaSettingsPage() {
                 </Card>
             )}
 
+            <StandardDialog open={newBackupCodes.length > 0} onClose={() => setNewBackupCodes([])} title="New backup codes" maxWidth="xs">
+                <p className="mb-4 text-sm text-muted-foreground">Save these codes before closing. They replace your previous codes and will not be shown again.</p>
+                <div className="grid grid-cols-1 gap-2 rounded-md bg-muted p-4 font-mono text-sm sm:grid-cols-2">
+                    {newBackupCodes.map(code => <span className="break-all" key={code}>{code}</span>)}
+                </div>
+                <Button className="mt-4" onClick={() => setNewBackupCodes([])}>Done</Button>
+            </StandardDialog>
             <EnrollDialog open={enrollOpen} onClose={() => setEnrollOpen(false)} onEnrolled={load} />
             <CodePromptDialog
                 open={disableOpen}

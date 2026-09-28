@@ -287,7 +287,7 @@ export function RuleBuilder({ open, setOpen, rule, onSave }: RuleBuilderProps) {
             <SheetContent
                 side="right"
                 showCloseButton={false}
-                className="w-full gap-0 sm:max-w-[600px] md:max-w-[800px]"
+                className="w-full min-w-0 gap-0 sm:max-w-[600px] md:max-w-[800px]"
             >
                 <SheetHeader className="flex-row items-center justify-between gap-3 border-b p-4">
                     <div>
@@ -298,12 +298,12 @@ export function RuleBuilder({ open, setOpen, rule, onSave }: RuleBuilderProps) {
                             Define how leads should be routed to your team.
                         </SheetDescription>
                     </div>
-                    <Button variant="ghost" size="icon" onClick={handleClose}>
+                    <Button variant="ghost" size="icon" aria-label="Close rule editor" onClick={handleClose}>
                         <X className="size-4" />
                     </Button>
                 </SheetHeader>
 
-                <div className="flex-1 overflow-y-auto p-4">
+                <div className="min-h-0 min-w-0 flex-1 overflow-y-auto p-4">
                     <div className="space-y-4">
                         <div className="space-y-2">
                             <Label htmlFor="rule-name-input">Rule Name</Label>
@@ -470,7 +470,7 @@ export function RuleBuilder({ open, setOpen, rule, onSave }: RuleBuilderProps) {
                             <div className="rounded-lg border p-4">
                                 <p className="mb-3 text-sm font-semibold">Routing Target</p>
 
-                                <div className="mb-4 flex gap-2">
+                                <div className="mb-4 flex flex-wrap gap-2">
                                     <Button
                                         type="button"
                                         variant={targetType === "USER_POOL" ? "default" : "outline"}
@@ -753,7 +753,7 @@ export function RuleBuilder({ open, setOpen, rule, onSave }: RuleBuilderProps) {
                     </div>
                 </div>
 
-                <SheetFooter className="flex-row justify-end gap-2 border-t p-4">
+                <SheetFooter className="flex-row flex-wrap justify-end gap-2 border-t p-4">
                     <Button variant="outline" onClick={handleClose}>
                         Cancel
                     </Button>

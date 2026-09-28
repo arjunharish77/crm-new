@@ -1,7 +1,10 @@
 'use client';
 
+import { canUseApplications } from "@/lib/application-access";
 import * as React from 'react';
-import { usePathname, useRouter } from 'next/navigation';
+import { usePathname } from 'next/navigation';
+import Link from 'next/link';
+import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet';
 import {
     Activity,
     BarChart3,
@@ -41,8 +44,16 @@ import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { useModuleEnabled } from '@/components/auth/feature-gate';
 
-const drawerWidth = 248;
-const railWidth = 68;
+const drawerWidth = 240;
+const railWidth = 64;
+const MAIN_NAV_GROUPS = [
+    { title: "My work", paths: ["/dashboard", "/dashboard/leads", "/dashboard/tasks", "/dashboard/activities"] },
+    { title: "Sales", paths: ["/dashboard/opportunities", "/dashboard/applications", "/dashboard/lists", "/dashboard/views"] },
+    { title: "Service", paths: ["/dashboard/call-center", "/dashboard/cases"] },
+    { title: "Growth", paths: ["/dashboard/forms", "/dashboard/automations-v2", "/dashboard/marketing"] },
+    { title: "Insights", paths: ["/dashboard/reports", "/dashboard/leaderboard", "/dashboard/my-points"] },
+    { title: "Data operations", paths: ["/dashboard/exports"] },
+];
 
 interface NavItem {
     name: string;
@@ -52,13 +63,16 @@ interface NavItem {
     adminOnly?: boolean;
 }
 
-export function NavigationDrawer({ open, toggleDrawer }: { open: boolean; toggleDrawer: () => void }) {
+export function NavigationDrawer({ open, isMobile, toggleDrawer }: { open: boolean; isMobile: boolean; toggleDrawer: () => void }) {
     const pathname = usePathname();
-    const router = useRouter();
     const { user } = useAuth();
-    const [isMobile, setIsMobile] = React.useState(false);
 
     const [adminOpen, setAdminOpen] = React.useState(true);
+    const [openGroups, setOpenGroups] = React.useState<string[]>(["My work", "Sales"]);
+    React.useEffect(() => {
+        const activeGroup = MAIN_NAV_GROUPS.find(group => group.paths.some(path => pathname === path || (path !== "/dashboard" && pathname.startsWith(path + "/"))));
+        if (activeGroup) setOpenGroups(current => current.includes(activeGroup.title) ? current : [...current, activeGroup.title]);
+    }, [pathname]);
     const [platformOpen, setPlatformOpen] = React.useState(true);
     const [customOpen, setCustomOpen] = React.useState(true);
     const [pinnedOpen, setPinnedOpen] = React.useState(true);
@@ -74,64 +88,6 @@ export function NavigationDrawer({ open, toggleDrawer }: { open: boolean; toggle
     }, []);
 
     React.useEffect(() => {
-        const mediaQuery = window.matchMedia('(max-width: 767px)');
-        const updateIsMobile = () => setIsMobile(mediaQuery.matches);
-
-        updateIsMobile();
-        mediaQuery.addEventListener('change', updateIsMobile);
-
-        return () => mediaQuery.removeEventListener('change', updateIsMobile);
-    }, []);
-
-    // Gap checklist Module 10's "accessibility pass" item, "focus traps in dialogs/drawers" --
-    // this mobile overlay is a hand-rolled `<aside>`, not a Radix Dialog/Sheet (which trap focus
-    // for free), so it needs its own trap: focus the first focusable element on open, cycle
-    // Tab/Shift+Tab within the drawer, close on Escape, and restore focus to whatever was
-    // focused before opening (the hamburger trigger, wherever it lives).
-    const mobileDrawerRef = React.useRef<HTMLElement | null>(null);
-    const previouslyFocusedRef = React.useRef<HTMLElement | null>(null);
-
-    React.useEffect(() => {
-        if (!isMobile) return;
-        if (open) {
-            previouslyFocusedRef.current = document.activeElement as HTMLElement | null;
-            const firstFocusable = mobileDrawerRef.current?.querySelector<HTMLElement>(
-                'a[href], button:not([disabled]), input, [tabindex]:not([tabindex="-1"])'
-            );
-            firstFocusable?.focus();
-        } else {
-            previouslyFocusedRef.current?.focus();
-        }
-    }, [open, isMobile]);
-
-    React.useEffect(() => {
-        if (!isMobile || !open) return;
-        const handleKeyDown = (event: KeyboardEvent) => {
-            if (event.key === "Escape") {
-                event.preventDefault();
-                toggleDrawer();
-                return;
-            }
-            if (event.key !== "Tab") return;
-            const focusable = mobileDrawerRef.current?.querySelectorAll<HTMLElement>(
-                'a[href], button:not([disabled]), input, [tabindex]:not([tabindex="-1"])'
-            );
-            if (!focusable || focusable.length === 0) return;
-            const first = focusable[0];
-            const last = focusable[focusable.length - 1];
-            if (event.shiftKey && document.activeElement === first) {
-                event.preventDefault();
-                last.focus();
-            } else if (!event.shiftKey && document.activeElement === last) {
-                event.preventDefault();
-                first.focus();
-            }
-        };
-        document.addEventListener("keydown", handleKeyDown);
-        return () => document.removeEventListener("keydown", handleKeyDown);
-    }, [open, isMobile, toggleDrawer]);
-
-    React.useEffect(() => {
         apiFetch('/metadata/objects')
             .then((data: any[]) => {
                 if (Array.isArray(data)) {
@@ -143,6 +99,7 @@ export function NavigationDrawer({ open, toggleDrawer }: { open: boolean; toggle
 
     const isPartner = !!(user?.role as any)?.permissions?.isPartnerRole;
     const serviceDeskEnabled = useModuleEnabled('SERVICE_DESK');
+    const applicationsEnabled = useModuleEnabled('PRODUCT_CATALOG');
     // Journeys live as a tab on the same /dashboard/marketing page and work independently of
     // Marketing Communications (its own module) -- keep the nav entry reachable if either is
     // enabled, since the page itself already gates each tab set separately.
@@ -176,6 +133,7 @@ export function NavigationDrawer({ open, toggleDrawer }: { open: boolean; toggle
             { name: 'Activities', href: '/dashboard/activities', icon: <Activity className="size-5" /> },
             { name: 'Tasks', href: '/dashboard/tasks', icon: <CheckSquare className="size-5" /> },
             { name: 'Call Center', href: '/dashboard/call-center', icon: <Phone className="size-5" /> },
+            { name: 'Applications', href: '/dashboard/applications', icon: <BriefcaseBusiness className="size-5" />, enabled: applicationsEnabled && canUseApplications(user, 'read') },
             { name: 'Cases', href: '/dashboard/cases', icon: <LifeBuoy className="size-5" />, enabled: serviceDeskEnabled },
             { name: 'Views', href: '/dashboard/views', icon: <LayoutList className="size-5" /> },
             { name: 'Exports', href: '/dashboard/exports', icon: <Download className="size-5" /> },
@@ -193,18 +151,11 @@ export function NavigationDrawer({ open, toggleDrawer }: { open: boolean; toggle
     ];
 
     const platformNavigation: NavItem[] = [
-        { name: 'Tenants', href: '/platform-admin', icon: <ShieldCheck className="size-5" />, adminOnly: true },
+        { name: 'Platform overview', href: '/platform-admin', icon: <ShieldCheck className="size-5" />, adminOnly: true },
         { name: 'Audit Logs', href: '/platform-admin/audit-logs', icon: <Shield className="size-5" />, adminOnly: true },
         { name: 'Schema Status', href: '/platform-admin/schema-status', icon: <Database className="size-5" />, adminOnly: true },
         { name: 'Marketplace', href: '/platform-admin/marketplace', icon: <Package className="size-5" />, adminOnly: true },
     ];
-
-    const goTo = (href: string) => {
-        if (pathname !== href) {
-            router.push(href);
-        }
-        if (isMobile) toggleDrawer();
-    };
 
     const renderNavItem = (item: NavItem) => {
         const isRoot = item.href === '/dashboard';
@@ -212,9 +163,11 @@ export function NavigationDrawer({ open, toggleDrawer }: { open: boolean; toggle
         const labelVisible = open || isMobile;
 
         const button = (
-            <button
-                type="button"
-                onClick={() => goTo(item.href)}
+            <Link
+                href={item.href}
+                aria-label={item.name}
+                aria-current={active ? "page" : undefined}
+                onClick={() => { if (isMobile) toggleDrawer(); }}
                 className={cn(
                     "group flex min-h-10 w-full items-center rounded-full px-3 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/20",
                     labelVisible ? "justify-start gap-3" : "mx-auto size-10 justify-center px-0",
@@ -234,7 +187,7 @@ export function NavigationDrawer({ open, toggleDrawer }: { open: boolean; toggle
                 {labelVisible ? (
                     <span className={cn("truncate", active ? "font-bold" : "font-medium")}>{item.name}</span>
                 ) : null}
-            </button>
+            </Link>
         );
 
         return (
@@ -275,6 +228,7 @@ export function NavigationDrawer({ open, toggleDrawer }: { open: boolean; toggle
                 <button
                     type="button"
                     onClick={onToggle}
+                    aria-expanded={isOpen}
                     className={cn(
                         "mb-1 flex min-h-8 w-full items-center justify-between rounded-md px-3 text-xs font-bold uppercase tracking-[0.04em] text-muted-foreground hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                         hasActiveChild && "text-primary"
@@ -312,7 +266,7 @@ export function NavigationDrawer({ open, toggleDrawer }: { open: boolean; toggle
                 )}
             </div>
 
-            <div className="grow overflow-y-auto py-1">
+            <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain py-1">
                 {pinnedModules.length > 0 ? (() => {
                     const pinnedItems = [...navigation, ...adminNavigation].filter(
                         (item) => item.enabled !== false && pinnedModules.includes(item.href),
@@ -326,9 +280,14 @@ export function NavigationDrawer({ open, toggleDrawer }: { open: boolean; toggle
                     );
                 })() : null}
 
-                <ul className="space-y-1 px-2">
-                    {navigation.filter(item => item.enabled !== false).map(renderNavItem)}
-                </ul>
+                {isPartner ? <ul className="space-y-1 px-2">
+                    {navigation.filter(item => item.enabled !== false && !pinnedModules.includes(item.href)).map(renderNavItem)}
+                </ul> : MAIN_NAV_GROUPS.map(group => {
+                    const items = navigation.filter(item => group.paths.includes(item.href) && !pinnedModules.includes(item.href));
+                    return <React.Fragment key={group.title}>{renderSection(group.title, items,
+                        openGroups.includes(group.title),
+                        () => setOpenGroups(current => current.includes(group.title) ? current.filter(title => title !== group.title) : [...current, group.title]))}</React.Fragment>;
+                })}
 
                 {!isPartner && (open || isMobile) ? <div className="mx-3 my-2 h-px bg-border" /> : null}
                 {!isPartner && renderSection('Administration', adminNavigation, adminOpen, () => setAdminOpen(!adminOpen))}
@@ -356,34 +315,23 @@ export function NavigationDrawer({ open, toggleDrawer }: { open: boolean; toggle
 
     if (isMobile) {
         return (
-            <>
-                {open ? (
-                    <button
-                        type="button"
-                        aria-label="Close navigation overlay"
-                        className="fixed inset-0 z-40 bg-black/35 md:hidden focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
-                        onClick={toggleDrawer}
-                    />
-                ) : null}
-                <aside
-                    ref={mobileDrawerRef}
-                    role="dialog"
-                    aria-modal="true"
-                    aria-label="Navigation"
-                    className={cn(
-                        "fixed inset-y-0 left-0 z-50 flex w-[248px] flex-col border-r bg-background shadow-xl transition-transform md:hidden",
-                        open ? "translate-x-0" : "-translate-x-full"
-                    )}
-                >
+            <Sheet open={open} onOpenChange={(next) => { if (next !== open) toggleDrawer(); }}>
+                <SheetContent side="left" showCloseButton={false} className="w-[min(280px,calc(100dvw-32px))] gap-0 p-0" aria-describedby={undefined}
+                    onCloseAutoFocus={(event) => {
+                        event.preventDefault();
+                        document.getElementById("mobile-navigation-trigger")?.focus();
+                    }}>
+                    <SheetTitle className="sr-only">Main navigation</SheetTitle>
                     {drawerContent}
-                </aside>
-            </>
+                </SheetContent>
+            </Sheet>
         );
     }
 
     return (
         <aside
-            className="hidden shrink-0 flex-col border-r bg-background transition-[width] duration-200 ease-in-out md:flex"
+            aria-label="Main navigation"
+            className="sticky top-0 hidden h-dvh shrink-0 flex-col self-start border-r bg-background transition-[width] duration-200 ease-in-out motion-reduce:transition-none md:flex"
             style={{ width: open ? drawerWidth : railWidth }}
         >
             {drawerContent}

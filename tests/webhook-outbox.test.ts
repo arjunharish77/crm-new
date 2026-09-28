@@ -1,6 +1,13 @@
+// Keep delivery tests independent of real DNS; destination guard has its own security tests.
+vi.mock("node:dns/promises", () => ({ default: { lookup: vi.fn().mockResolvedValue([{ address: "93.184.216.34", family: 4 }]) } }));
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const dbMocks = vi.hoisted(() => ({ query: vi.fn(), queryOne: vi.fn(), execute: vi.fn() }));
+const dbMocks = vi.hoisted(() => {
+  const query = vi.fn();
+  const queryOne = vi.fn();
+  const execute = vi.fn();
+  return { query, queryOne, execute, queryAsSystem: query, queryOneAsSystem: queryOne, executeAsSystem: execute };
+});
 const notificationMocks = vi.hoisted(() => ({ createUserNotification: vi.fn().mockResolvedValue(undefined) }));
 
 vi.mock("@/lib/db/query", () => dbMocks);
@@ -139,6 +146,44 @@ describe("outbound webhook governance", () => {
 
       expect(result.processed).toBe(0);
       expect(fetchMock).not.toHaveBeenCalled();
+    });
+
+    // F14 fix (WP10): a row claimed into SENDING previously had no expiry at all, so a worker
+    // crash between the claim and deliverOne's final status update left it stuck in SENDING
+    // forever with no recovery path. The due-row query must now also select an abandoned SENDING
+    // row (lease expired), and the claim itself must accept reclaiming it.
+    it("selects a SENDING row whose lease has expired, alongside PENDING-and-due rows", async () => {
+      mockClaimedRow();
+      dbMocks.queryOne.mockResolvedValueOnce({ id: "sub-1", url: "https://example.com/hook", secret: null, isActive: true });
+      vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, status: 200, text: async () => "ok" }));
+
+      await processWebhookOutbox(5);
+
+      const dueSql = String(dbMocks.query.mock.calls[0][0]);
+      expect(dueSql).toContain("status = 'SENDING' and \"leaseExpiresAt\" is not null and \"leaseExpiresAt\" <= $1");
+    });
+
+    it("the claim itself accepts either a due PENDING row or a SENDING row with an expired lease, setting a fresh lease", async () => {
+      mockClaimedRow();
+      dbMocks.queryOne.mockResolvedValueOnce({ id: "sub-1", url: "https://example.com/hook", secret: null, isActive: true });
+      vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, status: 200, text: async () => "ok" }));
+
+      await processWebhookOutbox(5);
+
+      const claimSql = String(dbMocks.queryOne.mock.calls[0][0]);
+      expect(claimSql).toContain("status = 'PENDING' or (status = 'SENDING' and \"leaseExpiresAt\" is not null and \"leaseExpiresAt\" <= $2)");
+      expect(claimSql).toContain('"leaseExpiresAt" = $1');
+    });
+
+    it("clears the lease on every terminal/retry status transition, not just on a fresh claim", async () => {
+      mockClaimedRow({ retryCount: 1 });
+      dbMocks.queryOne.mockResolvedValueOnce({ id: "sub-1", url: "https://example.com/hook", secret: null, isActive: true });
+      vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false, status: 500, text: async () => "server error" }));
+
+      await processWebhookOutbox(5);
+
+      const retryUpdate = dbMocks.execute.mock.calls.find((call) => String(call[0]).includes("status = 'PENDING'"));
+      expect(String(retryUpdate![0])).toContain('"leaseExpiresAt" = null');
     });
   });
 

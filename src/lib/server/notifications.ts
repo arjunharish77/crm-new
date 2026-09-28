@@ -16,6 +16,7 @@ export type NotificationCategory =
   | "REPORTS"
   | "CALLS"
   | "CASES"
+  | "APPLICATIONS"
   | "NBA"
   | "SECURITY";
 

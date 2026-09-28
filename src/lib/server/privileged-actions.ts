@@ -1,5 +1,5 @@
 import { randomUUID } from "crypto";
-import { query, queryOne, execute } from "@/lib/db/query";
+import { query, queryOne, execute, queryOneAsSystem, executeAsSystem } from "@/lib/db/query";
 import { createAuditLog } from "@/lib/server/crm";
 import { getEffectiveSecurityPolicy } from "@/lib/server/security-policy";
 import { changeTenantStatus, impersonateTenantUser, updatePermissionTemplateForTenant } from "@/lib/server/admin";
@@ -51,8 +51,9 @@ export async function isPrivilegedActionApprovalRequired(actionType: PrivilegedA
   return !!policy.privilegedActionApprovalRequired;
 }
 
+// WP07 (F04): CROSS_TENANT_ADMIN, disposition B -- a single global (non-tenant) settings row.
 export async function getPlatformSecuritySettings() {
-  const row = await queryOne<{ privilegedActionApprovalRequired: boolean; updatedBy: string | null; updatedAt: string | null }>(
+  const row = await queryOneAsSystem<{ privilegedActionApprovalRequired: boolean; updatedBy: string | null; updatedAt: string | null }>(
     `select "privilegedActionApprovalRequired", "updatedBy", "updatedAt" from "PlatformSecuritySettings" where id = 'singleton'`,
   );
   return row ?? { privilegedActionApprovalRequired: false, updatedBy: null, updatedAt: null };
@@ -60,7 +61,7 @@ export async function getPlatformSecuritySettings() {
 
 export async function updatePlatformSecuritySettings(adminUser: TenantUser, privilegedActionApprovalRequired: boolean) {
   const now = new Date().toISOString();
-  await execute(
+  await executeAsSystem(
     `insert into "PlatformSecuritySettings" (id, "privilegedActionApprovalRequired", "updatedBy", "updatedAt")
      values ('singleton', $1, $2, $3)
      on conflict (id) do update set "privilegedActionApprovalRequired" = $1, "updatedBy" = $2, "updatedAt" = $3`,
@@ -155,8 +156,14 @@ async function executeApprovedAction(row: PrivilegedActionRequestRow) {
   }
 }
 
+// WP07 (F04): hybrid PRE_AUTH/CROSS_TENANT_ADMIN, disposition B -- the request's own tenantId
+// (or null, for a platform-scoped request) is unknown until this lookup resolves it, and the
+// caller can legitimately be either a platform admin (ambient tenantId null) or a tenant admin
+// approving a request that belongs to their OWN tenant (the `row.tenantId !== approver.tenantId`
+// check right below is the real authorization boundary here, enforced in application code
+// regardless of RLS) -- so this lookup-by-id can't depend on ambient tenant context either way.
 export async function approvePrivilegedActionRequest(approver: TenantUser, requestId: string) {
-  const row = await queryOne<PrivilegedActionRequestRow>(
+  const row = await queryOneAsSystem<PrivilegedActionRequestRow>(
     `select ${COLUMNS} from "PrivilegedActionRequest" where id = $1 and status = 'PENDING'`,
     [requestId],
   );
@@ -172,10 +179,10 @@ export async function approvePrivilegedActionRequest(approver: TenantUser, reque
 
   const now = new Date().toISOString();
   if (row.actionType === "IMPERSONATION_START") {
-    await execute(`update "PrivilegedActionRequest" set status = 'APPROVED', "decidedBy" = $1, "decidedAt" = $2 where id = $3`, [approver.id, now, requestId]);
+    await executeAsSystem(`update "PrivilegedActionRequest" set status = 'APPROVED', "decidedBy" = $1, "decidedAt" = $2 where id = $3`, [approver.id, now, requestId]);
   } else {
     await executeApprovedAction(row);
-    await execute(
+    await executeAsSystem(
       `update "PrivilegedActionRequest" set status = 'EXECUTED', "decidedBy" = $1, "decidedAt" = $2, "executedAt" = $2 where id = $3`,
       [approver.id, now, requestId],
     );
@@ -187,8 +194,9 @@ export async function approvePrivilegedActionRequest(approver: TenantUser, reque
   return { status: row.actionType === "IMPERSONATION_START" ? "APPROVED" : "EXECUTED" };
 }
 
+// WP07 (F04): same hybrid PRE_AUTH/CROSS_TENANT_ADMIN disposition as approvePrivilegedActionRequest above.
 export async function rejectPrivilegedActionRequest(approver: TenantUser, requestId: string, decisionNote?: string | null) {
-  const row = await queryOne<PrivilegedActionRequestRow>(
+  const row = await queryOneAsSystem<PrivilegedActionRequestRow>(
     `select ${COLUMNS} from "PrivilegedActionRequest" where id = $1 and status = 'PENDING'`,
     [requestId],
   );
@@ -196,7 +204,7 @@ export async function rejectPrivilegedActionRequest(approver: TenantUser, reques
   if (row.requestedBy === approver.id) throw new Error("CANNOT_APPROVE_OWN_REQUEST");
   if (row.tenantId && row.tenantId !== approver.tenantId) throw new Error("FORBIDDEN");
 
-  await execute(
+  await executeAsSystem(
     `update "PrivilegedActionRequest" set status = 'REJECTED', "decidedBy" = $1, "decidedAt" = $2, "decisionNote" = $3 where id = $4`,
     [approver.id, new Date().toISOString(), decisionNote ?? null, requestId],
   );
@@ -209,8 +217,12 @@ export async function rejectPrivilegedActionRequest(approver: TenantUser, reques
 // The requester comes back for their own approved impersonation request once someone else has
 // approved it -- this is what actually creates the session/token, scoped to the requester's own
 // browser rather than the approver's.
+// WP07 (F04): CROSS_TENANT_ADMIN, disposition B -- the requester here is always the platform
+// admin who originally asked to impersonate a user in a DIFFERENT tenant; the admin's own
+// ambient context (typically null tenantId) could never legitimately scope this lookup or the
+// impersonation target it resolves.
 export async function claimApprovedImpersonation(requester: TenantUser, requestId: string) {
-  const row = await queryOne<PrivilegedActionRequestRow>(
+  const row = await queryOneAsSystem<PrivilegedActionRequestRow>(
     `select ${COLUMNS} from "PrivilegedActionRequest" where id = $1 and status = 'APPROVED' and "actionType" = 'IMPERSONATION_START'`,
     [requestId],
   );
@@ -219,6 +231,6 @@ export async function claimApprovedImpersonation(requester: TenantUser, requestI
 
   const payload = row.payload as { tenantId: string; userId: string; reason: string };
   const result = await impersonateTenantUser(requester.id, payload.tenantId, payload.userId, payload.reason);
-  await execute(`update "PrivilegedActionRequest" set status = 'EXECUTED', "executedAt" = $1 where id = $2`, [new Date().toISOString(), requestId]);
+  await executeAsSystem(`update "PrivilegedActionRequest" set status = 'EXECUTED', "executedAt" = $1 where id = $2`, [new Date().toISOString(), requestId]);
   return result;
 }

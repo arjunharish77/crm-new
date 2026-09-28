@@ -1,6 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const dbMocks = vi.hoisted(() => ({ query: vi.fn(), queryOne: vi.fn(), execute: vi.fn() }));
+const dbMocks = vi.hoisted(() => {
+  const query = vi.fn();
+  const queryOne = vi.fn();
+  const execute = vi.fn();
+  return { query, queryOne, execute, queryAsSystem: query, queryOneAsSystem: queryOne, executeAsSystem: execute };
+});
 const rateLimitMocks = vi.hoisted(() => ({ checkRateLimit: vi.fn().mockResolvedValue({ allowed: true, remaining: 59, resetSeconds: 60 }) }));
 const automationMocks = vi.hoisted(() => ({ runAutomationsForEvent: vi.fn().mockResolvedValue([]) }));
 vi.mock("@/lib/db/query", () => dbMocks);
@@ -10,6 +15,7 @@ vi.mock("@/lib/repositories/automations-postgres", () => automationMocks);
 import {
   MarketplaceAppAuthenticationError,
   authenticateMarketplaceAppRequest,
+  buildAppScopedActor,
   fireAppAutomationTrigger,
   hasAppPermission,
 } from "@/lib/server/marketplace-inbound";
@@ -190,6 +196,77 @@ describe("authenticateMarketplaceAppRequest", () => {
 
     expect(result.tenantId).toBe("tenant-b");
     expect(dbMocks.queryOne).toHaveBeenNthCalledWith(2, expect.stringContaining('"TenantAppInstall"'), ["tenant-b", "app-1"]);
+  });
+
+  // WP04 fix: the install's own opt-in record-scope/field-masking config now flows through
+  // authentication so route handlers can build a properly scoped actor from it.
+  it("returns the install's recordAccess/ownerUserId/fieldPermissions alongside permissions", async () => {
+    dbMocks.queryOne
+      .mockResolvedValueOnce(appRow())
+      .mockResolvedValueOnce(installRow({ recordAccess: "OWN", ownerUserId: "user-42", fieldPermissions: { leads: { email: "hidden" } } }));
+    dbMocks.query.mockResolvedValueOnce([secretRow()]).mockResolvedValueOnce([]);
+
+    const result = await authenticateMarketplaceAppRequest(request("Bearer app-1.current-secret"));
+
+    expect(result.recordAccess).toBe("OWN");
+    expect(result.ownerUserId).toBe("user-42");
+    expect(result.fieldPermissions).toEqual({ leads: { email: "hidden" } });
+  });
+
+  it("defaults recordAccess/ownerUserId/fieldPermissions to undefined for an install with no config set", async () => {
+    dbMocks.queryOne.mockResolvedValueOnce(appRow()).mockResolvedValueOnce(installRow());
+    dbMocks.query.mockResolvedValueOnce([secretRow()]).mockResolvedValueOnce([]);
+
+    const result = await authenticateMarketplaceAppRequest(request("Bearer app-1.current-secret"));
+
+    expect(result.recordAccess).toBeUndefined();
+    expect(result.ownerUserId).toBeUndefined();
+    expect(result.fieldPermissions).toBeUndefined();
+  });
+});
+
+// WP04 fix: builds the "user" object every /api/v1/apps/* route now passes into the shared
+// leads-postgres.ts/opportunities-postgres.ts repository functions, instead of the old bare
+// `{ id: appId, tenantId }` that always resolved to unrestricted tenant-wide access.
+describe("buildAppScopedActor", () => {
+  beforeEach(() => {
+    dbMocks.queryOne.mockReset();
+  });
+
+  it("keeps id/tenantId as the app's own identity and sets no team/scope-actor for ALL scope", async () => {
+    const actor = await buildAppScopedActor({ appId: "app-1", tenantId: "tenant-a", recordAccess: "ALL", ownerUserId: null, fieldPermissions: null });
+    expect(actor.id).toBe("app-1");
+    expect(actor.tenantId).toBe("tenant-a");
+    expect(actor.teamId).toBeNull();
+    expect(actor.recordScopeActorId).toBeUndefined();
+    expect(actor.role.permissions.recordAccess).toBe("ALL");
+    expect(dbMocks.queryOne).not.toHaveBeenCalled(); // no need to look up a team for ALL scope
+  });
+
+  it("sets recordScopeActorId to the designated owner for OWN scope, without a team lookup", async () => {
+    const actor = await buildAppScopedActor({ appId: "app-1", tenantId: "tenant-a", recordAccess: "OWN", ownerUserId: "user-42", fieldPermissions: null });
+    expect(actor.recordScopeActorId).toBe("user-42");
+    expect(actor.teamId).toBeNull();
+    expect(dbMocks.queryOne).not.toHaveBeenCalled();
+  });
+
+  it("looks up and sets the owner's own teamId for TEAM scope", async () => {
+    dbMocks.queryOne.mockResolvedValueOnce({ teamId: "team-7" });
+    const actor = await buildAppScopedActor({ appId: "app-1", tenantId: "tenant-a", recordAccess: "TEAM", ownerUserId: "user-42", fieldPermissions: null });
+    expect(actor.teamId).toBe("team-7");
+    expect(actor.recordScopeActorId).toBe("user-42");
+    expect(dbMocks.queryOne).toHaveBeenCalledWith(expect.stringContaining('"User"'), ["user-42", "tenant-a"]);
+  });
+
+  it("passes fieldPermissions through untouched for field-permissions.ts's legacy role-level lookup", async () => {
+    const actor = await buildAppScopedActor({
+      appId: "app-1",
+      tenantId: "tenant-a",
+      recordAccess: "ALL",
+      ownerUserId: null,
+      fieldPermissions: { leads: { email: "hidden" } },
+    });
+    expect(actor.role.permissions.fieldPermissions).toEqual({ leads: { email: "hidden" } });
   });
 });
 

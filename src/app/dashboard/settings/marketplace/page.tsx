@@ -1,5 +1,7 @@
 "use client";
 
+import { PageHeader } from "@/components/layout/page-header";
+
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Activity, Blocks, Copy, Download, History, ListTree, Package, Play, Plus, RefreshCw, RotateCw, ShieldOff, ShieldCheck, Table2, Trash2 } from "lucide-react";
@@ -287,12 +289,14 @@ export default function MarketplacePage() {
     const [runningSync, setRunningSync] = useState(false);
     const [dryRunResult, setDryRunResult] = useState<Record<string, unknown> | null>(null);
 
+    const [loadError, setLoadError] = useState(false);
     const load = () => {
         if (!marketplaceEnabled) {
             setLoading(false);
             return;
         }
         setLoading(true);
+        setLoadError(false);
         setLoadingCatalog(true);
         Promise.all([
             apiFetch<MarketplaceApp[]>("/marketplace/apps"),
@@ -306,7 +310,7 @@ export default function MarketplacePage() {
                 setPendingChanges(Array.isArray(changesData) ? changesData : []);
                 setCatalogApps(Array.isArray(catalogData) ? catalogData : []);
             })
-            .catch(() => toast.error("Failed to load marketplace data"))
+            .catch(() => setLoadError(true))
             .finally(() => {
                 setLoading(false);
                 setLoadingCatalog(false);
@@ -825,25 +829,16 @@ export default function MarketplacePage() {
 
     return (
         <div className="space-y-4">
-            <div className="flex items-start justify-between gap-3">
-                <div>
-                    <h1 className="text-lg font-bold">Marketplace</h1>
-                    <p className="text-sm text-muted-foreground">
-                        Register custom/private apps that integrate with this workspace via a scoped API credential and signed
-                        webhook deliveries. Every registration requires a separate admin&apos;s approval before it&apos;s live.
-                    </p>
-                </div>
-                <Button onClick={() => setIsRegistering(true)}>
-                    <Plus className="size-4" />
-                    Register App
-                </Button>
-            </div>
+            <PageHeader title="Marketplace" description="Manage registered apps, installation requests and available integrations." actions={
+                <Button onClick={() => setIsRegistering(true)}><Plus className="size-4" />Register App</Button>
+            } />
+            {loadError && <div role="alert" className="rounded-lg border p-4 text-sm">Unable to load marketplace data. <Button variant="outline" size="sm" onClick={load}>Retry</Button></div>}
 
-            <Tabs defaultValue="apps">
+            <Tabs defaultValue="apps" hidden={loadError}>
                 <TabsList>
                     <TabsTrigger value="apps">My Apps</TabsTrigger>
                     <TabsTrigger value="requests">
-                        Install Requests
+                        Requests
                         {(installs.length + pendingChanges.length) > 0 && (
                             <Badge variant="secondary" className="ml-1">{installs.length + pendingChanges.length}</Badge>
                         )}
@@ -861,9 +856,9 @@ export default function MarketplacePage() {
                             <div className="divide-y">
                                 {apps.map((app) => (
                                     <div key={app.id} className="flex flex-wrap items-center justify-between gap-3 p-3">
-                                        <div className="min-w-[12rem]">
-                                            <div className="flex items-center gap-2">
-                                                <p className="text-sm font-medium">{app.name}</p>
+                                        <div className="min-w-0 flex-1 basis-60 break-words">
+                                            <div className="flex min-w-0 flex-wrap items-center gap-2">
+                                                <p className="min-w-0 max-w-full break-words text-sm font-medium">{app.name}</p>
                                                 <Badge variant="outline" className={STATUS_BADGE[app.installStatus ?? ""] ?? ""}>
                                                     {app.installStatus ?? "NO INSTALL"}
                                                 </Badge>
@@ -890,7 +885,9 @@ export default function MarketplacePage() {
                                                     : "No module permissions requested"}
                                             </p>
                                         </div>
-                                        <div className="flex items-center gap-1.5">
+                                        <details className="w-full min-w-0">
+                                            <summary className="cursor-pointer rounded-md py-2 text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">App actions</summary>
+                                            <div className="flex flex-wrap items-center gap-2 py-2">
                                             <Button variant="outline" size="sm" onClick={() => { setTestEventFor(app); setTestEventResult(null); }}>
                                                 <Play className="size-3.5" />
                                                 Test
@@ -964,7 +961,8 @@ export default function MarketplacePage() {
                                                     Uninstall
                                                 </Button>
                                             )}
-                                        </div>
+                                            </div>
+                                        </details>
                                     </div>
                                 ))}
                             </div>
@@ -979,7 +977,7 @@ export default function MarketplacePage() {
                                 {pendingChanges.map((change) => (
                                     <div key={change.id} className="flex flex-wrap items-center justify-between gap-3 p-3">
                                         <div>
-                                            <div className="flex items-center gap-2">
+                                            <div className="flex min-w-0 flex-wrap items-center gap-2">
                                                 <p className="text-sm font-medium">{change.appName}</p>
                                                 <Badge variant="outline" className="border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-400">
                                                     Permission increase requested
@@ -992,7 +990,7 @@ export default function MarketplacePage() {
                                                     .join(", ")}
                                             </p>
                                         </div>
-                                        <div className="flex items-center gap-1.5">
+                                        <div className="flex min-w-0 flex-wrap items-center gap-1.5">
                                             <Button variant="outline" size="sm" disabled={busyId === change.id} onClick={() => runPermissionChangeAction(change.id, "reject-permission-change")}>
                                                 Reject
                                             </Button>
@@ -1015,7 +1013,7 @@ export default function MarketplacePage() {
                                     return (
                                     <div key={install.id} className="flex flex-wrap items-center justify-between gap-3 p-3">
                                         <div>
-                                            <div className="flex items-center gap-2">
+                                            <div className="flex min-w-0 flex-wrap items-center gap-2">
                                                 <p className="text-sm font-medium">{install.appName}</p>
                                                 <Badge variant="outline">{install.appCategory}</Badge>
                                             </div>
@@ -1047,7 +1045,7 @@ export default function MarketplacePage() {
                                                 )}
                                             </p>
                                         </div>
-                                        <div className="flex items-center gap-1.5">
+                                        <div className="flex min-w-0 flex-wrap items-center gap-1.5">
                                             <Button variant="outline" size="sm" disabled={loadingCompatibilityId === install.id} onClick={() => checkCompatibility(install)}>
                                                 {loadingCompatibilityId === install.id ? "Checking..." : "Check Compatibility"}
                                             </Button>
@@ -1081,9 +1079,9 @@ export default function MarketplacePage() {
                             <div className="divide-y">
                                 {catalogApps.map((app) => (
                                     <div key={app.id} className="flex flex-wrap items-center justify-between gap-3 p-3">
-                                        <div className="min-w-[16rem]">
-                                            <div className="flex items-center gap-2">
-                                                <p className="text-sm font-medium">{app.name}</p>
+                                        <div className="min-w-0 flex-1 basis-60 break-words">
+                                            <div className="flex min-w-0 flex-wrap items-center gap-2">
+                                                <p className="min-w-0 max-w-full break-words text-sm font-medium">{app.name}</p>
                                                 <Badge variant="outline">{app.category}</Badge>
                                                 {app.installStatus && (
                                                     <Badge variant="outline" className={STATUS_BADGE[app.installStatus] ?? ""}>{app.installStatus}</Badge>
@@ -1101,7 +1099,7 @@ export default function MarketplacePage() {
                                                 </a>
                                             )}
                                         </div>
-                                        <div className="flex items-center gap-1.5">
+                                        <div className="flex min-w-0 flex-wrap items-center gap-1.5">
                                             {app.installId ? (
                                                 <Badge variant="secondary">Already requested</Badge>
                                             ) : (
@@ -1134,13 +1132,13 @@ export default function MarketplacePage() {
                 <div className="space-y-4 py-2">
                     <div className="grid gap-3 sm:grid-cols-2">
                         <div className="space-y-1.5">
-                            <Label>Name</Label>
-                            <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="e.g. Internal Slack Notifier" />
+                            <Label htmlFor="marketplace-name-1">Name</Label>
+                            <Input id="marketplace-name-1" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="e.g. Internal Slack Notifier" />
                         </div>
                         <div className="space-y-1.5">
-                            <Label>Category</Label>
+                            <Label htmlFor="marketplace-category-1">Category</Label>
                             <Select value={form.category} onValueChange={(value) => setForm({ ...form, category: value })}>
-                                <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                                <SelectTrigger id="marketplace-category-1" className="w-full"><SelectValue /></SelectTrigger>
                                 <SelectContent>
                                     {CATEGORIES.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
                                 </SelectContent>
@@ -1148,21 +1146,21 @@ export default function MarketplacePage() {
                         </div>
                     </div>
                     <div className="space-y-1.5">
-                        <Label>Description</Label>
-                        <Textarea rows={2} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
+                        <Label htmlFor="marketplace-description-1">Description</Label>
+                        <Textarea id="marketplace-description-1" rows={2} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
                     </div>
                     <div className="space-y-1.5">
-                        <Label>Webhook URL (optional)</Label>
-                        <Input value={form.webhookUrl} onChange={(e) => setForm({ ...form, webhookUrl: e.target.value })} placeholder="https://example.com/webhooks/crm" />
+                        <Label htmlFor="marketplace-webhook-url-optional-1">Webhook URL (optional)</Label>
+                        <Input id="marketplace-webhook-url-optional-1" value={form.webhookUrl} onChange={(e) => setForm({ ...form, webhookUrl: e.target.value })} placeholder="https://example.com/webhooks/crm" />
                     </div>
                     <div className="space-y-1.5">
-                        <Label>Redirect URLs (one per line, optional)</Label>
-                        <Textarea rows={2} value={form.redirectUrlsText} onChange={(e) => setForm({ ...form, redirectUrlsText: e.target.value })} />
+                        <Label htmlFor="marketplace-redirect-urls-one-per-line-optional-1">Redirect URLs (one per line, optional)</Label>
+                        <Textarea id="marketplace-redirect-urls-one-per-line-optional-1" rows={2} value={form.redirectUrlsText} onChange={(e) => setForm({ ...form, redirectUrlsText: e.target.value })} />
                     </div>
                     <div className="grid gap-3 sm:grid-cols-2">
                         <div className="space-y-1.5">
-                            <Label>Required Contract Version</Label>
-                            <Input
+                            <Label htmlFor="marketplace-required-contract-version-1">Required Contract Version</Label>
+                            <Input id="marketplace-required-contract-version-1"
                                 value={form.requiredContractVersion}
                                 onChange={(e) => setForm({ ...form, requiredContractVersion: e.target.value })}
                                 placeholder="1.0"
@@ -1170,8 +1168,8 @@ export default function MarketplacePage() {
                             <p className="text-xs text-muted-foreground">The connector contract version this app was built against. This workspace currently runs v1.0.</p>
                         </div>
                         <div className="space-y-1.5">
-                            <Label>Depends On App IDs (one per line, optional)</Label>
-                            <Textarea
+                            <Label htmlFor="marketplace-depends-on-app-ids-one-per-line-optional-1">Depends On App IDs (one per line, optional)</Label>
+                            <Textarea id="marketplace-depends-on-app-ids-one-per-line-optional-1"
                                 rows={2}
                                 value={form.dependsOnAppIdsText}
                                 onChange={(e) => setForm({ ...form, dependsOnAppIdsText: e.target.value })}
@@ -1180,8 +1178,8 @@ export default function MarketplacePage() {
                         </div>
                     </div>
                     <div className="space-y-1.5">
-                        <Label>Required CRM Modules (one key per line, optional)</Label>
-                        <Textarea
+                        <Label htmlFor="marketplace-required-crm-modules-one-key-per-line-optional-1">Required CRM Modules (one key per line, optional)</Label>
+                        <Textarea id="marketplace-required-crm-modules-one-key-per-line-optional-1"
                             rows={2}
                             value={form.requiredModuleKeysText}
                             onChange={(e) => setForm({ ...form, requiredModuleKeysText: e.target.value })}
@@ -1190,9 +1188,9 @@ export default function MarketplacePage() {
                     </div>
                     <div className="space-y-1.5">
                         <Label>Event Subscriptions</Label>
-                        <div className="grid grid-cols-2 gap-1.5">
+                        <div className="grid min-w-0 grid-cols-1 sm:grid-cols-2 gap-1.5">
                             {EVENT_TYPES.map((eventType) => (
-                                <label key={eventType} className="flex items-center gap-2 text-sm">
+                                <label key={eventType} className="flex min-w-0 flex-wrap items-center gap-2 text-sm">
                                     <Checkbox
                                         checked={form.eventSubscriptions.includes(eventType)}
                                         onCheckedChange={(checked) => toggleEvent(eventType, !!checked)}
@@ -1203,13 +1201,13 @@ export default function MarketplacePage() {
                         </div>
                     </div>
                     <div className="space-y-1.5">
-                        <Label>Requested Module Permissions</Label>
+                        <Label htmlFor="marketplace-requested-module-permissions-1">Requested Module Permissions</Label>
                         <div className="space-y-1.5">
                             {PERMISSION_MODULES.map((moduleKey) => {
                                 const scope = form.permissions[moduleKey];
                                 return (
-                                    <div key={moduleKey} className="flex items-center justify-between gap-2">
-                                        <label className="flex items-center gap-2 text-sm">
+                                    <div key={moduleKey} className="flex min-w-0 flex-wrap items-center justify-between gap-2">
+                                        <label className="flex min-w-0 flex-wrap items-center gap-2 text-sm">
                                             <Checkbox checked={!!scope} onCheckedChange={(checked) => togglePermission(moduleKey, !!checked)} />
                                             {moduleKey}
                                             {scope === "write" && SENSITIVE_MODULES.has(moduleKey) && (
@@ -1220,7 +1218,7 @@ export default function MarketplacePage() {
                                         </label>
                                         {scope && (
                                             <Select value={scope} onValueChange={(value) => togglePermission(moduleKey, true, value as ModuleScope)}>
-                                                <SelectTrigger className="w-28"><SelectValue /></SelectTrigger>
+                                                <SelectTrigger id="marketplace-requested-module-permissions-1" className="w-28"><SelectValue /></SelectTrigger>
                                                 <SelectContent>
                                                     <SelectItem value="read">Read</SelectItem>
                                                     <SelectItem value="write">Write</SelectItem>
@@ -1261,7 +1259,7 @@ export default function MarketplacePage() {
                             {actions.length === 0 && <p className="text-sm text-muted-foreground">No actions defined yet.</p>}
                             {actions.map((action) => (
                                 <div key={action.id} className="rounded-lg border p-2.5">
-                                    <div className="flex items-center justify-between gap-2">
+                                    <div className="flex min-w-0 flex-wrap items-center justify-between gap-2">
                                         <div>
                                             <p className="text-sm font-medium">{action.name} <span className="text-xs text-muted-foreground">({action.key})</span></p>
                                             {action.description && <p className="text-xs text-muted-foreground">{action.description}</p>}
@@ -1277,9 +1275,9 @@ export default function MarketplacePage() {
                     )}
 
                     <div className="space-y-2 border-t pt-3">
-                        <Label>Add Action</Label>
+                        <Label htmlFor="marketplace-add-action-1">Add Action</Label>
                         <div className="grid gap-2 sm:grid-cols-2">
-                            <Input placeholder="key (e.g. send_slack_message)" value={newActionForm.key} onChange={(e) => setNewActionForm({ ...newActionForm, key: e.target.value })} />
+                            <Input id="marketplace-add-action-1" placeholder="key (e.g. send_slack_message)" value={newActionForm.key} onChange={(e) => setNewActionForm({ ...newActionForm, key: e.target.value })} />
                             <Input placeholder="Display name" value={newActionForm.name} onChange={(e) => setNewActionForm({ ...newActionForm, name: e.target.value })} />
                         </div>
                         <Textarea rows={2} placeholder="Description (optional)" value={newActionForm.description} onChange={(e) => setNewActionForm({ ...newActionForm, description: e.target.value })} />
@@ -1299,7 +1297,7 @@ export default function MarketplacePage() {
                                 {field.type === "select" && (
                                     <Input className="w-40" placeholder="options, comma-separated" value={field.options} onChange={(e) => setNewActionForm((f) => ({ ...f, inputSchema: f.inputSchema.map((it, i) => (i === index ? { ...it, options: e.target.value } : it)) }))} />
                                 )}
-                                <label className="flex items-center gap-1 text-xs">
+                                <label className="flex min-w-0 flex-wrap items-center gap-1 text-xs">
                                     <Checkbox checked={field.required} onCheckedChange={(checked) => setNewActionForm((f) => ({ ...f, inputSchema: f.inputSchema.map((it, i) => (i === index ? { ...it, required: !!checked } : it)) }))} />
                                     Required
                                 </label>
@@ -1337,13 +1335,13 @@ export default function MarketplacePage() {
                             {reports.length === 0 && <p className="text-sm text-muted-foreground">No reports defined yet.</p>}
                             {reports.map((report) => (
                                 <div key={report.id} className="rounded-lg border p-2.5">
-                                    <div className="flex items-center justify-between gap-2">
+                                    <div className="flex min-w-0 flex-wrap items-center justify-between gap-2">
                                         <div>
                                             <p className="text-sm font-medium">{report.name} <span className="text-xs text-muted-foreground">({report.key})</span></p>
                                             {report.description && <p className="text-xs text-muted-foreground">{report.description}</p>}
                                             <p className="text-xs text-muted-foreground">{(report.columnSchema ?? []).length} column(s) -- cached {report.cacheTtlMinutes}m</p>
                                         </div>
-                                        <div className="flex items-center gap-1.5">
+                                        <div className="flex min-w-0 flex-wrap items-center gap-1.5">
                                             <Button variant="outline" size="sm" onClick={() => reportsFor && viewReportData(reportsFor.id, report.key, report.name)}>
                                                 Preview Data
                                             </Button>
@@ -1358,9 +1356,9 @@ export default function MarketplacePage() {
                     )}
 
                     <div className="space-y-2 border-t pt-3">
-                        <Label>Add Report</Label>
+                        <Label htmlFor="marketplace-add-report-1">Add Report</Label>
                         <div className="grid gap-2 sm:grid-cols-3">
-                            <Input placeholder="key (e.g. usage_summary)" value={newReportForm.key} onChange={(e) => setNewReportForm({ ...newReportForm, key: e.target.value })} />
+                            <Input id="marketplace-add-report-1" placeholder="key (e.g. usage_summary)" value={newReportForm.key} onChange={(e) => setNewReportForm({ ...newReportForm, key: e.target.value })} />
                             <Input placeholder="Display name" value={newReportForm.name} onChange={(e) => setNewReportForm({ ...newReportForm, name: e.target.value })} />
                             <Input type="number" placeholder="Cache TTL (minutes)" value={newReportForm.cacheTtlMinutes} onChange={(e) => setNewReportForm({ ...newReportForm, cacheTtlMinutes: Number(e.target.value) || 15 })} />
                         </div>
@@ -1450,7 +1448,7 @@ export default function MarketplacePage() {
                     </Alert>
                     <div className="space-y-1.5">
                         <Label>API Secret</Label>
-                        <div className="flex items-center gap-2">
+                        <div className="flex min-w-0 flex-wrap items-center gap-2">
                             <code className="flex-1 truncate rounded-md border bg-muted px-2 py-1.5 text-xs">{revealedSecret?.secret}</code>
                             <Button variant="outline" size="icon-sm" onClick={() => revealedSecret && navigator.clipboard.writeText(revealedSecret.secret)}>
                                 <Copy className="size-3.5" />
@@ -1459,7 +1457,7 @@ export default function MarketplacePage() {
                     </div>
                     <div className="space-y-1.5">
                         <Label>Webhook Signing Secret</Label>
-                        <div className="flex items-center gap-2">
+                        <div className="flex min-w-0 flex-wrap items-center gap-2">
                             <code className="flex-1 truncate rounded-md border bg-muted px-2 py-1.5 text-xs">{revealedSecret?.signingSecret}</code>
                             <Button variant="outline" size="icon-sm" onClick={() => revealedSecret && navigator.clipboard.writeText(revealedSecret.signingSecret)}>
                                 <Copy className="size-3.5" />
@@ -1481,7 +1479,7 @@ export default function MarketplacePage() {
                         <p className="text-sm text-muted-foreground">Loading...</p>
                     ) : health ? (
                         <>
-                            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                            <div className="grid min-w-0 grid-cols-1 sm:grid-cols-2 gap-3 sm:grid-cols-4">
                                 <div>
                                     <p className="text-xs text-muted-foreground">Status</p>
                                     <Badge variant="outline" className={HEALTH_STATUS_BADGE[health.status] ?? ""}>{health.status}</Badge>
@@ -1515,16 +1513,16 @@ export default function MarketplacePage() {
                                 </Alert>
                             )}
                             <div className="space-y-1.5">
-                                <Label>Daily Delivery Limit (blank = unlimited)</Label>
-                                <div className="flex items-center gap-2">
-                                    <Input type="number" min={1} value={limitDraft} onChange={(e) => setLimitDraft(e.target.value)} placeholder="Unlimited" className="w-32" />
+                                <Label htmlFor="marketplace-daily-delivery-limit-blank-unlimited-1">Daily Delivery Limit (blank = unlimited)</Label>
+                                <div className="flex min-w-0 flex-wrap items-center gap-2">
+                                    <Input id="marketplace-daily-delivery-limit-blank-unlimited-1" type="number" min={1} value={limitDraft} onChange={(e) => setLimitDraft(e.target.value)} placeholder="Unlimited" className="w-32" />
                                     <Button size="sm" disabled={savingLimit} onClick={saveLimit}>Save</Button>
                                 </div>
                             </div>
                             <div className="space-y-1.5">
-                                <Label>Inbound API Rate Limit (requests/minute)</Label>
-                                <div className="flex items-center gap-2">
-                                    <Input type="number" min={1} value={rateLimitDraft} onChange={(e) => setRateLimitDraft(e.target.value)} placeholder="60" className="w-32" />
+                                <Label htmlFor="marketplace-inbound-api-rate-limit-requests-minute-1">Inbound API Rate Limit (requests/minute)</Label>
+                                <div className="flex min-w-0 flex-wrap items-center gap-2">
+                                    <Input id="marketplace-inbound-api-rate-limit-requests-minute-1" type="number" min={1} value={rateLimitDraft} onChange={(e) => setRateLimitDraft(e.target.value)} placeholder="60" className="w-32" />
                                     <Button size="sm" disabled={savingRateLimit} onClick={saveRateLimit}>Save</Button>
                                 </div>
                             </div>
@@ -1535,7 +1533,7 @@ export default function MarketplacePage() {
                                 ) : (
                                     <div className="max-h-48 space-y-1 overflow-y-auto text-xs">
                                         {usage.map((day) => (
-                                            <div key={day.date} className="flex items-center justify-between rounded border px-2 py-1">
+                                            <div key={day.date} className="flex min-w-0 flex-wrap items-center justify-between rounded border px-2 py-1">
                                                 <span>{day.date}</span>
                                                 <span className="text-muted-foreground">
                                                     {day.webhookDeliveryCount} deliveries -- {day.errorCount} errors
@@ -1589,7 +1587,7 @@ export default function MarketplacePage() {
                             {versions.map((v) => (
                                 <div key={v.id} className="flex flex-wrap items-center justify-between gap-2 p-2.5">
                                     <div>
-                                        <div className="flex items-center gap-2">
+                                        <div className="flex min-w-0 flex-wrap items-center gap-2">
                                             <p className="text-sm font-medium">Version {v.version}</p>
                                             <Badge variant="outline" className={v.approvalStatus === "APPROVED" ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400" : v.approvalStatus === "REJECTED" ? "border-destructive/30 bg-destructive/10 text-destructive" : "border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-400"}>
                                                 {v.approvalStatus}
@@ -1624,11 +1622,11 @@ export default function MarketplacePage() {
                         <p className="text-sm text-muted-foreground">Loading...</p>
                     ) : syncConfig ? (
                         <>
-                            <div className="grid grid-cols-2 gap-3">
+                            <div className="grid min-w-0 grid-cols-1 sm:grid-cols-2 gap-3">
                                 <div className="space-y-1.5">
-                                    <Label>Sync Direction</Label>
+                                    <Label htmlFor="marketplace-sync-direction-1">Sync Direction</Label>
                                     <Select value={syncConfig.syncDirection} onValueChange={(v) => saveSyncConfig({ syncDirection: v as SyncConfig["syncDirection"] })}>
-                                        <SelectTrigger><SelectValue /></SelectTrigger>
+                                        <SelectTrigger id="marketplace-sync-direction-1"><SelectValue /></SelectTrigger>
                                         <SelectContent>
                                             <SelectItem value="CRM_TO_APP">CRM to App</SelectItem>
                                             <SelectItem value="APP_TO_CRM">App to CRM</SelectItem>
@@ -1637,9 +1635,9 @@ export default function MarketplacePage() {
                                     </Select>
                                 </div>
                                 <div className="space-y-1.5">
-                                    <Label>Conflict Resolution</Label>
+                                    <Label htmlFor="marketplace-conflict-resolution-1">Conflict Resolution</Label>
                                     <Select value={syncConfig.conflictResolution} onValueChange={(v) => saveSyncConfig({ conflictResolution: v as SyncConfig["conflictResolution"] })}>
-                                        <SelectTrigger><SelectValue /></SelectTrigger>
+                                        <SelectTrigger id="marketplace-conflict-resolution-1"><SelectValue /></SelectTrigger>
                                         <SelectContent>
                                             <SelectItem value="CRM_WINS">CRM Wins</SelectItem>
                                             <SelectItem value="APP_WINS">App Wins</SelectItem>
@@ -1648,8 +1646,8 @@ export default function MarketplacePage() {
                                     </Select>
                                 </div>
                                 <div className="space-y-1.5">
-                                    <Label>Sync Cadence (minutes, blank = manual only)</Label>
-                                    <Input
+                                    <Label htmlFor="marketplace-sync-cadence-minutes-blank-manual-only-1">Sync Cadence (minutes, blank = manual only)</Label>
+                                    <Input id="marketplace-sync-cadence-minutes-blank-manual-only-1"
                                         type="number"
                                         min={1}
                                         defaultValue={syncConfig.syncCadenceMinutes ?? ""}
@@ -1658,23 +1656,23 @@ export default function MarketplacePage() {
                                     />
                                 </div>
                                 <div className="space-y-1.5">
-                                    <Label>Default Owner (user ID, optional)</Label>
-                                    <Input
+                                    <Label htmlFor="marketplace-default-owner-user-id-optional-1">Default Owner (user ID, optional)</Label>
+                                    <Input id="marketplace-default-owner-user-id-optional-1"
                                         defaultValue={syncConfig.defaultOwnerId ?? ""}
                                         onBlur={(e) => saveSyncConfig({ defaultOwnerId: e.target.value || null })}
                                         placeholder="No default owner"
                                     />
                                 </div>
                             </div>
-                            <div className="flex items-center gap-2">
+                            <div className="flex min-w-0 flex-wrap items-center gap-2">
                                 <Checkbox checked={syncConfig.notifyOnFailure} onCheckedChange={(checked) => saveSyncConfig({ notifyOnFailure: !!checked })} disabled={savingSyncConfig} />
                                 <Label className="font-normal">Notify on sync failure</Label>
                             </div>
                             <div className="space-y-1.5">
                                 <Label>Enabled Modules</Label>
-                                <div className="flex gap-4">
+                                <div className="flex min-w-0 flex-wrap gap-4">
                                     {SYNC_MODULES.map((moduleKey) => (
-                                        <div key={moduleKey} className="flex items-center gap-2">
+                                        <div key={moduleKey} className="flex min-w-0 flex-wrap items-center gap-2">
                                             <Checkbox
                                                 checked={syncConfig.enabledModules.includes(moduleKey)}
                                                 onCheckedChange={(checked) => {
@@ -1700,17 +1698,17 @@ export default function MarketplacePage() {
                             )}
 
                             <div className="space-y-2 border-t pt-3">
-                                <div className="flex items-center justify-between">
-                                    <Label>Field Mappings</Label>
+                                <div className="flex min-w-0 flex-wrap items-center justify-between">
+                                    <Label htmlFor="marketplace-field-mappings-1">Field Mappings</Label>
                                     <Select value={mappingModule} onValueChange={(v) => switchMappingModule(v as "leads" | "opportunities")}>
-                                        <SelectTrigger className="w-40"><SelectValue /></SelectTrigger>
+                                        <SelectTrigger id="marketplace-field-mappings-1" className="w-40"><SelectValue /></SelectTrigger>
                                         <SelectContent>
                                             {SYNC_MODULES.map((m) => <SelectItem key={m} value={m}>{m}</SelectItem>)}
                                         </SelectContent>
                                     </Select>
                                 </div>
                                 {mappingDraft.map((mapping, index) => (
-                                    <div key={index} className="flex items-center gap-2">
+                                    <div key={index} className="flex min-w-0 flex-wrap items-center gap-2">
                                         <Select value={mapping.crmField} onValueChange={(v) => setMappingDraft((d) => d.map((m, i) => (i === index ? { ...m, crmField: v } : m)))}>
                                             <SelectTrigger className="w-40"><SelectValue placeholder="CRM field" /></SelectTrigger>
                                             <SelectContent>
@@ -1727,7 +1725,7 @@ export default function MarketplacePage() {
                                         <Button variant="ghost" size="sm" onClick={() => setMappingDraft((d) => d.filter((_, i) => i !== index))}>Remove</Button>
                                     </div>
                                 ))}
-                                <div className="flex items-center gap-2">
+                                <div className="flex min-w-0 flex-wrap items-center gap-2">
                                     <Button variant="outline" size="sm" onClick={() => setMappingDraft((d) => [...d, { crmField: MAPPABLE_FIELDS_BY_MODULE[mappingModule][0], appField: "" }])}>
                                         <Plus className="size-3.5" />
                                         Add Mapping
@@ -1737,7 +1735,7 @@ export default function MarketplacePage() {
                             </div>
 
                             <div className="space-y-2 border-t pt-3">
-                                <div className="flex items-center gap-2">
+                                <div className="flex min-w-0 flex-wrap items-center gap-2">
                                     <Button size="sm" disabled={runningSync} onClick={runSyncNow}>Sync Now</Button>
                                     <Button variant="outline" size="sm" onClick={runDryRun}>Dry Run</Button>
                                 </div>
@@ -1750,7 +1748,7 @@ export default function MarketplacePage() {
                                 ) : (
                                     <div className="max-h-40 space-y-1 overflow-y-auto text-xs">
                                         {syncRuns.map((run) => (
-                                            <div key={run.id} className="flex items-center justify-between rounded border px-2 py-1">
+                                            <div key={run.id} className="flex min-w-0 flex-wrap items-center justify-between rounded border px-2 py-1">
                                                 <span>{formatWorkspaceRelativeTime(run.createdAt)} -- {run.recordsSynced} records</span>
                                                 <Badge variant={run.status === "SUCCESS" ? "outline" : "destructive"}>{run.status}</Badge>
                                             </div>
@@ -1793,9 +1791,9 @@ export default function MarketplacePage() {
                         <p className="text-sm text-muted-foreground">No deliveries yet. This app receives a delivery whenever it&apos;s subscribed to an event that fires.</p>
                     ) : (
                         deliveries.map((delivery) => (
-                            <div key={delivery.id} className="flex items-center justify-between gap-3 rounded-lg border p-2.5 text-xs">
+                            <div key={delivery.id} className="flex min-w-0 flex-wrap items-center justify-between gap-3 rounded-lg border p-2.5 text-xs">
                                 <div>
-                                    <div className="flex items-center gap-2">
+                                    <div className="flex min-w-0 flex-wrap items-center gap-2">
                                         <span className="font-medium">{delivery.eventType}</span>
                                         <Badge variant="outline" className={DELIVERY_STATUS_BADGE[delivery.status] ?? ""}>{delivery.status}</Badge>
                                         {delivery.attempts > 0 && <span className="text-muted-foreground">{delivery.attempts} attempt(s)</span>}

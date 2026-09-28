@@ -23,6 +23,7 @@ export function OnboardingChecklistBanner() {
   const isTenantAdmin = Boolean((user as any)?.isTenantAdmin || (user as any)?.isPlatformAdmin);
   const [readiness, setReadiness] = useState<OnboardingReadiness | null>(null);
   const [dismissing, setDismissing] = useState(false);
+  const [expanded, setExpanded] = useState(false);
 
   useEffect(() => {
     if (!isTenantAdmin) return;
@@ -48,19 +49,20 @@ export function OnboardingChecklistBanner() {
   };
 
   return (
-    <Card className="mb-4 rounded-2xl border-primary/20 bg-primary/[0.03] p-4">
-      <div className="mb-3 flex items-center justify-between gap-3">
+    <Card className="mb-4 gap-3 rounded-xl border-primary/20 bg-primary/[0.03] p-3">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 className="text-base font-extrabold">Get your workspace ready</h2>
           <p className="text-xs text-muted-foreground">
             {readiness.completedCount} of {readiness.totalCount} steps complete
           </p>
         </div>
+        <Button variant="outline" size="sm" aria-expanded={expanded} aria-controls="onboarding-steps" onClick={() => setExpanded(!expanded)}>{expanded ? "Hide steps" : "Setup steps"}</Button>
         <Button variant="ghost" size="icon-sm" onClick={dismiss} disabled={dismissing} aria-label="Dismiss setup checklist">
           <X className="size-4" />
         </Button>
       </div>
-      <div className="grid gap-2 sm:grid-cols-2">
+      <div id="onboarding-steps" className={expanded ? "grid gap-2 sm:grid-cols-2" : "hidden"}>
         {readiness.items.map((item) => (
           <Link
             key={item.key}

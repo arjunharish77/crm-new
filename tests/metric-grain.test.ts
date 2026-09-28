@@ -10,6 +10,9 @@ vi.mock("@/lib/db/query", () => ({
   query: queryMock,
   queryOne: queryOneMock,
   execute: executeMock,
+  queryAsSystem: queryMock,
+  queryOneAsSystem: queryOneMock,
+  executeAsSystem: executeMock,
 }));
 
 const { executeMetricQueryMock } = vi.hoisted(() => ({ executeMetricQueryMock: vi.fn() }));

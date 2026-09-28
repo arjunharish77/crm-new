@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { requireInternalUser } from "@/lib/server/auth";
+import { requireInternalUser, requireTenantAdmin } from "@/lib/server/auth";
 import { createTenantScopedUser, listTenantUsers } from "@/lib/server/admin";
 import { badRequest, forbidden, serverError, unauthorized } from "@/lib/server/http";
 import { getEffectiveSecurityPolicy } from "@/lib/server/security-policy";
@@ -13,13 +13,17 @@ export async function GET(request: Request) {
   } catch (error) {
     if (error instanceof Error && error.message === "UNAUTHORIZED") return unauthorized();
     if (error instanceof Error && error.message === "FORBIDDEN") return forbidden();
-    return serverError("Failed to fetch users");
+    return serverError("Failed to fetch users", error);
   }
 }
 
+// F02 fix (WP03): creating a user sets its initial roleId -- the same privilege-assignment
+// surface as PATCH /api/users/[id], just at creation time instead of update time. Tenant Admin
+// only, per the confirmed policy (this route's only real caller is the admin Users page's
+// invite-user dialog).
 export async function POST(request: Request) {
   try {
-    const user = await requireInternalUser(request);
+    const user = await requireTenantAdmin(request);
 
     if (!user.tenantId) {
       return forbidden("Tenant context required");
@@ -43,6 +47,10 @@ export async function POST(request: Request) {
   } catch (error) {
     if (error instanceof Error && error.message === "UNAUTHORIZED") return unauthorized();
     if (error instanceof Error && error.message === "FORBIDDEN") return forbidden();
-    return serverError("Failed to create user");
+    if (error instanceof Error && error.message === "ROLE_NOT_FOUND_FOR_TENANT") return badRequest("Selected role was not found for this workspace");
+    if (error instanceof Error && error.message === "TEAM_NOT_FOUND_FOR_TENANT") return badRequest("Selected team was not found for this workspace");
+    if (error instanceof Error && error.message === "MANAGER_NOT_FOUND_FOR_TENANT") return badRequest("Selected manager was not found for this workspace");
+    if (error instanceof Error && error.message === "PERMISSION_TEMPLATE_NOT_FOUND_FOR_TENANT") return badRequest("Selected permission template was not found for this workspace");
+    return serverError("Failed to create user", error);
   }
 }

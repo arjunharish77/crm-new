@@ -54,6 +54,9 @@ export function LeadForm({ context = {} }: { context?: LeadFormContext }) {
   const [message, setMessage] = useState("");
   const [contact, setContact] = useState({ name: context.name || "", email: context.email || "", phone: context.phone || "" });
   const [dial, setDial] = useState(DEFAULT_COUNTRY.dial);
+  // F27 fix (WP16): the real, user-driven consent signal -- see the checkbox in step 2 below and
+  // its use in submitLead's payload.
+  const [consentChecked, setConsentChecked] = useState(false);
 
   useEffect(() => {
     // The device's configured timezone tracks real physical location far more reliably than the
@@ -91,6 +94,10 @@ export function LeadForm({ context = {} }: { context?: LeadFormContext }) {
       intent: context.intent || "lead_wizard",
       interest: selectedLabel || context.goal || "General enquiry",
       goal: context.goal,
+      // F27 fix (WP16): real, user-driven consent evidence -- the `required` checkbox below is
+      // the only way this becomes `true`; the API rejects anything else instead of assuming
+      // consent from the mere fact that a request arrived (see api/leads/route.ts).
+      consent: formData.get("consent") === "on",
     };
     const response = await fetch("/api/leads", {
       method: "POST",
@@ -161,7 +168,7 @@ export function LeadForm({ context = {} }: { context?: LeadFormContext }) {
     );
   }
 
-  const canContinueStep2 = Boolean(contact.name.trim() && contact.email.trim() && contact.phone.trim()) && status !== "saving";
+  const canContinueStep2 = Boolean(contact.name.trim() && contact.email.trim() && contact.phone.trim()) && consentChecked && status !== "saving";
 
   return (
     <div style={{ marginTop: 22 }}>
@@ -261,6 +268,17 @@ export function LeadForm({ context = {} }: { context?: LeadFormContext }) {
               />
             </div>
           </div>
+          <label style={{ display: "flex", alignItems: "flex-start", gap: 8, fontSize: 12, color: "#707070", cursor: "pointer" }}>
+            <input
+              name="consent"
+              type="checkbox"
+              required
+              checked={consentChecked}
+              onChange={(event) => setConsentChecked(event.target.checked)}
+              style={{ marginTop: 2 }}
+            />
+            <span>I agree to receive counselling calls and WhatsApp updates about my enquiry.</span>
+          </label>
           <div className="lead-form-actions">
             {hasCourseContext ? null : (
               <button className="btn ghost" type="button" onClick={() => setStep(1)}>

@@ -1,5 +1,7 @@
 'use client';
 
+import { PageHeader } from "@/components/layout/page-header";
+
 import { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import { Lead } from "@/types/leads";
 import { PaginatedResponse } from "@/types/common";
@@ -346,12 +348,8 @@ export default function LeadsPage() {
 
     return (
         <div className="flex h-full w-full flex-col">
-            <div className="mb-4 flex items-center justify-between">
-                <div>
-                    <h1 className="text-lg font-bold tracking-[-0.5px]">Leads</h1>
-                    <p className="text-xs text-muted-foreground">Manage and track your sales prospects</p>
-                </div>
-                <div className="flex gap-2">
+            <PageHeader title="Leads" description="Manage and track your sales prospects" actions={<>
+
                     <QueueExportButton
                         moduleName="LEADS"
                         filters={{ ...filters, urlFilters }}
@@ -375,8 +373,7 @@ export default function LeadsPage() {
                         onSaved={fetchData}
                     />
                     <CreateLeadDialog onSuccess={fetchData} />
-                </div>
-            </div>
+                            </>} />
 
             <LeadStatusChips />
 
@@ -419,8 +416,8 @@ export default function LeadsPage() {
 
             <div className="hidden md:block">
                 <Card className="flex flex-grow flex-col overflow-hidden rounded-[14px] bg-surface-container-low">
-                    <div className="w-full overflow-x-auto">
-                        <div className="min-w-[800px]">
+                    <div className="min-w-0">
+                        <div className="min-w-0">
                             <DataTable
                                 storageKey="leads-table"
                                 data={data}

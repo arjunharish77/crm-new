@@ -1,5 +1,8 @@
 'use client';
 
+import { RecordSummary } from "@/components/detail-shell/record-summary";
+import { ErrorState } from "@/components/common/error-state";
+
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
@@ -78,6 +81,7 @@ export default function OpportunityDetailPage() {
     const [history, setHistory] = useState<OpportunityStageHistory[]>([]);
     const [taskCount, setTaskCount] = useState(0);
     const [loading, setLoading] = useState(true);
+    const [loadError, setLoadError] = useState<string | null>(null);
     const [showEditDialog, setShowEditDialog] = useState(false);
     const [tabValue, setTabValue] = useState<"activity" | "details" | "scoring" | "stage" | "tasks" | "communications" | "notes" | "audit">("activity");
     const [activityTypeFilter, setActivityTypeFilter] = useState<string>("ALL");
@@ -92,6 +96,8 @@ export default function OpportunityDetailPage() {
     const [isFavorite, setIsFavorite] = useState(false);
 
     const loadData = useCallback(async () => {
+        setLoadError(null);
+        setLoading(true);
         try {
             const opp = await apiFetch<Opportunity>(`/opportunities/${opportunityId}`);
             setOpportunity(opp);
@@ -118,6 +124,7 @@ export default function OpportunityDetailPage() {
             const taskData = await apiFetch<any[]>(`/tasks?opportunityId=${opportunityId}`);
             setTaskCount(Array.isArray(taskData) ? taskData.length : 0);
         } catch {
+            setLoadError("Unable to load opportunity details and related records. Please try again.");
             toast.error("Failed to load opportunity details");
         } finally {
             setLoading(false);
@@ -186,6 +193,8 @@ export default function OpportunityDetailPage() {
         );
     }
 
+    if (loadError) return <ErrorState description={loadError} onRetry={loadData} />;
+
     if (!opportunity) {
         return (
             <div className="p-8 text-center">
@@ -218,6 +227,15 @@ export default function OpportunityDetailPage() {
                         {currentStage?.name || "Unassigned"}
                     </Badge>
                 }
+                primaryAction={<Button
+                            size="sm"
+                            variant="default"
+                            className="min-h-9 px-3.5"
+                            onClick={() => setShowLogOutcomeDialog(true)}
+                        >
+                            <PhoneCall className="size-4" />
+                            Log Call Outcome
+                        </Button>}
                 actions={
                     <>
                         <Button
@@ -279,15 +297,7 @@ export default function OpportunityDetailPage() {
                                 Push to External
                             </Button>
                         )}
-                        <Button
-                            size="sm"
-                            variant="outline"
-                            className="min-h-9 px-3.5"
-                            onClick={() => setShowLogOutcomeDialog(true)}
-                        >
-                            <PhoneCall className="size-4" />
-                            Log Call Outcome
-                        </Button>
+
                         {canManageSharing(user, opportunity) && (
                             <Button
                                 size="sm"
@@ -311,35 +321,35 @@ export default function OpportunityDetailPage() {
                 <ExternalPushBadge opportunityId={opportunityId} refreshKey={pushRefreshKey} />
             </div>
 
-            <div className="grid grid-cols-1 gap-4 lg:grid-cols-[380px_1fr]">
-                <div className="flex flex-col gap-4 lg:sticky lg:top-20 lg:self-start">
+            <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-[300px_minmax(0,1fr)]">
+                <RecordSummary>
                     <div className="overflow-hidden rounded-2xl border border-secondary/20">
                         <div className="bg-secondary px-5 py-4.5 text-secondary-foreground">
                             <div className="mb-3 flex items-center gap-3">
-                                <Avatar className="size-12">
-                                    <AvatarFallback className="bg-white/15 text-base font-extrabold text-white">
+                                <Avatar className="size-12 shrink-0">
+                                    <AvatarFallback className="bg-secondary-foreground/10 text-base font-extrabold text-secondary-foreground">
                                         {opportunity.title.charAt(0)}
                                     </AvatarFallback>
                                 </Avatar>
                                 <div className="min-w-0">
-                                    <h2 className="text-lg leading-tight font-extrabold">{opportunity.title}</h2>
-                                    <p className="text-sm text-secondary-foreground/80">
+                                    <h2 className="break-words text-lg leading-tight font-extrabold">{opportunity.title}</h2>
+                                    <p className="break-words text-sm text-secondary-foreground/80">
                                         {opportunity.opportunityType?.name || "Opportunity"}
                                     </p>
                                 </div>
                             </div>
 
                             <div className="flex flex-wrap gap-1.5">
-                                <Badge className="h-[22px] rounded-lg border-transparent bg-white/15 font-extrabold text-white">
+                                <Badge className="h-auto min-h-[22px] max-w-full whitespace-normal break-all rounded-lg border-transparent bg-secondary-foreground/10 font-extrabold text-secondary-foreground">
                                     {currentStage?.name || "Unassigned"}
                                 </Badge>
-                                <Badge className="h-[22px] rounded-lg border-transparent bg-white/10 font-extrabold text-white">
+                                <Badge className="h-auto min-h-[22px] max-w-full whitespace-normal break-all rounded-lg border-transparent bg-secondary-foreground/10 font-extrabold text-secondary-foreground">
                                     {opportunity.priority || "MEDIUM"}
                                 </Badge>
                             </div>
                         </div>
 
-                        <div className="grid grid-cols-3 divide-x divide-white/10 bg-black/20">
+                        <div className="grid grid-cols-1 divide-y bg-muted">
                             <MetricCell label="Value" value={formatCurrency(opportunity.amount || 0)} />
                             <MetricCell label="Probability" value={`${currentStage?.probability ?? 0}%`} />
                             <MetricCell label="Activities" value={String(activities.length)} />
@@ -406,17 +416,17 @@ export default function OpportunityDetailPage() {
                         {opportunity.lead ? (
                             <div className="space-y-2">
                                 <div className="flex items-center gap-2">
-                                    <Avatar className="size-9.5">
+                                    <Avatar className="size-9.5 shrink-0">
                                         <AvatarFallback className="bg-primary-container text-on-primary-container">
                                             {opportunity.lead.name.charAt(0)}
                                         </AvatarFallback>
                                     </Avatar>
                                     <div className="min-w-0">
-                                        <p className="font-extrabold">{opportunity.lead.name}</p>
-                                        <p className="text-sm text-muted-foreground">{opportunity.lead.email || "No email"}</p>
+                                        <p className="break-words font-extrabold">{opportunity.lead.name}</p>
+                                        <p className="break-all text-sm text-muted-foreground">{opportunity.lead.email || "No email"}</p>
                                     </div>
                                 </div>
-                                <div className="flex gap-2">
+                                <div className="flex flex-wrap gap-2">
                                     <Button asChild variant="outline" size="sm" className="min-h-[34px] flex-1">
                                         <Link href={`/dashboard/leads/${opportunity.leadId}`}>Open Lead</Link>
                                     </Button>
@@ -438,9 +448,9 @@ export default function OpportunityDetailPage() {
                             <p className="text-sm text-muted-foreground">No linked lead.</p>
                         )}
                     </div>
-                </div>
+                </RecordSummary>
 
-                <div className="overflow-hidden rounded-2xl border border-border bg-card">
+                <div className="min-w-0 overflow-hidden rounded-xl border border-border bg-card">
                     <WorkspaceTabs
                         value={tabValue}
                         onChange={setTabValue}
@@ -465,7 +475,7 @@ export default function OpportunityDetailPage() {
                                     </span>
                                     <div className="flex flex-wrap gap-2">
                                         <Select value={activityTypeFilter} onValueChange={setActivityTypeFilter}>
-                                            <SelectTrigger className="w-[148px] bg-background">
+                                            <SelectTrigger aria-label="Activity type" className="h-auto min-h-9 w-full min-w-0 bg-background [&_span]:whitespace-normal">
                                                 <SelectValue />
                                             </SelectTrigger>
                                             <SelectContent>
@@ -481,7 +491,7 @@ export default function OpportunityDetailPage() {
                                             value={activityTimeFilter}
                                             onValueChange={(value) => setActivityTimeFilter(value as ActivityTimeFilter)}
                                         >
-                                            <SelectTrigger className="w-[120px] bg-background">
+                                            <SelectTrigger aria-label="Activity time range" className="h-auto min-h-9 w-full min-w-0 bg-background [&_span]:whitespace-normal">
                                                 <SelectValue />
                                             </SelectTrigger>
                                             <SelectContent>
@@ -597,9 +607,9 @@ export default function OpportunityDetailPage() {
 
 function MetricCell({ label, value }: { label: string; value: string }) {
     return (
-        <div className="border-t border-white/10 px-2 py-2.5 text-center">
-            <p className="text-base leading-tight font-extrabold text-white">{value}</p>
-            <p className="text-xs text-white/80">{label}</p>
+        <div className="min-w-0 break-words px-2 py-2.5 text-center">
+            <p className="text-base leading-tight font-extrabold text-foreground">{value}</p>
+            <p className="text-xs text-muted-foreground">{label}</p>
         </div>
     );
 }
@@ -617,9 +627,9 @@ function DetailPanel({ title, children }: { title: string; children: React.React
 
 function PropertyRow({ label, children }: { label: string; children: React.ReactNode }) {
     return (
-        <div className="flex items-center justify-between gap-3 px-3 py-2.5">
+        <div className="grid min-w-0 grid-cols-1 gap-1 px-3 py-2.5">
             <span className="text-sm text-muted-foreground">{label}</span>
-            <span className="text-right text-sm font-bold">{children}</span>
+            <span className="min-w-0 break-words text-sm font-bold">{children}</span>
         </div>
     );
 }

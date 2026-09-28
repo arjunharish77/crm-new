@@ -53,9 +53,9 @@ export function AgentAvailabilityToggle() {
     return (
         <DropdownMenu>
             <DropdownMenuTrigger asChild>
-                <Button variant="outline" size="sm" className="hidden gap-1.5 sm:inline-flex" disabled={saving}>
+                <Button variant="outline" size="sm" className="gap-1.5 px-2 sm:px-3" aria-label={`Availability: ${Meta.label}`} disabled={saving}>
                     <Icon className={`size-3 fill-current ${Meta.className}`} />
-                    {Meta.label}
+                    <span className="hidden md:inline">{Meta.label}</span>
                 </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">

@@ -23,7 +23,7 @@ export async function GET(request: Request) {
       return unauthorized();
     }
 
-    return serverError("Failed to fetch opportunities");
+    return serverError("Failed to fetch opportunities", error);
   }
 }
 

@@ -21,7 +21,7 @@ export async function GET(request: Request) {
       return unauthorized();
     }
 
-    return serverError("Failed to fetch notes");
+    return serverError("Failed to fetch notes", error);
   }
 }
 
@@ -41,6 +41,6 @@ export async function POST(request: Request) {
       return unauthorized();
     }
 
-    return serverError("Failed to create note");
+    return serverError("Failed to create note", error);
   }
 }

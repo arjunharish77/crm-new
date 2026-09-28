@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { MarketplaceAppAuthenticationError, authenticateMarketplaceAppRequest, hasAppPermission } from "@/lib/server/marketplace-inbound";
+import { MarketplaceAppAuthenticationError, authenticateMarketplaceAppRequest, buildAppScopedActor, hasAppPermission } from "@/lib/server/marketplace-inbound";
 import { getLeadOrOpportunityForConflictCheck, applyModuleUpdate, loadSyncContext, applyFieldMapping, resolveUpdateConflict } from "@/lib/server/marketplace-sync";
 import { badRequest, forbidden, marketplaceAppAuthErrorResponse, serverError } from "@/lib/server/http";
 
@@ -11,15 +11,15 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   try {
     const { id } = await params;
     const rawBody = await request.text();
-    const { appId, tenantId, installId, permissions } = await authenticateMarketplaceAppRequest(request);
-    if (!hasAppPermission(permissions, "leads", "write")) return forbidden("This app does not have permission to update leads");
+    const auth = await authenticateMarketplaceAppRequest(request);
+    if (!hasAppPermission(auth.permissions, "leads", "write")) return forbidden("This app does not have permission to update leads");
     const body = rawBody ? JSON.parse(rawBody) : {};
-    const user = { id: appId, tenantId };
+    const user = await buildAppScopedActor(auth);
 
     const current = await getLeadOrOpportunityForConflictCheck(user, "leads", id);
     if (!current) return badRequest("Lead not found");
 
-    const { config, mappings } = await loadSyncContext(installId, "leads");
+    const { config, mappings } = await loadSyncContext(auth.installId, "leads");
     const { expectedUpdatedAt, ...incoming } = body;
     const conflict = resolveUpdateConflict(config?.conflictResolution ?? "CRM_WINS", (current as any).updatedAt, expectedUpdatedAt);
     if (!conflict.allowed) return NextResponse.json({ message: conflict.reason, current }, { status: 409 });

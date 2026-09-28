@@ -1,7 +1,7 @@
 import { randomUUID } from "crypto";
 import { createAuditLog, automationConditionMatches } from "@/lib/server/crm";
 import { assertModuleEnabled, isModuleEnabledForTenant } from "@/lib/server/module-entitlements";
-import { query, queryOne, execute } from "@/lib/db/query";
+import { query, queryOne, execute, jsonbParam, queryAsSystem } from "@/lib/db/query";
 import { getLeadForTenant, updateLeadForTenant } from "@/lib/repositories/leads-postgres";
 import { getOpportunityForTenant, updateOpportunityForTenant } from "@/lib/repositories/opportunities-postgres";
 import { createTaskForTenant } from "@/lib/repositories/tasks-postgres";
@@ -624,7 +624,7 @@ export async function generateRecommendationsForRecord(user: TenantUser, recordT
     `insert into "NextBestActionDecisionLog"
       (id, "tenantId", "runId", "recordType", "recordId", "candidateCount", "chosenRecommendationIds", suppressed, "suppressedReason", "generatedAt")
      values ($1, $2, $3, $4, $5, $6, $7, false, null, $8)`,
-    [randomUUID(), user.tenantId, runId, recordType, recordId, candidates.length, created.map((rec) => rec.id), now],
+    [randomUUID(), user.tenantId, runId, recordType, recordId, candidates.length, jsonbParam(created.map((rec) => rec.id)), now],
   );
 
   return created;
@@ -1009,8 +1009,12 @@ export async function rejectRecommendation(user: TenantUser, recommendationId: s
 // first pass), so the scheduled batch refresh instead targets open records whose most
 // recent recommendation (if any) is older than the strategy's own cooldown window --
 // a reasonable "keep the pool warm" heuristic, not a precise per-record schedule.
+// WP07 (F04): BACKGROUND_JOB, disposition B -- worker-invoked recurring job with no ambient
+// tenant context; the outer strategies query is genuinely cross-tenant, and the per-strategy
+// candidate-record query below is tenant-parameterized in SQL but still ambient-context-
+// dependent (there's no request/session to have entered context from).
 export async function processDueNextBestActionRefresh(limit = 50) {
-  const strategies = await query<any>(`select ${STRATEGY_COLUMNS} from "NextBestActionStrategy" where "isActive" = true`, []);
+  const strategies = await queryAsSystem<any>(`select ${STRATEGY_COLUMNS} from "NextBestActionStrategy" where "isActive" = true`, []);
   let processed = 0;
 
   for (const strategy of strategies) {
@@ -1021,7 +1025,7 @@ export async function processDueNextBestActionRefresh(limit = 50) {
         ? `coalesce(upper(r.status), '') not in ('LOST', 'CONVERTED', 'DISQUALIFIED')`
         : `not exists (select 1 from "StageDefinition" s where s.id = r."stageId" and s."isClosed" = true)`;
 
-    const candidateRecords = await query<{ id: string }>(
+    const candidateRecords = await queryAsSystem<{ id: string }>(
       `select r.id
        from "${table}" r
        where r."tenantId" = $1 and ${closedFilter}

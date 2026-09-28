@@ -1,5 +1,5 @@
 import { randomUUID } from "crypto";
-import { execute, query, queryOne, type Queryable } from "@/lib/db/query";
+import { execute, query, queryOne, jsonbParam, type Queryable } from "@/lib/db/query";
 import { DatabaseError } from "@/lib/db/errors";
 
 type TenantUser = {
@@ -362,9 +362,9 @@ export async function pushExternalIntegration(
       integration.id,
       leadId,
       opportunityId,
-      requestPayloadSnapshot,
+      jsonbParam(requestPayloadSnapshot),
       responseStatusCode,
-      responseBody,
+      jsonbParam(responseBody),
       externalRecordId,
       status,
       errorMessage,

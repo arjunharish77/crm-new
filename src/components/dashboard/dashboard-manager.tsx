@@ -2,6 +2,8 @@
 
 import React, { useEffect, useMemo, useState, useCallback } from 'react';
 import { Plus, RefreshCw, LayoutDashboard, Loader2, X, Pencil, Trash2, Save, MoreVertical, History, Copy, UserCog, Archive, RotateCcw, Download, Star } from 'lucide-react';
+import { PageHeader } from '@/components/layout/page-header';
+import { ErrorState } from '@/components/common/error-state';
 import { Button } from '@/components/ui/button';
 import {
     Select,
@@ -64,6 +66,7 @@ export function DashboardManager() {
     const [savingLayout, setSavingLayout] = useState(false);
     const [restoringSnapshotId, setRestoringSnapshotId] = useState('');
     const [loading, setLoading] = useState(true);
+    const [loadError, setLoadError] = useState(false);
     const [isAdding, setIsAdding] = useState(false);
     const [editingWidget, setEditingWidget] = useState<any | null>(null);
     const [selectedPersona, setSelectedPersona] = useState('admin');
@@ -77,14 +80,16 @@ export function DashboardManager() {
     // into illegible slivers on a narrow screen. Drag/resize is a desktop power-user feature
     // anyway, so mobile gets a simple, read-order-preserving stacked list instead of trying to
     // teach react-grid-layout a second, responsive column count.
-    const [isMobile, setIsMobile] = useState(false);
+    const [isMobile, setIsMobile] = useState(true);
 
     useEffect(() => {
-        const mediaQuery = window.matchMedia('(max-width: 767px)');
-        const updateIsMobile = () => setIsMobile(mediaQuery.matches);
-        updateIsMobile();
-        mediaQuery.addEventListener('change', updateIsMobile);
-        return () => mediaQuery.removeEventListener('change', updateIsMobile);
+        const workspace = document.getElementById('dashboard-workspace');
+        if (!workspace) return;
+        const update = () => setIsMobile(workspace.clientWidth < 900);
+        const observer = new ResizeObserver(update);
+        observer.observe(workspace);
+        update();
+        return () => observer.disconnect();
     }, []);
 
     // A widget shared to this viewer (TEAM/TENANT visibility) has no tab this viewer's own tab
@@ -95,6 +100,7 @@ export function DashboardManager() {
     const fetchAll = useCallback(async () => {
         try {
             setLoading(true);
+            setLoadError(false);
             const [widgetData, tabData, layoutData] = await Promise.all([
                 apiFetch<any[]>('/dashboard-widgets'),
                 apiFetch<any[]>('/dashboard-tabs'),
@@ -104,8 +110,7 @@ export function DashboardManager() {
             setTabs(Array.isArray(tabData) ? tabData : []);
             setSavedLayouts(Array.isArray(layoutData) ? layoutData : []);
         } catch (err) {
-            console.error('Failed to fetch dashboard', err);
-            toast.error('Failed to load dashboard');
+            setLoadError(true);
         } finally {
             setLoading(false);
         }
@@ -382,6 +387,7 @@ export function DashboardManager() {
         }
     };
 
+    if (loadError) return <><PageHeader title="Dashboard" /><ErrorState description="Dashboard widgets and layouts could not be loaded." onRetry={fetchAll} /></>;
     if (loading && widgets.length === 0) {
         return (
             <div className="flex justify-center p-16">
@@ -392,11 +398,11 @@ export function DashboardManager() {
 
     if (widgets.length === 0) {
         return (
-            <div className="rounded-3xl border border-dashed border-border bg-card py-24 text-center">
+            <div className="rounded-3xl border border-dashed border-border bg-card px-4 py-12 text-center">
                 <LayoutDashboard className="mx-auto mb-4 size-16 text-muted-foreground/40" />
                 <h2 className="mb-2 text-2xl font-bold">Welcome to your Dashboard</h2>
                 <p className="mb-8 text-muted-foreground">You haven&apos;t added any widgets yet. Start by initializing the default set.</p>
-                <Button size="lg" className="rounded-2xl" onClick={initializeDefaults}>
+                <Button size="lg" className="h-auto min-h-10 whitespace-normal rounded-lg" onClick={initializeDefaults}>
                     <Plus className="size-4" />
                     Initialize Default Dashboard
                 </Button>
@@ -406,41 +412,29 @@ export function DashboardManager() {
 
     return (
         <div>
-            <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-                <h1 className="text-3xl font-extrabold">Dashboard</h1>
-                <div className="flex flex-wrap items-center gap-3">
+            <PageHeader title="Dashboard" description="Your saved performance views and widgets." actions={<>
+                <Button variant="outline" onClick={fetchAll} disabled={loading}><RefreshCw className="size-4" />Refresh</Button>
+                <Button onClick={() => setIsAdding(true)}><Plus className="size-4" />Add Widget</Button>
+            </>} />
+            <details className="mb-4 rounded-lg border p-3">
+                <summary className="cursor-pointer text-sm font-medium">Add widgets from a template</summary>
+                <div className="mt-3 flex min-w-0 flex-wrap items-center gap-2">
+                    <Label htmlFor="dashboard-persona">Template</Label>
                     <Select value={selectedPersona} onValueChange={setSelectedPersona}>
-                        <SelectTrigger className="w-[140px]">
-                            <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                            {PERSONA_OPTIONS.map((option) => (
-                                <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
-                            ))}
-                        </SelectContent>
+                        <SelectTrigger id="dashboard-persona" className="w-40"><SelectValue /></SelectTrigger>
+                        <SelectContent>{PERSONA_OPTIONS.map(option => <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>)}</SelectContent>
                     </Select>
-                    <Button variant="outline" onClick={applyPersonaTemplate} disabled={applyingTemplate} title="Adds any widgets from this persona's template that aren't already on your dashboard -- safe to re-apply anytime">
-                        <LayoutDashboard className="size-4" />
-                        {applyingTemplate ? "Applying..." : "Apply Template"}
-                    </Button>
-                    <Button variant="outline" onClick={fetchAll}>
-                        <RefreshCw className="size-4" />
-                        Refresh
-                    </Button>
-                    <Button className="rounded-2xl" onClick={() => setIsAdding(true)}>
-                        <Plus className="size-4" />
-                        Add Widget
-                    </Button>
+                    <Button variant="outline" onClick={applyPersonaTemplate} disabled={applyingTemplate}>{applyingTemplate ? 'Applying...' : 'Apply Template'}</Button>
                 </div>
-            </div>
+            </details>
 
             <div className="mb-4 flex flex-wrap items-center gap-2 border-b pb-3">
                 {tabs.map((tab) => (
-                    <div key={tab.id} className="group relative flex items-center">
+                    <div key={tab.id} className="group relative flex min-w-0 max-w-full items-center">
                         <button
                             onClick={() => switchTab(tab.id)}
                             className={cn(
-                                'rounded-full px-3 py-1.5 text-sm font-medium transition-colors',
+                                'min-w-0 break-words rounded-lg px-3 py-1.5 text-sm font-medium transition-colors',
                                 activeTabId === tab.id ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground hover:bg-accent'
                             )}
                         >
@@ -451,7 +445,7 @@ export function DashboardManager() {
                         </button>
                         <DropdownMenu>
                             <DropdownMenuTrigger asChild>
-                                <button className="ml-0.5 rounded p-1 opacity-0 hover:bg-accent group-hover:opacity-100" aria-label={`${tab.name} tab options`}>
+                                <button className="ml-0.5 rounded p-1 shrink-0 hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring" aria-label={`${tab.name} tab options`}>
                                     <MoreVertical className="size-3" />
                                 </button>
                             </DropdownMenuTrigger>
@@ -509,7 +503,7 @@ export function DashboardManager() {
                     <button
                         onClick={() => switchTab(SHARED_TAB_ID)}
                         className={cn(
-                            'rounded-full px-3 py-1.5 text-sm font-medium transition-colors',
+                            'min-w-0 break-words rounded-lg px-3 py-1.5 text-sm font-medium transition-colors',
                             activeTabId === SHARED_TAB_ID ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground hover:bg-accent'
                         )}
                     >
@@ -523,11 +517,11 @@ export function DashboardManager() {
                             value={newTabName}
                             onChange={(e) => setNewTabName(e.target.value)}
                             onKeyDown={(e) => { if (e.key === 'Enter') createTab(); if (e.key === 'Escape') setAddingTab(false); }}
-                            placeholder="Tab name"
+                            aria-label="Tab name" placeholder="Tab name"
                             className="h-8 w-32"
                         />
-                        <Button size="icon-sm" variant="ghost" onClick={createTab}><Plus className="size-4" /></Button>
-                        <Button size="icon-sm" variant="ghost" onClick={() => { setAddingTab(false); setNewTabName(''); }}><X className="size-4" /></Button>
+                        <Button size="icon-sm" variant="ghost" aria-label="Create tab" onClick={createTab}><Plus className="size-4" /></Button>
+                        <Button size="icon-sm" variant="ghost" aria-label="Cancel new tab" onClick={() => { setAddingTab(false); setNewTabName(''); }}><X className="size-4" /></Button>
                     </div>
                 ) : (
                     <Button size="icon-sm" variant="ghost" onClick={() => setAddingTab(true)} aria-label="Add tab">
@@ -536,9 +530,9 @@ export function DashboardManager() {
                 )}
             </div>
 
-            <div className="mb-4 flex flex-wrap items-center gap-2 rounded-xl border bg-muted/20 p-2">
+            <div className="mb-4 flex min-w-0 flex-wrap items-center gap-2 rounded-xl border bg-muted/20 p-2">
                 <span className="text-xs font-bold uppercase text-muted-foreground">Saved Layouts</span>
-                <Input value={layoutName} onChange={(e) => setLayoutName(e.target.value)} placeholder="Layout name" className="h-8 w-40" />
+                <Input value={layoutName} onChange={(e) => setLayoutName(e.target.value)} aria-label="Layout name" placeholder="Layout name" className="h-8 w-40" />
                 <Button size="sm" variant="outline" onClick={saveLayout} disabled={savingLayout || !layoutName.trim()}>
                     <Save className="size-4" />
                     Save Current
@@ -643,16 +637,22 @@ export function DashboardManager() {
 function TabVersionHistoryDialog({ tabId, onClose, onRestored }: { tabId: string | null; onClose: () => void; onRestored: () => void }) {
     const [versions, setVersions] = useState<any[]>([]);
     const [loading, setLoading] = useState(false);
+    const [loadError, setLoadError] = useState(false);
+    const [retryKey, setRetryKey] = useState(0);
     const [restoringVersion, setRestoringVersion] = useState<number | null>(null);
 
     useEffect(() => {
         if (!tabId) return;
+        let current = true;
         setLoading(true);
+        setLoadError(false);
+        setVersions([]);
         apiFetch<any[]>(`/dashboard-tabs/${tabId}/versions`)
-            .then((data) => setVersions(Array.isArray(data) ? data : []))
-            .catch((err) => toast.error(err.message || 'Failed to load version history'))
-            .finally(() => setLoading(false));
-    }, [tabId]);
+            .then((data) => { if (current) setVersions(Array.isArray(data) ? data : []); })
+            .catch(() => { if (current) setLoadError(true); })
+            .finally(() => { if (current) setLoading(false); });
+        return () => { current = false; };
+    }, [tabId, retryKey]);
 
     const restore = async (version: number) => {
         if (!tabId) return;
@@ -673,13 +673,13 @@ function TabVersionHistoryDialog({ tabId, onClose, onRestored }: { tabId: string
         <StandardDialog open={!!tabId} onClose={onClose} title="Version History" subtitle="Restoring publishes the old snapshot again as a new version -- nothing is ever lost.">
             {loading ? (
                 <div className="flex justify-center p-8"><Loader2 className="size-6 animate-spin text-muted-foreground" /></div>
-            ) : versions.length === 0 ? (
+            ) : loadError ? <ErrorState description="Dashboard versions could not be loaded." onRetry={() => setRetryKey(value => value + 1)} /> : versions.length === 0 ? (
                 <p className="p-4 text-sm text-muted-foreground">No published versions yet -- use &quot;Publish Version&quot; to create the first one.</p>
             ) : (
                 <div className="space-y-2 p-4">
                     {versions.map((version) => (
-                        <div key={version.id} className="flex items-center justify-between rounded-lg bg-accent p-3">
-                            <div>
+                        <div key={version.id} className="flex min-w-0 flex-wrap items-center justify-between rounded-lg bg-accent p-3">
+                            <div className="min-w-0 flex-1 basis-40 break-words">
                                 <div className="text-sm font-bold">Version {version.version}</div>
                                 <div className="text-xs text-muted-foreground">
                                     {version.publishNotes || 'No notes'} • {formatWorkspaceDate(version.publishedAt)}
@@ -1049,9 +1049,9 @@ function AddWidgetDialog({ open, widget, defaultTabId, existingWidgets, onClose,
 
                 <div className="grid gap-4 sm:grid-cols-2">
                     <div className="flex flex-col gap-1.5">
-                        <Label>Data Source</Label>
+                        <Label htmlFor="dashboard-field-1">Data Source</Label>
                         <Select value={source} onValueChange={(value) => setSource(value as 'module' | 'report' | 'app_report')}>
-                            <SelectTrigger className="w-full">
+                            <SelectTrigger id="dashboard-field-1" className="w-full">
                                 <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
@@ -1062,9 +1062,9 @@ function AddWidgetDialog({ open, widget, defaultTabId, existingWidgets, onClose,
                         </Select>
                     </div>
                     <div className="flex flex-col gap-1.5">
-                        <Label>Widget Type</Label>
+                        <Label htmlFor="dashboard-field-2">Widget Type</Label>
                         <Select value={type} onValueChange={setType}>
-                            <SelectTrigger className="w-full">
+                            <SelectTrigger id="dashboard-field-2" className="w-full">
                                 <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
@@ -1097,9 +1097,9 @@ function AddWidgetDialog({ open, widget, defaultTabId, existingWidgets, onClose,
                 </div>
 
                 <div className="flex flex-col gap-1.5">
-                    <Label>Sharing</Label>
+                    <Label htmlFor="dashboard-field-3">Sharing</Label>
                     <Select value={visibility} onValueChange={(value) => setVisibility(value as 'PRIVATE' | 'TEAM' | 'TENANT')}>
-                        <SelectTrigger className="w-full">
+                        <SelectTrigger id="dashboard-field-3" className="w-full">
                             <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
@@ -1136,9 +1136,9 @@ function AddWidgetDialog({ open, widget, defaultTabId, existingWidgets, onClose,
                 ) : type === 'PIVOT' ? (
                     <div className="grid gap-4 sm:grid-cols-2">
                         <div className="flex flex-col gap-1.5">
-                            <Label>Metric (row dimension)</Label>
+                            <Label htmlFor="dashboard-field-4">Metric (row dimension)</Label>
                             <Select value={pivotMetricId} onValueChange={setPivotMetricId}>
-                                <SelectTrigger className="w-full"><SelectValue placeholder="Choose a metric" /></SelectTrigger>
+                                <SelectTrigger id="dashboard-field-4" className="w-full"><SelectValue placeholder="Choose a metric" /></SelectTrigger>
                                 <SelectContent>
                                     {pivotMetrics.map((metric) => <SelectItem key={metric.id} value={metric.id}>{metric.name}</SelectItem>)}
                                 </SelectContent>
@@ -1148,13 +1148,13 @@ function AddWidgetDialog({ open, widget, defaultTabId, existingWidgets, onClose,
                             ) : null}
                         </div>
                         <div className="flex flex-col gap-1.5">
-                            <Label>Column Dimension</Label>
-                            <div className="grid grid-cols-2 gap-1.5">
+                            <Label htmlFor="dashboard-field-5">Column Dimension</Label>
+                            <div className="grid gap-1.5 sm:grid-cols-2">
                                 <Select
                                     value={pivotColumnObject}
                                     onValueChange={(object) => { setPivotColumnObject(object); setPivotColumnField((pivotCatalog[object] ?? [])[0] ?? ''); }}
                                 >
-                                    <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                                    <SelectTrigger id="dashboard-field-5" className="w-full"><SelectValue /></SelectTrigger>
                                     <SelectContent>
                                         {Object.keys(pivotCatalog).map((object) => <SelectItem key={object} value={object}>{object}</SelectItem>)}
                                     </SelectContent>
@@ -1171,9 +1171,9 @@ function AddWidgetDialog({ open, widget, defaultTabId, existingWidgets, onClose,
                 ) : source === 'module' ? (
                     <>
                         <div className="flex flex-col gap-1.5">
-                            <Label>Data Module</Label>
+                            <Label htmlFor="dashboard-field-6">Data Module</Label>
                             <Select value={module} onValueChange={setModule}>
-                                <SelectTrigger className="w-full">
+                                <SelectTrigger id="dashboard-field-6" className="w-full">
                                     <SelectValue />
                                 </SelectTrigger>
                                 <SelectContent>
@@ -1187,9 +1187,9 @@ function AddWidgetDialog({ open, widget, defaultTabId, existingWidgets, onClose,
                         </div>
                         {type === 'BAR' && module === 'LEADS' ? (
                             <div className="flex flex-col gap-1.5">
-                                <Label>Group Leads By</Label>
+                                <Label htmlFor="dashboard-field-7">Group Leads By</Label>
                                 <Select value={moduleGroupBy} onValueChange={setModuleGroupBy}>
-                                    <SelectTrigger className="w-full">
+                                    <SelectTrigger id="dashboard-field-7" className="w-full">
                                         <SelectValue />
                                     </SelectTrigger>
                                     <SelectContent>
@@ -1203,9 +1203,9 @@ function AddWidgetDialog({ open, widget, defaultTabId, existingWidgets, onClose,
                 ) : source === 'app_report' ? (
                     <div className="grid gap-4 sm:grid-cols-2">
                         <div className="flex flex-col gap-1.5 sm:col-span-2">
-                            <Label>App Report</Label>
+                            <Label htmlFor="dashboard-field-8">App Report</Label>
                             <Select value={appReportSelection} onValueChange={setAppReportSelection}>
-                                <SelectTrigger className="w-full">
+                                <SelectTrigger id="dashboard-field-8" className="w-full">
                                     <SelectValue placeholder="Choose a report" />
                                 </SelectTrigger>
                                 <SelectContent>
@@ -1222,9 +1222,9 @@ function AddWidgetDialog({ open, widget, defaultTabId, existingWidgets, onClose,
                         </div>
                         {type === 'STAT' ? (
                             <div className="flex flex-col gap-1.5">
-                                <Label>Metric</Label>
+                                <Label htmlFor="dashboard-field-9">Metric</Label>
                                 <Select value={appReportMetric} onValueChange={setAppReportMetric}>
-                                    <SelectTrigger className="w-full">
+                                    <SelectTrigger id="dashboard-field-9" className="w-full">
                                         <SelectValue />
                                     </SelectTrigger>
                                     <SelectContent>
@@ -1239,9 +1239,9 @@ function AddWidgetDialog({ open, widget, defaultTabId, existingWidgets, onClose,
                         {type === 'BAR' ? (
                             <>
                                 <div className="flex flex-col gap-1.5">
-                                    <Label>Group By Column</Label>
+                                    <Label htmlFor="dashboard-field-10">Group By Column</Label>
                                     <Select value={appReportGroupField} onValueChange={setAppReportGroupField}>
-                                        <SelectTrigger className="w-full">
+                                        <SelectTrigger id="dashboard-field-10" className="w-full">
                                             <SelectValue />
                                         </SelectTrigger>
                                         <SelectContent>
@@ -1252,9 +1252,9 @@ function AddWidgetDialog({ open, widget, defaultTabId, existingWidgets, onClose,
                                     </Select>
                                 </div>
                                 <div className="flex flex-col gap-1.5">
-                                    <Label>Value Column</Label>
+                                    <Label htmlFor="dashboard-field-11">Value Column</Label>
                                     <Select value={appReportValueField} onValueChange={setAppReportValueField}>
-                                        <SelectTrigger className="w-full">
+                                        <SelectTrigger id="dashboard-field-11" className="w-full">
                                             <SelectValue />
                                         </SelectTrigger>
                                         <SelectContent>
@@ -1273,9 +1273,9 @@ function AddWidgetDialog({ open, widget, defaultTabId, existingWidgets, onClose,
                 ) : (
                     <div className="grid gap-4 sm:grid-cols-2">
                         <div className="flex flex-col gap-1.5">
-                            <Label>Report</Label>
+                            <Label htmlFor="dashboard-field-12">Report</Label>
                             <Select value={reportKey} onValueChange={setReportKey}>
-                                <SelectTrigger className="w-full">
+                                <SelectTrigger id="dashboard-field-12" className="w-full">
                                     <SelectValue />
                                 </SelectTrigger>
                                 <SelectContent>
@@ -1288,9 +1288,9 @@ function AddWidgetDialog({ open, widget, defaultTabId, existingWidgets, onClose,
                             </Select>
                         </div>
                         <div className="flex flex-col gap-1.5">
-                            <Label>Metric</Label>
+                            <Label htmlFor="dashboard-field-13">Metric</Label>
                             <Select value={reportMetric} onValueChange={setReportMetric}>
-                                <SelectTrigger className="w-full">
+                                <SelectTrigger id="dashboard-field-13" className="w-full">
                                     <SelectValue />
                                 </SelectTrigger>
                                 <SelectContent>

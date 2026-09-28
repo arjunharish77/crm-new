@@ -34,14 +34,17 @@ const NotificationContext = createContext<NotificationContextType | undefined>(u
 const API_URL = '/api';
 
 export function NotificationProvider({ children }: { children: React.ReactNode }) {
-    const { token, isAuthenticated } = useAuth();
+    const { isAuthenticated } = useAuth();
     const [notifications, setNotifications] = useState<Notification[]>([]);
     const [unreadCount, setUnreadCount] = useState(0);
 
     useEffect(() => {
-        if (!isAuthenticated || !token) return;
+        if (!isAuthenticated) return;
 
-        const eventSource = new EventSource(`${API_URL}/notifications/sse?token=${token}`);
+        // F06 fix (WP05): no more raw session token in the SSE URL (query strings end up in
+        // server/proxy logs and browser history) -- EventSource sends the HttpOnly session
+        // cookie automatically for this same-origin request, the same way a normal fetch does.
+        const eventSource = new EventSource(`${API_URL}/notifications/sse`);
 
         eventSource.onmessage = (event) => {
             let payload: any;
@@ -100,19 +103,16 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
         return () => {
             eventSource.close();
         };
-    }, [isAuthenticated, token]);
+    }, [isAuthenticated]);
 
     const clearNotifications = () => {
         const ids = notifications.map((item) => item.id).filter((id): id is string => typeof id === "string" && id.length > 0);
         setNotifications([]);
         setUnreadCount(0);
-        if (ids.length && token) {
+        if (ids.length) {
             fetch(`${API_URL}/notifications`, {
                 method: "PATCH",
-                headers: {
-                    "Content-Type": "application/json",
-                    Authorization: `Bearer ${token}`,
-                },
+                headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ ids }),
             }).catch(() => undefined);
         }
@@ -125,16 +125,11 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
         if (!id) return;
         setNotifications((prev) => prev.filter((item) => item.id !== id));
         setUnreadCount((prev) => Math.max(0, prev - 1));
-        if (token) {
-            fetch(`${API_URL}/notifications`, {
-                method: "PATCH",
-                headers: {
-                    "Content-Type": "application/json",
-                    Authorization: `Bearer ${token}`,
-                },
-                body: JSON.stringify({ ids: [id] }),
-            }).catch(() => undefined);
-        }
+        fetch(`${API_URL}/notifications`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ ids: [id] }),
+        }).catch(() => undefined);
     };
 
     return (

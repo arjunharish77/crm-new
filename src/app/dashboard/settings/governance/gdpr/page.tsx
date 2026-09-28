@@ -1,5 +1,7 @@
 'use client';
 
+import { PageHeader } from "@/components/layout/page-header";
+
 import React, { useState, useEffect } from 'react';
 import { ShieldCheck, Plus, Download, Trash2 } from 'lucide-react';
 import { apiFetch } from '@/lib/api';
@@ -35,6 +37,7 @@ interface GDPRRequest {
 export default function GDPRPage() {
     const [requests, setRequests] = useState<GDPRRequest[]>([]);
     const [loading, setLoading] = useState(true);
+    const [loadError, setLoadError] = useState(false);
     const [isAdding, setIsAdding] = useState(false);
     const [newRequest, setNewRequest] = useState({ contactEmail: '', type: 'EXPORT' });
 
@@ -44,11 +47,12 @@ export default function GDPRPage() {
 
     const fetchRequests = async () => {
         setLoading(true);
+        setLoadError(false);
         try {
             const data = await apiFetch('/governance/gdpr/requests');
             setRequests(data || []);
         } catch (err) {
-            console.error('Failed to fetch GDPR requests', err);
+            setLoadError(true);
         } finally {
             setLoading(false);
         }
@@ -72,11 +76,8 @@ export default function GDPRPage() {
     };
 
     return (
-        <div className="p-8">
-            <h1 className="text-lg font-bold">GDPR & Data Privacy</h1>
-            <p className="mb-4 text-muted-foreground">
-                Manage Subject Access Requests (SARs) and &quot;Right to be Forgotten&quot; mandates.
-            </p>
+        <div className="min-w-0">
+            <PageHeader title="GDPR & Data Privacy" description="Manage data access and deletion requests." />
 
             <div className="flex flex-col gap-4">
                 <div className="flex items-start gap-2.5 rounded-lg border border-primary/20 bg-primary/5 px-3 py-2.5 text-sm text-foreground">
@@ -87,7 +88,7 @@ export default function GDPRPage() {
                     </p>
                 </div>
 
-                <div className="flex items-center justify-between">
+                <div className="flex flex-wrap items-center justify-between">
                     <h2 className="text-base font-semibold">Request History</h2>
                     <Button onClick={() => setIsAdding(true)}>
                         <Plus className="size-4" />
@@ -97,6 +98,8 @@ export default function GDPRPage() {
 
                 {loading ? (
                     <TableSkeleton rows={5} columns={5} hasToolbar={false} />
+                ) : loadError ? (
+                    <div role="alert" className="rounded-lg border p-4 text-sm">Unable to load privacy requests. <Button variant="outline" size="sm" onClick={fetchRequests}>Retry</Button></div>
                 ) : requests.length === 0 ? (
                     <div className="rounded-xl border">
                         <EmptyState

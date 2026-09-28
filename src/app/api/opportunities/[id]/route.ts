@@ -40,6 +40,7 @@ export async function PATCH(
     const { id } = await params;
 
     const opportunity = await updateOpportunityForTenant(user, id, payload ?? {});
+    if (!opportunity) return NextResponse.json(null, { status: 404 });
     return NextResponse.json(opportunity);
   } catch (error) {
     if (error instanceof Error && error.message === "UNAUTHORIZED") {

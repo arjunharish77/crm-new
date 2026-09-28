@@ -32,6 +32,6 @@ export async function POST(
   } catch (error) {
     if (error instanceof Error && error.message === "UNAUTHORIZED") return unauthorized();
     if (error instanceof Error && error.message === "FORBIDDEN") return forbidden();
-    return serverError("Failed to suspend tenant");
+    return serverError("Failed to suspend tenant", error);
   }
 }

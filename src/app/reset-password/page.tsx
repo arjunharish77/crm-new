@@ -2,7 +2,6 @@
 
 import { Suspense, useState } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
-import { toast } from "sonner";
 import { apiFetch } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -23,12 +22,15 @@ function ResetPasswordForm() {
     const [newPassword, setNewPassword] = useState("");
     const [confirmPassword, setConfirmPassword] = useState("");
     const [submitting, setSubmitting] = useState(false);
+    const [error, setError] = useState("");
     const [done, setDone] = useState(false);
 
     const submit = async (event: React.FormEvent) => {
         event.preventDefault();
+        if (submitting || !token) return;
+        setError("");
         if (newPassword !== confirmPassword) {
-            toast.error("Passwords do not match");
+            setError("Passwords do not match");
             return;
         }
         setSubmitting(true);
@@ -39,17 +41,17 @@ function ResetPasswordForm() {
             });
             setDone(true);
         } catch (error: any) {
-            toast.error(error?.message || "Failed to reset password");
+            setError(error?.message || "Failed to reset password");
         } finally {
             setSubmitting(false);
         }
     };
 
     return (
-        <div className="flex h-screen w-full items-center justify-center bg-background px-4">
+        <div className="flex min-h-dvh w-full items-center justify-center bg-background px-4 py-6">
             <motion.div variants={fadeInUp} initial="initial" animate="animate" className="w-full max-w-[440px]">
                 <Card className="overflow-hidden rounded-[28px] shadow-[0_4px_20px_rgba(0,0,0,0.05)]">
-                    <div className="p-8 pb-4 text-center">
+                    <div className="px-5 pt-6 pb-4 text-center sm:px-8">
                         <div className="mx-auto mb-6 flex size-12 items-center justify-center rounded-xl bg-primary text-primary-foreground">
                             {done ? <CheckCircle2 className="size-5" /> : <KeyRound className="size-5" />}
                         </div>
@@ -60,25 +62,27 @@ function ResetPasswordForm() {
                             {done ? "You can now log in with your new password." : "Choose a new password for your account."}
                         </p>
                     </div>
-                    <CardContent className="p-8">
+                    <CardContent className="p-5 sm:p-8">
                         {done ? (
                             <Button onClick={() => router.push("/login")} className="h-14 w-full rounded-2xl text-base font-bold">
                                 Go to Sign In
                             </Button>
                         ) : !token ? (
-                            <p className="text-center text-sm text-destructive">This link is missing its reset token.</p>
+                            <div className="space-y-4"><p role="alert" className="text-sm text-destructive">This reset link is incomplete. Ask your administrator for a new link.</p><Button variant="outline" className="w-full" onClick={() => router.push("/login")}>Back to sign in</Button></div>
                         ) : (
                             <form onSubmit={submit} className="space-y-6">
                                 <div className="space-y-2">
-                                    <Label>New Password</Label>
-                                    <Input type="password" value={newPassword} onChange={(event) => setNewPassword(event.target.value)} disabled={submitting} autoFocus />
+                                    <Label htmlFor="reset-password">New Password</Label>
+                                    <Input id="reset-password" required autoComplete="new-password" type="password" value={newPassword} onChange={(event) => setNewPassword(event.target.value)} disabled={submitting} autoFocus />
                                 </div>
                                 <div className="space-y-2">
-                                    <Label>Confirm New Password</Label>
-                                    <Input type="password" value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} disabled={submitting} />
+                                    <Label htmlFor="reset-confirm">Confirm New Password</Label>
+                                    <Input id="reset-confirm" required autoComplete="new-password" type="password" value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} disabled={submitting} />
                                 </div>
+                                <p className="text-xs text-muted-foreground">Use at least 6 characters. Your workspace may require a stronger password.</p>
+                                {error && <p role="alert" className="break-words text-sm text-destructive">{error}</p>}
                                 <Button type="submit" disabled={submitting || newPassword.length < 6} className="h-14 w-full rounded-2xl text-base font-bold">
-                                    {submitting ? <Loader2 className="size-5 animate-spin" /> : "Reset Password"}
+                                    {submitting ? <><Loader2 className="size-5 animate-spin" /> Resetting…</> : "Reset Password"}
                                 </Button>
                             </form>
                         )}

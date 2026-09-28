@@ -1,5 +1,5 @@
 import { randomUUID, randomBytes, createHmac, timingSafeEqual } from "crypto";
-import { query, queryOne, execute } from "@/lib/db/query";
+import { query, queryOne, execute, jsonbParam } from "@/lib/db/query";
 import { createAuditLog, createLeadForTenant } from "@/lib/server/crm";
 
 type TenantUser = {
@@ -149,7 +149,7 @@ async function recordInboundWebhookEvent(input: {
   return execute(
     `insert into "InboundWebhookEvent" (id, "tenantId", "idempotencyKey", status, payload, "leadId", "errorMessage", "createdAt")
      values ($1, $2, $3, $4, $5, $6, $7, $8)`,
-    [randomUUID(), input.tenantId, input.idempotencyKey ?? null, input.status, input.payload, input.leadId ?? null, input.errorMessage ?? null, new Date().toISOString()],
+    [randomUUID(), input.tenantId, input.idempotencyKey ?? null, input.status, jsonbParam(input.payload), input.leadId ?? null, input.errorMessage ?? null, new Date().toISOString()],
   );
 }
 

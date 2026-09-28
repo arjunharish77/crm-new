@@ -1,5 +1,7 @@
 "use client";
 
+import { PageHeader } from "@/components/layout/page-header";
+
 // Priority Module 12's "product catalog" item 4, "admin catalog management UI for universities,
 // campuses, programs, courses, intakes, fees, scholarships, eligibility criteria, application
 // stages, and document checklists." A 3-level drill-down (University -> Campuses/Programs ->
@@ -32,14 +34,9 @@ export default function CatalogSettingsPage() {
 
     return (
         <div className="space-y-4">
-            <div>
-                <h1 className="text-xl font-bold">Product Catalog</h1>
-                <p className="text-sm text-muted-foreground">
-                    Manage universities, campuses, programs, courses, intakes, fees, scholarships, eligibility criteria, application stages, and document checklists.
-                </p>
-            </div>
+            <PageHeader title="Product Catalog" description="Manage universities and programs, then configure their courses, fees and admission requirements." />
 
-            <Card className="rounded-2xl p-4">
+            <Card className="rounded-xl p-4">
                 <CatalogEntityManager
                     entityKey="universities"
                     requiresParent={false}
@@ -62,11 +59,11 @@ export default function CatalogSettingsPage() {
             </Card>
 
             {selectedUniversity ? (
-                <Card className="rounded-2xl p-4">
+                <Card className="rounded-xl p-4">
                     <p className="mb-3 text-xs font-bold uppercase tracking-wide text-muted-foreground/60">
                         {selectedUniversity.name}
                     </p>
-                    <div className="grid gap-4 md:grid-cols-2">
+                    <div className="grid min-w-0 gap-4 2xl:grid-cols-2">
                         <CatalogEntityManager
                             entityKey="campuses"
                             parentId={selectedUniversity.id}
@@ -101,7 +98,7 @@ export default function CatalogSettingsPage() {
             ) : null}
 
             {selectedProgram ? (
-                <Card className="rounded-2xl p-4">
+                <Card className="rounded-xl p-4">
                     <p className="mb-3 text-xs font-bold uppercase tracking-wide text-muted-foreground/60">
                         {selectedProgram.name}
                     </p>
@@ -190,7 +187,7 @@ export default function CatalogSettingsPage() {
                                 fields={[
                                     { key: "name", label: "Name", type: "text" },
                                     { key: "description", label: "Description", type: "textarea" },
-                                    { key: "minEducationLevel", label: "Min Education Level", type: "text" },
+                                    { key: "minEducationLevel", label: "Minimum education level", type: "select", options: [{value:"CLASS_10",label:"Class 10"},{value:"CLASS_12",label:"Class 12"},{value:"BACHELORS",label:"Bachelor’s degree"},{value:"MASTERS",label:"Master’s degree"},{value:"DOCTORATE",label:"Doctorate"}] },
                                     { key: "minPercentage", label: "Min Percentage", type: "number" },
                                     { key: "requiredEntranceExam", label: "Required Entrance Exam", type: "text" },
                                     { key: "isActive", label: "Active", type: "boolean", defaultValue: true },
@@ -209,7 +206,9 @@ export default function CatalogSettingsPage() {
                                     { key: "slaDays", label: "SLA (days)", type: "number" },
                                     { key: "color", label: "Color", type: "text", placeholder: "#3b82f6" },
                                     { key: "isClosed", label: "Closed stage", type: "boolean" },
-                                    { key: "isWon", label: "Won/Enrolled stage", type: "boolean" },
+                                    { key: "isWon", label: "Won stage (does not create enrollment)", type: "boolean" },
+                                    { key: "requiresVerifiedDocuments", label: "Require verified documents before entry", type: "boolean" },
+                                    { key: "requiresEligibility", label: "Require eligibility checks to be met before entry", type: "boolean" },
                                 ]}
                             />
                         </TabsContent>

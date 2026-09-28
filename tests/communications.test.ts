@@ -8,6 +8,9 @@ vi.mock("@/lib/db/query", () => ({
   query: queryMock,
   queryOne: queryOneMock,
   execute: executeMock,
+  queryAsSystem: queryMock,
+  queryOneAsSystem: queryOneMock,
+  executeAsSystem: executeMock,
 }));
 
 vi.mock("@/lib/server/crm", () => ({
@@ -20,6 +23,15 @@ vi.mock("@/lib/repositories/automations-postgres", () => ({
 
 vi.mock("@/lib/server/next-best-action", () => ({
   refreshNextBestActionsForRecord: vi.fn(async () => null),
+}));
+
+// F07 fix (WP06): this file's HTTP-connector test uses a fake hostname (provider.example) that
+// doesn't resolve via real DNS -- the SSRF guard's own correctness is covered by
+// outbound-request-guard.test.ts; here it's mocked out so this unit test stays isolated from
+// real network/DNS behavior.
+vi.mock("@/lib/server/outbound-request-guard", () => ({
+  assertSafeOutboundUrl: vi.fn(async () => undefined),
+  UnsafeDestinationError: class extends Error {},
 }));
 
 describe("communications connectors", () => {
@@ -94,9 +106,12 @@ describe("communications connectors", () => {
           attempts: 0,
         },
       ])
-      .mockResolvedValueOnce(1)
       .mockResolvedValueOnce(1);
     queryOneMock
+      // F14 fix (WP10): the SENDING claim is now an atomic compare-and-swap via queryOne
+      // (previously an unconditional `query()` update with no status guard) -- this is its
+      // mocked "claim succeeded" result.
+      .mockResolvedValueOnce({ id: "outbox-1" })
       .mockResolvedValueOnce({
         id: "provider-1",
         tenantId: "tenant-1",
@@ -120,6 +135,58 @@ describe("communications connectors", () => {
         body: JSON.stringify({ to: "+919999999999", text: "Hello" }),
       }),
     );
+  });
+
+  // F14 fix (WP10): processCommunicationOutbox previously set status = 'SENDING' unconditionally
+  // by id with no status guard at all -- two overlapping drain ticks that both selected the same
+  // due row could BOTH claim and send it (a real double-send, not just a post-crash recovery
+  // gap). The claim is now an atomic compare-and-swap (queryOne + a status/lease guard), matching
+  // webhook-outbox.ts's own processWebhookOutbox.
+  it("skips a message and never calls sendMessage if the atomic claim loses the race to another tick", async () => {
+    queryMock.mockResolvedValueOnce([]).mockResolvedValueOnce([
+      {
+        id: "outbox-1",
+        tenantId: "tenant-1",
+        channel: "WHATSAPP",
+        recipient: "+919999999999",
+        subject: null,
+        body: "Hello",
+        payload: {},
+        attempts: 0,
+      },
+    ]);
+    queryOneMock.mockResolvedValueOnce(null); // another tick already claimed this row
+    const fetchMock = vi.spyOn(globalThis, "fetch");
+
+    const { processCommunicationOutbox } = await import("@/lib/server/communications");
+    const result = await processCommunicationOutbox(10, new Date("2026-07-18T00:00:00.000Z"));
+
+    expect(result.processed).toEqual([]);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("the claim's SQL guards on QUEUED-or-expired-lease and sets a fresh lease alongside the SENDING status", async () => {
+    queryMock.mockResolvedValueOnce([]).mockResolvedValueOnce([
+      {
+        id: "outbox-1",
+        tenantId: "tenant-1",
+        channel: "WHATSAPP",
+        recipient: "+919999999999",
+        subject: null,
+        body: "Hello",
+        payload: {},
+        attempts: 0,
+      },
+    ]);
+    queryOneMock.mockResolvedValueOnce(null); // claim result is irrelevant here -- inspecting the SQL/params only
+
+    const { processCommunicationOutbox } = await import("@/lib/server/communications");
+    await processCommunicationOutbox(10, new Date("2026-07-18T00:00:00.000Z"));
+
+    const [claimSql, claimParams] = queryOneMock.mock.calls[0];
+    expect(String(claimSql)).toContain("status = 'QUEUED' or (status = 'SENDING' and \"leaseExpiresAt\" is not null and \"leaseExpiresAt\" <= $1)");
+    expect(String(claimSql)).toContain('"leaseExpiresAt" = $2');
+    expect(claimParams[1]).toBe(new Date(new Date("2026-07-18T00:00:00.000Z").getTime() + 5 * 60 * 1000).toISOString());
   });
 
   it("turns pending report email deliveries into email outbox rows", async () => {
@@ -176,6 +243,79 @@ describe("communications connectors", () => {
     expect(result.processed[0]).toMatchObject({ id: "outbox-quiet", status: "DEFERRED", reason: "QUIET_HOURS" });
     expect(queryMock.mock.calls[2][0]).toContain('update "CommunicationOutbox"');
     expect(queryMock.mock.calls[2][1][0]).toBe("2026-07-19T03:30:00.000Z");
+  });
+
+  // F16 fix (WP10): quiet hours must be resolved against the TENANT's own configured timezone,
+  // not the server process's -- this tenant is configured for America/New_York (via
+  // TenantConfig.featureFlags.generalSettings.timezone), completely independent of whatever
+  // TZ this test process itself happens to run under (this whole suite already passes
+  // identically under TZ=UTC/Asia/Kolkata/America/New_York/Pacific/Auckland).
+  it("resolves quiet hours against the TENANT's configured timezone, not the process timezone", async () => {
+    queryMock
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([
+        {
+          id: "outbox-quiet-ny",
+          tenantId: "tenant-ny",
+          channel: "EMAIL",
+          recipient: "lead@example.com",
+          subject: "Admissions update",
+          body: "Hello",
+          payload: {},
+          attempts: 0,
+          sourceType: "MARKETING_CAMPAIGN",
+          sourceId: "campaign-ny",
+        },
+      ])
+      .mockResolvedValueOnce(1);
+    queryOneMock
+      .mockResolvedValueOnce({ throttlePerMinute: 60, quietHours: { enabled: true, start: "21:00", end: "09:00" } })
+      .mockResolvedValueOnce({ featureFlags: { generalSettings: { timezone: "America/New_York" } } });
+
+    const { processCommunicationOutbox } = await import("@/lib/server/communications");
+    // 2026-07-19T02:15Z = 2026-07-18T22:15 in America/New_York (EDT, UTC-4) -- 10:15pm NY time,
+    // inside the 21:00-09:00 quiet-hours window.
+    const result = await processCommunicationOutbox(10, new Date("2026-07-19T02:15:00.000Z"));
+
+    expect(result.processed[0]).toMatchObject({ id: "outbox-quiet-ny", status: "DEFERRED", reason: "QUIET_HOURS" });
+    // 09:00 the next NY calendar day = 2026-07-19T09:00 EDT = 2026-07-19T13:00Z.
+    expect(queryMock.mock.calls[2][1][0]).toBe("2026-07-19T13:00:00.000Z");
+  });
+
+  // F16 fix (WP10): the accept-when criteria explicitly calls out DST boundaries. Using
+  // Intl.DateTimeFormat (via zonedWallClockParts/zonedWallClockToUTC) rather than manual UTC-
+  // offset arithmetic means this is correct by construction across a DST transition -- this
+  // exercises America/New_York's 2026-03-08 spring-forward (2am -> 3am EDT) day directly.
+  it("computes the correct quiet-hours exit across a DST spring-forward boundary", async () => {
+    queryMock
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([
+        {
+          id: "outbox-quiet-dst",
+          tenantId: "tenant-ny",
+          channel: "EMAIL",
+          recipient: "lead@example.com",
+          subject: "Admissions update",
+          body: "Hello",
+          payload: {},
+          attempts: 0,
+          sourceType: "MARKETING_CAMPAIGN",
+          sourceId: "campaign-ny",
+        },
+      ])
+      .mockResolvedValueOnce(1);
+    queryOneMock
+      .mockResolvedValueOnce({ throttlePerMinute: 60, quietHours: { enabled: true, start: "21:00", end: "09:00" } })
+      .mockResolvedValueOnce({ featureFlags: { generalSettings: { timezone: "America/New_York" } } });
+
+    const { processCommunicationOutbox } = await import("@/lib/server/communications");
+    // 2026-03-08T05:00Z = 2026-03-08T00:00 EST (still standard time) -- inside quiet hours.
+    const result = await processCommunicationOutbox(10, new Date("2026-03-08T05:00:00.000Z"));
+
+    expect(result.processed[0]).toMatchObject({ id: "outbox-quiet-dst", status: "DEFERRED", reason: "QUIET_HOURS" });
+    // 09:00 that same NY calendar day, but AFTER the 2am->3am spring-forward, = 09:00 EDT = 13:00Z
+    // (not 14:00Z, which is what a naive fixed-offset "EST all day" calculation would produce).
+    expect(queryMock.mock.calls[2][1][0]).toBe("2026-03-08T13:00:00.000Z");
   });
 
   it("defers marketing campaign messages when throttle is exhausted", async () => {
@@ -280,9 +420,11 @@ describe("communications connectors", () => {
             attempts: 4,
           },
         ])
-        .mockResolvedValueOnce(1) // SENDING update
         .mockResolvedValueOnce(1); // FAILED update
       queryOneMock
+        // F14 fix (WP10): the SENDING claim -- see the identical comment in the "processes queued
+        // HTTP connector messages" test above.
+        .mockResolvedValueOnce({ id: "outbox-1" })
         .mockResolvedValueOnce(null) // getProviderForMessage -> not configured -> sendMessage throws
         .mockResolvedValueOnce({ id: "event-1", entityType: null, entityId: null }) // recordDeliveryEvent(FAILED)
         .mockResolvedValueOnce(null) // isSuppressed(fallback)
@@ -292,7 +434,7 @@ describe("communications connectors", () => {
       const result = await processCommunicationOutbox(10, new Date("2026-07-18T10:00:00.000Z"));
 
       expect(result.processed[0]).toMatchObject({ id: "outbox-1", status: "FAILED" });
-      const fallbackInsert = queryOneMock.mock.calls[3];
+      const fallbackInsert = queryOneMock.mock.calls[4];
       expect(String(fallbackInsert[0])).toContain('insert into "CommunicationOutbox"');
       expect(fallbackInsert[1][6]).toBe("+919999999999");
       // nextAttemptAt honors the configured 30-minute delay.

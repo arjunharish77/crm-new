@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef } from 'react';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -9,7 +9,10 @@ import { Button } from '@/components/ui/button';
 import { useObjectMetadata } from '@/hooks/use-object-metadata';
 import { MuiDynamicField } from '@/components/forms/mui-dynamic-field';
 import { apiFetch } from '@/lib/api';
+import { ErrorState } from '@/components/common/error-state';
 import { toast } from 'sonner';
+import { useRetainedEditorDraft } from '@/providers/editor-draft-provider';
+import { useEditorDismissGuard } from '@/hooks/use-editor-dismiss-guard';
 import { useRegisterShortcut } from '@/lib/keyboard-shortcuts';
 
 const RESOURCE_PATHS: Record<string, string> = {
@@ -43,11 +46,19 @@ export function DynamicFormRenderer({
     saveUrl,
     fieldOverrides
 }: DynamicFormRendererProps) {
-    const { metadata: fetchedMetadata, loading: metadataLoading } = useObjectMetadata(objectName || '');
+    const { metadata: fetchedMetadata, loading: metadataLoading, error: metadataError, retry: retryMetadata } = useObjectMetadata(objectName || '');
     const metadata = externalMetadata || fetchedMetadata;
     const isMetadataLoading = externalMetadata ? false : metadataLoading;
-    const [isSaving, setIsSaving] = useState(false);
-    const fields = Array.isArray(metadata?.fields) ? metadata.fields : [];
+    const draftKey = `form:${saveUrl || objectName || metadata?.name || 'unknown'}:${initialData?.id || `new:${JSON.stringify(initialData ?? {})}`}`;
+    const { draft, update: updateDraft, current: currentDraft } = useRetainedEditorDraft(draftKey);
+    const isSaving = draft.pending;
+    const saveError = draft.error;
+    const setIsSaving = (pending: boolean) => updateDraft({ pending });
+    const setSaveError = (error: string) => updateDraft({ error });
+    const version = useRef(0);
+    useEffect(() => { version.current += 1; return () => { version.current += 1; }; }, [draftKey]);
+    const savingRef = useRef(false);
+    const fields = useMemo(() => Array.isArray(metadata?.fields) ? metadata.fields : [], [metadata]);
 
     // 1. Generate Schema and Default Values
     const { schema, defaultValues } = useMemo(() => {
@@ -87,7 +98,7 @@ export function DynamicFormRenderer({
     const {
         control,
         handleSubmit,
-        formState: { errors },
+        formState: { errors, isDirty },
         reset,
         setValue,
         watch,
@@ -96,11 +107,43 @@ export function DynamicFormRenderer({
         defaultValues,
     });
 
+    const baseline = useRef<Record<string, any>>(defaultValues);
+    const canDismiss = useEditorDismissGuard(isDirty, isSaving, () => updateDraft({ values: null, dirty: false, error: "" }));
+
     useEffect(() => {
+        baseline.current = defaultValues;
         reset(defaultValues);
-    }, [defaultValues, reset]);
+        const retained = currentDraft();
+        if (retained.values) {
+            const restored = Object.fromEntries(Object.keys(defaultValues).map(key => [key, retained.values?.[key] ?? defaultValues[key]]));
+            reset(restored, { keepDefaultValues: true });
+        }
+    }, [defaultValues, reset, currentDraft]);
+    useEffect(() => {
+        if (!metadata || isMetadataLoading) return;
+        const subscription = watch(values => {
+            const dirty = Object.keys(baseline.current).some(key => JSON.stringify(values[key]) !== JSON.stringify(baseline.current[key]));
+            updateDraft({ values: dirty ? { ...values } : null, dirty });
+        });
+        return () => subscription.unsubscribe();
+    }, [watch, defaultValues, metadata, isMetadataLoading, updateDraft]);
+
+    useEffect(() => {
+        if (!draft.savedValues || draft.pending) return;
+        const saved = initialData?.id
+            ? Object.fromEntries(Object.keys(defaultValues).map(key => [key, draft.savedValues?.[key] ?? defaultValues[key]]))
+            : defaultValues;
+        baseline.current = saved;
+        reset(saved);
+        updateDraft({ values: null, dirty: false, error: "", savedValues: null });
+        toast.success("Your previous save completed successfully");
+    }, [draft.savedValues, draft.pending, initialData?.id, defaultValues, reset, updateDraft]);
 
     const onSubmit = async (values: any) => {
+        if (savingRef.current || currentDraft().pending || !metadata || isMetadataLoading || (!externalMetadata && metadataError)) return;
+        const requestVersion = version.current;
+        savingRef.current = true;
+        setSaveError('');
         setIsSaving(true);
         try {
             const name = objectName || metadata?.name;
@@ -129,12 +172,17 @@ export function DynamicFormRenderer({
                 body: JSON.stringify(payload),
             });
 
+            updateDraft({ values: null, dirty: false, error: "", savedValues: requestVersion !== version.current ? response : null });
+            if (requestVersion !== version.current) return;
+            baseline.current = values;
+            reset(values);
+            updateDraft({ values: null, dirty: false, error: "" });
             toast.success(`${name} saved successfully`);
             onSuccess?.(response);
         } catch (error: any) {
-            console.error(error);
-            toast.error(error.message || `Failed to save ${objectName || metadata?.name}`);
+            setSaveError(error.message || `Failed to save ${objectName || metadata?.name}`);
         } finally {
+            savingRef.current = false;
             setIsSaving(false);
         }
     };
@@ -161,7 +209,7 @@ export function DynamicFormRenderer({
         );
     }
 
-    if (!metadata) return <p className="text-sm text-muted-foreground">No metadata found for {objectName}</p>;
+    if ((!externalMetadata && metadataError) || !metadata) return <ErrorState description="Form fields could not be loaded." onRetry={retryMetadata} />;
 
     // 2. Group fields for rendering
     const groups = Array.isArray(metadata.groups) && metadata.groups.length > 0
@@ -169,7 +217,9 @@ export function DynamicFormRenderer({
         : [{ id: 'default', name: 'General Information' }];
 
     return (
-        <form onSubmit={handleSubmit(onSubmit)}>
+        <form onSubmit={handleSubmit(onSubmit)} className="@container/record-form min-w-0" aria-busy={isSaving}>
+            {draft.dirty && <p role="status" className="mb-3 text-xs text-muted-foreground">Unsaved changes are kept while you navigate in this app. Refreshing or signing out clears them.</p>}
+            <fieldset disabled={isSaving} className="min-w-0">
             <div className="flex flex-col gap-8">
                 {groups.map((group: any) => {
                     const groupFields = group.id === 'default'
@@ -179,14 +229,14 @@ export function DynamicFormRenderer({
                     if (!Array.isArray(groupFields) || groupFields.length === 0) return null;
 
                     return (
-                        <div key={group.id}>
-                            <h3 className="text-base font-semibold text-foreground">{group.name}</h3>
+                        <div key={group.id} className="min-w-0">
+                            <h3 className="break-words text-base font-semibold text-foreground">{group.name}</h3>
                             <div className="mt-1 mb-4 h-px w-full bg-border" />
-                            <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
+                            <div className="grid min-w-0 grid-cols-1 gap-5 @min-[520px]/record-form:grid-cols-2">
                                 {groupFields.map((field: any) => (
                                     <div
                                         key={field.id}
-                                        className={field.type === 'TEXTAREA' ? 'col-span-1 sm:col-span-2' : 'col-span-1'}
+                                        className={field.type === 'TEXTAREA' ? 'min-w-0 col-span-1 @min-[520px]/record-form:col-span-2' : 'min-w-0 col-span-1'}
                                     >
                                         {fieldOverrides && fieldOverrides[field.key] ? (
                                             fieldOverrides[field.key]({ field, control, errors, setValue, watch })
@@ -196,7 +246,7 @@ export function DynamicFormRenderer({
                                                 control={control}
                                                 render={({ field: hookField }) => (
                                                     <MuiDynamicField
-                                                        field={field}
+                                                        field={{ ...field, required: field.isRequired ?? field.required }}
                                                         value={hookField.value}
                                                         onChange={hookField.onChange}
                                                         error={errors[field.key]?.message as string}
@@ -211,9 +261,10 @@ export function DynamicFormRenderer({
                     );
                 })}
 
-                <div className="flex justify-end gap-2 pt-2">
+                {saveError && <p role="alert" className="break-words text-sm text-destructive">{saveError}</p>}
+                <div className="flex flex-wrap justify-end gap-2 pt-2">
                     {onCancel && (
-                        <Button type="button" variant="outline" onClick={onCancel}>
+                        <Button type="button" variant="outline" onClick={() => { if (canDismiss()) onCancel(); }}>
                             Cancel
                         </Button>
                     )}
@@ -223,6 +274,7 @@ export function DynamicFormRenderer({
                     </Button>
                 </div>
             </div>
+            </fieldset>
         </form>
     );
 }

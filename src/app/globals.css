@@ -7,6 +7,9 @@
    once the MUI migration in later steps is complete).
    ============================================================ */
 :root {
+  --app-header-offset: 56px;
+  --page-gutter: 16px;
+  --section-gap: 24px;
   --background: #f7fbf2;
   --foreground: #181d18;
   --surface: #f7fbf2;
@@ -34,7 +37,7 @@
   --muted: #dee5d9;
   --muted-foreground: #424940;
 
-  --border: #727970;
+  --border: color-mix(in srgb, var(--foreground) 18%, var(--background));
   --input: #c1c9be;
 
   --shadow-color: #000000;
@@ -91,7 +94,7 @@
   --muted: #424940;
   --muted-foreground: #c1c9be;
 
-  --border: #8b9389;
+  --border: color-mix(in srgb, var(--foreground) 18%, var(--background));
   --input: #424940;
 
   --shadow-color: #000000;
@@ -149,7 +152,7 @@ html[data-color-theme="ocean"] {
   --muted: #dde6ec;
   --muted-foreground: #40484d;
 
-  --border: #6d7780;
+  --border: color-mix(in srgb, var(--foreground) 18%, var(--background));
   --input: #bcc7cf;
 
   --inverse-surface: #282e33;
@@ -188,7 +191,7 @@ html.dark[data-color-theme="ocean"] {
   --muted: #40484d;
   --muted-foreground: #bcc7cf;
 
-  --border: #7d8790;
+  --border: color-mix(in srgb, var(--foreground) 18%, var(--background));
   --input: #40484d;
 
   --inverse-surface: #dde3e8;
@@ -227,7 +230,7 @@ html[data-color-theme="sunset"] {
   --muted: #ece0d3;
   --muted-foreground: #4d4438;
 
-  --border: #837568;
+  --border: color-mix(in srgb, var(--foreground) 18%, var(--background));
   --input: #d5c7b8;
 
   --inverse-surface: #362f27;
@@ -266,7 +269,7 @@ html.dark[data-color-theme="sunset"] {
   --muted: #4d4438;
   --muted-foreground: #d5c7b8;
 
-  --border: #948573;
+  --border: color-mix(in srgb, var(--foreground) 18%, var(--background));
   --input: #4d4438;
 
   --inverse-surface: #ece1d5;
@@ -305,7 +308,7 @@ html[data-color-theme="grape"] {
   --muted: #e6e0ea;
   --muted-foreground: #48454b;
 
-  --border: #79757e;
+  --border: color-mix(in srgb, var(--foreground) 18%, var(--background));
   --input: #c9c4cd;
 
   --inverse-surface: #312f36;
@@ -344,7 +347,7 @@ html.dark[data-color-theme="grape"] {
   --muted: #48454b;
   --muted-foreground: #c9c4cd;
 
-  --border: #8a8590;
+  --border: color-mix(in srgb, var(--foreground) 18%, var(--background));
   --input: #48454b;
 
   --inverse-surface: #e2dce6;
@@ -417,6 +420,12 @@ html.dark[data-color-theme="grape"] {
   --color-accent-foreground: var(--accent-foreground);
 }
 
+@layer base {
+  *, ::before, ::after {
+    border-color: var(--border);
+  }
+}
+
 body {
   background-color: var(--background);
   color: var(--foreground);
@@ -460,4 +469,19 @@ body {
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
   }
+}
+
+/* Builder panels respond to their workspace width, after app navigation is deducted. */
+.builder-workspace { container: builder / inline-size; display: flex; flex-direction: column; min-width: 0; }
+.builder-workspace-body { display: flex; flex: 1; min-width: 0; min-height: 0; overflow: hidden; }
+.builder-panel { display: none; min-width: 0; min-height: 0; flex: 1; flex-direction: column; }
+.builder-panel[data-active="true"] { display: flex; }
+@container builder (min-width: 800px) {
+  .builder-workspace-body[data-layout="flow"] .builder-panel { display: flex; }
+  .builder-workspace-body[data-layout="flow"] .builder-library { flex: 0 0 320px; }
+}
+@container builder (min-width: 1120px) {
+  .builder-workspace-body[data-layout="form"] .builder-panel { display: flex; }
+  .builder-workspace-body[data-layout="form"] .builder-library { flex: 0 0 224px; }
+  .builder-workspace-body[data-layout="form"] .builder-inspector { flex: 0 0 288px; }
 }

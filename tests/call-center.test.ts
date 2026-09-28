@@ -66,6 +66,17 @@ describe("call center workspace", () => {
     expect(teamCall).toBeDefined();
   });
 
+  it("joins UUID telephony references to text CRM ids without casting core ids to UUID", async () => {
+    await getCallCenterWorkspaceForTenant(rep);
+    const callQueries = dbMocks.query.mock.calls.filter(call => sqlOf(call).includes('from "TelephonyCallLog"'));
+    expect(callQueries).toHaveLength(2);
+    for (const [sql] of callQueries) {
+      expect(sql).toContain('l.id = tcl."leadId"::text');
+      expect(sql).toContain('o.id = tcl."opportunityId"::text');
+      expect(sql).not.toContain('l.id::uuid');
+    }
+  });
+
   it("queries only missed/no-answer statuses for the missed-calls-today section", async () => {
     await getCallCenterWorkspaceForTenant(rep);
     const missedCallsCall = dbMocks.query.mock.calls.find((call) => sqlOf(call).includes("status in ('missed', 'no-answer')"));

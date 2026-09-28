@@ -1,5 +1,5 @@
 import { randomUUID } from "crypto";
-import { query, queryOne, execute } from "@/lib/db/query";
+import { query, queryOne, execute, queryAsSystem, queryOneAsSystem, executeAsSystem } from "@/lib/db/query";
 import { getEffectiveSecurityPolicy } from "@/lib/server/security-policy";
 
 const ABSOLUTE_SESSION_DAYS = 7;
@@ -45,6 +45,12 @@ export type SessionRow = {
 const COLUMNS =
   'id, "tenantId", "userId", "userAgent", "ipAddress", "isImpersonation", "impersonatedBy", reason, "createdAt", "lastActiveAt", "expiresAt", "revokedAt", "revokedBy", "revokedReason", "reviewedAt", "reviewedBy", "reviewNote"';
 
+// WP07 (F04): PRE_AUTH + CROSS_TENANT_ADMIN, disposition B -- this function's own two callers
+// are login-flow.ts (issueSessionForUser, pre-session by definition) and admin.ts's
+// impersonateTenantUser (a platform admin creating a session for a DIFFERENT tenant's user,
+// while the admin's own ambient context is their own null tenantId) -- neither has real ambient
+// tenant context for the tenant this session row is being created for. See
+// 25_AUDIT_REMEDIATION_PLAN.md "## WP07 pre-auth/system path inventory".
 export async function createUserSession(input: {
   userId: string;
   tenantId: string | null;
@@ -59,13 +65,15 @@ export async function createUserSession(input: {
   const hours = input.isImpersonation ? IMPERSONATION_SESSION_HOURS : ABSOLUTE_SESSION_DAYS * 24;
   const expiresAt = new Date(now.getTime() + hours * 60 * 60 * 1000).toISOString();
 
-  await execute(
+  await executeAsSystem(
     `insert into "UserSession" (id, "tenantId", "userId", "userAgent", "ipAddress", "isImpersonation", "impersonatedBy", reason, "createdAt", "lastActiveAt", "expiresAt")
      values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $9, $10)`,
     [id, input.tenantId, input.userId, input.userAgent ?? null, input.ipAddress ?? null, !!input.isImpersonation, input.impersonatedBy ?? null, input.reason ?? null, now.toISOString(), expiresAt],
   );
 
   if (!input.isImpersonation) {
+    // NOT converted -- getEffectiveSecurityPolicy is shared with many ordinary per-tenant
+    // callers (see plan doc open question); flagged rather than blanket-converted.
     const policy = await getEffectiveSecurityPolicy(input.tenantId);
     await enforceMaxConcurrentSessions(input.userId, policy.maxConcurrentSessions);
   }
@@ -76,9 +84,10 @@ export async function createUserSession(input: {
 // Oldest-first eviction: when a new session pushes the user over their policy's concurrent-
 // session limit, the LEAST recently active sessions are revoked, not the newest (the one that
 // was just created is definitionally the one the user is currently using).
+// WP07 (F04): private helper, only ever called from createUserSession above -- same disposition.
 async function enforceMaxConcurrentSessions(userId: string, maxConcurrentSessions: number) {
   if (!Number.isFinite(maxConcurrentSessions) || maxConcurrentSessions <= 0) return;
-  const active = await query<{ id: string }>(
+  const active = await queryAsSystem<{ id: string }>(
     `select id from "UserSession"
      where "userId" = $1 and "revokedAt" is null and "expiresAt" > now() and "isImpersonation" = false
      order by "lastActiveAt" desc`,
@@ -86,7 +95,7 @@ async function enforceMaxConcurrentSessions(userId: string, maxConcurrentSession
   );
   const toRevoke = active.slice(maxConcurrentSessions).map((row) => row.id);
   if (toRevoke.length === 0) return;
-  await execute(
+  await executeAsSystem(
     `update "UserSession" set "revokedAt" = $1, "revokedBy" = 'system', "revokedReason" = 'MAX_CONCURRENT_SESSIONS' where id = any($2::text[])`,
     [new Date().toISOString(), toRevoke],
   );
@@ -98,8 +107,12 @@ export type SessionValidation = { valid: true; row: SessionRow } | { valid: fals
 // point for revocation and both timeout types. Idle timeout is policy-driven and only applied
 // when the policy's own enforceSessionTimeout is on; absolute timeout is the row's own
 // expiresAt, always enforced (it mirrors the JWT's own expiry, so this rarely fires first).
+// WP07 (F04): PRE_AUTH, disposition B -- called from resolveUserFromPayload BEFORE
+// enterTenantContext runs on every single authenticated request (it's part of discovering
+// whether this request's session is even valid), plus once more, redundantly-but-harmlessly,
+// from the notifications/SSE route after context is already set for the same session/tenant.
 export async function validateSession(sessionId: string): Promise<SessionValidation> {
-  const row = await queryOne<SessionRow>(`select ${COLUMNS} from "UserSession" where id = $1 limit 1`, [sessionId]);
+  const row = await queryOneAsSystem<SessionRow>(`select ${COLUMNS} from "UserSession" where id = $1 limit 1`, [sessionId]);
   if (!row) return { valid: false, reason: "NOT_FOUND" };
   if (row.revokedAt) return { valid: false, reason: "REVOKED" };
   if (new Date(row.expiresAt).getTime() <= Date.now()) return { valid: false, reason: "EXPIRED" };
@@ -115,9 +128,11 @@ export async function validateSession(sessionId: string): Promise<SessionValidat
   return { valid: true, row };
 }
 
+// WP07 (F04): PRE_AUTH, disposition B -- same call-timing reasoning as validateSession above
+// (called from auth.ts right after it, before context is entered).
 export async function touchSessionIfStale(sessionId: string, lastActiveAt: string) {
   if (Date.now() - new Date(lastActiveAt).getTime() < TOUCH_DEBOUNCE_MS) return;
-  await execute(`update "UserSession" set "lastActiveAt" = $1 where id = $2 and "revokedAt" is null`, [new Date().toISOString(), sessionId]).catch(() => undefined);
+  await executeAsSystem(`update "UserSession" set "lastActiveAt" = $1 where id = $2 and "revokedAt" is null`, [new Date().toISOString(), sessionId]).catch(() => undefined);
 }
 
 export async function listSessionsForUser(userId: string) {
@@ -174,8 +189,10 @@ export async function revokeSessionAsAdmin(tenantId: string, userId: string, ses
 // there's no "current session" to spare here: a reset performed via a token (out-of-band,
 // possibly from a browser that never had a session at all) should invalidate every existing
 // login, on the assumption the old password may have been compromised.
+// WP07 (F04): PRE_AUTH, disposition B -- its one caller, resetPasswordWithToken, runs entirely
+// pre-session (a token-based reset, not a logged-in user changing their own password).
 export async function revokeAllSessionsForUser(userId: string, reason: string) {
-  await execute(
+  await executeAsSystem(
     `update "UserSession" set "revokedAt" = $1, "revokedBy" = $2, "revokedReason" = $3
      where "userId" = $2 and "revokedAt" is null`,
     [new Date().toISOString(), userId, reason],
@@ -198,11 +215,13 @@ export async function listLoginHistoryForUser(userId: string, limit = 20) {
 // a completed impersonation session beyond it appearing in the general audit log").
 // ---------------------------------------------------------------------------------------------
 
+// WP07 (F04): CROSS_TENANT_ADMIN, disposition B -- reads impersonation sessions across every
+// tenant at once (platform-admin governance view), joined against "Tenant" with no filter.
 export async function listImpersonationSessions(opts: { reviewed?: boolean; limit?: number } = {}) {
   const clauses = ['"isImpersonation" = true'];
   if (opts.reviewed === true) clauses.push('"reviewedAt" is not null');
   if (opts.reviewed === false) clauses.push('"reviewedAt" is null');
-  return query<SessionRow & { userName: string; userEmail: string; impersonatedByName: string | null; tenantName: string | null }>(
+  return queryAsSystem<SessionRow & { userName: string; userEmail: string; impersonatedByName: string | null; tenantName: string | null }>(
     `select s.${COLUMNS.split(", ").join(', s.')}, u.name as "userName", u.email as "userEmail", admin.name as "impersonatedByName", t.name as "tenantName"
      from "UserSession" s
      join "User" u on u.id = s."userId"
@@ -215,8 +234,10 @@ export async function listImpersonationSessions(opts: { reviewed?: boolean; limi
   );
 }
 
+// WP07 (F04): CROSS_TENANT_ADMIN, disposition B -- reachable only from the platform-admin
+// impersonation-session review route, acting on a session possibly belonging to any tenant.
 export async function markImpersonationSessionReviewed(sessionId: string, reviewedBy: string, reviewNote: string | null) {
-  const updated = await queryOne<{ id: string }>(
+  const updated = await queryOneAsSystem<{ id: string }>(
     `update "UserSession" set "reviewedAt" = $1, "reviewedBy" = $2, "reviewNote" = $3
      where id = $4 and "isImpersonation" = true
      returning id`,
@@ -231,9 +252,12 @@ export async function markImpersonationSessionReviewed(sessionId: string, review
 // session's own time window and its impersonatedBy tag (see leads-postgres.ts's createAuditLog
 // change), not just "any action by this user in this time range," which could double-count
 // actions the user took organically right before/after the impersonated window.
+// WP07 (F04): CROSS_TENANT_ADMIN, disposition B -- its one caller is the platform-admin
+// impersonation-sessions list route; the userId here can belong to any tenant and the admin's
+// own ambient context (typically null tenantId) could never legitimately scope this lookup.
 export async function countAuditActionsDuringSession(session: { userId: string; impersonatedBy: string | null; createdAt: string; revokedAt: string | null; expiresAt: string }) {
   const endTime = session.revokedAt ?? session.expiresAt;
-  const row = await queryOne<{ count: string }>(
+  const row = await queryOneAsSystem<{ count: string }>(
     `select count(*) as count from "AuditLog"
      where "userId" = $1 and "createdAt" >= $2 and "createdAt" <= $3 and metadata->>'impersonatedBy' = $4`,
     [session.userId, session.createdAt, endTime, session.impersonatedBy],

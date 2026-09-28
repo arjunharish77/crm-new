@@ -48,6 +48,13 @@ describe("apiFetch request cancellation", () => {
     expect(result).toEqual({ ok: true });
   });
 
+  it("returns a successful null strategy instead of throwing while building debug metadata", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response("null", {
+      status: 200, headers: { "content-type": "application/json" },
+    })));
+    await expect(apiFetch("/next-best-action/strategies/LEAD")).resolves.toBeNull();
+  });
+
   it("forwards a caller-supplied AbortSignal to fetch's own signal", async () => {
     const fetchMock = vi.fn(async (_url: string, init?: RequestInit) => {
       expect(init?.signal).toBeInstanceOf(AbortSignal);
@@ -100,5 +107,27 @@ describe("apiFetch request cancellation", () => {
     controller.abort();
 
     await expect(apiFetch("/leads", { signal: controller.signal })).rejects.toMatchObject({ name: "AbortError" });
+  });
+
+  // F22 fix (WP12): clearTimeout previously only ran on the SUCCESS path, so any REJECTION (a
+  // real network failure, or the caller's own cancellation) left the 30s timeout timer running
+  // uncleared -- harmless for the timeout's own abort (the timer already fired), but a real,
+  // accumulating leak for every other failure. `finally` now clears it unconditionally.
+  it("clears the 30s timeout timer on a real network-error rejection, not just on success", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new TypeError("Failed to fetch")));
+
+    await expect(apiFetch("/leads")).rejects.toThrow();
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it("clears the 30s timeout timer when the caller cancels via an external signal", async () => {
+    vi.stubGlobal("fetch", respondingToSignal());
+    const controller = new AbortController();
+
+    const promise = apiFetch("/leads", { signal: controller.signal });
+    controller.abort();
+
+    await expect(promise).rejects.toMatchObject({ name: "AbortError" });
+    expect(vi.getTimerCount()).toBe(0);
   });
 });

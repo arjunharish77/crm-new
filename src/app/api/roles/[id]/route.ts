@@ -1,14 +1,14 @@
 import { NextResponse } from "next/server";
-import { requireInternalUser } from "@/lib/server/auth";
+import { requireTenantAdmin } from "@/lib/server/auth";
 import { deleteTenantRole, updateTenantRole } from "@/lib/server/admin";
-import { forbidden, serverError, unauthorized } from "@/lib/server/http";
+import { badRequest, forbidden, serverError, unauthorized } from "@/lib/server/http";
 
 export async function PATCH(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const user = await requireInternalUser(request);
+    const user = await requireTenantAdmin(request);
 
     if (!user.tenantId) {
       return forbidden("Tenant context required");
@@ -21,7 +21,8 @@ export async function PATCH(
   } catch (error) {
     if (error instanceof Error && error.message === "UNAUTHORIZED") return unauthorized();
     if (error instanceof Error && error.message === "FORBIDDEN") return forbidden();
-    return serverError("Failed to update role");
+    if (error instanceof Error && error.message === "PERMISSION_TEMPLATE_NOT_FOUND_FOR_TENANT") return badRequest("Selected permission template was not found for this workspace");
+    return serverError("Failed to update role", error);
   }
 }
 
@@ -30,7 +31,7 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const user = await requireInternalUser(request);
+    const user = await requireTenantAdmin(request);
 
     if (!user.tenantId) {
       return forbidden("Tenant context required");
@@ -42,6 +43,6 @@ export async function DELETE(
   } catch (error) {
     if (error instanceof Error && error.message === "UNAUTHORIZED") return unauthorized();
     if (error instanceof Error && error.message === "FORBIDDEN") return forbidden();
-    return serverError("Failed to delete role");
+    return serverError("Failed to delete role", error);
   }
 }

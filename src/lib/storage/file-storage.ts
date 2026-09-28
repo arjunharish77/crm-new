@@ -45,15 +45,9 @@ function checksum(data: Buffer) {
 
 export type ScanResult = { clean: boolean; engine: string; scannedAt: string };
 
-// Virus-scan hook (gap checklist: "virus-scan hook placeholder"). Genuinely a placeholder --
-// there is no antivirus engine wired up (confirmed by audit: every file this app ever writes
-// is app-generated -- CSV exports, PDF invoices, GDPR JSON dumps, rendered report CSVs -- there
-// is no end-user file-upload surface anywhere in this codebase for a malicious upload to even
-// reach today). Wired into writePrivateFile itself, the one choke point every file write
-// already goes through, specifically so a future upload feature gets real scanning for free by
-// routing through this function rather than needing its own integration. Always reports clean
-// today; swap the body for a real engine call (ClamAV daemon, a cloud AV API) without touching
-// any of this function's callers.
+// Central scan hook used by generated files and user uploads. No antivirus engine is
+// configured: this placeholder does not inspect file content. Upload surfaces must not
+// represent its result as a real malware scan. Replace it with an actual engine integration.
 export async function scanFileForThreats(_data: Buffer, _filename?: string | null): Promise<ScanResult> {
   return { clean: true, engine: "none-configured", scannedAt: new Date().toISOString() };
 }

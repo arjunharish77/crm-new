@@ -52,14 +52,15 @@ type InviteUserFormValues = z.infer<typeof formSchema>;
 
 interface FieldProps {
     label: string;
+    htmlFor?: string;
     error?: string;
     children: ReactNode;
 }
 
-function Field({ label, error, children }: FieldProps) {
+function Field({ label, htmlFor, error, children }: FieldProps) {
     return (
         <div className="space-y-2">
-            <Label>{label}</Label>
+            <Label htmlFor={htmlFor}>{label}</Label>
             {children}
             {error ? <p className="text-xs text-destructive">{error}</p> : null}
         </div>
@@ -167,8 +168,8 @@ export function InviteUserDialog({
                     name="name"
                     control={control}
                     render={({ field }) => (
-                        <Field label="Full Name" error={errors.name?.message}>
-                            <Input {...field} placeholder="John Doe" />
+                        <Field htmlFor="invite-full-name" label="Full Name" error={errors.name?.message}>
+                            <Input id="invite-full-name" {...field} placeholder="John Doe" />
                         </Field>
                     )}
                 />
@@ -177,8 +178,8 @@ export function InviteUserDialog({
                     name="email"
                     control={control}
                     render={({ field }) => (
-                        <Field label="Email" error={errors.email?.message}>
-                            <Input {...field} type="email" placeholder="john@example.com" />
+                        <Field htmlFor="invite-email" label="Email" error={errors.email?.message}>
+                            <Input id="invite-email" {...field} type="email" placeholder="john@example.com" />
                         </Field>
                     )}
                 />
@@ -187,8 +188,8 @@ export function InviteUserDialog({
                     name="password"
                     control={control}
                     render={({ field }) => (
-                        <Field label="Temporary Password" error={errors.password?.message}>
-                            <Input {...field} type="password" placeholder="Min. 6 characters" />
+                        <Field htmlFor="invite-temporary-password" label="Temporary Password" error={errors.password?.message}>
+                            <Input id="invite-temporary-password" {...field} type="password" placeholder="Min. 6 characters" />
                         </Field>
                     )}
                 />
@@ -197,9 +198,9 @@ export function InviteUserDialog({
                     name="roleId"
                     control={control}
                     render={({ field }) => (
-                        <Field label="Role" error={errors.roleId?.message}>
+                        <Field htmlFor="invite-role" label="Role" error={errors.roleId?.message}>
                             <Select value={field.value} onValueChange={field.onChange}>
-                                <SelectTrigger>
+                                <SelectTrigger id="invite-role" className="w-full">
                                     <SelectValue placeholder="Select role" />
                                 </SelectTrigger>
                                 <SelectContent>
@@ -218,12 +219,12 @@ export function InviteUserDialog({
                     name="permissionTemplateId"
                     control={control}
                     render={({ field }) => (
-                        <Field label="Permission Template Override">
+                        <Field htmlFor="invite-permission-template-override" label="Permission Template Override">
                             <Select
                                 value={field.value || NONE_VALUE}
                                 onValueChange={(value) => field.onChange(value === NONE_VALUE ? "" : value)}
                             >
-                                <SelectTrigger>
+                                <SelectTrigger id="invite-permission-template-override" className="w-full">
                                     <SelectValue />
                                 </SelectTrigger>
                                 <SelectContent>
@@ -239,17 +240,17 @@ export function InviteUserDialog({
                     )}
                 />
 
-                <div className="grid gap-4 sm:grid-cols-2">
+                <div className="grid min-w-0 gap-4 sm:grid-cols-2">
                     <Controller
                         name="teamId"
                         control={control}
                         render={({ field }) => (
-                            <Field label="Team">
+                            <Field htmlFor="invite-team" label="Team">
                                 <Select
                                     value={field.value || NONE_VALUE}
                                     onValueChange={(value) => field.onChange(value === NONE_VALUE ? "" : value)}
                                 >
-                                    <SelectTrigger>
+                                    <SelectTrigger id="invite-team" className="w-full">
                                         <SelectValue />
                                     </SelectTrigger>
                                     <SelectContent>
@@ -268,12 +269,12 @@ export function InviteUserDialog({
                         name="managerId"
                         control={control}
                         render={({ field }) => (
-                            <Field label="Manager">
+                            <Field htmlFor="invite-manager" label="Manager">
                                 <Select
                                     value={field.value || NONE_VALUE}
                                     onValueChange={(value) => field.onChange(value === NONE_VALUE ? "" : value)}
                                 >
-                                    <SelectTrigger>
+                                    <SelectTrigger id="invite-manager" className="w-full">
                                         <SelectValue />
                                     </SelectTrigger>
                                     <SelectContent>

@@ -3,6 +3,8 @@
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Copy, KeyRound, Plus, RotateCw, Trash2 } from "lucide-react";
+import { PageHeader } from "@/components/layout/page-header";
+import { ErrorState } from "@/components/common/error-state";
 import { apiFetch } from "@/lib/api";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -61,6 +63,10 @@ function emptyScopes(): Record<string, ModuleScope> {
 export default function ApiKeysSettingsPage() {
     const apiAccessEnabled = useFeature("apiAccessEnabled");
     const [keys, setKeys] = useState<ApiKeyRow[]>([]);
+    const [loadError, setLoadError] = useState(false);
+    const [createError, setCreateError] = useState("");
+    const [actionError, setActionError] = useState("");
+    const [busy, setBusy] = useState(false);
     const [loading, setLoading] = useState(true);
     const [isCreating, setIsCreating] = useState(false);
     const [name, setName] = useState("");
@@ -77,10 +83,11 @@ export default function ApiKeysSettingsPage() {
             setLoading(false);
             return;
         }
+        setLoadError(false);
         setLoading(true);
         apiFetch<ApiKeyRow[]>("/settings/api-keys")
             .then((data) => setKeys(Array.isArray(data) ? data : []))
-            .catch(() => toast.error("Failed to load API keys"))
+            .catch(() => setLoadError(true))
             .finally(() => setLoading(false));
     };
 
@@ -95,6 +102,10 @@ export default function ApiKeysSettingsPage() {
     };
 
     const handleCreate = async () => {
+        if (saving) return;
+        setCreateError("");
+        const rate = Number(rateLimitPerMinute);
+        if (!Number.isInteger(rate) || rate < 1) { setCreateError("Rate limit must be a positive whole number."); return; }
         setSaving(true);
         try {
             const ipAllowlist = ipAllowlistText
@@ -107,7 +118,7 @@ export default function ApiKeysSettingsPage() {
                     name,
                     permissions: buildPermissions(scopes),
                     ipAllowlist,
-                    rateLimitPerMinute: Number(rateLimitPerMinute) || 60,
+                    rateLimitPerMinute: rate,
                     expiresAt: expiresAt ? new Date(expiresAt).toISOString() : null,
                 }),
             });
@@ -117,13 +128,16 @@ export default function ApiKeysSettingsPage() {
             setRevealedSecret({ keyId: created.id, secret: created.secret });
             load();
         } catch (error: any) {
-            toast.error(error?.message || "Failed to create API key");
+            setCreateError(error?.message || "Failed to create API key");
         } finally {
             setSaving(false);
         }
     };
 
     const handleRotate = async (key: ApiKeyRow) => {
+        if (busy) return;
+        setBusy(true);
+        setActionError("");
         try {
             const rotated = await apiFetch<(ApiKeyRow & { secret: string }) | { pendingApproval: true; requestId: string }>(`/settings/api-keys/${key.id}/rotate`, { method: "POST" });
             if ("pendingApproval" in rotated) {
@@ -134,25 +148,27 @@ export default function ApiKeysSettingsPage() {
             setRevealedSecret({ keyId: rotated.id, secret: rotated.secret });
             load();
         } catch (error: any) {
-            toast.error(error?.message || "Failed to rotate API key");
-        }
+            setActionError(error?.message || "Failed to rotate API key");
+        } finally { setBusy(false); }
     };
 
     const handleRevoke = async () => {
-        if (!revokeTarget) return;
+        if (!revokeTarget || busy) return;
+        setBusy(true);
+        setActionError("");
         try {
             await apiFetch(`/settings/api-keys/${revokeTarget.id}`, { method: "DELETE" });
             toast.success("API key revoked");
             setRevokeTarget(null);
             load();
         } catch (error: any) {
-            toast.error(error?.message || "Failed to revoke API key");
-        }
+            setActionError(error?.message || "Failed to revoke API key");
+        } finally { setBusy(false); }
     };
 
     if (!apiAccessEnabled) {
         return (
-            <div className="space-y-4">
+            <div className="min-w-0 space-y-4">
                 <div>
                     <h1 className="text-lg font-bold">API Keys</h1>
                     <p className="text-sm text-muted-foreground">Manage credentials for external systems to call this workspace&apos;s API.</p>
@@ -166,33 +182,24 @@ export default function ApiKeysSettingsPage() {
     }
 
     return (
-        <div className="space-y-4">
-            <div className="flex items-start justify-between gap-3">
-                <div>
-                    <h1 className="text-lg font-bold">API Keys</h1>
-                    <p className="text-sm text-muted-foreground">
-                        Credentials external systems use to call <code>/api/v1/*</code>. Each key is scoped to specific modules, can be
-                        IP-restricted and rate-limited, and can be rotated or revoked at any time.
-                    </p>
-                </div>
-                <Button onClick={() => setIsCreating(true)}>
-                    <Plus className="size-4" />
-                    New API Key
-                </Button>
-            </div>
+        <div className="min-w-0 space-y-4">
+            <PageHeader title="API Keys" description="Manage scoped credentials for external systems, including access, rate limits and expiry." actions={
+                <Button disabled={loading || loadError || busy} onClick={() => { setCreateError(""); setIsCreating(true); }}><Plus className="size-4" />New API Key</Button>
+            } />
+            {actionError && !revokeTarget && <p role="alert" className="break-words text-sm text-destructive">{actionError}</p>}
 
             {loading ? (
                 <p className="text-sm text-muted-foreground">Loading...</p>
-            ) : keys.length === 0 ? (
+            ) : loadError ? <ErrorState description="API keys could not be loaded." onRetry={load} /> : keys.length === 0 ? (
                 <Card className="p-6 text-center text-sm text-muted-foreground">No API keys yet.</Card>
             ) : (
                 <Card className="overflow-hidden py-0">
                     <div className="divide-y">
                         {keys.map((key) => (
                             <div key={key.id} className="flex flex-wrap items-center justify-between gap-3 p-3">
-                                <div className="min-w-[12rem]">
-                                    <div className="flex items-center gap-2">
-                                        <p className="text-sm font-medium">{key.name}</p>
+                                <div className="min-w-0 max-w-full flex-1 basis-48 break-all">
+                                    <div className="flex min-w-0 flex-wrap items-center gap-2">
+                                        <p className="min-w-0 max-w-full break-all text-sm font-medium">{key.name}</p>
                                         <Badge variant={key.isActive ? "outline" : "secondary"}>{key.isActive ? "Active" : "Revoked"}</Badge>
                                         {key.expiresAt && new Date(key.expiresAt).getTime() <= Date.now() && (
                                             <Badge variant="destructive">Expired</Badge>
@@ -217,7 +224,7 @@ export default function ApiKeysSettingsPage() {
                                 </div>
 
                                 <div className="flex items-center gap-1.5">
-                                    <Button variant="outline" size="sm" onClick={() => handleRotate(key)} disabled={!key.isActive}>
+                                    <Button variant="outline" size="sm" onClick={() => handleRotate(key)} disabled={busy || !key.isActive}>
                                         <RotateCw className="size-3.5" />
                                         Rotate
                                     </Button>
@@ -225,8 +232,8 @@ export default function ApiKeysSettingsPage() {
                                         variant="outline"
                                         size="sm"
                                         className="text-destructive hover:text-destructive"
-                                        onClick={() => setRevokeTarget(key)}
-                                        disabled={!key.isActive}
+                                        onClick={() => { setActionError(""); setRevokeTarget(key); }}
+                                        disabled={busy || !key.isActive}
                                     >
                                         <Trash2 className="size-3.5" />
                                         Revoke
@@ -240,32 +247,33 @@ export default function ApiKeysSettingsPage() {
 
             <StandardDialog
                 open={isCreating}
-                onClose={() => setIsCreating(false)}
+                onClose={() => { if (!saving) setIsCreating(false); }}
                 title="New API Key"
                 maxWidth="sm"
                 actions={
                     <>
-                        <Button variant="outline" onClick={() => setIsCreating(false)}>Cancel</Button>
+                        <Button disabled={saving} variant="outline" onClick={() => setIsCreating(false)}>Cancel</Button>
                         <Button onClick={handleCreate} disabled={!name.trim() || saving}>{saving ? "Creating..." : "Create Key"}</Button>
                     </>
                 }
             >
-                <div className="space-y-4 py-2">
+                <div className="min-w-0 space-y-4 py-2">
+                    {createError && <p role="alert" className="break-words text-sm text-destructive">{createError}</p>}
                     <div className="space-y-1.5">
-                        <Label>Name</Label>
-                        <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Marketing automation script" />
+                        <Label htmlFor="key-name">Name</Label>
+                        <Input id="key-name" disabled={saving} value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Marketing automation script" />
                     </div>
 
                     <div className="space-y-1.5">
                         <Label>Module Access</Label>
                         {SCOPED_MODULES.map((m) => (
-                            <div key={m.key} className="flex items-center justify-between gap-2">
+                            <div key={m.key} className="flex min-w-0 flex-wrap items-center justify-between gap-2">
                                 <span className="text-sm">{m.label}</span>
-                                <Select
+                                <Select disabled={saving}
                                     value={scopes[m.key]}
                                     onValueChange={(value) => setScopes((current) => ({ ...current, [m.key]: value as ModuleScope }))}
                                 >
-                                    <SelectTrigger className="w-40"><SelectValue /></SelectTrigger>
+                                    <SelectTrigger aria-label={`${m.label} access`} className="w-full min-w-0 sm:w-40"><SelectValue /></SelectTrigger>
                                     <SelectContent>
                                         <SelectItem value="none">No access</SelectItem>
                                         <SelectItem value="read">Read only</SelectItem>
@@ -277,8 +285,8 @@ export default function ApiKeysSettingsPage() {
                     </div>
 
                     <div className="space-y-1.5">
-                        <Label>IP Allowlist (optional)</Label>
-                        <Textarea
+                        <Label htmlFor="key-ips">IP Allowlist (optional)</Label>
+                        <Textarea id="key-ips" disabled={saving}
                             value={ipAllowlistText}
                             onChange={(e) => setIpAllowlistText(e.target.value)}
                             placeholder="One IP per line -- leave blank to allow any IP"
@@ -286,14 +294,14 @@ export default function ApiKeysSettingsPage() {
                         />
                     </div>
 
-                    <div className="grid grid-cols-2 gap-3">
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                         <div className="space-y-1.5">
-                            <Label>Rate Limit (per minute)</Label>
-                            <Input type="number" min={1} value={rateLimitPerMinute} onChange={(e) => setRateLimitPerMinute(e.target.value)} />
+                            <Label htmlFor="key-rate">Rate Limit (per minute)</Label>
+                            <Input id="key-rate" disabled={saving} type="number" min={1} value={rateLimitPerMinute} onChange={(e) => setRateLimitPerMinute(e.target.value)} />
                         </div>
                         <div className="space-y-1.5">
-                            <Label>Expires (optional)</Label>
-                            <Input type="date" value={expiresAt} onChange={(e) => setExpiresAt(e.target.value)} />
+                            <Label htmlFor="key-expiry">Expires (optional)</Label>
+                            <Input id="key-expiry" disabled={saving} type="date" value={expiresAt} onChange={(e) => setExpiresAt(e.target.value)} />
                         </div>
                     </div>
                 </div>
@@ -302,7 +310,7 @@ export default function ApiKeysSettingsPage() {
             <StandardDialog
                 open={!!revealedSecret}
                 onClose={() => setRevealedSecret(null)}
-                title="API Key Created"
+                title="API Key Secret"
                 maxWidth="sm"
                 actions={<Button onClick={() => setRevealedSecret(null)}>Done</Button>}
             >
@@ -313,18 +321,18 @@ export default function ApiKeysSettingsPage() {
                     </Alert>
                     <div className="space-y-1.5">
                         <Label>Key ID</Label>
-                        <div className="flex items-center gap-2">
-                            <code className="flex-1 truncate rounded-md border bg-muted px-2 py-1.5 text-xs">{revealedSecret?.keyId}</code>
-                            <Button variant="outline" size="icon-sm" onClick={() => revealedSecret && navigator.clipboard.writeText(revealedSecret.keyId)}>
+                        <div className="flex min-w-0 flex-wrap items-center gap-2">
+                            <code className="min-w-0 flex-1 break-all rounded-md border bg-muted px-2 py-1.5 text-xs">{revealedSecret?.keyId}</code>
+                            <Button aria-label="Copy key ID" variant="outline" size="icon-sm" onClick={() => revealedSecret && navigator.clipboard.writeText(revealedSecret.keyId).catch(() => toast.error("Copy failed. Select and copy the key ID manually."))}>
                                 <Copy className="size-3.5" />
                             </Button>
                         </div>
                     </div>
                     <div className="space-y-1.5">
                         <Label>Secret</Label>
-                        <div className="flex items-center gap-2">
-                            <code className="flex-1 truncate rounded-md border bg-muted px-2 py-1.5 text-xs">{revealedSecret?.secret}</code>
-                            <Button variant="outline" size="icon-sm" onClick={() => revealedSecret && navigator.clipboard.writeText(revealedSecret.secret)}>
+                        <div className="flex min-w-0 flex-wrap items-center gap-2">
+                            <code className="min-w-0 flex-1 break-all rounded-md border bg-muted px-2 py-1.5 text-xs">{revealedSecret?.secret}</code>
+                            <Button aria-label="Copy secret" variant="outline" size="icon-sm" onClick={() => revealedSecret && navigator.clipboard.writeText(revealedSecret.secret).catch(() => toast.error("Copy failed. Select and copy the secret manually."))}>
                                 <Copy className="size-3.5" />
                             </Button>
                         </div>
@@ -340,17 +348,18 @@ export default function ApiKeysSettingsPage() {
 
             <StandardDialog
                 open={!!revokeTarget}
-                onClose={() => setRevokeTarget(null)}
+                onClose={() => { if (!busy) setRevokeTarget(null); }}
                 title="Revoke API Key"
                 maxWidth="sm"
                 actions={
                     <>
-                        <Button variant="outline" onClick={() => setRevokeTarget(null)}>Cancel</Button>
-                        <Button variant="destructive" onClick={handleRevoke}>Revoke</Button>
+                        <Button disabled={busy} variant="outline" onClick={() => setRevokeTarget(null)}>Cancel</Button>
+                        <Button disabled={busy} variant="destructive" onClick={handleRevoke}>{busy ? "Revoking…" : "Revoke"}</Button>
                     </>
                 }
             >
-                <p className="py-2 text-sm text-muted-foreground">
+                {actionError && <p role="alert" className="break-words text-sm text-destructive">{actionError}</p>}
+                <p className="break-words py-2 text-sm text-muted-foreground">
                     Revoking &quot;{revokeTarget?.name}&quot; immediately blocks any further requests using it. This can&apos;t be undone --
                     a new key would need to be created instead.
                 </p>

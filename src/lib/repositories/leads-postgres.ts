@@ -1,5 +1,7 @@
-import { randomUUID } from "crypto";
-import { execute, query, queryOne } from "@/lib/db/query";
+import type { CreateUnitOfWork } from "./create-unit-of-work";
+import { randomUUID, createHash } from "crypto";
+import { execute, query, queryOne, type Queryable } from "@/lib/db/query";
+import { withTransaction } from "@/lib/db/transaction";
 import { runAutomationsForEvent } from "@/lib/repositories/automations-postgres";
 import { distributeRecord } from "@/lib/server/distribution-engine";
 import { refreshNextBestActionsForRecord } from "@/lib/server/next-best-action";
@@ -7,15 +9,24 @@ import { enqueueWebhookEvent } from "@/lib/server/webhook-outbox";
 import { enqueueAppEvent } from "@/lib/server/marketplace-events";
 import { checkRateLimit } from "@/lib/server/rate-limit";
 import { invalidateReportRollupsForTenant } from "@/lib/server/report-rollups";
-import { applyFilterCondition, buildGroupedFilterClause, type FilterValueKind } from "@/lib/query-filters";
+import { applyFilterCondition, buildGroupedFilterClause, type FilterColumnEntry, type FilterValueKind } from "@/lib/query-filters";
 import { substituteUserTokens } from "@/lib/server/user-token-filters";
+import { maskFieldsForUser, sanitizeWritePayload } from "@/lib/server/field-permissions";
+import { applyRecordScopeClause } from "@/lib/server/record-scope";
 
 type TenantUser = {
+  apiKeyId?: string;
   id: string;
   tenantId: string | null;
   role?: { permissions?: any } | string | null;
+  permissionTemplates?: any[] | null;
+  teamId?: string | null;
   isImpersonating?: boolean;
   impersonatedBy?: string | null;
+  // WP04 fix: see record-scope.ts's ScopedUser -- lets a marketplace-app actor's OWN/TEAM check
+  // run against a designated internal user without changing what `id` itself means for audit
+  // attribution.
+  recordScopeActorId?: string | null;
 };
 
 type LeadFilterCondition = {
@@ -31,8 +42,17 @@ type LeadFilterInput =
       conditions?: LeadFilterCondition[];
     };
 
-const LEAD_COLUMNS = 'id, name, email, phone, company, source, status, score, tags, "createdBy", "createdAt", "updatedAt", "ownerId"';
-const LEAD_FILTER_COLUMNS = new Map<string, { column: string; kind: FilterValueKind }>([
+const LEAD_COLUMNS = '"duplicateWarnings", id, name, email, phone, company, source, status, score, tags, "createdBy", "createdAt", "updatedAt", "ownerId"';
+
+// WP09 (F12): predictive-score fields compile as an inline `id in (select ...)` subquery against
+// "RecordScore" (see the `subquery` descriptor on FilterColumnEntry in query-filters.ts) so they
+// participate in the same AND/OR group-logic tree as every other field, instead of being
+// resolved into a record-id list beforehand and ANDed onto the whole where clause -- the fix for
+// the audit's own example of a top-level OR (source = web OR predictiveScoreBand = HOT) silently
+// becoming an AND.
+const RECORD_SCORE_SUBQUERY = { table: '"RecordScore"', matchColumn: '"recordId"', recordType: "LEAD" };
+
+const LEAD_FILTER_COLUMNS = new Map<string, FilterColumnEntry>([
   ["id", { column: "id", kind: "text" }],
   ["name", { column: "name", kind: "text" }],
   ["email", { column: "email", kind: "text" }],
@@ -46,72 +66,28 @@ const LEAD_FILTER_COLUMNS = new Map<string, { column: string; kind: FilterValueK
   ["createdAt", { column: "createdAt", kind: "date" }],
   ["updatedAt", { column: "updatedAt", kind: "date" }],
   ["tags", { column: "tags", kind: "tags" }],
+  ["predictiveScoreBand", { column: "scoreBand", kind: "select", subquery: RECORD_SCORE_SUBQUERY }],
+  ["predictiveConfidence", { column: "confidence", kind: "number", subquery: RECORD_SCORE_SUBQUERY }],
+  ["predictiveConversionProbability", { column: "conversionProbability", kind: "number", subquery: RECORD_SCORE_SUBQUERY }],
+  ["predictiveWinProbability", { column: "winProbability", kind: "number", subquery: RECORD_SCORE_SUBQUERY }],
+  ["predictiveStallRisk", { column: "stallRisk", kind: "number", subquery: RECORD_SCORE_SUBQUERY }],
+  ["predictiveExpectedResponseLikelihood", { column: "expectedResponseLikelihood", kind: "number", subquery: RECORD_SCORE_SUBQUERY }],
+  ["predictiveDuplicateRisk", { column: "duplicateRisk", kind: "number", subquery: RECORD_SCORE_SUBQUERY }],
+  ["predictiveStaleRisk", { column: "staleRisk", kind: "number", subquery: RECORD_SCORE_SUBQUERY }],
 ]);
-
-const PREDICTIVE_SCORE_FILTER_FIELDS = new Set([
-  "predictiveScoreBand",
-  "predictiveConfidence",
-  "predictiveConversionProbability",
-  "predictiveWinProbability",
-  "predictiveStallRisk",
-  "predictiveExpectedResponseLikelihood",
-  "predictiveDuplicateRisk",
-  "predictiveStaleRisk",
-]);
-
-const SCORE_FIELD_TO_COLUMN = new Map<string, { column: string; kind: FilterValueKind }>([
-  ["predictiveScoreBand", { column: "scoreBand", kind: "select" }],
-  ["predictiveConfidence", { column: "confidence", kind: "number" }],
-  ["predictiveConversionProbability", { column: "conversionProbability", kind: "number" }],
-  ["predictiveWinProbability", { column: "winProbability", kind: "number" }],
-  ["predictiveStallRisk", { column: "stallRisk", kind: "number" }],
-  ["predictiveExpectedResponseLikelihood", { column: "expectedResponseLikelihood", kind: "number" }],
-  ["predictiveDuplicateRisk", { column: "duplicateRisk", kind: "number" }],
-  ["predictiveStaleRisk", { column: "staleRisk", kind: "number" }],
-]);
-
-function isOwnerScoped(user: TenantUser) {
-  const permissions = user.role && typeof user.role === "object" ? user.role.permissions : null;
-  return permissions?.isPartnerRole || permissions?.recordAccess === "OWN";
-}
 
 function normalizeLeadFilters(filters: LeadFilterInput[] | null) {
   if (!Array.isArray(filters)) return [];
   return filters;
 }
 
-function splitPredictiveScoreFilters(filters: LeadFilterInput[] | null) {
-  const recordFilters: LeadFilterInput[] = [];
-  const scoreFilters: LeadFilterCondition[] = [];
-
-  for (const group of normalizeLeadFilters(filters)) {
-    const conditions: LeadFilterCondition[] =
-      "conditions" in group && Array.isArray(group.conditions)
-        ? group.conditions
-        : [group as LeadFilterCondition];
-    const recordConditions = conditions.filter((condition) => !condition?.field || !PREDICTIVE_SCORE_FILTER_FIELDS.has(condition.field));
-    scoreFilters.push(...conditions.filter((condition) => condition?.field && PREDICTIVE_SCORE_FILTER_FIELDS.has(condition.field)));
-    if (recordConditions.length === conditions.length) recordFilters.push(group);
-    else if (recordConditions.length > 0) recordFilters.push({ ...(group as any), conditions: recordConditions });
-  }
-
-  return { recordFilters, scoreFilters };
-}
-
-function addCondition(
-  clauses: string[],
-  values: unknown[],
-  field: string,
-  operator: string | undefined,
-  value: unknown,
-  columnMap: Map<string, { column: string; kind: FilterValueKind }>,
-) {
-  const entry = columnMap.get(field);
-  if (!entry) return;
-  applyFilterCondition(clauses, values, entry.column, operator, value, entry.kind);
-}
-
-function buildLeadWhere(user: TenantUser, filters: LeadFilterInput[] | null, scoreMatchedIds?: string[] | null) {
+// WP09 (F11 follow-up): exported (was previously private to this file) so opportunities-postgres.ts
+// can build genuine cross-table SQL aggregates (e.g. lead-source ROI, which must join Opportunity
+// to Lead through the SAME tenant/scope filtering both tables' own read paths already use) without
+// duplicating or approximating this logic -- see the aggregate functions below and in
+// opportunities-postgres.ts for why. Still the single source of truth for Lead's own
+// tenant/soft-merge/record-scope filtering; nothing about its own logic changed.
+export function buildLeadWhere(user: TenantUser, filters: LeadFilterInput[] | null) {
   const clauses: string[] = [];
   const values: unknown[] = [];
 
@@ -130,61 +106,20 @@ function buildLeadWhere(user: TenantUser, filters: LeadFilterInput[] | null, sco
   // survivor as if nothing happened.
   clauses.push(`"mergedIntoId" is null`);
 
-  if (isOwnerScoped(user)) {
-    values.push(user.id);
-    const userIdParam = values.length;
-    if (tenantIdParam) {
-      // A record explicitly shared with this user (directly, or via their team) is visible
-      // even to an otherwise OWN-scoped user -- RecordShare is the one exception to "only my
-      // own records" enforced here at the row-selection level, not layered on afterward.
-      clauses.push(
-        `("ownerId" = $${userIdParam} or id = any(
-          select rs."recordId" from "RecordShare" rs
-          where rs."tenantId" = $${tenantIdParam} and rs."recordType" = 'LEAD'
-            and ($${userIdParam} = any(rs."sharedUserIds")
-                 or exists (select 1 from "User" u where u.id = $${userIdParam} and u."teamId"::text = any(rs."sharedTeamIds")))
-        ))`
-      );
-    } else {
-      clauses.push(`"ownerId" = $${userIdParam}`);
-    }
-  }
+  // F03 fix (WP04): OWN/TEAM/ALL, not a binary OWN-vs-everything-else check -- see
+  // record-scope.ts. A role configured as "TEAM Records" in the Roles UI previously fell
+  // through to unrestricted tenant-wide visibility, identical to "ALL", since only "OWN" was
+  // ever actually checked here.
+  applyRecordScopeClause(clauses, values, user, "LEAD", tenantIdParam);
 
-  if (scoreMatchedIds) {
-    if (scoreMatchedIds.length === 0) clauses.push("false");
-    else {
-      values.push(scoreMatchedIds);
-      clauses.push(`id = any($${values.length}::text[])`);
-    }
-  }
-
-  buildGroupedFilterClause(clauses, values, normalizeLeadFilters(filters), LEAD_FILTER_COLUMNS);
+  // WP09 (F12): predictive-score fields (LEAD_FILTER_COLUMNS entries with a `subquery`
+  // descriptor) now compile inline as part of the SAME grouped AND/OR tree -- see
+  // buildGroupedFilterClause in query-filters.ts. Previously they were resolved into a record-id
+  // list by a separate query and ANDed onto the whole where clause here, which silently turned a
+  // top-level OR mixing a normal field and a score field into an intersection.
+  buildGroupedFilterClause(clauses, values, normalizeLeadFilters(filters), LEAD_FILTER_COLUMNS, undefined, user.tenantId);
 
   return { sql: clauses.length ? `where ${clauses.join(" and ")}` : "", values };
-}
-
-async function resolvePredictiveScoreRecordIds(
-  tenantId: string | null,
-  filters: LeadFilterCondition[],
-) {
-  if (!filters.length) return null;
-  const clauses = ['"recordType" = $1'];
-  const values: unknown[] = ["LEAD"];
-  if (tenantId) {
-    values.push(tenantId);
-    clauses.push(`"tenantId" = $${values.length}`);
-  } else {
-    clauses.push('"tenantId" is null');
-  }
-  for (const filter of filters) {
-    if (!filter.field) continue;
-    addCondition(clauses, values, filter.field, filter.operator, filter.value, SCORE_FIELD_TO_COLUMN);
-  }
-  const rows = await query<{ recordId: string }>(
-    `select "recordId" from "RecordScore" where ${clauses.join(" and ")} limit 5000`,
-    values,
-  );
-  return Array.from(new Set(rows.map((row) => row.recordId).filter(Boolean)));
 }
 
 async function getPredictiveScoreMap(tenantId: string | null, recordIds: string[]) {
@@ -221,13 +156,17 @@ export async function getPendingNbaCountMap(tenantId: string | null, recordIds: 
   return new Map(rows.map((row) => [row.recordId, row.count]));
 }
 
-function formatLead(lead: any, predictiveScore: any = null, pendingNbaCount = 0) {
-  return {
+// F03 fix (WP04): every read path funnels through here, so a field a tenant's permission
+// template marks "hidden" for this user (e.g. phone/email for a role that shouldn't see them)
+// is masked before the record ever leaves the repository -- previously LEAD_COLUMNS always
+// included every column regardless of what the template configured.
+function formatLead(user: TenantUser, lead: any, predictiveScore: any = null, pendingNbaCount = 0) {
+  return maskFieldsForUser(user, "leads", {
     ...lead,
     assignedUserId: lead.ownerId ?? null,
     predictiveScore,
     pendingNbaCount,
-  };
+  });
 }
 
 async function getObjectId(user: TenantUser) {
@@ -254,6 +193,7 @@ export async function createAuditLog(
   before: unknown,
   after: unknown,
   diff: Record<string, unknown> | null,
+  client?: Queryable,
 ) {
   // "Complete audit trail" for impersonation (gap checklist: "impersonation governance") --
   // this is the single choke point nearly every write in this app already calls to log an
@@ -263,24 +203,31 @@ export async function createAuditLog(
   // the real user took themselves -- indistinguishable after the fact. `user` here is
   // typically the exact object requireCurrentUser/getCurrentUser returned, which already
   // carries isImpersonating/impersonatedBy when applicable.
-  const metadata = user.isImpersonating && user.impersonatedBy ? { impersonatedBy: user.impersonatedBy } : null;
+  //
+  // WP08 (F13): optional `client` -- when the caller is inside a withTransaction (e.g. the
+  // atomic core of createLeadForTenant/updateLeadForTenant), pass it so this insert commits or
+  // rolls back with the record change itself rather than as a separate, independently-fallible
+  // write. flagAuditLogIfAnomalous's own update reads the just-inserted row by id, so it must
+  // use the SAME client -- a different pooled connection wouldn't see an uncommitted insert.
+  const metadata = user.apiKeyId ? {apiKeyId:user.apiKeyId} : user.isImpersonating && user.impersonatedBy ? { impersonatedBy: user.impersonatedBy } : null;
   const id = randomUUID();
   await execute(
     `insert into "AuditLog" (id, "tenantId", "userId", action, "entityType", "entityId", before, after, diff, metadata, "createdAt")
      values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
     [id, user.tenantId, user.id, action, entityType, entityId, before, after, diff, metadata, new Date().toISOString()],
+    client,
   );
   // "Anomaly flags" (gap checklist: "audit review workflows") -- real but deliberately narrow:
   // a rate-based check reusing the existing Redis-backed rate limiter (more than N of the same
   // action by one user within a window gets flagged for a reviewer), not ML/statistical
   // modeling. Runs at this one choke point so every one of the ~90 call sites gets it for free.
-  await flagAuditLogIfAnomalous(id, user.id, action).catch(() => undefined);
+  await flagAuditLogIfAnomalous(id, user.id, action, client).catch(() => undefined);
 }
 
 const ANOMALY_ACTION_LIMIT = 20;
 const ANOMALY_WINDOW_SECONDS = 10 * 60;
 
-async function flagAuditLogIfAnomalous(auditLogId: string, userId: string, action: string) {
+async function flagAuditLogIfAnomalous(auditLogId: string, userId: string, action: string, client?: Queryable) {
   const result = await checkRateLimit({
     key: `audit-anomaly:${userId}:${action}`,
     limit: ANOMALY_ACTION_LIMIT,
@@ -290,7 +237,7 @@ async function flagAuditLogIfAnomalous(auditLogId: string, userId: string, actio
     await execute(`update "AuditLog" set flagged = true, "flagReason" = $1 where id = $2`, [
       `More than ${ANOMALY_ACTION_LIMIT} "${action}" actions by this user within ${ANOMALY_WINDOW_SECONDS / 60} minutes`,
       auditLogId,
-    ]);
+    ], client);
   }
 }
 
@@ -311,19 +258,21 @@ export async function listLeadsForTenant(
   filters: LeadFilterInput[] | null = null,
 ) {
   const currentPage = Math.max(1, Number.isFinite(page) ? page : 1);
-  const currentLimit = Math.min(200, Math.max(1, Number.isFinite(limit) ? limit : 10));
+  // WP09 (F11): raised from 200 to 1000 -- inbuilt-reports.ts calls this with limit=1000 in
+  // ~10 different reports, expecting up to that many rows for in-memory aggregation/analysis;
+  // the old 200 cap silently truncated every one of those reports to a fifth of what they asked
+  // for, with no indication anything was incomplete. 1000 is still not a durable fix at real
+  // tenant scale (a tenant with >1000 matching leads still gets a silently-partial report) --
+  // see 25_AUDIT_REMEDIATION_PLAN.md WP09 for why the real fix (per-report SQL aggregation) is
+  // tracked as a separate, larger follow-up rather than done in this pass.
+  const currentLimit = Math.min(1000, Math.max(1, Number.isFinite(limit) ? limit : 10));
   const offset = (currentPage - 1) * currentLimit;
-  const { recordFilters, scoreFilters } = splitPredictiveScoreFilters(filters);
-  const scoreMatchedIds = await resolvePredictiveScoreRecordIds(user.tenantId, scoreFilters);
-  if (scoreMatchedIds && scoreMatchedIds.length === 0) {
-    return { data: [], meta: { total: 0, page: currentPage, last_page: 1, limit: currentLimit } };
-  }
   // "Current user/team tokens" (gap checklist's universal advanced filter drawer sub-item) --
   // "@myteam" needs a DB lookup, so it's resolved here, once, before the synchronous
   // buildLeadWhere runs, rather than making buildLeadWhere itself async (which would ripple
   // into its several other no-filter call sites below).
-  const resolvedFilters = await substituteUserTokens(recordFilters, user);
-  const where = buildLeadWhere(user, resolvedFilters, scoreMatchedIds);
+  const resolvedFilters = await substituteUserTokens(normalizeLeadFilters(filters), user);
+  const where = buildLeadWhere(user, resolvedFilters);
 
   const [countRow, data] = await Promise.all([
     queryOne<{ count: number }>(`select count(*)::int as count from "Lead" ${where.sql}`, where.values),
@@ -338,12 +287,19 @@ export async function listLeadsForTenant(
   ]);
 
   return {
-    data: data.map((lead) => formatLead(lead, scoreMap.get(lead.id) ?? null, nbaCountMap.get(lead.id) ?? 0)),
+    data: data.map((lead) => formatLead(user, lead, scoreMap.get(lead.id) ?? null, nbaCountMap.get(lead.id) ?? 0)),
     meta: {
       total: countRow?.count ?? 0,
       page: currentPage,
       last_page: Math.max(1, Math.ceil((countRow?.count ?? 0) / currentLimit)),
       limit: currentLimit,
+      // WP09 (F11): `data` never has more rows than `currentLimit` even when more match --
+      // `isComplete` says whether THIS response's `data` array genuinely IS every matching
+      // record (only true on page 1 when the real total fits within one page), so a caller doing
+      // in-memory aggregation over `.data` alone (as several inbuilt reports do) can tell a
+      // capped/partial fetch apart from a genuinely complete one instead of silently treating
+      // both the same way.
+      isComplete: currentPage === 1 && (countRow?.count ?? 0) <= currentLimit,
     },
   };
 }
@@ -353,93 +309,239 @@ export async function listLeadsForTenant(
 // (`buildLeadWhere`) every other Lead read path uses, so the counts a viewer sees always match
 // what they're actually allowed to see, not a raw tenant-wide count.
 export async function getLeadStatusCountsForTenant(user: TenantUser) {
-  const where = buildLeadWhere(user, null, null);
+  const where = buildLeadWhere(user, null);
   return query<{ status: string; count: number }>(`select status, count(*)::int as count from "Lead" ${where.sql} group by status`, where.values);
 }
 
-export async function createLeadForTenant(user: TenantUser, payload: Record<string, unknown>) {
+// WP09 (F11): real SQL aggregation for `getPeriodComparisonReportForTenant` in inbuilt-reports.ts.
+// The report previously fetched up to 1000 leads tenant-wide (most-recent-first) and filtered by
+// date range in JS -- silently wrong for a tenant whose "this period"/"last period" window's real
+// leads fall outside whatever happens to be in the top 1000 by createdAt (e.g. any tenant with
+// >1000 total leads comparing a period other than "right now"). This runs one `count(*) filter
+// (where ...)` query per range directly against the full matching set (same `buildLeadWhere`
+// tenant/scope/soft-merge filtering every other Lead read path uses), so both counts are exact
+// regardless of how many leads the tenant has in total.
+export async function getLeadPeriodCountsForTenant(
+  user: TenantUser,
+  currentRange: { start: Date; end: Date },
+  previousRange: { start: Date; end: Date },
+) {
+  const where = buildLeadWhere(user, null);
+  const base = where.values.length;
+  const values = where.values.concat([
+    currentRange.start.toISOString(),
+    currentRange.end.toISOString(),
+    previousRange.start.toISOString(),
+    previousRange.end.toISOString(),
+  ]);
+  const row = await queryOne<{ current: number; previous: number }>(
+    `select
+       count(*) filter (where "createdAt" >= $${base + 1}::timestamptz and "createdAt" < $${base + 2}::timestamptz)::int as current,
+       count(*) filter (where "createdAt" >= $${base + 3}::timestamptz and "createdAt" < $${base + 4}::timestamptz)::int as previous
+     from "Lead" ${where.sql}`,
+    values,
+  );
+  return { current: row?.current ?? 0, previous: row?.previous ?? 0 };
+}
+
+const LEAD_CREATE_IDEMPOTENCY_SOURCE = "LEAD_CREATE";
+
+function hashIdempotentRequestBody(payload: Record<string, unknown>) {
+  return createHash("sha256").update(JSON.stringify(payload)).digest("hex");
+}
+
+// WP08 (F13): lead creation's atomic core + idempotency + after-commit side effects.
+//
+// Atomic core (one transaction): insert the lead, write its mandatory audit row, write durable
+// WebhookOutbox rows for any active subscription, and (when an idempotency key was supplied)
+// record the replay row -- all committed together or none at all. Previously each of these was a
+// separately-fallible `await` after the lead already existed: a crash/error between them could
+// leave a lead with no audit trail, or an audit trail with no webhook delivery ever enqueued
+// (silently, since the old call sites swallowed the enqueue error).
+//
+// After commit (best-effort, never rolls back an already-committed lead): distribution
+// (assignment), automations, the marketplace app event bus, NBA refresh, and report-rollup
+// invalidation. These are the "expensive downstream work" the audit's fix asks to move out of
+// the atomic core -- an ML/automation/marketplace outage must not turn a committed lead into an
+// unexplained 500. This also settles the audit's own explicit question of which assignment
+// invariant must hold: ownership is NOT required to exist the instant a lead is created --
+// `distributeRecord` already runs its own separate transaction and is safe to fail/retry-later
+// without the lead itself being invalid; a lead created while distribution is down simply stays
+// unassigned (ownerId null) until the next successful distribution run for that record, rather
+// than blocking creation on it.
+export async function createLeadForTenant(user: TenantUser, payload: Record<string, unknown>, idempotencyKey?: string | null, unit?: CreateUnitOfWork) {
+  const requestHash = idempotencyKey ? hashIdempotentRequestBody(payload) : null;
+
+  // Checked before any other work (including getObjectId) -- a cache hit should be as cheap as
+  // possible, not pay for a lookup/insert this request will just discard the result of.
+  if (idempotencyKey && user.tenantId) {
+    const existing = await queryOne<{ requestHash: string; responseSnapshot: any }>(
+      `select "requestHash", "responseSnapshot" from "RequestIdempotencyKey" where "tenantId" = $1 and source = $2 and "idempotencyKey" = $3`,
+      [user.tenantId, LEAD_CREATE_IDEMPOTENCY_SOURCE, idempotencyKey],
+    );
+    if (existing) {
+      if (existing.requestHash !== requestHash) throw new Error("IDEMPOTENCY_KEY_CONFLICT");
+      return maskFieldsForUser(user, "leads", existing.responseSnapshot);
+    }
+  }
+
   const objectId = await getObjectId(user);
   const now = new Date().toISOString();
   const id = randomUUID();
-  const lead = await queryOne<any>(
-    `insert into "Lead" (id, name, email, phone, company, source, status, "tenantId", "createdBy", "objectId", score, tags, "createdAt", "updatedAt")
-     values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 0, $11, $12, $12)
-     returning ${LEAD_COLUMNS}`,
-    [
-      id,
-      payload.name,
-      payload.email || null,
-      payload.phone || null,
-      payload.company || null,
-      payload.source || null,
-      payload.status || "NEW",
-      user.tenantId,
-      user.id,
-      objectId,
-      [],
-      now,
-    ],
-  );
-  if (!lead) throw new Error("LEAD_INSERT_FAILED");
-  const formatted = formatLead(lead);
-  await createAuditLog(user, "CREATE", "LEAD", formatted.id, null, formatted, null);
-  const distribution = await distributeRecord(user, "LEAD", formatted.id, formatted).catch(() => null);
-  const formattedWithOwner = distribution?.assignedUserId ? { ...formatted, ownerId: distribution.assignedUserId } : formatted;
-  await runAutomationsForEvent(user, "LEAD_CREATED", "LEAD", formattedWithOwner.id, formattedWithOwner).catch(() => undefined);
-  await enqueueWebhookEvent(user.tenantId, "LEAD_CREATED", formattedWithOwner).catch(() => undefined);
-  await enqueueAppEvent(user.tenantId, "LEAD_CREATED", formattedWithOwner).catch(() => undefined);
-  await refreshNextBestActionsForRecord(user, "LEAD", formattedWithOwner.id);
+
+  const insertLeadAndReplayRow = async () => {
+    const write = async (client: Queryable) => {
+      const lead = await queryOne<any>(
+        `insert into "Lead" (id, name, email, phone, company, source, status, "tenantId", "createdBy", "objectId", score, tags, "createdAt", "updatedAt")
+         values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 0, $11, $12, $12)
+         returning ${LEAD_COLUMNS}`,
+        [
+          id,
+          payload.name,
+          payload.email || null,
+          payload.phone || null,
+          payload.company || null,
+          payload.source || null,
+          payload.status || "NEW",
+          user.tenantId,
+          user.id,
+          objectId,
+          [],
+          now,
+        ],
+        client,
+      );
+      if (!lead) throw new Error("LEAD_INSERT_FAILED");
+      // Raw (unmasked) shape for audit/distribution/automations/webhooks/NBA -- see the comment
+      // on updateLeadForTenant's equivalent rawUpdated: masking is a response-to-the-acting-user
+      // policy, not a property of the record itself, so internal system consumers always get the
+      // real values regardless of what this particular caller's permission template hides.
+      const rawLead = { ...lead, assignedUserId: lead.ownerId ?? null, predictiveScore: null, pendingNbaCount: 0 };
+      await createAuditLog(user, "CREATE", "LEAD", rawLead.id, null, rawLead, null, client);
+      await enqueueWebhookEvent(user.tenantId, "LEAD_CREATED", rawLead, client);
+
+      if (idempotencyKey && user.tenantId) {
+        const masked = maskFieldsForUser(user, "leads", rawLead);
+        await execute(
+          `insert into "RequestIdempotencyKey" (id, "tenantId", source, "idempotencyKey", "requestHash", "entityType", "entityId", "responseSnapshot", "createdAt")
+           values ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+          [randomUUID(), user.tenantId, LEAD_CREATE_IDEMPOTENCY_SOURCE, idempotencyKey, requestHash, "LEAD", rawLead.id, masked, now],
+          client,
+        );
+      }
+      return rawLead;
+    };
+    return unit ? write(unit.tx) : withTransaction(user as any, write);
+  };
+
+  let raw: any;
+  try {
+    raw = await insertLeadAndReplayRow();
+  } catch (error) {
+    // A concurrent request under the SAME idempotency key can race this one to the unique
+    // index -- the loser here isn't a real failure, it means the winner already produced the
+    // canonical result, so replay it instead of surfacing a spurious 500.
+    const pgError = error as { code?: string };
+    if (idempotencyKey && user.tenantId && (pgError.code === "23505" || (error instanceof Error && error.message.startsWith("DUPLICATE_RULE_BLOCK:")))) {
+      const existing = await queryOne<{ requestHash: string; responseSnapshot: any }>(
+        `select "requestHash", "responseSnapshot" from "RequestIdempotencyKey" where "tenantId" = $1 and source = $2 and "idempotencyKey" = $3`,
+        [user.tenantId, LEAD_CREATE_IDEMPOTENCY_SOURCE, idempotencyKey],
+      );
+      if (existing) {
+        if (existing.requestHash !== requestHash) throw new Error("IDEMPOTENCY_KEY_CONFLICT");
+        return maskFieldsForUser(user, "leads", existing.responseSnapshot);
+      }
+    }
+    throw error;
+  }
+
+  const complete = async () => {
+  const distribution = await distributeRecord(user, "LEAD", raw.id, raw).catch(() => null);
+  const rawWithOwner = distribution?.assignedUserId ? { ...raw, ownerId: distribution.assignedUserId, assignedUserId: distribution.assignedUserId } : raw;
+  await runAutomationsForEvent(user, "LEAD_CREATED", "LEAD", rawWithOwner.id, rawWithOwner).catch(() => undefined);
+  await enqueueAppEvent(user.tenantId, "LEAD_CREATED", rawWithOwner).catch(() => undefined);
+  await refreshNextBestActionsForRecord(user, "LEAD", rawWithOwner.id);
   await invalidateReportRollupsForTenant(user.tenantId).catch(() => undefined);
-  return formattedWithOwner;
+  return maskFieldsForUser(user, "leads", rawWithOwner);
+  };
+  if (unit) { unit.afterCommit.push(complete); return maskFieldsForUser(user, "leads", raw); }
+  return complete();
 }
 
-export async function getLeadForTenant(user: TenantUser, id: string) {
+// Raw (unmasked) lead fetch, shared by getLeadForTenant (which masks before returning to the
+// caller) and updateLeadForTenant (which needs the TRUE current values as its merge baseline --
+// using the masked version there would silently overwrite a "hidden" field's real value with
+// null on every update that doesn't explicitly touch it, since a masked field always reads as
+// null regardless of what's actually stored).
+async function fetchRawLead(user: TenantUser, id: string) {
   const where = buildLeadWhere(user, null);
   const values = where.values.concat([id]);
   const lead = await queryOne<any>(`select ${LEAD_COLUMNS} from "Lead" ${where.sql} and id = $${values.length} limit 1`, values);
   if (!lead) return null;
   const scoreMap = await getPredictiveScoreMap(user.tenantId, [lead.id]);
-  return formatLead(lead, scoreMap.get(lead.id) ?? null);
+  return { ...lead, assignedUserId: lead.ownerId ?? null, predictiveScore: scoreMap.get(lead.id) ?? null, pendingNbaCount: 0 };
+}
+
+export async function getLeadForTenant(user: TenantUser, id: string) {
+  const raw = await fetchRawLead(user, id);
+  if (!raw) return null;
+  return maskFieldsForUser(user, "leads", raw);
 }
 
 export async function updateLeadForTenant(user: TenantUser, id: string, payload: Record<string, unknown>) {
-  const existing = await getLeadForTenant(user, id);
+  const existing = await fetchRawLead(user, id);
   if (!existing) return null;
-  const nextName = payload.name !== undefined ? payload.name : existing.name;
-  const nextEmail = payload.email !== undefined ? payload.email : existing.email;
-  const nextPhone = payload.phone !== undefined ? payload.phone : existing.phone;
-  const nextCompany = payload.company !== undefined ? payload.company : existing.company;
-  const nextSource = payload.source !== undefined ? payload.source : existing.source;
-  const nextStatus = payload.status !== undefined ? payload.status : existing.status;
-  const nextOwnerId = payload.ownerId !== undefined ? payload.ownerId : existing.ownerId;
 
-  const lead = await queryOne<any>(
-    `update "Lead"
-     set name = $1, email = $2, phone = $3, company = $4, source = $5, status = $6, "ownerId" = $7, "updatedAt" = $8
-     where ${user.tenantId ? '"tenantId" = $9' : '"tenantId" is null'} and id = $${user.tenantId ? 10 : 9}
-     returning ${LEAD_COLUMNS}`,
-    [
-      nextName,
-      nextEmail || null,
-      nextPhone || null,
-      nextCompany || null,
-      nextSource || null,
-      nextStatus || existing.status,
-      nextOwnerId || null,
-      new Date().toISOString(),
-      ...(user.tenantId ? [user.tenantId, id] : [id]),
-    ],
-  );
-  if (!lead) return null;
-  const formatted = formatLead(lead);
-  const diff = fieldDiff(existing, formatted);
-  await createAuditLog(user, "UPDATE", "LEAD", formatted.id, existing, formatted, Object.keys(diff).length ? diff : null);
-  await runAutomationsForEvent(user, "LEAD_UPDATED", "LEAD", formatted.id, formatted).catch(() => undefined);
-  await enqueueWebhookEvent(user.tenantId, "LEAD_UPDATED", formatted).catch(() => undefined);
-  await enqueueAppEvent(user.tenantId, "LEAD_UPDATED", formatted).catch(() => undefined);
-  await refreshNextBestActionsForRecord(user, "LEAD", formatted.id);
+  // F03 fix: a field this user's permission template marks "readonly" or "hidden" is dropped
+  // from the payload before it can influence the update -- silently, the same way a disabled
+  // form field would never be submitted in the first place.
+  const { sanitized } = sanitizeWritePayload(user, "leads", payload);
+
+  const nextName = sanitized.name !== undefined ? sanitized.name : existing.name;
+  const nextEmail = sanitized.email !== undefined ? sanitized.email : existing.email;
+  const nextPhone = sanitized.phone !== undefined ? sanitized.phone : existing.phone;
+  const nextCompany = sanitized.company !== undefined ? sanitized.company : existing.company;
+  const nextSource = sanitized.source !== undefined ? sanitized.source : existing.source;
+  const nextStatus = sanitized.status !== undefined ? sanitized.status : existing.status;
+  const nextOwnerId = sanitized.ownerId !== undefined ? sanitized.ownerId : existing.ownerId;
+
+  // WP08 (F13): atomic core -- the update, its mandatory audit row, and durable WebhookOutbox
+  // rows commit together or none do (same reasoning as createLeadForTenant's atomic core above).
+  const rawUpdated = await withTransaction(user as any, async (client) => {
+    const lead = await queryOne<any>(
+      `update "Lead"
+       set name = $1, email = $2, phone = $3, company = $4, source = $5, status = $6, "ownerId" = $7, "updatedAt" = $8
+       where ${user.tenantId ? '"tenantId" = $9' : '"tenantId" is null'} and id = $${user.tenantId ? 10 : 9}
+       returning ${LEAD_COLUMNS}`,
+      [
+        nextName,
+        nextEmail || null,
+        nextPhone || null,
+        nextCompany || null,
+        nextSource || null,
+        nextStatus || existing.status,
+        nextOwnerId || null,
+        new Date().toISOString(),
+        ...(user.tenantId ? [user.tenantId, id] : [id]),
+      ],
+      client,
+    );
+    if (!lead) return null;
+    // Raw (unmasked) shape for the audit trail and internal system consumers (automations,
+    // webhooks, marketplace events, NBA refresh) -- masking is a policy for what the ACTING
+    // user's own API response shows, not for what the record actually contains internally.
+    const updated = { ...lead, assignedUserId: lead.ownerId ?? null, predictiveScore: existing.predictiveScore, pendingNbaCount: existing.pendingNbaCount };
+    const diff = fieldDiff(existing, updated);
+    await createAuditLog(user, "UPDATE", "LEAD", updated.id, existing, updated, Object.keys(diff).length ? diff : null, client);
+    await enqueueWebhookEvent(user.tenantId, "LEAD_UPDATED", updated, client);
+    return updated;
+  });
+  if (!rawUpdated) return null;
+  await runAutomationsForEvent(user, "LEAD_UPDATED", "LEAD", rawUpdated.id, rawUpdated).catch(() => undefined);
+  await enqueueAppEvent(user.tenantId, "LEAD_UPDATED", rawUpdated).catch(() => undefined);
+  await refreshNextBestActionsForRecord(user, "LEAD", rawUpdated.id);
   await invalidateReportRollupsForTenant(user.tenantId).catch(() => undefined);
-  return formatted;
+  return maskFieldsForUser(user, "leads", rawUpdated);
 }
 
 export async function deleteLeadsForTenant(user: TenantUser, ids: string[]) {

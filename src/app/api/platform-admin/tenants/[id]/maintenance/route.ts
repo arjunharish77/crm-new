@@ -13,6 +13,6 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   } catch (error) {
     if (error instanceof Error && error.message === "UNAUTHORIZED") return unauthorized();
     if (error instanceof Error && error.message === "FORBIDDEN") return forbidden();
-    return serverError("Failed to update maintenance banner");
+    return serverError("Failed to update maintenance banner", error);
   }
 }

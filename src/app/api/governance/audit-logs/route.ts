@@ -42,7 +42,7 @@ export async function GET(request: Request) {
     return NextResponse.json(logs);
   } catch (error) {
     if (error instanceof Error && error.message === "UNAUTHORIZED") return unauthorized();
-    return serverError("Failed to fetch audit logs");
+    return serverError("Failed to fetch audit logs", error);
   }
 }
 
@@ -62,6 +62,6 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: true });
   } catch (error) {
     if (error instanceof Error && error.message === "UNAUTHORIZED") return unauthorized();
-    return serverError("Failed to record command execution");
+    return serverError("Failed to record command execution", error);
   }
 }

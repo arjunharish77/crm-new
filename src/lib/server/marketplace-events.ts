@@ -1,8 +1,9 @@
 import { randomUUID, createHmac } from "crypto";
-import { query, queryOne, execute } from "@/lib/db/query";
+import { query, queryOne, execute, queryAsSystem, queryOneAsSystem } from "@/lib/db/query";
 import { createUserNotification } from "@/lib/server/notifications";
 import { WEBHOOK_EVENT_TYPES, type WebhookEventType } from "@/lib/server/webhook-outbox";
 import { decryptSecretAtRestOrNull } from "@/lib/server/secret-encryption";
+import { assertSafeOutboundUrl } from "@/lib/server/outbound-request-guard";
 
 type TenantUser = { id: string; tenantId: string | null };
 
@@ -142,9 +143,12 @@ async function deliverOne(row: { id: string; tenantId: string; appId: string; ev
   let responseBody: string | null = null;
   let errorMessage: string | null = null;
   try {
+    // F07 fix (WP06): a marketplace app's webhookUrl is app-supplied, not administrator-owned --
+    // same SSRF exposure as a tenant webhook subscription, revalidated immediately before send.
+    await assertSafeOutboundUrl(app.webhookUrl);
     const headers: Record<string, string> = { "content-type": "application/json", "x-app-timestamp": timestamp, "x-app-event": row.eventType };
     if (secretRow?.signingSecret) headers["x-app-signature"] = signPayload(secretRow.signingSecret, timestamp, rawBody);
-    const response = await fetch(app.webhookUrl, { method: "POST", headers, body: rawBody, signal: controller.signal });
+    const response = await fetch(app.webhookUrl, { method: "POST", headers, body: rawBody, signal: controller.signal, redirect: "manual" });
     httpStatus = response.status;
     responseBody = (await response.text().catch(() => "")).slice(0, 2000);
     if (!response.ok) errorMessage = `HTTP ${response.status}`;
@@ -199,15 +203,18 @@ async function deliverOne(row: { id: string; tenantId: string; appId: string; ev
 
 // Worker-invoked recurring job, identical shape to processWebhookOutbox: claims due rows one
 // at a time via an atomic claim so overlapping worker ticks can't double-send the same delivery.
+// WP07 (F04): BACKGROUND_JOB, disposition B -- worker-invoked recurring job with no incoming
+// request and therefore no ambient tenant context; discovers due deliveries across every
+// tenant at once by design.
 export async function processAppEventDeliveries(limit = 25) {
   const now = new Date().toISOString();
-  const due = await query<{ id: string }>(
+  const due = await queryAsSystem<{ id: string }>(
     `select id from "TenantAppDelivery" where status = 'PENDING' and ("nextRetryAt" is null or "nextRetryAt" <= $1) order by "createdAt" asc limit $2`,
     [now, limit],
   );
   let processed = 0;
   for (const item of due) {
-    const claimed = await queryOne<any>(
+    const claimed = await queryOneAsSystem<any>(
       `update "TenantAppDelivery" set status = 'SENDING', "updatedAt" = $1 where id = $2 and status = 'PENDING' returning id, "tenantId", "appId", "eventType", payload, attempts`,
       [new Date().toISOString(), item.id],
     );
@@ -246,8 +253,12 @@ function extractWebhookHostname(webhookUrl: string | null | undefined): string |
   }
 }
 
+// WP07 (F04): CROSS_TENANT_ADMIN, disposition B -- this is inherently a platform-wide aggregate
+// (grouping app health by webhook hostname across every tenant to spot a shared provider
+// outage), never tenant-scoped even when called internally from getAppHealthForTenant's own
+// per-tenant health check below -- so converting it introduces no RLS bypass for that caller.
 export async function getSuspectedProviderOutages() {
-  const rows = await query<{ appId: string; webhookUrl: string | null; status: string }>(
+  const rows = await queryAsSystem<{ appId: string; webhookUrl: string | null; status: string }>(
     `select a.id as "appId", a."webhookUrl", h.status
      from "MarketplaceApp" a
      join "TenantAppHealth" h on h."appId" = a.id
@@ -316,8 +327,10 @@ export async function getAppUsageForTenant(user: TenantUser, appId: string, days
 // counts by status only (how many apps across the whole platform are OK/DEGRADED/ERROR/
 // UNKNOWN), never which tenant, which app, or any payload/request/response content. Deliberately
 // the coarsest possible view that still answers "is the marketplace healthy platform-wide."
+// WP07 (F04): CROSS_TENANT_ADMIN, disposition B -- platform-admin-only, aggregates across every
+// tenant's app health by design (the name says it all).
 export async function getCrossTenantAppHealthOverview() {
-  const rows = await query<{ status: string; count: string }>(`select status, count(*) as count from "TenantAppHealth" group by status`, []);
+  const rows = await queryAsSystem<{ status: string; count: string }>(`select status, count(*) as count from "TenantAppHealth" group by status`, []);
   const overview: Record<string, number> = { OK: 0, DEGRADED: 0, ERROR: 0, UNKNOWN: 0 };
   for (const row of rows) overview[row.status] = Number(row.count);
   return overview;

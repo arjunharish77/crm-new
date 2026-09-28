@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { apiFetch } from "@/lib/api";
+import { PageHeader } from "@/components/layout/page-header";
+import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
@@ -105,26 +107,11 @@ export default function PartnersPage() {
     };
 
     return (
-        <div className="mx-auto max-w-[1600px] p-4">
-            <div className="mb-4 flex items-center justify-between gap-4">
-                <div>
-                    <div className="flex flex-wrap items-center gap-3">
-                        <h1 className="text-lg font-extrabold">Partners</h1>
-                    </div>
-                    <p className="mt-1 text-xs text-muted-foreground">
-                        Channel partners see only their own assigned leads/opportunities and their own commission/payout data.
-                    </p>
-                </div>
-                <div className="flex items-center gap-2">
-                    <QueueExportButton moduleName="PARTNERS" />
-                    {partnersEnabled && (
-                        <Button onClick={() => setDialogOpen(true)}>
-                            <UserPlus className="size-4" />
-                            Add Partner
-                        </Button>
-                    )}
-                </div>
-            </div>
+        <div className="@container/partners min-w-0">
+            <PageHeader title="Partners" description="Manage partner organizations, logins and access to their assigned records." actions={<>
+                <QueueExportButton moduleName="PARTNERS" />
+                {partnersEnabled && <Button onClick={() => setDialogOpen(true)}><UserPlus className="size-4" />Add Partner</Button>}
+            </>} />
 
             {!partnersEnabled && (
                 <p className="mb-3 text-sm text-muted-foreground">
@@ -156,10 +143,10 @@ export default function PartnersPage() {
                         return (
                         <div
                             key={partner.id}
-                            className="rounded-[14px] border bg-card p-4"
+                            className="min-w-0 rounded-[14px] border bg-card p-4"
                         >
-                            <div className="flex items-center justify-between gap-4">
-                                <div className="flex items-center gap-3">
+                            <div className="flex min-w-0 flex-wrap items-center justify-between gap-4">
+                                <div className="flex min-w-0 flex-wrap items-center gap-3">
                                     <Checkbox
                                         checked={selectedPartnerIds.includes(partner.id)}
                                         onCheckedChange={(checked) => {
@@ -174,7 +161,7 @@ export default function PartnersPage() {
                                             {(partner.user?.name || partner.legalBusinessName || "?").charAt(0).toUpperCase()}
                                         </AvatarFallback>
                                     </Avatar>
-                                    <div>
+                                    <div className="min-w-0 flex-1 basis-40 break-words">
                                         <div className="text-sm font-bold">
                                             {partner.legalBusinessName}
                                         </div>
@@ -183,7 +170,7 @@ export default function PartnersPage() {
                                         </div>
                                     </div>
                                 </div>
-                                <div className="flex items-center gap-2">
+                                <div className="flex min-w-0 flex-wrap items-center gap-2">
                                     <Button variant="outline" size="sm" onClick={() => router.push(`/dashboard/settings/partners/${partner.id}`)}>
                                         View Dashboard
                                     </Button>
@@ -208,37 +195,39 @@ export default function PartnersPage() {
                                     </Badge>
                                 </div>
                             </div>
-                            <div className="mt-4 rounded-xl border bg-surface-container-low p-3">
-                                <div className="mb-3 flex items-center gap-2 text-xs font-bold uppercase text-muted-foreground">
+                            <details className="mt-4 rounded-xl border bg-surface-container-low p-3">
+                                <summary className="flex cursor-pointer items-center gap-2 text-sm font-semibold">
                                     <UsersRound className="size-4" />
-                                    Partner Logins
-                                </div>
-                                <div className="space-y-2">
+                                    Partner Logins ({logins.length})
+                                </summary>
+                                <div className="mt-3 space-y-2">
                                     {logins.map((login) => (
-                                        <div key={login.id} className="grid gap-3 rounded-lg bg-card p-3 lg:grid-cols-[1.4fr_150px_150px_150px_120px] lg:items-center">
-                                            <div className="min-w-0">
-                                                <div className="truncate text-sm font-semibold">{login.user?.name || login.legalBusinessName}</div>
-                                                <div className="truncate text-xs text-muted-foreground">{login.user?.email}</div>
+                                        <div key={login.id} className="grid min-w-0 gap-3 @min-[600px]/partners:grid-cols-2 rounded-lg bg-card p-3 @min-[950px]/partners:grid-cols-[minmax(0,1.4fr)_130px_150px_130px_110px] @min-[950px]/partners:items-end">
+                                            <div className="min-w-0 @min-[600px]/partners:col-span-2 @min-[950px]/partners:col-span-1">
+                                                <div className="break-words text-sm font-semibold">{login.user?.name || login.legalBusinessName}</div>
+                                                <div className="break-words text-xs text-muted-foreground">{login.user?.email}</div>
                                             </div>
+                                            <div className="min-w-0 space-y-2"><Label htmlFor={`partner-login-partnerLoginRole-${login.id}`}> Login role</Label>
                                             <Select
                                                 value={login.partnerLoginRole}
                                                 disabled={updatingProfileId === login.id || !partnersEnabled}
                                                 onValueChange={(value) => updatePartner(login, { partnerLoginRole: value as PartnerProfile["partnerLoginRole"] })}
                                             >
-                                                <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                                                <SelectTrigger id={`partner-login-partnerLoginRole-${login.id}`} className="w-full"><SelectValue /></SelectTrigger>
                                                 <SelectContent>
                                                     <SelectItem value="PRIMARY">Primary</SelectItem>
                                                     <SelectItem value="MANAGER">Manager</SelectItem>
                                                     <SelectItem value="MEMBER">Member</SelectItem>
                                                     <SelectItem value="FINANCE">Finance</SelectItem>
                                                 </SelectContent>
-                                            </Select>
+                                            </Select></div>
+                                            <div className="min-w-0 space-y-2"><Label htmlFor={`partner-login-parentPartnerProfileId-${login.id}`}> Reports to</Label>
                                             <Select
                                                 value={login.parentPartnerProfileId || "__none__"}
                                                 disabled={updatingProfileId === login.id || login.id === partner.id || !partnersEnabled}
                                                 onValueChange={(value) => updatePartner(login, { parentPartnerProfileId: value === "__none__" ? null : value })}
                                             >
-                                                <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                                                <SelectTrigger id={`partner-login-parentPartnerProfileId-${login.id}`} className="w-full"><SelectValue /></SelectTrigger>
                                                 <SelectContent>
                                                     <SelectItem value="__none__">No parent</SelectItem>
                                                     {logins.filter((candidate) => candidate.id !== login.id).map((candidate) => (
@@ -247,19 +236,20 @@ export default function PartnersPage() {
                                                         </SelectItem>
                                                     ))}
                                                 </SelectContent>
-                                            </Select>
+                                            </Select></div>
+                                            <div className="min-w-0 space-y-2"><Label htmlFor={`partner-login-status-${login.id}`}> Status</Label>
                                             <Select
                                                 value={login.status}
                                                 disabled={updatingProfileId === login.id || !partnersEnabled}
                                                 onValueChange={(value) => updatePartner(login, { status: value as PartnerProfile["status"] })}
                                             >
-                                                <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                                                <SelectTrigger id={`partner-login-status-${login.id}`} className="w-full"><SelectValue /></SelectTrigger>
                                                 <SelectContent>
                                                     <SelectItem value="ACTIVE">Active</SelectItem>
                                                     <SelectItem value="SUSPENDED">Suspended</SelectItem>
                                                 </SelectContent>
-                                            </Select>
-                                            <label className="flex items-center justify-between gap-2 rounded-md border bg-surface-container-low px-3 py-2 text-xs font-semibold">
+                                            </Select></div>
+                                            <label className="flex min-w-0 flex-wrap items-center justify-between gap-2 rounded-md border bg-surface-container-low px-3 py-2 text-xs font-semibold">
                                                 Payouts
                                                 <Checkbox
                                                     checked={login.canAccessPayouts}
@@ -270,7 +260,7 @@ export default function PartnersPage() {
                                         </div>
                                     ))}
                                 </div>
-                            </div>
+                            </details>
                         </div>
                     )})}
                 </div>

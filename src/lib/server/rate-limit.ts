@@ -61,11 +61,23 @@ export async function checkRateLimit({ key, limit, windowSeconds }: RateLimitOpt
 
   const redisKey = `ratelimit:${key}`;
   try {
-    const count = await redis.incr(redisKey);
-    if (count === 1) {
-      await redis.expire(redisKey, windowSeconds);
-    }
-    const ttl = await redis.ttl(redisKey);
+    // F29 fix (WP11): INCR and EXPIRE were previously two separate round trips -- if the
+    // process crashed (or Redis failed over) between them, a key created by that INCR would be
+    // left with NO expiry at all, permanently pinning that counter above its limit (or, if the
+    // count happened to reset via some other path, silently losing the window semantics
+    // entirely). A single MULTI/EXEC makes both changes atomic from Redis's perspective, and
+    // `EXPIRE ... NX` (only set the TTL if the key doesn't already have one) means this is safe
+    // to run on every call, not just when `count === 1` -- so even a key that somehow ended up
+    // without a TTL from a prior failure gets one fixed on the very next increment.
+    const results = await redis.multi().incr(redisKey).expire(redisKey, windowSeconds, "NX").ttl(redisKey).exec();
+    if (!results) throw new Error("Redis MULTI returned null (connection likely in a bad state)");
+    const [[incrError, count], , [ttlError, ttl]] = results as [
+      [Error | null, number],
+      [Error | null, number],
+      [Error | null, number],
+    ];
+    if (incrError) throw incrError;
+    if (ttlError) throw ttlError;
     const resetSeconds = ttl > 0 ? ttl : windowSeconds;
     return {
       allowed: count <= limit,
@@ -135,12 +147,72 @@ async function recordRateLimitViolation(tenantId: string | null, category: strin
   if (!redis) return;
   const key = `ratelimit-violations:${tenantId}:${category}`;
   try {
-    const count = await redis.incr(key);
-    if (count === 1) await redis.expire(key, 600);
+    // F29 fix (WP11): same atomic INCR+EXPIRE-NX fix as checkRateLimit above -- see its comment
+    // for why the previous separate-round-trips version could leave this counter without a TTL.
+    const results = await redis.multi().incr(key).expire(key, 600, "NX").exec();
+    if (!results) throw new Error("Redis MULTI returned null (connection likely in a bad state)");
+    const [[incrError, count]] = results as [[Error | null, number]];
+    if (incrError) throw incrError;
     if (count === 5) await alertAbuseThresholdCrossed(tenantId, category, detail);
   } catch {
     // Best-effort, same fail-open philosophy as checkRateLimit itself.
   }
+}
+
+// F23 fix (WP11): /dashboard/admin/rate-limits previously called an API route that didn't exist
+// at all, silently showing 0 for everything. There is no PERSISTENT rate-limit violation log in
+// this codebase (recordRateLimitViolation's own counters above are intentionally ephemeral,
+// 10-minute fixed windows, by design -- see its own comment), so a genuine "last 24h" history
+// cannot be built without adding one. Rather than fabricate a number this system doesn't track,
+// this returns a real, honestly-scoped snapshot of CURRENTLY ACTIVE violation counters (i.e.
+// "who's being rate-limited right now, in roughly the last 10 minutes") -- true, live data, just
+// with a narrower time window than "last 24h" implies. The caller must present this as a live
+// snapshot, not a 24h history (see the API route's own response shape/the frontend's label).
+export async function getActiveRateLimitViolationSnapshot(): Promise<{
+  scanned: boolean;
+  totalActive: number;
+  byTenant: Array<{ tenantId: string; violationCount: number }>;
+  byCategory: Array<{ category: string; violationCount: number }>;
+}> {
+  const redis = getClient();
+  if (!redis) return { scanned: false, totalActive: 0, byTenant: [], byCategory: [] };
+
+  const tenantCounts = new Map<string, number>();
+  const categoryCounts = new Map<string, number>();
+  try {
+    let cursor = "0";
+    do {
+      const [nextCursor, keys] = await redis.scan(cursor, "MATCH", "ratelimit-violations:*", "COUNT", 200);
+      cursor = nextCursor;
+      if (keys.length) {
+        const values = await redis.mget(...keys);
+        keys.forEach((key, index) => {
+          const count = Number(values[index] ?? 0);
+          if (!count) return;
+          const [, tenantId, ...categoryParts] = key.split(":");
+          const category = categoryParts.join(":");
+          if (tenantId) tenantCounts.set(tenantId, (tenantCounts.get(tenantId) ?? 0) + count);
+          if (category) categoryCounts.set(category, (categoryCounts.get(category) ?? 0) + count);
+        });
+      }
+    } while (cursor !== "0");
+  } catch {
+    return { scanned: false, totalActive: 0, byTenant: [], byCategory: [] };
+  }
+
+  const byTenant = [...tenantCounts.entries()]
+    .map(([tenantId, violationCount]) => ({ tenantId, violationCount }))
+    .sort((a, b) => b.violationCount - a.violationCount);
+  const byCategory = [...categoryCounts.entries()]
+    .map(([category, violationCount]) => ({ category, violationCount }))
+    .sort((a, b) => b.violationCount - a.violationCount);
+
+  return {
+    scanned: true,
+    totalActive: byTenant.reduce((sum, row) => sum + row.violationCount, 0),
+    byTenant,
+    byCategory,
+  };
 }
 
 export async function checkRateLimitWithAlert(opts: RateLimitOptions & { tenantId: string | null; category: string; detail: string }) {
@@ -151,12 +223,24 @@ export async function checkRateLimitWithAlert(opts: RateLimitOptions & { tenantI
 
 // "General per-user/per-tenant limit independent of a specific credential" -- the gap the
 // existing per-API-key/per-app/login-throttling limits didn't cover: an ordinary logged-in
-// session hammering the app. Deliberately generous (300/min per user, 1000/min per tenant --
-// ~5-16/sec sustained) so no realistic UI usage trips it; this is an abuse ceiling, not a
-// normal-usage budget. Wired into requireCurrentUser (auth.ts), the single choke point nearly
-// every session-authenticated route already calls.
+// session hammering the app. This is an abuse ceiling, not a normal-usage budget. Wired into
+// requireCurrentUser (auth.ts), the single choke point nearly every session-authenticated route
+// already calls.
 const GENERAL_USER_LIMIT = 300;
-const GENERAL_TENANT_LIMIT = 1000;
+
+// F29 fix (WP11): the previous flat 1,000/min tenant ceiling didn't scale to the capacity
+// revision's own largest-tenant target (25_AUDIT_REMEDIATION_PLAN.md: 250 active users at peak)
+// -- 1,000/min across 250 concurrent users is only 4 requests/user/minute, which a single active
+// user's normal navigation could approach on its own. No real production traffic has been
+// measured yet (pre-launch), so this is a reasoned ceiling, not a measured one: 250 users at a
+// generous 20 requests/user/minute of genuine UI activity (list loads, dashboard widgets,
+// autosave, polling) is 5,000/min -- comfortably above ordinary navigation for the whole tenant
+// at once, while still being a real, bounded abuse ceiling rather than "effectively unlimited."
+// Revisit with real measured request-rate data once this is running in production (the audit's
+// own F29/F21 acceptance criteria both call for exactly that measurement).
+const CAPACITY_LARGEST_TENANT_ACTIVE_USERS = 250;
+const CAPACITY_REASONABLE_REQUESTS_PER_USER_PER_MINUTE = 20;
+const GENERAL_TENANT_LIMIT = CAPACITY_LARGEST_TENANT_ACTIVE_USERS * CAPACITY_REASONABLE_REQUESTS_PER_USER_PER_MINUTE;
 
 export async function assertGeneralRateLimit(user: { id: string; tenantId: string | null }) {
   const userResult = await checkRateLimitWithAlert({

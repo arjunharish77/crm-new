@@ -26,6 +26,6 @@ export async function DELETE(request: Request) {
       return unauthorized();
     }
 
-    return serverError("Failed to delete leads");
+    return serverError("Failed to delete leads", error);
   }
 }

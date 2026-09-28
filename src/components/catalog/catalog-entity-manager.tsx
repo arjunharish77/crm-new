@@ -1,5 +1,7 @@
 "use client";
 
+import { ErrorState } from "@/components/common/error-state";
+
 // Priority Module 12's "product catalog" item 4, "admin catalog management UI." One generic,
 // reusable list+create/edit/delete component, parameterized by a field config, shared across
 // all 10 named catalog entities (universities, campuses, programs, courses, intakes, fee plans,
@@ -64,6 +66,7 @@ export function CatalogEntityManager({
 }: CatalogEntityManagerProps) {
   const [items, setItems] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<any | null>(null);
   const [formData, setFormData] = useState<Record<string, unknown>>({});
@@ -78,12 +81,13 @@ export function CatalogEntityManager({
       return;
     }
     setLoading(true);
+    setLoadError(null);
     const params = new URLSearchParams();
     if (parentId) params.set("parentId", parentId);
     const query = params.toString();
     apiFetch<any[]>(`/catalog/${entityKey}${query ? `?${query}` : ""}`)
       .then((data) => setItems(Array.isArray(data) ? data : []))
-      .catch(() => setItems([]))
+      .catch(() => setLoadError(`Could not load ${title.toLowerCase()}.`))
       .finally(() => setLoading(false));
   };
 
@@ -156,7 +160,7 @@ export function CatalogEntityManager({
 
   return (
     <div className="space-y-3">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <h3 className="text-sm font-bold">{title}</h3>
         <Button size="sm" onClick={openCreate}>
           <Plus className="size-4" />
@@ -166,7 +170,7 @@ export function CatalogEntityManager({
 
       {loading ? (
         <p className="text-sm text-muted-foreground">Loading...</p>
-      ) : items.length === 0 ? (
+      ) : loadError ? <ErrorState description={loadError} onRetry={load} /> : items.length === 0 ? (
         <EmptyState title={`No ${title.toLowerCase()} yet`} description={emptyDescription} />
       ) : (
         <div className="space-y-2">
@@ -180,18 +184,18 @@ export function CatalogEntityManager({
                 tabIndex={selectable ? 0 : undefined}
                 onClick={selectable ? () => onSelectItem!(item) : undefined}
                 onKeyDown={selectable ? (event) => {
-                  if (event.key === "Enter" || event.key === " ") {
+                  if (event.target === event.currentTarget && (event.key === "Enter" || event.key === " ")) {
                     event.preventDefault();
                     onSelectItem!(item);
                   }
                 } : undefined}
                 className={cn(
-                  "flex items-center justify-between rounded-lg border bg-card p-3",
+                  "flex flex-wrap items-center justify-between gap-2 rounded-lg border bg-card p-3",
                   selectable && "cursor-pointer transition-colors hover:bg-accent",
                   selected && "border-primary bg-primary/5",
                 )}
               >
-                <div className="min-w-0">
+                <div className="min-w-0 flex-1 basis-40">
                   <p className="truncate text-sm font-semibold">{item.name}</p>
                   {item.description ? <p className="truncate text-xs text-muted-foreground">{item.description}</p> : null}
                 </div>
@@ -252,7 +256,7 @@ export function CatalogEntityManager({
                     value={String(formData[field.key] ?? "")}
                     onValueChange={(value) => setFormData({ ...formData, [field.key]: value })}
                   >
-                    <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                    <SelectTrigger id={`catalog-field-${field.key}`} className="w-full"><SelectValue /></SelectTrigger>
                     <SelectContent>
                       {(field.options ?? []).map((option) => (
                         <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>

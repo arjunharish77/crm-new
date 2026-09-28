@@ -19,12 +19,11 @@ export interface User {
 
 export interface AuthContextType {
     user: User | null;
-    token: string | null;
-    login: (token: string) => Promise<void>;
+    // F06 fix (WP05): no token parameter -- the session is an HttpOnly cookie a server route
+    // has already set by the time this is called; it just re-fetches "who am I now".
+    login: () => Promise<void>;
     logout: () => void;
     isAuthenticated: boolean;
     isLoading: boolean;
     isImpersonating: boolean;
-    impersonate: (userId: string) => Promise<void>;
-    exitImpersonate: () => Promise<void>;
 }

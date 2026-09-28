@@ -8,12 +8,27 @@ import { enqueueAppEvent } from "@/lib/server/marketplace-events";
 import { invalidateReportRollupsForTenant } from "@/lib/server/report-rollups";
 import { applyFilterCondition, buildGroupedFilterClause, type FilterValueKind } from "@/lib/query-filters";
 import { substituteUserTokens } from "@/lib/server/user-token-filters";
+import { maskFieldsForUser, sanitizeWritePayload } from "@/lib/server/field-permissions";
 
 type TenantUser = {
   id: string;
   tenantId: string | null;
   role?: { permissions?: any } | string | null;
+  permissionTemplates?: any[] | null;
 };
+
+// F03 fix (WP04, slice 3): masks the activity's own fields per its activity-type field-
+// permission config, AND the embedded lead/opportunity summaries hydrateActivities attaches --
+// those come from a direct raw fetch (rowsByIds) that bypasses leads-postgres.ts/
+// opportunities-postgres.ts's own masking entirely, so without this an activity list/detail
+// view would leak a hidden Lead/Opportunity field through the embedded card even after those
+// two repositories were fixed directly.
+function maskActivityForUser(user: TenantUser, item: any) {
+  const masked = maskFieldsForUser(user, "activities", item, item.typeId);
+  if (masked.lead) masked.lead = maskFieldsForUser(user, "leads", masked.lead);
+  if (masked.opportunity) masked.opportunity = maskFieldsForUser(user, "opportunities", masked.opportunity, masked.opportunity.opportunityTypeId);
+  return masked;
+}
 
 type ActivityFilterCondition = {
   field: string;
@@ -196,8 +211,9 @@ export async function listActivitiesForTenant(user: TenantUser, limit: number, f
     ),
   ]);
   const total = countRow?.count ?? 0;
+  const hydrated = await hydrateActivities(user, activities);
   return {
-    data: await hydrateActivities(user, activities),
+    data: hydrated.map((item) => maskActivityForUser(user, item)),
     meta: { total, page: currentPage, last_page: Math.max(1, Math.ceil(total / currentLimit)), limit: currentLimit },
   };
 }
@@ -244,7 +260,7 @@ export async function createActivityForTenant(user: TenantUser, payload: Record<
   await enqueueAppEvent(user.tenantId, "ACTIVITY_CREATED", hydrated).catch(() => undefined);
   await refreshNbaForActivity(user, hydrated).catch(() => undefined);
   await invalidateReportRollupsForTenant(user.tenantId).catch(() => undefined);
-  return hydrated;
+  return maskActivityForUser(user, hydrated);
 }
 
 // Event-based NBA refresh (gap checklist: "worker job... plus event-based refresh on
@@ -277,9 +293,13 @@ export async function updateActivityForTenant(user: TenantUser, id: string, payl
   );
   if (!existing) throw new Error("ACTIVITY_NOT_FOUND");
 
+  // F03 fix: drop any field this user's permission template marks "readonly"/"hidden" for this
+  // activity's type before it can influence the update (see field-permissions.ts).
+  const { sanitized } = sanitizeWritePayload(user, "activities", payload, (payload.typeId as string | undefined) ?? existing.typeId);
+
   const patch: Record<string, unknown> = { updatedAt: new Date().toISOString() };
   for (const key of ["typeId", "leadId", "opportunityId", "outcome", "notes", "dueAt", "completedAt", "slaStatus", "slaTarget"]) {
-    if (payload[key] !== undefined) patch[key] = payload[key] || null;
+    if (sanitized[key] !== undefined) patch[key] = sanitized[key] || null;
   }
   const columns = Object.keys(patch);
   const assignments = columns.map((column) => {
@@ -310,7 +330,7 @@ export async function updateActivityForTenant(user: TenantUser, id: string, payl
   await enqueueAppEvent(user.tenantId, "ACTIVITY_UPDATED", hydrated).catch(() => undefined);
   await refreshNbaForActivity(user, hydrated).catch(() => undefined);
   await invalidateReportRollupsForTenant(user.tenantId).catch(() => undefined);
-  return hydrated;
+  return maskActivityForUser(user, hydrated);
 }
 
 export async function getActivityStatsForTenant(user: TenantUser) {

@@ -25,14 +25,15 @@ const formSchema = z.object({
 export default function LoginPage() {
     const { login } = useAuth();
     const router = useRouter();
+    const [submitError, setSubmitError] = useState("");
     const [loading, setLoading] = useState(false);
     const [showPassword, setShowPassword] = useState(false);
 
     // "Default landing page" (gap checklist Module 10's user workspace personalization item) --
     // redirects to the user's own saved preference (if any) instead of always /dashboard.
     // Falls back to /dashboard on any failure (e.g. a fresh account with no preference set yet).
-    async function redirectAfterLogin(accessToken: string) {
-        await login(accessToken);
+    async function redirectAfterLogin() {
+        await login();
         try {
             const personalization = await apiFetch("/settings/personalization");
             router.push(personalization?.defaultLandingPage || "/dashboard");
@@ -65,6 +66,8 @@ export default function LoginPage() {
     });
 
     async function onSubmit(values: z.infer<typeof formSchema>) {
+        if (loading) return;
+        setSubmitError("");
         setLoading(true);
         try {
             const res = await apiFetch("/auth/login", {
@@ -82,10 +85,10 @@ export default function LoginPage() {
                 return;
             }
 
-            await redirectAfterLogin(res.access_token);
+            await redirectAfterLogin();
             toast.success("Logged in successfully");
         } catch (error: any) {
-            toast.error(error.message || "Failed to login");
+            setSubmitError(error.message || "Failed to login");
         } finally {
             setLoading(false);
         }
@@ -94,6 +97,8 @@ export default function LoginPage() {
     async function onVerifyMfa(event: React.FormEvent) {
         event.preventDefault();
         if (mfaCode.trim().length < 6) return;
+        if (verifying) return;
+        setSubmitError("");
         setVerifying(true);
         try {
             const res = await apiFetch("/auth/mfa/verify", {
@@ -107,10 +112,10 @@ export default function LoginPage() {
                 return;
             }
 
-            await redirectAfterLogin(res.access_token);
+            await redirectAfterLogin();
             toast.success("Logged in successfully");
         } catch (error: any) {
-            toast.error(error.message || "Invalid code");
+            setSubmitError(error.message || "Invalid code");
         } finally {
             setVerifying(false);
         }
@@ -118,9 +123,10 @@ export default function LoginPage() {
 
     async function onChangeExpiredPassword(event: React.FormEvent) {
         event.preventDefault();
-        if (newPassword.length < 6) return;
+        if (changingPassword || newPassword.length < 6) return;
+        setSubmitError("");
         if (newPassword !== confirmNewPassword) {
-            toast.error("New passwords do not match");
+            setSubmitError("New passwords do not match");
             return;
         }
         setChangingPassword(true);
@@ -129,17 +135,17 @@ export default function LoginPage() {
                 method: "POST",
                 body: JSON.stringify({ passwordChangeToken, newPassword }),
             });
-            await redirectAfterLogin(res.access_token);
+            await redirectAfterLogin();
             toast.success("Password changed and logged in");
         } catch (error: any) {
-            toast.error(error.message || "Failed to change password");
+            setSubmitError(error.message || "Failed to change password");
         } finally {
             setChangingPassword(false);
         }
     }
 
     return (
-        <div className="flex h-screen w-full items-center justify-center bg-background px-4">
+        <div className="flex min-h-dvh w-full items-center justify-center bg-background px-4 py-6">
             <motion.div
                 variants={fadeInUp}
                 initial="initial"
@@ -147,7 +153,7 @@ export default function LoginPage() {
                 className="w-full max-w-[440px]"
             >
                 <Card className="overflow-hidden rounded-[28px] shadow-[0_4px_20px_rgba(0,0,0,0.05)]">
-                    <div className="p-8 pb-4 text-center">
+                    <div className="px-5 pt-6 pb-4 text-center sm:px-8">
                         <div className="mx-auto mb-6 flex size-12 items-center justify-center rounded-xl bg-primary text-primary-foreground">
                             {passwordChangeToken ? <KeyRound className="size-5" /> : mfaToken ? <ShieldCheck className="size-5" /> : <LogIn className="size-5" />}
                         </div>
@@ -163,13 +169,15 @@ export default function LoginPage() {
                         </p>
                     </div>
 
+                    {submitError && <p role="alert" className="mx-5 break-words text-sm text-destructive sm:mx-8">{submitError}</p>}
                     {passwordChangeToken ? (
-                        <CardContent className="p-8">
+                        <CardContent className="p-5 sm:p-8">
                             <form onSubmit={onChangeExpiredPassword} className="space-y-6">
                                 <div className="space-y-2">
-                                    <Label>New Password</Label>
+                                    <Label htmlFor="expired-password">New Password</Label>
                                     <Input
                                         type="password"
+                                        id="expired-password" autoComplete="new-password" required
                                         value={newPassword}
                                         onChange={(event) => setNewPassword(event.target.value)}
                                         disabled={changingPassword}
@@ -177,30 +185,31 @@ export default function LoginPage() {
                                     />
                                 </div>
                                 <div className="space-y-2">
-                                    <Label>Confirm New Password</Label>
+                                    <Label htmlFor="expired-confirm">Confirm New Password</Label>
                                     <Input
                                         type="password"
+                                        id="expired-confirm" autoComplete="new-password" required
                                         value={confirmNewPassword}
                                         onChange={(event) => setConfirmNewPassword(event.target.value)}
                                         disabled={changingPassword}
                                     />
                                 </div>
-                                <Button type="submit" disabled={changingPassword || newPassword.length < 6} className="h-14 w-full rounded-2xl text-base font-bold">
-                                    {changingPassword ? <Loader2 className="size-5 animate-spin" /> : "Update Password & Sign In"}
+                                <Button type="submit" disabled={changingPassword || newPassword.length < 6} className="min-h-14 h-auto w-full whitespace-normal py-3 rounded-2xl text-base font-bold">
+                                    {changingPassword ? <><Loader2 className="size-5 animate-spin" /> Updating…</> : "Update Password & Sign In"}
                                 </Button>
                             </form>
                         </CardContent>
                     ) : mfaToken ? (
-                        <CardContent className="p-8">
+                        <CardContent className="p-5 sm:p-8">
                             <form onSubmit={onVerifyMfa} className="space-y-6">
                                 <div className="space-y-2">
-                                    <Label>Authentication code</Label>
+                                    <Label htmlFor="mfa-code">Authentication code</Label>
                                     <Input
+                                        id="mfa-code" autoComplete="one-time-code"
                                         value={mfaCode}
                                         onChange={(event) => setMfaCode(event.target.value.replace(/\s/g, "").slice(0, 12))}
                                         placeholder="000000"
-                                        inputMode="numeric"
-                                        autoFocus
+                                            autoFocus
                                         disabled={verifying}
                                         className="text-center text-lg tracking-widest"
                                     />
@@ -212,13 +221,14 @@ export default function LoginPage() {
                                     Remember this device for 30 days
                                 </label>
 
-                                <Button type="submit" disabled={verifying || mfaCode.trim().length < 6} className="h-14 w-full rounded-2xl text-base font-bold">
-                                    {verifying ? <Loader2 className="size-5 animate-spin" /> : "Verify"}
+                                <Button type="submit" disabled={verifying || mfaCode.trim().length < 6} className="min-h-14 h-auto w-full whitespace-normal py-3 rounded-2xl text-base font-bold">
+                                    {verifying ? <><Loader2 className="size-5 animate-spin" /> Verifying…</> : "Verify"}
                                 </Button>
 
                                 <button
                                     type="button"
-                                    onClick={() => { setMfaToken(null); setMfaCode(""); }}
+                                    disabled={verifying}
+                                    onClick={() => { setMfaToken(null); setMfaCode(""); setRememberDevice(false); setSubmitError(""); }}
                                     className="w-full text-center text-sm text-muted-foreground hover:text-foreground"
                                 >
                                     Back to sign in
@@ -226,19 +236,22 @@ export default function LoginPage() {
                             </form>
                         </CardContent>
                     ) : (
-                    <CardContent className="p-8">
+                    <CardContent className="p-5 sm:p-8">
                         <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
                             <Controller
                                 name="email"
                                 control={control}
                                 render={({ field }) => (
                                     <div className="space-y-2">
-                                        <Label>Email address</Label>
+                                        <Label htmlFor="login-email">Email address</Label>
                                         <div className="relative">
                                             <Mail className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
                                             <Input
                                                 {...field}
                                                 className="pl-9"
+                                                id="login-email"
+                                                type="email"
+                                                autoComplete="username"
                                                 placeholder="name@company.com"
                                                 disabled={loading}
                                                 aria-invalid={!!errors.email}
@@ -256,11 +269,13 @@ export default function LoginPage() {
                                 control={control}
                                 render={({ field }) => (
                                     <div className="space-y-2">
-                                        <Label>Password</Label>
+                                        <Label htmlFor="login-password">Password</Label>
                                         <div className="relative">
                                             <Lock className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
                                             <Input
                                                 {...field}
+                                                id="login-password"
+                                                autoComplete="current-password"
                                                 type={showPassword ? "text" : "password"}
                                                 className="pl-9 pr-9"
                                                 disabled={loading}
@@ -268,6 +283,7 @@ export default function LoginPage() {
                                             />
                                             <button
                                                 type="button"
+                                                aria-label={showPassword ? "Hide password" : "Show password"}
                                                 onClick={() => setShowPassword(!showPassword)}
                                                 className="absolute right-2 top-1/2 flex size-6 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                                             >
@@ -281,8 +297,8 @@ export default function LoginPage() {
                                 )}
                             />
 
-                            <Button type="submit" disabled={loading} className="mt-2 h-14 w-full rounded-2xl text-base font-bold">
-                                {loading ? <Loader2 className="size-5 animate-spin" /> : "Sign in"}
+                            <Button type="submit" disabled={loading} className="mt-2 min-h-14 h-auto w-full whitespace-normal py-3 rounded-2xl text-base font-bold">
+                                {loading ? <><Loader2 className="size-5 animate-spin" /> Signing in…</> : "Sign in"}
                             </Button>
                         </form>
                     </CardContent>

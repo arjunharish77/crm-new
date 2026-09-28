@@ -1,5 +1,7 @@
 "use client";
 
+import { RecordSummary } from "@/components/detail-shell/record-summary";
+
 import { useCallback, useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
@@ -194,20 +196,20 @@ export default function CaseDetailPage() {
     const isBreached = !record.resolvedAt && record.resolutionDueAt && new Date(record.resolutionDueAt).getTime() < Date.now();
 
     return (
-        <div className="mx-auto max-w-[1100px] p-3 md:p-4">
-            <div className="mb-4 flex items-center gap-2">
-                <Button variant="ghost" size="icon-sm" onClick={() => router.push("/dashboard/cases")}>
+        <div className="mx-auto min-w-0 max-w-[1400px]">
+            <div className="mb-4 flex min-w-0 items-start gap-2">
+                <Button variant="ghost" size="icon-sm" aria-label="Back to cases" onClick={() => router.push("/dashboard/cases")}>
                     <ArrowLeft className="size-4" />
                 </Button>
-                <div>
-                    <h1 className="text-lg font-bold tracking-[-0.5px]">Case #{record.caseNumber}</h1>
-                    <p className="text-xs text-muted-foreground">{record.subject}</p>
+                <div className="min-w-0 flex-1">
+                    <h1 className="[overflow-wrap:anywhere] break-words text-2xl font-semibold">{record.subject}</h1>
+                    <div className="mt-1 flex flex-wrap items-center gap-2 text-sm text-muted-foreground"><span>Case #{record.caseNumber}</span><Badge variant="outline">{statuses.find(status => status.id === record.statusId)?.name || "Status unavailable"}</Badge>{isBreached && <Badge variant="destructive">SLA overdue</Badge>}</div>
                 </div>
             </div>
 
-            <div className="grid gap-4 lg:grid-cols-[320px_1fr]">
-                <div className="space-y-4 lg:sticky lg:top-4 lg:self-start">
-                    <Card className="space-y-3 p-4">
+            <div className="grid gap-4 lg:grid-cols-[280px_minmax(0,1fr)]">
+                <RecordSummary>
+                    <Card className="min-w-0 space-y-3 p-4">
                         <div className="space-y-1.5">
                             <Label>Status</Label>
                             <Select value={record.statusId} onValueChange={(value) => handleFieldChange({ statusId: value })}>
@@ -228,8 +230,8 @@ export default function CaseDetailPage() {
                         </div>
                         <div className="space-y-1.5">
                             <Label>Owner</Label>
-                            <div className="flex items-center justify-between gap-2">
-                                <span className="text-sm">{userById.get(record.ownerId)?.name ?? userById.get(record.ownerId)?.email ?? "Unassigned"}</span>
+                            <div className="flex flex-wrap items-center justify-between gap-2">
+                                <span className="min-w-0 break-words text-sm">{userById.get(record.ownerId)?.name ?? userById.get(record.ownerId)?.email ?? "Unassigned"}</span>
                                 <Button variant="outline" size="sm" onClick={() => setAssignOpen(true)}>
                                     <UserCog className="size-4" />
                                     Reassign
@@ -250,7 +252,7 @@ export default function CaseDetailPage() {
                                 </p>
                             </div>
                         </div>
-                        <div className="flex items-center justify-between border-t pt-3">
+                        <div className="flex flex-wrap items-center justify-between border-t pt-3">
                             <div className="text-xs">
                                 {record.slaPausedAt ? (
                                     <Badge variant="outline" className="gap-1"><Pause className="size-3" />SLA paused</Badge>
@@ -300,7 +302,7 @@ export default function CaseDetailPage() {
                                         <p className="text-muted-foreground">No prior communications found.</p>
                                     ) : (
                                         [...(history.events ?? []), ...(history.outbox ?? [])].slice(0, 20).map((item: any, index: number) => (
-                                            <div key={item.id ?? index} className="flex items-center justify-between border-b pb-1">
+                                            <div key={item.id ?? index} className="flex flex-wrap items-center justify-between border-b pb-1">
                                                 <span>{item.channel} — {item.subject || item.eventType || item.status}</span>
                                                 <span className="text-muted-foreground">{formatWorkspaceRelativeTime(item.createdAt ?? item.occurredAt)}</span>
                                             </div>
@@ -317,7 +319,7 @@ export default function CaseDetailPage() {
                         <Card className="space-y-1 p-4 text-sm">
                             <p className="mb-1 text-xs font-bold uppercase tracking-wide text-muted-foreground">Requester</p>
                             {record.requesterName && <p>{record.requesterName}</p>}
-                            {record.requesterEmail && <p className="text-muted-foreground">{record.requesterEmail}</p>}
+                            {record.requesterEmail && <p className="break-all text-muted-foreground">{record.requesterEmail}</p>}
                             {record.requesterPhone && <p className="text-muted-foreground">{record.requesterPhone}</p>}
                         </Card>
                     )}
@@ -329,13 +331,13 @@ export default function CaseDetailPage() {
                             {record.relatedOpportunityId && <Link href={`/dashboard/opportunities/${record.relatedOpportunityId}`} className="block text-primary hover:underline">View Opportunity</Link>}
                         </Card>
                     )}
-                </div>
+                </RecordSummary>
 
-                <div className="space-y-4">
+                <div className="min-w-0 space-y-4">
                     {record.description && (
                         <Card className="p-4">
                             <p className="mb-1 text-xs font-bold uppercase tracking-wide text-muted-foreground">Description</p>
-                            <p className="whitespace-pre-wrap text-sm">{record.description}</p>
+                            <p className="whitespace-pre-wrap break-words [overflow-wrap:anywhere] text-sm">{record.description}</p>
                         </Card>
                     )}
 
@@ -350,7 +352,7 @@ export default function CaseDetailPage() {
                             ) : (
                                 record.comments.map((comment: any) => (
                                     <div key={comment.id} className={cn("rounded-lg border p-3", comment.isInternal ? "bg-muted/40" : "bg-background")}>
-                                        <div className="mb-1 flex items-center justify-between gap-2">
+                                        <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
                                             <span className="text-xs font-bold">{userById.get(comment.authorId)?.name ?? userById.get(comment.authorId)?.email ?? "Unknown"}</span>
                                             <div className="flex items-center gap-2">
                                                 {comment.isInternal && (
@@ -362,7 +364,7 @@ export default function CaseDetailPage() {
                                                 <span className="text-xs text-muted-foreground">{formatWorkspaceRelativeTime(comment.createdAt)}</span>
                                             </div>
                                         </div>
-                                        <p className="whitespace-pre-wrap text-sm">{comment.body}</p>
+                                        <p className="whitespace-pre-wrap break-words [overflow-wrap:anywhere] text-sm">{comment.body}</p>
                                     </div>
                                 ))
                             )}
@@ -383,7 +385,7 @@ export default function CaseDetailPage() {
                         )}
                         <div className="mt-4 space-y-2 border-t pt-3">
                             <Textarea rows={3} placeholder="Add a comment..." value={commentBody} onChange={(e) => setCommentBody(e.target.value)} />
-                            <div className="flex items-center justify-between">
+                            <div className="flex flex-wrap items-center justify-between">
                                 <label className="flex items-center gap-2 text-sm">
                                     <Checkbox checked={commentInternal} onCheckedChange={(checked) => setCommentInternal(!!checked)} />
                                     Internal note (not visible to requester)
@@ -396,7 +398,7 @@ export default function CaseDetailPage() {
                     </Card>
 
                     <Card className="p-4">
-                        <div className="mb-3 flex items-center justify-between">
+                        <div className="mb-3 flex flex-wrap items-center justify-between">
                             <div className="flex items-center gap-2">
                                 <Paperclip className="size-4 text-muted-foreground" />
                                 <p className="text-sm font-bold">Attachments</p>
@@ -421,7 +423,7 @@ export default function CaseDetailPage() {
                                         href={`/api/case-attachments/${attachment.id}/download`}
                                         target="_blank"
                                         rel="noreferrer"
-                                        className="flex items-center justify-between text-sm text-primary hover:underline"
+                                        className="flex flex-wrap items-center justify-between text-sm text-primary hover:underline"
                                     >
                                         <span>{attachment.filename}</span>
                                     </a>
@@ -437,7 +439,7 @@ export default function CaseDetailPage() {
                         ) : (
                             <div className="space-y-2 text-sm">
                                 {record.assignmentLog.map((entry: any) => (
-                                    <div key={entry.id} className="flex items-center justify-between gap-2 text-xs">
+                                    <div key={entry.id} className="flex flex-wrap items-center justify-between gap-2 text-xs">
                                         <span>
                                             Assigned to <span className="font-semibold">{userById.get(entry.assignedToId)?.name ?? userById.get(entry.assignedToId)?.email ?? "Unknown"}</span>
                                             {entry.reason ? ` — ${entry.reason}` : ""}

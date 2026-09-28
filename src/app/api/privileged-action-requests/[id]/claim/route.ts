@@ -11,7 +11,17 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     const user = await requirePlatformAdmin(request);
     const { id } = await params;
     const result = await claimApprovedImpersonation(user, id);
-    return NextResponse.json(result);
+    // F06 fix (WP05): same reasoning as /api/platform-admin/impersonate -- the session token is
+    // set as an HttpOnly cookie server-side rather than handed to the client in the JSON body.
+    const response = NextResponse.json({ user: result.user });
+    response.cookies.set("token", result.token, {
+      httpOnly: true,
+      sameSite: "lax",
+      secure: process.env.NODE_ENV === "production",
+      path: "/",
+      maxAge: result.expiresInSeconds,
+    });
+    return response;
   } catch (error) {
     if (error instanceof Error && error.message === "UNAUTHORIZED") return unauthorized();
     if (error instanceof Error && error.message === "FORBIDDEN") return forbidden("This isn't your request to claim");

@@ -1,5 +1,8 @@
 "use client";
 
+import { PageHeader } from "@/components/layout/page-header";
+import { ErrorState } from "@/components/common/error-state";
+
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { FileText, Plus, Pencil, Trash2, History } from "lucide-react";
@@ -56,15 +59,17 @@ function emptyScript(): Partial<CallScript> {
 export default function CallScriptsSettingsPage() {
     const [scripts, setScripts] = useState<CallScript[]>([]);
     const [loading, setLoading] = useState(true);
+    const [loadError, setLoadError] = useState<string | null>(null);
     const [dialog, setDialog] = useState<{ open: boolean; script: Partial<CallScript> | null }>({ open: false, script: null });
     const [historyFor, setHistoryFor] = useState<CallScript | null>(null);
     const [versions, setVersions] = useState<ScriptVersion[]>([]);
 
     const load = () => {
         setLoading(true);
+        setLoadError(null);
         apiFetch<CallScript[]>("/call-scripts")
             .then((data) => setScripts(Array.isArray(data) ? data : []))
-            .catch(() => toast.error("Failed to load call scripts"))
+            .catch(() => setLoadError("Failed to load call scripts."))
             .finally(() => setLoading(false));
     };
 
@@ -92,31 +97,26 @@ export default function CallScriptsSettingsPage() {
     };
 
     return (
-        <div className="space-y-4">
-            <div className="flex items-center justify-between">
-                <div>
-                    <h1 className="text-lg font-bold">Call Scripts &amp; Guidance</h1>
-                    <p className="text-sm text-muted-foreground">
-                        Define scripts matched dynamically by lead source, opportunity type, stage, and predictive score, with objection
-                        handling and required compliance lines. Shown to agents alongside next-best-action hints during a call.
-                    </p>
-                </div>
+        <div className="min-w-0 space-y-4">
+            <PageHeader title="Call Scripts & Guidance" description="Manage scripts, objection responses and required call guidance." actions={
                 <Button onClick={() => setDialog({ open: true, script: emptyScript() })}>
                     <Plus className="size-4" />
                     Add Script
                 </Button>
-            </div>
+            } />
 
             {loading ? (
                 <p className="text-sm text-muted-foreground">Loading...</p>
+            ) : loadError ? (
+                <ErrorState description={loadError} onRetry={load} />
             ) : scripts.length === 0 ? (
                 <Card className="p-6 text-center text-sm text-muted-foreground">No call scripts configured yet.</Card>
             ) : (
                 <div className="space-y-2">
                     {scripts.map((script) => (
                         <Card key={script.id} className="p-3">
-                            <div className="flex items-center justify-between gap-2">
-                                <div className="flex items-center gap-2">
+                            <div className="flex flex-wrap items-center justify-between gap-2">
+                                <div className="flex flex-wrap items-center gap-2">
                                     <FileText className="size-4 text-primary" />
                                     <span className="font-bold">{script.name}</span>
                                     {!script.isActive && <Badge variant="outline">Inactive</Badge>}
@@ -158,13 +158,13 @@ export default function CallScriptsSettingsPage() {
 
             {historyFor && (
                 <StandardDialog open onClose={() => setHistoryFor(null)} title={`Version History -- ${historyFor.name}`} maxWidth="md">
-                    <div className="max-h-[60vh] space-y-3 overflow-y-auto p-[18px] pt-1">
+                    <div className="space-y-3">
                         {versions.length === 0 ? (
                             <p className="text-sm text-muted-foreground">No prior versions -- this is the first version.</p>
                         ) : (
                             versions.map((version) => (
                                 <div key={version.id} className="rounded-md border p-3">
-                                    <div className="flex items-center justify-between">
+                                    <div className="flex flex-wrap items-center justify-between">
                                         <Badge variant="outline">v{version.version}</Badge>
                                         <span className="text-xs text-muted-foreground">{formatWorkspaceDateTime(version.createdAt)}</span>
                                     </div>
@@ -252,10 +252,10 @@ function ScriptDialog({
                 </>
             }
         >
-            <div className="max-h-[70vh] space-y-4 overflow-y-auto p-[18px] pt-1">
+            <div className="space-y-4">
                 <div className="space-y-1.5">
-                    <Label>Name</Label>
-                    <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Enterprise Renewal -- Hot Leads" />
+                    <Label htmlFor="call-script-name">Name</Label>
+                    <Input id="call-script-name" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Enterprise Renewal -- Hot Leads" />
                 </div>
 
                 <ConditionBuilder
@@ -269,12 +269,12 @@ function ScriptDialog({
                 />
 
                 <div className="space-y-1.5">
-                    <Label>Script Content</Label>
-                    <Textarea rows={6} value={content} onChange={(e) => setContent(e.target.value)} placeholder="What the agent should say..." />
+                    <Label htmlFor="call-script-content">Script Content</Label>
+                    <Textarea id="call-script-content" rows={6} value={content} onChange={(e) => setContent(e.target.value)} placeholder="What the agent should say..." />
                 </div>
 
                 <div className="space-y-2">
-                    <div className="flex items-center justify-between">
+                    <div className="flex flex-wrap items-center justify-between">
                         <Label>Objection Handling</Label>
                         <Button size="sm" variant="outline" onClick={addObjection}>
                             <Plus className="size-3.5" />
@@ -282,7 +282,7 @@ function ScriptDialog({
                         </Button>
                     </div>
                     {objectionHandling.map((entry, index) => (
-                        <div key={index} className="grid grid-cols-2 gap-2 rounded-md border p-2">
+                        <div key={index} className="grid grid-cols-1 gap-2 sm:grid-cols-2 rounded-md border p-2">
                             <Input placeholder="Objection" value={entry.objection} onChange={(e) => updateObjection(index, { objection: e.target.value })} />
                             <div className="flex gap-1">
                                 <Input placeholder="Response" value={entry.response} onChange={(e) => updateObjection(index, { response: e.target.value })} />
@@ -295,7 +295,7 @@ function ScriptDialog({
                 </div>
 
                 <div className="space-y-2">
-                    <div className="flex items-center justify-between">
+                    <div className="flex flex-wrap items-center justify-between">
                         <Label>Required Compliance Lines</Label>
                         <Button size="sm" variant="outline" onClick={addComplianceLine}>
                             <Plus className="size-3.5" />
@@ -312,7 +312,7 @@ function ScriptDialog({
                     ))}
                 </div>
 
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2">
                     <Switch checked={isActive} onCheckedChange={setIsActive} />
                     <Label>Active</Label>
                 </div>

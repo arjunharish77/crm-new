@@ -12,3 +12,7 @@ backups
 .codex
 coverage
 *.log
+
+ui-audit-2026-09
+crm-audit-bundle
+crm-audit-bundle-new

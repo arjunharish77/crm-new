@@ -1,5 +1,5 @@
 import { randomUUID } from "crypto";
-import { query, queryOne, execute } from "@/lib/db/query";
+import { query, queryOne, execute, jsonbParam, queryAsSystem, queryOneAsSystem, executeAsSystem } from "@/lib/db/query";
 import { withTransaction } from "@/lib/db/transaction";
 import { writePrivateFile, readPrivateFile, deletePrivateFile } from "@/lib/storage/file-storage";
 import { enqueueExportJob } from "@/lib/server/job-queue";
@@ -12,10 +12,41 @@ import { DatabaseError } from "@/lib/db/errors";
 import { checkRateLimitWithAlert, RateLimitExceededError } from "@/lib/server/rate-limit";
 import { assertAccountActiveForDownload } from "@/lib/server/file-download-guards";
 import { generateSignedDownloadToken, verifySignedDownloadToken } from "@/lib/server/signed-urls";
+import { applyRecordScopeClause } from "@/lib/server/record-scope";
+import { fieldPermissionMap } from "@/lib/server/field-permissions";
+
+// F03 fix (WP04): the export query results use friendly column headers ("Email", "Phone")
+// rather than the raw field keys field-permissions.ts's fieldPermissionMap is keyed by (per the
+// Permission Templates settings UI's BASE_FIELDS) -- this maps header back to key so a field a
+// user's role/template marks "hidden" can be nulled out in the exported row, same as it already
+// is in every other read surface fixed in this work package. Only fields BASE_FIELDS.lead/
+// .opportunity actually name are included; predictive-score/audit/join columns were never
+// individually configurable and are left untouched.
+const LEAD_EXPORT_FIELD_ALIASES: Record<string, string> = {
+  "Lead Name": "name", Email: "email", Phone: "phone", Company: "company",
+  Status: "status", Source: "source", Score: "score",
+};
+const OPPORTUNITY_EXPORT_FIELD_ALIASES: Record<string, string> = {
+  Opportunity: "title", Amount: "amount", Priority: "priority", "Expected Close Date": "expectedCloseDate",
+};
+
+export function maskExportRows(user: TenantUser, module: "leads" | "opportunities", rows: Record<string, unknown>[]) {
+  const permissions = fieldPermissionMap(user, module);
+  if (!Object.keys(permissions).length) return rows;
+  const aliasMap = module === "leads" ? LEAD_EXPORT_FIELD_ALIASES : OPPORTUNITY_EXPORT_FIELD_ALIASES;
+  return rows.map((row) => {
+    const masked = { ...row };
+    for (const [alias, fieldKey] of Object.entries(aliasMap)) {
+      if (permissions[fieldKey] === "hidden" && alias in masked) masked[alias] = null;
+    }
+    return masked;
+  });
+}
 
 type TenantUser = {
   id: string;
   tenantId: string | null;
+  teamId?: string | null;
   role?: { permissions?: any } | string | null;
 };
 
@@ -157,19 +188,31 @@ function tenantClause(user: TenantUser, values: unknown[], alias = "") {
   return `${alias ? `${alias}.` : ""}"tenantId"::text = $${values.length}`;
 }
 
-function filterConditions(filters: Record<string, unknown> | null | undefined): ExportFilterCondition[] {
-  const parsed = filters?.urlFilters && typeof filters.urlFilters === "string" ? (() => {
+type ExportFilterGroup = { logic: "AND" | "OR"; conditions: ExportFilterCondition[] };
+
+// WP09 (F12): returns GROUPS, each with its own AND/OR logic intact -- previously this flattened
+// every group's conditions into one flat array and the caller ANDed all of them together
+// unconditionally, silently discarding any group the user configured as "Match ANY (OR)". A
+// nested export filter now compiles with the exact same group structure the list/view surface
+// already respects (see buildGroupedFilterClause in query-filters.ts), so "exporting a view
+// exports the actual view" holds for group logic too, not just which fields/values are present.
+export function filterGroups(filters: Record<string, unknown> | unknown[] | null | undefined): ExportFilterGroup[] {
+  const urlFilters = !Array.isArray(filters) ? filters?.urlFilters : undefined;
+  const parsed = urlFilters && typeof urlFilters === "string" ? (() => {
     try {
-      return JSON.parse(filters.urlFilters);
+      return JSON.parse(urlFilters);
     } catch {
       return null;
     }
   })() : null;
   const source: any = Array.isArray(parsed) ? parsed : filters;
-  if (Array.isArray(source)) {
-    return source.flatMap((group) => Array.isArray(group?.conditions) ? group.conditions : []);
-  }
-  return Array.isArray(source?.conditions) ? source.conditions : [];
+  const rawGroups: any[] = Array.isArray(source) ? source : Array.isArray(source?.conditions) ? [source] : [];
+  return rawGroups
+    .map((group) => ({
+      logic: group?.logic === "OR" ? ("OR" as const) : ("AND" as const),
+      conditions: Array.isArray(group?.conditions) ? (group.conditions as ExportFilterCondition[]) : [],
+    }))
+    .filter((group) => group.conditions.length > 0);
 }
 
 function addMappedCondition(
@@ -222,14 +265,19 @@ function addMappedCondition(
   }
 }
 
-function applyMappedConditions(
+export function applyMappedConditions(
   clauses: string[],
   values: unknown[],
-  filters: Record<string, unknown> | null | undefined,
+  filters: Record<string, unknown> | unknown[] | null | undefined,
   columnMap: Map<string, string>,
 ) {
-  for (const condition of filterConditions(filters)) {
-    addMappedCondition(clauses, values, condition, columnMap);
+  for (const group of filterGroups(filters)) {
+    const groupClauses: string[] = [];
+    for (const condition of group.conditions) {
+      addMappedCondition(groupClauses, values, condition, columnMap);
+    }
+    if (!groupClauses.length) continue;
+    clauses.push(groupClauses.length === 1 ? groupClauses[0] : `(${groupClauses.join(` ${group.logic} `)})`);
   }
 }
 
@@ -271,6 +319,13 @@ async function fetchExportRows(user: TenantUser, moduleName: ExportModuleName, f
 
   if (moduleName === "LEADS") {
     const clauses = [tenantClause(user, values, "l")];
+    // F03 fix (WP04): the export path had its own separate OWN-vs-everything-else check,
+    // exactly like leads-postgres.ts did before that fix -- "TEAM Records" fell through to an
+    // unrestricted tenant-wide export. Reuses the same shared record-scope.ts module (aliased
+    // to "l" since this query joins User/RecordScore, which would make an unqualified
+    // "ownerId"/"tenantId" reference ambiguous).
+    const leadsTenantIdParam = user.tenantId ? values.length : null;
+    applyRecordScopeClause(clauses, values, user, "LEAD", leadsTenantIdParam, "l");
     applySelectedExportIds(clauses, values, filters, "l");
     applyMappedConditions(clauses, values, filters, new Map([
       ["name", "l.name"],
@@ -291,12 +346,8 @@ async function fetchExportRows(user: TenantUser, moduleName: ExportModuleName, f
       ["createdAt", `l."createdAt"`],
       ["updatedAt", `l."updatedAt"`],
     ]));
-    if (own) {
-      values.push(user.id);
-      clauses.push(`l."ownerId" = $${values.length}`);
-    }
     values.push(limit);
-    return query<Record<string, unknown>>(
+    const leadRows = await query<Record<string, unknown>>(
       `select l.name as "Lead Name", l.email as "Email", l.phone as "Phone", l.company as "Company",
               l.status as "Status", l.source as "Source", owner.name as "Owner", l.score as "Score",
               rs."scoreBand" as "Predictive Score Band", rs."conversionProbability" as "Conversion Probability",
@@ -312,10 +363,14 @@ async function fetchExportRows(user: TenantUser, moduleName: ExportModuleName, f
        limit $${values.length}`,
       values,
     );
+    return maskExportRows(user, "leads", leadRows);
   }
 
   if (moduleName === "OPPORTUNITIES") {
     const clauses = [tenantClause(user, values, "o")];
+    // F03 fix (WP04): same reasoning as the LEADS branch above.
+    const oppsTenantIdParam = user.tenantId ? values.length : null;
+    applyRecordScopeClause(clauses, values, user, "OPPORTUNITY", oppsTenantIdParam, "o");
     applySelectedExportIds(clauses, values, filters, "o");
     const opportunityTypeId = typeof filters.opportunityTypeId === "string" ? filters.opportunityTypeId : null;
     if (opportunityTypeId) {
@@ -338,12 +393,8 @@ async function fetchExportRows(user: TenantUser, moduleName: ExportModuleName, f
       ["predictiveStallRisk", `rs."stallRisk"`],
       ["predictiveExpectedCloseRisk", `rs."expectedCloseRisk"`],
     ]));
-    if (own) {
-      values.push(user.id);
-      clauses.push(`o."ownerId" = $${values.length}`);
-    }
     values.push(limit);
-    return query<Record<string, unknown>>(
+    const opportunityRows = await query<Record<string, unknown>>(
       `select o.title as "Opportunity", l.name as "Lead", ot.name as "Opportunity Type",
               sd.name as "Stage", o.amount as "Amount", o.priority as "Priority",
               owner.name as "Owner", o."expectedCloseDate" as "Expected Close Date",
@@ -362,6 +413,7 @@ async function fetchExportRows(user: TenantUser, moduleName: ExportModuleName, f
        limit $${values.length}`,
       values,
     );
+    return maskExportRows(user, "opportunities", opportunityRows);
   }
 
   if (moduleName === "ACTIVITIES") {
@@ -721,7 +773,7 @@ export async function createExportRequestForUser(user: TenantUser, input: Record
 
   if (initialStatus === "QUEUED") {
     try {
-      await enqueueExportJob(id);
+      await enqueueExportJob(id, user.tenantId);
     } catch (error) {
       await execute(`update "ExportRequest" set status = 'FAILED', error = $1, "updatedAt" = $2 where id = $3`, [
         error instanceof Error ? error.message : "Export queue unavailable",
@@ -743,7 +795,7 @@ export async function approveExportRequest(user: TenantUser, exportRequestId: st
   );
   if (!request) throw new Error("EXPORT_REQUEST_NOT_PENDING_APPROVAL");
   await createAuditLog(user, "UPDATE", "EXPORT_REQUEST", exportRequestId, null, null, { status: { before: "PENDING_APPROVAL", after: "QUEUED" } });
-  await enqueueExportJob(exportRequestId).catch(() => undefined);
+  await enqueueExportJob(exportRequestId, user.tenantId).catch(() => undefined);
   return request;
 }
 
@@ -812,7 +864,7 @@ export async function createExportTemplateForTenant(
       `insert into "ExportTemplate" (id, "tenantId", name, "moduleName", filters, columns, "createdBy", "createdAt", "updatedAt")
        values ($1, $2, $3, $4, $5, $6, $7, $8, $8)
        returning id, name, "moduleName", filters, columns, "createdAt"`,
-      [randomUUID(), user.tenantId, name, moduleName, input.filters ?? {}, input.columns ?? [], user.id, new Date().toISOString()],
+      [randomUUID(), user.tenantId, name, moduleName, input.filters ?? {}, jsonbParam(input.columns ?? []), user.id, new Date().toISOString()],
     );
     if (!template) throw new Error("EXPORT_TEMPLATE_INSERT_FAILED");
     return template;
@@ -837,8 +889,10 @@ function exportRetentionDays() {
 // (a link/file that stays downloadable indefinitely long after anyone remembers it exists).
 // Deletes the underlying stored file and marks the request EXPIRED; the ExportRequest row
 // itself (and its audit trail) survives so "someone exported X on date Y" stays answerable.
+// WP07 (F04): BACKGROUND_JOB, disposition B -- worker-invoked recurring job, discovers expired
+// export files across every tenant at once.
 export async function processExpiredExportFiles(limit = 50) {
-  const due = await query<{ id: string; fileObjectId: string | null; storageKey: string | null }>(
+  const due = await queryAsSystem<{ id: string; fileObjectId: string | null; storageKey: string | null }>(
     `select er.id, er."fileObjectId", fo."storageKey"
      from "ExportRequest" er
      join "FileObject" fo on fo.id = er."fileObjectId"
@@ -849,7 +903,7 @@ export async function processExpiredExportFiles(limit = 50) {
   let processed = 0;
   for (const row of due) {
     if (row.storageKey) await deletePrivateFile(row.storageKey).catch(() => undefined);
-    await execute(`update "ExportRequest" set status = 'EXPIRED', "fileObjectId" = null, "updatedAt" = $1 where id = $2`, [
+    await executeAsSystem(`update "ExportRequest" set status = 'EXPIRED', "fileObjectId" = null, "updatedAt" = $1 where id = $2`, [
       new Date().toISOString(),
       row.id,
     ]);
@@ -858,8 +912,12 @@ export async function processExpiredExportFiles(limit = 50) {
   return { processed };
 }
 
+// WP07 (F04): BACKGROUND_JOB, disposition B -- both callers of this function (the worker's own
+// "exports.process" dynamic job, and processDueReportSchedules/retryFailedReportSchedules'
+// createDelivery, themselves already-converted background jobs) run with no ambient tenant
+// context; the exportRequestId is looked up by id alone, tenant unknown until the row resolves it.
 export async function processExportRequest(exportRequestId: string) {
-  let request = await queryOne<ExportRequestRow>(`select * from "ExportRequest" where id = $1 limit 1`, [exportRequestId]);
+  let request = await queryOneAsSystem<ExportRequestRow>(`select * from "ExportRequest" where id = $1 limit 1`, [exportRequestId]);
   if (!request) throw new Error("EXPORT_REQUEST_NOT_FOUND");
   if (request.status === "COMPLETED" || request.status === "RUNNING") return request;
 
@@ -868,7 +926,7 @@ export async function processExportRequest(exportRequestId: string) {
   const user = requester as TenantUser;
   const startedAt = new Date().toISOString();
 
-  const claimedRequest = await queryOne<ExportRequestRow>(
+  const claimedRequest = await queryOneAsSystem<ExportRequestRow>(
     `update "ExportRequest"
      set status = 'RUNNING', "startedAt" = $1, "updatedAt" = $1, error = null
      where id = $2 and status not in ('COMPLETED', 'RUNNING')
@@ -876,7 +934,7 @@ export async function processExportRequest(exportRequestId: string) {
     [startedAt, exportRequestId],
   );
   if (!claimedRequest) {
-    const latest = await queryOne<ExportRequestRow>(`select * from "ExportRequest" where id = $1 limit 1`, [exportRequestId]);
+    const latest = await queryOneAsSystem<ExportRequestRow>(`select * from "ExportRequest" where id = $1 limit 1`, [exportRequestId]);
     if (!latest) throw new Error("EXPORT_REQUEST_NOT_FOUND");
     return latest;
   }

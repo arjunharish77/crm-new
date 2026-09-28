@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { getAdminSession } from "@/lib/admin-auth";
 import { getCrmSyncConfig } from "@/lib/crm-sync";
 import { query } from "@/lib/db";
 
@@ -19,10 +20,23 @@ const configSchema = z.object({
 });
 
 export async function GET() {
+  // F26 fix (WP16): this config includes the CRM push destination's auth headers/API key -- must
+  // not be readable by an anonymous or stale-session request. See getAdminSession's own comment
+  // in src/lib/admin-auth.ts for why proxy.ts's cookie-only check isn't sufficient by itself.
+  const session = await getAdminSession();
+  if (!session) {
+    return NextResponse.json({ error: "CMS admin login required" }, { status: 401 });
+  }
+
   return NextResponse.json(await getCrmSyncConfig());
 }
 
 export async function PATCH(request: Request) {
+  const session = await getAdminSession();
+  if (!session) {
+    return NextResponse.json({ error: "CMS admin login required" }, { status: 401 });
+  }
+
   const body = await request.json().catch(() => null);
   const parsed = configSchema.safeParse(body);
   if (!parsed.success) {

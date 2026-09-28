@@ -18,7 +18,7 @@ import { cn } from "@/lib/utils";
 // keyed off the M3 tokens rather than fixed hex values.
 const STATUS_CLASSNAMES: Record<string, string> = {
     NEW: "bg-primary/8 text-primary border-primary/20",
-    QUALIFIED: "bg-secondary/15 text-secondary-foreground border-secondary/30",
+    QUALIFIED: "bg-secondary/15 text-foreground border-secondary/30",
     LOST: "bg-destructive/8 text-destructive border-destructive/20",
     CONVERTED: "bg-tertiary/12 text-tertiary border-tertiary/25",
 };
@@ -56,6 +56,7 @@ function StatusCell({ lead, onStatusChange }: { lead: Lead; onStatusChange: Lead
         >
             <SelectTrigger
                 size="sm"
+                aria-label={`Status for ${lead.name}`}
                 onClick={(e) => e.stopPropagation()}
                 className={cn(
                     "h-7 w-fit gap-1 rounded-full border px-2.5 text-xs font-bold uppercase tracking-wide [&_svg]:size-3",

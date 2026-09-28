@@ -1,5 +1,7 @@
 "use client";
 
+import { PageHeader } from "@/components/layout/page-header";
+
 import { useCallback, useEffect, useState } from "react";
 import { apiFetch } from "@/lib/api";
 import { Button } from "@/components/ui/button";
@@ -14,7 +16,7 @@ import { ConditionBuilder, type ConditionFieldOption, type CrmCondition } from "
 import { TableSkeleton } from "@/components/common/skeletons";
 import { EmptyState } from "@/components/common/empty-state";
 import { useModuleEnabled } from "@/components/auth/feature-gate";
-import { Plus, Pencil, Trash2, Sparkles } from "lucide-react";
+import { Plus, Pencil, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 type Module = "LEAD" | "OPPORTUNITY";
@@ -106,6 +108,7 @@ const EMPTY_RULE_FORM: {
 function ModulePanel({ module }: { module: Module }) {
     const [strategy, setStrategy] = useState<Strategy | null>(null);
     const [rules, setRules] = useState<Rule[]>([]);
+    const [loadError, setLoadError] = useState(false);
     const [loading, setLoading] = useState(true);
     const [savingStrategy, setSavingStrategy] = useState(false);
     const [ruleDialogOpen, setRuleDialogOpen] = useState(false);
@@ -114,6 +117,7 @@ function ModulePanel({ module }: { module: Module }) {
 
     const fetchAll = useCallback(async () => {
         setLoading(true);
+        setLoadError(false);
         try {
             const [strategyData, rulesData] = await Promise.all([
                 apiFetch<Strategy | null>(`/next-best-action/strategies/${module}`),
@@ -122,7 +126,7 @@ function ModulePanel({ module }: { module: Module }) {
             setStrategy(strategyData ?? null);
             setRules(Array.isArray(rulesData) ? rulesData : []);
         } catch {
-            toast.error("Failed to load Next-Best-Action configuration");
+            setLoadError(true);
         } finally {
             setLoading(false);
         }
@@ -210,11 +214,12 @@ function ModulePanel({ module }: { module: Module }) {
     };
 
     if (loading) return <TableSkeleton rows={4} columns={2} />;
+    if (loadError) return <div role="alert" className="rounded-lg border p-4 text-sm">Unable to load recommendation settings. <Button variant="outline" size="sm" onClick={fetchAll}>Retry</Button></div>;
 
     return (
         <div className="space-y-4">
             <div className="rounded-[14px] border bg-card p-4">
-                <div className="mb-3 flex items-start justify-between gap-3">
+                <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
                     <div>
                         <h2 className="text-sm font-bold">Strategy Settings</h2>
                         <p className="mt-0.5 text-xs text-muted-foreground">
@@ -230,26 +235,26 @@ function ModulePanel({ module }: { module: Module }) {
                         Active
                     </label>
                 </div>
-                <div className="grid gap-3 sm:grid-cols-3">
+                <div className="grid min-w-0 gap-3 2xl:grid-cols-3">
                     <div className="space-y-1.5">
-                        <Label>Max visible recommendations / user</Label>
-                        <Input
+                        <Label htmlFor={`nba-max-visible-recommendations-user-${module}`}>Max visible recommendations / user</Label>
+                        <Input id={`nba-max-visible-recommendations-user-${module}`}
                             type="number"
                             defaultValue={strategyOrDefault.maxVisibleRecommendationsPerUser}
                             onBlur={(e) => saveStrategy({ maxVisibleRecommendationsPerUser: Number(e.target.value) || 5 })}
                         />
                     </div>
                     <div className="space-y-1.5">
-                        <Label>Cooldown (hours)</Label>
-                        <Input
+                        <Label htmlFor={`nba-cooldown-hours-${module}`}>Cooldown (hours)</Label>
+                        <Input id={`nba-cooldown-hours-${module}`}
                             type="number"
                             defaultValue={strategyOrDefault.cooldownHours}
                             onBlur={(e) => saveStrategy({ cooldownHours: Number(e.target.value) || 0 })}
                         />
                     </div>
                     <div className="space-y-1.5">
-                        <Label>Daily action cap / user</Label>
-                        <Input
+                        <Label htmlFor={`nba-daily-action-cap-user-${module}`}>Daily action cap / user</Label>
+                        <Input id={`nba-daily-action-cap-user-${module}`}
                             type="number"
                             defaultValue={strategyOrDefault.dailyActionCapPerUser}
                             onBlur={(e) => saveStrategy({ dailyActionCapPerUser: Number(e.target.value) || 1 })}
@@ -274,7 +279,7 @@ function ModulePanel({ module }: { module: Module }) {
             </div>
 
             <div className="rounded-[14px] border bg-card p-4">
-                <div className="mb-3 flex items-center justify-between gap-3">
+                <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
                     <h2 className="text-sm font-bold">Rules</h2>
                     <Button size="sm" onClick={openCreateRule}>
                         <Plus className="size-4" />
@@ -286,10 +291,10 @@ function ModulePanel({ module }: { module: Module }) {
                 ) : (
                     <div className="space-y-2">
                         {rules.map((rule) => (
-                            <div key={rule.id} className="flex items-center justify-between gap-3 rounded-xl border bg-surface-container-low p-3">
+                            <div key={rule.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-surface-container-low p-3">
                                 <div>
-                                    <div className="flex items-center gap-2">
-                                        <span className="text-sm font-semibold">{rule.name}</span>
+                                    <div className="flex min-w-0 flex-wrap items-center gap-2">
+                                        <span className="min-w-0 break-all text-sm font-semibold">{rule.name}</span>
                                         <Badge variant="outline" className="rounded-md text-[0.65rem]">{rule.actionType}</Badge>
                                         {!rule.isActive && <Badge variant="outline" className="rounded-md text-[0.65rem] text-muted-foreground">Inactive</Badge>}
                                         {rule.requiresApproval && <Badge variant="secondary" className="rounded-md text-[0.65rem]">Needs manager approval</Badge>}
@@ -299,10 +304,10 @@ function ModulePanel({ module }: { module: Module }) {
                                     </p>
                                 </div>
                                 <div className="flex items-center gap-1">
-                                    <Button size="icon-sm" variant="ghost" onClick={() => openEditRule(rule)}>
+                                    <Button size="icon-sm" variant="ghost" aria-label={`Edit ${rule.name}`} onClick={() => openEditRule(rule)}>
                                         <Pencil className="size-4" />
                                     </Button>
-                                    <Button size="icon-sm" variant="ghost" className="text-destructive" onClick={() => deleteRule(rule.id)}>
+                                    <Button size="icon-sm" variant="ghost" className="text-destructive" aria-label={`Delete ${rule.name}`} onClick={() => deleteRule(rule.id)}>
                                         <Trash2 className="size-4" />
                                     </Button>
                                 </div>
@@ -326,13 +331,13 @@ function ModulePanel({ module }: { module: Module }) {
             >
                 <div className="space-y-4">
                     <div className="space-y-1.5">
-                        <Label>Rule Name</Label>
-                        <Input value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} />
+                        <Label htmlFor={`nba-rule-name-${module}`}>Rule Name</Label>
+                        <Input id={`nba-rule-name-${module}`} value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} />
                     </div>
                     <div className="space-y-1.5">
-                        <Label>Action Type</Label>
+                        <Label htmlFor={`nba-action-type-${module}`}>Action Type</Label>
                         <Select value={form.actionType} onValueChange={(value) => setForm((f) => ({ ...f, actionType: value }))}>
-                            <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                            <SelectTrigger id={`nba-action-type-${module}`} className="w-full"><SelectValue /></SelectTrigger>
                             <SelectContent>
                                 {ACTION_TYPES.map((option) => (
                                     <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
@@ -349,18 +354,18 @@ function ModulePanel({ module }: { module: Module }) {
                         onLogicChange={(conditionLogic) => setForm((f) => ({ ...f, eligibilityConditions: { ...f.eligibilityConditions, conditionLogic } }))}
                         onChange={(conditions) => setForm((f) => ({ ...f, eligibilityConditions: { ...f.eligibilityConditions, conditions } }))}
                     />
-                    <div className="grid gap-3 sm:grid-cols-3">
+                    <div className="grid min-w-0 gap-3 2xl:grid-cols-3">
                         <div className="space-y-1.5">
-                            <Label>Base Priority (0-100)</Label>
-                            <Input type="number" value={form.basePriority} onChange={(e) => setForm((f) => ({ ...f, basePriority: Number(e.target.value) || 0 }))} />
+                            <Label htmlFor={`nba-base-priority-${module}`}>Base Priority (0-100)</Label>
+                            <Input id={`nba-base-priority-${module}`} type="number" value={form.basePriority} onChange={(e) => setForm((f) => ({ ...f, basePriority: Number(e.target.value) || 0 }))} />
                         </div>
                         <div className="space-y-1.5">
-                            <Label>Business Value</Label>
-                            <Input type="number" value={form.businessValue} onChange={(e) => setForm((f) => ({ ...f, businessValue: Number(e.target.value) || 0 }))} />
+                            <Label htmlFor={`nba-business-value-${module}`}>Business Value</Label>
+                            <Input id={`nba-business-value-${module}`} type="number" value={form.businessValue} onChange={(e) => setForm((f) => ({ ...f, businessValue: Number(e.target.value) || 0 }))} />
                         </div>
                         <div className="space-y-1.5">
-                            <Label>Tie-break Priority</Label>
-                            <Input type="number" value={form.priority} onChange={(e) => setForm((f) => ({ ...f, priority: Number(e.target.value) || 0 }))} />
+                            <Label htmlFor={`nba-tie-break-priority-${module}`}>Tie-break Priority</Label>
+                            <Input id={`nba-tie-break-priority-${module}`} type="number" value={form.priority} onChange={(e) => setForm((f) => ({ ...f, priority: Number(e.target.value) || 0 }))} />
                         </div>
                     </div>
                     {(form.actionType === "CREATE_TASK" || form.actionType === "SCHEDULE_ACTIVITY") && (
@@ -380,15 +385,15 @@ function ModulePanel({ module }: { module: Module }) {
                     {form.actionType === "UPDATE_FIELD" && (
                         <div className="grid gap-3 sm:grid-cols-2">
                             <div className="space-y-1.5">
-                                <Label>Field Key</Label>
-                                <Input
+                                <Label htmlFor={`nba-field-key-${module}`}>Field Key</Label>
+                                <Input id={`nba-field-key-${module}`}
                                     value={(form.actionConfig.fieldKey as string) || ""}
                                     onChange={(e) => setForm((f) => ({ ...f, actionConfig: { ...f.actionConfig, fieldKey: e.target.value } }))}
                                 />
                             </div>
                             <div className="space-y-1.5">
-                                <Label>Field Value</Label>
-                                <Input
+                                <Label htmlFor={`nba-field-value-${module}`}>Field Value</Label>
+                                <Input id={`nba-field-value-${module}`}
                                     value={(form.actionConfig.fieldValue as string) || ""}
                                     onChange={(e) => setForm((f) => ({ ...f, actionConfig: { ...f.actionConfig, fieldValue: e.target.value } }))}
                                 />
@@ -397,8 +402,8 @@ function ModulePanel({ module }: { module: Module }) {
                     )}
                     {form.actionType === "ADD_TO_LIST" && (
                         <div className="space-y-1.5">
-                            <Label>List Id</Label>
-                            <Input
+                            <Label htmlFor={`nba-list-id-${module}`}>List Id</Label>
+                            <Input id={`nba-list-id-${module}`}
                                 value={(form.actionConfig.listId as string) || ""}
                                 onChange={(e) => setForm((f) => ({ ...f, actionConfig: { ...f.actionConfig, listId: e.target.value } }))}
                             />
@@ -431,22 +436,15 @@ export default function NextBestActionAdminPage() {
 
     if (!moduleEnabled) {
         return (
-            <div className="mx-auto max-w-[1200px] p-4 md:p-6">
+            <div className="min-w-0">
                 <EmptyState title="Next-Best-Action isn't enabled" description="Ask a platform admin to enable this module for your tenant." />
             </div>
         );
     }
 
     return (
-        <div className="mx-auto max-w-[1200px] p-4 md:p-6">
-            <div className="flex items-center gap-2">
-                <Sparkles className="size-5 text-primary" />
-                <h1 className="text-lg font-extrabold tracking-tight">Next-Best-Action</h1>
-            </div>
-            <p className="mt-1 text-xs text-muted-foreground">
-                Deterministic recommendation rules for Leads and Opportunities -- no external AI cost, ranked from predictive
-                score, SLA risk, owner workload, and rule priority.
-            </p>
+        <div className="min-w-0">
+            <PageHeader title="Next-Best-Action" description="Configure recommendations for leads and opportunities, including priorities, cooldowns and workload limits." />
 
             <Tabs defaultValue="LEAD" className="mt-4 space-y-4">
                 <TabsList>

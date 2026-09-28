@@ -1,12 +1,13 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { apiFetch } from "@/lib/api";
 import { toast } from "sonner";
 import { UserPlus } from "lucide-react";
+import { ErrorState } from "@/components/common/error-state";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -33,6 +34,8 @@ const formSchema = z.object({
 
 export function AddPartnerDialog({ open, onOpenChange, onSuccess }: AddPartnerDialogProps) {
     const [loading, setLoading] = useState(false);
+    const [rolesError, setRolesError] = useState(false);
+    const [rolesLoaded, setRolesLoaded] = useState(false);
     const [partnerRoles, setPartnerRoles] = useState<Role[]>([]);
 
     const { control, handleSubmit, reset, formState: { errors } } = useForm({
@@ -49,16 +52,15 @@ export function AddPartnerDialog({ open, onOpenChange, onSuccess }: AddPartnerDi
         },
     });
 
-    useEffect(() => {
-        if (open) {
-            apiFetch("/roles")
-                .then((data) => {
-                    const roles = Array.isArray(data) ? data : [];
-                    setPartnerRoles(roles.filter((role: Role) => role.permissions?.isPartnerRole));
-                })
-                .catch(() => setPartnerRoles([]));
-        }
-    }, [open]);
+    const fetchRoles = useCallback(async () => {
+        setRolesError(false); setRolesLoaded(false);
+        try {
+            const data = await apiFetch<Role[]>("/roles");
+            setPartnerRoles((Array.isArray(data) ? data : []).filter((role) => role.permissions?.isPartnerRole));
+            setRolesLoaded(true);
+        } catch { setRolesError(true); }
+    }, []);
+    useEffect(() => { if (open) fetchRoles(); }, [open, fetchRoles]);
 
     const handleClose = () => {
         onOpenChange(false);
@@ -99,12 +101,14 @@ export function AddPartnerDialog({ open, onOpenChange, onSuccess }: AddPartnerDi
                     <Button type="button" variant="ghost" onClick={handleClose}>
                         Cancel
                     </Button>
-                    <Button type="submit" form="add-partner-form" disabled={loading}>
+                    <Button type="submit" form="add-partner-form" disabled={loading || !rolesLoaded || partnerRoles.length === 0}>
                         {loading ? "Creating..." : "Create Partner"}
                     </Button>
                 </>
             }
         >
+            {rolesError && <ErrorState description="Partner roles could not be loaded." onRetry={fetchRoles} />}
+            {rolesLoaded && partnerRoles.length === 0 && <p className="text-sm text-muted-foreground">Create a partner role in Roles &amp; Permissions before adding a login.</p>}
             <form id="add-partner-form" onSubmit={handleSubmit(onSubmit)}>
                 <div className="space-y-4">
                     {partnerRoles.length === 0 && (
@@ -119,7 +123,7 @@ export function AddPartnerDialog({ open, onOpenChange, onSuccess }: AddPartnerDi
                         control={control}
                         render={({ field }) => (
                             <Field label="Contact Name" error={errors.name?.message as string}>
-                                <Input {...field} aria-invalid={!!errors.name} />
+                                <Input id="add-partner-dialog-contact-name" {...field} aria-invalid={!!errors.name} />
                             </Field>
                         )}
                     />
@@ -129,7 +133,7 @@ export function AddPartnerDialog({ open, onOpenChange, onSuccess }: AddPartnerDi
                         control={control}
                         render={({ field }) => (
                             <Field label="Email" error={errors.email?.message as string}>
-                                <Input {...field} type="email" aria-invalid={!!errors.email} />
+                                <Input id="add-partner-dialog-email" {...field} type="email" aria-invalid={!!errors.email} />
                             </Field>
                         )}
                     />
@@ -139,7 +143,7 @@ export function AddPartnerDialog({ open, onOpenChange, onSuccess }: AddPartnerDi
                         control={control}
                         render={({ field }) => (
                             <Field label="Temporary Password" error={errors.password?.message as string}>
-                                <Input {...field} type="password" placeholder="Min. 6 characters" aria-invalid={!!errors.password} />
+                                <Input id="add-partner-dialog-temporary-password" {...field} type="password" placeholder="Min. 6 characters" aria-invalid={!!errors.password} />
                             </Field>
                         )}
                     />
@@ -150,7 +154,7 @@ export function AddPartnerDialog({ open, onOpenChange, onSuccess }: AddPartnerDi
                         render={({ field }) => (
                             <Field label="Partner Role" error={errors.roleId?.message as string}>
                                 <Select value={field.value} onValueChange={field.onChange}>
-                                    <SelectTrigger aria-invalid={!!errors.roleId} className="w-full">
+                                    <SelectTrigger id="add-partner-dialog-partner-role" aria-invalid={!!errors.roleId} className="w-full">
                                         <SelectValue placeholder="Select partner role" />
                                     </SelectTrigger>
                                     <SelectContent>
@@ -183,7 +187,7 @@ export function AddPartnerDialog({ open, onOpenChange, onSuccess }: AddPartnerDi
                             control={control}
                             render={({ field }) => (
                                 <Field label="GSTIN (optional)">
-                                    <Input {...field} placeholder="Leave blank if not GST-registered" />
+                                    <Input id="add-partner-dialog-gstin-optional-" {...field} placeholder="Leave blank if not GST-registered" />
                                 </Field>
                             )}
                         />
@@ -192,7 +196,7 @@ export function AddPartnerDialog({ open, onOpenChange, onSuccess }: AddPartnerDi
                             control={control}
                             render={({ field }) => (
                                 <Field label="PAN (optional)">
-                                    <Input {...field} />
+                                    <Input id="add-partner-dialog-pan-optional-" {...field} />
                                 </Field>
                             )}
                         />
@@ -203,7 +207,7 @@ export function AddPartnerDialog({ open, onOpenChange, onSuccess }: AddPartnerDi
                         control={control}
                         render={({ field }) => (
                             <Field label="Registered State (optional)" hint="Used for CGST+SGST vs IGST place-of-supply logic on invoices">
-                                <Input {...field} />
+                                <Input id="add-partner-dialog-registered-state-optional-" {...field} />
                             </Field>
                         )}
                     />
@@ -226,7 +230,7 @@ function Field({
 }) {
     return (
         <div className="space-y-2">
-            <Label>{label}</Label>
+            <Label htmlFor={`add-partner-dialog-${label.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`}>{label}</Label>
             {children}
             {error ? (
                 <p className="text-xs text-destructive">{error}</p>

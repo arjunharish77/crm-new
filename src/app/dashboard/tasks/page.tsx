@@ -1,6 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { PageHeader } from "@/components/layout/page-header";
+
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { apiFetch } from "@/lib/api";
 import { Button } from "@/components/ui/button";
@@ -9,6 +11,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
+import { useRetainedEditorDraft } from "@/providers/editor-draft-provider";
+import { useEditorDismissGuard } from "@/hooks/use-editor-dismiss-guard";
 import { StandardDialog } from "@/components/common/standard-dialog";
 import { EmptyState } from "@/components/common/empty-state";
 import { ErrorState } from "@/components/common/error-state";
@@ -155,7 +159,20 @@ export default function TasksPage() {
     const [ownerFilter, setOwnerFilter] = useState("ALL");
     const [dialogOpen, setDialogOpen] = useState(false);
     const [editingTask, setEditingTask] = useState<Task | null>(null);
-    const [form, setForm] = useState(EMPTY_FORM);
+    const [initialForm, setInitialForm] = useState(EMPTY_FORM);
+    const draftKey = editingTask ? `task:edit:${editingTask.id}` : `task:new:${JSON.stringify([initialForm.leadId, initialForm.opportunityId])}`;
+    const { draft: taskDraft, current: currentTaskDraft, update: updateTaskDraft } = useRetainedEditorDraft(draftKey);
+    const form: typeof EMPTY_FORM = taskDraft.values?.form ?? initialForm;
+    const setForm = (action: React.SetStateAction<typeof EMPTY_FORM>) => {
+        const previous = currentTaskDraft().values?.form ?? initialForm;
+        const next = typeof action === "function" ? action(previous) : action;
+        const dirty = JSON.stringify(next) !== JSON.stringify(initialForm);
+        updateTaskDraft({ values: dirty ? { form: next } : null, dirty });
+    };
+    const taskVersion = useRef(0);
+    useEffect(() => { taskVersion.current += 1; return () => { taskVersion.current += 1; }; }, [draftKey]);
+    const canCloseEditor = useEditorDismissGuard(dialogOpen && taskDraft.dirty, dialogOpen && taskDraft.pending, () => updateTaskDraft({ values: null, dirty: false, error: "" }));
+    const closeEditor = () => { if (canCloseEditor()) setDialogOpen(false); };
     const [paginationModel, setPaginationModel] = useState({ page: 0, pageSize: 10 });
     const [selectedTaskIds, setSelectedTaskIds] = useState<string[]>([]);
     const [viewMode, setViewModeState] = useState<"list" | "calendar">(() => {
@@ -283,7 +300,7 @@ export default function TasksPage() {
 
     const openCreate = () => {
         setEditingTask(null);
-        setForm(EMPTY_FORM);
+        setInitialForm(EMPTY_FORM);
         setDialogOpen(true);
     };
 
@@ -299,7 +316,7 @@ export default function TasksPage() {
             const leadId = params.get("leadId");
             const opportunityId = params.get("opportunityId");
             if (leadId || opportunityId) {
-                setForm((current) => ({ ...current, leadId: leadId ?? current.leadId, opportunityId: opportunityId ?? current.opportunityId }));
+                setInitialForm((current) => ({ ...current, leadId: leadId ?? current.leadId, opportunityId: opportunityId ?? current.opportunityId }));
             }
         }
         // "Quick-open from command palette" / recent-records deep link (gap checklist's
@@ -316,7 +333,7 @@ export default function TasksPage() {
     const openEdit = (task: Task) => {
         recordRecentView("task", task.id, task.title);
         setEditingTask(task);
-        setForm({
+        setInitialForm({
             title: task.title,
             description: task.description ?? "",
             status: task.status,
@@ -335,7 +352,18 @@ export default function TasksPage() {
         setDialogOpen(true);
     };
 
+    useEffect(() => {
+        if (!taskDraft.savedValues || taskDraft.pending) return;
+        updateTaskDraft({ savedValues: null, values: null, dirty: false, error: "" });
+        setDialogOpen(false);
+        toast.success("Your previous task save completed successfully");
+        fetchTasks();
+    }, [taskDraft.savedValues, taskDraft.pending, updateTaskDraft, fetchTasks]);
+
     const saveTask = async () => {
+        if (currentTaskDraft().pending || !form.title.trim()) return;
+        const version = taskVersion.current;
+        updateTaskDraft({ pending: true, error: "" });
         try {
             const payload = {
                 ...form,
@@ -355,15 +383,19 @@ export default function TasksPage() {
                     }
                     : editingTask?.metadata,
             };
-            await apiFetch(editingTask ? `/tasks/${editingTask.id}` : "/tasks", {
+            const saved = await apiFetch<Task>(editingTask ? `/tasks/${editingTask.id}` : "/tasks", {
                 method: editingTask ? "PATCH" : "POST",
                 body: JSON.stringify(payload),
             });
+            updateTaskDraft({ values: null, dirty: false, error: "", savedValues: version === taskVersion.current ? null : saved });
+            if (version !== taskVersion.current) return;
             toast.success(editingTask ? "Task updated" : "Task created");
             setDialogOpen(false);
             fetchTasks();
         } catch (error: any) {
-            toast.error(error.message || "Failed to save task");
+            updateTaskDraft({ error: error.message || "Failed to save task. Your draft is still here." });
+        } finally {
+            updateTaskDraft({ pending: false });
         }
     };
 
@@ -469,13 +501,9 @@ export default function TasksPage() {
     };
 
     return (
-        <div className="mx-auto max-w-[1400px] p-4 md:p-6">
-            <div className="flex flex-col justify-between gap-3 md:flex-row md:items-center">
-                <div>
-                    <h1 className="text-lg font-extrabold tracking-tight">Tasks</h1>
-                    <p className="mt-1 text-xs text-muted-foreground">Manage follow-ups, reminders, and CRM work linked to leads, opportunities, and activities.</p>
-                </div>
-                <div className="flex items-center gap-2">
+        <div className="mx-auto min-w-0 max-w-[1400px]">
+            <PageHeader title="Tasks" description="Manage follow-ups, reminders, and work linked to your CRM records." actions={<>
+
                     <QueueExportButton
                         moduleName="TASKS"
                         filters={{
@@ -502,30 +530,30 @@ export default function TasksPage() {
                         <Plus className="size-4" />
                         New Task
                     </Button>
-                </div>
-            </div>
+                            </>} />
 
-            <div className="mt-4 grid gap-3 md:grid-cols-3">
+            <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-3 md:gap-3">
                 <div className="rounded-xl border bg-card p-4">
                     <p className="text-xs font-bold uppercase text-muted-foreground">Open Work</p>
-                    <p className="mt-2 text-2xl font-extrabold">{stats.open}</p>
+                    <p className="mt-2 text-2xl font-extrabold">{loading || fetchError ? "—" : stats.open}</p>
                 </div>
                 <div className="rounded-xl border bg-card p-4">
                     <p className="text-xs font-bold uppercase text-muted-foreground">Overdue</p>
-                    <p className="mt-2 text-2xl font-extrabold text-destructive">{stats.overdue}</p>
+                    <p className="mt-2 text-2xl font-extrabold text-destructive">{loading || fetchError ? "—" : stats.overdue}</p>
                 </div>
                 <div className="rounded-xl border bg-card p-4">
                     <p className="text-xs font-bold uppercase text-muted-foreground">Completed</p>
-                    <p className="mt-2 text-2xl font-extrabold text-primary">{stats.completed}</p>
+                    <p className="mt-2 text-2xl font-extrabold text-primary">{loading || fetchError ? "—" : stats.completed}</p>
                 </div>
             </div>
 
-            <div className="mt-4 flex flex-wrap items-center gap-2 rounded-xl border bg-card p-3">
-                <div className="flex rounded-md border bg-background p-1">
+            <div className="mt-4 flex flex-wrap items-end gap-3 rounded-xl border bg-card p-3">
+                <div className="flex max-w-full flex-wrap rounded-md border bg-background p-1">
                     <Button
                         type="button"
                         size="sm"
                         variant={viewMode === "list" ? "secondary" : "ghost"}
+                        aria-pressed={viewMode === "list"}
                         onClick={() => setViewMode("list")}
                     >
                         <ListChecks className="size-4" />
@@ -535,34 +563,46 @@ export default function TasksPage() {
                         type="button"
                         size="sm"
                         variant={viewMode === "calendar" ? "secondary" : "ghost"}
+                        aria-pressed={viewMode === "calendar"}
                         onClick={() => setViewMode("calendar")}
                     >
                         <CalendarDays className="size-4" />
                         Calendar
                     </Button>
                 </div>
+                <div className="min-w-0 flex-1 basis-52 space-y-1">
+                    <Label htmlFor="task-filter-quickFilter">Due range</Label>
                 <Select value={quickFilter} onValueChange={setQuickFilter}>
-                    <SelectTrigger className="w-[160px]"><SelectValue /></SelectTrigger>
+                    <SelectTrigger id="task-filter-quickFilter" className="w-full min-h-9 h-auto data-[size=default]:h-auto whitespace-normal text-left [&_[data-slot=select-value]]:line-clamp-none [&_[data-slot=select-value]]:break-words [&_[data-slot=select-value]]:whitespace-normal"><SelectValue /></SelectTrigger>
                     <SelectContent>
                         {QUICK_FILTERS.map((option) => <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>)}
                     </SelectContent>
                 </Select>
+                </div>
+                <div className="min-w-0 flex-1 basis-52 space-y-1">
+                    <Label htmlFor="task-filter-statusFilter">Task status</Label>
                 <Select value={statusFilter} onValueChange={setStatusFilter}>
-                    <SelectTrigger className="w-[170px]"><SelectValue /></SelectTrigger>
+                    <SelectTrigger id="task-filter-statusFilter" className="w-full min-h-9 h-auto data-[size=default]:h-auto whitespace-normal text-left [&_[data-slot=select-value]]:line-clamp-none [&_[data-slot=select-value]]:break-words [&_[data-slot=select-value]]:whitespace-normal"><SelectValue /></SelectTrigger>
                     <SelectContent>
                         <SelectItem value="ALL">All statuses</SelectItem>
                         {STATUS_OPTIONS.map((option) => <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>)}
                     </SelectContent>
                 </Select>
+                </div>
+                <div className="min-w-0 flex-1 basis-52 space-y-1">
+                    <Label htmlFor="task-filter-priorityFilter">Task priority</Label>
                 <Select value={priorityFilter} onValueChange={setPriorityFilter}>
-                    <SelectTrigger className="w-[170px]"><SelectValue /></SelectTrigger>
+                    <SelectTrigger id="task-filter-priorityFilter" className="w-full min-h-9 h-auto data-[size=default]:h-auto whitespace-normal text-left [&_[data-slot=select-value]]:line-clamp-none [&_[data-slot=select-value]]:break-words [&_[data-slot=select-value]]:whitespace-normal"><SelectValue /></SelectTrigger>
                     <SelectContent>
                         <SelectItem value="ALL">All priorities</SelectItem>
                         {PRIORITY_OPTIONS.map((option) => <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>)}
                     </SelectContent>
                 </Select>
+                </div>
+                <div className="min-w-0 flex-1 basis-52 space-y-1">
+                    <Label htmlFor="task-filter-ownerFilter">Task owner</Label>
                 <Select value={ownerFilter} onValueChange={setOwnerFilter}>
-                    <SelectTrigger className="w-[220px]"><SelectValue /></SelectTrigger>
+                    <SelectTrigger id="task-filter-ownerFilter" className="w-full min-h-9 h-auto data-[size=default]:h-auto whitespace-normal text-left [&_[data-slot=select-value]]:line-clamp-none [&_[data-slot=select-value]]:break-words [&_[data-slot=select-value]]:whitespace-normal"><SelectValue /></SelectTrigger>
                     <SelectContent>
                         <SelectItem value="ALL">All owners</SelectItem>
                         {users.map((user) => (
@@ -570,6 +610,7 @@ export default function TasksPage() {
                         ))}
                     </SelectContent>
                 </Select>
+                </div>
             </div>
 
             {selectedTaskIds.length > 0 ? (
@@ -593,7 +634,7 @@ export default function TasksPage() {
                             </SelectContent>
                         </Select>
                         <Button size="sm" variant="outline" disabled={!bulkOwnerId} onClick={() => bulkUpdateTasks({ ownerId: bulkOwnerId })}>Reassign</Button>
-                        <Input className="h-9 w-[210px]" type="datetime-local" value={bulkDueAt} onChange={(event) => setBulkDueAt(event.target.value)} />
+                        <Input aria-label="Bulk due date" className="h-9 w-[210px]" type="datetime-local" value={bulkDueAt} onChange={(event) => setBulkDueAt(event.target.value)} />
                         <Button size="sm" variant="outline" disabled={!bulkDueAt} onClick={() => bulkUpdateTasks({ dueAt: fromLocalInputValue(bulkDueAt) })}>Reschedule</Button>
                         <Button size="sm" variant="outline" className="text-destructive hover:bg-destructive/10 hover:text-destructive" onClick={handleBulkDelete}>
                             <Trash2 className="size-4" />
@@ -637,9 +678,9 @@ export default function TasksPage() {
                                             onCheckedChange={(value) => toggleTaskSelection(task.id, !!value)}
                                             aria-label={`Select ${task.title}`}
                                         />
-                                        <div className="min-w-0">
+                                        <div className="min-w-0 break-words">
                                         <div className="flex flex-wrap items-center gap-2">
-                                            <h2 className={cn("text-sm font-bold", task.status === "COMPLETED" && "text-muted-foreground line-through")}>{task.title}</h2>
+                                            <h2 className={cn("min-w-0 max-w-full break-words text-sm font-bold", task.status === "COMPLETED" && "text-muted-foreground line-through")}>{task.title}</h2>
                                             <Badge variant="outline" className="rounded-md text-[0.65rem] font-semibold">{task.status.replace("_", " ")}</Badge>
                                             <Badge variant={task.priority === "URGENT" || task.priority === "HIGH" ? "destructive" : "secondary"} className="rounded-md text-[0.65rem] font-semibold">
                                                 {task.priority}
@@ -667,14 +708,14 @@ export default function TasksPage() {
                                             {task.reminderAt ? <span className="inline-flex items-center gap-1"><Clock className="size-3" />Reminder {formatWorkspaceDateTime(task.reminderAt)}</span> : null}
                                             {task.lead && task.leadId ? (
                                                 <RecordPreviewPopover entityType="lead" entityId={task.leadId}>
-                                                    <button type="button" className="underline decoration-dotted underline-offset-2 hover:text-foreground">
+                                                    <button type="button" className="min-w-0 max-w-full break-all text-left underline decoration-dotted underline-offset-2 hover:text-foreground">
                                                         Lead: {task.lead.name}
                                                     </button>
                                                 </RecordPreviewPopover>
                                             ) : null}
                                             {task.opportunity && task.opportunityId ? (
                                                 <RecordPreviewPopover entityType="opportunity" entityId={task.opportunityId}>
-                                                    <button type="button" className="underline decoration-dotted underline-offset-2 hover:text-foreground">
+                                                    <button type="button" className="min-w-0 max-w-full break-all text-left underline decoration-dotted underline-offset-2 hover:text-foreground">
                                                         Opportunity: {task.opportunity.title}
                                                     </button>
                                                 </RecordPreviewPopover>
@@ -719,7 +760,7 @@ export default function TasksPage() {
                                     value={String(paginationModel.pageSize)}
                                     onValueChange={(value) => setPaginationModel({ page: 0, pageSize: Number(value) })}
                                 >
-                                    <SelectTrigger size="sm" className="w-[72px]">
+                                    <SelectTrigger size="sm" className="w-[72px]" aria-label="Rows per page">
                                         <SelectValue />
                                     </SelectTrigger>
                                     <SelectContent>
@@ -762,44 +803,47 @@ export default function TasksPage() {
 
             <StandardDialog
                 open={dialogOpen}
-                onClose={() => setDialogOpen(false)}
+                onClose={closeEditor}
                 title={editingTask ? "Edit Task" : "Create Task"}
                 maxWidth="sm"
                 actions={
                     <>
-                        <Button variant="ghost" onClick={() => setDialogOpen(false)}>Cancel</Button>
-                        <Button onClick={saveTask} disabled={!form.title.trim()}>Save Task</Button>
+                        <Button variant="ghost" disabled={taskDraft.pending} onClick={closeEditor}>Cancel</Button>
+                        <Button onClick={saveTask} disabled={taskDraft.pending || !form.title.trim()}>{taskDraft.pending ? "Saving…" : "Save Task"}</Button>
                     </>
                 }
             >
+                {taskDraft.dirty && <p role="status" className="mb-3 text-xs text-muted-foreground">This task draft is kept while you navigate in the app. Refreshing or signing out clears it.</p>}
+                {taskDraft.error && <p role="alert" className="mb-3 break-words text-sm text-destructive">{taskDraft.error}</p>}
+                <fieldset disabled={taskDraft.pending} className="min-w-0">
                 <div className="space-y-4">
                     <div className="space-y-2">
-                        <Label>Title</Label>
-                        <Input value={form.title} onChange={(e) => setForm((current) => ({ ...current, title: e.target.value }))} />
+                        <Label htmlFor="task-edit-title">Title</Label>
+                        <Input id="task-edit-title" value={form.title} onChange={(e) => setForm((current) => ({ ...current, title: e.target.value }))} />
                     </div>
                     <div className="space-y-2">
-                        <Label>Description</Label>
-                        <Input value={form.description} onChange={(e) => setForm((current) => ({ ...current, description: e.target.value }))} />
+                        <Label htmlFor="task-edit-description">Description</Label>
+                        <Input id="task-edit-description" value={form.description} onChange={(e) => setForm((current) => ({ ...current, description: e.target.value }))} />
                     </div>
                     <div className="grid gap-4 sm:grid-cols-3">
                         <div className="space-y-2">
-                            <Label>Status</Label>
+                            <Label htmlFor="task-edit-status">Status</Label>
                             <Select value={form.status} onValueChange={(value) => setForm((current) => ({ ...current, status: value as Task["status"] }))}>
-                                <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                                <SelectTrigger id="task-edit-status" className="w-full"><SelectValue /></SelectTrigger>
                                 <SelectContent>{STATUS_OPTIONS.map((option) => <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>)}</SelectContent>
                             </Select>
                         </div>
                         <div className="space-y-2">
-                            <Label>Priority</Label>
+                            <Label htmlFor="task-edit-priority">Priority</Label>
                             <Select value={form.priority} onValueChange={(value) => setForm((current) => ({ ...current, priority: value as Task["priority"] }))}>
-                                <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                                <SelectTrigger id="task-edit-priority" className="w-full"><SelectValue /></SelectTrigger>
                                 <SelectContent>{PRIORITY_OPTIONS.map((option) => <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>)}</SelectContent>
                             </Select>
                         </div>
                         <div className="space-y-2">
-                            <Label>Owner</Label>
+                            <Label htmlFor="task-edit-owner">Owner</Label>
                             <Select value={form.ownerId || "__me__"} onValueChange={(value) => setForm((current) => ({ ...current, ownerId: value === "__me__" ? "" : value }))}>
-                                <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                                <SelectTrigger id="task-edit-owner" className="w-full"><SelectValue /></SelectTrigger>
                                 <SelectContent>
                                     <SelectItem value="__me__">Me</SelectItem>
                                     {users.map((user) => <SelectItem key={user.id} value={user.id}>{user.name || user.email || "User"}</SelectItem>)}
@@ -809,12 +853,12 @@ export default function TasksPage() {
                     </div>
                     <div className="grid gap-4 sm:grid-cols-2">
                         <div className="space-y-2">
-                            <Label>Due</Label>
-                            <Input type="datetime-local" value={form.dueAt} onChange={(e) => setForm((current) => ({ ...current, dueAt: e.target.value }))} />
+                            <Label htmlFor="task-edit-due">Due</Label>
+                            <Input id="task-edit-due" type="datetime-local" value={form.dueAt} onChange={(e) => setForm((current) => ({ ...current, dueAt: e.target.value }))} />
                         </div>
                         <div className="space-y-2">
-                            <Label>Reminder</Label>
-                            <Input type="datetime-local" value={form.reminderAt} onChange={(e) => setForm((current) => ({ ...current, reminderAt: e.target.value }))} />
+                            <Label htmlFor="task-edit-reminder">Reminder</Label>
+                            <Input id="task-edit-reminder" type="datetime-local" value={form.reminderAt} onChange={(e) => setForm((current) => ({ ...current, reminderAt: e.target.value }))} />
                         </div>
                     </div>
                     <TaskRecurrenceEscalationFields
@@ -824,12 +868,12 @@ export default function TasksPage() {
                     />
                     <div className="grid gap-4 sm:grid-cols-2">
                         <div className="space-y-2">
-                            <Label>Lead</Label>
+                            <Label htmlFor="task-edit-lead">Lead</Label>
                             <Select
                                 value={form.leadId || "__none__"}
                                 onValueChange={(value) => setForm((current) => ({ ...current, leadId: value === "__none__" ? "" : value, activityId: "" }))}
                             >
-                                <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                                <SelectTrigger id="task-edit-lead" className="w-full"><SelectValue /></SelectTrigger>
                                 <SelectContent>
                                     <SelectItem value="__none__">No lead</SelectItem>
                                     {leads.map((lead) => (
@@ -841,7 +885,7 @@ export default function TasksPage() {
                             </Select>
                         </div>
                         <div className="space-y-2">
-                            <Label>Opportunity</Label>
+                            <Label htmlFor="task-edit-opportunity">Opportunity</Label>
                             <Select
                                 value={form.opportunityId || "__none__"}
                                 onValueChange={(value) => {
@@ -854,7 +898,7 @@ export default function TasksPage() {
                                     }));
                                 }}
                             >
-                                <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                                <SelectTrigger id="task-edit-opportunity" className="w-full"><SelectValue /></SelectTrigger>
                                 <SelectContent>
                                     <SelectItem value="__none__">No opportunity</SelectItem>
                                     {opportunities.map((opportunity) => (
@@ -867,12 +911,12 @@ export default function TasksPage() {
                         </div>
                     </div>
                     <div className="space-y-2">
-                        <Label>Related Activity</Label>
+                        <Label htmlFor="task-edit-activity">Related Activity</Label>
                         <Select
                             value={form.activityId || "__none__"}
                             onValueChange={(value) => setForm((current) => ({ ...current, activityId: value === "__none__" ? "" : value }))}
                         >
-                            <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                            <SelectTrigger id="task-edit-activity" className="w-full"><SelectValue /></SelectTrigger>
                             <SelectContent>
                                 <SelectItem value="__none__">No activity</SelectItem>
                                 {activityOptions.map((activity) => (
@@ -916,8 +960,8 @@ export default function TasksPage() {
                         />
                     ) : null}
                     <div className="space-y-2">
-                        <Label>{editingTask ? "Add Comment" : "Initial Comment"}</Label>
-                        <Input value={form.comment} onChange={(e) => setForm((current) => ({ ...current, comment: e.target.value }))} />
+                        <Label htmlFor="task-edit-comment">{editingTask ? "Add Comment" : "Initial Comment"}</Label>
+                        <Input id="task-edit-comment" value={form.comment} onChange={(e) => setForm((current) => ({ ...current, comment: e.target.value }))} />
                     </div>
                     {editingTask && (
                         <TaskChecklistDependenciesPanel task={editingTask} siblingTasks={siblingTasksForEditingTask} onRefresh={fetchTasks} />
@@ -941,7 +985,7 @@ export default function TasksPage() {
                                 <div className="mt-2 flex flex-wrap items-center gap-2">
                                     <p className="text-xs text-muted-foreground">Not in a queue yet.</p>
                                     <Select onValueChange={(queueId) => sendTaskToQueue(editingTask, queueId)}>
-                                        <SelectTrigger className="w-48" size="sm"><SelectValue placeholder="Send to queue..." /></SelectTrigger>
+                                        <SelectTrigger aria-label="Send task to queue" className="w-48" size="sm"><SelectValue placeholder="Send to queue..." /></SelectTrigger>
                                         <SelectContent>
                                             {teams.map((team) => <SelectItem key={team.id} value={team.id}>{team.name}</SelectItem>)}
                                         </SelectContent>
@@ -951,6 +995,7 @@ export default function TasksPage() {
                         </div>
                     )}
                 </div>
+                </fieldset>
             </StandardDialog>
         </div>
     );
@@ -975,19 +1020,20 @@ function TaskCalendar({
     const lanes = useMemo(() => calendarLanes(tasks, mode), [mode, tasks]);
     const draggingTask = draggingTaskId ? tasks.find((task) => task.id === draggingTaskId) ?? null : null;
     return (
-        <div className="space-y-3">
+        <div className="@container/task-calendar min-w-0 space-y-3">
             <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border bg-card p-3">
                 <div>
                     <p className="text-sm font-extrabold">Calendar</p>
                     <p className="text-xs text-muted-foreground">Overdue tasks stay visible while current due work is grouped by the selected period.</p>
                 </div>
-                <div className="flex rounded-md border bg-background p-1">
+                <div className="flex max-w-full flex-wrap rounded-md border bg-background p-1">
                     {(["day", "week", "month"] as const).map((item) => (
                         <Button
                             key={item}
                             type="button"
                             size="sm"
                             variant={mode === item ? "secondary" : "ghost"}
+                            aria-pressed={mode === item}
                             onClick={() => onModeChange(item)}
                         >
                             {item[0].toUpperCase() + item.slice(1)}
@@ -995,11 +1041,11 @@ function TaskCalendar({
                     ))}
                 </div>
             </div>
-            <div className="grid gap-3 xl:grid-cols-4">
+            <div className="grid min-w-0 grid-cols-1 gap-3 @min-[640px]/task-calendar:grid-cols-2 @min-[1100px]/task-calendar:grid-cols-4">
                 {lanes.map((lane) => (
                     <div
                         key={lane.key}
-                        className={cn("min-h-[220px] rounded-xl border bg-card p-3", lane.key === "overdue" && "border-destructive/35 bg-destructive/5")}
+                        className={cn("min-w-0 min-h-[220px] rounded-xl border bg-card p-3", lane.key === "overdue" && "border-destructive/35 bg-destructive/5")}
                         onDragOver={(event) => {
                             if (lane.startAt && draggingTask) event.preventDefault();
                         }}
@@ -1021,44 +1067,27 @@ function TaskCalendar({
                             {lane.tasks.length === 0 ? (
                                 <div className="rounded-lg border border-dashed p-3 text-xs text-muted-foreground">No tasks in this lane.</div>
                             ) : lane.tasks.map((task) => (
-                                <button
+                                <div
                                     key={task.id}
-                                    type="button"
                                     draggable={task.status !== "COMPLETED"}
                                     onDragStart={() => setDraggingTaskId(task.id)}
                                     onDragEnd={() => setDraggingTaskId(null)}
-                                    onClick={() => onEdit(task)}
-                                    className="w-full rounded-lg border bg-background p-3 text-left transition-colors hover:bg-surface-container-low"
+                                    className="min-w-0 w-full break-words rounded-lg border bg-background p-3 text-left transition-colors hover:bg-surface-container-low"
                                 >
-                                    <div className="flex items-start justify-between gap-2">
-                                        <p className={cn("text-sm font-bold", task.status === "COMPLETED" && "line-through text-muted-foreground")}>{task.title}</p>
+                                    <button type="button" aria-label={`Edit ${task.title}`} onClick={() => onEdit(task)} className="block w-full min-w-0 rounded-md text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                                    <div className="flex min-w-0 flex-wrap items-start justify-between gap-2">
+                                        <p className={cn("min-w-0 max-w-full break-words text-sm font-bold", task.status === "COMPLETED" && "line-through text-muted-foreground")}>{task.title}</p>
                                         <Badge variant={task.priority === "URGENT" || task.priority === "HIGH" ? "destructive" : "secondary"} className="rounded-md text-[0.65rem]">
                                             {task.priority}
                                         </Badge>
                                     </div>
                                     <p className="mt-1 text-xs text-muted-foreground">{task.owner?.name || task.owner?.email || "Unassigned"}</p>
                                     {task.dueAt ? <p className="mt-1 text-xs text-muted-foreground">{formatWorkspaceDateTime(task.dueAt)}</p> : null}
+                                    </button>
                                     {task.status !== "COMPLETED" ? (
-                                        <span
-                                            role="button"
-                                            tabIndex={0}
-                                            className="mt-2 inline-flex h-8 items-center rounded-md border px-2 text-xs font-semibold"
-                                            onClick={(event) => {
-                                                event.stopPropagation();
-                                                onComplete(task);
-                                            }}
-                                            onKeyDown={(event) => {
-                                                if (event.key === "Enter" || event.key === " ") {
-                                                    event.preventDefault();
-                                                    event.stopPropagation();
-                                                    onComplete(task);
-                                                }
-                                            }}
-                                        >
-                                            Complete
-                                        </span>
+                                        <Button type="button" variant="outline" size="sm" className="mt-2" aria-label={`Complete ${task.title}`} onClick={() => onComplete(task)}>Complete</Button>
                                     ) : null}
-                                </button>
+                                </div>
                             ))}
                         </div>
                     </div>

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { requireCurrentUser } from "@/lib/server/auth";
 import { badRequest, serverError, unauthorized } from "@/lib/server/http";
 import { createWebhookForTenant, listWebhooksForTenant } from "@/lib/server/crm";
+import { UnsafeDestinationError } from "@/lib/server/outbound-request-guard";
 
 export async function GET(request: Request) {
   try {
@@ -23,6 +24,7 @@ export async function POST(request: Request) {
     return NextResponse.json(webhook);
   } catch (error) {
     if (error instanceof Error && error.message === "UNAUTHORIZED") return unauthorized();
+    if (error instanceof UnsafeDestinationError) return badRequest(error.message);
     return serverError("Failed to create webhook", error);
   }
 }

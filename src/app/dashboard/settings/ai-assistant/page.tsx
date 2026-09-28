@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Sparkles, CheckCircle2, XCircle, Loader2, Plus } from "lucide-react";
 import { apiFetch } from "@/lib/api";
+import { ErrorState } from "@/components/common/error-state";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -36,6 +37,8 @@ type AiSettings = {
 export default function AiAssistantSettingsPage() {
     const [settings, setSettings] = useState<AiSettings | null>(null);
     const [saving, setSaving] = useState(false);
+    const [savedSettings, setSavedSettings] = useState("");
+    const [loadError, setLoadError] = useState(false);
     const [testing, setTesting] = useState(false);
     const [testResult, setTestResult] = useState<{ ok: boolean; message: string } | null>(null);
     const [apiKeyInput, setApiKeyInput] = useState("");
@@ -45,7 +48,15 @@ export default function AiAssistantSettingsPage() {
 
     const [usage, setUsage] = useState<any>(null);
 
-    const loadSettings = () => apiFetch<AiSettings>("/ai/settings").then(setSettings).catch(() => toast.error("Failed to load AI settings"));
+    const loadSettings = () => {
+        setLoadError(false);
+        return apiFetch<AiSettings>("/ai/settings").then(data => {
+            setSettings(data);
+            setSavedSettings(JSON.stringify(data));
+        }).catch(() => setLoadError(true));
+    };
+    const hasUnsavedSettings = !!apiKeyInput || JSON.stringify(settings) !== savedSettings;
+    useEffect(() => { setTestResult(null); }, [settings, apiKeyInput]);
     const loadTemplates = () => apiFetch<any[]>("/ai/prompt-templates").then(setTemplates).catch(() => setTemplates([]));
     const loadUsage = () => apiFetch<any>("/ai/usage").then(setUsage).catch(() => setUsage(null));
 
@@ -56,12 +67,14 @@ export default function AiAssistantSettingsPage() {
     }, []);
 
     const saveSettings = async () => {
-        if (!settings) return;
+        if (loadError) return <ErrorState description="AI settings could not be loaded." onRetry={loadSettings} />;
+    if (!settings) return;
         setSaving(true);
         try {
             const payload = { ...settings, secretConfig: apiKeyInput ? { apiKey: apiKeyInput } : {} };
             const updated = await apiFetch<AiSettings>("/ai/settings", { method: "PATCH", body: JSON.stringify(payload) });
             setSettings(updated);
+            setSavedSettings(JSON.stringify(updated));
             setApiKeyInput("");
             toast.success("AI settings saved");
         } catch (error: any) {
@@ -72,6 +85,7 @@ export default function AiAssistantSettingsPage() {
     };
 
     const testConnection = async () => {
+        if (hasUnsavedSettings || !settings?.enabled || settings.providerMode === "DISABLED") return;
         setTesting(true);
         setTestResult(null);
         try {
@@ -107,9 +121,9 @@ export default function AiAssistantSettingsPage() {
     if (!settings) return <div className="p-6 text-sm text-muted-foreground">Loading...</div>;
 
     return (
-        <div className="mx-auto max-w-[1000px] space-y-6 p-3 md:p-4">
+        <div className="min-w-0 space-y-4 break-words">
             <div>
-                <h1 className="flex items-center gap-2 text-lg font-extrabold">
+                <h1 className="flex min-w-0 flex-wrap items-center gap-2 text-lg font-extrabold">
                     <Sparkles className="size-5" />
                     AI Assistant
                 </h1>
@@ -127,8 +141,8 @@ export default function AiAssistantSettingsPage() {
                 </TabsList>
 
                 <TabsContent value="provider" className="space-y-4">
-                    <Card className="space-y-4 p-5">
-                        <div className="flex items-center justify-between">
+                    <Card className="min-w-0 space-y-4 p-4 sm:p-5">
+                        <div className="flex min-w-0 flex-wrap items-center justify-between">
                             <div>
                                 <p className="text-sm font-semibold">Enable AI Assistant</p>
                                 <p className="text-xs text-muted-foreground">Off by default. No AI call is ever made while this is off, regardless of provider mode below.</p>
@@ -137,10 +151,10 @@ export default function AiAssistantSettingsPage() {
                         </div>
 
                         <div className="grid gap-4 md:grid-cols-2">
-                            <div className="space-y-2">
-                                <Label>Provider mode</Label>
+                            <div className="min-w-0 space-y-2">
+                                <Label htmlFor="ai-field-1">Provider mode</Label>
                                 <Select value={settings.providerMode} onValueChange={(value) => setSettings({ ...settings, providerMode: value as AiSettings["providerMode"] })}>
-                                    <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                                    <SelectTrigger id="ai-field-1" className="w-full"><SelectValue /></SelectTrigger>
                                     <SelectContent>
                                         <SelectItem value="DISABLED">Disabled</SelectItem>
                                         <SelectItem value="EXTERNAL_API">External API (e.g. OpenAI-compatible)</SelectItem>
@@ -148,45 +162,45 @@ export default function AiAssistantSettingsPage() {
                                     </SelectContent>
                                 </Select>
                             </div>
-                            <div className="space-y-2">
-                                <Label>Model name</Label>
-                                <Input value={settings.model ?? ""} onChange={(e) => setSettings({ ...settings, model: e.target.value || null })} placeholder="e.g. gpt-4o-mini" />
+                            <div className="min-w-0 space-y-2">
+                                <Label htmlFor="ai-field-2">Model name</Label>
+                                <Input id="ai-field-2" value={settings.model ?? ""} onChange={(e) => setSettings({ ...settings, model: e.target.value || null })} placeholder="e.g. gpt-4o-mini" />
                             </div>
-                            <div className="space-y-2 md:col-span-2">
-                                <Label>Endpoint URL</Label>
-                                <Input
+                            <div className="min-w-0 space-y-2 md:col-span-2">
+                                <Label htmlFor="ai-field-3">Endpoint URL</Label>
+                                <Input id="ai-field-3"
                                     value={settings.endpointUrl ?? ""}
                                     onChange={(e) => setSettings({ ...settings, endpointUrl: e.target.value || null })}
                                     placeholder="https://api.openai.com/v1 or your self-hosted server's URL"
                                 />
                                 <p className="text-xs text-muted-foreground">
-                                    A Chat Completions-compatible endpoint (<code>POST {"{endpoint}"}/chat/completions</code>) -- supported by OpenAI, Azure OpenAI,
+                                    A Chat Completions-compatible endpoint (<code className="break-all">POST {"{endpoint}"}/chat/completions</code>) -- supported by OpenAI, Azure OpenAI,
                                     and most self-hosted inference servers (vLLM, Ollama, LM Studio, LocalAI). Same code path for both provider modes; only the endpoint differs.
                                 </p>
                             </div>
-                            <div className="space-y-2">
-                                <Label>API key {settings.secretConfig?.apiKey ? "(configured)" : ""}</Label>
-                                <Input type="password" value={apiKeyInput} onChange={(e) => setApiKeyInput(e.target.value)} placeholder={settings.secretConfig?.apiKey || "Leave blank to keep existing"} />
+                            <div className="min-w-0 space-y-2">
+                                <Label htmlFor="ai-field-4">API key {settings.secretConfig?.apiKey ? "(configured)" : ""}</Label>
+                                <Input id="ai-field-4" type="password" value={apiKeyInput} onChange={(e) => setApiKeyInput(e.target.value)} placeholder={settings.secretConfig?.apiKey || "Leave blank to keep existing"} />
                             </div>
-                            <div className="space-y-2">
-                                <Label>Max tokens per request</Label>
-                                <Input type="number" value={settings.maxTokensPerRequest} onChange={(e) => setSettings({ ...settings, maxTokensPerRequest: Number(e.target.value) || 1024 })} />
+                            <div className="min-w-0 space-y-2">
+                                <Label htmlFor="ai-field-5">Max tokens per request</Label>
+                                <Input id="ai-field-5" type="number" value={settings.maxTokensPerRequest} onChange={(e) => setSettings({ ...settings, maxTokensPerRequest: Number(e.target.value) || 1024 })} />
                             </div>
-                            <div className="space-y-2">
-                                <Label>Timeout (ms)</Label>
-                                <Input type="number" value={settings.timeoutMs} onChange={(e) => setSettings({ ...settings, timeoutMs: Number(e.target.value) || 30000 })} />
+                            <div className="min-w-0 space-y-2">
+                                <Label htmlFor="ai-field-6">Timeout (ms)</Label>
+                                <Input id="ai-field-6" type="number" value={settings.timeoutMs} onChange={(e) => setSettings({ ...settings, timeoutMs: Number(e.target.value) || 30000 })} />
                             </div>
-                            <div className="space-y-2">
-                                <Label>Daily spend limit (USD, blank = no limit)</Label>
-                                <Input
+                            <div className="min-w-0 space-y-2">
+                                <Label htmlFor="ai-field-7">Daily spend limit (USD, blank = no limit)</Label>
+                                <Input id="ai-field-7"
                                     type="number"
                                     value={settings.dailySpendLimitUsd ?? ""}
                                     onChange={(e) => setSettings({ ...settings, dailySpendLimitUsd: e.target.value ? Number(e.target.value) : null })}
                                 />
                             </div>
-                            <div className="space-y-2">
-                                <Label>Monthly spend limit (USD, blank = no limit)</Label>
-                                <Input
+                            <div className="min-w-0 space-y-2">
+                                <Label htmlFor="ai-field-8">Monthly spend limit (USD, blank = no limit)</Label>
+                                <Input id="ai-field-8"
                                     type="number"
                                     value={settings.monthlySpendLimitUsd ?? ""}
                                     onChange={(e) => setSettings({ ...settings, monthlySpendLimitUsd: e.target.value ? Number(e.target.value) : null })}
@@ -194,8 +208,8 @@ export default function AiAssistantSettingsPage() {
                             </div>
                         </div>
 
-                        <div className="space-y-2">
-                            <Label>Allowed modules</Label>
+                        <div className="min-w-0 space-y-2">
+                            <Label htmlFor="ai-field-9">Allowed modules</Label>
                             <div className="flex flex-wrap gap-2">
                                 {["LEAD", "OPPORTUNITY", "REPORTS"].map((moduleKey) => {
                                     const active = settings.allowedModules.includes(moduleKey);
@@ -218,7 +232,7 @@ export default function AiAssistantSettingsPage() {
                             </div>
                         </div>
 
-                        <div className="flex items-center justify-between border-t pt-4">
+                        <div className="flex min-w-0 flex-wrap items-center justify-between border-t pt-4">
                             <div>
                                 <p className="text-sm font-semibold">Require a second admin&apos;s approval for AI-drafted sends</p>
                                 <p className="text-xs text-muted-foreground">Every send still requires the drafting user&apos;s own confirmation regardless of this setting -- this adds a distinct second approver on top, mirroring the reassignment-approval control.</p>
@@ -229,15 +243,17 @@ export default function AiAssistantSettingsPage() {
                             />
                         </div>
 
-                        <div className="flex items-center justify-between border-t pt-4">
-                            <div className="flex gap-2">
-                                <Button variant="outline" onClick={testConnection} disabled={testing}>
+                        <div className="flex min-w-0 flex-wrap items-center justify-between border-t pt-4">
+                            <div className="flex flex-wrap gap-2">
+                                <Button variant="outline" onClick={testConnection} disabled={testing || saving || hasUnsavedSettings || !settings.enabled || settings.providerMode === "DISABLED"}>
                                     {testing ? <Loader2 className="size-4 animate-spin" /> : null}
                                     Test connection
                                 </Button>
-                                <Button onClick={saveSettings} disabled={saving}>{saving ? "Saving..." : "Save settings"}</Button>
+                                <Button onClick={saveSettings} disabled={saving || testing}>{saving ? "Saving..." : "Save settings"}</Button>
                             </div>
                         </div>
+                        {hasUnsavedSettings && <p className="text-sm text-muted-foreground">Save settings before testing the connection. The test uses the saved endpoint, model and API key.</p>}
+                        {!settings.enabled && <p className="text-sm text-muted-foreground">Enable AI Assistant and save a provider configuration to test it.</p>}
                         {testResult && (
                             <Alert variant={testResult.ok ? "default" : "destructive"}>
                                 {testResult.ok ? <CheckCircle2 className="size-4" /> : <XCircle className="size-4" />}
@@ -259,7 +275,7 @@ export default function AiAssistantSettingsPage() {
                         {editingTemplate && (
                             <div className="mb-4 space-y-2 rounded-lg border p-3">
                                 <div className="grid gap-2 md:grid-cols-2">
-                                    <Input placeholder="key (e.g. summarize_record)" value={editingTemplate.key} onChange={(e) => setEditingTemplate({ ...editingTemplate, key: e.target.value })} />
+                                    <Input id="ai-field-9" placeholder="key (e.g. summarize_record)" value={editingTemplate.key} onChange={(e) => setEditingTemplate({ ...editingTemplate, key: e.target.value })} />
                                     <Input placeholder="Display name" value={editingTemplate.name} onChange={(e) => setEditingTemplate({ ...editingTemplate, name: e.target.value })} />
                                 </div>
                                 <Textarea rows={5} placeholder="Template text, {{tokens}} allowed" value={editingTemplate.template} onChange={(e) => setEditingTemplate({ ...editingTemplate, template: e.target.value })} />
@@ -272,12 +288,12 @@ export default function AiAssistantSettingsPage() {
                         <div className="space-y-1.5">
                             {templates.length === 0 && <p className="text-xs text-muted-foreground">No custom template versions yet -- built-in defaults are used until you edit one.</p>}
                             {templates.map((template) => (
-                                <div key={template.id} className="flex items-center justify-between rounded-md border px-3 py-2 text-sm">
+                                <div key={template.id} className="flex min-w-0 flex-wrap items-center justify-between rounded-md border px-3 py-2 text-sm">
                                     <div>
                                         <span className="font-semibold">{template.name}</span>{" "}
                                         <span className="text-xs text-muted-foreground">{template.key} v{template.version}</span>
                                     </div>
-                                    <div className="flex items-center gap-2">
+                                    <div className="flex min-w-0 flex-wrap items-center gap-2">
                                         <Badge variant={template.isActive ? "secondary" : "outline"}>{template.isActive ? "Active" : "Inactive"}</Badge>
                                         <Switch checked={template.isActive} onCheckedChange={(checked) => toggleTemplateActive(template.id, checked)} />
                                     </div>
@@ -319,7 +335,7 @@ export default function AiAssistantSettingsPage() {
                                 <p className="mb-2 text-sm font-semibold">Recent requests</p>
                                 <div className="space-y-1 text-xs">
                                     {(usage.recent ?? []).map((row: any) => (
-                                        <div key={row.id} className="flex items-center justify-between border-b py-1 last:border-0">
+                                        <div key={row.id} className="flex min-w-0 flex-wrap items-center justify-between border-b py-1 last:border-0">
                                             <span>{row.module} — {formatWorkspaceDateTime(row.createdAt)}</span>
                                             <Badge variant={row.status === "SUCCESS" ? "secondary" : "destructive"}>{row.status}</Badge>
                                         </div>

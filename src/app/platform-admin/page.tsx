@@ -1,6 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import { PageHeader } from "@/components/layout/page-header";
+import { ErrorState } from "@/components/common/error-state";
 import { apiFetch } from "@/lib/api";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Users, Building, Coins, Activity } from "lucide-react";
@@ -14,7 +16,9 @@ export default function PlatformAdminDashboard() {
     });
     const [loading, setLoading] = useState(true);
 
-    useEffect(() => {
+    const [loadError, setLoadError] = useState(false);
+    const loadStats = useCallback(() => {
+        setLoading(true); setLoadError(false);
         apiFetch('/platform-admin/tenants')
             .then((tenants: any[]) => {
                 const totalTenants = tenants.length;
@@ -24,17 +28,19 @@ export default function PlatformAdminDashboard() {
 
                 setStats({ totalTenants, totalUsers, activeTenants, totalLeads });
             })
-            .catch(console.error)
+            .catch(() => setLoadError(true))
             .finally(() => setLoading(false));
     }, []);
 
-    if (loading) return <div className="p-8">Loading dashboard...</div>;
+    useEffect(() => { loadStats(); }, [loadStats]);
+    if (loading) return <p role="status">Loading dashboard...</p>;
+    if (loadError) return <ErrorState description="Platform overview could not be loaded." onRetry={loadStats} />;
 
     return (
-        <div className="space-y-6">
-            <h2 className="text-3xl font-bold tracking-tight">Dashboard Overview</h2>
+        <div className="@container/platform min-w-0 space-y-6">
+            <PageHeader title="Dashboard Overview" description="Workspace status and platform usage." />
 
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+            <div className="grid gap-4 @min-[550px]/platform:grid-cols-2 @min-[1050px]/platform:grid-cols-4">
                 <Card>
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                         <CardTitle className="text-sm font-medium">Total Tenants</CardTitle>
@@ -80,7 +86,7 @@ export default function PlatformAdminDashboard() {
                         <Coins className="h-4 w-4 text-muted-foreground" />
                     </CardHeader>
                     <CardContent>
-                        <div className="text-2xl font-bold">$0.00</div>
+                        <div className="text-2xl font-bold">Unavailable</div>
                         <p className="text-xs text-muted-foreground">
                             Billing integration pending
                         </p>

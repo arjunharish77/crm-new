@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { getAdminSession } from "@/lib/admin-auth";
 import { query } from "@/lib/db";
 
 const courseSchema = z.object({
@@ -20,6 +21,15 @@ const courseSchema = z.object({
 });
 
 export async function POST(request: Request) {
+  // F26 fix (WP16): proxy.ts already blocks anonymous/expired requests to /api/admin/*, but only
+  // checks the cookie's own signature+expiry -- it can't reach Postgres from the edge runtime, so
+  // it never notices a deactivated admin or a forced revocation. This authoritative, DB-backed
+  // check is the second half of that fix; see getAdminSession's own comment for the full reasoning.
+  const session = await getAdminSession();
+  if (!session) {
+    return NextResponse.json({ error: "CMS admin login required" }, { status: 401 });
+  }
+
   const body = await request.json().catch(() => null);
   const parsed = courseSchema.safeParse(body);
   if (!parsed.success) {

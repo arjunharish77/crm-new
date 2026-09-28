@@ -4,7 +4,18 @@ import {
   listOpportunitiesForTenant,
   listOpportunityTypesForTenant,
 } from "@/lib/server/crm";
-import { query as pgQuery, queryOne as pgQueryOne, execute as pgExecute } from "@/lib/db/query";
+import { query as pgQuery, queryOne as pgQueryOne, queryAsSystem as pgQueryAsSystem, executeAsSystem as pgExecuteAsSystem } from "@/lib/db/query";
+// WP09 (F11): real SQL-aggregation rewrites for 3 of this file's ~14 capped-fetch-then-JS-reduce
+// reports (funnel-by-stage, lead-source ROI, period comparison) -- see each report function's own
+// comment below and the new aggregate functions' comments in these two repository files for what
+// changed and why. Imported directly from the repositories (bypassing the crm.ts pass-through
+// layer) since these are new, report-specific aggregate queries with no other caller today.
+import { getLeadPeriodCountsForTenant } from "@/lib/repositories/leads-postgres";
+import {
+  getFunnelByStageAggregateForTenant,
+  getOpportunityPeriodMetricsForTenant,
+  getLeadSourceRoiAggregateForTenant,
+} from "@/lib/repositories/opportunities-postgres";
 import { randomUUID } from "crypto";
 
 type TenantUser = {
@@ -407,9 +418,49 @@ export type DataQualityReport = {
   issues: DataQualityIssue[];
 };
 
+// WP09 (F11): rewritten to real SQL aggregation (`getFunnelByStageAggregateForTenant`, a genuine
+// `group by "stageId"` query over the FULL matching set) instead of fetching up to 1000
+// opportunities tenant-wide and reducing in JS -- see that function's own comment in
+// opportunities-postgres.ts. `calculateFunnelByStageReport` (below) is left as-is/still exported
+// (a correct pure function given a raw opportunity array, not itself the source of the bug) but
+// is no longer called from this wrapper; `buildFunnelByStageReportFromAggregateRows` is its
+// pre-aggregated-rows equivalent.
 export async function getFunnelByStageReportForTenant(user: TenantUser): Promise<FunnelByStageReport> {
-  const opportunities = await listOpportunitiesForTenant(user, 1000);
-  return calculateFunnelByStageReport(opportunities.data, new Date());
+  const stageRows = await getFunnelByStageAggregateForTenant(user);
+  return buildFunnelByStageReportFromAggregateRows(stageRows, new Date());
+}
+
+export function buildFunnelByStageReportFromAggregateRows(
+  rows: Array<{ stageId: string | null; stage: string; count: number; value: number; isWon: boolean; isClosed: boolean; order: number }>,
+  generatedAt: Date
+): FunnelByStageReport {
+  const sorted = [...rows].sort((a, b) => a.order - b.order || a.stage.localeCompare(b.stage));
+  const firstCount = Number(sorted[0]?.count ?? 0);
+  let previousCount: number | null = null;
+
+  const mappedRows: FunnelByStageRow[] = sorted.map((item) => {
+    const count = Number(item.count);
+    const row: FunnelByStageRow = {
+      stageId: item.stageId,
+      stage: item.stage,
+      count,
+      value: Number(item.value),
+      isWon: Boolean(item.isWon),
+      isClosed: Boolean(item.isClosed),
+      conversionFromFirst: firstCount > 0 ? count / firstCount : null,
+      conversionFromPrevious: previousCount && previousCount > 0 ? count / previousCount : null,
+    };
+    previousCount = count;
+    return row;
+  });
+
+  return {
+    reportKey: "funnel_conversion_by_stage",
+    generatedAt: generatedAt.toISOString(),
+    totalOpportunities: mappedRows.reduce((sum, row) => sum + row.count, 0),
+    totalValue: mappedRows.reduce((sum, row) => sum + row.value, 0),
+    rows: mappedRows,
+  };
 }
 
 export async function getFunnelBySourceCampaignReportForTenant(user: TenantUser): Promise<FunnelBySourceCampaignReport> {
@@ -1331,17 +1382,60 @@ export function calculatePeriodComparisonReport(
   };
 }
 
-// Same 1000-row cap every other report in this file uses -- if a tenant has more than 1000
-// leads/opportunities total, a comparison against an older period than the most recent 1000
-// rows can silently under-count. A real, pre-existing architectural characteristic of this
-// whole file, not something new to this report.
+// WP09 (F11): rewritten to real SQL aggregation -- previously fetched up to 1000
+// leads/opportunities tenant-wide (most-recent-first) and filtered by date range in JS, which
+// silently under-counted any tenant with more than 1000 leads/opportunities total whenever the
+// comparison period's real records weren't all within that top-1000-by-createdAt slice (true for
+// any period comparison other than "right now"). `getLeadPeriodCountsForTenant` and
+// `getOpportunityPeriodMetricsForTenant` each run one `count(*)/sum(...) filter (where ...)`
+// query per range directly against the full matching set (same tenant/scope filtering every
+// other read path uses) -- no row cap at all. `calculatePeriodComparisonReport` (above) is left
+// as-is/still exported and still tested directly as a pure function given raw record arrays; it's
+// simply no longer called from this wrapper, since the wrapper no longer has (or needs) raw
+// record arrays to reduce.
 export async function getPeriodComparisonReportForTenant(
   user: TenantUser,
   preset: PeriodComparisonPreset = "THIS_MONTH_VS_LAST"
 ): Promise<PeriodComparisonReport> {
-  const [leads, opportunities] = await Promise.all([listLeadsForTenant(user, 1, 1000), listOpportunitiesForTenant(user, 1000)]);
   const { current, previous } = periodRangeForPreset(preset, new Date());
-  return calculatePeriodComparisonReport(leads.data, opportunities.data, current, previous, new Date());
+  const [leadCounts, oppMetrics] = await Promise.all([
+    getLeadPeriodCountsForTenant(user, current, previous),
+    getOpportunityPeriodMetricsForTenant(user, current, previous),
+  ]);
+
+  const buildBucket = (
+    range: { start: Date; end: Date },
+    leadsCreated: number,
+    oppMetric: { count: number; wonCount: number; wonValue: number }
+  ): PeriodComparisonBucket => ({
+    start: range.start.toISOString(),
+    end: range.end.toISOString(),
+    leadsCreated,
+    opportunitiesCreated: oppMetric.count,
+    opportunitiesWon: oppMetric.wonCount,
+    wonValue: oppMetric.wonValue,
+    winRate: oppMetric.count > 0 ? Math.round((oppMetric.wonCount / oppMetric.count) * 10000) / 10000 : null,
+  });
+
+  const currentBucket = buildBucket(current, leadCounts.current, oppMetrics.current);
+  const previousBucket = buildBucket(previous, leadCounts.previous, oppMetrics.previous);
+
+  return {
+    reportKey: "period_comparison",
+    generatedAt: new Date().toISOString(),
+    current: currentBucket,
+    previous: previousBucket,
+    percentChange: {
+      leadsCreated: percentChange(currentBucket.leadsCreated, previousBucket.leadsCreated),
+      opportunitiesCreated: percentChange(currentBucket.opportunitiesCreated, previousBucket.opportunitiesCreated),
+      opportunitiesWon: percentChange(currentBucket.opportunitiesWon, previousBucket.opportunitiesWon),
+      wonValue: percentChange(currentBucket.wonValue, previousBucket.wonValue),
+      winRate:
+        currentBucket.winRate !== null && previousBucket.winRate !== null
+          ? percentChange(currentBucket.winRate, previousBucket.winRate)
+          : null,
+    },
+  };
 }
 
 export async function getRepPerformanceReportForTenant(user: TenantUser): Promise<RepPerformanceReport> {
@@ -1474,14 +1568,70 @@ export async function getFormDropOffReportForTenant(user: TenantUser): Promise<F
   return calculateFormDropOffReport(forms, events, submissionCounts, new Date());
 }
 
+// WP09 (F11): rewritten to real SQL aggregation (`getLeadSourceRoiAggregateForTenant`, a genuine
+// `group by source` over the FULL matching Lead/Opportunity sets, joined in SQL) instead of
+// fetching up to 1000 leads and 1000 opportunities tenant-wide and reducing in JS -- see that
+// function's own comment in opportunities-postgres.ts. `calculateLeadSourceRoiReport` (below) is
+// left as-is/still exported but no longer called from this wrapper; the row-shaped SQL results
+// still need the exact same "collapse null/blank source into Unknown" normalization the old JS
+// version applied per-lead, which is why the merge happens in JS (over a small, per-source row
+// count -- one row per distinct source, not one per record) rather than in SQL.
 export async function getLeadSourceRoiReportForTenant(user: TenantUser): Promise<LeadSourceRoiReport> {
   assertSensitiveReportAccess(user, "lead_source_roi");
-  const [leads, opportunities] = await Promise.all([
-    listLeadsForTenant(user, 1, 1000),
-    listOpportunitiesForTenant(user, 1000),
-  ]);
+  const { leadRows, oppRows } = await getLeadSourceRoiAggregateForTenant(user);
+  return buildLeadSourceRoiReportFromAggregates(leadRows, oppRows, new Date());
+}
 
-  return calculateLeadSourceRoiReport(leads.data, opportunities.data, new Date());
+export function buildLeadSourceRoiReportFromAggregates(
+  leadRows: Array<{ source: string | null; leads: number }>,
+  oppRows: Array<{ source: string | null; opportunities: number; pipelineValue: number; wonOpportunities: number; wonValue: number }>,
+  generatedAt: Date
+): LeadSourceRoiReport {
+  const rowsBySource = new Map<string, LeadSourceRoiRow>();
+  const ensureRow = (source: string): LeadSourceRoiRow =>
+    rowsBySource.get(source) ?? {
+      source,
+      leads: 0,
+      opportunities: 0,
+      wonOpportunities: 0,
+      pipelineValue: 0,
+      wonValue: 0,
+      spend: null,
+      roi: null,
+      opportunityConversionRate: null,
+      wonConversionRate: null,
+    };
+
+  for (const leadRow of leadRows) {
+    const source = normalizeDimension(leadRow.source);
+    const row = ensureRow(source);
+    row.leads += Number(leadRow.leads ?? 0);
+    rowsBySource.set(source, row);
+  }
+  for (const oppRow of oppRows) {
+    const source = normalizeDimension(oppRow.source);
+    const row = ensureRow(source);
+    row.opportunities += Number(oppRow.opportunities ?? 0);
+    row.pipelineValue += Number(oppRow.pipelineValue ?? 0);
+    row.wonOpportunities += Number(oppRow.wonOpportunities ?? 0);
+    row.wonValue += Number(oppRow.wonValue ?? 0);
+    rowsBySource.set(source, row);
+  }
+
+  const rows = [...rowsBySource.values()]
+    .map((row) => ({
+      ...row,
+      opportunityConversionRate: row.leads > 0 ? row.opportunities / row.leads : null,
+      wonConversionRate: row.leads > 0 ? row.wonOpportunities / row.leads : null,
+    }))
+    .sort((a, b) => b.leads - a.leads || b.wonValue - a.wonValue || a.source.localeCompare(b.source));
+
+  return {
+    reportKey: "lead_source_roi",
+    generatedAt: generatedAt.toISOString(),
+    spendAvailable: false,
+    rows,
+  };
 }
 
 export async function getReassignmentImpactReportForTenant(
@@ -1674,15 +1824,24 @@ export async function listDataQualityScorecardHistoryForTenant(user: TenantUser,
 // source of truth for what "a data quality issue" means, at the cost of one query set per
 // tenant per run (acceptable for a low-frequency scan; would need a real cross-tenant SQL
 // rewrite if this ever needs to run more than a few times a day across many tenants).
+// WP07 (F04): BACKGROUND_JOB, disposition B -- worker-invoked recurring job, discovers active
+// tenants across the whole platform at once (the per-tenant getDataQualityReportForTenant call
+// below runs with an explicit `{ id: "system", tenantId: tenant.id }` actor, not through the
+// ambient-context mechanism, so it is unaffected either way).
 export async function runScheduledDataQualityScan(limit = 100) {
-  const tenants = await pgQuery<{ id: string }>(`select id from "Tenant" where status = 'ACTIVE' order by "createdAt" asc limit $1`, [limit]);
+  const tenants = await pgQueryAsSystem<{ id: string }>(`select id from "Tenant" where status = 'ACTIVE' order by "createdAt" asc limit $1`, [limit]);
   const results = [];
   for (const tenant of tenants) {
     const report = await getDataQualityReportForTenant({ id: "system", tenantId: tenant.id }, 30);
-    await pgExecute(
+    // node-postgres serializes a plain object parameter as JSON automatically, but a plain
+    // ARRAY parameter is instead converted to a Postgres array literal (`{...,...}`) -- not
+    // valid JSON syntax -- which a jsonb column then rejects with "invalid input syntax for
+    // type json". `report.issues` is an array, so it must be JSON.stringify'd explicitly;
+    // `report.totals` is a plain object and serializes correctly either way.
+    await pgExecuteAsSystem(
       `insert into "DataQualityScorecard" (id, "tenantId", "generatedAt", "staleDays", totals, issues, "createdAt")
        values ($1, $2, $3, $4, $5, $6, $3)`,
-      [randomUUID(), tenant.id, report.generatedAt, report.staleDays, report.totals, report.issues],
+      [randomUUID(), tenant.id, report.generatedAt, report.staleDays, report.totals, JSON.stringify(report.issues)],
     );
     results.push({ tenantId: tenant.id, totalIssues: report.issues.reduce((sum, item) => sum + item.count, 0) });
   }
@@ -4074,15 +4233,17 @@ export async function getCaseAnalyticsReportForTenant(user: TenantUser): Promise
 // computes live (matching this file's existing on-demand convention), the snapshot exists
 // purely as a cheap, pre-computed fallback for a dashboard that wants to avoid a live
 // recomputation on every page load.
+// WP07 (F04): BACKGROUND_JOB, disposition B -- worker-invoked recurring job, discovers every
+// tenant with at least one case across the whole platform at once.
 export async function refreshCaseAnalyticsSnapshots(limit = 50) {
-  const tenants = await pgQuery<{ id: string }>(
+  const tenants = await pgQueryAsSystem<{ id: string }>(
     `select distinct t.id from "Tenant" t join "Case" c on c."tenantId" = t.id limit $1`,
     [limit],
   );
   let refreshed = 0;
   for (const tenant of tenants) {
     const report = await getCaseAnalyticsReportForTenant({ id: "system", tenantId: tenant.id } as TenantUser);
-    await pgExecute(
+    await pgExecuteAsSystem(
       `insert into "CaseAnalyticsSnapshot" ("tenantId", "generatedAt", payload) values ($1,$2,$3)
        on conflict ("tenantId") do update set "generatedAt" = excluded."generatedAt", payload = excluded.payload`,
       [tenant.id, report.generatedAt, report],

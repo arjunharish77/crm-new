@@ -1,6 +1,9 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { PageHeader } from '@/components/layout/page-header';
+import { SettingsSections } from '@/components/layout/settings-sections';
+
+import { useState, useEffect, useId } from 'react';
 import {
     Webhook as WebhookIcon,
     Upload,
@@ -337,7 +340,7 @@ function parseCsv(text: string) {
 
 function ApiBox({ value, onCopy }: { value: string; onCopy: (text: string) => void }) {
     return (
-        <div className="flex items-center justify-between gap-2 rounded-md bg-muted p-3">
+        <div className="flex min-w-0 flex-wrap items-center justify-between gap-2 rounded-md bg-muted p-3">
             <span className="break-all font-mono text-[0.8rem]">{value}</span>
             <Button variant="ghost" size="icon" onClick={() => onCopy(value)}>
                 <Copy className="size-4" />
@@ -361,10 +364,11 @@ function FieldInput({
     disabled?: boolean;
     className?: string;
 }) {
+    const id = useId();
     return (
         <div className={cn('space-y-1.5', className)}>
-            <Label>{label}</Label>
-            <Input type={type} value={value} disabled={disabled} onChange={(event) => onChange(event.target.value)} />
+            <Label htmlFor={id}>{label}</Label>
+            <Input id={id} type={type} value={value} disabled={disabled} onChange={(event) => onChange(event.target.value)} />
         </div>
     );
 }
@@ -382,16 +386,16 @@ function FieldTextarea({
     rows?: number;
     className?: string;
 }) {
+    const id = useId();
     return (
         <div className={cn('space-y-1.5', className)}>
-            <Label>{label}</Label>
-            <Textarea rows={rows} value={value} onChange={(event) => onChange(event.target.value)} className="font-mono text-sm" />
+            <Label htmlFor={id}>{label}</Label>
+            <Textarea id={id} rows={rows} value={value} onChange={(event) => onChange(event.target.value)} className="font-mono text-sm" />
         </div>
     );
 }
 
 export default function IntegrationsSettingsPage() {
-    const [activeTab, setActiveTab] = useState(0);
     const [webhooks, setWebhooks] = useState<Webhook[]>([]);
     const [imports, setImports] = useState<ImportJob[]>([]);
     const [communicationProviders, setCommunicationProviders] = useState<CommunicationProvider[]>([]);
@@ -420,6 +424,9 @@ export default function IntegrationsSettingsPage() {
     });
     const [savingCommunication, setSavingCommunication] = useState(false);
     const [loading, setLoading] = useState(true);
+    const [loadError, setLoadError] = useState(false);
+    const [sectionState, setSectionState] = useState<Record<string, 'loading' | 'ready' | 'error'>>({ telephony: 'loading', messaging: 'loading', external: 'loading', inbound: 'loading', health: 'loading' });
+
     const [isAddingWebhook, setIsAddingWebhook] = useState(false);
     const [newWebhook, setNewWebhook] = useState({ name: '', url: '', events: ['LEAD_CREATED'] as string[], secret: '', rateLimitPerMinute: 60 });
     const [togglingWebhookId, setTogglingWebhookId] = useState<string | null>(null);
@@ -511,18 +518,9 @@ export default function IntegrationsSettingsPage() {
         return () => clearInterval(timer);
     }, [imports]);
 
-    const fetchData = async () => {
-        setLoading(true);
-        try {
-            const [whData, impData, templateData] = await Promise.all([
-                apiFetch('/integrations/webhooks'),
-                apiFetch('/integrations/csv/jobs'),
-                apiFetch('/integrations/csv/templates'),
-            ]);
-            setWebhooks(whData || []);
-            setImports(impData || []);
-            setImportTemplates(templateData || []);
-            apiFetch('/integrations/telephony')
+    const fetchTelephony = () => {
+        setSectionState(current => ({ ...current, telephony: 'loading' }));
+        return apiFetch('/integrations/telephony')
                 .then((data) => setTelephony({
                     provider: data?.config?.provider ?? '',
                     agentPopupUrl: data?.config?.agentPopupUrl ?? '',
@@ -557,17 +555,13 @@ export default function IntegrationsSettingsPage() {
                     defaultCallQueueTeamId: data?.config?.defaultCallQueueTeamId ?? '',
                     isActive: Boolean(data?.isActive)
                 }))
-                .catch(() => undefined);
-            apiFetch('/integrations/telephony/call-logs')
-                .then((data) => setCallLogs(Array.isArray(data) ? data : []))
-                .catch(() => undefined);
-            apiFetch('/integrations/telephony/suppress')
-                .then((data) => setDoNotCallList(Array.isArray(data) ? data : []))
-                .catch(() => undefined);
-            apiFetch('/teams')
-                .then((data) => setTeams(Array.isArray(data) ? data : []))
-                .catch(() => undefined);
-            Promise.all([
+                .then(() => setSectionState(current => ({ ...current, telephony: 'ready' })))
+                .catch(() => setSectionState(current => ({ ...current, telephony: 'error' })));
+    };
+
+    const fetchMessaging = () => {
+        setSectionState(current => ({ ...current, messaging: 'loading' }));
+        return Promise.all([
                 apiFetch('/communications/providers'),
                 apiFetch('/communications/templates'),
                 apiFetch('/communications/outbox'),
@@ -577,31 +571,66 @@ export default function IntegrationsSettingsPage() {
                     setCommunicationTemplates(Array.isArray(templates) ? templates : []);
                     setCommunicationOutbox(Array.isArray(outbox) ? outbox : []);
                 })
-                .catch(() => undefined);
-            apiFetch('/settings/integrations/external')
+                .then(() => setSectionState(current => ({ ...current, messaging: 'ready' })))
+                .catch(() => setSectionState(current => ({ ...current, messaging: 'error' })));
+    };
+
+    const fetchExternal = () => {
+        setSectionState(current => ({ ...current, external: 'loading' }));
+        return apiFetch('/settings/integrations/external')
                 .then((data) => setExternalIntegrations(Array.isArray(data) ? data : []))
+                .then(() => setSectionState(current => ({ ...current, external: 'ready' })))
+                .catch(() => setSectionState(current => ({ ...current, external: 'error' })));
+    };
+
+    const fetchData = async () => {
+        setLoading(true);
+        setLoadError(false);
+        try {
+            const [whData, impData, templateData] = await Promise.all([
+                apiFetch('/integrations/webhooks'),
+                apiFetch('/integrations/csv/jobs'),
+                apiFetch('/integrations/csv/templates'),
+            ]);
+            setWebhooks(whData || []);
+            setImports(impData || []);
+            setImportTemplates(templateData || []);
+            fetchTelephony();
+            apiFetch('/integrations/telephony/call-logs')
+                .then((data) => setCallLogs(Array.isArray(data) ? data : []))
                 .catch(() => undefined);
+            apiFetch('/integrations/telephony/suppress')
+                .then((data) => setDoNotCallList(Array.isArray(data) ? data : []))
+                .catch(() => undefined);
+            apiFetch('/teams')
+                .then((data) => setTeams(Array.isArray(data) ? data : []))
+                .catch(() => undefined);
+            fetchMessaging();
+            fetchExternal();
         } catch (err) {
-            console.error('Failed to fetch integrations', err);
+            setLoadError(true);
         } finally {
             setLoading(false);
         }
     };
 
     const fetchConnectorHealth = async () => {
+        setSectionState(current => ({ ...current, health: 'loading' }));
         setLoadingHealth(true);
         try {
             const data = await apiFetch<{ checks: ConnectorHealthCheck[]; checkedAt: string }>('/settings/integrations/health');
             setConnectorHealth(data.checks);
             setConnectorHealthCheckedAt(data.checkedAt);
+            setSectionState(current => ({ ...current, health: 'ready' }));
         } catch (err) {
-            toast.error('Failed to check connector health');
+            setSectionState(current => ({ ...current, health: 'error' }));
         } finally {
             setLoadingHealth(false);
         }
     };
 
     const fetchInboundWebhookData = async () => {
+        setSectionState(current => ({ ...current, inbound: 'loading' }));
         try {
             const [settings, events] = await Promise.all([
                 apiFetch<InboundWebhookSettings>('/integrations/inbound/settings'),
@@ -609,8 +638,9 @@ export default function IntegrationsSettingsPage() {
             ]);
             setInboundSettings(settings);
             setInboundEvents(events || []);
+            setSectionState(current => ({ ...current, inbound: 'ready' }));
         } catch {
-            toast.error('Failed to load inbound webhook settings');
+            setSectionState(current => ({ ...current, inbound: 'error' }));
         }
     };
 
@@ -1088,53 +1118,17 @@ export default function IntegrationsSettingsPage() {
     };
 
     return (
-        <div className="p-8">
-            <h1 className="text-lg font-bold">Integrations</h1>
-            <p className="mb-4 text-muted-foreground">
-                Connect your CRM to external tools via Webhooks and CSV imports.
-            </p>
+        <div className="min-w-0">
+            <PageHeader title="Integrations" description="Configure webhooks, imports, telephony and connected services." />
 
-            <Tabs
-                value={String(activeTab)}
-                onValueChange={(value) => {
-                    setActiveTab(Number(value));
-                    if (value === '6' && !connectorHealthCheckedAt) fetchConnectorHealth();
-                    if (value === '1' && !inboundSettings) fetchInboundWebhookData();
-                }}
-            >
-                <TabsList className="mb-4">
-                    <TabsTrigger value="0">
-                        <WebhookIcon className="size-4" />
-                        Webhooks (Outbound)
-                    </TabsTrigger>
-                    <TabsTrigger value="1">
-                        <Info className="size-4" />
-                        Inbound Capture
-                    </TabsTrigger>
-                    <TabsTrigger value="2">
-                        <Upload className="size-4" />
-                        CSV Imports
-                    </TabsTrigger>
-                    <TabsTrigger value="3">
-                        <Download className="size-4" />
-                        Telephony
-                    </TabsTrigger>
-                    <TabsTrigger value="4">
-                        <MessageSquareText className="size-4" />
-                        Messaging
-                    </TabsTrigger>
-                    <TabsTrigger value="5">
-                        <Share2 className="size-4" />
-                        External Push
-                    </TabsTrigger>
-                    <TabsTrigger value="6">
-                        <HeartPulse className="size-4" />
-                        Health
-                    </TabsTrigger>
-                </TabsList>
-
-                <TabsContent value="0" className="space-y-4">
-                    <div className="flex items-center justify-between">
+            {loadError && <div role="alert" className="rounded-lg border p-4 text-sm">Unable to load integrations. <Button variant="outline" size="sm" onClick={fetchData}>Retry</Button></div>}
+            <div hidden={loadError}>
+            <SettingsSections label="Integration section" onValueChange={(value) => {
+                if (value === '6' && !connectorHealthCheckedAt) fetchConnectorHealth();
+                if (value === '1' && !inboundSettings) fetchInboundWebhookData();
+            }} sections={[
+                { id: "0", label: "Outbound Webhooks", content: <div className="min-w-0 space-y-4">
+                    <div className="flex min-w-0 flex-wrap items-center justify-between">
                         <h2 className="text-lg font-semibold">Webhook Subscriptions</h2>
                         <Button onClick={() => setIsAddingWebhook(true)}>
                             <Plus className="size-4" />
@@ -1155,8 +1149,8 @@ export default function IntegrationsSettingsPage() {
                         <Card className="overflow-hidden py-0">
                             <div className="divide-y">
                                 {webhooks.map((wh) => (
-                                    <div key={wh.id} className="flex items-start justify-between gap-3 p-4">
-                                        <div className="flex items-start gap-3">
+                                    <div key={wh.id} className="flex min-w-0 flex-wrap items-start justify-between gap-3 p-4">
+                                        <div className="flex min-w-0 flex-wrap items-start gap-3">
                                             {wh.isActive ? (
                                                 <CheckCircle2 className="mt-0.5 size-5 text-green-600" />
                                             ) : (
@@ -1173,7 +1167,7 @@ export default function IntegrationsSettingsPage() {
                                                 </div>
                                             </div>
                                         </div>
-                                        <div className="flex items-center gap-1">
+                                        <div className="flex min-w-0 flex-wrap items-center gap-1">
                                             <Button variant="ghost" size="sm" disabled={togglingWebhookId === wh.id} onClick={() => handleToggleWebhookActive(wh)}>
                                                 {wh.isActive ? 'Pause' : 'Resume'}
                                             </Button>
@@ -1193,9 +1187,8 @@ export default function IntegrationsSettingsPage() {
                             </div>
                         </Card>
                     )}
-                </TabsContent>
-
-                <TabsContent value="1" className="space-y-4">
+                </div> },
+                { id: "1", label: "Inbound Capture", content: <div className="min-w-0 space-y-4">{sectionState.inbound === 'loading' ? <p role="status" className="py-4 text-sm text-muted-foreground">Loading inbound capture…</p> : sectionState.inbound === 'error' ? <div role="alert" className="rounded-lg border p-4 text-sm">Unable to load inbound capture. <Button variant="outline" size="sm" onClick={fetchInboundWebhookData}>Retry</Button></div> : <>
                     <Card>
                         <CardHeader>
                             <CardTitle>Lead Capture Webhook</CardTitle>
@@ -1218,9 +1211,9 @@ export default function IntegrationsSettingsPage() {
 
                             {inboundSettings && (
                                 <div className="space-y-2 rounded-lg border p-3">
-                                    <Label>Signing secret</Label>
-                                    <div className="flex items-center gap-2">
-                                        <Input
+                                    <Label htmlFor="integrations-signing-secret-1">Signing secret</Label>
+                                    <div className="flex min-w-0 flex-wrap items-center gap-2">
+                                        <Input id="integrations-signing-secret-1"
                                             readOnly
                                             type={showInboundSecret ? 'text' : 'password'}
                                             value={inboundSettings.currentSecret}
@@ -1315,10 +1308,9 @@ export default function IntegrationsSettingsPage() {
                             )}
                         </CardContent>
                     </Card>
-                </TabsContent>
-
-                <TabsContent value="2" className="space-y-4">
-                    <div className="flex items-center justify-between">
+                </>}</div> },
+                { id: "2", label: "CSV Imports", content: <div className="min-w-0 space-y-4">
+                    <div className="flex min-w-0 flex-wrap items-center justify-between">
                         <h2 className="text-lg font-semibold">Recent Imports</h2>
                         <Button variant="outline" onClick={() => setIsImportOpen(true)}>
                             <Upload className="size-4" />
@@ -1362,7 +1354,7 @@ export default function IntegrationsSettingsPage() {
                                             </TableCell>
                                             <TableCell className="whitespace-nowrap">
                                                 {job.status === 'PENDING_APPROVAL' && (
-                                                    <div className="flex gap-1">
+                                                    <div className="flex min-w-0 flex-wrap gap-1">
                                                         <Button size="sm" variant="outline" onClick={() => handleApproveImportJob(job.id)}>Approve</Button>
                                                         <Button size="sm" variant="ghost" onClick={() => handleRejectImportJob(job.id)}>Reject</Button>
                                                     </div>
@@ -1377,13 +1369,14 @@ export default function IntegrationsSettingsPage() {
                             </Table>
                         </Card>
                     )}
-                </TabsContent>
-
-                <TabsContent value="3" className="space-y-4">
+                </div> },
+                { id: "3", label: "Telephony", content: <div className="min-w-0 space-y-4">{sectionState.telephony === 'loading' ? <p role="status" className="py-4 text-sm text-muted-foreground">Loading telephony…</p> : sectionState.telephony === 'error' ? <div role="alert" className="rounded-lg border p-4 text-sm">Unable to load telephony. <Button variant="outline" size="sm" onClick={fetchTelephony}>Retry</Button></div> : <>
                     <Card className="overflow-hidden py-0">
-                        <div className="grid md:grid-cols-[260px_1fr]">
-                            <div className="border-b bg-muted/40 md:border-b-0 md:border-r">
-                                {[
+                        <div className="grid min-w-0">
+                            <label className="grid gap-2 border-b p-4 text-sm font-medium">
+                                Telephony section
+                                <select value={telephonySection} onChange={event => setTelephonySection(event.target.value)} className="h-10 w-full min-w-0 rounded-md border bg-background px-3">
+                                    {[
                                     ['virtual', 'Virtual Numbers'],
                                     ['route', 'Call Route API'],
                                     ['agentPopup', 'Agent Popup API'],
@@ -1396,22 +1389,9 @@ export default function IntegrationsSettingsPage() {
                                     ['status', 'Call Status Mapping'],
                                     ['compliance', 'Compliance & Consent'],
                                     ['queueRouting', 'Queue Routing'],
-                                ].map(([key, label]) => (
-                                    <button
-                                        key={key}
-                                        type="button"
-                                        onClick={() => setTelephonySection(key)}
-                                        className={cn(
-                                            'block w-full px-4 py-2.5 text-left text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
-                                            telephonySection === key
-                                                ? 'bg-secondary font-bold text-secondary-foreground'
-                                                : 'text-muted-foreground hover:bg-accent'
-                                        )}
-                                    >
-                                        {label}
-                                    </button>
-                                ))}
-                            </div>
+                                ].map(([key, label]) => <option key={key} value={key}>{label}</option>)}
+                                </select>
+                            </label>
                             <div className="p-4">
                                 <div className="mb-4 flex items-center justify-between gap-3">
                                     <div>
@@ -1420,7 +1400,7 @@ export default function IntegrationsSettingsPage() {
                                             Configure call routing, click-to-call, logs, popups, dispositions, and provider mappings.
                                         </p>
                                     </div>
-                                    <div className="flex items-center gap-2">
+                                    <div className="flex min-w-0 flex-wrap items-center gap-2">
                                         <Switch
                                             checked={telephony.isActive}
                                             onCheckedChange={(checked) => setTelephony({ ...telephony, isActive: checked })}
@@ -1431,7 +1411,7 @@ export default function IntegrationsSettingsPage() {
 
                                 {telephonySection === 'virtual' && (
                                     <div className="space-y-3">
-                                        <div className="flex flex-col gap-3 md:flex-row">
+                                        <div className="grid min-w-0 gap-3 2xl:grid-cols-2">
                                             <FieldInput
                                                 className="w-full"
                                                 label="Provider / Instance"
@@ -1457,11 +1437,11 @@ export default function IntegrationsSettingsPage() {
                                             onChange={(value) => setTelephony({ ...telephony, defaultAgentNumber: value })}
                                         />
                                         <div className="space-y-1.5">
-                                            <Label>Webhook Signing Secret</Label>
+                                            <Label htmlFor="integrations-webhook-signing-secret-1">Webhook Signing Secret</Label>
                                             {telephony.webhookSecret ? (
                                                 <>
-                                                    <div className="flex items-center gap-2">
-                                                        <Input
+                                                    <div className="flex min-w-0 flex-wrap items-center gap-2">
+                                                        <Input id="integrations-webhook-signing-secret-1"
                                                             readOnly
                                                             type={showTelephonySecret ? 'text' : 'password'}
                                                             value={telephony.webhookSecret}
@@ -1508,21 +1488,21 @@ export default function IntegrationsSettingsPage() {
                                 {telephonySection === 'agentPopup' && (
                                     <div className="space-y-3">
                                         <ApiBox value="/api/integrations/telephony/agent-popup?phoneNumber=@IncomingPhone" onCopy={copyToClipboard} />
-                                        <div className="flex items-center gap-2">
+                                        <div className="flex min-w-0 flex-wrap items-center gap-2">
                                             <Checkbox
                                                 checked={telephony.enableAgentPopup}
                                                 onCheckedChange={(checked) => setTelephony({ ...telephony, enableAgentPopup: checked === true })}
                                             />
                                             <Label>Enable phone call popup for users</Label>
                                         </div>
-                                        <div className="flex items-center gap-2">
+                                        <div className="flex min-w-0 flex-wrap items-center gap-2">
                                             <Checkbox
                                                 checked={telephony.hideAgentPopupClose}
                                                 onCheckedChange={(checked) => setTelephony({ ...telephony, hideAgentPopupClose: checked === true })}
                                             />
                                             <Label>Hide close option on popup</Label>
                                         </div>
-                                        <div className="flex items-center gap-2">
+                                        <div className="flex min-w-0 flex-wrap items-center gap-2">
                                             <Checkbox
                                                 checked={telephony.useExternalAgentPopupUrl}
                                                 onCheckedChange={(checked) => setTelephony({ ...telephony, useExternalAgentPopupUrl: checked === true })}
@@ -1553,14 +1533,14 @@ export default function IntegrationsSettingsPage() {
                                             <Info />
                                             <AlertDescription>Use mail-merge tokens like @AgentNumberWithoutCC, @agentEmail, @leadPhone, @LeadId, and @LeadName in URL, headers, or body.</AlertDescription>
                                         </Alert>
-                                        <div className="flex flex-col gap-3 md:flex-row">
+                                        <div className="grid min-w-0 gap-3 2xl:grid-cols-2">
                                             <div className="w-full space-y-1.5">
-                                                <Label>Method</Label>
+                                                <Label htmlFor="integrations-method-1">Method</Label>
                                                 <Select
                                                     value={telephony.clickToCallMode}
                                                     onValueChange={(value) => setTelephony({ ...telephony, clickToCallMode: value })}
                                                 >
-                                                    <SelectTrigger className="w-full">
+                                                    <SelectTrigger id="integrations-method-1" className="w-full">
                                                         <SelectValue />
                                                     </SelectTrigger>
                                                     <SelectContent>
@@ -1570,12 +1550,12 @@ export default function IntegrationsSettingsPage() {
                                                 </Select>
                                             </div>
                                             <div className="w-full space-y-1.5">
-                                                <Label>HTTP Method</Label>
+                                                <Label htmlFor="integrations-http-method-1">HTTP Method</Label>
                                                 <Select
                                                     value={telephony.clickToCallMethod}
                                                     onValueChange={(value) => setTelephony({ ...telephony, clickToCallMethod: value })}
                                                 >
-                                                    <SelectTrigger className="w-full">
+                                                    <SelectTrigger id="integrations-http-method-1" className="w-full">
                                                         <SelectValue />
                                                     </SelectTrigger>
                                                     <SelectContent>
@@ -1632,7 +1612,7 @@ export default function IntegrationsSettingsPage() {
                                             value={telephony.agentPanelUrl}
                                             onChange={(value) => setTelephony({ ...telephony, agentPanelUrl: value })}
                                         />
-                                        <div className="flex flex-col gap-3 md:flex-row">
+                                        <div className="grid min-w-0 gap-3 2xl:grid-cols-2">
                                             <FieldInput
                                                 className="w-full"
                                                 label="Panel Title"
@@ -1662,7 +1642,7 @@ export default function IntegrationsSettingsPage() {
 
                                 {telephonySection === 'team' && (
                                     <div className="space-y-3">
-                                        <div className="flex items-center gap-2">
+                                        <div className="flex min-w-0 flex-wrap items-center gap-2">
                                             <Switch
                                                 checked={telephony.enableTeamAssignment}
                                                 onCheckedChange={(checked) => setTelephony({ ...telephony, enableTeamAssignment: checked })}
@@ -1694,7 +1674,7 @@ export default function IntegrationsSettingsPage() {
                                     <div className="space-y-2">
                                         <p className="text-sm text-muted-foreground">Map provider raw statuses to CRM statuses.</p>
                                         {Object.entries(telephony.callStatusMappings ?? {}).map(([key, value]) => (
-                                            <div key={key} className="flex gap-2">
+                                            <div key={key} className="flex min-w-0 flex-wrap gap-2">
                                                 <FieldInput className="w-full" label="Provider Status" value={key} disabled onChange={() => undefined} />
                                                 <FieldInput
                                                     className="w-full"
@@ -1710,7 +1690,7 @@ export default function IntegrationsSettingsPage() {
                                 {telephonySection === 'compliance' && (
                                     <div className="space-y-6">
                                         <div className="space-y-3">
-                                            <div className="flex items-center gap-2">
+                                            <div className="flex min-w-0 flex-wrap items-center gap-2">
                                                 <Switch
                                                     checked={telephony.callingQuietHours?.enabled ?? false}
                                                     onCheckedChange={(checked) => setTelephony({ ...telephony, callingQuietHours: { ...(telephony.callingQuietHours ?? { start: '21:00', end: '09:00' }), enabled: checked } })}
@@ -1721,7 +1701,7 @@ export default function IntegrationsSettingsPage() {
                                                 <Info />
                                                 <AlertDescription>Calls attempted inside this window are blocked before dialing (server local time).</AlertDescription>
                                             </Alert>
-                                            <div className="flex flex-col gap-3 md:flex-row">
+                                            <div className="grid min-w-0 gap-3 2xl:grid-cols-2">
                                                 <FieldInput
                                                     className="w-full"
                                                     label="Quiet Hours Start"
@@ -1744,7 +1724,7 @@ export default function IntegrationsSettingsPage() {
                                                 <p className="text-sm font-medium">Do-Not-Call List</p>
                                                 <p className="text-sm text-muted-foreground">Numbers on this list are blocked from click-to-call, with the same explanation surfaced to the agent.</p>
                                             </div>
-                                            <div className="flex gap-2">
+                                            <div className="flex min-w-0 flex-wrap gap-2">
                                                 <FieldInput
                                                     className="w-full"
                                                     label="Phone Number"
@@ -1761,7 +1741,7 @@ export default function IntegrationsSettingsPage() {
                                             ) : (
                                                 <div className="space-y-2">
                                                     {doNotCallList.map((entry) => (
-                                                        <div key={entry.id} className="flex items-center justify-between rounded-md border px-3 py-2">
+                                                        <div key={entry.id} className="flex min-w-0 flex-wrap items-center justify-between rounded-md border px-3 py-2">
                                                             <div>
                                                                 <p className="text-sm font-medium">{entry.address}</p>
                                                                 <p className="text-xs text-muted-foreground">
@@ -1787,8 +1767,8 @@ export default function IntegrationsSettingsPage() {
                                         </Alert>
 
                                         <div className="space-y-1.5">
-                                            <Label>Recording Retention (days)</Label>
-                                            <Input
+                                            <Label htmlFor="integrations-recording-retention-days-1">Recording Retention (days)</Label>
+                                            <Input id="integrations-recording-retention-days-1"
                                                 type="number"
                                                 min={0}
                                                 className="w-40"
@@ -1844,7 +1824,7 @@ export default function IntegrationsSettingsPage() {
                     <Accordion type="single" collapsible>
                         <AccordionItem value="click-to-call-test" className="rounded-lg border px-4">
                             <AccordionTrigger>
-                                <div className="flex items-center gap-2">
+                                <div className="flex min-w-0 flex-wrap items-center gap-2">
                                     <Phone className="size-4" />
                                     <span className="font-bold">Click-to-call test</span>
                                 </div>
@@ -1909,9 +1889,8 @@ export default function IntegrationsSettingsPage() {
                             )}
                         </CardContent>
                     </Card>
-                </TabsContent>
-
-                <TabsContent value="4" className="space-y-4">
+                </>}</div> },
+                { id: "4", label: "Messaging", content: <div className="min-w-0 space-y-4">{sectionState.messaging === 'loading' ? <p role="status" className="py-4 text-sm text-muted-foreground">Loading messaging…</p> : sectionState.messaging === 'error' ? <div role="alert" className="rounded-lg border p-4 text-sm">Unable to load messaging. <Button variant="outline" size="sm" onClick={fetchMessaging}>Retry</Button></div> : <>
                     <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                         <div>
                             <h2 className="text-lg font-semibold">Messaging Connectors</h2>
@@ -1934,7 +1913,7 @@ export default function IntegrationsSettingsPage() {
                         </div>
                     </div>
 
-                    <div className="grid gap-4 xl:grid-cols-[minmax(0,1.1fr)_minmax(360px,0.9fr)]">
+                    <div className="grid gap-4 2xl:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)]">
                         <Card>
                             <CardHeader>
                                 <CardTitle>{communicationChannel} Provider</CardTitle>
@@ -1950,12 +1929,12 @@ export default function IntegrationsSettingsPage() {
                                         onChange={(value) => setCommunicationProvider({ ...communicationProvider, name: value })}
                                     />
                                     <div className="space-y-1.5">
-                                        <Label>Provider Type</Label>
+                                        <Label htmlFor="integrations-provider-type-1">Provider Type</Label>
                                         <Select
                                             value={communicationProvider.providerType}
                                             onValueChange={(value) => setCommunicationProvider({ ...communicationProvider, providerType: value })}
                                         >
-                                            <SelectTrigger className="w-full">
+                                            <SelectTrigger id="integrations-provider-type-1" className="w-full">
                                                 <SelectValue />
                                             </SelectTrigger>
                                             <SelectContent>
@@ -1980,7 +1959,7 @@ export default function IntegrationsSettingsPage() {
                                         value={String(communicationProvider.rateLimitPerMinute ?? '')}
                                         onChange={(value) => setCommunicationProvider({ ...communicationProvider, rateLimitPerMinute: Number(value || 0) })}
                                     />
-                                    <div className="flex items-center gap-2 pt-7">
+                                    <div className="flex min-w-0 flex-wrap items-center gap-2 pt-7">
                                         <Switch
                                             checked={communicationProvider.isActive}
                                             onCheckedChange={(checked) => setCommunicationProvider({ ...communicationProvider, isActive: checked })}
@@ -2040,7 +2019,7 @@ export default function IntegrationsSettingsPage() {
                                                 }}
                                                 className="flex w-full items-center justify-between rounded-md border p-3 text-left transition-colors hover:bg-accent"
                                             >
-                                                <div className="flex items-center gap-3">
+                                                <div className="flex min-w-0 flex-wrap items-center gap-3">
                                                     <Icon className="size-4 text-primary" />
                                                     <div>
                                                         <div className="font-medium">{provider.name}</div>
@@ -2058,7 +2037,7 @@ export default function IntegrationsSettingsPage() {
                         </Card>
                     </div>
 
-                    <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(360px,0.9fr)]">
+                    <div className="grid gap-4 2xl:grid-cols-[minmax(0,1fr)_minmax(0,0.9fr)]">
                         <Card>
                             <CardHeader>
                                 <CardTitle>{communicationChannel} Template</CardTitle>
@@ -2072,12 +2051,12 @@ export default function IntegrationsSettingsPage() {
                                         onChange={(value) => setCommunicationTemplate({ ...communicationTemplate, name: value })}
                                     />
                                     <div className="space-y-1.5">
-                                        <Label>Category</Label>
+                                        <Label htmlFor="integrations-category-1">Category</Label>
                                         <Select
                                             value={communicationTemplate.category}
                                             onValueChange={(value) => setCommunicationTemplate({ ...communicationTemplate, category: value })}
                                         >
-                                            <SelectTrigger className="w-full">
+                                            <SelectTrigger id="integrations-category-1" className="w-full">
                                                 <SelectValue />
                                             </SelectTrigger>
                                             <SelectContent>
@@ -2102,7 +2081,7 @@ export default function IntegrationsSettingsPage() {
                                     value={communicationTemplate.body}
                                     onChange={(value) => setCommunicationTemplate({ ...communicationTemplate, body: value })}
                                 />
-                                <div className="flex items-center justify-between gap-3">
+                                <div className="flex min-w-0 flex-wrap items-center justify-between gap-3">
                                     <div className="flex flex-wrap gap-1">
                                         {(communicationTemplate.tokens ?? []).map((token) => (
                                             <Badge key={token} variant="outline">{token}</Badge>
@@ -2153,9 +2132,8 @@ export default function IntegrationsSettingsPage() {
                             </CardContent>
                         </Card>
                     </div>
-                </TabsContent>
-
-                <TabsContent value="5" className="space-y-4">
+                </>}</div> },
+                { id: "5", label: "External Push", content: <div className="min-w-0 space-y-4">{sectionState.external === 'loading' ? <p role="status" className="py-4 text-sm text-muted-foreground">Loading external integrations…</p> : sectionState.external === 'error' ? <div role="alert" className="rounded-lg border p-4 text-sm">Unable to load external integrations. <Button variant="outline" size="sm" onClick={fetchExternal}>Retry</Button></div> : <>
                     <div>
                         <h2 className="text-lg font-semibold">External System Push</h2>
                         <p className="text-sm text-muted-foreground">
@@ -2171,7 +2149,7 @@ export default function IntegrationsSettingsPage() {
                         </AlertDescription>
                     </Alert>
 
-                    <div className="grid gap-4 xl:grid-cols-[minmax(0,1.1fr)_minmax(320px,0.9fr)]">
+                    <div className="grid gap-4 2xl:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)]">
                         <Card>
                             <CardHeader>
                                 <CardTitle>{editingExternalIntegrationId ? 'Edit Integration' : 'New Integration'}</CardTitle>
@@ -2199,12 +2177,12 @@ export default function IntegrationsSettingsPage() {
                                         onChange={(value) => setExternalIntegrationDraft({ ...externalIntegrationDraft, endpointUrl: value })}
                                     />
                                     <div className="space-y-1.5">
-                                        <Label>HTTP Method</Label>
+                                        <Label htmlFor="integrations-http-method-2">HTTP Method</Label>
                                         <Select
                                             value={externalIntegrationDraft.httpMethod}
                                             onValueChange={(value) => setExternalIntegrationDraft({ ...externalIntegrationDraft, httpMethod: value })}
                                         >
-                                            <SelectTrigger className="w-full">
+                                            <SelectTrigger id="integrations-http-method-2" className="w-full">
                                                 <SelectValue />
                                             </SelectTrigger>
                                             <SelectContent>
@@ -2216,12 +2194,12 @@ export default function IntegrationsSettingsPage() {
                                         </Select>
                                     </div>
                                     <div className="space-y-1.5">
-                                        <Label>Auth Type</Label>
+                                        <Label htmlFor="integrations-auth-type-1">Auth Type</Label>
                                         <Select
                                             value={externalIntegrationDraft.authType}
                                             onValueChange={(value) => setExternalIntegrationDraft({ ...externalIntegrationDraft, authType: value as ExternalIntegration['authType'] })}
                                         >
-                                            <SelectTrigger className="w-full">
+                                            <SelectTrigger id="integrations-auth-type-1" className="w-full">
                                                 <SelectValue />
                                             </SelectTrigger>
                                             <SelectContent>
@@ -2301,15 +2279,15 @@ export default function IntegrationsSettingsPage() {
                                     onChange={(value) => setExternalIntegrationDraft({ ...externalIntegrationDraft, config: { ...externalIntegrationDraft.config, payloadTemplate: value } })}
                                 />
 
-                                <div className="flex items-center justify-between">
-                                    <div className="flex items-center gap-2">
+                                <div className="flex min-w-0 flex-wrap items-center justify-between">
+                                    <div className="flex min-w-0 flex-wrap items-center gap-2">
                                         <Switch
                                             checked={externalIntegrationDraft.isActive}
                                             onCheckedChange={(checked) => setExternalIntegrationDraft({ ...externalIntegrationDraft, isActive: checked })}
                                         />
                                         <Label>Integration enabled</Label>
                                     </div>
-                                    <div className="flex gap-2">
+                                    <div className="flex min-w-0 flex-wrap gap-2">
                                         {editingExternalIntegrationId && (
                                             <Button variant="outline" onClick={startNewExternalIntegration}>New</Button>
                                         )}
@@ -2334,14 +2312,14 @@ export default function IntegrationsSettingsPage() {
                                     </Alert>
                                 ) : (
                                     externalIntegrations.map((integration) => (
-                                        <div key={integration.id} className="flex items-center justify-between gap-2 rounded-md border p-3">
+                                        <div key={integration.id} className="flex min-w-0 flex-wrap items-center justify-between gap-2 rounded-md border p-3">
                                             <div>
                                                 <div className="font-medium">{integration.name}</div>
                                                 <div className="text-xs text-muted-foreground">
                                                     {integration.httpMethod} {integration.endpointUrl}
                                                 </div>
                                             </div>
-                                            <div className="flex items-center gap-1">
+                                            <div className="flex min-w-0 flex-wrap items-center gap-1">
                                                 <Badge variant={integration.isActive ? 'default' : 'outline'}>
                                                     {integration.isActive ? 'Active' : 'Off'}
                                                 </Badge>
@@ -2358,10 +2336,9 @@ export default function IntegrationsSettingsPage() {
                             </CardContent>
                         </Card>
                     </div>
-                </TabsContent>
-
-                <TabsContent value="6" className="space-y-4">
-                    <div className="flex items-center justify-between">
+                </>}</div> },
+                { id: "6", label: "Health", content: <div className="min-w-0 space-y-4">{sectionState.health === 'loading' ? <p role="status" className="py-4 text-sm text-muted-foreground">Loading connector health…</p> : sectionState.health === 'error' ? <div role="alert" className="rounded-lg border p-4 text-sm">Unable to load connector health. <Button variant="outline" size="sm" onClick={fetchConnectorHealth}>Retry</Button></div> : <>
+                    <div className="flex min-w-0 flex-wrap items-center justify-between">
                         <div>
                             <h2 className="text-lg font-semibold">Connector Health</h2>
                             <p className="text-sm text-muted-foreground">
@@ -2389,8 +2366,8 @@ export default function IntegrationsSettingsPage() {
                         <Card className="overflow-hidden py-0">
                             <div className="divide-y">
                                 {connectorHealth.map((check) => (
-                                    <div key={check.key} className="flex items-center justify-between gap-3 p-4">
-                                        <div className="flex items-center gap-3">
+                                    <div key={check.key} className="flex min-w-0 flex-wrap items-center justify-between gap-3 p-4">
+                                        <div className="flex min-w-0 flex-wrap items-center gap-3">
                                             {check.status === 'ok' && <CheckCircle2 className="size-5 text-green-600" />}
                                             {check.status === 'degraded' && <AlertTriangle className="size-5 text-amber-500" />}
                                             {check.status === 'error' && <XCircle className="size-5 text-destructive" />}
@@ -2400,7 +2377,7 @@ export default function IntegrationsSettingsPage() {
                                                 {check.detail && <div className="text-xs text-muted-foreground">{check.detail}</div>}
                                             </div>
                                         </div>
-                                        <div className="flex items-center gap-2">
+                                        <div className="flex min-w-0 flex-wrap items-center gap-2">
                                             {typeof check.latencyMs === 'number' && (
                                                 <span className="text-xs text-muted-foreground">{check.latencyMs}ms</span>
                                             )}
@@ -2424,8 +2401,9 @@ export default function IntegrationsSettingsPage() {
                             </div>
                         </Card>
                     )}
-                </TabsContent>
-            </Tabs>
+                </>}</div> },
+            ]} />
+            </div>
 
             {/* Add Webhook Dialog */}
             <StandardDialog
@@ -2442,24 +2420,24 @@ export default function IntegrationsSettingsPage() {
             >
                 <div className="space-y-4 py-2">
                     <div className="space-y-1.5">
-                        <Label>Webhook Name</Label>
-                        <Input
+                        <Label htmlFor="integrations-webhook-name-1">Webhook Name</Label>
+                        <Input id="integrations-webhook-name-1"
                             value={newWebhook.name}
                             onChange={(e) => setNewWebhook({ ...newWebhook, name: e.target.value })}
                             placeholder="e.g. My Zapier Lead Webhook"
                         />
                     </div>
                     <div className="space-y-1.5">
-                        <Label>Destination URL</Label>
-                        <Input
+                        <Label htmlFor="integrations-destination-url-1">Destination URL</Label>
+                        <Input id="integrations-destination-url-1"
                             value={newWebhook.url}
                             onChange={(e) => setNewWebhook({ ...newWebhook, url: e.target.value })}
                             placeholder="https://hooks.zapier.com/..."
                         />
                     </div>
                     <div className="space-y-1.5">
-                        <Label>Secret (Optional)</Label>
-                        <Input
+                        <Label htmlFor="integrations-secret-optional-1">Secret (Optional)</Label>
+                        <Input id="integrations-secret-optional-1"
                             type="password"
                             value={newWebhook.secret}
                             onChange={(e) => setNewWebhook({ ...newWebhook, secret: e.target.value })}
@@ -2473,7 +2451,7 @@ export default function IntegrationsSettingsPage() {
                         <Label>Events</Label>
                         <div className="flex flex-wrap gap-3">
                             {WEBHOOK_EVENT_OPTIONS.map((event) => (
-                                <label key={event} className="flex items-center gap-1.5 text-sm">
+                                <label key={event} className="flex min-w-0 flex-wrap items-center gap-1.5 text-sm">
                                     <Checkbox
                                         checked={newWebhook.events.includes(event)}
                                         onCheckedChange={(checked) => setNewWebhook({
@@ -2487,8 +2465,8 @@ export default function IntegrationsSettingsPage() {
                         </div>
                     </div>
                     <div className="space-y-1.5">
-                        <Label>Rate Limit (deliveries per minute)</Label>
-                        <Input
+                        <Label htmlFor="integrations-rate-limit-deliveries-per-minute-1">Rate Limit (deliveries per minute)</Label>
+                        <Input id="integrations-rate-limit-deliveries-per-minute-1"
                             type="number"
                             min={1}
                             value={newWebhook.rateLimitPerMinute}
@@ -2566,10 +2544,10 @@ export default function IntegrationsSettingsPage() {
                 <div className="space-y-4 py-2">
                     {importTemplates.length > 0 && (
                         <div className="space-y-1.5">
-                            <Label>Load saved mapping</Label>
-                            <div className="flex gap-2">
+                            <Label htmlFor="integrations-load-saved-mapping-1">Load saved mapping</Label>
+                            <div className="flex min-w-0 flex-wrap gap-2">
                                 <Select value={selectedTemplateId || NONE_VALUE} onValueChange={(value) => value !== NONE_VALUE && handleLoadImportTemplate(value)}>
-                                    <SelectTrigger className="w-full">
+                                    <SelectTrigger id="integrations-load-saved-mapping-1" className="w-full">
                                         <SelectValue placeholder="Choose a template" />
                                     </SelectTrigger>
                                     <SelectContent>
@@ -2587,14 +2565,14 @@ export default function IntegrationsSettingsPage() {
                             </div>
                         </div>
                     )}
-                    <div className="grid grid-cols-1 gap-3 md:grid-cols-[1fr_1fr_auto_auto] md:items-end">
+                    <div className="grid grid-cols-1 gap-3 2xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto_auto] 2xl:items-end">
                         <div className="space-y-1.5">
-                            <Label>Module</Label>
+                            <Label htmlFor="integrations-module-1">Module</Label>
                             <Select
                                 value={importModule}
                                 onValueChange={(value) => { setImportModule(value as any); setCsvHeaders([]); setCsvRows([]); setMappings({}); }}
                             >
-                                <SelectTrigger className="w-full">
+                                <SelectTrigger id="integrations-module-1" className="w-full">
                                     <SelectValue />
                                 </SelectTrigger>
                                 <SelectContent>
@@ -2605,9 +2583,9 @@ export default function IntegrationsSettingsPage() {
                             </Select>
                         </div>
                         <div className="space-y-1.5">
-                            <Label>Duplicates</Label>
+                            <Label htmlFor="integrations-duplicates-1">Duplicates</Label>
                             <Select value={duplicateMode} onValueChange={(value) => setDuplicateMode(value as any)}>
-                                <SelectTrigger className="w-full">
+                                <SelectTrigger id="integrations-duplicates-1" className="w-full">
                                     <SelectValue />
                                 </SelectTrigger>
                                 <SelectContent>
@@ -2695,8 +2673,8 @@ export default function IntegrationsSettingsPage() {
                             )}
 
                             <div className="space-y-1.5">
-                                <Label>Save this mapping as a reusable template (optional)</Label>
-                                <Input
+                                <Label htmlFor="integrations-save-this-mapping-as-a-reusable-template-optional-1">Save this mapping as a reusable template (optional)</Label>
+                                <Input id="integrations-save-this-mapping-as-a-reusable-template-optional-1"
                                     placeholder="Template name"
                                     value={saveAsTemplateName}
                                     onChange={(event) => setSaveAsTemplateName(event.target.value)}

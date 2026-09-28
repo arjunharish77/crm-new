@@ -1,5 +1,7 @@
 "use client";
 
+import { PageHeader } from "@/components/layout/page-header";
+
 import { useEffect, useState, useCallback, useMemo } from "react";
 import { Activity } from "@/types/activities";
 import { PaginatedResponse } from "@/types/common";
@@ -188,19 +190,10 @@ export default function ActivitiesPage() {
     const activityColumns = useMemo(() => buildActivityColumns({ onFormsSaved: fetchData }), [fetchData]);
 
     return (
-        <div className="mx-auto max-w-[1520px] px-3 py-3 md:px-4 md:py-4">
+        <div className="mx-auto min-w-0 max-w-[1520px]">
             {/* Header */}
-            <div className="mb-3 flex flex-col items-start justify-between gap-4 sm:flex-row sm:items-center">
-                <div>
-                    <div className="flex items-center gap-3">
-                        <h1 className="text-lg font-bold tracking-[-0.5px]">Activities</h1>
-                    </div>
-                    <p className="mt-0.5 text-xs text-muted-foreground">
-                        Track and manage your sales interactions
-                    </p>
-                </div>
+            <PageHeader title="Activities" description="Track and manage your sales interactions." actions={<>
 
-                <div className="flex items-center gap-2">
                     <QueueExportButton
                         moduleName="ACTIVITIES"
                         filters={{
@@ -221,7 +214,7 @@ export default function ActivitiesPage() {
                         <TooltipContent>Refresh</TooltipContent>
                     </Tooltip>
                     <Select value={selectedActivityTypeId} onValueChange={setSelectedActivityTypeId}>
-                        <SelectTrigger className="min-w-[190px] rounded-[10px]">
+                        <SelectTrigger className="w-full max-w-full sm:w-[190px] rounded-lg">
                             <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
@@ -248,8 +241,7 @@ export default function ActivitiesPage() {
                         )}
                     </Button>
                     <CreateActivityDialog onSuccess={fetchData} />
-                </div>
-            </div>
+                            </>} />
 
             <AdvancedFilterDrawer
                 open={filterOpen}

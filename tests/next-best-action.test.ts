@@ -39,6 +39,8 @@ function resetState() {
 resetState();
 
 vi.mock("@/lib/db/query", () => ({
+  // Identity passthrough -- see the identical comment in tests/ai-assistant.test.ts.
+  jsonbParam: (v: unknown) => v,
   query: vi.fn(async (sql: string, params: any[] = []) => {
     if (sql.includes('from "NextBestActionRule"')) {
       return state.rules.filter((rule) => rule.strategyId === params[1] && rule.isActive);

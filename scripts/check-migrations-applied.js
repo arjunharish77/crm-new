@@ -10,7 +10,6 @@ const {
   directDatabaseUrl,
   checksum,
   withClient,
-  ensureMigrationTable,
   migrationFiles,
 } = require("./db-utils");
 
@@ -19,7 +18,8 @@ async function main() {
   const problems = [];
 
   await withClient(directDatabaseUrl(), async (client) => {
-    await ensureMigrationTable(client);
+    const ledger = await client.query(`select to_regclass('public."SchemaMigration"') as ledger`);
+    if (!ledger.rows[0]?.ledger) throw new Error("Migration ledger is missing; this check never creates or baselines it");
     const { rows } = await client.query('select "id", "checksum", "status" from "SchemaMigration"');
     const rowById = new Map(rows.map((row) => [row.id, row]));
 
@@ -30,7 +30,7 @@ async function main() {
         problems.push(`PENDING: ${id} has not been applied to this database`);
         continue;
       }
-      if (row.status === "FAILED") {
+      if (row.status !== "APPLIED") {
         problems.push(`FAILED: ${id} previously failed to apply (${row.error || "no error recorded"})`);
         continue;
       }

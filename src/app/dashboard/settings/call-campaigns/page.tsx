@@ -1,5 +1,8 @@
 "use client";
 
+import { PageHeader } from "@/components/layout/page-header";
+import { ErrorState } from "@/components/common/error-state";
+
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
@@ -48,13 +51,15 @@ function totalMembers(counts: Record<string, number>) {
 export default function CallCampaignsSettingsPage() {
     const [campaigns, setCampaigns] = useState<CallCampaign[]>([]);
     const [loading, setLoading] = useState(true);
+    const [loadError, setLoadError] = useState<string | null>(null);
     const [dialog, setDialog] = useState<{ open: boolean; campaign: Partial<CallCampaign> | null }>({ open: false, campaign: null });
 
     const load = () => {
         setLoading(true);
+        setLoadError(null);
         apiFetch<CallCampaign[]>("/call-campaigns")
             .then((data) => setCampaigns(Array.isArray(data) ? data : []))
-            .catch(() => toast.error("Failed to load call campaigns"))
+            .catch(() => setLoadError("Failed to load call campaigns."))
             .finally(() => setLoading(false));
     };
 
@@ -91,23 +96,18 @@ export default function CallCampaignsSettingsPage() {
     };
 
     return (
-        <div className="space-y-4">
-            <div className="flex items-center justify-between">
-                <div>
-                    <h1 className="text-lg font-bold">Call Campaigns</h1>
-                    <p className="text-sm text-muted-foreground">
-                        Build an audience from a List, a saved View, or a manual selection; assign a script, disposition set, retry
-                        policy, and a team to work it.
-                    </p>
-                </div>
+        <div className="min-w-0 space-y-4">
+            <PageHeader title="Call Campaigns" description="Configure outbound campaigns, retry rules and calling windows." actions={
                 <Button onClick={() => setDialog({ open: true, campaign: emptyCampaign() })}>
                     <Plus className="size-4" />
                     Add Campaign
                 </Button>
-            </div>
+            } />
 
             {loading ? (
                 <p className="text-sm text-muted-foreground">Loading...</p>
+            ) : loadError ? (
+                <ErrorState description={loadError} onRetry={load} />
             ) : campaigns.length === 0 ? (
                 <Card className="p-6 text-center text-sm text-muted-foreground">No call campaigns yet.</Card>
             ) : (
@@ -117,8 +117,8 @@ export default function CallCampaignsSettingsPage() {
                         const completed = campaign.memberCounts?.COMPLETED ?? 0;
                         return (
                             <Card key={campaign.id} className="p-3">
-                                <div className="flex items-center justify-between gap-2">
-                                    <div className="flex items-center gap-2">
+                                <div className="flex flex-wrap items-center justify-between gap-2">
+                                    <div className="flex flex-wrap items-center gap-2">
                                         <Megaphone className="size-4 text-primary" />
                                         <span className="font-bold">{campaign.name}</span>
                                         <Badge variant={campaign.status === "ACTIVE" ? "default" : "outline"}>{campaign.status}</Badge>
@@ -281,7 +281,7 @@ function CampaignDialog({
                 </>
             }
         >
-            <div className="max-h-[70vh] space-y-4 overflow-y-auto p-[18px] pt-1">
+            <div className="space-y-4">
                 <div className="space-y-1.5">
                     <Label>Name</Label>
                     <Input value={name} onChange={(e) => setName(e.target.value)} />
@@ -347,7 +347,7 @@ function CampaignDialog({
                     </div>
                 )}
 
-                <div className="grid grid-cols-3 gap-2">
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
                     <div className="space-y-1.5">
                         <Label>Call Script</Label>
                         <select className="w-full rounded-md border bg-background px-3 py-2 text-sm" value={callScriptId} onChange={(e) => setCallScriptId(e.target.value)}>
@@ -383,7 +383,7 @@ function CampaignDialog({
                     </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                     <div className="space-y-1.5">
                         <Label>Max Attempts</Label>
                         <Input type="number" min={1} value={maxAttempts} onChange={(e) => setMaxAttempts(e.target.value)} />

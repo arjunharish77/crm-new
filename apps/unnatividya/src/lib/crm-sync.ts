@@ -96,6 +96,20 @@ export async function getCrmSyncConfig(): Promise<CrmSyncConfig> {
   };
 }
 
+// F27 fix (WP16): a newly-created lead used to be hardcoded to crm_sync_status = 'DISABLED' no
+// matter what the CRM sync config actually said -- so an admin who had genuinely enabled CRM sync
+// would still see every incoming lead reported as "disabled" until someone noticed and manually
+// pushed it. Derive the honest starting status instead: 'DISABLED' only when sync really is
+// disabled, 'PENDING' when it's enabled and the lead is just waiting on this app's existing gates
+// (OTP verification / consent, enforced by scripts/crm-sync-worker.js's processAttempt) or on an
+// admin's manual push (src/app/api/admin/crm-sync/queue/route.ts) -- neither of which this change
+// touches. This does not add a new auto-enqueue trigger; none existed before this fix either, and
+// building one is a product feature, not a security fix.
+export async function initialCrmSyncStatus(): Promise<"DISABLED" | "PENDING"> {
+  const config = await getCrmSyncConfig();
+  return config.isEnabled ? "PENDING" : "DISABLED";
+}
+
 export async function getActiveMapping() {
   const result = await query(
     `select version, name, request_body_template, available_field_snapshot, helper_config

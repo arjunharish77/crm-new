@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
@@ -30,6 +30,9 @@ export default function BootstrapPage() {
     const router = useRouter();
     const [loading, setLoading] = useState(false);
     const [checkingStatus, setCheckingStatus] = useState(true);
+    const [statusError, setStatusError] = useState(false);
+    const [submitError, setSubmitError] = useState("");
+    const [created, setCreated] = useState(false);
     const [needsBootstrap, setNeedsBootstrap] = useState(false);
 
     const form = useForm<z.infer<typeof formSchema>>({
@@ -41,26 +44,24 @@ export default function BootstrapPage() {
         },
     });
 
-    useEffect(() => {
-        // Check if bootstrap is needed
-        async function checkStatus() {
-            try {
-                const res = await apiFetch("/auth/bootstrap/status");
-                setNeedsBootstrap(res.needsBootstrap);
-                if (!res.needsBootstrap) {
-                    toast.info("Platform admin already exists. Redirecting to login...");
-                    setTimeout(() => router.push("/login"), 2000);
-                }
-            } catch (error) {
-                toast.error("Failed to check bootstrap status");
-            } finally {
-                setCheckingStatus(false);
-            }
+    const checkStatus = useCallback(async () => {
+        setCheckingStatus(true);
+        setStatusError(false);
+        try {
+            const res = await apiFetch("/auth/bootstrap/status");
+            setNeedsBootstrap(res.needsBootstrap);
+        } catch {
+            setStatusError(true);
+        } finally {
+            setCheckingStatus(false);
         }
-        checkStatus();
-    }, [router]);
+    }, []);
+
+    useEffect(() => { checkStatus(); }, [checkStatus]);
 
     async function onSubmit(values: z.infer<typeof formSchema>) {
+        if (loading || created) return;
+        setSubmitError("");
         setLoading(true);
         try {
             await apiFetch("/auth/bootstrap", {
@@ -69,9 +70,9 @@ export default function BootstrapPage() {
             });
 
             toast.success("Platform admin created successfully!");
-            setTimeout(() => router.push("/login"), 2000);
+            setCreated(true);
         } catch (error: any) {
-            toast.error(error.message || "Failed to create platform admin");
+            setSubmitError(error.message || "Failed to create platform admin");
         } finally {
             setLoading(false);
         }
@@ -79,33 +80,40 @@ export default function BootstrapPage() {
 
     if (checkingStatus) {
         return (
-            <div className="flex h-screen w-full items-center justify-center">
+            <div className="flex min-h-dvh w-full items-center justify-center px-4 py-6">
                 <Card className="mx-auto max-w-sm w-full">
                     <CardHeader>
-                        <CardTitle>Checking Bootstrap Status...</CardTitle>
+                        <CardTitle role="status">Checking Bootstrap Status...</CardTitle>
                     </CardHeader>
                 </Card>
             </div>
         );
     }
 
-    if (!needsBootstrap) {
+    if (statusError) return <div className="flex min-h-dvh items-center justify-center px-4 py-6">
+        <Card className="w-full max-w-sm"><CardHeader><CardTitle>Setup status unavailable</CardTitle></CardHeader>
+            <CardContent className="space-y-4"><p role="alert" className="text-sm">Could not check whether setup is needed. Try again.</p>
+                <Button onClick={checkStatus}>Try again</Button></CardContent></Card>
+    </div>;
+
+    if (created || !needsBootstrap) {
         return (
-            <div className="flex h-screen w-full items-center justify-center">
+            <div className="flex min-h-dvh w-full items-center justify-center px-4 py-6">
                 <Card className="mx-auto max-w-sm w-full">
                     <CardHeader>
                         <CardTitle>Bootstrap Complete</CardTitle>
                         <CardDescription>
-                            Platform admin already exists. Redirecting to login...
+                            {created ? "Platform admin created successfully. Sign in to continue." : "A platform admin already exists. Sign in to continue."}
                         </CardDescription>
                     </CardHeader>
+                    <CardContent><Button onClick={() => router.push("/login")}>Go to Sign In</Button></CardContent>
                 </Card>
             </div>
         );
     }
 
     return (
-        <div className="flex h-screen w-full items-center justify-center px-4">
+        <div className="flex min-h-dvh w-full items-center justify-center px-4 py-6">
             <Card className="mx-auto max-w-sm w-full">
                 <CardHeader>
                     <CardTitle className="text-2xl">Bootstrap Platform Admin</CardTitle>
@@ -123,7 +131,7 @@ export default function BootstrapPage() {
                                     <FormItem>
                                         <FormLabel>Full Name</FormLabel>
                                         <FormControl>
-                                            <Input placeholder="John Doe" {...field} />
+                                            <Input disabled={loading} autoComplete="name" placeholder="John Doe" {...field} />
                                         </FormControl>
                                         <FormMessage />
                                     </FormItem>
@@ -136,7 +144,7 @@ export default function BootstrapPage() {
                                     <FormItem>
                                         <FormLabel>Email</FormLabel>
                                         <FormControl>
-                                            <Input placeholder="admin@example.com" {...field} />
+                                            <Input disabled={loading} type="email" autoComplete="username" placeholder="admin@example.com" {...field} />
                                         </FormControl>
                                         <FormMessage />
                                     </FormItem>
@@ -149,12 +157,14 @@ export default function BootstrapPage() {
                                     <FormItem>
                                         <FormLabel>Password</FormLabel>
                                         <FormControl>
-                                            <Input type="password" {...field} />
+                                            <Input disabled={loading} autoComplete="new-password" type="password" {...field} />
                                         </FormControl>
                                         <FormMessage />
                                     </FormItem>
                                 )}
                             />
+                            <p className="text-xs text-muted-foreground">Use at least 8 characters for your password.</p>
+                            {submitError && <p role="alert" className="break-words text-sm text-destructive">{submitError}</p>}
                             <Button type="submit" className="w-full" disabled={loading}>
                                 {loading ? "Creating..." : "Create Platform Admin"}
                             </Button>

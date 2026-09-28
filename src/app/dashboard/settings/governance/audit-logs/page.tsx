@@ -1,5 +1,7 @@
 'use client';
 
+import { PageHeader } from "@/components/layout/page-header";
+
 import React, { useState, useEffect } from 'react';
 import { History, Search, Eye, Shield, AlertTriangle, Lock, Send, Loader2, UserCheck } from 'lucide-react';
 import { apiFetch } from '@/lib/api';
@@ -76,6 +78,7 @@ export default function AuditLogPage() {
     const { user } = useAuth();
     const [logs, setLogs] = useState<AuditLog[]>([]);
     const [loading, setLoading] = useState(true);
+    const [loadError, setLoadError] = useState(false);
     const [selectedLog, setSelectedLog] = useState<AuditLog | null>(null);
     const [filters, setFilters] = useState(DEFAULT_FILTERS);
     const [category, setCategory] = useState<'' | 'privacy'>('');
@@ -104,6 +107,7 @@ export default function AuditLogPage() {
 
     const fetchLogs = async () => {
         setLoading(true);
+        setLoadError(false);
         try {
             const params = new URLSearchParams({ entityType: filters.entityType, action: filters.action });
             if (filters.userId) params.set('userId', filters.userId);
@@ -116,7 +120,7 @@ export default function AuditLogPage() {
             const data = await apiFetch(`/governance/audit-logs?${params.toString()}`);
             setLogs(data || []);
         } catch (err) {
-            console.error('Failed to fetch audit logs', err);
+            setLoadError(true);
         } finally {
             setLoading(false);
         }
@@ -202,14 +206,8 @@ export default function AuditLogPage() {
     };
 
     return (
-        <div className="p-8">
-            <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
-                <div>
-                    <h1 className="text-lg font-bold">Audit logs</h1>
-                    <p className="text-muted-foreground">
-                        Trace every action across your tenant for security and compliance.
-                    </p>
-                </div>
+        <div className="min-w-0">
+            <PageHeader title="Audit logs" description="Trace actions across your workspace and review evidence." actions={
                 <QueueExportButton
                     moduleName="AUDIT_LOGS"
                     filters={{
@@ -221,7 +219,7 @@ export default function AuditLogPage() {
                     }}
                     label="Export Evidence"
                 />
-            </div>
+            } />
 
             <div className="mb-3 flex flex-wrap gap-2">
                 <Button
@@ -237,7 +235,7 @@ export default function AuditLogPage() {
                     onClick={() => setCategory('privacy')}
                 >
                     <Shield className="size-3.5" />
-                    Privacy (exports, consent, suppression, GDPR requests)
+                    Privacy activity
                 </Button>
                 <Button
                     variant={filters.flagged ? 'secondary' : 'outline'}
@@ -257,27 +255,31 @@ export default function AuditLogPage() {
                 </Button>
             </div>
 
+            {category === "privacy" && <p className="mb-3 text-sm text-muted-foreground">Exports, consent, suppression and data privacy requests.</p>}
             <div className="mb-6 flex flex-wrap items-center gap-2">
                 <Input
-                    className="w-56"
+                    className="w-full sm:w-56"
+                    aria-label="Filter by entity"
                     placeholder="Filter by Entity (e.g. LEAD)"
                     value={filters.entityType}
                     onChange={(e) => setFilters({ ...filters, entityType: e.target.value })}
                 />
                 <Input
-                    className="w-56"
+                    className="w-full sm:w-56"
+                    aria-label="Filter by action"
                     placeholder="Filter by Action (e.g. UPDATE)"
                     value={filters.action}
                     onChange={(e) => setFilters({ ...filters, action: e.target.value })}
                 />
                 <Input
-                    className="w-56"
+                    className="w-full sm:w-56"
+                    aria-label="Filter by user ID"
                     placeholder="Filter by User ID"
                     value={filters.userId}
                     onChange={(e) => setFilters({ ...filters, userId: e.target.value })}
                 />
                 <Select value={filters.reviewStatus || '__any'} onValueChange={(v) => setFilters({ ...filters, reviewStatus: v === '__any' ? '' : v })}>
-                    <SelectTrigger className="w-44"><SelectValue placeholder="Review status" /></SelectTrigger>
+                    <SelectTrigger aria-label="Review status" className="w-full sm:w-44"><SelectValue placeholder="Review status" /></SelectTrigger>
                     <SelectContent>
                         <SelectItem value="__any">Any review status</SelectItem>
                         <SelectItem value="UNREVIEWED">Unreviewed</SelectItem>
@@ -287,13 +289,15 @@ export default function AuditLogPage() {
                 </Select>
                 <Input
                     type="date"
-                    className="w-40"
+                    className="w-full sm:w-40"
+                    aria-label="From date"
                     value={filters.dateFrom}
                     onChange={(e) => setFilters({ ...filters, dateFrom: e.target.value })}
                 />
                 <Input
                     type="date"
-                    className="w-40"
+                    className="w-full sm:w-40"
+                    aria-label="To date"
                     value={filters.dateTo}
                     onChange={(e) => setFilters({ ...filters, dateTo: e.target.value })}
                 />
@@ -306,7 +310,9 @@ export default function AuditLogPage() {
 
             {loading ? (
                 <TableSkeleton rows={8} columns={6} hasToolbar={false} />
-            ) : logs.length === 0 ? (
+            ) : loadError ? (
+                    <div role="alert" className="rounded-lg border p-4 text-sm">Unable to load audit logs. <Button variant="outline" size="sm" onClick={fetchLogs}>Retry</Button></div>
+                ) : logs.length === 0 ? (
                 <div className="rounded-xl border">
                     <EmptyState
                         icon={<History className="size-10 text-muted-foreground opacity-50" />}
@@ -434,7 +440,7 @@ export default function AuditLogPage() {
                                     {savingReview ? <Loader2 className="size-3.5 animate-spin" /> : 'Save note'}
                                 </Button>
                             </div>
-                            <div className="sm:col-span-2 flex items-center justify-between border-t pt-3">
+                            <div className="sm:col-span-2 flex flex-wrap items-center justify-between border-t pt-3">
                                 <div>
                                     <p className="text-sm font-medium">Legal Hold</p>
                                     <p className="text-xs text-muted-foreground">Excludes this entry from the retention-policy purge job.</p>
@@ -450,7 +456,7 @@ export default function AuditLogPage() {
                             <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                                 Changes (Diff)
                             </p>
-                            <pre className="overflow-auto rounded-lg border bg-muted/40 p-3 font-mono text-xs">
+                            <pre className="max-w-full overflow-auto rounded-lg border bg-muted/40 p-3 font-mono text-xs">
                                 {JSON.stringify(selectedLog.changes, null, 2)}
                             </pre>
                         </div>
@@ -458,7 +464,7 @@ export default function AuditLogPage() {
                             <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                                 Metadata (IP/User Agent)
                             </p>
-                            <pre className="overflow-auto rounded-lg border bg-muted/40 p-3 font-mono text-xs">
+                            <pre className="max-w-full overflow-auto rounded-lg border bg-muted/40 p-3 font-mono text-xs">
                                 {JSON.stringify(selectedLog.metadata, null, 2)}
                             </pre>
                         </div>
@@ -472,8 +478,8 @@ export default function AuditLogPage() {
                             ) : (
                                 <div className="space-y-2">
                                     {comments.map((comment) => (
-                                        <div key={comment.id} className="rounded-lg border p-2.5 text-sm">
-                                            <div className="mb-1 flex items-center justify-between text-xs text-muted-foreground">
+                                        <div key={comment.id} className="min-w-0 break-words rounded-lg border p-2.5 text-sm">
+                                            <div className="mb-1 flex flex-wrap items-center justify-between text-xs text-muted-foreground">
                                                 <span className="font-medium text-foreground">{comment.authorName || comment.authorEmail || 'Unknown'}</span>
                                                 <span>{formatWorkspaceDateTime(comment.createdAt)}</span>
                                             </div>

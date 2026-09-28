@@ -244,8 +244,8 @@ export function PublicFormRenderer({ slug, config }: RendererProps) {
                 <div className="inline-flex items-center justify-center w-20 h-20 rounded-full bg-green-100 mb-6">
                     <CheckCircle2 className="h-10 w-10 text-green-600" />
                 </div>
-                <h2 className="text-3xl font-bold text-gray-900 mb-2">Success!</h2>
-                <p className="text-gray-600 text-lg">{config.successMessage || "Thank you for your submission."}</p>
+                <h2 className="text-3xl font-bold text-foreground mb-2">Success!</h2>
+                <p className="text-muted-foreground text-lg">{config.successMessage || "Thank you for your submission."}</p>
             </div>
         );
     }
@@ -265,24 +265,24 @@ export function PublicFormRenderer({ slug, config }: RendererProps) {
             {config.customCss && <style dangerouslySetInnerHTML={{ __html: config.customCss }} />}
             <form onSubmit={handleSubmit} className={`space-y-4 form-theme-${config.theme || 'default'}`}>
                 {Object.keys(formData).length > 0 && (
-                    <div className="flex items-center justify-between rounded-md border border-gray-200 bg-gray-50 px-3 py-2 text-xs text-gray-600">
+                    <div className="flex min-w-0 flex-wrap items-center justify-between gap-2 rounded-md border border-border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
                         <span>Draft is saved automatically on this device.</span>
                         <button type="button" className="rounded-sm font-semibold text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" onClick={clearDraft}>Clear draft</button>
                     </div>
                 )}
                 {fields.length === 0 && (
-                    <div className="rounded-lg border border-dashed border-gray-300 bg-gray-50 p-6 text-center text-sm text-gray-500">
+                    <div className="rounded-lg border border-dashed border-border bg-muted/40 p-6 text-center text-sm text-muted-foreground">
                         This form does not have any fields yet.
                     </div>
                 )}
                 {visibleTabs.length > 1 && (
-                    <div className="flex gap-2 border-b border-gray-200 overflow-x-auto">
+                    <div className="flex min-w-0 max-w-full gap-2 border-b border-border overflow-x-auto">
                         {visibleTabs.map((tab) => (
                             <button
                                 key={tab.id}
                                 type="button"
                                 onClick={() => setActiveTabId(tab.id)}
-                                className={`px-3 py-2 text-sm font-semibold border-b-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${activeTabId === tab.id ? "border-primary text-primary" : "border-transparent text-gray-500"}`}
+                                className={`min-w-0 shrink-0 max-w-full break-words px-3 py-2 text-sm font-semibold border-b-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${activeTabId === tab.id ? "border-primary text-primary" : "border-transparent text-muted-foreground"}`}
                             >
                                 {tab.label}
                             </button>
@@ -294,12 +294,12 @@ export function PublicFormRenderer({ slug, config }: RendererProps) {
                     if (sectionFields.length === 0) return null;
                     return (
                         <div key={section.id} className="space-y-3">
-                            {config.showSectionNames !== false && <h3 className="text-sm font-bold text-gray-800">{section.label}</h3>}
-                            <div className={config.layoutColumns === 1 ? "grid grid-cols-1 gap-4" : "grid grid-cols-1 md:grid-cols-2 gap-4"}>
+                            {config.showSectionNames !== false && <h3 className="text-sm font-bold text-foreground">{section.label}</h3>}
+                            <div className={config.layoutColumns === 1 ? "grid grid-cols-1 gap-4" : "grid grid-cols-1 @min-[440px]/public-form:grid-cols-2 gap-4"}>
                 {sectionFields.map((field) => (
-                    <div key={field.id} className="space-y-2 animate-in fade-in slide-in-from-top-2 duration-200">
+                    <div key={field.id} className="min-w-0 break-words space-y-2 animate-in fade-in slide-in-from-top-2 duration-200">
                         {field.type !== 'HIDDEN' && (
-                            <Label htmlFor={field.id} className="text-sm font-semibold text-gray-700">
+                            <Label htmlFor={field.id} className="text-sm font-semibold text-foreground">
                                 {field.label}
                                 {field.required && <span className="text-destructive ml-1">*</span>}
                             </Label>
@@ -344,7 +344,7 @@ export function PublicFormRenderer({ slug, config }: RendererProps) {
                                                         }
                                                     }}
                                                 />
-                                                <label htmlFor={`${field.id}-${opt.value}`} className="text-sm font-medium leading-none cursor-pointer">
+                                                <label htmlFor={`${field.id}-${opt.value}`} className="min-w-0 break-words text-sm font-medium leading-snug cursor-pointer">
                                                     {opt.label}
                                                 </label>
                                             </div>
@@ -356,7 +356,7 @@ export function PublicFormRenderer({ slug, config }: RendererProps) {
                                                 checked={formData[field.id] || false}
                                                 onCheckedChange={(checked) => handleChange(field.id, checked)}
                                             />
-                                            <label htmlFor={field.id} className="text-sm font-medium leading-none cursor-pointer">
+                                            <label htmlFor={field.id} className="min-w-0 break-words text-sm font-medium leading-snug cursor-pointer">
                                                 {field.placeholder || "Confirm"}
                                             </label>
                                         </div>
@@ -373,9 +373,9 @@ export function PublicFormRenderer({ slug, config }: RendererProps) {
                                                 value={opt.value}
                                                 checked={formData[field.id] === opt.value}
                                                 onChange={e => handleChange(field.id, e.target.value)}
-                                                className="h-4 w-4 border-gray-300 text-primary focus:ring-primary"
+                                                className="h-4 w-4 border-border text-primary focus:ring-primary"
                                             />
-                                            <label htmlFor={`${field.id}-${opt.value}`} className="text-sm font-medium leading-none cursor-pointer text-gray-700">
+                                            <label htmlFor={`${field.id}-${opt.value}`} className="text-sm font-medium leading-none cursor-pointer text-foreground">
                                                 {opt.label}
                                             </label>
                                         </div>
@@ -412,18 +412,18 @@ export function PublicFormRenderer({ slug, config }: RendererProps) {
                     );
                 })}
 
-                <div className="flex gap-2">
+                <div className="flex flex-wrap gap-2">
                     {activeTabIndex > 0 && (
-                        <Button type="button" variant="outline" className="w-full py-4 text-base font-bold" onClick={() => setActiveTabId(visibleTabs[activeTabIndex - 1].id)}>
+                        <Button type="button" variant="outline" className="w-full h-auto min-h-10 whitespace-normal py-3 text-base font-semibold" onClick={() => setActiveTabId(visibleTabs[activeTabIndex - 1].id)}>
                             Previous
                         </Button>
                     )}
                     {config.useMultiStep && activeTabIndex >= 0 && activeTabIndex < visibleTabs.length - 1 ? (
-                        <Button type="button" className="w-full py-4 text-base font-bold" onClick={() => setActiveTabId(visibleTabs[activeTabIndex + 1].id)}>
+                        <Button type="button" className="w-full h-auto min-h-10 whitespace-normal py-3 text-base font-semibold" onClick={() => setActiveTabId(visibleTabs[activeTabIndex + 1].id)}>
                             Next
                         </Button>
                     ) : (
-                <Button type="submit" className="w-full py-4 text-base font-bold shadow-sm transition-transform hover:scale-[1.01] active:scale-[0.99]" disabled={submitting}>
+                <Button type="submit" className="w-full h-auto min-h-10 whitespace-normal py-3 text-base font-semibold shadow-sm transition-transform hover:scale-[1.01] active:scale-[0.99]" disabled={submitting}>
                     {submitting ? (
                         <div className="flex items-center gap-2">
                             <span className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />

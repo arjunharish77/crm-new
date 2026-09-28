@@ -34,6 +34,8 @@ export type BulkModule = "leads" | "opportunities" | "users" | "tenants" | "acti
 
 export interface BulkActionsToolbarProps {
     selectedCount: number;
+    disabled?: boolean;
+    activateDeactivateLabel?: string;
     onClearSelection: () => void;
     module?: BulkModule;
     // Leads actions
@@ -63,6 +65,8 @@ export interface BulkActionsToolbarProps {
 
 export function BulkActionsToolbar({
     selectedCount,
+    disabled = false,
+    activateDeactivateLabel = "Activate",
     onClearSelection,
     module = "leads",
     onAssignOwner,
@@ -104,7 +108,7 @@ export function BulkActionsToolbar({
     }
 
     if (module === "users") {
-        if (onActivateDeactivate) actions.push({ label: "Activate", icon: <ToggleRight className="size-4" />, onClick: onActivateDeactivate });
+        if (onActivateDeactivate) actions.push({ label: activateDeactivateLabel, icon: <ToggleRight className="size-4" />, onClick: onActivateDeactivate });
         if (onAssignRole) actions.push({ label: "Role", icon: <Shield className="size-4" />, onClick: onAssignRole });
         if (onAssignTeam) actions.push({ label: "Team", icon: <Users className="size-4" />, onClick: onAssignTeam });
         if (onAssignManager) actions.push({ label: "Manager", icon: <UserCog className="size-4" />, onClick: onAssignManager });
@@ -137,13 +141,14 @@ export function BulkActionsToolbar({
                     animate={{ y: 0, opacity: 1, scale: 1 }}
                     exit={{ y: 40, opacity: 0, scale: 0.95 }}
                     transition={spring.expressive}
-                    className="fixed bottom-8 left-1/2 z-[1300] -translate-x-1/2"
+                    className="fixed bottom-4 left-1/2 z-[1300] w-max max-w-[calc(100vw-32px)] -translate-x-1/2"
                 >
-                    <div className="flex items-center gap-1 rounded-full border border-white/10 bg-inverse-surface px-4 py-2 text-inverse-foreground shadow-[0_8px_32px_rgba(0,0,0,0.24)] backdrop-blur-md">
+                    <div className="flex flex-wrap items-center justify-center gap-2 rounded-2xl border border-white/10 bg-inverse-surface px-4 py-2 text-inverse-foreground shadow-[0_8px_32px_rgba(0,0,0,0.24)] backdrop-blur-md">
                         {/* Selection count + clear */}
                         <div className="mr-1 flex items-center gap-2 border-r border-current/20 pr-3">
                             <button
                                 type="button"
+                                disabled={disabled}
                                 onClick={onClearSelection}
                                 className="rounded-full p-1.5 transition-colors hover:bg-current/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inverse-foreground/60"
                                 aria-label="Clear selection"
@@ -156,21 +161,23 @@ export function BulkActionsToolbar({
                         </div>
 
                         {/* Context-aware actions */}
-                        <div className="flex items-center gap-0.5">
+                        <div className="flex flex-wrap items-center justify-center gap-0.5">
                             {actions.map((action) => (
                                 <button
                                     key={action.label}
                                     type="button"
+                                    disabled={disabled}
+                                    aria-label={action.label}
                                     onClick={action.onClick}
                                     className={cn(
-                                        "flex min-w-0 items-center gap-1.5 rounded-full px-3 py-1.5 text-[13px] font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inverse-foreground/60",
+                                        "disabled:cursor-not-allowed disabled:opacity-50 flex min-w-0 items-center gap-1.5 rounded-full px-3 py-1.5 text-[13px] font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inverse-foreground/60",
                                         action.color === "error"
                                             ? "text-red-300 hover:bg-red-500/20"
                                             : "hover:bg-current/10"
                                     )}
                                 >
                                     {action.icon}
-                                    <span className="hidden sm:inline">{action.label}</span>
+                                    <span>{action.label}</span>
                                 </button>
                             ))}
                         </div>

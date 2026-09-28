@@ -17,6 +17,6 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     if (error instanceof Error && error.message === "UNAUTHORIZED") return unauthorized();
     if (error instanceof Error && error.message === "FORBIDDEN") return forbidden();
     if (error instanceof Error && error.message === "TENANT_NOT_FOUND") return badRequest("Tenant not found");
-    return serverError("Failed to update tenant environment");
+    return serverError("Failed to update tenant environment", error);
   }
 }

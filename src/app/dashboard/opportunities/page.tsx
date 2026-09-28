@@ -36,6 +36,7 @@ import { PredictiveScoreBadge } from "@/components/scoring/predictive-score";
 import { NbaCountChip } from "@/components/next-best-action/nba-count-chip";
 import { QueueExportButton } from "@/components/exports/queue-export-button";
 import { ContextualFormsPanel } from "@/components/forms/contextual-forms-panel";
+import { RecordPreviewPopover } from "@/components/common/record-preview-popover";
 
 const EMPTY_FILTERS: FilterConfig = { conditions: [], logic: "AND" };
 const SELECTED_TYPE_STORAGE_KEY = "unnatify.opportunities.selectedTypeId";
@@ -386,18 +387,15 @@ export default function OpportunitiesPage() {
             size: 120,
             cell: ({ row }) => (
                 <div className="flex gap-1">
-                    <Tooltip>
-                        <TooltipTrigger asChild>
-                            <IconButton variant="ghost" size="icon-sm" onClick={(event) => event.stopPropagation()}>
-                                <Eye className="size-4" />
-                            </IconButton>
-                        </TooltipTrigger>
-                        <TooltipContent>View Preview</TooltipContent>
-                    </Tooltip>
+                    <RecordPreviewPopover entityType="opportunity" entityId={row.original.id}>
+                        <IconButton variant="ghost" size="icon-sm" aria-label={`Preview ${row.original.title}`} onClick={(event) => event.stopPropagation()}>
+                            <Eye className="size-4" />
+                        </IconButton>
+                    </RecordPreviewPopover>
                     <Tooltip>
                         <TooltipTrigger asChild>
                             <IconButton variant="ghost" size="icon-sm" asChild onClick={(event) => event.stopPropagation()}>
-                                <Link href={`/dashboard/opportunities/${row.original.id}`}>
+                                <Link href={`/dashboard/opportunities/${row.original.id}`} aria-label={`Open ${row.original.title}`}>
                                     <ExternalLink className="size-4" />
                                 </Link>
                             </IconButton>
@@ -409,6 +407,7 @@ export default function OpportunitiesPage() {
                             <IconButton
                                 variant="ghost"
                                 size="icon-sm"
+                                aria-label={`Edit ${row.original.title}`}
                                 onClick={(event) => {
                                     event.stopPropagation();
                                     handleEdit(row.original);
@@ -493,13 +492,13 @@ export default function OpportunitiesPage() {
             }
         >
             <div className="flex h-full flex-grow flex-col">
-                <div className="flex items-center justify-between px-3 py-2">
-                    <div className="flex items-center gap-3">
+                <div className="flex flex-wrap items-start justify-between gap-3 py-2">
+                    <div className="flex min-w-0 flex-wrap items-center gap-3">
                         <h1 className="text-lg font-bold">Opportunities</h1>
                         {/* Opportunity Type selector — switch between types to see their kanban */}
                         {opportunityTypes.length > 0 && (
                             <Select value={selectedTypeId} onValueChange={handleTypeChange}>
-                                <SelectTrigger className="min-w-[180px]">
+                                <SelectTrigger aria-label="Opportunity type" className="data-[size=default]:h-auto min-h-9 w-full max-w-full sm:w-[220px] *:data-[slot=select-value]:line-clamp-none *:data-[slot=select-value]:block [&_span]:min-w-0 [&_span]:break-words [&_span]:whitespace-normal">
                                     <SelectValue />
                                 </SelectTrigger>
                                 <SelectContent>
@@ -511,7 +510,7 @@ export default function OpportunitiesPage() {
                             </Select>
                         )}
                     </div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex max-w-full flex-wrap items-center gap-2">
                         <QueueExportButton
                             moduleName="OPPORTUNITIES"
                             filters={{
@@ -675,9 +674,9 @@ export default function OpportunitiesPage() {
                             Reassign {selectedRows.length} selected opportunit{selectedRows.length === 1 ? "y" : "ies"} to another owner.
                         </p>
                         <div className="space-y-2">
-                            <Label>New Owner</Label>
+                            <Label htmlFor="opportunity-bulk-owner">New Owner</Label>
                             <Select value={bulkAssignUserId} onValueChange={setBulkAssignUserId}>
-                                <SelectTrigger className="w-full">
+                                <SelectTrigger id="opportunity-bulk-owner" className="w-full">
                                     <SelectValue placeholder="Select a user" />
                                 </SelectTrigger>
                                 <SelectContent>
@@ -690,8 +689,8 @@ export default function OpportunitiesPage() {
                             </Select>
                         </div>
                         <div className="space-y-2">
-                            <Label>Reason</Label>
-                            <Textarea
+                            <Label htmlFor="opportunity-bulk-reason">Reason</Label>
+                            <Textarea id="opportunity-bulk-reason"
                                 placeholder="Why are these opportunities being reassigned?"
                                 rows={2}
                                 value={bulkAssignReason}

@@ -1,5 +1,5 @@
+import { toast } from "sonner";
 
-import Cookies from 'js-cookie';
 import { getUserFriendlyError } from './error-utils';
 
 const API_URL = '/api';
@@ -17,7 +17,6 @@ function createNetworkError(endpoint: string) {
 }
 
 export async function apiFetch<T = any>(endpoint: string, options: RequestInit = {}): Promise<T> {
-    const token = Cookies.get('token');
     const requestId = Math.random().toString(36).substring(7);
     const startTime = Date.now();
     // Gap checklist Module 10's "performance UX polish" item, "request cancellation on
@@ -31,13 +30,14 @@ export async function apiFetch<T = any>(endpoint: string, options: RequestInit =
 
     debugLog('log', `[API ${requestId}] Starting fetch to: ${endpoint}`, {
         method: options.method || 'GET',
-        hasToken: !!token,
         timestamp: new Date().toISOString()
     });
 
+    // F06 fix (WP05): session auth is now an HttpOnly cookie -- there is no token for this code
+    // to read anymore, and none is needed: the browser attaches the cookie automatically to
+    // this same-origin request, exactly like it already does for a plain <form> submission.
     const headers = {
         'Content-Type': 'application/json',
-        ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
         ...options.headers,
     };
 
@@ -48,9 +48,18 @@ export async function apiFetch<T = any>(endpoint: string, options: RequestInit =
         else externalSignal.addEventListener('abort', onExternalAbort);
     }
 
+    // F22 fix (WP12): declared outside the try block, and always cleared in the `finally` below
+    // -- previously `clearTimeout` only ran on the SUCCESS path (right after a resolved fetch),
+    // so any rejection (a real network failure, or the caller's own cancellation via
+    // `externalSignal`) left this 30s timer running uncleared. Harmless when the timeout itself
+    // was what caused the rejection (the timer already fired), but a genuine leak for every
+    // OTHER failure -- it fires 30s later and calls `controller.abort()` on an already-settled
+    // controller, which does nothing useful but still costs a live timer for that whole window.
+    let timeoutId: ReturnType<typeof setTimeout> | undefined;
+
     try {
         // Add 30-second timeout
-        const timeoutId = setTimeout(() => {
+        timeoutId = setTimeout(() => {
             timedOut = true;
             debugLog('error', `[API ${requestId}] TIMEOUT after 30s for: ${endpoint}`);
             controller.abort();
@@ -62,8 +71,6 @@ export async function apiFetch<T = any>(endpoint: string, options: RequestInit =
             signal: controller.signal,
         });
 
-        clearTimeout(timeoutId);
-        externalSignal?.removeEventListener('abort', onExternalAbort);
         const elapsed = Date.now() - startTime;
         debugLog('log', `[API ${requestId}] Response received in ${elapsed}ms:`, {
             status: response.status,
@@ -72,9 +79,11 @@ export async function apiFetch<T = any>(endpoint: string, options: RequestInit =
         });
 
         if (!response.ok) {
-            // Handle 401 Unauthorized globally
+            // Handle 401 Unauthorized globally. The session cookie is HttpOnly now (F06 fix,
+            // WP05) so this can't clear it client-side -- an already-invalid/expired cookie is
+            // harmless left in place; it keeps failing auth until overwritten by a fresh login
+            // or it naturally expires.
             if (response.status === 401 && typeof window !== 'undefined') {
-                Cookies.remove('token');
                 // Avoid redirect loop if already on login
                 if (!window.location.pathname.includes('/login')) {
                     window.location.href = '/login?expired=true';
@@ -113,7 +122,7 @@ export async function apiFetch<T = any>(endpoint: string, options: RequestInit =
 
             // Create error with user-friendly message
             const error: any = new Error(
-                getUserFriendlyError({
+                errorData.code === "DUPLICATE_RULE_BLOCK" ? errorMessage : getUserFriendlyError({
                     message: errorMessage,
                     status: response.status,
                     statusText: response.statusText,
@@ -133,12 +142,14 @@ export async function apiFetch<T = any>(endpoint: string, options: RequestInit =
             : await response.text();
         debugLog('log', `[API ${requestId}] Data parsed successfully:`, {
             isArray: Array.isArray(data),
-            keys: typeof data === 'object' ? Object.keys(data).slice(0, 5) : 'N/A'
+            keys: data !== null && typeof data === 'object' ? Object.keys(data).slice(0, 5) : 'N/A'
         });
 
+        if (options.method && !["GET", "HEAD"].includes(options.method.toUpperCase()) && Array.isArray(data?.duplicateWarnings)) {
+            for (const warning of data.duplicateWarnings) toast.warning(`Saved with a duplicate match: ${warning.name}`);
+        }
         return data;
     } catch (error: any) {
-        externalSignal?.removeEventListener('abort', onExternalAbort);
         const elapsed = Date.now() - startTime;
         const isAbort = error.name === 'AbortError';
         const isTimeout = isAbort && timedOut;
@@ -165,5 +176,8 @@ export async function apiFetch<T = any>(endpoint: string, options: RequestInit =
             throw createNetworkError(endpoint);
         }
         throw error;
+    } finally {
+        clearTimeout(timeoutId);
+        externalSignal?.removeEventListener('abort', onExternalAbort);
     }
 }

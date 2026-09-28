@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { query } from "@/lib/db";
 import { createOtp, hashOtp } from "@/lib/otp";
+import { checkRateLimit, clientIp } from "@/lib/rate-limit";
 import { sendOtpEmail } from "@/lib/zeptomail";
 
 const schema = z.object({
@@ -13,6 +14,15 @@ export async function POST(request: Request) {
   const parsed = schema.safeParse(json);
   if (!parsed.success) {
     return NextResponse.json({ error: "Invalid OTP request" }, { status: 400 });
+  }
+
+  // F27 fix (WP16): each real ZeptoMail send has a cost and can spam a recipient's inbox -- 5 per
+  // lead and 20 per IP per 10 minutes is enough for legitimate retries (a missed/delayed email)
+  // without letting a script hammer either dimension.
+  const perLead = checkRateLimit("otp-send-lead", parsed.data.leadId, 5, 10 * 60 * 1000);
+  const perIp = checkRateLimit("otp-send-ip", clientIp(request), 20, 10 * 60 * 1000);
+  if (!perLead.allowed || !perIp.allowed) {
+    return NextResponse.json({ error: "Too many OTP requests. Please try again later." }, { status: 429 });
   }
 
   const lead = await query<{ id: string; email: string; name: string }>(

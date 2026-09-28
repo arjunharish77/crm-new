@@ -1,5 +1,5 @@
 import { randomUUID } from "crypto";
-import { query, queryOne, execute } from "@/lib/db/query";
+import { query, queryOne, execute, jsonbParam } from "@/lib/db/query";
 import { createAuditLog, automationConditionMatches } from "@/lib/server/crm";
 import { getLeadForTenant } from "@/lib/repositories/leads-postgres";
 import { getOpportunityForTenant } from "@/lib/repositories/opportunities-postgres";
@@ -46,8 +46,8 @@ export async function createCallScriptForTenant(user: TenantUser, input: Record<
       name,
       input.matchConditions ?? { conditions: [], conditionLogic: "AND" },
       String(input.content ?? ""),
-      input.objectionHandling ?? [],
-      input.complianceLines ?? [],
+      jsonbParam(input.objectionHandling ?? []),
+      jsonbParam(input.complianceLines ?? []),
       input.isActive !== false,
       typeof input.order === "number" ? input.order : 0,
       user.id,
@@ -79,8 +79,8 @@ export async function updateCallScriptForTenant(user: TenantUser, id: string, in
       existing.version,
       existing.name,
       existing.content,
-      existing.objectionHandling,
-      existing.complianceLines,
+      jsonbParam(existing.objectionHandling),
+      jsonbParam(existing.complianceLines),
       existing.matchConditions,
       user.id,
       now,
@@ -98,8 +98,8 @@ export async function updateCallScriptForTenant(user: TenantUser, id: string, in
       name,
       "matchConditions" in input ? input.matchConditions : existing.matchConditions,
       "content" in input ? String(input.content ?? "") : existing.content,
-      "objectionHandling" in input ? input.objectionHandling : existing.objectionHandling,
-      "complianceLines" in input ? input.complianceLines : existing.complianceLines,
+      jsonbParam("objectionHandling" in input ? input.objectionHandling : existing.objectionHandling),
+      jsonbParam("complianceLines" in input ? input.complianceLines : existing.complianceLines),
       "isActive" in input ? input.isActive !== false : existing.isActive,
       "order" in input ? Number(input.order ?? 0) : existing.order,
       user.id,

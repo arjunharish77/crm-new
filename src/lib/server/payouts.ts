@@ -7,7 +7,8 @@ import {
   resolvePartnerRollupTargets,
   type PartnerVisibilityConfig,
 } from "@/lib/server/partner-access";
-import { query, queryOne } from "@/lib/db/query";
+import { query, queryOne, jsonbParam } from "@/lib/db/query";
+import { withTransaction } from "@/lib/db/transaction";
 import { formatTenantDate, getTenantTimeZone } from "@/lib/server/date-format";
 import { assertFeatureEnabled } from "@/lib/server/entitlements";
 import { assertNotImpersonating } from "@/lib/server/sessions";
@@ -83,8 +84,8 @@ export async function upsertPartnerPayoutSettingsForTenant(user: TenantUser, inp
     autoApproveBelowAmount: input.autoApproveBelowAmount ?? null,
     requireInvoiceBeforePayment: input.requireInvoiceBeforePayment ?? true,
     allowPartnerSelfInvoice: input.allowPartnerSelfInvoice ?? true,
-    adjustmentReasons: Array.isArray(input.adjustmentReasons) ? input.adjustmentReasons : [],
-    holdReasons: Array.isArray(input.holdReasons) ? input.holdReasons : [],
+    adjustmentReasons: jsonbParam(Array.isArray(input.adjustmentReasons) ? input.adjustmentReasons : []),
+    holdReasons: jsonbParam(Array.isArray(input.holdReasons) ? input.holdReasons : []),
     payoutVisibilityConfig: normalizePayoutVisibilityConfig(input.payoutVisibilityConfig),
     updatedBy: user.id,
     updatedAt: now,
@@ -462,6 +463,14 @@ const ALLOWED_TRANSITIONS: Record<string, string[]> = {
   PAID: [],
 };
 
+// F15 fix (WP10): the whole read-check-write sequence now runs inside one DB transaction with
+// the Payout row locked via `for update` at the very first read -- a concurrent
+// approve/pay/hold/invoice-cancel transition on the SAME payout now genuinely blocks on this
+// transaction rather than reading a stale snapshot and both racing to write. Previously each of
+// approvePayout/holdPayout/releasePayoutHold/markPayoutPaid read `existing`, validated against
+// it, then wrote by tenantId+id with no expected-state predicate at all -- so e.g. a concurrent
+// hold and pay could both read isHeld=false, both pass their own check, and both commit, leaving
+// a payout simultaneously "held" and "PAID".
 async function transitionPayoutStatus(
   user: TenantUser,
   payoutId: string,
@@ -475,115 +484,152 @@ async function transitionPayoutStatus(
     throw new Error("TENANT_CONTEXT_REQUIRED");
   }
   await assertFeatureEnabled(user.tenantId, "payoutsEnabled", { isPlatformAdmin: user.isPlatformAdmin });
-
-  const existing = await queryOne<any>(
-    `select id, "tenantId", "payoutCycleId", "partnerId", "partnerOrganizationId", "totalCommissionAmount", status,
-            "invoiceId", "approvedAt", "approvedBy", "paidAt", "paidBy", "paymentReference", "isHeld",
-            "holdReason", "heldAt", "heldBy", "releasedAt", "releasedBy", "createdAt", "updatedAt"
-     from "Payout"
-     where "tenantId" = $1 and id = $2
-     limit 1`,
-    [user.tenantId, payoutId],
-  );
-  if (!existing) return null;
-  if (!ALLOWED_TRANSITIONS[existing.status]?.includes(nextStatus)) {
-    throw new Error(`INVALID_PAYOUT_TRANSITION: ${existing.status} -> ${nextStatus}`);
-  }
-  if (existing.isHeld) throw new Error("PAYOUT_HELD");
-
   const settings = await getPartnerPayoutSettingsForTenant(user);
-  if (nextStatus === "APPROVED" && Number(existing.totalCommissionAmount ?? 0) < Number(settings?.minimumPayoutAmount ?? 0)) {
-    throw new Error("PAYOUT_BELOW_MINIMUM");
-  }
-  if (nextStatus === "PAID" && settings?.requireInvoiceBeforePayment !== false) {
-    if (!existing.invoiceId) throw new Error("INVOICE_REQUIRED_BEFORE_PAYMENT");
-    // The linked invoiceId can point at an invoice that was since cancelled (e.g. a
-    // reissue was started but hasn't completed yet) -- re-check its live status rather
-    // than trusting that a non-null invoiceId still means "a valid, ISSUED invoice exists".
-    const invoice = await queryOne<any>(`select status from "PartnerInvoice" where "tenantId" = $1 and id = $2 limit 1`, [
-      user.tenantId,
-      existing.invoiceId,
-    ]);
-    if (!invoice || invoice.status !== "ISSUED") throw new Error("INVOICE_REQUIRED_BEFORE_PAYMENT");
-  }
 
-  const patch: Record<string, unknown> = { status: nextStatus, updatedAt: new Date().toISOString(), ...extra };
-  const columns = Object.keys(patch);
-  const values = columns.map((column) => patch[column]);
-  const assignments = columns.map((column, index) => `"${column}" = $${index + 1}`).join(", ");
-  const data = await queryOne<any>(
-    `update "Payout"
-     set ${assignments}
-     where "tenantId" = $${columns.length + 1} and id = $${columns.length + 2}
-     returning id, "tenantId", "payoutCycleId", "partnerId", "partnerOrganizationId", "totalCommissionAmount", status,
-               "invoiceId", "approvedAt", "approvedBy", "paidAt", "paidBy", "paymentReference", "isHeld",
-               "holdReason", "heldAt", "heldBy", "releasedAt", "releasedBy", "createdAt", "updatedAt"`,
-    [...values, user.tenantId, payoutId],
-  );
-  if (!data) return null;
-  await createAuditLog(user as any, "UPDATE", "PAYOUT", data.id, existing, data, { status: { before: existing.status, after: nextStatus } });
-  return data;
+  const result = await withTransaction(user as any, async (client) => {
+    const existing = await queryOne<any>(
+      `select id, "tenantId", "payoutCycleId", "partnerId", "partnerOrganizationId", "totalCommissionAmount", status,
+              "invoiceId", "approvedAt", "approvedBy", "paidAt", "paidBy", "paymentReference", "isHeld",
+              "holdReason", "heldAt", "heldBy", "releasedAt", "releasedBy", "createdAt", "updatedAt"
+       from "Payout"
+       where "tenantId" = $1 and id = $2
+       limit 1
+       for update`,
+      [user.tenantId, payoutId],
+      client,
+    );
+    if (!existing) return null;
+    if (!ALLOWED_TRANSITIONS[existing.status]?.includes(nextStatus)) {
+      throw new Error(`INVALID_PAYOUT_TRANSITION: ${existing.status} -> ${nextStatus}`);
+    }
+    if (existing.isHeld) throw new Error("PAYOUT_HELD");
+
+    if (nextStatus === "APPROVED" && Number(existing.totalCommissionAmount ?? 0) < Number(settings?.minimumPayoutAmount ?? 0)) {
+      throw new Error("PAYOUT_BELOW_MINIMUM");
+    }
+    if (nextStatus === "PAID" && settings?.requireInvoiceBeforePayment !== false) {
+      if (!existing.invoiceId) throw new Error("INVOICE_REQUIRED_BEFORE_PAYMENT");
+      // The linked invoiceId can point at an invoice that was since cancelled (e.g. a reissue
+      // was started but hasn't completed yet) -- re-check its live status rather than trusting
+      // that a non-null invoiceId still means "a valid, ISSUED invoice exists". Locked too
+      // (`for update`), so a concurrent invoice-cancel on this same invoice blocks on this
+      // transaction instead of racing it -- the audit's own explicit "invoice-cancel/pay race".
+      const invoice = await queryOne<any>(
+        `select status from "PartnerInvoice" where "tenantId" = $1 and id = $2 limit 1 for update`,
+        [user.tenantId, existing.invoiceId],
+        client,
+      );
+      if (!invoice || invoice.status !== "ISSUED") throw new Error("INVOICE_REQUIRED_BEFORE_PAYMENT");
+    }
+
+    const patch: Record<string, unknown> = { status: nextStatus, updatedAt: new Date().toISOString(), ...extra };
+    const columns = Object.keys(patch);
+    const values = columns.map((column) => patch[column]);
+    const assignments = columns.map((column, index) => `"${column}" = $${index + 1}`).join(", ");
+    let data: any;
+    try {
+      data = await queryOne<any>(
+        `update "Payout"
+         set ${assignments}
+         where "tenantId" = $${columns.length + 1} and id = $${columns.length + 2}
+         returning id, "tenantId", "payoutCycleId", "partnerId", "partnerOrganizationId", "totalCommissionAmount", status,
+                   "invoiceId", "approvedAt", "approvedBy", "paidAt", "paidBy", "paymentReference", "isHeld",
+                   "holdReason", "heldAt", "heldBy", "releasedAt", "releasedBy", "createdAt", "updatedAt"`,
+        [...values, user.tenantId, payoutId],
+        client,
+      );
+    } catch (error) {
+      // F15 fix (WP10): "require ... unique payment references in the appropriate business
+      // scope" -- a partial unique index on (tenantId, paymentReference) now rejects a second
+      // payout being marked PAID with a reference already recorded for this tenant (e.g. a
+      // duplicate provider webhook/callback replaying the same payment), instead of silently
+      // recording two payouts against the same real-world payment.
+      const pgError = error as { code?: string };
+      if (pgError.code === "23505") throw new Error("DUPLICATE_PAYMENT_REFERENCE");
+      throw error;
+    }
+    if (!data) return null;
+    await createAuditLog(user as any, "UPDATE", "PAYOUT", data.id, existing, data, { status: { before: existing.status, after: nextStatus } }, client);
+    return data;
+  });
+  return result;
 }
 
 export async function approvePayout(user: TenantUser, payoutId: string) {
   return transitionPayoutStatus(user, payoutId, "APPROVED", { approvedAt: new Date().toISOString(), approvedBy: user.id });
 }
 
+// F15 fix (WP10): same `for update` row-lock-inside-a-transaction pattern as
+// transitionPayoutStatus above -- a concurrent approve/pay transition on this same payout now
+// blocks on this transaction instead of racing it (previously a hold and a pay could both read
+// isHeld=false and both commit, leaving a payout simultaneously held and PAID).
 export async function holdPayout(user: TenantUser, payoutId: string, holdReason: string) {
   if (!user.tenantId) throw new Error("TENANT_CONTEXT_REQUIRED");
   await assertFeatureEnabled(user.tenantId, "payoutsEnabled", { isPlatformAdmin: user.isPlatformAdmin });
   if (!holdReason?.trim()) throw new Error("HOLD_REASON_REQUIRED");
-  const existing = await queryOne<any>(
-    `select id, "tenantId", "payoutCycleId", "partnerId", "partnerOrganizationId", "totalCommissionAmount", status,
-            "invoiceId", "approvedAt", "approvedBy", "paidAt", "paidBy", "paymentReference", "isHeld",
-            "holdReason", "heldAt", "heldBy", "releasedAt", "releasedBy", "createdAt", "updatedAt"
-     from "Payout"
-     where "tenantId" = $1 and id = $2
-     limit 1`,
-    [user.tenantId, payoutId],
-  );
-  if (!existing) return null;
 
-  const data = await queryOne<any>(
-    `update "Payout"
-     set "isHeld" = true, "holdReason" = $1, "heldAt" = $2, "heldBy" = $3, "updatedAt" = $2
-     where "tenantId" = $4 and id = $5
-     returning id, "tenantId", "payoutCycleId", "partnerId", "partnerOrganizationId", "totalCommissionAmount", status,
-               "invoiceId", "approvedAt", "approvedBy", "paidAt", "paidBy", "paymentReference", "isHeld",
-               "holdReason", "heldAt", "heldBy", "releasedAt", "releasedBy", "createdAt", "updatedAt"`,
-    [holdReason.trim(), new Date().toISOString(), user.id, user.tenantId, payoutId],
-  );
-  if (!data) return null;
-  await createAuditLog(user as any, "UPDATE", "PAYOUT", data.id, existing, data, { hold: { before: false, after: true } });
-  return data;
+  return withTransaction(user as any, async (client) => {
+    const existing = await queryOne<any>(
+      `select id, "tenantId", "payoutCycleId", "partnerId", "partnerOrganizationId", "totalCommissionAmount", status,
+              "invoiceId", "approvedAt", "approvedBy", "paidAt", "paidBy", "paymentReference", "isHeld",
+              "holdReason", "heldAt", "heldBy", "releasedAt", "releasedBy", "createdAt", "updatedAt"
+       from "Payout"
+       where "tenantId" = $1 and id = $2
+       limit 1
+       for update`,
+      [user.tenantId, payoutId],
+      client,
+    );
+    if (!existing) return null;
+
+    const data = await queryOne<any>(
+      `update "Payout"
+       set "isHeld" = true, "holdReason" = $1, "heldAt" = $2, "heldBy" = $3, "updatedAt" = $2
+       where "tenantId" = $4 and id = $5
+       returning id, "tenantId", "payoutCycleId", "partnerId", "partnerOrganizationId", "totalCommissionAmount", status,
+                 "invoiceId", "approvedAt", "approvedBy", "paidAt", "paidBy", "paymentReference", "isHeld",
+                 "holdReason", "heldAt", "heldBy", "releasedAt", "releasedBy", "createdAt", "updatedAt"`,
+      [holdReason.trim(), new Date().toISOString(), user.id, user.tenantId, payoutId],
+      client,
+    );
+    if (!data) return null;
+    await createAuditLog(user as any, "UPDATE", "PAYOUT", data.id, existing, data, { hold: { before: false, after: true } }, client);
+    return data;
+  });
 }
 
 export async function releasePayoutHold(user: TenantUser, payoutId: string) {
   if (!user.tenantId) throw new Error("TENANT_CONTEXT_REQUIRED");
   await assertFeatureEnabled(user.tenantId, "payoutsEnabled", { isPlatformAdmin: user.isPlatformAdmin });
-  const existing = await queryOne<any>(
-    `select id, "tenantId", "payoutCycleId", "partnerId", "partnerOrganizationId", "totalCommissionAmount", status,
-            "invoiceId", "approvedAt", "approvedBy", "paidAt", "paidBy", "paymentReference", "isHeld",
-            "holdReason", "heldAt", "heldBy", "releasedAt", "releasedBy", "createdAt", "updatedAt"
-     from "Payout"
-     where "tenantId" = $1 and id = $2
-     limit 1`,
-    [user.tenantId, payoutId],
-  );
-  if (!existing) return null;
 
-  const data = await queryOne<any>(
-    `update "Payout"
-     set "isHeld" = false, "releasedAt" = $1, "releasedBy" = $2, "updatedAt" = $1
-     where "tenantId" = $3 and id = $4
-     returning id, "tenantId", "payoutCycleId", "partnerId", "partnerOrganizationId", "totalCommissionAmount", status,
-               "invoiceId", "approvedAt", "approvedBy", "paidAt", "paidBy", "paymentReference", "isHeld",
-               "holdReason", "heldAt", "heldBy", "releasedAt", "releasedBy", "createdAt", "updatedAt"`,
-    [new Date().toISOString(), user.id, user.tenantId, payoutId],
-  );
-  if (!data) return null;
-  await createAuditLog(user as any, "UPDATE", "PAYOUT", data.id, existing, data, { hold: { before: true, after: false } });
-  return data;
+  return withTransaction(user as any, async (client) => {
+    const existing = await queryOne<any>(
+      `select id, "tenantId", "payoutCycleId", "partnerId", "partnerOrganizationId", "totalCommissionAmount", status,
+              "invoiceId", "approvedAt", "approvedBy", "paidAt", "paidBy", "paymentReference", "isHeld",
+              "holdReason", "heldAt", "heldBy", "releasedAt", "releasedBy", "createdAt", "updatedAt"
+       from "Payout"
+       where "tenantId" = $1 and id = $2
+       limit 1
+       for update`,
+      [user.tenantId, payoutId],
+      client,
+    );
+    if (!existing) return null;
+
+    const data = await queryOne<any>(
+      `update "Payout"
+       set "isHeld" = false, "releasedAt" = $1, "releasedBy" = $2, "updatedAt" = $1
+       where "tenantId" = $3 and id = $4
+       returning id, "tenantId", "payoutCycleId", "partnerId", "partnerOrganizationId", "totalCommissionAmount", status,
+                 "invoiceId", "approvedAt", "approvedBy", "paidAt", "paidBy", "paymentReference", "isHeld",
+                 "holdReason", "heldAt", "heldBy", "releasedAt", "releasedBy", "createdAt", "updatedAt"`,
+      [new Date().toISOString(), user.id, user.tenantId, payoutId],
+      client,
+    );
+    if (!data) return null;
+    await createAuditLog(user as any, "UPDATE", "PAYOUT", data.id, existing, data, { hold: { before: true, after: false } }, client);
+    return data;
+  });
 }
 
 export async function createPayoutAdjustment(

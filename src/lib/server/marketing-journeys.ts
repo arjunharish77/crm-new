@@ -1,7 +1,7 @@
 import { randomUUID } from "crypto";
 import { createAuditLog } from "@/lib/server/crm";
 import { assertModuleEnabled } from "@/lib/server/module-entitlements";
-import { query, queryOne, execute } from "@/lib/db/query";
+import { query, queryOne, execute, queryAsSystem } from "@/lib/db/query";
 import {
   createAutomationForTenant,
   getAutomationForTenant,
@@ -601,7 +601,7 @@ export async function getAttributionExplorerForTenant(
   const opportunities = opportunityIds.length
     ? await query<any>(
         `select o.id, o.amount, s."isWon" from "Opportunity" o
-         join "OpportunityStage" s on s.id = o."stageId"
+         join "StageDefinition" s on s.id = o."stageId"
          where o."tenantId" = $1 and o.id = any($2::text[])`,
         [user.tenantId, opportunityIds],
       )
@@ -972,8 +972,9 @@ export function assertJourneyPermission(user: TenantUser, action: JourneyPermiss
 
 // Cross-tenant worker job: notifies each AT_RISK journey's creator, matching the alerting
 // pattern already used for stale unassigned cases (alertStaleUnassignedCases).
+// WP07 (F04): BACKGROUND_JOB, disposition B -- worker-invoked, cross-tenant by its own comment.
 export async function alertDegradedJourneys(limit = 100) {
-  const journeys = await query<any>(`select id, "tenantId", name, "createdBy" from "MarketingJourney" where status = 'ACTIVE' limit $1`, [limit]);
+  const journeys = await queryAsSystem<any>(`select id, "tenantId", name, "createdBy" from "MarketingJourney" where status = 'ACTIVE' limit $1`, [limit]);
   let alerted = 0;
   for (const journey of journeys) {
     const health = await getJourneyHealthForTenant({ id: "journey-health-worker", tenantId: journey.tenantId }, journey.id);
@@ -991,8 +992,10 @@ export async function alertDegradedJourneys(limit = 100) {
   return { checked: journeys.length, alerted };
 }
 
+// WP07 (F04): BACKGROUND_JOB, disposition B -- worker-invoked recurring job, discovers active
+// continuous-enrollment journeys across every tenant at once.
 export async function processDueJourneyEnrollmentRefresh() {
-  const journeys = await query<any>(
+  const journeys = await queryAsSystem<any>(
     `select ${JOURNEY_COLUMNS} from "MarketingJourney" where status = 'ACTIVE' and "continuousEnrollment" = true`,
     [],
   );

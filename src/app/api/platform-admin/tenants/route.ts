@@ -13,7 +13,7 @@ export async function GET(request: Request) {
   } catch (error) {
     if (error instanceof Error && error.message === "UNAUTHORIZED") return unauthorized();
     if (error instanceof Error && error.message === "FORBIDDEN") return forbidden();
-    return serverError("Failed to fetch tenants");
+    return serverError("Failed to fetch tenants", error);
   }
 }
 
@@ -35,6 +35,6 @@ export async function POST(request: Request) {
   } catch (error) {
     if (error instanceof Error && error.message === "UNAUTHORIZED") return unauthorized();
     if (error instanceof Error && error.message === "FORBIDDEN") return forbidden();
-    return serverError("Failed to create tenant");
+    return serverError("Failed to create tenant", error);
   }
 }

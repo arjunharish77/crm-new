@@ -1,5 +1,8 @@
 'use client';
 
+import { RecordSummary } from "@/components/detail-shell/record-summary";
+import { ErrorState } from "@/components/common/error-state";
+
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
@@ -97,6 +100,7 @@ export default function LeadDetailPage() {
     const [opportunities, setOpportunities] = useState<Opportunity[]>([]);
     const [taskCount, setTaskCount] = useState(0);
     const [loading, setLoading] = useState(true);
+    const [loadError, setLoadError] = useState<string | null>(null);
     const [showEditDialog, setShowEditDialog] = useState(false);
     const [tabValue, setTabValue] = useState<"activity" | "details" | "scoring" | "opportunities" | "tasks" | "communications" | "notes" | "audit">("activity");
     const [activityTypeFilter, setActivityTypeFilter] = useState<string>("ALL");
@@ -111,6 +115,7 @@ export default function LeadDetailPage() {
     const [isFavorite, setIsFavorite] = useState(false);
 
     const loadData = useCallback(async () => {
+        setLoadError(null);
         setLoading(true);
         try {
             const [leadData, oppsData] = await Promise.all([
@@ -141,6 +146,7 @@ export default function LeadDetailPage() {
             const taskData = await apiFetch<any[]>(`/tasks?leadId=${leadId}`);
             setTaskCount(Array.isArray(taskData) ? taskData.length : 0);
         } catch {
+            setLoadError("Unable to load lead details and related records. Please try again.");
             toast.error("Failed to fetch lead details");
         } finally {
             setLoading(false);
@@ -214,6 +220,8 @@ export default function LeadDetailPage() {
         );
     }
 
+    if (loadError) return <ErrorState description={loadError} onRetry={loadData} />;
+
     if (!lead) {
         return (
             <div className="p-8 text-center">
@@ -230,7 +238,7 @@ export default function LeadDetailPage() {
             variants={fadeInUp}
             initial="initial"
             animate="animate"
-            className="mx-auto max-w-[1440px] p-2.5 md:p-4"
+            className="mx-auto min-w-0 max-w-[1440px]"
         >
             <DetailPageHeader
                 onBack={() => router.back()}
@@ -241,6 +249,14 @@ export default function LeadDetailPage() {
                         {lead.status}
                     </Badge>
                 }
+                primaryAction={<Button
+                            variant="default"
+                            className="h-9 rounded-[10px] px-3.5"
+                            onClick={() => setShowLogOutcomeDialog(true)}
+                        >
+                            <PhoneCall className="size-4" />
+                            Log Call Outcome
+                        </Button>}
                 actions={
                     <>
                         <Button
@@ -292,14 +308,7 @@ export default function LeadDetailPage() {
                                 Push to External
                             </Button>
                         )}
-                        <Button
-                            variant="outline"
-                            className="h-9 rounded-[10px] px-3.5"
-                            onClick={() => setShowLogOutcomeDialog(true)}
-                        >
-                            <PhoneCall className="size-4" />
-                            Log Call Outcome
-                        </Button>
+
                         {canManageSharing(user, lead) && (
                             <Button
                                 variant="outline"
@@ -321,22 +330,26 @@ export default function LeadDetailPage() {
                 }
             />
 
+            <div className="mb-3 flex flex-wrap gap-3 break-all text-sm lg:hidden">
+                {lead.phone && <a className="text-primary underline" href={`tel:${lead.phone}`}>{lead.phone}</a>}
+                {lead.email && <a className="text-primary underline" href={`mailto:${lead.email}`}>{lead.email}</a>}
+            </div>
             <div className="mb-3 flex justify-end">
                 <ExternalPushBadge leadId={leadId} refreshKey={pushRefreshKey} />
             </div>
 
-            <div className="grid grid-cols-1 gap-3 lg:grid-cols-[3.8fr_8.2fr]">
-                <div className="flex flex-col gap-3 lg:sticky lg:top-20 lg:self-start">
+            <div className="grid grid-cols-1 items-start gap-3 lg:grid-cols-[280px_minmax(0,1fr)]">
+                <RecordSummary>
                     <Card className="gap-0 overflow-hidden rounded-[14px] border-primary/20 bg-transparent py-0">
                         <div className="bg-gradient-to-b from-primary/95 to-primary/90 px-5 py-[18px] text-primary-foreground">
                             <div className="mb-[10px] flex items-center gap-[10px]">
-                                <Avatar className="size-12">
+                                <Avatar className="size-12 shrink-0">
                                     <AvatarFallback className="bg-white/15 text-lg font-extrabold text-primary-foreground">
                                         {lead.name?.charAt(0) || "L"}
                                     </AvatarFallback>
                                 </Avatar>
                                 <div className="min-w-0">
-                                    <h2 className="text-lg font-extrabold leading-tight">{lead.name}</h2>
+                                    <h2 className="break-words text-lg font-extrabold leading-tight">{lead.name}</h2>
                                     <p className="text-sm italic opacity-80">{lead.status}</p>
                                 </div>
                             </div>
@@ -380,7 +393,7 @@ export default function LeadDetailPage() {
 
                     <Card className="rounded-xl p-3">
                         <h3 className="mb-[9px] text-base font-extrabold">Quick Snapshot</h3>
-                        <div className="grid grid-cols-3 gap-2">
+                        <div className="grid grid-cols-1 gap-2">
                             <SnapshotCard icon={<Flame className="size-4" />} label="Score" value={String(lead.score ?? 0)} />
                             <SnapshotCard icon={<Calendar className="size-4" />} label="Last Touch" value={lastActivity ? relativeDay(lastActivity.createdAt) : "None"} />
                             <SnapshotCard icon={<Link2 className="size-4" />} label="Open Opportunity Value" value={formatCurrency(openOpportunityValue)} />
@@ -390,10 +403,10 @@ export default function LeadDetailPage() {
                     <PredictiveScorePanel recordType="LEAD" recordId={lead.id} score={lead.predictiveScore} />
                     <NextBestActionPanel recordType="LEAD" recordId={lead.id} />
                     <CallScriptPanel recordType="LEAD" recordId={lead.id} />
-                </div>
+                </RecordSummary>
 
-                <div>
-                    <Card className="gap-0 overflow-hidden rounded-[14px] py-0">
+                <div className="min-w-0">
+                    <Card className="min-w-0 gap-0 overflow-hidden rounded-xl py-0">
                         <WorkspaceTabs
                             value={tabValue}
                             onChange={setTabValue}
@@ -418,7 +431,7 @@ export default function LeadDetailPage() {
                                         </span>
                                         <div className="flex flex-wrap gap-[6px]">
                                             <Select value={activityTypeFilter} onValueChange={setActivityTypeFilter}>
-                                                <SelectTrigger size="sm" className="min-w-[148px] rounded-lg bg-background">
+                                                <SelectTrigger size="sm" aria-label="Activity type" className="h-auto min-h-8 w-full min-w-0 rounded-lg bg-background [&_span]:whitespace-normal">
                                                     <SelectValue />
                                                 </SelectTrigger>
                                                 <SelectContent>
@@ -431,7 +444,7 @@ export default function LeadDetailPage() {
                                                 </SelectContent>
                                             </Select>
                                             <Select value={activityTimeFilter} onValueChange={(value) => setActivityTimeFilter(value as ActivityTimeFilter)}>
-                                                <SelectTrigger size="sm" className="min-w-[120px] rounded-lg bg-background">
+                                                <SelectTrigger size="sm" aria-label="Activity time range" className="h-auto min-h-8 w-full min-w-0 rounded-lg bg-background [&_span]:whitespace-normal">
                                                     <SelectValue />
                                                 </SelectTrigger>
                                                 <SelectContent>
@@ -593,10 +606,10 @@ function CompactContactRow({ icon, value, onClick, tooltip }: { icon: React.Reac
                 }
             } : undefined}
             aria-label={onClick ? (tooltip || value) : undefined}
-            className={cn("group flex items-center gap-2", onClick && "cursor-pointer")}
+            className={cn("group flex min-w-0 items-start gap-2", onClick && "cursor-pointer")}
         >
-            <span className="flex items-center opacity-90">{icon}</span>
-            <span className={cn("text-sm font-medium leading-[1.35]", onClick && "group-hover:underline")}>
+            <span className="flex shrink-0 items-center opacity-90">{icon}</span>
+            <span className={cn("min-w-0 break-all text-sm font-medium leading-[1.35]", onClick && "group-hover:underline")}>
                 {value}
             </span>
         </div>
@@ -611,9 +624,9 @@ function CompactContactRow({ icon, value, onClick, tooltip }: { icon: React.Reac
 
 function MetricCell({ label, value }: { label: string; value: string }) {
     return (
-        <div className="border-t border-white/10 bg-black/20 px-[7px] py-[9px] text-center">
-            <p className="text-base font-extrabold leading-tight text-white">{value}</p>
-            <p className="text-xs text-white/80">{label}</p>
+        <div className="min-w-0 break-words border-t bg-muted px-[7px] py-[9px] text-center">
+            <p className="text-base font-extrabold leading-tight text-foreground">{value}</p>
+            <p className="text-xs text-muted-foreground">{label}</p>
         </div>
     );
 }
@@ -643,9 +656,9 @@ function DetailPanel({ title, children }: { title: string; children: React.React
 
 function PropertyRow({ label, children }: { label: string; children: React.ReactNode }) {
     return (
-        <div className="flex items-center justify-between gap-4 px-3 py-[8.4px]">
+        <div className="grid min-w-0 grid-cols-1 gap-1 px-3 py-[8.4px]">
             <span className="text-sm text-muted-foreground">{label}</span>
-            <div className="text-right text-sm font-bold">{children}</div>
+            <div className="min-w-0 break-words text-sm font-bold">{children}</div>
         </div>
     );
 }

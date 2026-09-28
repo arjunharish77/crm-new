@@ -1,5 +1,5 @@
 import { randomUUID } from "crypto";
-import { execute, query, queryOne, type Queryable } from "@/lib/db/query";
+import { execute, query, queryOne, jsonbParam, queryAsSystem, executeAsSystem, type Queryable } from "@/lib/db/query";
 import { withTransaction } from "@/lib/db/transaction";
 import * as pgAdminModules from "@/lib/repositories/admin-modules-postgres";
 import { assertModuleEnabled } from "@/lib/server/module-entitlements";
@@ -282,7 +282,7 @@ async function writeAssignmentRuleChildRows(tenantId: string, ruleId: string, co
     await execute(
       `insert into "DistributionCondition" (id, "tenantId", "ruleId", field, operator, value, "order", "createdAt", "updatedAt")
        values ($1,$2,$3,$4,$5,$6,$7,$8,$8)`,
-      [randomUUID(), tenantId, ruleId, String(condition.field), String(condition.operator ?? "equals"), condition.value ?? null, index, now],
+      [randomUUID(), tenantId, ruleId, String(condition.field), String(condition.operator ?? "equals"), jsonbParam(condition.value), index, now],
       client,
     );
   }
@@ -574,11 +574,14 @@ export async function deleteLeadScoringRuleForTenant(user: TenantUser, id: strin
   await execute('delete from "LeadScoringRule" where "tenantId" = $1 and id = $2', [tenantId, id]);
 }
 
+// WP07 (F04): BACKGROUND_JOB, disposition B -- its one caller is the worker's own
+// "scoring.recomputeRules" dynamic job, dispatched with tenantId in job data but no ambient
+// tenant context (it's a headless worker process, not a request).
 export async function recomputeLeadScoresForTenant(user: TenantUser) {
   const tenantId = requireTenantId(user);
   const [rules, leads] = await Promise.all([
     listLeadScoringRulesForTenant(user),
-    query<any>('select id, name, email, phone, company, status, source, score from "Lead" where "tenantId" = $1', [tenantId]),
+    queryAsSystem<any>('select id, name, email, phone, company, status, source, score from "Lead" where "tenantId" = $1', [tenantId]),
   ]);
   const activeRules = rules.filter((rule) => rule.isActive).sort((a, b) => a.order - b.order);
   const now = new Date().toISOString();
@@ -589,7 +592,7 @@ export async function recomputeLeadScoresForTenant(user: TenantUser) {
       if (evaluateRuleAgainstLead(rule, lead)) score += Number(rule.scoreChange ?? 0);
     }
     const nextScore = Math.max(0, Math.min(100, score));
-    await execute('update "Lead" set score = $1, "updatedAt" = $2 where "tenantId" = $3 and id = $4', [nextScore, now, tenantId, lead.id]);
+    await executeAsSystem('update "Lead" set score = $1, "updatedAt" = $2 where "tenantId" = $3 and id = $4', [nextScore, now, tenantId, lead.id]);
   }));
 
   return { count: leads.length };

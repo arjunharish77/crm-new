@@ -1,33 +1,31 @@
-import { requireCurrentUser, verifyAuthToken } from "@/lib/server/auth";
+import { requireCurrentUser } from "@/lib/server/auth";
 import { unauthorized } from "@/lib/server/http";
-import { getRealtimePool } from "@/lib/db/pool";
 import { query as dbQuery } from "@/lib/db/query";
-import { getCurrentUserById } from "@/lib/repositories/auth-admin-postgres";
-import type { PoolClient } from "pg";
+import { subscribeToNotifications } from "@/lib/server/realtime-notifications";
+import { validateSession } from "@/lib/server/sessions";
+import { isTenantSuspended } from "@/lib/repositories/auth-admin-postgres";
 
 export const runtime = "nodejs";
 
-async function getRealtimeUser(request: Request) {
-  const token = new URL(request.url).searchParams.get("token");
-  if (token) {
-    const payload = await verifyAuthToken(token);
-    if (!payload) return null;
-    const user = await getCurrentUserById(payload.sub);
-    if (!user) return null;
-    return {
-      ...user,
-      isImpersonating: !!payload.isImpersonating,
-      impersonatedBy: payload.impersonatedBy ?? null,
-    };
-  }
-
-  return requireCurrentUser(request);
-}
+// F05 fix (WP05): the connection-time checks (WP02) confirm the session/tenant are valid when a
+// stream OPENS, but a long-lived SSE connection could previously keep delivering notifications
+// indefinitely after a mid-connection revocation (logout elsewhere, admin-revoked session,
+// tenant suspended) until the browser happened to reconnect on its own. Rechecked on this
+// interval instead -- comfortably under the audit's own "auth revocation propagation <=60s"
+// target (section 9) while not meaningfully more expensive than the existing heartbeat.
+const REAUTH_INTERVAL_MS = 30_000;
 
 export async function GET(request: Request) {
-  let user: Awaited<ReturnType<typeof getRealtimeUser>>;
+  // F06 fix (WP05): a session token in a URL query string ends up in server/proxy access logs,
+  // browser history and Referer headers -- this route previously accepted one as a fallback
+  // (needed only because EventSource can't set a custom Authorization header). Now that
+  // sessions are an HttpOnly cookie the browser attaches automatically, EventSource carries it
+  // like any other same-origin request, so the token-in-URL path is removed rather than left as
+  // still-working-but-deprecated: a stale bookmark or logged URL should not remain a live
+  // credential.
+  let user: Awaited<ReturnType<typeof requireCurrentUser>>;
   try {
-    user = await getRealtimeUser(request);
+    user = await requireCurrentUser(request);
     if (!user) return unauthorized();
   } catch {
     return unauthorized();
@@ -38,7 +36,7 @@ export async function GET(request: Request) {
 
   const stream = new ReadableStream({
     async start(controller) {
-      let client: PoolClient | null = null;
+      let unsubscribe: (() => void) | null = null;
       let streamClosed = false;
       let cleanedUp = false;
       const send = (payload: unknown) => {
@@ -54,29 +52,42 @@ export async function GET(request: Request) {
       };
       const heartbeat = setInterval(() => send({ type: "heartbeat" }), 25_000);
 
-      const onNotification = (message: { channel: string; payload?: string }) => {
-        if (message.channel !== "crm_notifications" || !message.payload) return;
+      const closeUnauthorized = () => {
+        send({ type: "error", message: "Session no longer valid" });
+        streamClosed = true;
+        cleanup?.();
         try {
-          const payload = JSON.parse(message.payload);
-          if (payload.userId !== user.id) return;
-          if ((payload.tenantId ?? null) !== (user.tenantId ?? null)) return;
-          send({
-            id: payload.id,
-            type: payload.data?.type || "notification",
-            title: payload.title,
-            message: payload.message,
-            data: payload.data,
-            timestamp: payload.createdAt,
-          });
+          controller.close();
         } catch {
-          // Ignore malformed database notifications.
+          // The browser may already have closed the stream.
         }
       };
+      const reauth = setInterval(async () => {
+        try {
+          if (user.sessionId) {
+            const validation = await validateSession(user.sessionId);
+            if (!validation.valid) {
+              closeUnauthorized();
+              return;
+            }
+          }
+          if (user.tenantId && !user.isPlatformAdmin && (await isTenantSuspended(user.tenantId))) {
+            closeUnauthorized();
+          }
+        } catch {
+          // A transient DB error during the recheck shouldn't kill an otherwise-healthy stream;
+          // the next interval tick (or the connection's own natural reconnect) tries again.
+        }
+      }, REAUTH_INTERVAL_MS);
 
       try {
-        client = await getRealtimePool().connect();
+        // F10 fix: one shared LISTEN connection per web process (see realtime-notifications.ts),
+        // not one dedicated connection per browser stream -- this stays bounded regardless of
+        // how many streams are open, instead of exhausting the (default max-3) realtime pool.
+        unsubscribe = await subscribeToNotifications({ userId: user.id, tenantId: user.tenantId, send });
       } catch {
         clearInterval(heartbeat);
+        clearInterval(reauth);
         send({ type: "error", message: "Realtime notifications unavailable" });
         streamClosed = true;
         try {
@@ -87,8 +98,6 @@ export async function GET(request: Request) {
         return;
       }
 
-      client.on("notification", onNotification);
-      await client.query("listen crm_notifications");
       const unread = await dbQuery(
         user.tenantId
           ? `select id, title, message, data, "createdAt" from "Notification" where "userId"::text = $1 and "isRead" = false and "tenantId"::text = $2 order by "createdAt" desc limit 20`
@@ -103,8 +112,8 @@ export async function GET(request: Request) {
         streamClosed = true;
         cleanup = null;
         clearInterval(heartbeat);
-        client?.off("notification", onNotification);
-        client?.query("unlisten crm_notifications").catch(() => undefined).finally(() => client?.release());
+        clearInterval(reauth);
+        unsubscribe?.();
       };
       request.signal.addEventListener("abort", () => cleanup?.(), { once: true });
     },

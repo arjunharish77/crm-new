@@ -20,6 +20,7 @@ vi.mock("@/lib/server/call-campaigns", () => callCampaignsMocks);
 
 import {
   listDispositionGroupsForTenant,
+  listCallDispositionsForTenant,
   createDispositionGroupForTenant,
   createDispositionOutcomeForTenant,
   logCallDispositionForTenant,
@@ -39,6 +40,27 @@ describe("call disposition framework", () => {
     automationsMocks.runAutomationsForEvent.mockReset().mockResolvedValue([]);
     callQueuesMocks.removeCallFromQueue.mockReset().mockResolvedValue(undefined);
     callCampaignsMocks.recordCallCampaignAttemptOutcome.mockReset().mockResolvedValue(undefined);
+  });
+
+  describe("listCallDispositionsForTenant", () => {
+    it("qualifies tenant and record filters when joining disposition metadata", async () => {
+      dbMocks.query.mockResolvedValueOnce([]);
+      await listCallDispositionsForTenant(user, { leadId: "lead-1", opportunityId: "opp-1", callLogId: "call-1", createdBy: "agent-1" });
+      const [sql, values] = dbMocks.query.mock.calls[0];
+      expect(sql).toContain('where cd."tenantId" = $1');
+      expect(sql).toContain('cd."leadId" = $2');
+      expect(sql).toContain('cd."opportunityId" = $3');
+      expect(sql).toContain('cd."callLogId" = $4');
+      expect(sql).toContain('cd."createdBy" = $5');
+      expect(values).toEqual(["tenant-a", "lead-1", "opp-1", "call-1", "agent-1"]);
+    });
+
+    it("keeps tenant scope when no optional filters are supplied", async () => {
+      dbMocks.query.mockResolvedValueOnce([]);
+      await listCallDispositionsForTenant(user);
+      expect(dbMocks.query.mock.calls[0][0]).toContain('where cd."tenantId" = $1');
+      expect(dbMocks.query.mock.calls[0][1]).toEqual(["tenant-a"]);
+    });
   });
 
   describe("listDispositionGroupsForTenant", () => {

@@ -1,5 +1,7 @@
 "use client";
 
+import { PageHeader } from "@/components/layout/page-header";
+
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -57,6 +59,7 @@ export default function LeadListsPage() {
     const mountedRef = useRef(false);
     const [lists, setLists] = useState<LeadListSummary[]>([]);
     const [loading, setLoading] = useState(true);
+    const [fetchError, setFetchError] = useState<string | null>(null);
     const [open, setOpen] = useState(false);
     const [filterOpen, setFilterOpen] = useState(false);
     const [form, setForm] = useState({ name: "", description: "", type: "SMART" });
@@ -68,6 +71,7 @@ export default function LeadListsPage() {
     const fetchLists = useCallback(async () => {
         if (mountedRef.current) {
             setLoading(true);
+            setFetchError(null);
         }
         try {
             const data = await apiFetch("/lead-lists");
@@ -76,7 +80,7 @@ export default function LeadListsPage() {
             }
         } catch {
             if (mountedRef.current) {
-                toast.error("Failed to load lists");
+                setFetchError("Failed to load lists.");
             }
         } finally {
             if (mountedRef.current) {
@@ -221,34 +225,25 @@ export default function LeadListsPage() {
     ], []);
 
     return (
-        <div className="mx-auto max-w-[1480px] px-3 py-3 md:px-4 md:py-4">
+        <div className="min-w-0">
             <div className="space-y-3">
-                <div className="flex flex-col justify-between gap-3 md:flex-row md:items-center">
-                    <div>
-                        <h1 className="text-lg font-extrabold">Lead Lists</h1>
-                        <p className="text-sm text-muted-foreground">
-                            Create static and smart lead views for segmentation, follow-up, and automation enrollment.
-                        </p>
-                    </div>
-                    <Button onClick={() => setOpen(true)} className="rounded-[10px]">
-                        <Plus className="size-4" />
-                        New List
-                    </Button>
-                </div>
+                <PageHeader title="Lead Lists" description="Segment leads into smart lists or manage membership in static lists." actions={
+                    <Button onClick={() => setOpen(true)}><Plus className="size-4" />New List</Button>
+                } />
 
                 <Card className="rounded-xl p-2.5">
-                    <div className="flex flex-col gap-2 md:flex-row md:items-center">
-                        <div className="relative md:min-w-[320px]">
+                    <div className="flex flex-wrap items-center gap-2">
+                        <div className="relative min-w-0 flex-1 basis-60">
                             <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
                             <Input
-                                placeholder="Search lists"
+                                aria-label="Search lists" placeholder="Search lists"
                                 value={search}
                                 onChange={(event) => setSearch(event.target.value)}
                                 className="pl-9"
                             />
                         </div>
                         <Select value={typeFilter} onValueChange={(value) => setTypeFilter(value as any)}>
-                            <SelectTrigger className="min-w-[160px]">
+                            <SelectTrigger aria-label="List type" className="w-full sm:w-40">
                                 <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
@@ -259,7 +254,7 @@ export default function LeadListsPage() {
                         </Select>
                         <div className="flex-grow" />
                         <span className="text-xs font-bold text-muted-foreground">
-                            {filteredLists.length} lists
+                            {loading || fetchError ? "—" : filteredLists.length} lists
                         </span>
                     </div>
                 </Card>
@@ -270,6 +265,8 @@ export default function LeadListsPage() {
                             data={paginatedLists}
                             columns={columns}
                             loading={loading}
+                            error={fetchError}
+                            onRetry={fetchLists}
                             getRowId={(row) => row.id}
                             totalItems={filteredLists.length}
                             pageIndex={pagination.pageIndex}
@@ -301,17 +298,17 @@ export default function LeadListsPage() {
             >
                 <div className="space-y-4">
                     <div className="space-y-2">
-                        <Label>Name</Label>
-                        <Input value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} />
+                        <Label htmlFor="list-name">Name</Label>
+                        <Input id="list-name" value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} />
                     </div>
                     <div className="space-y-2">
-                        <Label>Description</Label>
-                        <Input value={form.description} onChange={(event) => setForm({ ...form, description: event.target.value })} />
+                        <Label htmlFor="list-description">Description</Label>
+                        <Input id="list-description" value={form.description} onChange={(event) => setForm({ ...form, description: event.target.value })} />
                     </div>
                     <div className="space-y-2">
-                        <Label>Type</Label>
+                        <Label htmlFor="list-type">Type</Label>
                         <Select value={form.type} onValueChange={(value) => setForm({ ...form, type: value })}>
-                            <SelectTrigger className="w-full">
+                            <SelectTrigger id="list-type" className="w-full">
                                 <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
@@ -321,7 +318,7 @@ export default function LeadListsPage() {
                         </Select>
                     </div>
                     {form.type === "SMART" && (
-                        <div className="flex items-center gap-2">
+                        <div className="flex flex-wrap items-center gap-2">
                             <Button variant="outline" size="sm" onClick={() => setFilterOpen(true)}>Configure filters</Button>
                             <span className="text-xs text-muted-foreground">{filters.reduce((sum, group) => sum + group.conditions.length, 0)} conditions</span>
                         </div>

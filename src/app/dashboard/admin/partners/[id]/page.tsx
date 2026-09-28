@@ -5,7 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import { apiFetch } from "@/lib/api";
 import { formatCurrency } from "@/lib/utils";
 import { formatWorkspaceDate } from "@/lib/date-format";
-import { toast } from "sonner";
+import { ErrorState } from "@/components/common/error-state";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -38,10 +38,13 @@ export default function PartnerDetailPage() {
     const [profile, setProfile] = useState<PartnerProfile | null>(null);
     const [dashboard, setDashboard] = useState<PartnerDashboard | null>(null);
     const [loading, setLoading] = useState(true);
+    const [loadError, setLoadError] = useState(false);
     const [notFound, setNotFound] = useState(false);
 
     const fetchAll = useCallback(async () => {
         setLoading(true);
+        setLoadError(false);
+        setNotFound(false);
         try {
             const [profileData, dashboardData] = await Promise.all([
                 apiFetch<PartnerProfile>(`/partners/${params.id}`),
@@ -51,7 +54,7 @@ export default function PartnerDetailPage() {
             setDashboard(dashboardData);
         } catch (error: any) {
             if (error?.status === 404) setNotFound(true);
-            else toast.error(error.message || "Failed to load partner");
+            else setLoadError(true);
         } finally {
             setLoading(false);
         }
@@ -63,16 +66,18 @@ export default function PartnerDetailPage() {
 
     if (loading) {
         return (
-            <div className="mx-auto max-w-[1200px] p-4">
+            <div className="@container/partner min-w-0">
                 <Skeleton className="mb-4 h-8 w-64" />
                 <Skeleton className="h-64 w-full rounded-2xl" />
             </div>
         );
     }
 
+    if (loadError) return <ErrorState description="Partner dashboard could not be loaded." onRetry={fetchAll} />;
+
     if (notFound || !profile) {
         return (
-            <div className="mx-auto max-w-[1200px] p-4">
+            <div className="@container/partner min-w-0">
                 <Button variant="ghost" onClick={() => router.push("/dashboard/settings/partners")}>
                     <ArrowLeft className="size-4" />
                     Back to Partners
@@ -83,18 +88,18 @@ export default function PartnerDetailPage() {
     }
 
     return (
-        <div className="mx-auto max-w-[1200px] p-4">
+        <div className="@container/partner min-w-0">
             <Button variant="ghost" size="sm" onClick={() => router.push("/dashboard/settings/partners")} className="mb-3">
                 <ArrowLeft className="size-4" />
                 Back to Partners
             </Button>
 
-            <div className="mb-4 flex items-center justify-between gap-4">
-                <div className="flex items-center gap-3">
+            <div className="mb-4 flex min-w-0 flex-wrap items-center justify-between gap-4">
+                <div className="flex min-w-0 flex-1 items-center gap-3">
                     <Avatar className="size-12 bg-primary/10 text-primary">
                         <AvatarFallback>{(profile.user?.name || profile.legalBusinessName || "?").charAt(0).toUpperCase()}</AvatarFallback>
                     </Avatar>
-                    <div>
+                    <div className="min-w-0 break-words">
                         <h1 className="text-xl font-extrabold">{profile.legalBusinessName}</h1>
                         <p className="text-sm text-muted-foreground">{profile.user?.name} &middot; {profile.user?.email}</p>
                     </div>
@@ -105,16 +110,16 @@ export default function PartnerDetailPage() {
             </div>
 
             {dashboard ? (
-                <div className="mb-4 grid grid-cols-1 gap-3 md:grid-cols-3">
+                <div className="mb-4 grid grid-cols-1 gap-3 @min-[750px]/partner:grid-cols-3">
                     <StatCard title="Total Commission Earned" value={formatCurrency(dashboard.totals.totalEarned)} icon={<DollarSign />} />
                     <StatCard title="Total Paid Out" value={formatCurrency(dashboard.totals.totalPaid)} icon={<Wallet />} />
                     <StatCard title="Pending Payouts" value={dashboard.totals.pendingPayouts} icon={<Clock3 />} />
                 </div>
             ) : null}
 
-            <div className="grid gap-4 md:grid-cols-2">
-                <Card className="rounded-2xl">
-                    <CardContent className="p-6">
+            <div className="grid gap-4 @min-[1000px]/partner:grid-cols-2">
+                <Card className="min-w-0 rounded-2xl">
+                    <CardContent className="min-w-0 p-4">
                         <h2 className="mb-3 text-lg font-bold">Recent Commission Ledger</h2>
                         {!dashboard?.recentLedgerEntries.length ? (
                             <p className="text-sm text-muted-foreground">No commission ledger entries yet.</p>
@@ -141,8 +146,8 @@ export default function PartnerDetailPage() {
                     </CardContent>
                 </Card>
 
-                <Card className="rounded-2xl">
-                    <CardContent className="p-6">
+                <Card className="min-w-0 rounded-2xl">
+                    <CardContent className="min-w-0 p-4">
                         <h2 className="mb-3 text-lg font-bold">Recent Payouts</h2>
                         {!dashboard?.recentPayouts.length ? (
                             <p className="text-sm text-muted-foreground">No payouts yet.</p>

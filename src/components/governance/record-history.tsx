@@ -17,6 +17,7 @@ import {
     CommandItem,
     CommandList,
 } from '@/components/ui/command';
+import { ErrorState } from '@/components/common/error-state';
 import { apiFetch } from '@/lib/api';
 import { formatWorkspaceRelativeTime } from '@/lib/date-format';
 import { cn } from '@/lib/utils';
@@ -98,20 +99,28 @@ export function RecordHistory({ entityType, entityId }: RecordHistoryProps) {
     const [fieldFilter, setFieldFilter] = useState<string[]>([]);
     const [filterOpen, setFilterOpen] = useState(false);
 
+    const [loadError, setLoadError] = useState(false);
+    const [attempt, setAttempt] = useState(0);
     useEffect(() => {
-        if (entityId) {
-            apiFetch(`/governance/history/${entityType}/${entityId}`)
-                .then(setHistory)
-                .catch(console.error)
-                .finally(() => setLoading(false));
-        }
-    }, [entityType, entityId]);
+        const controller = new AbortController();
+        setLoading(true);
+        setLoadError(false);
+        setHistory([]);
+        setFieldFilter([]);
+        apiFetch<HistoryItem[]>(`/governance/history/${entityType}/${entityId}`, { signal: controller.signal })
+            .then(data => { if (!controller.signal.aborted) setHistory(Array.isArray(data) ? data : []); })
+            .catch(() => { if (!controller.signal.aborted) setLoadError(true); })
+            .finally(() => { if (!controller.signal.aborted) setLoading(false); });
+        return () => controller.abort();
+    }, [entityType, entityId, attempt]);
 
     if (loading) return (
         <div className="flex justify-center p-8">
             <Loader2 className="size-6 animate-spin text-muted-foreground" />
         </div>
     );
+
+    if (loadError) return <ErrorState description="Audit history could not be loaded." onRetry={() => setAttempt(value => value + 1)} />;
 
     const availableFields = [...new Set(history.flatMap((item) => changedFields(item).map((field) => field.field)))];
     const filteredHistory = fieldFilter.length === 0
@@ -144,15 +153,15 @@ export function RecordHistory({ entityType, entityId }: RecordHistoryProps) {
                         <Button
                             variant="outline"
                             size="sm"
-                            className="h-[34px] w-full justify-start rounded-[10px] font-semibold sm:w-80"
+                            className="h-auto min-h-[34px] max-w-full whitespace-normal w-full justify-start rounded-[10px] font-semibold sm:w-80"
                         >
                             <ListFilter className="size-4" />
                             {fieldFilter.length > 0 ? `${fieldFilter.length} selected` : "Filter fields"}
                         </Button>
                     </PopoverTrigger>
-                    <PopoverContent className="w-80 p-0" align="start">
+                    <PopoverContent className="w-80 max-w-[calc(100dvw-2rem)] p-0" align="start">
                         <Command>
-                            <CommandInput placeholder="Search fields" />
+                            <CommandInput aria-label="Search audit fields" placeholder="Search fields" />
                             <CommandList>
                                 <CommandEmpty>No fields found.</CommandEmpty>
                                 <CommandGroup>
@@ -169,6 +178,7 @@ export function RecordHistory({ entityType, entityId }: RecordHistoryProps) {
                                                 )}
                                             />
                                             {labelForField(field)}
+                                            <span className="sr-only">{fieldFilter.includes(field) ? ", selected" : ", not selected"}</span>
                                         </CommandItem>
                                     ))}
                                 </CommandGroup>
@@ -178,10 +188,12 @@ export function RecordHistory({ entityType, entityId }: RecordHistoryProps) {
                 </Popover>
             )}
 
+            {fieldFilter.length > 0 && <Button variant="ghost" size="sm" onClick={() => setFieldFilter([])}>Clear field filters</Button>}
+
             {filteredHistory.map((item: any, idx) => (
-                <div key={item.id} className="relative pl-8">
+                <div key={item.id} className="relative min-w-0 break-words pl-5 sm:pl-8">
                     {/* Vertical Line */}
-                    {idx < history.length - 1 && (
+                    {idx < filteredHistory.length - 1 && (
                         <div className="absolute bottom-[-14px] left-[11px] top-[18px] w-0.5 bg-border" />
                     )}
 
@@ -202,8 +214,8 @@ export function RecordHistory({ entityType, entityId }: RecordHistoryProps) {
                                     : `${item.action} by ${actor}`;
                             return (
                                 <>
-                                    <div className="mb-1 flex items-start justify-between">
-                                        <span className="text-sm font-extrabold">
+                                    <div className="mb-1 flex flex-wrap items-start justify-between gap-1">
+                                        <span className="min-w-0 max-w-full break-words text-sm font-extrabold">
                                             {actionLabel}
                                         </span>
                                         <span className="text-xs text-muted-foreground">
@@ -212,7 +224,7 @@ export function RecordHistory({ entityType, entityId }: RecordHistoryProps) {
                                     </div>
 
                                     <p className="mb-1 block text-xs text-muted-foreground">
-                                        by {item.user.name} ({item.user.email})
+                                        by {item.user?.name || "Unknown user"} {item.user?.email ? `(${item.user.email})` : ""}
                                     </p>
 
                                     {item.action === 'UPDATE' && fields.length > 0 && (
@@ -223,11 +235,11 @@ export function RecordHistory({ entityType, entityId }: RecordHistoryProps) {
                                                         {labelForField(field.field)}
                                                     </p>
                                                     <div className="flex flex-wrap items-center gap-1.5">
-                                                        <Badge variant="outline" className="max-w-[220px] truncate">
+                                                        <Badge variant="outline" className="min-w-0 max-w-full whitespace-normal break-all">
                                                             {formatValue(field.before, field.field, item)}
                                                         </Badge>
                                                         <ArrowRight className="size-3.5 text-muted-foreground/60" />
-                                                        <Badge variant="outline" className="max-w-[220px] truncate border-emerald-500/40 text-emerald-600">
+                                                        <Badge variant="outline" className="min-w-0 max-w-full whitespace-normal break-all border-emerald-500/40 text-emerald-700 dark:text-emerald-300">
                                                             {formatValue(field.after, field.field, item)}
                                                         </Badge>
                                                     </div>

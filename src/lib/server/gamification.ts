@@ -2,7 +2,7 @@ import { randomUUID } from "crypto";
 import { createAuditLog, automationConditionMatches } from "@/lib/server/crm";
 import { userMatchesTargetingConfig, type ParticipantConfig } from "@/lib/server/partner-access";
 import { assertFeatureEnabled, isFeatureEnabledForTenant } from "@/lib/server/entitlements";
-import { execute, query, queryOne } from "@/lib/db/query";
+import { execute, query, queryOne, jsonbParam } from "@/lib/db/query";
 
 type TenantUser = {
   id: string;
@@ -112,9 +112,9 @@ export async function upsertGamificationSettingsForTenant(user: TenantUser, inpu
   const existing = await getGamificationSettingsForTenant(user);
   const now = new Date().toISOString();
   const payload = {
-    levels: Array.isArray(input.levels) ? input.levels : DEFAULT_LEVELS,
+    levels: jsonbParam(Array.isArray(input.levels) ? input.levels : DEFAULT_LEVELS),
     leaderboardConfig: input.leaderboardConfig ?? DEFAULT_LEADERBOARD_CONFIG,
-    redemptionCatalog: Array.isArray(input.redemptionCatalog) ? input.redemptionCatalog : [],
+    redemptionCatalog: jsonbParam(Array.isArray(input.redemptionCatalog) ? input.redemptionCatalog : []),
     antiGamingRules: input.antiGamingRules ?? DEFAULT_ANTI_GAMING_RULES,
     participantConfig: normalizeParticipantConfig(input.participantConfig),
     updatedBy: user.id,

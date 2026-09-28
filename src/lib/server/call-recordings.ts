@@ -1,4 +1,4 @@
-import { query, queryOne, execute } from "@/lib/db/query";
+import { query, queryOne, execute, queryAsSystem, executeAsSystem } from "@/lib/db/query";
 import { createAuditLog } from "@/lib/server/crm";
 import { getLeadForTenant } from "@/lib/repositories/leads-postgres";
 import { getOpportunityForTenant } from "@/lib/repositories/opportunities-postgres";
@@ -106,13 +106,15 @@ export async function getCallRecordingForTenant(user: TenantUser, callLogId: str
 // recordingExpiresAt has passed, following the exact shape of processExpiredExportFiles
 // (src/lib/server/exports.ts) -- the row and its metadata (status/duration/transcript) stay,
 // only the recording itself is dropped, so call history isn't lost, just the audio.
+// WP07 (F04): BACKGROUND_JOB, disposition B -- worker-invoked recurring job, discovers expired
+// recordings across every tenant at once.
 export async function expireCallRecordings(limit = 100) {
-  const due = await query<{ id: string }>(
+  const due = await queryAsSystem<{ id: string }>(
     `select id from "TelephonyCallLog" where "recordingUrl" is not null and "recordingExpiresAt" is not null and "recordingExpiresAt" <= $1 limit $2`,
     [new Date().toISOString(), limit],
   );
   for (const row of due) {
-    await execute(`update "TelephonyCallLog" set "recordingUrl" = null where id = $1`, [row.id]);
+    await executeAsSystem(`update "TelephonyCallLog" set "recordingUrl" = null where id = $1`, [row.id]);
   }
   return { processed: due.length };
 }

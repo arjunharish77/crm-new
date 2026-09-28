@@ -44,11 +44,15 @@ describe("Lead CRUD server wrapper", () => {
 
     const list = await listLeadsForTenant(tenantAUser, 1, 10);
     expect(list.meta.total).toBe(1);
-    expect(leadRepoMocks.createLeadForTenant).toHaveBeenCalledWith(tenantAUser, {
-      name: "Acme Co",
-      email: "acme@example.com",
-      status: "NEW",
-    });
+    expect(leadRepoMocks.createLeadForTenant).toHaveBeenCalledWith(
+      tenantAUser,
+      {
+        name: "Acme Co",
+        email: "acme@example.com",
+        status: "NEW",
+      },
+      undefined,
+    );
     expect(leadRepoMocks.getLeadForTenant).toHaveBeenCalledWith(tenantAUser, "lead-1");
     expect(leadRepoMocks.updateLeadForTenant).toHaveBeenCalledWith(tenantAUser, "lead-1", {
       name: "Acme Corp",

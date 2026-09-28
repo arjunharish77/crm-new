@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -37,7 +37,7 @@ interface AuditLog {
         id: string;
         name: string;
         email: string;
-    };
+    } | null;
     tenant: {
         id: string;
         name: string;
@@ -45,6 +45,7 @@ interface AuditLog {
 }
 
 export default function AuditLogsPage() {
+    const requestVersion = useRef(0);
     const [logs, setLogs] = useState<AuditLog[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -58,6 +59,7 @@ export default function AuditLogsPage() {
     const [searchQuery, setSearchQuery] = useState('');
 
     const fetchLogs = async () => {
+        const version = ++requestVersion.current;
         setLoading(true);
         setError(null);
         try {
@@ -71,14 +73,16 @@ export default function AuditLogsPage() {
 
             const response = await apiFetch(`/audit-logs?${queryParams.toString()}`);
 
+            if (version !== requestVersion.current) return;
             setLogs(response.data || []);
             setTotal(response.pagination.total);
             setTotalPages(response.pagination.totalPages);
         } catch (err: any) {
+            if (version !== requestVersion.current) return;
             setError(err.message || 'Failed to load audit logs');
             console.error('Audit logs fetch error:', err);
         } finally {
-            setLoading(false);
+            if (version === requestVersion.current) setLoading(false);
         }
     };
 
@@ -87,6 +91,9 @@ export default function AuditLogsPage() {
     }, [page, actionFilter, entityTypeFilter]);
 
 
+    const search = searchQuery.trim().toLowerCase();
+    const visibleLogs = logs.filter((log) => !search || [log.user?.name, log.user?.email, log.entityType, log.entityId].some((value) => String(value ?? "").toLowerCase().includes(search)));
+
     const formatChanges = (changes: any) => {
         if (!changes) return 'N/A';
         if (typeof changes === 'string') return changes;
@@ -94,8 +101,8 @@ export default function AuditLogsPage() {
     };
 
     return (
-        <div className="p-6 space-y-6">
-            <div className="flex items-center justify-between">
+        <div className="@container/audit min-w-0 space-y-6">
+            <div className="flex min-w-0 flex-wrap items-center justify-between">
                 <div>
                     <h1 className="text-3xl font-bold">Audit Logs</h1>
                     <p className="text-muted-foreground mt-1">
@@ -111,15 +118,15 @@ export default function AuditLogsPage() {
                     <CardTitle>Filters</CardTitle>
                 </CardHeader>
                 <CardContent>
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="grid grid-cols-1 @min-[750px]/audit:grid-cols-3 gap-4">
                         <div>
                             <label className="text-sm font-medium mb-2 block">Action</label>
-                            <Select value={actionFilter} onValueChange={setActionFilter}>
-                                <SelectTrigger>
+                            <Select value={actionFilter || "__all__"} onValueChange={(value) => { setActionFilter(value === "__all__" ? "" : value); setPage(1); }}>
+                                <SelectTrigger aria-label="Action filter" className="w-full">
                                     <SelectValue placeholder="All actions" />
                                 </SelectTrigger>
                                 <SelectContent>
-                                    <SelectItem value="">All actions</SelectItem>
+                                    <SelectItem value="__all__">All actions</SelectItem>
                                     <SelectItem value="CREATE">Create</SelectItem>
                                     <SelectItem value="UPDATE">Update</SelectItem>
                                     <SelectItem value="DELETE">Delete</SelectItem>
@@ -131,12 +138,12 @@ export default function AuditLogsPage() {
 
                         <div>
                             <label className="text-sm font-medium mb-2 block">Entity Type</label>
-                            <Select value={entityTypeFilter} onValueChange={setEntityTypeFilter}>
-                                <SelectTrigger>
+                            <Select value={entityTypeFilter || "__all__"} onValueChange={(value) => { setEntityTypeFilter(value === "__all__" ? "" : value); setPage(1); }}>
+                                <SelectTrigger aria-label="Entity type filter" className="w-full">
                                     <SelectValue placeholder="All types" />
                                 </SelectTrigger>
                                 <SelectContent>
-                                    <SelectItem value="">All types</SelectItem>
+                                    <SelectItem value="__all__">All types</SelectItem>
                                     <SelectItem value="LEAD">Lead</SelectItem>
                                     <SelectItem value="OPPORTUNITY">Opportunity</SelectItem>
                                     <SelectItem value="ACTIVITY">Activity</SelectItem>
@@ -148,11 +155,11 @@ export default function AuditLogsPage() {
                         </div>
 
                         <div>
-                            <label className="text-sm font-medium mb-2 block">Search</label>
+                            <label className="text-sm font-medium mb-2 block">Search current page</label>
                             <div className="relative">
                                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                                 <Input
-                                    placeholder="Search user or entity..."
+                                    aria-label="Search current page" placeholder="Search this page by user or entity..."
                                     value={searchQuery}
                                     onChange={(e) => setSearchQuery(e.target.value)}
                                     className="pl-10"
@@ -195,16 +202,17 @@ export default function AuditLogsPage() {
                                         </TableRow>
                                     </TableHeader>
                                     <TableBody>
-                                        {logs.map((log) => (
+                                        {visibleLogs.length === 0 && <TableRow><TableCell colSpan={7} className="py-6 text-center text-muted-foreground">No matching logs on this page.</TableCell></TableRow>}
+                                        {visibleLogs.map((log) => (
                                             <TableRow key={log.id}>
                                                 <TableCell className="whitespace-nowrap">
                                                     {formatWorkspaceDateTime(log.createdAt, { seconds: true })}
                                                 </TableCell>
                                                 <TableCell>
                                                     <div>
-                                                        <div className="font-medium">{log.user.name}</div>
+                                                        <div className="font-medium">{log.user?.name || "Unknown user"}</div>
                                                         <div className="text-xs text-muted-foreground">
-                                                            {log.user.email}
+                                                            {log.user?.email || "—"}
                                                         </div>
                                                     </div>
                                                 </TableCell>
@@ -251,11 +259,11 @@ export default function AuditLogsPage() {
                             </div>
 
                             {/* Pagination */}
-                            <div className="flex items-center justify-between px-6 py-4 border-t">
+                            <div className="flex min-w-0 flex-wrap items-center justify-between px-6 py-4 border-t">
                                 <div className="text-sm text-muted-foreground">
-                                    Showing {logs.length} of {total} audit logs
+                                    Showing {visibleLogs.length} of {total} audit logs
                                 </div>
-                                <div className="flex items-center gap-2">
+                                <div className="flex min-w-0 flex-wrap items-center gap-2">
                                     <Button
                                         variant="outline"
                                         size="sm"

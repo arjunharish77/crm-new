@@ -1,5 +1,5 @@
 import { randomUUID } from "crypto";
-import { execute, query, queryOne } from "@/lib/db/query";
+import { execute, query, queryOne, queryAsSystem } from "@/lib/db/query";
 import { isModuleEnabledForTenant } from "@/lib/server/module-entitlements";
 import { createUserNotification } from "@/lib/server/notifications";
 
@@ -84,9 +84,11 @@ async function escalateLowScoreSurvey(response: any) {
 // Worker job (checklist item 20): dispatches a survey for every recently-resolved case that
 // hasn't already been sent one. Scoped to cases resolved in the last 3 days rather than an
 // unbounded scan, matching this codebase's other worker jobs' bounded-lookback convention.
+// WP07 (F04): BACKGROUND_JOB, disposition B -- worker-invoked recurring job, discovers
+// recently-resolved cases across every tenant at once.
 export async function dispatchCaseSurveys(limit = 100, now = new Date()) {
   const lookbackIso = new Date(now.getTime() - 3 * 24 * 60 * 60_000).toISOString();
-  const candidates = await query<any>(
+  const candidates = await queryAsSystem<any>(
     `select c.id, c."tenantId", c."caseNumber", c.subject, c."requesterEmail", c."requesterPhone", c."resolvedAt"
      from "Case" c
      where c."resolvedAt" is not null and c."resolvedAt" >= $1

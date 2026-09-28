@@ -1,5 +1,7 @@
 "use client";
 
+import { ErrorState } from "@/components/common/error-state";
+
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -96,6 +98,7 @@ export default function ViewsPage() {
     const payoutsEnabled = useFeature("payoutsEnabled");
     const [views, setViews] = useState<ViewRecord[]>([]);
     const [loading, setLoading] = useState(true);
+    const [fetchError, setFetchError] = useState<string | null>(null);
     const [builderOpen, setBuilderOpen] = useState(false);
     const [editingView, setEditingView] = useState<ViewRecord | null>(null);
     const [selectedViewId, setSelectedViewId] = useState<string | null>(null);
@@ -136,13 +139,14 @@ export default function ViewsPage() {
 
     const fetchViews = useCallback(async () => {
         setLoading(true);
+        setFetchError(null);
         try {
             const data = await apiFetch<ViewRecord[]>("/saved-views?module=ALL");
             const records = Array.isArray(data) ? data : [];
             setViews(records);
             setSelectedViewId((current) => current && records.some((view) => view.id === current) ? current : records[0]?.id ?? null);
         } catch {
-            toast.error("Failed to load Smart Views");
+            setFetchError("Failed to load Smart Views.");
         } finally {
             setLoading(false);
         }
@@ -378,7 +382,7 @@ export default function ViewsPage() {
         + (selectedView?.sharedRoleIds?.length ?? 0);
 
     return (
-        <div className="flex h-full min-h-[calc(100vh-80px)] flex-col bg-background">
+        <div className="flex min-w-0 flex-col bg-background">
             {deepLinkSummary ? (
                 <div className="flex flex-wrap items-center gap-2 border-b bg-amber-50 px-4 py-2.5 text-sm dark:bg-amber-950/30">
                     <span>
@@ -392,14 +396,14 @@ export default function ViewsPage() {
             <div className="border-b bg-card px-4 py-3 md:px-5">
                 <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
                     <div className="flex min-w-0 flex-1 flex-wrap items-center gap-3">
-                        <div className="flex items-center gap-2">
+                        <div className="flex flex-wrap items-center gap-2">
                             <div className="flex size-8 items-center justify-center rounded-lg bg-primary/10 text-primary">
                                 <LayoutList className="size-4" />
                             </div>
-                            <h1 className="text-base font-extrabold tracking-tight">Smart Views</h1>
+                            <h1 className="text-2xl font-semibold tracking-tight">Smart Views</h1>
                         </div>
                         <Select value={selectedViewId ?? ""} onValueChange={openView} disabled={loading || visibleViews.length === 0}>
-                            <SelectTrigger className="h-9 w-full min-w-[280px] max-w-[460px] rounded-md font-semibold">
+                            <SelectTrigger aria-label="Smart View" className="h-9 w-full min-w-0 max-w-[460px] rounded-md font-semibold">
                                 <SelectValue placeholder="Select Smart View" />
                             </SelectTrigger>
                             <SelectContent>
@@ -523,6 +527,8 @@ export default function ViewsPage() {
 
             {loading ? (
                 <div className="m-4 rounded-xl border bg-card p-6 text-sm text-muted-foreground">Loading Smart Views...</div>
+            ) : fetchError ? (
+                <ErrorState description={fetchError} onRetry={fetchViews} />
             ) : views.length === 0 ? (
                 <div className="p-4">
                     <EmptyState
@@ -535,7 +541,7 @@ export default function ViewsPage() {
             ) : selectedView && activeTab ? (
                 <>
                     <div className="border-b bg-surface-container-low">
-                        <div className="flex overflow-x-auto px-2 md:px-4">
+                        <div className="flex max-w-full overflow-x-auto px-2 md:px-4" role="group" aria-label="View sections">
                             {tabs.map((tab) => {
                                 const active = tab.id === activeTab.id;
                                 const count = recordsByTab[tab.id]?.length;
@@ -544,9 +550,10 @@ export default function ViewsPage() {
                                     <button
                                         key={tab.id}
                                         type="button"
+                                        aria-pressed={active}
                                         onClick={() => setActiveTabId(tab.id)}
                                         className={cn(
-                                            "min-h-[68px] min-w-[220px] border-x border-transparent px-4 py-2.5 text-left transition-colors",
+                                            "min-h-[68px] w-48 shrink-0 border-x border-transparent px-4 py-2.5 text-left transition-colors",
                                             active ? "border-x-border border-t-2 border-t-primary bg-background shadow-sm" : "text-muted-foreground hover:bg-background/70"
                                         )}
                                     >
@@ -559,7 +566,7 @@ export default function ViewsPage() {
                                             ) : null}
                                         </div>
                                         <div className={cn("mt-0.5 text-lg font-extrabold", active ? "text-primary" : "text-muted-foreground")}>
-                                            {!enabled ? "-" : loadingRecords && count === undefined ? "..." : (count ?? 0).toLocaleString()}
+                                            {!enabled || tabErrors[tab.id] ? "—" : loadingRecords && count === undefined ? "..." : (count ?? 0).toLocaleString()}
                                         </div>
                                         <div className="text-xs text-muted-foreground">{moduleLabel(tab.module)}</div>
                                     </button>
@@ -583,7 +590,7 @@ export default function ViewsPage() {
                                     <SlidersHorizontal className="size-4" />
                                     {activeTab.filters?.conditions?.length ?? 0} filters
                                 </div>
-                                <div className="relative w-full sm:w-[300px]">
+                                <div className="relative w-full sm:w-[min(300px,100%)]">
                                     <Search className="absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
                                     <Input
                                         className="h-9 rounded-md pl-8"
@@ -612,7 +619,7 @@ export default function ViewsPage() {
                             </div>
                         ) : null}
                         {selectedRecordIds.length > 0 && (
-                            <div className="mt-2 flex items-center gap-2 rounded-md border bg-surface-container-low px-3 py-2">
+                            <div className="mt-2 flex flex-wrap items-center gap-2 rounded-md border bg-surface-container-low px-3 py-2">
                                 <span className="text-sm font-semibold">{selectedRecordIds.length} selected</span>
                                 <QueueExportButton
                                     moduleName={activeTab.module}
@@ -626,10 +633,10 @@ export default function ViewsPage() {
                         )}
                     </div>
 
-                    <div className="min-h-0 flex-1 overflow-auto bg-background">
+                    <div className="min-h-0 min-w-0 flex-1 bg-background">
                         {tabErrors[activeTab.id] ? (
                             <div className="p-4">
-                                <EmptyState title="Cannot load this tab" description={tabErrors[activeTab.id]} />
+                                <ErrorState title="Cannot load this tab" description={tabErrors[activeTab.id]} onRetry={() => loadRecords(selectedView, tabs)} />
                             </div>
                         ) : loadingRecords && visibleRecords.length === 0 ? (
                             <div className="p-4 text-sm text-muted-foreground">Loading records...</div>
@@ -718,7 +725,7 @@ export default function ViewsPage() {
                             <p className="text-sm text-muted-foreground">No comments yet.</p>
                         )}
                     </div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex flex-wrap items-center gap-2">
                         <Input value={commentDraft} onChange={(event) => setCommentDraft(event.target.value)} placeholder="Add a comment" />
                         <Button disabled={postingComment || !commentDraft.trim()} onClick={postComment}>
                             {postingComment ? "Posting..." : "Post"}
@@ -881,7 +888,7 @@ function InlineRecordsTable({
     const selectedSet = new Set(selectedIds);
     const allSelected = records.length > 0 && records.every((record) => selectedSet.has(record.id));
     return (
-        <div className="min-w-full overflow-x-auto">
+        <div className="min-w-0 max-w-full overflow-x-auto">
             <Table>
                 <TableHeader className="sticky top-0 z-10 bg-muted">
                     <TableRow>

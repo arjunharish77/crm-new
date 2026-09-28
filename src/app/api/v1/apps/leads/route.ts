@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
-import { MarketplaceAppAuthenticationError, authenticateMarketplaceAppRequest, hasAppPermission } from "@/lib/server/marketplace-inbound";
+import { MarketplaceAppAuthenticationError, authenticateMarketplaceAppRequest, buildAppScopedActor, hasAppPermission } from "@/lib/server/marketplace-inbound";
 import { createLeadForTenant, listLeadsForTenant } from "@/lib/server/crm";
 import { prepareIncomingPayload } from "@/lib/server/marketplace-sync";
-import { badRequest, forbidden, marketplaceAppAuthErrorResponse, serverError } from "@/lib/server/http";
+import { badRequest, conflict, forbidden, marketplaceAppAuthErrorResponse, serverError } from "@/lib/server/http";
 
 // The marketplace-app counterpart to /api/v1/leads -- same underlying repo functions, but
 // authenticated against a MarketplaceApp's own id+secret and TenantAppPermissionGrant scopes
@@ -12,13 +12,13 @@ import { badRequest, forbidden, marketplaceAppAuthErrorResponse, serverError } f
 export async function GET(request: Request) {
   try {
     const url = new URL(request.url);
-    const { appId, tenantId, permissions } = await authenticateMarketplaceAppRequest(request);
-    if (!hasAppPermission(permissions, "leads", "read")) {
+    const auth = await authenticateMarketplaceAppRequest(request);
+    if (!hasAppPermission(auth.permissions, "leads", "read")) {
       return forbidden("This app does not have permission to read leads");
     }
     const page = Number(url.searchParams.get("page") ?? "1");
     const limit = Number(url.searchParams.get("limit") ?? "25");
-    const result = await listLeadsForTenant({ id: appId, tenantId }, page, limit);
+    const result = await listLeadsForTenant(await buildAppScopedActor(auth), page, limit);
     return NextResponse.json(result);
   } catch (error) {
     if (error instanceof MarketplaceAppAuthenticationError) return marketplaceAppAuthErrorResponse(error.reason);
@@ -29,21 +29,25 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     const rawBody = await request.text();
-    const { appId, tenantId, installId, permissions } = await authenticateMarketplaceAppRequest(request);
-    if (!hasAppPermission(permissions, "leads", "write")) {
+    const auth = await authenticateMarketplaceAppRequest(request);
+    if (!hasAppPermission(auth.permissions, "leads", "write")) {
       return forbidden("This app does not have permission to create leads");
     }
     const rawParsed = rawBody ? JSON.parse(rawBody) : {};
     // Field mapping (translate the app's own field names back to real CRM fields) and default
     // ownership (fill in an owner the app didn't specify) -- both opt-in via the install's own
     // sync settings, no-ops for an app that never configured them.
-    const body = await prepareIncomingPayload(installId, "leads", rawParsed);
+    const body = await prepareIncomingPayload(auth.installId, "leads", rawParsed);
     if (!body?.name || typeof body.name !== "string" || !body.name.trim()) return badRequest("name is required");
-    const lead = await createLeadForTenant({ id: appId, tenantId }, body);
+    const idempotencyKey = request.headers.get("idempotency-key");
+    const lead = await createLeadForTenant(await buildAppScopedActor(auth), body, idempotencyKey);
     return NextResponse.json(lead, { status: 201 });
   } catch (error) {
     if (error instanceof MarketplaceAppAuthenticationError) return marketplaceAppAuthErrorResponse(error.reason);
     if (error instanceof SyntaxError) return badRequest("Request body must be valid JSON");
+    if (error instanceof Error && error.message === "IDEMPOTENCY_KEY_CONFLICT") {
+      return conflict("This Idempotency-Key was already used with a different request body");
+    }
     return serverError("Failed to create lead", error);
   }
 }

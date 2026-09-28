@@ -23,6 +23,6 @@ export async function POST(request: Request) {
       return badRequest("Bootstrap already completed");
     }
 
-    return serverError("Failed to bootstrap platform admin");
+    return serverError("Failed to bootstrap platform admin", error);
   }
 }

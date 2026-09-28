@@ -1,5 +1,7 @@
 'use client';
 
+import { BuilderWorkspace } from "@/components/layout/builder-workspace";
+
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import ReactFlow, {
@@ -529,6 +531,7 @@ function normalizeMultiIfElseBranches(nodes: Node[], edges: Edge[]) {
 const OPPORTUNITY_TRIGGER_SCOPES = ["opportunity", "activity_opportunity", "task_opportunity"];
 
 function AutomationBuilderContent() {
+    const [activePanel, setActivePanel] = useState("canvas");
     const router = useRouter();
     const params = useParams();
     const automationId = params?.id as string;
@@ -1266,11 +1269,10 @@ function AutomationBuilderContent() {
             variants={fadeInUp}
             initial="initial"
             animate="animate"
-            className="flex flex-col"
-            style={{ height: 'calc(100vh - 64px)' }}
+            className="flex min-w-0 flex-col"
         >
             {/* Header */}
-            <div className="flex items-center gap-4 border-b bg-card px-4 py-2.5">
+            <div className="flex flex-wrap items-center gap-3 border-b bg-card px-3 py-2.5">
                 <Button variant="ghost" size="icon-sm" onClick={() => router.push('/dashboard/automations-v2')}>
                     <ArrowLeft className="size-4" />
                 </Button>
@@ -1310,9 +1312,10 @@ function AutomationBuilderContent() {
                 </div>
             </div>
 
-            <div className="flex flex-1 overflow-hidden">
+            <BuilderWorkspace layout="flow" activePanel={activePanel} onPanelChange={setActivePanel} panels={[{ id: "canvas", label: "Canvas" }, { id: "library", label: "Workflow & history" }]}>
+
                 {/* Sidebar - Node Palette & Config */}
-                <div className="z-10 flex w-[380px] shrink-0 flex-col border-r bg-card/70 backdrop-blur-md">
+                <div className="builder-panel builder-library border-r bg-card" data-active={activePanel === "library"}>
                     <Tabs value={String(tabValue)} onValueChange={(v) => setTabValue(Number(v))}>
                         <TabsList className="h-auto w-full rounded-none border-b bg-transparent p-0">
                             <TabsTrigger
@@ -2541,7 +2544,7 @@ function AutomationBuilderContent() {
                 </div>
 
                 {/* Canvas */}
-                <div className="relative flex-1 bg-background">
+                <div className="builder-panel relative bg-background" data-active={activePanel === "canvas"}>
                     <ReactFlow
                         nodes={flowNodes}
                         edges={edges}
@@ -2565,7 +2568,7 @@ function AutomationBuilderContent() {
                         <Background variant={BackgroundVariant.Dots} gap={24} size={1} color="color-mix(in srgb, var(--primary) 10%, transparent)" />
                     </ReactFlow>
                 </div>
-            </div>
+            </BuilderWorkspace>
 
             {/* Test Dialog */}
             {!isNew && (

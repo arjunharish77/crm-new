@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 import { toast } from "sonner";
-import { KeyRound, Loader2 } from "lucide-react";
+import { Loader2 } from "lucide-react";
+import { PageHeader } from "@/components/layout/page-header";
 import { apiFetch } from "@/lib/api";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -13,12 +14,15 @@ export default function ChangePasswordPage() {
     const [currentPassword, setCurrentPassword] = useState("");
     const [newPassword, setNewPassword] = useState("");
     const [confirmPassword, setConfirmPassword] = useState("");
+    const [error, setError] = useState("");
     const [saving, setSaving] = useState(false);
 
     const submit = async (event: React.FormEvent) => {
         event.preventDefault();
+        if (saving) return;
+        setError("");
         if (newPassword !== confirmPassword) {
-            toast.error("New passwords do not match");
+            setError("New passwords do not match");
             return;
         }
         setSaving(true);
@@ -32,21 +36,15 @@ export default function ChangePasswordPage() {
             setNewPassword("");
             setConfirmPassword("");
         } catch (error: any) {
-            toast.error(error?.message || "Failed to change password");
+            setError(error?.message || "Failed to change password");
         } finally {
             setSaving(false);
         }
     };
 
     return (
-        <div className="space-y-6 p-6">
-            <div>
-                <h1 className="flex items-center gap-2 text-xl font-bold">
-                    <KeyRound className="size-5" />
-                    Password
-                </h1>
-                <p className="text-sm text-muted-foreground">Change your account password.</p>
-            </div>
+        <div className="min-w-0 space-y-6">
+            <PageHeader title="Password" description="Change your account password." />
 
             <Card className="max-w-md">
                 <CardHeader>
@@ -56,17 +54,18 @@ export default function ChangePasswordPage() {
                 <CardContent>
                     <form onSubmit={submit} className="space-y-4">
                         <div className="space-y-1.5">
-                            <Label>Current Password</Label>
-                            <Input type="password" value={currentPassword} onChange={(event) => setCurrentPassword(event.target.value)} disabled={saving} required />
+                            <Label htmlFor="current-password">Current Password</Label>
+                            <Input id="current-password" autoComplete="current-password" type="password" value={currentPassword} onChange={(event) => setCurrentPassword(event.target.value)} disabled={saving} required />
                         </div>
                         <div className="space-y-1.5">
-                            <Label>New Password</Label>
-                            <Input type="password" value={newPassword} onChange={(event) => setNewPassword(event.target.value)} disabled={saving} required />
+                            <Label htmlFor="new-password">New Password</Label>
+                            <Input id="new-password" autoComplete="new-password" type="password" value={newPassword} onChange={(event) => setNewPassword(event.target.value)} disabled={saving} required />
                         </div>
                         <div className="space-y-1.5">
-                            <Label>Confirm New Password</Label>
-                            <Input type="password" value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} disabled={saving} required />
+                            <Label htmlFor="confirm-password">Confirm New Password</Label>
+                            <Input id="confirm-password" autoComplete="new-password" type="password" value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} disabled={saving} required />
                         </div>
+                        {error && <p role="alert" className="break-words text-sm text-destructive">{error}</p>}
                         <Button type="submit" disabled={saving}>
                             {saving && <Loader2 className="size-4 animate-spin" />}
                             Change Password

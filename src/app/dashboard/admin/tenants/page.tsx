@@ -38,15 +38,15 @@ export default function TenantsPage() {
     const [tenants, setTenants] = useState<Tenant[]>([]);
     const [loading, setLoading] = useState(true);
     const [createDialogOpen, setCreateDialogOpen] = useState(false);
-    const { token, user } = useAuth();
+    const { isAuthenticated, user } = useAuth();
 
     const fetchTenants = useCallback(async () => {
-        if (!token) return;
+        if (!isAuthenticated) return;
         setLoading(true);
         try {
-            const res = await fetch(`/api/platform-admin/tenants`, {
-                headers: { Authorization: `Bearer ${token}` },
-            });
+            // F06 fix (WP05): session auth is now an HttpOnly cookie the browser attaches
+            // automatically for this same-origin request -- no Authorization header to build.
+            const res = await fetch(`/api/platform-admin/tenants`);
             if (res.ok) {
                 const data = await res.json();
                 setTenants(data);
@@ -58,7 +58,7 @@ export default function TenantsPage() {
         } finally {
             setLoading(false);
         }
-    }, [token]);
+    }, [isAuthenticated]);
 
     useEffect(() => {
         fetchTenants();

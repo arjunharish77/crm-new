@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { query } from "@/lib/db";
 import { verifyOtpHash } from "@/lib/otp";
+import { checkRateLimit, clientIp } from "@/lib/rate-limit";
 
 const schema = z.object({
   leadId: z.string().uuid(),
@@ -13,6 +14,15 @@ export async function POST(request: Request) {
   const parsed = schema.safeParse(json);
   if (!parsed.success) {
     return NextResponse.json({ error: "Invalid OTP" }, { status: 400 });
+  }
+
+  // F27 fix (WP16): the per-otp_request `attempts >= 5` check below already caps guesses against
+  // one issued code, but a script could otherwise call this endpoint at will across many
+  // different leadIds/otp_request rows from a single source. Throttle by IP too, matching the
+  // other public lead/OTP endpoints (see api/leads/route.ts, api/otp/send/route.ts).
+  const limit = checkRateLimit("otp-verify", clientIp(request), 30, 10 * 60 * 1000);
+  if (!limit.allowed) {
+    return NextResponse.json({ error: "Too many attempts. Please try again later." }, { status: 429 });
   }
 
   const latest = await query<{ id: string; otp_hash: string; expires_at: string; attempts: number }>(

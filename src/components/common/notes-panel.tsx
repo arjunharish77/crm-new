@@ -7,9 +7,12 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import { ErrorState } from '@/components/common/error-state';
 import { apiFetch } from '@/lib/api';
 import { toast } from 'sonner';
 import { formatWorkspaceRelativeTime, parseWorkspaceDate } from '@/lib/date-format';
+import { useRetainedEditorDraft } from '@/providers/editor-draft-provider';
+import { useEditorDismissGuard } from '@/hooks/use-editor-dismiss-guard';
 import { cn } from '@/lib/utils';
 
 interface NoteAuthor {
@@ -36,30 +39,51 @@ interface NotesPanelProps {
 export function NotesPanel({ entityType, entityId, currentUserId }: NotesPanelProps) {
     const [notes, setNotes] = useState<Note[]>([]);
     const [loading, setLoading] = useState(true);
-    const [submitting, setSubmitting] = useState(false);
-    const [content, setContent] = useState('');
-    const [editingNote, setEditingNote] = useState<Note | null>(null);
-    const [editContent, setEditContent] = useState('');
+    const newDraft = useRetainedEditorDraft(`notes:new:${entityType}:${entityId}`);
+    const editDraft = useRetainedEditorDraft(`notes:edit:${entityType}:${entityId}`);
+    const content: string = newDraft.draft.values?.content ?? '';
+    const submitting = newDraft.draft.pending;
+    const setSubmitting = (pending: boolean) => newDraft.update({ pending });
+    const setContent = (content: string) => newDraft.update({ values: content ? { content } : null, dirty: !!content.trim() });
+    const editingNote: Note | null = editDraft.draft.values?.note ?? null;
+    const editContent: string = editDraft.draft.values?.content ?? '';
+    const setEditingNote = (note: Note | null) => editDraft.update({ values: note ? { note, content: note.content } : null, dirty: false });
+    const setEditContent = (content: string) => {
+        const note = editDraft.current().values?.note;
+        editDraft.update({ values: note ? { note, content } : null, dirty: !!note && content !== note.content });
+    };
     const textRef = useRef<HTMLTextAreaElement>(null);
 
-    const fetchNotes = async () => {
-        try {
-            const data = await apiFetch<Note[]>(`/notes?entityType=${entityType}&entityId=${entityId}`);
-            setNotes(Array.isArray(data) ? data : []);
-        } catch {
-            toast.error('Failed to load notes');
-        } finally {
-            setLoading(false);
-        }
-    };
-
+    const [loadError, setLoadError] = useState(false);
+    const [attempt, setAttempt] = useState(0);
+    const saveError = newDraft.draft.error;
+    const setSaveError = (error: string) => newDraft.update({ error });
+    const submittingRef = useRef(false);
+    const actionRef = useRef(false);
+    const pendingAction = editDraft.draft.pending;
+    const setPendingAction = (pending: boolean) => editDraft.update({ pending });
+    const actionError = editDraft.draft.error;
+    const setActionError = (error: string) => editDraft.update({ error });
+    useEditorDismissGuard(!!content.trim(), submitting);
+    const canDismissEdit = useEditorDismissGuard(!!editingNote && editContent !== editingNote.content, !!editingNote && pendingAction);
     useEffect(() => {
-        if (entityId) fetchNotes();
-    }, [entityId, entityType]);
+        if (submitting || pendingAction) return;
+        const controller = new AbortController();
+        setLoading(true);
+        setLoadError(false);
+        setNotes([]);
+        apiFetch<Note[]>(`/notes?entityType=${entityType}&entityId=${entityId}`, { signal: controller.signal })
+            .then(data => { if (!controller.signal.aborted) setNotes(Array.isArray(data) ? data : []); })
+            .catch(() => { if (!controller.signal.aborted) setLoadError(true); })
+            .finally(() => { if (!controller.signal.aborted) setLoading(false); });
+        return () => controller.abort();
+    }, [entityId, entityType, attempt, submitting, pendingAction]);
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!content.trim()) return;
+        if (!content.trim() || submittingRef.current || actionRef.current || newDraft.current().pending || editDraft.current().pending || loading || loadError) return;
+        submittingRef.current = true;
+        setSaveError('');
         setSubmitting(true);
         try {
             const note = await apiFetch<Note>('/notes', {
@@ -70,14 +94,18 @@ export function NotesPanel({ entityType, entityId, currentUserId }: NotesPanelPr
             setContent('');
             toast.success('Note added');
         } catch {
-            toast.error('Failed to add note');
+            setSaveError('Note could not be added. Your draft is still here.');
         } finally {
+            submittingRef.current = false;
             setSubmitting(false);
         }
     };
 
     const handleEdit = async (note: Note) => {
-        if (!editContent.trim()) return;
+        if (!editContent.trim() || actionRef.current || submittingRef.current || newDraft.current().pending || editDraft.current().pending) return;
+        actionRef.current = true;
+        setPendingAction(true);
+        setActionError('');
         try {
             const updated = await apiFetch<Note>(`/notes/${note.id}`, {
                 method: 'PATCH',
@@ -87,22 +115,35 @@ export function NotesPanel({ entityType, entityId, currentUserId }: NotesPanelPr
             setEditingNote(null);
             toast.success('Note updated');
         } catch {
-            toast.error('Failed to update note');
+            setActionError('Note could not be updated. Your edits are still here.');
+        } finally {
+            actionRef.current = false;
+            setPendingAction(false);
         }
     };
 
     const handleDelete = async (noteId: string) => {
-        if (!confirm('Delete this note?')) return;
+        if (actionRef.current || submittingRef.current || !confirm('Delete this note?')) return;
+        actionRef.current = true;
+        setPendingAction(true);
+        setActionError('');
         try {
             await apiFetch(`/notes/${noteId}`, { method: 'DELETE' });
             setNotes(prev => prev.filter(n => n.id !== noteId));
             toast.success('Note deleted');
         } catch {
-            toast.error('Failed to delete note');
+            setActionError('Note could not be deleted. It is still in the list.');
+        } finally {
+            actionRef.current = false;
+            setPendingAction(false);
         }
     };
 
     const handlePin = async (noteId: string) => {
+        if (actionRef.current || submittingRef.current) return;
+        actionRef.current = true;
+        setPendingAction(true);
+        setActionError('');
         try {
             const updated = await apiFetch<Note>(`/notes/${noteId}/pin`, { method: 'POST' });
             setNotes(prev => [
@@ -114,11 +155,16 @@ export function NotesPanel({ entityType, entityId, currentUserId }: NotesPanelPr
                 return (parseWorkspaceDate(b.createdAt)?.getTime() ?? 0) - (parseWorkspaceDate(a.createdAt)?.getTime() ?? 0);
             }));
         } catch {
-            toast.error('Failed to toggle pin');
+            setActionError('Note pin could not be changed.');
+        } finally {
+            actionRef.current = false;
+            setPendingAction(false);
         }
     };
 
     const startEdit = (note: Note) => {
+        if (!canDismissEdit()) return;
+        setActionError('');
         setEditingNote(note);
         setEditContent(note.content);
     };
@@ -144,15 +190,18 @@ export function NotesPanel({ entityType, entityId, currentUserId }: NotesPanelPr
                 <Textarea
                     ref={textRef}
                     rows={3}
-                    placeholder="Add a note…"
+                    aria-label="New note" disabled={submitting || pendingAction || loading || loadError} placeholder="Add a note…"
                     value={content}
                     onChange={e => setContent(e.target.value)}
                     className="min-h-16 resize-none rounded-none border-0 bg-transparent shadow-none focus-visible:ring-0"
                 />
-                <div className="flex justify-end border-t bg-muted/40 px-2 py-1.5">
+                <div className="flex flex-wrap justify-end gap-2 border-t bg-muted/40 px-2 py-1.5">
+                    {!!content.trim() && <Button type="button" variant="ghost" size="sm" disabled={submitting || pendingAction} onClick={() => {
+                        if (window.confirm("Discard this unsaved note?")) { setContent(''); setSaveError(''); }
+                    }}>Discard note draft</Button>}
                     <Button
                         type="submit"
-                        disabled={!content.trim() || submitting}
+                        aria-label="Add note" disabled={!content.trim() || submitting || pendingAction || loading || loadError}
                         size="icon-sm"
                         className="rounded-lg"
                     >
@@ -161,12 +210,16 @@ export function NotesPanel({ entityType, entityId, currentUserId }: NotesPanelPr
                 </div>
             </form>
 
+            {(newDraft.draft.dirty || editDraft.draft.dirty) && <p role="status" className="text-xs text-muted-foreground">Unsubmitted notes are kept while you navigate in this app. Refreshing or signing out clears them.</p>}
+            {saveError && <p role="alert" className="text-sm text-destructive">{saveError}</p>}
+            {actionError && <p role="alert" className="break-words text-sm text-destructive">{actionError}</p>}
+            {pendingAction && <p role="status" className="text-sm text-muted-foreground">Updating note…</p>}
             {/* Notes List */}
             {loading ? (
                 <div className="flex justify-center py-6">
                     <Loader2 className="size-6 animate-spin text-muted-foreground" />
                 </div>
-            ) : notes.length === 0 ? (
+            ) : loadError ? <ErrorState description="Notes could not be loaded." onRetry={() => setAttempt(value => value + 1)} /> : notes.length === 0 ? (
                 <div className="py-6 text-center text-muted-foreground/60">
                     <StickyNote className="mx-auto mb-2 size-8" />
                     <p className="text-sm">No notes yet. Add one above!</p>
@@ -182,23 +235,23 @@ export function NotesPanel({ entityType, entityId, currentUserId }: NotesPanelPr
                             )}
                         >
                             <div className="flex items-start gap-3">
-                                <Avatar className="size-7 text-[0.72rem]">
+                                <Avatar className="size-7 shrink-0 text-[0.72rem]">
                                     <AvatarFallback>{note.author.name[0].toUpperCase()}</AvatarFallback>
                                 </Avatar>
                                 <div className="min-w-0 flex-1">
-                                    <div className="flex items-center justify-between gap-2">
-                                        <div className="flex items-center gap-1">
-                                            <span className="text-xs font-bold">
+                                    <div className="flex flex-wrap items-center justify-between gap-2">
+                                        <div className="flex min-w-0 max-w-full flex-wrap items-center gap-1">
+                                            <span className="min-w-0 max-w-full break-words text-xs font-bold">
                                                 {note.author.name}
                                             </span>
                                             {note.isPinned && (
-                                                <Badge className="h-4 gap-0.5 rounded-[5px] bg-amber-500 text-[0.6rem] text-white hover:bg-amber-500">
+                                                <Badge className="h-4 gap-0.5 rounded-[5px] bg-amber-500 text-[0.6rem] text-black hover:bg-amber-500">
                                                     <Pin className="size-2.5" />
                                                     Pinned
                                                 </Badge>
                                             )}
                                         </div>
-                                        <div className="flex items-center gap-0.5">
+                                        <div className="flex flex-wrap items-center gap-0.5">
                                             <span className="text-xs text-muted-foreground/60">
                                                 {formatWorkspaceRelativeTime(note.createdAt)}
                                             </span>
@@ -207,7 +260,7 @@ export function NotesPanel({ entityType, entityId, currentUserId }: NotesPanelPr
                                                     <Button
                                                         size="icon-xs"
                                                         variant="ghost"
-                                                        onClick={() => handlePin(note.id)}
+                                                        aria-label={note.isPinned ? "Unpin note" : "Pin note"} disabled={pendingAction || submitting} onClick={() => handlePin(note.id)}
                                                     >
                                                         {note.isPinned ? <Pin className="size-3.5 text-amber-500" /> : <PinOff className="size-3.5" />}
                                                     </Button>
@@ -221,7 +274,7 @@ export function NotesPanel({ entityType, entityId, currentUserId }: NotesPanelPr
                                                             <Button
                                                                 size="icon-xs"
                                                                 variant="ghost"
-                                                                onClick={() => startEdit(note)}
+                                                                aria-label="Edit note" disabled={pendingAction || submitting} onClick={() => startEdit(note)}
                                                             >
                                                                 <Pencil className="size-3.5" />
                                                             </Button>
@@ -233,7 +286,7 @@ export function NotesPanel({ entityType, entityId, currentUserId }: NotesPanelPr
                                                             <Button
                                                                 size="icon-xs"
                                                                 variant="ghost"
-                                                                onClick={() => handleDelete(note.id)}
+                                                                aria-label="Delete note" disabled={pendingAction || submitting} onClick={() => handleDelete(note.id)}
                                                                 className="text-destructive hover:bg-destructive/10 hover:text-destructive"
                                                             >
                                                                 <Trash2 className="size-3.5" />
@@ -249,7 +302,7 @@ export function NotesPanel({ entityType, entityId, currentUserId }: NotesPanelPr
                                     {editingNote?.id === note.id ? (
                                         <div className="mt-2">
                                             <Textarea
-                                                value={editContent}
+                                                aria-label="Edit note content" disabled={pendingAction || submitting} value={editContent}
                                                 onChange={e => setEditContent(e.target.value)}
                                                 autoFocus
                                                 className="text-sm"
@@ -257,14 +310,14 @@ export function NotesPanel({ entityType, entityId, currentUserId }: NotesPanelPr
                                             <div className="mt-2 flex gap-1.5">
                                                 <Button
                                                     size="icon-sm"
-                                                    onClick={() => handleEdit(note)}
+                                                    aria-label="Save note changes" disabled={pendingAction || submitting} onClick={() => handleEdit(note)}
                                                 >
                                                     <Send className="size-4" />
                                                 </Button>
                                                 <Button
                                                     size="icon-sm"
                                                     variant="ghost"
-                                                    onClick={() => setEditingNote(null)}
+                                                    aria-label="Cancel note editing" disabled={pendingAction || submitting} onClick={() => { if (canDismissEdit()) setEditingNote(null); }}
                                                 >
                                                     <X className="size-4" />
                                                 </Button>

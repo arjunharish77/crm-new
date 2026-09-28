@@ -46,6 +46,15 @@ const eslintConfig = defineConfig([
     "next-env.d.ts",
     "**/next-env.d.ts",
     "**/tsconfig.tsbuildinfo",
+    // F21 fix (WP11): "limit lint scope to shipped code" -- these are audit/design/reference
+    // artifacts that ship nowhere (not imported by src/, not part of the Next.js build, not
+    // deployed), not app source. `npm run lint` previously failed outright on a stray file in
+    // handoff_v2/ (an old design-handoff export using deprecated React APIs) -- a real CI
+    // blocker on a directory nobody was ever going to fix, since it isn't live code.
+    "handoff_v2/**",
+    "crm-audit-bundle/**",
+    "crm-audit-bundle-new/**",
+    "ui-audit-2026-09/**",
   ]),
 ]);
 

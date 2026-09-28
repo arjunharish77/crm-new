@@ -18,11 +18,12 @@ const crmMocks = vi.hoisted(() => ({
 // closing the "impersonation gets the same 7-day expiry as a normal login" gap -- this file's
 // tests care about the audit-log side effect, not session internals, so a minimal always-empty
 // mock is enough to let createUserSession run without touching a real database.
-const dbMocks = vi.hoisted(() => ({
-  query: vi.fn().mockResolvedValue([]),
-  queryOne: vi.fn().mockResolvedValue(null),
-  execute: vi.fn().mockResolvedValue(undefined),
-}));
+const dbMocks = vi.hoisted(() => {
+  const query = vi.fn().mockResolvedValue([]);
+  const queryOne = vi.fn().mockResolvedValue(null);
+  const execute = vi.fn().mockResolvedValue(undefined);
+  return { query, queryOne, execute, queryAsSystem: query, queryOneAsSystem: queryOne, executeAsSystem: execute };
+});
 
 vi.mock("@/lib/db/query", () => dbMocks);
 vi.mock("@/lib/repositories/auth-admin-postgres", () => pgAdminMocks);

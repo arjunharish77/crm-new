@@ -1,5 +1,7 @@
 "use client";
 
+import { PageHeader } from "@/components/layout/page-header";
+
 import { useEffect, useState, useCallback, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
@@ -151,14 +153,8 @@ export default function TeamsPage() {
     ], []);
 
     return (
-        <div className="mx-auto max-w-[1600px] px-3 py-3 md:px-4 md:py-4">
-            <div className="mb-4 flex items-center justify-between">
-                <div>
-                    <h1 className="text-lg font-bold tracking-[-0.5px]">Teams</h1>
-                    <p className="mt-1 text-sm text-muted-foreground">
-                        Organize users into functional groups for assignment and reporting.
-                    </p>
-                </div>
+        <div className="min-w-0">
+            <PageHeader title="Teams" description="Organize users for assignment and reporting." actions={
                 <Button
                     className="rounded-full px-3"
                     onClick={() => {
@@ -169,9 +165,9 @@ export default function TeamsPage() {
                     <Plus className="size-4" />
                     Create Team
                 </Button>
-            </div>
+            } />
 
-            <Card className="h-[600px] w-full overflow-hidden">
+            <Card className="min-w-0 w-full overflow-hidden">
                     <DataTable
                         storageKey="settings-teams-table"
                         data={teams}

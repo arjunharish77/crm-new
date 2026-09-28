@@ -1,8 +1,10 @@
 "use client";
 
+import { PageHeader } from "@/components/layout/page-header";
+
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { UserCog, RefreshCw } from "lucide-react";
+import { RefreshCw } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -41,10 +43,12 @@ const STATUS_BADGE: Record<string, string> = {
 export default function ScimPage() {
     const apiAccessEnabled = useFeature("apiAccessEnabled");
     const [loading, setLoading] = useState(true);
+    const [loadError, setLoadError] = useState(false);
     const [reconciliation, setReconciliation] = useState<ReconciliationRow[]>([]);
     const [syncLog, setSyncLog] = useState<SyncLogRow[]>([]);
     const [roles, setRoles] = useState<Array<{ id: string; name: string }>>([]);
     const [defaultScimRoleId, setDefaultScimRoleId] = useState("");
+    const [saveError, setSaveError] = useState("");
     const [savingDefaultRole, setSavingDefaultRole] = useState(false);
 
     const load = () => {
@@ -53,6 +57,7 @@ export default function ScimPage() {
             return;
         }
         setLoading(true);
+        setLoadError(false);
         Promise.all([
             apiFetch<ReconciliationRow[]>("/admin/scim/reconciliation"),
             apiFetch<SyncLogRow[]>("/admin/scim/sync-log"),
@@ -65,13 +70,15 @@ export default function ScimPage() {
                 setDefaultScimRoleId(defaultRoleData?.defaultScimRoleId ?? "");
                 setRoles(Array.isArray(rolesData) ? rolesData : []);
             })
-            .catch(() => toast.error("Failed to load SCIM data"))
+            .catch(() => setLoadError(true))
             .finally(() => setLoading(false));
     };
 
     useEffect(load, [apiAccessEnabled]);
 
     const saveDefaultRole = async (value: string) => {
+        if (savingDefaultRole) return;
+        setSaveError("");
         setSavingDefaultRole(true);
         try {
             await apiFetch("/admin/scim/default-role", {
@@ -81,7 +88,7 @@ export default function ScimPage() {
             setDefaultScimRoleId(value);
             toast.success("Default SCIM role updated");
         } catch (error: any) {
-            toast.error(error?.message || "Failed to update default SCIM role");
+            setSaveError(error?.message || "Failed to update default SCIM role");
         } finally {
             setSavingDefaultRole(false);
         }
@@ -89,8 +96,8 @@ export default function ScimPage() {
 
     if (!apiAccessEnabled) {
         return (
-            <div className="space-y-4 p-6">
-                <h1 className="text-xl font-bold">SCIM Provisioning</h1>
+            <div className="min-w-0 space-y-4">
+                <PageHeader title="SCIM Provisioning" />
                 <Card className="p-6 text-center text-sm text-muted-foreground">
                     API access is not enabled for this workspace -- SCIM shares the same API-key authentication, so enable API access first (Settings &gt; General).
                 </Card>
@@ -99,22 +106,13 @@ export default function ScimPage() {
     }
 
     return (
-        <div className="space-y-6 p-6">
-            <div className="flex items-center justify-between">
-                <div>
-                    <h1 className="flex items-center gap-2 text-xl font-bold">
-                        <UserCog className="size-5" />
-                        SCIM Provisioning
-                    </h1>
-                    <p className="text-sm text-muted-foreground">
-                        Connect an identity provider (Okta, Azure AD, etc.) via SCIM 2.0 at <code className="rounded bg-muted px-1">/api/scim/v2</code>, authenticated with an API key granted &quot;Users (SCIM provisioning)&quot; access under Settings &gt; API Keys.
-                    </p>
-                </div>
-                <Button variant="outline" size="sm" onClick={load} disabled={loading}>
-                    <RefreshCw className="size-3.5" />
-                    Refresh
-                </Button>
-            </div>
+        <div className="min-w-0 space-y-4">
+            <PageHeader title="SCIM Provisioning" description="Connect an identity provider to manage users and review synchronization activity." actions={
+                <Button variant="outline" size="sm" onClick={load} disabled={loading || savingDefaultRole}><RefreshCw className="size-3.5" />Refresh</Button>
+            } />
+            <p className="break-words text-sm text-muted-foreground">SCIM endpoint: <code>/api/scim/v2</code>. Use an API key with Users (SCIM provisioning) access from Settings &gt; API Keys.</p>
+            {loadError && <div role="alert" className="rounded-lg border p-4 text-sm">Unable to load SCIM data. <Button variant="outline" size="sm" onClick={load}>Retry</Button></div>}
+            <div hidden={loadError} className="min-w-0 space-y-4">
 
             <Alert variant="info">
                 <AlertDescription>
@@ -122,13 +120,14 @@ export default function ScimPage() {
                 </AlertDescription>
             </Alert>
 
-            <Card className="space-y-3 p-4">
-                <Label>Default Role for New SCIM Users</Label>
+            <Card className="min-w-0 space-y-3 p-4">
+                {saveError && <p role="alert" className="break-words text-sm text-destructive">{saveError}</p>}
+                <Label htmlFor="scim-default-role">Default Role for New SCIM Users</Label>
                 <p className="text-xs text-muted-foreground">
                     Used when a provisioned user has no <code>roles</code> attribute matching an existing Role, and isn&apos;t added to a Team with its own default Role configured (Settings &gt; Teams).
                 </p>
-                <Select value={defaultScimRoleId || "none"} onValueChange={(value) => saveDefaultRole(value === "none" ? "" : value)} disabled={savingDefaultRole}>
-                    <SelectTrigger className="w-64"><SelectValue placeholder="None configured" /></SelectTrigger>
+                <Select value={defaultScimRoleId || "none"} onValueChange={(value) => saveDefaultRole(value === "none" ? "" : value)} disabled={savingDefaultRole || loading || loadError}>
+                    <SelectTrigger id="scim-default-role" className="w-full max-w-sm"><SelectValue placeholder="None configured" /></SelectTrigger>
                     <SelectContent>
                         <SelectItem value="none">None configured</SelectItem>
                         {roles.map((role) => <SelectItem key={role.id} value={role.id}>{role.name}</SelectItem>)}
@@ -149,11 +148,11 @@ export default function ScimPage() {
                     <div className="divide-y">
                         {reconciliation.map((row) => (
                             <div key={row.id} className="flex flex-wrap items-center justify-between gap-2 p-3">
-                                <div>
+                                <div className="min-w-0 flex-1 basis-52 break-all">
                                     <p className="text-sm font-medium">{row.name} <span className="text-xs text-muted-foreground">({row.email})</span></p>
                                     <p className="text-xs text-muted-foreground">External ID: {row.externalId}</p>
                                 </div>
-                                <div className="flex items-center gap-2">
+                                <div className="flex flex-wrap items-center gap-2">
                                     <Badge variant="outline">{row.status}</Badge>
                                     {row.stale ? (
                                         <Badge variant="outline" className="border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-400">
@@ -181,11 +180,11 @@ export default function ScimPage() {
                     <div className="divide-y">
                         {syncLog.map((row) => (
                             <div key={row.id} className="flex flex-wrap items-center justify-between gap-2 p-3 text-sm">
-                                <div>
+                                <div className="min-w-0 flex-1 basis-52 break-words">
                                     <span className="font-medium">{row.resourceType}</span> {row.action.toLowerCase()}
                                     {row.errorMessage && <span className="ml-2 text-xs text-destructive">{row.errorMessage}</span>}
                                 </div>
-                                <div className="flex items-center gap-2">
+                                <div className="flex flex-wrap items-center gap-2">
                                     <Badge variant="outline" className={STATUS_BADGE[row.status] ?? ""}>{row.status}</Badge>
                                     <span className="text-xs text-muted-foreground">{formatWorkspaceDateTime(row.createdAt)}</span>
                                 </div>
@@ -194,6 +193,7 @@ export default function ScimPage() {
                     </div>
                 )}
             </Card>
+            </div>
         </div>
     );
 }

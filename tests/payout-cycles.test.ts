@@ -115,6 +115,16 @@ vi.mock("@/lib/db/query", () => ({
   execute: async () => ({ rowCount: 0 }),
 }));
 
+// F15 fix (WP10): transitionPayoutStatus/holdPayout/releasePayoutHold now run their read-lock-
+// write sequence inside withTransaction (a real `for update` row lock against real Postgres);
+// this fixture-DB suite mocks query()/queryOne()/execute() directly with an in-memory fake, so
+// withTransaction is shimmed to just invoke its callback -- the fake query/queryOne/execute
+// above ignore the extra `client` argument entirely, so every existing fixture-based assertion
+// keeps working unchanged.
+vi.mock("@/lib/db/transaction", () => ({
+  withTransaction: (_user: unknown, fn: (client: unknown) => unknown) => fn({}),
+}));
+
 vi.mock("@/lib/server/crm", () => ({
   createAuditLog: vi.fn(async () => null),
 }));

@@ -2,6 +2,7 @@ import * as pgAdmin from "@/lib/repositories/auth-admin-postgres";
 import { signAuthToken } from "@/lib/server/auth";
 import { createAuditLog } from "@/lib/server/crm";
 import { createUserSession } from "@/lib/server/sessions";
+import { queryAsSystem, queryOneAsSystem } from "@/lib/db/query";
 
 // Loose actor shape -- createAuditLog only ever reads id/tenantId off it.
 type AuditActor = { id: string; tenantId: string | null };
@@ -157,6 +158,81 @@ export async function listTenants() {
   return pgAdmin.listTenants();
 }
 
+// F23 fix (WP11): /dashboard/admin/usage previously called an API route that didn't exist
+// (/api/platform-admin/usage/overview), silently falling back to showing 0 for every number --
+// indistinguishable from "genuinely zero usage." All real, platform-wide counts, straightforward
+// to compute directly (no new tables/infrastructure needed).
+// WP07 (F04): CROSS_TENANT_ADMIN, disposition B -- genuinely aggregates across every tenant at
+// once; platform-admin only, no per-tenant equivalent caller exists.
+export async function getPlatformUsageOverview() {
+  const [tenantCounts, userTotal, usersByTenant, leadTotal, opportunityTotal, activityTotal] = await Promise.all([
+    queryAsSystem<{ status: string; count: number }>(`select status, count(*)::int as count from "Tenant" group by status`),
+    queryOneAsSystem<{ count: number }>(`select count(*)::int as count from "User" where "tenantId" is not null`),
+    queryAsSystem<{ tenantId: string; count: number }>(
+      `select "tenantId", count(*)::int as count from "User" where "tenantId" is not null group by "tenantId" order by count(*) desc limit 20`,
+    ),
+    queryOneAsSystem<{ count: number }>(`select count(*)::int as count from "Lead"`),
+    queryOneAsSystem<{ count: number }>(`select count(*)::int as count from "Opportunity"`),
+    queryOneAsSystem<{ count: number }>(`select count(*)::int as count from "Activity"`),
+  ]);
+  const countFor = (status: string) => tenantCounts.find((row) => row.status === status)?.count ?? 0;
+  return {
+    tenants: {
+      total: tenantCounts.reduce((sum, row) => sum + row.count, 0),
+      active: countFor("ACTIVE"),
+      suspended: countFor("SUSPENDED"),
+      // No tenant in this app's real status vocabulary is ever "TRIAL" today (changeTenantStatus
+      // only accepts ACTIVE/SUSPENDED) -- reported honestly as 0 rather than fabricated, and
+      // forward-compatible if that status is ever introduced.
+      trial: countFor("TRIAL"),
+    },
+    users: {
+      total: userTotal?.count ?? 0,
+      byTenant: usersByTenant.map((row) => ({ tenantId: row.tenantId, count: row.count })),
+    },
+    data: {
+      leads: leadTotal?.count ?? 0,
+      opportunities: opportunityTotal?.count ?? 0,
+      activities: activityTotal?.count ?? 0,
+    },
+  };
+}
+
+// F23 fix (WP11): /dashboard/admin/usage also called /api/platform-admin/automation/stats,
+// equally absent. AutomationExecution already records every run's status/timing -- real,
+// platform-wide aggregation, not a new tracking mechanism.
+// WP07 (F04): CROSS_TENANT_ADMIN, disposition B -- same reasoning as getPlatformUsageOverview.
+export async function getPlatformAutomationStats() {
+  const [totalRules, executionCounts, last24h, topRules] = await Promise.all([
+    queryOneAsSystem<{ count: number }>(`select count(*)::int as count from "AutomationV2" where "deletedAt" is null`),
+    queryAsSystem<{ status: string; count: number }>(`select status, count(*)::int as count from "AutomationExecution" group by status`),
+    queryOneAsSystem<{ count: number }>(`select count(*)::int as count from "AutomationExecution" where "startedAt" >= now() - interval '24 hours'`),
+    queryAsSystem<{ automationId: string; ruleName: string | null; count: number }>(
+      `select e."automationId", a.name as "ruleName", count(*)::int as count
+       from "AutomationExecution" e
+       left join "AutomationV2" a on a.id = e."automationId"
+       group by e."automationId", a.name
+       order by count(*) desc
+       limit 10`,
+    ),
+  ]);
+  const countFor = (status: string) => executionCounts.find((row) => row.status === status)?.count ?? 0;
+  return {
+    totalRules: totalRules?.count ?? 0,
+    executions: {
+      total: executionCounts.reduce((sum, row) => sum + row.count, 0),
+      success: countFor("COMPLETED"),
+      failed: countFor("FAILED"),
+      last24h: last24h?.count ?? 0,
+    },
+    topRules: topRules.map((row) => ({
+      ruleId: row.automationId,
+      ruleName: row.ruleName ?? "(deleted rule)",
+      executionCount: row.count,
+    })),
+  };
+}
+
 export async function createTenantWithAdmin(input: CreateTenantInput) {
   return pgAdmin.createTenantWithAdmin(input);
 }
@@ -238,5 +314,5 @@ export async function impersonateTenantUser(platformAdminUserId: string, tenantI
     { platformAdminUserId, reason: trimmedReason, sessionId: session.id },
   ).catch(() => undefined);
 
-  return { token: accessToken, user };
+  return { token: accessToken, user, expiresInSeconds: session.expiresInSeconds };
 }

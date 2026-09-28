@@ -1,5 +1,5 @@
 import { randomUUID } from "crypto";
-import { query, queryOne, execute } from "@/lib/db/query";
+import { query, queryOne, execute, jsonbParam, queryAsSystem, queryOneAsSystem } from "@/lib/db/query";
 
 // "SecurityPolicy" is a pre-existing table (db-bootstrap/base-schema.sql) that had zero
 // backing code anywhere in this app before this pass -- see migration 0076's comment for the
@@ -83,9 +83,11 @@ export const DEFAULT_SECURITY_POLICY: Omit<SecurityPolicy, "id" | "tenantId" | "
 // Platform-admin management surface: every tenant-specific policy plus the global default row
 // (tenantId is null), so an admin can see and edit both from one screen -- matching the
 // existing (previously dead) admin/security page's own expectation of a flat list.
+// WP07 (F04): CROSS_TENANT_ADMIN, disposition B -- genuinely reads every tenant's policy (plus
+// the global default row) at once; platform-admin only, no per-tenant equivalent caller.
 export async function listSecurityPolicies() {
   const qualifiedColumns = COLUMNS.split(", ").map((column) => (column.startsWith('"') ? `sp.${column}` : `sp.${column}`)).join(", ");
-  const rows = await query<SecurityPolicy & { tenantName: string | null }>(
+  const rows = await queryAsSystem<SecurityPolicy & { tenantName: string | null }>(
     `select ${qualifiedColumns}, t.name as "tenantName" from "SecurityPolicy" sp left join "Tenant" t on t.id = sp."tenantId" order by sp."tenantId" nulls first`,
     [],
   );
@@ -93,7 +95,7 @@ export async function listSecurityPolicies() {
   // No rows at all yet (fresh install) -- seed the global default so the admin page always
   // has at least one editable row instead of an empty screen with no way to create one.
   const now = new Date().toISOString();
-  const seeded = await queryOne<SecurityPolicy>(
+  const seeded = await queryOneAsSystem<SecurityPolicy>(
     `insert into "SecurityPolicy" (id, "tenantId", "createdAt", "updatedAt") values ($1, null, $2, $2) returning ${COLUMNS}`,
     [randomUUID(), now],
   );
@@ -146,7 +148,12 @@ export async function updateSecurityPolicy(tenantIdOrGlobal: string, patch: Reco
     patchValues.mfaEnforcedSince = new Date().toISOString();
   }
 
-  const values: unknown[] = columns.map((key) => patchValues[key]);
+  // "allowedIpRanges"/"blockedIpRanges" are jsonb columns storing an array -- a raw array
+  // parameter would be misserialized by node-postgres (see jsonbParam's own doc comment in
+  // db/query.ts). No caller sends these today (latent-only), but a dynamic column-driven patch
+  // like this one is exactly the shape that's easy to miss when a caller eventually does.
+  const JSONB_ARRAY_FIELDS = new Set(["allowedIpRanges", "blockedIpRanges"]);
+  const values: unknown[] = columns.map((key) => (JSONB_ARRAY_FIELDS.has(key) ? jsonbParam(patchValues[key]) : patchValues[key]));
   const assignments = columns.map((key, index) => `"${key}" = $${index + 1}`);
   values.push(new Date().toISOString());
   assignments.push(`"updatedAt" = $${values.length}`);

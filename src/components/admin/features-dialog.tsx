@@ -51,7 +51,7 @@ export function FeaturesDialog({
         advancedReporting: true,
         apiAccessEnabled: false,
     });
-    const { token } = useAuth();
+    const { isAuthenticated } = useAuth();
 
     const isOpen = controlledOpen ?? open;
     const setIsOpen = (newOpen: boolean) => {
@@ -63,17 +63,17 @@ export function FeaturesDialog({
     };
 
     useEffect(() => {
-        if (isOpen && tenantId && token) {
+        if (isOpen && tenantId && isAuthenticated) {
             fetchFeatures();
         }
-    }, [isOpen, tenantId, token]);
+    }, [isOpen, tenantId, isAuthenticated]);
 
     const fetchFeatures = async () => {
         setLoading(true);
         try {
-            const res = await fetch(`/api/platform-admin/tenants/${tenantId}/feature-flags`, {
-                headers: { Authorization: `Bearer ${token}` },
-            });
+            // F06 fix (WP05): session auth is now an HttpOnly cookie the browser attaches
+            // automatically for these same-origin requests -- no Authorization header to build.
+            const res = await fetch(`/api/platform-admin/tenants/${tenantId}/feature-flags`);
             if (res.ok) {
                 const data = await res.json();
                 setFeatures((prev) => ({ ...prev, ...data }));
@@ -92,10 +92,7 @@ export function FeaturesDialog({
         try {
             const res = await fetch(`/api/platform-admin/tenants/${tenantId}/feature-flags`, {
                 method: "PATCH",
-                headers: {
-                    "Content-Type": "application/json",
-                    Authorization: `Bearer ${token}`,
-                },
+                headers: { "Content-Type": "application/json" },
                 body: JSON.stringify(features),
             });
 

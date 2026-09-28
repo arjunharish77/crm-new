@@ -1,8 +1,10 @@
+import { AI_RECORD_WORKFLOWS } from "@/lib/ai-workflows";
 import { NextResponse } from "next/server";
 import { requireCurrentUser } from "@/lib/server/auth";
 import { badRequest, forbidden, serverError, unauthorized } from "@/lib/server/http";
 import {
   AiProviderError,
+  runRecordWorkflow,
   explainPredictiveScore,
   explainTimeline,
   prepareCallNotes,
@@ -12,6 +14,7 @@ import {
 } from "@/lib/server/ai-assistant";
 
 const ACTIONS: Record<string, (user: any, entityType: string, entityId: string) => Promise<{ text: string }>> = {
+  ...Object.fromEntries(AI_RECORD_WORKFLOWS.map(({ key }) => [key, (user: any, entityType: string, entityId: string) => runRecordWorkflow(user, key, entityType, entityId)])),
   summarize_record: summarizeRecord,
   explain_timeline: explainTimeline,
   prepare_call_notes: prepareCallNotes,
@@ -29,7 +32,8 @@ export async function POST(request: Request) {
     const user = await requireCurrentUser(request);
     if (!user.tenantId) return forbidden("Tenant context required");
     const body = await request.json().catch(() => null);
-    const action = ACTIONS[String(body?.action ?? "")];
+    const actionKey = String(body?.action ?? "");
+    const action = Object.hasOwn(ACTIONS, actionKey) ? ACTIONS[actionKey] : undefined;
     if (!action || !body?.entityType || !body?.entityId) return badRequest("A valid action, entityType, and entityId are required");
 
     const result = await action(user, String(body.entityType), String(body.entityId));

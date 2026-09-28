@@ -27,6 +27,7 @@ interface PermissionMatrixProps {
 
 const MODULES: { key: PermissionModule; label: string }[] = [
     { key: "leads", label: "Leads" },
+    { key: "applications", label: "Applications" },
     { key: "opportunities", label: "Opportunities" },
     { key: "activities", label: "Activities" },
     { key: "automations", label: "Automations" },

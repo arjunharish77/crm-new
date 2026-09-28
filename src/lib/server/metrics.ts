@@ -1,5 +1,5 @@
 import { randomUUID } from "crypto";
-import { execute, query, queryOne } from "@/lib/db/query";
+import { execute, query, queryOne, queryAsSystem } from "@/lib/db/query";
 import { assertFeatureEnabled } from "@/lib/server/entitlements";
 import {
   MetricAggregation,
@@ -383,8 +383,10 @@ function resolveLastCompletedPeriod(grain: MetricGrain, now = new Date()) {
 // refreshCaseAnalyticsSnapshots's own `{ id: "system", tenantId } as TenantUser` precedent
 // (inbuilt-reports.ts) for exactly the same reason: a scheduled background scan across every
 // tenant's metrics, not a single tenant-scoped request.
+// WP07 (F04): BACKGROUND_JOB, disposition B -- see the module comment above; this is exactly
+// the recurring cross-tenant sweep it describes.
 export async function computeDueMetricGrainSnapshots(limit = 200) {
-  const metrics = await query<any>(
+  const metrics = await queryAsSystem<any>(
     `select id, "tenantId", root, aggregation, "aggregateObject", "aggregateField", filters, grain
      from "Metric" where grain is not null and "groupByObject" is null limit $1`,
     [limit],

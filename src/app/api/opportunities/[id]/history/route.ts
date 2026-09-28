@@ -17,6 +17,6 @@ export async function GET(
       return unauthorized();
     }
 
-    return serverError("Failed to fetch opportunity history");
+    return serverError("Failed to fetch opportunity history", error);
   }
 }

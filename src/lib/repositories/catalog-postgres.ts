@@ -99,7 +99,7 @@ const CATALOG_ENTITY_CONFIGS: Record<CatalogEntityKey, CatalogEntityConfig> = {
   "application-stages": {
     table: "ApplicationStage",
     parentColumn: "programId",
-    fields: ["name", "order", "slaDays", "isClosed", "isWon", "color"],
+    fields: ["name", "order", "slaDays", "isClosed", "isWon", "color", "requiresVerifiedDocuments", "requiresEligibility"],
   },
   "application-checklists": {
     table: "ApplicationChecklist",

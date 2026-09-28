@@ -2,7 +2,9 @@
 
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { Laptop, LogOut, ShieldCheck } from "lucide-react";
+import { Laptop, LogOut } from "lucide-react";
+import { PageHeader } from "@/components/layout/page-header";
+import { ErrorState } from "@/components/common/error-state";
 import { apiFetch } from "@/lib/api";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -35,11 +37,13 @@ export default function ActiveSessionsPage() {
     const [revokingId, setRevokingId] = useState<string | null>(null);
     const [revokingAll, setRevokingAll] = useState(false);
 
+    const [loadError, setLoadError] = useState(false);
     const load = () => {
+        setLoadError(false);
         setLoading(true);
         apiFetch<SessionRow[]>("/sessions")
             .then((data) => setSessions(Array.isArray(data) ? data : []))
-            .catch(() => toast.error("Failed to load active sessions"))
+            .catch(() => setLoadError(true))
             .finally(() => setLoading(false));
     };
 
@@ -78,34 +82,26 @@ export default function ActiveSessionsPage() {
     };
 
     return (
-        <div className="space-y-6 p-6">
-            <div className="flex items-center justify-between">
-                <div>
-                    <h1 className="flex items-center gap-2 text-xl font-bold">
-                        <ShieldCheck className="size-5" />
-                        Active Sessions
-                    </h1>
-                    <p className="text-sm text-muted-foreground">Devices currently signed in to your account.</p>
-                </div>
-                <Button variant="outline" size="sm" disabled={revokingAll || sessions.length <= 1} onClick={revokeAllOthers}>
-                    <LogOut className="size-3.5" />
-                    Log Out Other Devices
+        <div className="min-w-0 space-y-6">
+            <PageHeader title="Active Sessions" description="Devices currently signed in to your account." actions={
+                <Button variant="outline" size="sm" disabled={loading || loadError || revokingAll || !!revokingId || sessions.length <= 1} onClick={revokeAllOthers}>
+                    <LogOut className="size-3.5" /> Log Out Other Devices
                 </Button>
-            </div>
+            } />
 
             <Card className="overflow-hidden py-0">
                 {loading ? (
                     <p className="p-4 text-sm text-muted-foreground">Loading...</p>
-                ) : sessions.length === 0 ? (
+                ) : loadError ? <ErrorState description="Active sessions could not be loaded." onRetry={load} /> : sessions.length === 0 ? (
                     <p className="p-4 text-sm text-muted-foreground">No active sessions.</p>
                 ) : (
                     <div className="divide-y">
                         {sessions.map((session) => (
                             <div key={session.id} className="flex flex-wrap items-center justify-between gap-3 p-4">
-                                <div className="flex items-start gap-3">
-                                    <Laptop className="mt-0.5 size-5 text-muted-foreground" />
-                                    <div>
-                                        <div className="flex items-center gap-2">
+                                <div className="flex min-w-0 max-w-full items-start gap-3">
+                                    <Laptop className="mt-0.5 size-5 shrink-0 text-muted-foreground" />
+                                    <div className="min-w-0 break-words">
+                                        <div className="flex flex-wrap items-center gap-2">
                                             <p className="text-sm font-medium">{describeDevice(session.userAgent)}</p>
                                             {session.isCurrent && (
                                                 <Badge variant="outline" className="border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400">
@@ -119,7 +115,7 @@ export default function ActiveSessionsPage() {
                                         <p className="text-xs text-muted-foreground">Last active {formatWorkspaceRelativeTime(session.lastActiveAt)}</p>
                                     </div>
                                 </div>
-                                <Button variant="ghost" size="sm" disabled={revokingId === session.id} onClick={() => revoke(session)}>
+                                <Button variant="ghost" size="sm" disabled={!!revokingId || revokingAll} onClick={() => revoke(session)}>
                                     {session.isCurrent ? "Log Out" : "Revoke"}
                                 </Button>
                             </div>

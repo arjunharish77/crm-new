@@ -59,8 +59,8 @@ function resetState() {
 }
 resetState();
 
-vi.mock("@/lib/db/query", () => ({
-  query: vi.fn(async (sql: string, params: any[] = []) => {
+vi.mock("@/lib/db/query", () => {
+  const query = vi.fn(async (sql: string, params: any[] = []) => {
     if (sql.includes('from "CaseStatus"')) return state.statuses.filter((s) => s.tenantId === params[0]);
     if (sql.includes('from "CasePriority"') && sql.includes("select level")) return [];
     if (sql.includes('from "CaseQueueMembership"')) return state.queueMembers.filter((m) => m.tenantId === params[0] && (!params[1] || m.queueId === params[1] || (Array.isArray(params[1]) && params[1].includes(m.queueId))));
@@ -116,8 +116,8 @@ vi.mock("@/lib/db/query", () => ({
     if (sql.includes('from "User" where "tenantId" = $1')) return state.users.filter((u) => u.tenantId === params[0]);
     if (sql.includes('from "Case" where "resolvedAt" is not null')) return [];
     return [];
-  }),
-  queryOne: vi.fn(async (sql: string, params: any[] = []) => {
+  });
+  const queryOne = vi.fn(async (sql: string, params: any[] = []) => {
     if (sql.includes('select id from "CaseType"')) return { id: "type-1" };
     if (sql.includes('from "CaseStatus" where "tenantId" = $1 and "isDefault" = true')) return state.statuses.find((s) => s.tenantId === params[0] && s.isDefault) ?? null;
     if (sql.includes('from "CasePriority" where "tenantId" = $1 and "isDefault" = true')) return state.priorities.find((p) => p.tenantId === params[0] && p.isDefault) ?? null;
@@ -206,8 +206,8 @@ vi.mock("@/lib/db/query", () => ({
     if (sql.includes('select "tenantId" from "Case" where id = $1')) return state.cases.find((c) => c.id === params[0]) ? { tenantId: state.cases.find((c) => c.id === params[0]).tenantId } : null;
     if (sql.includes('select "tenantId", "caseNumber", subject, "ownerId" from "Case"')) return state.cases.find((c) => c.id === params[0]) ?? null;
     return null;
-  }),
-  execute: vi.fn(async (sql: string, params: any[] = []) => {
+  });
+  const execute = vi.fn(async (sql: string, params: any[] = []) => {
     if (sql.includes('update "Case" set "slaWarningFiredAt"')) {
       const c = state.cases.find((row) => row.id === params[2]);
       if (c) c.slaWarningFiredAt = params[0];
@@ -276,8 +276,9 @@ vi.mock("@/lib/db/query", () => ({
       state.mergeAudits.push({ id: params[0] });
     }
     return 1;
-  }),
-}));
+  });
+  return { query, queryOne, execute, queryAsSystem: query, queryOneAsSystem: queryOne, executeAsSystem: execute };
+});
 
 const runAutomationsForEventMock = vi.fn(async () => []);
 vi.mock("@/lib/repositories/automations-postgres", () => ({

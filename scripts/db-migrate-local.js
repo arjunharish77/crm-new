@@ -24,72 +24,44 @@ function runPsql(databaseUrl, filePath, label) {
 }
 
 async function applyOptionalBaseSchema(client) {
-  const baseSchemaPath = process.env.BASE_SCHEMA_SQL_PATH;
-  const files = migrationFiles();
-  if (!baseSchemaPath) {
-    const tenantTable = await client.query("select to_regclass('public.\"Tenant\"') as table_name");
-    if (!tenantTable.rows[0]?.table_name) {
-      throw new Error(
-        "Base CRM schema is missing. Set BASE_SCHEMA_SQL_PATH to an executable Supabase schema dump before running migrations.",
-      );
-    }
-    return;
-  }
-  const absolutePath = path.resolve(baseSchemaPath);
-  if (!fs.existsSync(absolutePath)) throw new Error(`BASE_SCHEMA_SQL_PATH not found: ${absolutePath}`);
-  const id = `base:${path.basename(absolutePath)}`;
-  const hash = checksum(fs.readFileSync(absolutePath, "utf8"));
-  const existing = await client.query('select "checksum", "status" from "SchemaMigration" where "id" = $1', [id]);
-  if (existing.rowCount) {
-    const row = existing.rows[0];
-    if (row.checksum !== hash) throw new Error(`Base schema checksum changed: ${absolutePath}`);
-    if (row.status === "APPLIED") {
-      await baselineMigrations(client, files);
-      return;
-    }
-  }
-
   const tenantTable = await client.query("select to_regclass('public.\"Tenant\"') as table_name");
-  if (!tenantTable.rows[0]?.table_name) {
-    await client.query("drop schema if exists public cascade");
+  // An existing installation must run pending migrations, never re-baseline them.
+  if (tenantTable.rows[0]?.table_name) return;
+  const baseSchemaPath = process.env.BASE_SCHEMA_SQL_PATH;
+  if (!baseSchemaPath) throw new Error("Base CRM schema is missing. Set BASE_SCHEMA_SQL_PATH for a fresh installation.");
+  const absolutePath = path.resolve(baseSchemaPath);
+  const manifestPath = `${absolutePath}.manifest.json`;
+  if (!fs.existsSync(manifestPath)) throw new Error(`Verified bootstrap manifest is required: ${manifestPath}`);
+  const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
+  const hash = checksum(fs.readFileSync(absolutePath, "utf8"));
+  if (manifest.schemaChecksum !== hash) throw new Error("Bootstrap schema does not match its manifest");
+  const files = new Map(migrationFiles().map((file) => [path.basename(file), file]));
+  for (const entry of manifest.migrations) {
+    if (!files.has(entry.id) || checksum(fs.readFileSync(files.get(entry.id), "utf8")) !== entry.checksum) {
+      throw new Error(`Bootstrap migration does not match its manifest: ${entry.id}`);
+    }
   }
+  const objects = await client.query(`select tablename from pg_tables where schemaname = 'public' and tablename <> 'SchemaMigration'`);
+  if (objects.rowCount) throw new Error("Refusing bootstrap into a non-empty database without Tenant; inspect and restore manually");
+  await client.query("drop schema if exists public cascade");
   await client.query("create schema if not exists auth");
-  await client.query(`
-    create or replace function auth.jwt()
-    returns jsonb
-    language sql
-    stable
-    as $$ select '{}'::jsonb $$
-  `);
-
+  await client.query(`create or replace function auth.jwt() returns jsonb language sql stable as $$ select '{}'::jsonb $$`);
   runPsql(directDatabaseUrl(), absolutePath, "Base schema restore");
   await ensureMigrationTable(client);
-  await client.query(
-    'insert into "SchemaMigration" ("id", "checksum", "status") values ($1, $2, $3) on conflict ("id") do update set "checksum" = excluded."checksum", "status" = excluded."status", "appliedAt" = current_timestamp, "error" = null',
-    [id, hash, "APPLIED"],
-  );
-  await baselineMigrations(client, files);
-  console.log(`Applied base schema: ${absolutePath}`);
-}
-
-async function baselineMigrations(client, files) {
-  for (const file of files) {
-    const id = path.basename(file);
-    const hash = checksum(fs.readFileSync(file, "utf8"));
-    await client.query(
-      'insert into "SchemaMigration" ("id", "checksum", "status") values ($1, $2, $3) on conflict ("id") do update set "checksum" = excluded."checksum", "status" = excluded."status", "appliedAt" = current_timestamp, "error" = null',
-      [id, hash, "APPLIED"],
-    );
+  await client.query('insert into "SchemaMigration" (id, checksum, status) values ($1, $2, $3)', [`base:${path.basename(absolutePath)}`, hash, "APPLIED"]);
+  // This frozen manifest covers only migrations already contained in this dump.
+  for (const entry of manifest.migrations) {
+    await client.query('insert into "SchemaMigration" (id, checksum, status) values ($1, $2, $3)', [entry.id, entry.checksum, "APPLIED"]);
   }
-  if (files.length) console.log(`Baselined ${files.length} migration files from base schema.`);
+  console.log(`Restored bootstrap schema with ${manifest.migrations.length} historical migrations; newer migrations will run normally.`);
 }
 
-async function grantAppRolePrivileges(client) {
+async function grantAppRolePrivileges(client, upgradeOnly = false) {
   const appRole = roleNameFromUrl(appDatabaseUrl());
   const quotedRole = quoteIdentifier(appRole);
-  await client.query(`alter role ${quotedRole} with bypassrls`);
+  if (!upgradeOnly) await client.query(`alter role ${quotedRole} with bypassrls`);
   await client.query(`grant all on schema public to ${quotedRole}`);
-  await client.query(`alter schema public owner to ${quotedRole}`);
+  if (!upgradeOnly) await client.query(`alter schema public owner to ${quotedRole}`);
   await client.query(`grant select, insert, update, delete on all tables in schema public to ${quotedRole}`);
   await client.query(`grant usage, select, update on all sequences in schema public to ${quotedRole}`);
   await client.query(`alter default privileges in schema public grant select, insert, update, delete on tables to ${quotedRole}`);
@@ -130,6 +102,50 @@ async function applyMigration(client, filePath) {
   }
 }
 
+// The pre-2026-09 runner re-baselined every migration file as APPLIED, without running it,
+// whenever BASE_SCHEMA_SQL_PATH was set -- which the VPS .env always sets. The bootstrap dump
+// genuinely contains 0001-0019 (see base-schema.sql.manifest.json), but 0020-0023 were added
+// after it and so exist in the production ledger as APPLIED while their tables/columns were
+// never created. Each entry below names a migration and a probe for the object it creates;
+// the repair only re-runs a migration when the ledger claims APPLIED, the checksum matches the
+// file exactly, and the probe proves the object is absent. On any correctly-migrated or fresh
+// database every probe finds its object and nothing happens.
+const BASELINE_REPAIRS = [
+  { id: "0020_advanced_predictive_scoring.sql", probe: `select to_regclass('public."ScoringFeatureCatalog"') is not null as present` },
+  { id: "0021_marketing_communications.sql", probe: `select to_regclass('public."MarketingCampaign"') is not null as present` },
+  {
+    id: "0022_form_submission_opportunity_link.sql",
+    probe: `select exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'FormSubmission' and column_name = 'opportunityId') as present`,
+  },
+  { id: "0023_external_integrations.sql", probe: `select to_regclass('public."ExternalIntegration"') is not null as present` },
+];
+
+async function repairBaselinedMigrations(client) {
+  const files = new Map(migrationFiles().map((file) => [path.basename(file), file]));
+  for (const repair of BASELINE_REPAIRS) {
+    const filePath = files.get(repair.id);
+    if (!filePath) continue;
+    const ledger = await client.query('select "checksum", "status" from "SchemaMigration" where "id" = $1', [repair.id]);
+    if (!ledger.rowCount || ledger.rows[0].status !== "APPLIED") continue; // normal apply path handles it
+    const probe = await client.query(repair.probe);
+    if (probe.rows[0]?.present) continue;
+    const sql = fs.readFileSync(filePath, "utf8");
+    if (ledger.rows[0].checksum !== checksum(sql)) {
+      throw new Error(`Cannot repair ${repair.id}: ledger checksum differs from the migration file`);
+    }
+    try {
+      await client.query("begin");
+      await client.query(sql);
+      await client.query('update "SchemaMigration" set "appliedAt" = current_timestamp, "error" = null where "id" = $1', [repair.id]);
+      await client.query("commit");
+      console.log(`Repaired ${repair.id} (ledger said APPLIED but its objects were missing; migration executed now)`);
+    } catch (error) {
+      await client.query("rollback");
+      throw new Error(`Repair of ${repair.id} failed; nothing from it was committed: ${error.message}`);
+    }
+  }
+}
+
 // Fixed, app-specific advisory lock key -- prevents two concurrent migration runs (e.g. a
 // deploy script and a developer running this locally at the same time) from racing each
 // other mid-migration. Distinct from the per-rule keys distribution-engine.ts computes
@@ -143,14 +159,23 @@ async function main() {
       throw new Error("Another migration run holds the lock (pg_try_advisory_lock failed) -- refusing to run concurrently.");
     }
     try {
-      await client.query("create schema if not exists public");
-      await ensureMigrationTable(client);
-      await applyOptionalBaseSchema(client);
+      const upgradeOnly = process.argv.includes("--upgrade");
+      if (upgradeOnly) {
+        const existing = await client.query(`select to_regclass('public."Tenant"') as tenant, to_regclass('public."SchemaMigration"') as ledger`);
+        if (!existing.rows[0]?.tenant || !existing.rows[0]?.ledger) throw new Error("Upgrade requires an existing CRM database and migration ledger; bootstrap will not run");
+      } else {
+        await client.query("create schema if not exists public");
+        await ensureMigrationTable(client);
+        await applyOptionalBaseSchema(client);
+      }
+      // Must run before any pending migration: 0024+ were written against a schema that
+      // already had 0020-0023's objects.
+      await repairBaselinedMigrations(client);
       const files = migrationFiles();
       for (const file of files) {
         await applyMigration(client, file);
       }
-      await grantAppRolePrivileges(client);
+      await grantAppRolePrivileges(client, upgradeOnly);
       console.log(`Migration complete. Checked ${files.length} migration files.`);
     } finally {
       await client.query("select pg_advisory_unlock($1)", [MIGRATION_LOCK_KEY]);

@@ -17,6 +17,6 @@ export async function GET(
     return NextResponse.json(submissions);
   } catch (error) {
     if (error instanceof Error && error.message === "UNAUTHORIZED") return unauthorized();
-    return serverError("Failed to fetch submissions");
+    return serverError("Failed to fetch submissions", error);
   }
 }

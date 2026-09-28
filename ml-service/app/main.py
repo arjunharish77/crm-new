@@ -7,8 +7,10 @@ app = FastAPI(title="Unnatify CRM ML Service")
 
 
 def require_internal_auth(x_internal_auth: str | None = Header(default=None)) -> None:
-    expected = settings.internal_secret
-    if expected and x_internal_auth != expected:
+    # F25 fix (WP06): always compare, unconditionally -- settings.internal_secret is now
+    # guaranteed to be a configured, non-empty string (app.config raises at import time
+    # otherwise), so there is no "secret unconfigured" case left where this could be skipped.
+    if x_internal_auth != settings.internal_secret:
         raise HTTPException(status_code=401, detail="Unauthorized")
 
 

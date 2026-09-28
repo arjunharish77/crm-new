@@ -1,5 +1,5 @@
 import { randomUUID } from "crypto";
-import { execute, query, queryOne } from "@/lib/db/query";
+import { execute, query, queryOne, jsonbParam } from "@/lib/db/query";
 import { assertFeatureEnabled } from "@/lib/server/entitlements";
 
 type TenantUser = {
@@ -171,7 +171,7 @@ export async function saveDashboardLayoutSnapshotForTenant(user: TenantUser, nam
   }));
 
   const now = new Date().toISOString();
-  const values: unknown[] = [randomUUID(), user.tenantId, user.id, trimmed, snapshot, now];
+  const values: unknown[] = [randomUUID(), user.tenantId, user.id, trimmed, jsonbParam(snapshot), now];
   const row = await queryOne<any>(
     `insert into "DashboardLayoutSnapshot" (id, "tenantId", "userId", name, snapshot, "createdAt")
      values ($1, $2, $3, $4, $5, $6)

@@ -6,7 +6,12 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 // were completed after the event bus's original pass; Communication already had one. Partner,
 // Payout, and Scoring still have no such hook anywhere in this codebase, so they stay unwired.
 
-const dbMocks = vi.hoisted(() => ({ query: vi.fn(), queryOne: vi.fn(), execute: vi.fn() }));
+const dbMocks = vi.hoisted(() => {
+  const query = vi.fn();
+  const queryOne = vi.fn();
+  const execute = vi.fn();
+  return { query, queryOne, execute, queryAsSystem: query, queryOneAsSystem: queryOne, executeAsSystem: execute };
+});
 const automationMocks = vi.hoisted(() => ({ runAutomationsForEvent: vi.fn().mockResolvedValue(undefined) }));
 const notificationMocks = vi.hoisted(() => ({ createUserNotification: vi.fn().mockResolvedValue(undefined) }));
 const slaPolicyMocks = vi.hoisted(() => ({ getActiveTaskSlaPolicyForPriority: vi.fn().mockResolvedValue(null) }));

@@ -1,14 +1,20 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { apiFetch } from '@/lib/api';
-import { toast } from 'sonner';
 
 export function useObjectMetadata(objectName: string) {
     const [metadata, setMetadata] = useState<any>(null);
     const [loading, setLoading] = useState(true);
 
+    const [error, setError] = useState(false);
+    const [attempt, setAttempt] = useState(0);
+    const retry = useCallback(() => setAttempt(value => value + 1), []);
+
     useEffect(() => {
+        const controller = new AbortController();
+        setMetadata(null);
+        setError(false);
         let isMounted = true;
 
         if (!objectName) {
@@ -21,13 +27,12 @@ export function useObjectMetadata(objectName: string) {
             setLoading(true);
             try {
                 // Assuming we have an endpoint for this, or using the existing custom-fields one if updated
-                const data = await apiFetch(`/metadata/objects/${objectName.toLowerCase()}`);
+                const data = await apiFetch(`/metadata/objects/${objectName.toLowerCase()}`, { signal: controller.signal });
                 if (isMounted) {
                     setMetadata(data);
                 }
             } catch (error) {
-                console.error(`Failed to fetch metadata for ${objectName}`, error);
-                toast.error(`Failed to load metadata for ${objectName}`);
+                if (isMounted && !controller.signal.aborted) setError(true);
             } finally {
                 if (isMounted) {
                     setLoading(false);
@@ -35,8 +40,8 @@ export function useObjectMetadata(objectName: string) {
             }
         }
         fetchMetadata();
-        return () => { isMounted = false; };
-    }, [objectName]);
+        return () => { isMounted = false; controller.abort(); };
+    }, [objectName, attempt]);
 
-    return { metadata, loading };
+    return { metadata, loading, error, retry };
 }

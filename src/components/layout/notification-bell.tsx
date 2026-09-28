@@ -22,6 +22,7 @@ import { formatWorkspaceRelativeTime } from '@/lib/date-format';
 export function resolveNotificationLink(data: any): string | null {
     if (!data || typeof data !== 'object') return null;
     if (data.viewId) return `/dashboard/views?viewId=${data.viewId}`;
+    if (data.entityType === 'APPLICATION' && data.entityId) return `/dashboard/applications/${encodeURIComponent(data.entityId)}`;
     if (data.entityType === 'OPPORTUNITY' && data.entityId) return `/dashboard/opportunities/${data.entityId}`;
     if (data.entityType === 'LEAD' && data.entityId) return `/dashboard/leads/${data.entityId}`;
     if (data.opportunityId) return `/dashboard/opportunities/${data.opportunityId}`;

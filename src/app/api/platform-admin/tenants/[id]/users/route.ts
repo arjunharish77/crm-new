@@ -15,6 +15,6 @@ export async function GET(
   } catch (error) {
     if (error instanceof Error && error.message === "UNAUTHORIZED") return unauthorized();
     if (error instanceof Error && error.message === "FORBIDDEN") return forbidden();
-    return serverError("Failed to fetch tenant users");
+    return serverError("Failed to fetch tenant users", error);
   }
 }

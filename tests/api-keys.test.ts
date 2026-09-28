@@ -2,7 +2,12 @@ import { createHmac } from "crypto";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { DatabaseError } from "@/lib/db/errors";
 
-const dbMocks = vi.hoisted(() => ({ query: vi.fn(), queryOne: vi.fn(), execute: vi.fn() }));
+const dbMocks = vi.hoisted(() => {
+  const query = vi.fn();
+  const queryOne = vi.fn();
+  const execute = vi.fn();
+  return { query, queryOne, execute, queryAsSystem: query, queryOneAsSystem: queryOne, executeAsSystem: execute };
+});
 const entitlementsMocks = vi.hoisted(() => ({
   assertFeatureEnabled: vi.fn().mockResolvedValue(undefined),
   isFeatureEnabledForTenant: vi.fn().mockResolvedValue(true),

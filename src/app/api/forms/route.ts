@@ -10,7 +10,7 @@ export async function GET(request: Request) {
     return NextResponse.json(forms);
   } catch (error) {
     if (error instanceof Error && error.message === "UNAUTHORIZED") return unauthorized();
-    return serverError("Failed to fetch forms");
+    return serverError("Failed to fetch forms", error);
   }
 }
 

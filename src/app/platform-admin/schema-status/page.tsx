@@ -14,6 +14,8 @@ import {
     TableHeader,
     TableRow,
 } from '@/components/ui/table';
+import { PageHeader } from '@/components/layout/page-header';
+import { ErrorState } from '@/components/common/error-state';
 import { apiFetch } from '@/lib/api';
 import { formatWorkspaceDateTime } from '@/lib/date-format';
 import { cn } from '@/lib/utils';
@@ -45,6 +47,7 @@ export default function SchemaStatusPage() {
 
     const fetchStatus = async () => {
         setLoading(true);
+        setReport(null);
         try {
             const data = await apiFetch<MigrationStatusReport>('/platform-admin/schema-status');
             setReport(data);
@@ -60,27 +63,10 @@ export default function SchemaStatusPage() {
     }, []);
 
     return (
-        <div className="p-8">
-            <div className="mb-6 flex items-center justify-between">
-                <div>
-                    <h1 className="flex items-center gap-2 text-lg font-bold">
-                        <Database className="size-5" />
-                        Schema Status
-                    </h1>
-                    <p className="text-muted-foreground">Applied, pending, and failed database migrations across the platform.</p>
-                </div>
-                <Button variant="outline" onClick={fetchStatus} disabled={loading}>
-                    <RefreshCw className={loading ? 'size-4 animate-spin' : 'size-4'} />
-                    Refresh
-                </Button>
-            </div>
-
-            {!loading && !report && (
-                <Alert variant="destructive">
-                    <XCircle />
-                    <AlertDescription>Failed to load schema status.</AlertDescription>
-                </Alert>
-            )}
+        <div className="@container/schema min-w-0">
+            <PageHeader title="Schema Status" description="Applied, pending and failed database migrations." actions={<Button variant="outline" onClick={fetchStatus} disabled={loading}><RefreshCw className={loading ? 'size-4 animate-spin' : 'size-4'} />Refresh</Button>} />
+            {loading && <p role="status">Loading schema status...</p>}
+            {!loading && !report && <ErrorState description="Schema status could not be loaded." onRetry={fetchStatus} />}
 
             {report && (
                 <div className="space-y-4">
@@ -119,7 +105,7 @@ export default function SchemaStatusPage() {
                         </Alert>
                     )}
 
-                    <div className="grid grid-cols-3 gap-4">
+                    <div className="grid gap-4 @min-[550px]/schema:grid-cols-3">
                         <Card><CardContent className="pt-6"><div className="text-2xl font-bold">{report.totals.applied}</div><div className="text-xs text-muted-foreground">Applied</div></CardContent></Card>
                         <Card><CardContent className="pt-6"><div className="text-2xl font-bold text-amber-600">{report.totals.pending}</div><div className="text-xs text-muted-foreground">Pending</div></CardContent></Card>
                         <Card><CardContent className="pt-6"><div className="text-2xl font-bold text-destructive">{report.totals.failed}</div><div className="text-xs text-muted-foreground">Failed</div></CardContent></Card>

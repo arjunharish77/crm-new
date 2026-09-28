@@ -1,5 +1,8 @@
 "use client";
 
+import { PageHeader } from "@/components/layout/page-header";
+import { ErrorState } from "@/components/common/error-state";
+
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Plus, Pencil, Trash2, ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
@@ -103,6 +106,7 @@ export default function PermissionTemplatesPage() {
     const [opportunityTypes, setOpportunityTypes] = useState<any[]>([]);
     const [activityTypes, setActivityTypes] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
+    const [loadError, setLoadError] = useState<string | null>(null);
     const [dialogOpen, setDialogOpen] = useState(false);
     const [editing, setEditing] = useState<PermissionTemplate | null>(null);
     const [name, setName] = useState("");
@@ -113,6 +117,7 @@ export default function PermissionTemplatesPage() {
 
     const loadData = useCallback(async () => {
         setLoading(true);
+        setLoadError(null);
         try {
             const [templateData, oppTypeData, activityTypeData] = await Promise.all([
                 apiFetch("/permission-templates"),
@@ -123,7 +128,7 @@ export default function PermissionTemplatesPage() {
             setOpportunityTypes(Array.isArray(oppTypeData) ? oppTypeData : []);
             setActivityTypes(Array.isArray(activityTypeData) ? activityTypeData : []);
         } catch (error: any) {
-            toast.error(error.message || "Failed to load permission templates");
+            setLoadError(error.message || "Failed to load permission templates");
         } finally {
             setLoading(false);
         }
@@ -230,23 +235,11 @@ export default function PermissionTemplatesPage() {
     };
 
     return (
-        <div className="mx-auto max-w-[1600px] p-3 md:p-4">
-            <div className="mb-4 flex items-center justify-between">
-                <div>
-                    <h1 className="text-lg font-extrabold">Permission Templates</h1>
-                    <p className="text-sm text-muted-foreground">
-                        Configure action access, field visibility, and type-specific opportunity or activity permissions.
-                    </p>
-                </div>
-                <Button onClick={openCreate}>
-                    <Plus className="size-4" />
-                    Create Template
-                </Button>
-            </div>
-
+        <div className="min-w-0">
+            <PageHeader title="Permission Templates" description="Configure module actions, field visibility and type-specific access." actions={<Button onClick={openCreate}><Plus className="size-4" />Create Template</Button>} />
             <div className="overflow-hidden rounded-xl border bg-card">
                 <div className="divide-y">
-                    {templates.length === 0 && !loading ? (
+                    {loading ? <p className="p-4 text-sm text-muted-foreground">Loading templates…</p> : loadError ? <ErrorState description={loadError} onRetry={loadData} /> : templates.length === 0 ? (
                         <div className="p-10 text-center">
                             <ShieldCheck className="mx-auto mb-2 size-10 text-muted-foreground opacity-40" />
                             <p className="font-extrabold">No permission templates yet</p>
@@ -262,9 +255,9 @@ export default function PermissionTemplatesPage() {
                         const actionCount = Object.values(template.permissions.actions ?? {}).reduce((count, actions) => count + Object.values(actions).filter((enabled) => enabled === true).length, 0);
                         const fieldCount = Object.values(template.permissions.fieldPermissions ?? {}).reduce((count, fields) => count + Object.values(fields).filter((value) => value !== "editable").length, 0);
                         return (
-                            <div key={template.id} className="flex items-center justify-between gap-3 p-3">
+                            <div key={template.id} className="flex flex-wrap items-center justify-between gap-3 p-3">
                                 <div className="min-w-0">
-                                    <div className="flex items-center gap-2">
+                                    <div className="flex flex-wrap items-center gap-2">
                                         <p className="font-extrabold">{template.name}</p>
                                         <Badge
                                             variant="outline"
@@ -277,7 +270,7 @@ export default function PermissionTemplatesPage() {
                                     </div>
                                     {template.description && <p className="text-sm text-muted-foreground">{template.description}</p>}
                                 </div>
-                                <div className="flex items-center gap-1.5">
+                                <div className="flex flex-wrap items-center gap-1.5">
                                     <Badge variant="outline">{actionCount} actions</Badge>
                                     <Badge variant="outline">{fieldCount} field rules</Badge>
                                     <Tooltip>
@@ -336,28 +329,12 @@ export default function PermissionTemplatesPage() {
                             />
                         </div>
 
-                        <div className="grid overflow-hidden rounded-lg border md:min-h-[520px] md:grid-cols-[280px_1fr]">
-                            <div className="border-b bg-muted/40 md:border-b-0 md:border-r">
-                                <p className="px-3 pt-3 pb-1 text-xs font-extrabold uppercase text-muted-foreground">
-                                    Modules & Types
-                                </p>
-                                <ul className="max-h-[520px] overflow-auto p-1">
-                                    {scopes.map((scope) => (
-                                        <li key={scope.key}>
-                                            <button
-                                                type="button"
-                                                onClick={() => setSelectedScope(scope.key)}
-                                                className={cn(
-                                                    "flex w-full flex-col rounded-md px-2 py-1.5 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                                                    selectedScope === scope.key ? "bg-primary/10 text-primary" : "hover:bg-accent"
-                                                )}
-                                            >
-                                                <span className="text-sm font-extrabold">{scope.label}</span>
-                                                <span className="text-xs text-muted-foreground">{scope.subtitle}</span>
-                                            </button>
-                                        </li>
-                                    ))}
-                                </ul>
+                        <div className="grid min-w-0 overflow-hidden rounded-lg border">
+                            <div className="space-y-1 border-b bg-muted/40 p-3">
+                                <Label htmlFor="permission-scope">Module or type</Label>
+                                <select id="permission-scope" value={selectedScope} onChange={event => setSelectedScope(event.target.value)} className="h-10 w-full min-w-0 rounded-md border border-input bg-background px-3 text-sm focus-visible:ring-2 focus-visible:ring-ring">
+                                    {scopes.map(scope => <option key={scope.key} value={scope.key}>{scope.label} — {scope.subtitle}</option>)}
+                                </select>
                             </div>
 
                             {activeScope && (
@@ -370,7 +347,7 @@ export default function PermissionTemplatesPage() {
                                     <p className="mb-2 text-sm font-extrabold">Actions</p>
                                     <div className="mb-4 flex flex-wrap gap-3">
                                         {ACTIONS.map((action) => (
-                                            <label key={action.key} className="flex items-center gap-2 text-sm">
+                                            <label key={action.key} className="flex flex-wrap items-center gap-2 text-sm">
                                                 <Switch
                                                     size="sm"
                                                     checked={Boolean(permissions.actions?.[activeScope.key]?.[action.key])}

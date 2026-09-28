@@ -22,6 +22,12 @@ function resetState() {
 resetState();
 
 vi.mock("@/lib/db/query", () => ({
+  // Identity passthrough -- this fake simulates real storage/retrieval round-trips (see
+  // `execute` below, which pushes params straight into in-memory state read back later), so it
+  // must not stringify jsonb-array params the way the real jsonbParam does; that serialization
+  // behavior itself is verified separately (a pure function, tested directly + against real
+  // Postgres, not the concern of this file's fake DB).
+  jsonbParam: (v: unknown) => v,
   query: vi.fn(async (sql: string, params: any[] = []) => {
     if (sql.includes('from "AiPromptTemplate"')) {
       return state.templates.filter((t) => t.tenantId === params[0]);
@@ -56,7 +62,10 @@ vi.mock("@/lib/db/query", () => ({
       return state.templates.find((t) => t.id === params[0]) ?? null;
     }
     if (sql.includes('select * from "Lead"') || sql.includes('select * from "Opportunity"')) {
-      return state.leads.find((l) => l.tenantId === params[0] && l.id === params[1]) ?? null;
+      // F03 fix (WP04): this lookup can now include an OWN/TEAM record-scope clause (see
+      // record-scope.ts), which pushes extra bound values BEFORE the entity id -- always the
+      // LAST parameter regardless of how many scope values preceded it.
+      return state.leads.find((l) => l.tenantId === params[0] && l.id === params[params.length - 1]) ?? null;
     }
     if (sql.includes('select name, email from "User"')) {
       return state.users.find((u) => u.id === params[0]) ?? null;
@@ -125,6 +134,15 @@ const queueCommunicationForTenantMock = vi.fn(async () => ({ id: "outbox-1", sta
 vi.mock("@/lib/server/communications", () => ({
   queueCommunicationForTenant: queueCommunicationForTenantMock,
   renderTemplate: (text: string, tokens: Record<string, unknown> = {}) => text.replace(/\{\{\s*([a-zA-Z0-9_.-]+)\s*\}\}/g, (_m, key) => String(tokens[key] ?? "")),
+}));
+
+// F07 fix (WP06): these tests use fetch mocks against fake hostnames (ai.example.com) that
+// don't resolve via real DNS -- the SSRF guard's own correctness is covered by
+// outbound-request-guard.test.ts; here it's mocked out so these unit tests stay isolated from
+// real network/DNS behavior, consistent with everything else already mocked in this file.
+vi.mock("@/lib/server/outbound-request-guard", () => ({
+  assertSafeOutboundUrl: vi.fn(async () => undefined),
+  UnsafeDestinationError: class extends Error {},
 }));
 
 const createPrivilegedActionRequestMock = vi.fn(async () => ({ id: "request-1" }));
@@ -202,6 +220,95 @@ describe("AI Assistant module", () => {
   });
 
   describe("provider connector", () => {
+    it("explains exhausted provider credits separately from connectivity errors", async () => {
+      enableProvider();
+      mockFetchOnce({ ok: false, status: 429, text: JSON.stringify({ error: { code: "credit_balance_exhausted", type: "insufficient_quota" } }) });
+      const { testAiProviderConnection } = await import("@/lib/server/ai-assistant");
+      const result = await testAiProviderConnection(TENANT_USER);
+      expect(result.ok).toBe(false);
+      expect(result.message).toContain("no API credits");
+    });
+    it("generates a communication draft without sending it", async () => {
+      enableProvider();
+      state.leads.push({ tenantId: "tenant-1", id: "lead-1", ownerId: null, name: "Fixture lead" });
+      mockFetchOnce({ ok: true, json: { choices: [{ message: { content: "Draft for review" } }], usage: { prompt_tokens: 10, completion_tokens: 5 } } });
+      const { draftCommunicationVariants } = await import("@/lib/server/ai-assistant");
+      expect(await draftCommunicationVariants(TENANT_USER, { entityType: "LEAD", entityId: "lead-1", channel: "EMAIL" })).toEqual({ variants: ["Draft for review"] });
+      expect(queueCommunicationForTenantMock).not.toHaveBeenCalled();
+      expect(state.usageLogs.at(-1)).toMatchObject({ status: "SUCCESS", module: "DRAFT_COMMUNICATION" });
+    });
+
+    it.each(["summarizeRecord", "explainTimeline", "prepareCallNotes", "suggestNextTask", "explainPredictiveScore", "prepareManagerReview"] as const)("%s reaches the configured provider and records usage", async (action) => {
+      enableProvider();
+      state.leads.push({ tenantId: "tenant-1", id: "lead-1", ownerId: null, name: "Fixture lead" });
+      mockFetchOnce({ ok: true, json: { choices: [{ message: { content: "Fixture assistant response" } }], usage: { prompt_tokens: 10, completion_tokens: 5 } } });
+      const ai = await import("@/lib/server/ai-assistant");
+      expect((await ai[action](TENANT_USER, "LEAD", "lead-1")).text).toBe("Fixture assistant response");
+      expect(global.fetch).toHaveBeenCalledWith("https://ai.example.com/v1/chat/completions", expect.objectContaining({ redirect: "manual", headers: expect.objectContaining({ authorization: "Bearer sk-real-secret" }) }));
+      expect(state.usageLogs.at(-1)).toMatchObject({ status: "SUCCESS", tokensIn: 10, tokensOut: 5 });
+    });
+
+    it("does not expose the API key echoed by a rejected provider request", async () => {
+      enableProvider();
+      mockFetchOnce({ ok: false, status: 401, text: "Rejected sk-real-secret" });
+      const { testAiProviderConnection } = await import("@/lib/server/ai-assistant");
+      const result = await testAiProviderConnection(TENANT_USER);
+      expect(result.ok).toBe(false);
+      expect(result.message).toContain("401");
+      expect(result.message).not.toContain("sk-real-secret");
+    });
+
+    it("reports an empty response as a failed connection", async () => {
+      enableProvider();
+      mockFetchOnce({ ok: true, json: { choices: [{ message: { content: " " } }] } });
+      const { testAiProviderConnection } = await import("@/lib/server/ai-assistant");
+      expect(await testAiProviderConnection(TENANT_USER)).toMatchObject({ ok: false, message: "AI provider returned an empty response." });
+    });
+
+    it("explains an output budget exhausted before visible text", async () => {
+      enableProvider();
+      mockFetchOnce({ ok: true, json: { choices: [{ finish_reason: "length", message: { content: "" } }] } });
+      const { testAiProviderConnection } = await import("@/lib/server/ai-assistant");
+      const result = await testAiProviderConnection(TENANT_USER);
+      expect(result.ok).toBe(false);
+      expect(result.message).toContain("output token limit");
+    });
+
+    it("logs empty-response metadata without exposing private reasoning", async () => {
+      enableProvider();
+      state.leads.push({ tenantId: "tenant-1", id: "lead-1", ownerId: null, name: "Fixture lead" });
+      mockFetchOnce({ ok: true, json: { choices: [{ finish_reason: "stop", message: { content: "", reasoning: "Private model reasoning must not appear" } }], usage: { completion_tokens: 100 } } });
+      const { prepareCallNotes } = await import("@/lib/server/ai-assistant");
+      await expect(prepareCallNotes(TENANT_USER, "LEAD", "lead-1")).rejects.toThrow("AI provider returned an empty response.");
+      const log = state.usageLogs.at(-1);
+      expect(log.status).toBe("FAILED");
+      expect(log.errorMessage).toContain('"finishReason":"stop"');
+      expect(log.errorMessage).toContain('"completionTokens":100');
+      expect(log.errorMessage).not.toContain("Private model reasoning");
+    });
+
+    it.each([
+      ["https://api.groq.com/openai/v1", "openai/gpt-oss-20b", "low"],
+      ["https://api.groq.com/openai/v1", "openai/gpt-oss-120b", "low"],
+      ["https://ai.example.com/v1", "openai/gpt-oss-20b", undefined],
+      ["https://api.groq.com/openai/v1", "llama-3.3-70b-versatile", undefined],
+    ])("scopes reasoning budget adaptation to %s %s", async (endpointUrl, model, effort) => {
+      enableProvider({ endpointUrl, model, maxTokensPerRequest: 1024 });
+      mockFetchOnce({ ok: true, json: { choices: [{ message: { content: "OK" } }] } });
+      const { testAiProviderConnection } = await import("@/lib/server/ai-assistant");
+      expect((await testAiProviderConnection(TENANT_USER)).ok).toBe(true);
+      const body = JSON.parse(vi.mocked(global.fetch).mock.calls[0][1]?.body as string);
+      expect(body.reasoning_effort).toBe(effort);
+      expect(body.max_tokens).toBe(1024);
+    });
+
+    it("reports provider timeouts", async () => {
+      enableProvider();
+      global.fetch = vi.fn().mockRejectedValue(Object.assign(new Error("Timed out"), { name: "AbortError" }));
+      const { testAiProviderConnection } = await import("@/lib/server/ai-assistant");
+      expect(await testAiProviderConnection(TENANT_USER)).toMatchObject({ ok: false, message: "AI provider request timed out." });
+    });
+
     it("calls the configured endpoint and logs a SUCCESS usage row with token counts", async () => {
       enableProvider();
       state.leads.push({ tenantId: "tenant-1", id: "lead-1", ownerId: null, name: "Alice", email: "alice@example.com", source: "Website" });
@@ -255,6 +362,25 @@ describe("AI Assistant module", () => {
   });
 
   describe("guardrails", () => {
+    it.each(["draft", "report"])("%s applies the configured module policy", async (kind) => {
+      enableProvider({ allowedModules: [] });
+      state.leads.push({ tenantId: "tenant-1", id: "lead-1", ownerId: null, name: "Fixture" });
+      global.fetch = vi.fn();
+      const ai = await import("@/lib/server/ai-assistant");
+      const request = kind === "draft" ? ai.draftCommunicationVariants(TENANT_USER, { entityType: "LEAD", entityId: "lead-1", channel: "EMAIL" }) : ai.generateNlReportDefinition(TENANT_USER, "Count leads");
+      await expect(request).rejects.toMatchObject({ code: "AI_MODULE_NOT_ALLOWED" });
+      expect(global.fetch).not.toHaveBeenCalled();
+    });
+    it.each(["draft", "report"])("%s stops at the configured daily limit", async (kind) => {
+      enableProvider({ dailySpendLimitUsd: 0 });
+      state.leads.push({ tenantId: "tenant-1", id: "lead-1", ownerId: null, name: "Fixture" });
+      global.fetch = vi.fn();
+      const ai = await import("@/lib/server/ai-assistant");
+      const request = kind === "draft" ? ai.draftCommunicationVariants(TENANT_USER, { entityType: "LEAD", entityId: "lead-1", channel: "EMAIL" }) : ai.generateNlReportDefinition(TENANT_USER, "Count leads");
+      await expect(request).rejects.toMatchObject({ code: "AI_BUDGET_EXCEEDED" });
+      expect(global.fetch).not.toHaveBeenCalled();
+    });
+
     it("blocks and logs BLOCKED_MODULE when the entity type is not in allowedModules, without calling fetch", async () => {
       enableProvider({ allowedModules: ["OPPORTUNITY"] });
       state.leads.push({ tenantId: "tenant-1", id: "lead-1", ownerId: null, name: "Alice" });
@@ -297,6 +423,45 @@ describe("AI Assistant module", () => {
       const masked = await buildRecordContextPack(TENANT_USER, "LEAD", "lead-1", ["email"]);
       expect(masked.email).toBeUndefined();
       expect(masked.name).toBe("Alice");
+    });
+
+    // F03 fix (WP04): buildRecordContextPack previously fetched by tenant only (no record-access
+    // scope check) via `select *` (no field-permission masking at all) -- any authenticated user
+    // could get the AI assistant to summarize/draft-communication-about ANY record in the
+    // tenant, hidden fields included, just by supplying its id.
+    it("masks a field this user's permission template marks hidden, even with no blockedFields configured", async () => {
+      state.leads.push({ tenantId: "tenant-1", id: "lead-1", ownerId: "owner-1", name: "Alice", email: "alice@example.com", phone: "555-1234", source: "Website" });
+      state.users.push({ id: "owner-1", name: "Rep One", email: "rep@example.com" });
+      const userWithHiddenPhone = { id: "user-1", tenantId: "tenant-1", role: { permissions: { fieldPermissions: { leads: { phone: "hidden" } } } } };
+
+      const { buildRecordContextPack } = await import("@/lib/server/ai-assistant");
+      const context = await buildRecordContextPack(userWithHiddenPhone, "LEAD", "lead-1", []);
+
+      expect(context.phone).toBeNull();
+      expect(context.email).toBe("alice@example.com"); // unrelated field unaffected
+    });
+
+    it("scopes the record lookup to the caller's own records for an OWN-access role", async () => {
+      state.leads.push({ tenantId: "tenant-1", id: "lead-1", ownerId: "user-1", name: "Alice" });
+      const ownScopedUser = { id: "user-1", tenantId: "tenant-1", role: { permissions: { recordAccess: "OWN" } } };
+
+      const { buildRecordContextPack } = await import("@/lib/server/ai-assistant");
+      await buildRecordContextPack(ownScopedUser, "LEAD", "lead-1", []);
+
+      const { queryOne } = await import("@/lib/db/query");
+      const lookup = (queryOne as any).mock.calls.find((call: any[]) => String(call[0]).startsWith('select * from "Lead"'));
+      expect(lookup).toBeDefined();
+      expect(lookup[0]).toContain('"ownerId" = $2');
+      expect(lookup[1]).toEqual(["tenant-1", "user-1", "lead-1"]);
+    });
+
+    it("throws RECORD_NOT_FOUND when the scoped lookup finds nothing (out-of-scope record)", async () => {
+      // No matching lead pushed to state.leads -- simulates a real scope-enforcing Postgres
+      // query returning no row for a record outside this OWN-scoped user's access.
+      const ownScopedUser = { id: "user-1", tenantId: "tenant-1", role: { permissions: { recordAccess: "OWN" } } };
+
+      const { buildRecordContextPack } = await import("@/lib/server/ai-assistant");
+      await expect(buildRecordContextPack(ownScopedUser, "LEAD", "someone-elses-lead", [])).rejects.toThrow("RECORD_NOT_FOUND");
     });
   });
 
@@ -377,8 +542,36 @@ describe("AI Assistant module", () => {
     });
   });
 
+  describe("record workflows", () => {
+    const workflows = ["review_qualification", "plan_reengagement", "prepare_objection_coaching", "prepare_handoff"] as const;
+    for (const entityType of ["LEAD", "OPPORTUNITY"]) {
+      it.each(workflows)(`generates %s for ${entityType} with governed usage and no message send`, async (workflow) => {
+        enableProvider();
+        state.leads.push({ tenantId: "tenant-1", id: "record-1", name: "Fixture", title: "Fixture", ownerId: null });
+        mockFetchOnce({ ok: true, json: { choices: [{ message: { content: "Reviewable workflow" } }], usage: { prompt_tokens: 10, completion_tokens: 5 } } });
+        const { runRecordWorkflow } = await import("@/lib/server/ai-assistant");
+        expect(await runRecordWorkflow(TENANT_USER, workflow, entityType, "record-1")).toEqual({ text: "Reviewable workflow" });
+        expect(state.usageLogs.at(-1)).toMatchObject({ module: workflow, promptTemplateKey: workflow, entityType, status: "SUCCESS" });
+        expect(queueCommunicationForTenantMock).not.toHaveBeenCalled();
+      });
+    }
+    it.each(workflows)("enforces module restrictions before calling %s", async (workflow) => {
+      enableProvider({ allowedModules: [] }); global.fetch = vi.fn();
+      const { runRecordWorkflow } = await import("@/lib/server/ai-assistant");
+      await expect(runRecordWorkflow(TENANT_USER, workflow, "LEAD", "record-1")).rejects.toMatchObject({ code: "AI_MODULE_NOT_ALLOWED" });
+      expect(global.fetch).not.toHaveBeenCalled();
+    });
+    it("rejects unknown workflows and unsupported record types", async () => {
+      global.fetch = vi.fn();
+      const { runRecordWorkflow } = await import("@/lib/server/ai-assistant");
+      await expect(runRecordWorkflow(TENANT_USER, "unknown" as any, "LEAD", "record-1")).rejects.toMatchObject({ code: "AI_INVALID_WORKFLOW" });
+      await expect(runRecordWorkflow(TENANT_USER, "prepare_handoff", "CASE", "record-1")).rejects.toMatchObject({ code: "AI_INVALID_ENTITY" });
+      expect(global.fetch).not.toHaveBeenCalled();
+    });
+  });
+
   describe("natural-language report helper", () => {
-    it("parses a valid JSON response and runs it through the real report-query validator/executor", async () => {
+    it("parses a valid JSON response and passes it to the report-query executor", async () => {
       enableProvider();
       mockFetchOnce({ ok: true, json: { choices: [{ message: { content: '{"root":"lead","fields":[{"object":"lead","field":"name"}]}' } }], usage: { prompt_tokens: 10, completion_tokens: 5 } } });
 
@@ -388,6 +581,27 @@ describe("AI Assistant module", () => {
       expect(result.definition).toEqual({ root: "lead", fields: [{ object: "lead", field: "name" }] });
       expect(executeReportQueryForTenantMock).toHaveBeenCalled();
       expect(result.preview).toEqual({ rows: [{ name: "Alice" }] });
+    });
+
+    it("normalizes a singleton order array without dropping the requested sort", async () => {
+      enableProvider();
+      const definition = { root: "lead", fields: [{ object: "lead", field: "name" }], orderBy: [{ object: "lead", field: "score", direction: "desc" }] };
+      mockFetchOnce({ ok: true, json: { choices: [{ message: { content: JSON.stringify(definition) } }] } });
+      const { generateNlReportDefinition } = await import("@/lib/server/ai-assistant");
+      const result = await generateNlReportDefinition(TENANT_USER, "Lead names by score");
+      expect(result.definition.orderBy).toEqual(definition.orderBy[0]);
+    });
+
+    it.each([
+      { unsupported: true },
+      { root: "lead", fields: [{ object: "lead", field: "id" }], groupBy: "source" },
+      { root: "lead", fields: [{ object: "lead", field: "id" }], orderBy: [{ object: "lead", field: "name" }, { object: "lead", field: "score" }] },
+    ])("rejects unsupported operations before executing a misleading report: %j", async (definition) => {
+      enableProvider();
+      mockFetchOnce({ ok: true, json: { choices: [{ message: { content: JSON.stringify(definition) } }] } });
+      const { generateNlReportDefinition, AiProviderError } = await import("@/lib/server/ai-assistant");
+      await expect(generateNlReportDefinition(TENANT_USER, "Report")).rejects.toThrow(AiProviderError);
+      expect(executeReportQueryForTenantMock).not.toHaveBeenCalled();
     });
 
     it("throws AI_INVALID_REPORT_JSON when the provider does not return parseable JSON", async () => {

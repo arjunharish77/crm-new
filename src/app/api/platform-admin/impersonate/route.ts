@@ -38,11 +38,23 @@ export async function POST(request: Request) {
     }
 
     const result = await impersonateTenantUser(adminUser.id, body.tenantId, body.userId, String(body.reason));
-    return NextResponse.json(result);
+    // F06 fix (WP05): the impersonation token used to come back in this JSON body for the
+    // client to store (sessionStorage/js-cookie) and re-apply itself -- exactly the kind of
+    // client-visible, XSS-exposed session token the audit flags. It's now set as the same
+    // HttpOnly session cookie a normal login uses; the client never sees the raw value.
+    const response = NextResponse.json({ user: result.user });
+    response.cookies.set("token", result.token, {
+      httpOnly: true,
+      sameSite: "lax",
+      secure: process.env.NODE_ENV === "production",
+      path: "/",
+      maxAge: result.expiresInSeconds,
+    });
+    return response;
   } catch (error) {
     if (error instanceof Error && error.message === "UNAUTHORIZED") return unauthorized();
     if (error instanceof Error && error.message === "FORBIDDEN") return forbidden();
     if (error instanceof Error && error.message === "IMPERSONATION_REASON_REQUIRED") return badRequest("A reason is required to start impersonation");
-    return serverError("Failed to impersonate user");
+    return serverError("Failed to impersonate user", error);
   }
 }

@@ -1,6 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const dbMocks = vi.hoisted(() => ({ query: vi.fn(), queryOne: vi.fn(), execute: vi.fn() }));
+const dbMocks = vi.hoisted(() => {
+  const query = vi.fn();
+  const queryOne = vi.fn();
+  const execute = vi.fn();
+  return { query, queryOne, execute, queryAsSystem: query, queryOneAsSystem: queryOne, executeAsSystem: execute };
+});
 const entitlementsMocks = vi.hoisted(() => ({
   assertFeatureEnabled: vi.fn().mockResolvedValue(undefined),
   isFeatureEnabledForTenant: vi.fn().mockResolvedValue(true),
@@ -79,7 +84,7 @@ describe("processDueReportSchedules", () => {
     exportsMocks.createExportRequestForUser.mockResolvedValueOnce({
       id: "exp-1",
       status: "COMPLETED",
-      expiresAt: "2026-09-10T00:00:00.000Z",
+      expiresAt: new Date(Date.now() + 86_400_000).toISOString(),
     });
 
     const result = await processDueReportSchedules(new Date("2026-01-08T00:00:00.000Z"));
@@ -403,7 +408,7 @@ describe("getReportDeliveryDownload", () => {
       scheduleUserId: "user-1",
       exportRequestId: "exp-1",
       exportStatus: "COMPLETED",
-      expiresAt: "2026-09-10T00:00:00.000Z",
+      expiresAt: new Date(Date.now() + 86_400_000).toISOString(),
       storageKey: "reports/exp-1.csv",
       originalFilename: "rep_performance.csv",
       contentType: "text/csv; charset=utf-8",

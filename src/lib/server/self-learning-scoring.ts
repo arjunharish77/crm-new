@@ -1,6 +1,6 @@
 import { randomUUID } from "crypto";
 import { createAuditLog } from "@/lib/server/crm";
-import { query as pgQuery, queryOne as pgQueryOne } from "@/lib/db/query";
+import { query as pgQuery, queryOne as pgQueryOne, queryAsSystem as pgQueryAsSystem } from "@/lib/db/query";
 import { trainViaMlService, scoreViaMlService } from "@/lib/server/ml-service-client";
 import { refreshNextBestActionsForRecord } from "@/lib/server/next-best-action";
 import { assertModuleEnabled } from "@/lib/server/module-entitlements";
@@ -1391,8 +1391,10 @@ function nextRetrainDate(cadence: ScoringSettings["retrainCadence"], from = new 
   return null;
 }
 
+// WP07 (F04): BACKGROUND_JOB, disposition B -- worker-invoked recurring job, discovers due
+// retraining settings across every tenant at once.
 export async function processDueScheduledScoringRetraining(limit = 10) {
-  const due = await pgQuery<any>(
+  const due = await pgQueryAsSystem<any>(
     `select id, "tenantId", "targetModules", "retrainCadence", "nextRetrainAt", "updatedBy"
      from "ScoringSettings"
      where "isEnabled" = true

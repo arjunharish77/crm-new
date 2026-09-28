@@ -158,6 +158,22 @@ describe("direct Postgres reports and dashboards", () => {
     expect(insertCall![1][6]).toBe("TABLE");
   });
 
+  it("filters and sorts Postgres Date values alongside serialized dates", async () => {
+    queryMock.mockResolvedValueOnce([
+      { id: "before", name: "Before", createdAt: new Date("2025-12-31T00:00:00Z") },
+      { id: "early", name: "Early", createdAt: new Date("2026-01-02T00:00:00Z") },
+      { id: "late", name: "Late", createdAt: "2026-02-01T00:00:00Z" },
+    ]).mockResolvedValue([]);
+    const { executeReportQueryForTenant } = await import("@/lib/server/reporting-query");
+    const result = await executeReportQueryForTenant(
+      { id: "user-1", tenantId: "tenant-1", role: { permissions: { recordAccess: "OWN" } } },
+      { root: "lead", fields: [{ object: "lead", field: "name" }],
+        filters: [{ object: "lead", field: "createdAt", operator: "gte", value: "2026-01-01" }],
+        orderBy: { object: "lead", field: "createdAt", direction: "desc" } },
+    );
+    expect(result.rows).toEqual([{ "lead.name": "Late" }, { "lead.name": "Early" }]);
+  });
+
   it("executes structured report queries from direct Postgres datasets", async () => {
     queryMock
       .mockResolvedValueOnce([
@@ -179,7 +195,34 @@ describe("direct Postgres reports and dashboards", () => {
     expect(result.columns[0].label).toBe("Lead Name");
     expect(result.rows).toEqual([{ "lead.name": "Alpha" }]);
     expect(queryMock.mock.calls[0][0]).toContain('from "Lead"');
-    expect(queryMock.mock.calls[0][0]).toContain('"ownerId" = $2');
+    // F03 fix (WP04): OWN and TEAM scope now share one code path (a resolved list of visible
+    // owner ids), so even a single-id OWN scope renders as "= any(...)" rather than bare "=".
+    expect(queryMock.mock.calls[0][0]).toContain('"ownerId" = any($2::text[])');
+    expect(queryMock.mock.calls[0][1]).toEqual(["tenant-1", ["user-1"], 1000]);
+  });
+
+  // F03 fix (WP04): the report builder had its own separate OWN-vs-everything-else check --
+  // "TEAM Records" fell through to unrestricted tenant-wide report data, same bug already fixed
+  // in leads-postgres.ts/opportunities-postgres.ts/exports.ts.
+  it("scopes report data to team membership, not tenant-wide, for a TEAM-access role", async () => {
+    queryMock
+      .mockResolvedValueOnce([{ id: "member-1" }, { id: "member-2" }]) // team-member id resolution
+      .mockResolvedValueOnce([{ id: "lead-1", name: "Alpha", ownerId: "member-2" }])
+      .mockResolvedValueOnce([]);
+
+    const { executeReportQueryForTenant } = await import("@/lib/server/reporting-query");
+    await executeReportQueryForTenant(
+      { id: "user-1", tenantId: "tenant-1", teamId: "team-1", role: { permissions: { recordAccess: "TEAM" } } },
+      { root: "lead", fields: [{ object: "lead", field: "name", label: "Lead Name" }] },
+    );
+
+    const teamLookupCall = queryMock.mock.calls[0];
+    expect(teamLookupCall[0]).toContain('from "User"');
+    expect(teamLookupCall[1]).toEqual(["tenant-1", "team-1"]);
+
+    const leadCall = queryMock.mock.calls[1];
+    expect(leadCall[0]).toContain('"ownerId" = any($2::text[])');
+    expect(leadCall[1]).toEqual(["tenant-1", ["member-1", "member-2"], 1000]);
   });
 
   it("rejects a structured report query that takes too long (gap checklist Module 17, item 24 -- query timeout limits)", async () => {

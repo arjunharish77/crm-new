@@ -1,6 +1,6 @@
 export type RecordAccess = 'OWN' | 'TEAM' | 'ALL';
 export type PermissionAction = 'read' | 'create' | 'update' | 'delete' | 'export' | 'manage';
-export type PermissionModule = 'leads' | 'opportunities' | 'activities' | 'automations' | 'journeys' | 'metrics' | 'users' | 'roles' | 'settings';
+export type PermissionModule = 'leads' | 'applications' | 'opportunities' | 'activities' | 'automations' | 'journeys' | 'metrics' | 'users' | 'roles' | 'settings';
 
 export interface ModulePermissions {
     [key: string]: boolean | 'full' | {

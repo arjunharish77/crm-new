@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Bookmark, Loader2, Plus, Trash2 } from 'lucide-react';
 import {
     Sheet,
@@ -176,13 +176,15 @@ export function AdvancedFilterDrawer({ open, onClose, fields, onApply, initialGr
         savePresets(storageKey, next);
     };
 
-    const renderValueInput = (groupId: string, condition: FilterCondition) => {
+    const openerRef = useRef<HTMLElement | null>(null);
+
+    const renderValueInput = (groupId: string, condition: FilterCondition, conditionLabel: string) => {
         const field = fieldFor(condition.field);
         const fieldType = (field?.type || 'text') as FilterFieldType;
         const options = field?.options || [];
 
         if (condition.operator === 'is_empty' || condition.operator === 'is_not_empty') {
-            return <div className="min-w-[160px] flex-1" />;
+            return <div className="min-w-0 w-full flex-1" />;
         }
 
         if (fieldType === 'boolean') {
@@ -191,7 +193,7 @@ export function AdvancedFilterDrawer({ open, onClose, fields, onApply, initialGr
                     value={condition.value === true ? 'true' : condition.value === false ? 'false' : ''}
                     onValueChange={(value) => handleUpdateCondition(groupId, condition.id, { value: value === 'true' })}
                 >
-                    <SelectTrigger size="sm" className="min-w-[160px] flex-1"><SelectValue placeholder="Value" /></SelectTrigger>
+                    <SelectTrigger aria-label={`${conditionLabel} value`} size="sm" className="min-w-0 w-full flex-1"><SelectValue placeholder="Value" /></SelectTrigger>
                     <SelectContent>
                         <SelectItem value="true">Yes</SelectItem>
                         <SelectItem value="false">No</SelectItem>
@@ -209,11 +211,11 @@ export function AdvancedFilterDrawer({ open, onClose, fields, onApply, initialGr
             return (
                 <DropdownMenu>
                     <DropdownMenuTrigger asChild>
-                        <Button variant="outline" size="sm" className="min-w-[180px] flex-1 justify-between">
+                        <Button aria-label={`${conditionLabel} values`} variant="outline" size="sm" className="min-w-0 max-w-full h-auto min-h-8 whitespace-normal flex-1 justify-between">
                             {values.length === 0 ? 'Select values' : values.length === 1 ? allOptions.find((o) => o.value === values[0])?.label ?? '1 selected' : `${values.length} selected`}
                         </Button>
                     </DropdownMenuTrigger>
-                    <DropdownMenuContent align="start" className="max-h-64 w-64 overflow-y-auto">
+                    <DropdownMenuContent align="start" className="max-h-64 w-64 max-w-[calc(100dvw-2rem)] overflow-y-auto">
                         {allOptions.map((option) => (
                             <DropdownMenuCheckboxItem
                                 key={option.value}
@@ -250,20 +252,20 @@ export function AdvancedFilterDrawer({ open, onClose, fields, onApply, initialGr
                     handleUpdateCondition(groupId, condition.id, { value: nextPair });
                 };
                 return (
-                    <div key={index} className="flex flex-1 flex-col gap-1.5 sm:flex-row">
+                    <div key={index} className="flex min-w-0 flex-1 flex-col gap-1.5">
                         <Select value={currentMode} onValueChange={(value) => setValue(value === '__exact__' ? '' : value)}>
-                            <SelectTrigger size="sm" className="min-w-[140px]"><SelectValue placeholder="When" /></SelectTrigger>
+                            <SelectTrigger aria-label={`${conditionLabel} ${isBetween ? (index === 0 ? "start" : "end") : "date"} mode`} size="sm" className="min-w-0 w-full"><SelectValue placeholder="When" /></SelectTrigger>
                             <SelectContent>
                                 <SelectItem value="__exact__">Exact date</SelectItem>
                                 {RELATIVE_DATE_TOKENS.map((token) => <SelectItem key={token.value} value={token.value}>{token.label}</SelectItem>)}
                             </SelectContent>
                         </Select>
                         {currentMode === '__exact__' && (
-                            <Input
+                            <Input aria-label={`${conditionLabel} ${isBetween ? (index === 0 ? "start date" : "end date") : "date"}`}
                                 type="date"
                                 value={formatWorkspaceDateInput(typeof current === 'string' ? current : '')}
                                 onChange={(event) => setValue(workspaceDateInputToIso(event.target.value) ?? '')}
-                                className="min-w-[160px] flex-1"
+                                className="min-w-0 w-full flex-1"
                             />
                         )}
                     </div>
@@ -279,7 +281,7 @@ export function AdvancedFilterDrawer({ open, onClose, fields, onApply, initialGr
         }
 
         return (
-            <Input
+            <Input aria-label={`${conditionLabel} value`}
                 type={fieldType === 'number' ? 'number' : 'text'}
                 placeholder={condition.operator === 'in' || condition.operator === 'not_in' || fieldType === 'tags' ? 'Comma-separated values' : 'Value'}
                 value={Array.isArray(condition.value) ? condition.value.join(', ') : condition.value ?? ''}
@@ -289,7 +291,7 @@ export function AdvancedFilterDrawer({ open, onClose, fields, onApply, initialGr
                         : event.target.value;
                     handleUpdateCondition(groupId, condition.id, { value });
                 }}
-                className="min-w-[180px] flex-1"
+                className="min-w-0 w-full flex-1"
             />
         );
     };
@@ -304,13 +306,13 @@ export function AdvancedFilterDrawer({ open, onClose, fields, onApply, initialGr
 
     return (
         <Sheet open={open} onOpenChange={(next) => !next && onClose()}>
-            <SheetContent className="flex w-full flex-col gap-0 sm:max-w-2xl">
+            <SheetContent onOpenAutoFocus={() => { openerRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null; }} onCloseAutoFocus={(event) => { if (openerRef.current?.isConnected) { event.preventDefault(); openerRef.current.focus(); } }} className="flex w-full flex-col gap-0 sm:max-w-2xl [&_[data-slot=select-trigger]]:whitespace-normal [&_[data-slot=select-trigger]]:h-auto [&_[data-slot=select-trigger]]:min-h-8 [&_[data-slot=select-value]]:line-clamp-none [&_[data-slot=select-value]]:break-words">
                 <SheetHeader className="border-b pb-4">
                     <SheetTitle>Advanced Filters</SheetTitle>
                     <SheetDescription>Build complex queries with AND/OR logic across groups.</SheetDescription>
                 </SheetHeader>
 
-                <div className="flex-1 space-y-4 overflow-y-auto p-4">
+                <div className="@container/filter min-h-0 flex-1 space-y-4 overflow-y-auto p-4">
                     {storageKey && (
                         <div className="flex flex-wrap items-center gap-1.5 rounded-lg border bg-muted/30 p-2">
                             <Bookmark className="size-3.5 shrink-0 text-muted-foreground" />
@@ -330,42 +332,42 @@ export function AdvancedFilterDrawer({ open, onClose, fields, onApply, initialGr
 
                     {groups.map((group, gIndex) => (
                         <div key={group.id} className="rounded-xl border bg-muted/30 p-4">
-                            <div className="mb-4 flex items-center gap-4">
+                            <div className="mb-4 flex flex-wrap items-center gap-3">
                                 <span className="text-sm font-bold">Group {gIndex + 1}</span>
                                 <Select value={group.logic} onValueChange={(value) => setGroups((prev) => prev.map((g) => g.id === group.id ? { ...g, logic: value as any } : g))}>
-                                    <SelectTrigger size="sm" className="min-w-[160px]"><SelectValue /></SelectTrigger>
+                                    <SelectTrigger aria-label={`Group ${gIndex + 1} matching logic`} size="sm" className="min-w-0 max-w-full"><SelectValue /></SelectTrigger>
                                     <SelectContent>
                                         <SelectItem value="AND">Match ALL (AND)</SelectItem>
                                         <SelectItem value="OR">Match ANY (OR)</SelectItem>
                                     </SelectContent>
                                 </Select>
                                 {groups.length > 1 && (
-                                    <Button variant="ghost" size="icon-sm" className="ml-auto text-destructive hover:bg-destructive/10 hover:text-destructive" onClick={() => handleRemoveGroup(group.id)}>
+                                    <Button aria-label={`Remove group ${gIndex + 1}`} variant="ghost" size="icon-sm" className="ml-auto text-destructive hover:bg-destructive/10 hover:text-destructive" onClick={() => handleRemoveGroup(group.id)}>
                                         <Trash2 className="size-4" />
                                     </Button>
                                 )}
                             </div>
 
                             <div className="flex flex-col gap-3">
-                                {group.conditions.map((condition) => (
-                                    <div key={condition.id} className="flex flex-col items-stretch gap-2.5 sm:flex-row sm:items-center">
+                                {group.conditions.map((condition, cIndex) => (
+                                    <div key={condition.id} role="group" aria-label={`Group ${gIndex + 1} condition ${cIndex + 1}`} className="flex flex-col items-stretch gap-2.5 @min-[580px]/filter:flex-row @min-[580px]/filter:items-center">
                                         <Select value={condition.field} onValueChange={(value) => handleUpdateCondition(group.id, condition.id, resetForField(value))}>
-                                            <SelectTrigger size="sm" className="min-w-[150px] flex-1"><SelectValue placeholder="Field" /></SelectTrigger>
+                                            <SelectTrigger aria-label={`Group ${gIndex + 1} condition ${cIndex + 1} field`} size="sm" className="min-w-0 w-full flex-1"><SelectValue placeholder="Field" /></SelectTrigger>
                                             <SelectContent>
                                                 {fields.map((f) => <SelectItem key={f.key} value={f.key}>{f.label}</SelectItem>)}
                                             </SelectContent>
                                         </Select>
 
                                         <Select value={condition.operator} onValueChange={(value) => handleUpdateCondition(group.id, condition.id, { operator: value as FilterOperator, value: '' })}>
-                                            <SelectTrigger size="sm" className="min-w-[120px]"><SelectValue placeholder="Operator" /></SelectTrigger>
+                                            <SelectTrigger aria-label={`Group ${gIndex + 1} condition ${cIndex + 1} operator`} size="sm" className="min-w-0 max-w-full"><SelectValue placeholder="Operator" /></SelectTrigger>
                                             <SelectContent>
                                                 {operatorsFor(condition.field).map((operator) => <SelectItem key={operator.value} value={operator.value}>{operator.label}</SelectItem>)}
                                             </SelectContent>
                                         </Select>
 
-                                        {renderValueInput(group.id, condition)}
+                                        {renderValueInput(group.id, condition, `Group ${gIndex + 1} condition ${cIndex + 1}`)}
 
-                                        <Button variant="ghost" size="icon-sm" className="text-destructive hover:bg-destructive/10 hover:text-destructive" onClick={() => handleRemoveCondition(group.id, condition.id)}>
+                                        <Button variant="ghost" size="icon-sm" aria-label={`Remove group ${gIndex + 1} condition ${cIndex + 1}`} className="text-destructive hover:bg-destructive/10 hover:text-destructive" onClick={() => handleRemoveCondition(group.id, condition.id)}>
                                             <Trash2 className="size-4" />
                                         </Button>
                                     </div>
@@ -383,9 +385,9 @@ export function AdvancedFilterDrawer({ open, onClose, fields, onApply, initialGr
                     </Button>
                 </div>
 
-                <SheetFooter className="flex-row items-center justify-between border-t">
+                <SheetFooter className="flex-row flex-wrap items-center justify-between gap-3 border-t">
                     <span className="text-xs text-muted-foreground">{previewLabel}</span>
-                    <div className="flex gap-2">
+                    <div className="flex flex-wrap gap-2">
                         <Button variant="outline" onClick={onClose}>Cancel</Button>
                         <Button onClick={() => { onApply(groups); onClose(); }}>Apply Filters</Button>
                     </div>

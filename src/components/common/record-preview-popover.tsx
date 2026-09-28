@@ -6,7 +6,7 @@
 // click-triggered popover (this design system has no hover-card primitive, and hover has no
 // touch-device equivalent anyway) for wrapping a BARE related-record mention that today has no
 // link or preview at all -- e.g. Tasks' "Lead: {name}" / "Opportunity: {title}" plain text.
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { ExternalLink, Loader2 } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -27,7 +27,7 @@ const API_PATHS: Record<PreviewEntityType, string> = {
   opportunity: "/opportunities",
 };
 
-export function RecordPreviewPopover({
+function RecordPreviewContent({
   entityType,
   entityId,
   children,
@@ -41,12 +41,17 @@ export function RecordPreviewPopover({
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState(false);
 
+  const requestRef = useRef<AbortController | null>(null);
+  useEffect(() => () => requestRef.current?.abort(), []);
   const load = () => {
     if (loaded || loading) return;
+    const controller = new AbortController();
+    requestRef.current = controller;
     setLoading(true);
     setError(false);
-    apiFetch(`${API_PATHS[entityType]}/${entityId}`)
+    apiFetch(`${API_PATHS[entityType]}/${entityId}`, { signal: controller.signal })
       .then((result) => {
+        if (controller.signal.aborted) return;
         if (!result) {
           setError(true);
           return;
@@ -54,20 +59,20 @@ export function RecordPreviewPopover({
         setData(result);
         setLoaded(true);
       })
-      .catch(() => setError(true))
-      .finally(() => setLoading(false));
+      .catch(() => { if (!controller.signal.aborted) setError(true); })
+      .finally(() => { if (!controller.signal.aborted) setLoading(false); });
   };
 
   return (
     <Popover onOpenChange={(open) => { if (open) load(); }}>
       <PopoverTrigger asChild>{children}</PopoverTrigger>
-      <PopoverContent className="w-72" align="start">
+      <PopoverContent aria-label={`${entityType === "lead" ? "Lead" : "Opportunity"} preview`} className="w-72 max-w-[calc(100dvw-2rem)] max-h-[var(--radix-popover-content-available-height)] overflow-y-auto break-words" align="start">
         {loading ? (
           <div className="flex items-center justify-center py-4">
             <Loader2 className="size-4 animate-spin text-muted-foreground" />
           </div>
         ) : error || !data ? (
-          <p className="text-sm text-muted-foreground">Failed to load preview.</p>
+          <div className="space-y-2"><p role="alert" className="text-sm text-muted-foreground">Failed to load preview.</p><Button variant="outline" size="sm" onClick={load}>Try again</Button></div>
         ) : entityType === "lead" ? (
           <div className="space-y-1.5">
             <p className="font-bold leading-tight">{data.name}</p>
@@ -85,7 +90,7 @@ export function RecordPreviewPopover({
         ) : (
           <div className="space-y-1.5">
             <p className="font-bold leading-tight">{data.title}</p>
-            {data.stage?.label ? <Badge variant="outline" className="text-[0.65rem] font-semibold uppercase">{data.stage.label}</Badge> : null}
+            {data.stage?.label || data.stage?.name ? <Badge variant="outline" className="text-[0.65rem] font-semibold uppercase">{data.stage.label || data.stage.name}</Badge> : null}
             <p className="text-xs text-muted-foreground">{formatCurrency(data.amount ?? 0)}</p>
             <Button asChild size="sm" variant="outline" className="mt-2 w-full">
               <Link href={`${PAGE_PATHS.opportunity}/${data.id}`}>
@@ -98,4 +103,8 @@ export function RecordPreviewPopover({
       </PopoverContent>
     </Popover>
   );
+}
+
+export function RecordPreviewPopover(props: { entityType: PreviewEntityType; entityId: string; children: React.ReactNode }) {
+  return <RecordPreviewContent key={`${props.entityType}:${props.entityId}`} {...props} />;
 }

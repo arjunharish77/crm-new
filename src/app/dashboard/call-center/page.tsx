@@ -1,6 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { PageHeader } from "@/components/layout/page-header";
+import { ErrorState } from "@/components/common/error-state";
+
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { PhoneCall, PhoneMissed, CalendarClock, Users, RefreshCw, Circle, Coffee, CircleOff, ListOrdered } from "lucide-react";
 import { toast } from "sonner";
@@ -109,14 +112,14 @@ function CallListCard({ title, icon: Icon, calls, emptyText }: { title: string; 
                         const href = recordHref(call);
                         const label = recordLabel(call);
                         return (
-                            <div key={call.id} className="flex items-center justify-between gap-2 p-3">
-                                <div className="min-w-0">
+                            <div key={call.id} className="flex flex-wrap items-center justify-between gap-2 p-3">
+                                <div className="min-w-0 flex-1 basis-40 break-words">
                                     {href ? (
-                                        <Link href={href} className="truncate text-sm font-medium text-primary hover:underline">
+                                        <Link href={href} className="block truncate text-sm font-medium text-primary hover:underline">
                                             {label}
                                         </Link>
                                     ) : (
-                                        <span className="truncate text-sm font-medium">{label}</span>
+                                        <span className="block truncate text-sm font-medium">{label}</span>
                                     )}
                                     <p className="text-xs text-muted-foreground">
                                         {call.direction} · {call.status} · {call.toNumber || call.fromNumber || "—"}
@@ -159,18 +162,18 @@ function CallbacksCard({
                         const href = recordHref(row);
                         const label = recordLabel(row);
                         return (
-                            <div key={row.id} className="flex items-center justify-between gap-2 p-3">
-                                <div className="min-w-0">
+                            <div key={row.id} className="flex flex-wrap items-center justify-between gap-2 p-3">
+                                <div className="min-w-0 flex-1 basis-40 break-words">
                                     {href ? (
-                                        <Link href={href} className="truncate text-sm font-medium text-primary hover:underline">
+                                        <Link href={href} className="block truncate text-sm font-medium text-primary hover:underline">
                                             {label}
                                         </Link>
                                     ) : (
-                                        <span className="truncate text-sm font-medium">{label}</span>
+                                        <span className="block truncate text-sm font-medium">{label}</span>
                                     )}
                                     <p className="text-xs text-muted-foreground">{row.nextAction || "Callback"} · {row.leadPhone || "—"}</p>
                                 </div>
-                                <div className="flex shrink-0 items-center gap-2">
+                                <div className="flex max-w-full flex-wrap items-center gap-2">
                                     <Badge variant={overdue ? "destructive" : "outline"}>{formatWorkspaceDateTime(row.callbackAt)}</Badge>
                                     <Button size="sm" variant="outline" onClick={() => onLog(row)}>
                                         Log Outcome
@@ -200,14 +203,14 @@ function DispositionsCard({ title, dispositions }: { title: string; dispositions
                         const href = recordHref(row);
                         const label = recordLabel(row);
                         return (
-                            <div key={row.id} className="flex items-center justify-between gap-2 p-3">
-                                <div className="min-w-0">
+                            <div key={row.id} className="flex flex-wrap items-center justify-between gap-2 p-3">
+                                <div className="min-w-0 flex-1 basis-40 break-words">
                                     {href ? (
-                                        <Link href={href} className="truncate text-sm font-medium text-primary hover:underline">
+                                        <Link href={href} className="block truncate text-sm font-medium text-primary hover:underline">
                                             {label}
                                         </Link>
                                     ) : (
-                                        <span className="truncate text-sm font-medium">{label}</span>
+                                        <span className="block truncate text-sm font-medium">{label}</span>
                                     )}
                                     <p className="text-xs text-muted-foreground">
                                         {row.groupName ? `${row.groupName} · ` : ""}
@@ -237,7 +240,7 @@ function OpenRecordsCard({ title, records, hrefBase }: { title: string; records:
                 ) : (
                     records.map((row) => (
                         <Link key={row.id} href={`${hrefBase}/${row.id}`} className="block p-3 text-sm hover:bg-accent/50">
-                            <p className="font-medium text-primary">{row.name || row.title}</p>
+                            <p className="break-words font-medium text-primary">{row.name || row.title}</p>
                             <p className="text-xs text-muted-foreground">{row.stageName || row.status || ""}</p>
                         </Link>
                     ))
@@ -260,9 +263,9 @@ function AgentAvailabilityCard({ agents }: { agents: AgentAvailabilityRow[] }) {
                     const Meta = STATUS_META[agent.status];
                     const Icon = Meta.icon;
                     return (
-                        <div key={agent.userId} className="flex items-center justify-between gap-2 p-3">
+                        <div key={agent.userId} className="flex flex-wrap items-center justify-between gap-2 p-3">
                             <span className="text-sm font-medium">{agent.name}</span>
-                            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                            <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
                                 <span>{agent.callsToday} calls · {agent.openTaskWorkload} open</span>
                                 <span className={`flex items-center gap-1 ${Meta.className}`}>
                                     <Icon className="size-3 fill-current" />
@@ -281,22 +284,26 @@ function QueueBacklogCard({ queues, onClaimed }: { queues: QueueHealthRow[]; onC
     const [expandedTeamId, setExpandedTeamId] = useState<string | null>(null);
     const [queuedCalls, setQueuedCalls] = useState<QueuedCallRow[]>([]);
     const [loadingCalls, setLoadingCalls] = useState(false);
+    const [queueError, setQueueError] = useState<string | null>(null);
+    const queueRequest = useRef(0);
     const [claimingId, setClaimingId] = useState<string | null>(null);
 
-    const toggleTeam = async (teamId: string) => {
-        if (expandedTeamId === teamId) {
+    const toggleTeam = async (teamId: string, retry = false) => {
+        const request = ++queueRequest.current;
+        if (!retry && expandedTeamId === teamId) {
             setExpandedTeamId(null);
             return;
         }
         setExpandedTeamId(teamId);
         setLoadingCalls(true);
+        setQueueError(null);
         try {
             const data = await apiFetch<QueuedCallRow[]>(`/call-queues/team/${teamId}/calls`);
-            setQueuedCalls(Array.isArray(data) ? data : []);
+            if (request === queueRequest.current) setQueuedCalls(Array.isArray(data) ? data : []);
         } catch {
-            setQueuedCalls([]);
+            if (request === queueRequest.current) setQueueError("Could not load queued calls.");
         } finally {
-            setLoadingCalls(false);
+            if (request === queueRequest.current) setLoadingCalls(false);
         }
     };
 
@@ -328,11 +335,12 @@ function QueueBacklogCard({ queues, onClaimed }: { queues: QueueHealthRow[]; onC
                         <div key={queue.teamId}>
                             <button
                                 type="button"
+                                aria-expanded={expandedTeamId === queue.teamId}
                                 onClick={() => toggleTeam(queue.teamId)}
-                                className="flex w-full items-center justify-between gap-2 p-3 text-left hover:bg-accent/50"
+                                className="flex w-full flex-wrap items-center justify-between gap-2 p-3 text-left hover:bg-accent/50"
                             >
                                 <span className="text-sm font-medium">{queue.teamName}</span>
-                                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                                <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
                                     <Badge variant={queue.unclaimed > 0 ? "destructive" : "outline"}>{queue.unclaimed} unclaimed</Badge>
                                     <span>oldest {queue.oldestAgeMinutes}m</span>
                                 </div>
@@ -341,13 +349,15 @@ function QueueBacklogCard({ queues, onClaimed }: { queues: QueueHealthRow[]; onC
                                 <div className="divide-y border-t bg-muted/20">
                                     {loadingCalls ? (
                                         <p className="p-3 text-sm text-muted-foreground">Loading...</p>
+                                    ) : queueError ? (
+                                        <ErrorState description={queueError} onRetry={() => toggleTeam(queue.teamId, true)} />
                                     ) : queuedCalls.length === 0 ? (
                                         <p className="p-3 text-sm text-muted-foreground">Nothing queued right now.</p>
                                     ) : (
                                         queuedCalls.map((call) => (
-                                            <div key={call.id} className="flex items-center justify-between gap-2 p-3 pl-6">
-                                                <div className="min-w-0">
-                                                    <p className="truncate text-sm font-medium">
+                                            <div key={call.id} className="flex flex-wrap items-center justify-between gap-2 p-3 pl-6">
+                                                <div className="min-w-0 flex-1 basis-40 break-words">
+                                                    <p className="block truncate text-sm font-medium">
                                                         {call.leadName || call.opportunityTitle || call.fromNumber || call.toNumber || "Unknown"}
                                                     </p>
                                                     <p className="text-xs text-muted-foreground">
@@ -375,6 +385,7 @@ function QueueBacklogCard({ queues, onClaimed }: { queues: QueueHealthRow[]; onC
 }
 
 export default function CallCenterWorkspacePage() {
+    const [fetchError, setFetchError] = useState<string | null>(null);
     const [workspace, setWorkspace] = useState<Workspace | null>(null);
     const [loading, setLoading] = useState(true);
     const [logOutcomeFor, setLogOutcomeFor] = useState<CallbackRow | null>(null);
@@ -389,8 +400,8 @@ export default function CallCenterWorkspacePage() {
         setNow(Date.now());
         setRefreshing(true);
         apiFetch<Workspace>("/call-center/workspace")
-            .then(setWorkspace)
-            .catch(() => undefined)
+            .then(data => { setWorkspace(data); setFetchError(null); })
+            .catch(() => setFetchError("Could not refresh the call center workspace. Any displayed data is from the last successful refresh."))
             .finally(() => {
                 setLoading(false);
                 setRefreshing(false);
@@ -403,22 +414,20 @@ export default function CallCenterWorkspacePage() {
         return () => clearInterval(interval);
     }, [load]);
 
-    if (loading || !workspace || now === null) {
+    if (loading) {
         return <p className="text-sm text-muted-foreground">Loading call center workspace...</p>;
     }
 
+    if (!workspace || now === null) return <ErrorState title="Call Center unavailable" description={fetchError || "Workspace data is unavailable."} onRetry={load} />;
+
     return (
-        <div className="space-y-6">
-            <div className="flex items-center justify-between">
-                <div>
-                    <h1 className="text-lg font-bold">Call Center Workspace</h1>
-                    <p className="text-sm text-muted-foreground">Auto-refreshes every 20 seconds.</p>
-                </div>
+        <div className="min-w-0 space-y-6 [overflow-wrap:anywhere]">
+            <PageHeader title="Call Center" description="Calls, callbacks and assigned records. Refreshes every 20 seconds." actions={
                 <Button variant="outline" size="sm" onClick={load} disabled={refreshing}>
-                    <RefreshCw className={cn("size-4", refreshing && "animate-spin")} />
-                    Refresh
+                    <RefreshCw className={cn("size-4", refreshing && "animate-spin")} />Refresh
                 </Button>
-            </div>
+            } />
+            {fetchError && <div role="alert" className="flex flex-wrap items-center gap-2 rounded-lg border border-destructive/30 p-3 text-sm"><p className="min-w-0 flex-1 basis-60">{fetchError}</p><Button variant="outline" size="sm" onClick={load} disabled={refreshing}>Try again</Button></div>}
 
             <div>
                 <h2 className="mb-2 text-base font-bold">My Workspace</h2>

@@ -21,14 +21,15 @@ export function WorkspaceTabs<T extends string>({
 }) {
   return (
     <div className="border-b bg-surface-container-lowest px-2 py-2">
-      <div className="flex gap-1.5 overflow-x-auto pb-0.5 md:pb-0">
+      <div role="group" aria-label="Record workspace sections" className="flex min-w-0 max-w-full flex-wrap gap-1.5">
         {tabs.map((tab) => (
           <button
             key={tab.value}
             type="button"
+            aria-pressed={value === tab.value}
             onClick={() => onChange(tab.value)}
             className={cn(
-              "h-[34px] shrink-0 whitespace-nowrap rounded-lg px-3 text-[0.82rem] font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+              "min-h-[34px] min-w-0 max-w-full whitespace-normal break-words py-2 text-left rounded-lg px-3 text-[0.82rem] font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
               value === tab.value
                 ? "bg-primary font-extrabold text-primary-foreground"
                 : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"

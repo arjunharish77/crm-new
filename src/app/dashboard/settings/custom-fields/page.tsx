@@ -1,6 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { PageHeader } from "@/components/layout/page-header";
+import { ErrorState } from "@/components/common/error-state";
+
+import { useEffect, useRef, useState } from "react";
 import { Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
@@ -20,18 +23,22 @@ import { CreateCustomFieldDialog } from "./create-custom-field-dialog";
 
 export default function CustomFieldsSettingsPage() {
     const [fields, setFields] = useState<CustomFieldDefinition[]>([]);
-    const [loading, setLoading] = useState(false);
+    const [loading, setLoading] = useState(true);
+    const [loadError, setLoadError] = useState<string | null>(null);
+    const requestVersion = useRef(0);
     const [activeTab, setActiveTab] = useState("LEAD");
 
     const fetchFields = async (objectType: string) => {
+        const request = ++requestVersion.current;
         setLoading(true);
+        setLoadError(null);
         try {
             const data = await apiFetch(`/custom-fields?objectType=${objectType}`);
-            setFields(data);
+            if (request === requestVersion.current) setFields(Array.isArray(data) ? data : []);
         } catch (error) {
-            toast.error("Failed to load custom fields");
+            if (request === requestVersion.current) setLoadError("Failed to load custom fields.");
         } finally {
-            setLoading(false);
+            if (request === requestVersion.current) setLoading(false);
         }
     };
 
@@ -51,20 +58,8 @@ export default function CustomFieldsSettingsPage() {
     };
 
     return (
-        <div className="mx-auto max-w-[1200px] px-4 py-4 md:px-6">
-            <div className="flex items-center justify-between gap-3">
-                <div>
-                    <h1 className="text-xl font-semibold text-foreground">Custom Fields</h1>
-                    <p className="mt-1 text-sm text-muted-foreground">
-                        Manage custom fields for your CRM objects.
-                    </p>
-                </div>
-                <CreateCustomFieldDialog
-                    objectType={activeTab}
-                    onSuccess={() => fetchFields(activeTab)}
-                />
-            </div>
-            <div className="my-4 border-t border-border" />
+        <div className="min-w-0">
+            <PageHeader title="Custom Fields" description="Manage the additional information captured for each CRM object." actions={<CreateCustomFieldDialog objectType={activeTab} onSuccess={() => fetchFields(activeTab)} />} />
 
             <Tabs value={activeTab} onValueChange={setActiveTab} className="mb-4">
                 <TabsList>
@@ -75,7 +70,7 @@ export default function CustomFieldsSettingsPage() {
             </Tabs>
 
             <div className="overflow-hidden rounded-xl border border-border">
-                <Table>
+                {loadError ? <ErrorState description={loadError} onRetry={() => fetchFields(activeTab)} /> : loading ? <p role="status" className="p-4 text-sm text-muted-foreground">Loading custom fields…</p> : <Table>
                     <TableHeader>
                         <TableRow className="bg-primary/5 hover:bg-primary/5">
                             <TableHead>Label</TableHead>
@@ -134,7 +129,7 @@ export default function CustomFieldsSettingsPage() {
                             </TableRow>
                         ))}
                     </TableBody>
-                </Table>
+                </Table>}
             </div>
         </div>
     );

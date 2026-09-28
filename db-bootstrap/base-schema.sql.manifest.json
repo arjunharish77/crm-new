@@ -1,0 +1,86 @@
+{
+  "schemaChecksum": "1125d78f33d8ad5aa7fc8161d840b01adb54785087f4ad3d0f09a277c06111d6",
+  "sourceCommit": "a232983",
+  "migrations": [
+    {
+      "id": "0001_partner_profile.sql",
+      "checksum": "900f2165e7d6f868949b3aca5fe9c1a983f5ae0b3b3e5c68e8d017d7ab451861"
+    },
+    {
+      "id": "0002_commission_rule.sql",
+      "checksum": "f0cbf5c207cf91feccf8c6857ec6ceb0010609b3b94ea2d9b88490ef476bff16"
+    },
+    {
+      "id": "0003_commission_ledger.sql",
+      "checksum": "4bbe85cd620d67f9b82b769add325171966c6c85afc9b19a5b5f92a2a9eaaaa7"
+    },
+    {
+      "id": "0004_payout_cycle.sql",
+      "checksum": "3e37c568461496a1df258006792714b6e8b4c2b904140d21da3e726b89cf1e5a"
+    },
+    {
+      "id": "0005_partner_invoice.sql",
+      "checksum": "2a402ff995e653bbba22bd5788567118ccafcea5e9748c6e700bc172cba9e8ca"
+    },
+    {
+      "id": "0006_gamification_points.sql",
+      "checksum": "0d5d7551940c2602151a79b98b5ba14fe149d591725e506739fb1495d50e3f91"
+    },
+    {
+      "id": "0007_badges.sql",
+      "checksum": "7de1948ae19df66257c657a3a1df7a31fc42c60a4081be8f1a3e4e365bbebd99"
+    },
+    {
+      "id": "0008_reporting_rollups.sql",
+      "checksum": "a1f6c21907ca2a593e577181e9cc9ee9d68dbcb6eef79b1a423c8913d821a669"
+    },
+    {
+      "id": "0009_report_schedules.sql",
+      "checksum": "16e71a21da96328eaab31f445735d9f000b876a611a5352564c26766d0ded689"
+    },
+    {
+      "id": "0010_advanced_payout_gamification_settings.sql",
+      "checksum": "95369534bad972ce28d0b4fb2fef1737c820415e31a19d177a42515c6d1c2a9b"
+    },
+    {
+      "id": "0011_gamification_redemptions.sql",
+      "checksum": "c12655083866ad5401a2292bd308049ee928f5c7105ef1557760ebf7d5c2b44d"
+    },
+    {
+      "id": "0012_tasks.sql",
+      "checksum": "caa92af54b2c6732e4e5b19577098f46de30e57d6f7d964ccad6895e81b4bc96"
+    },
+    {
+      "id": "0013_partner_org_visibility_targeting.sql",
+      "checksum": "320486f678304fe694d03b417bf703f05e62ae404af8dc41ec12193bc150ab8b"
+    },
+    {
+      "id": "0014_predictive_scoring.sql",
+      "checksum": "0f6b612a8d8111b3dd71b8bd8eff62a4e0e2413da690733e63672ef32c31a8b8"
+    },
+    {
+      "id": "0015_file_storage.sql",
+      "checksum": "97b0262ee0e315b9364c53cbf2fbaa96b32042ac4715200ec9ada64b3c49ab2b"
+    },
+    {
+      "id": "0015_pre_vps_cleanup.sql",
+      "checksum": "dfb780db31beeff5fb3ce99535f16cd6223b02aab951942732d13f84b76e22db"
+    },
+    {
+      "id": "0016_communication_connectors.sql",
+      "checksum": "58bfcad9348657fe781559e67a5c9653e564880d6c6a91edf3d6bf1b4aab4e23"
+    },
+    {
+      "id": "0017_export_requests_and_queue_notifications.sql",
+      "checksum": "48d3fa1273eb7091cf8ee25094a6fd8e89e21c1cb203d7bc95ce0b30168094dd"
+    },
+    {
+      "id": "0018_ensure_communication_runtime_tables.sql",
+      "checksum": "fe2b8650e99301cb7c47d620341d198b95c493e0cb13a88210891bef4c8d5320"
+    },
+    {
+      "id": "0019_naive_timestamps_to_timestamptz.sql",
+      "checksum": "4db32115d00b28b890d9e8a11cd656e5c780b4024c0303e9b229088faf1144e9"
+    }
+  ]
+}

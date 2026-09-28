@@ -24,11 +24,16 @@ class Settings:
         return os.environ.get("DIRECT_DATABASE_URL") or _require("DATABASE_URL")
 
     @property
-    def internal_secret(self) -> str | None:
-        # Optional in local dev so the service is easy to hit with curl while iterating;
-        # required implicitly in production because deploy/vps/.env.example sets it and
-        # self-learning-scoring.ts always sends it.
-        return os.environ.get("ML_SERVICE_SECRET") or None
+    def internal_secret(self) -> str:
+        # F25 fix (WP06): this used to be optional (falling back to None), which made
+        # require_internal_auth's "if expected and ..." check a no-op whenever the secret
+        # was unconfigured -- silently turning /train, /score, and /nba-score-batch into
+        # fully unauthenticated endpoints for anyone who can reach this service over the
+        # network. This service has no established prod/dev environment distinction (no
+        # APP_ENV/ENV read anywhere in this codebase), so the only safe fix is to always
+        # require it, full stop, including in local dev -- see ml-service/README.md's
+        # "Local development" section, which documents setting it in .env.local.
+        return _require("ML_SERVICE_SECRET")
 
     @property
     def storage_root(self) -> str:
@@ -53,3 +58,9 @@ class Settings:
 
 
 settings = Settings()
+
+# Fail fast at import time -- not lazily on the first request -- if the internal-auth
+# secret is unconfigured, so a misconfigured deployment refuses to start instead of quietly
+# exposing /train, /score, and /nba-score-batch with no auth. Accessing the property here
+# runs its _require(...) check immediately as a side effect of importing this module.
+settings.internal_secret

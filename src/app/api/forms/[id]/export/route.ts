@@ -18,6 +18,6 @@ export async function GET(
     });
   } catch (error) {
     if (error instanceof Error && error.message === "UNAUTHORIZED") return unauthorized();
-    return serverError("Failed to export form submissions");
+    return serverError("Failed to export form submissions", error);
   }
 }
