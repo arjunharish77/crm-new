@@ -37,7 +37,7 @@ function emptyQueueCounts() {
 
 function makeQueue(counts = emptyQueueCounts()) {
   return {
-    client: Promise.resolve({ ping: vi.fn().mockResolvedValue("PONG") }),
+    client: Promise.resolve({ get: vi.fn().mockResolvedValue(null) }),
     getJobCounts: vi.fn().mockResolvedValue(counts),
   };
 }

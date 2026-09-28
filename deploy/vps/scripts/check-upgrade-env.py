@@ -21,7 +21,9 @@ for line in text.splitlines():
 # ML_SERVICE_SECRET: the ML service now refuses to start without it (it used to silently run
 # unauthenticated). NODE_ENV: Compose now passes it explicitly to the website container, so an
 # unset value would override the image's own NODE_ENV=production with an empty string.
-required = ['APP_DOMAIN', 'API_DOMAIN', 'ACME_EMAIL', 'POSTGRES_DB', 'POSTGRES_USER', 'POSTGRES_PASSWORD', 'REDIS_PASSWORD', 'DATABASE_URL', 'DIRECT_DATABASE_URL', 'REDIS_URL', 'JWT_SECRET', 'FILE_STORAGE_ROOT', 'APP_INTERNAL_URL', 'ML_SERVICE_SECRET', 'NODE_ENV']
+required = ['APP_DOMAIN', 'API_DOMAIN', 'ACME_EMAIL', 'POSTGRES_DB', 'POSTGRES_USER', 'POSTGRES_PASSWORD', 'REDIS_PASSWORD', 'DATABASE_URL', 'DIRECT_DATABASE_URL', 'REDIS_URL', 'JWT_SECRET', 'ML_SERVICE_SECRET', 'NODE_ENV']
+# Not required: FILE_STORAGE_ROOT defaults to <cwd>/storage, i.e. /app/storage in the image
+# (the mounted volume); APP_INTERNAL_URL is not read by any application code.
 if values.get('UNNATIVIDYA_DOMAIN'):
     required += ['UNNATIVIDYA_DATABASE_URL', 'UNNATIVIDYA_SESSION_SECRET']
 bad = [key for key in required if not values.get(key) or 'replace-with-' in values[key]]

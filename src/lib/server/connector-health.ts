@@ -68,7 +68,10 @@ async function checkRedisAndQueue(): Promise<[ConnectorHealthCheck, ...Connector
   try {
     const queues = QUEUE_HEALTH_CLASSES.map((queueClass) => ({ queueClass, queue: getQueueByClass(queueClass) }));
     const { result: redisClient, latencyMs: connectLatencyMs } = await timed(() => queues[0].queue.client);
-    const { latencyMs: pingLatencyMs } = await timed(() => redisClient.ping());
+    // BullMQ >= 5.7x types queue.client as its adapter-neutral IRedisClient, which does not
+    // declare ping(). A GET of a key that never exists is an equally real round trip and is
+    // part of that interface for every adapter.
+    const { latencyMs: pingLatencyMs } = await timed(() => redisClient.get("crm:connector-health:ping"));
     const redisCheck: ConnectorHealthCheck = { key: "redis", label: "Redis", status: "ok", latencyMs: connectLatencyMs + pingLatencyMs };
 
     const allCounts = await Promise.all(queues.map(({ queue }) => queue.getJobCounts("waiting", "active", "completed", "failed", "delayed")));
