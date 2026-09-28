@@ -1,3 +1,5 @@
+import { MODULE_FEATURE_KEYS } from "@/lib/tenant-provisioning";
+import { isModuleEnabledForTenant } from "@/lib/server/module-entitlements";
 import { getTenantFeatureFlags } from "@/lib/server/admin";
 
 export type EntitlementFeature =
@@ -16,7 +18,9 @@ export type EntitlementFeature =
 export async function isFeatureEnabledForTenant(tenantId: string | null | undefined, feature: EntitlementFeature) {
   if (!tenantId) return false;
   const flags = await getTenantFeatureFlags(tenantId);
-  return flags[feature] !== false;
+  if (flags[feature] === false) return false;
+  const moduleKey = Object.keys(MODULE_FEATURE_KEYS).find(key=>MODULE_FEATURE_KEYS[key]===feature);
+  return moduleKey ? isModuleEnabledForTenant(tenantId,moduleKey) : true;
 }
 
 // Platform admins bypass everywhere else in the app (feature-gate.tsx) and do so here

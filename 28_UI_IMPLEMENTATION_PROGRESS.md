@@ -741,3 +741,12 @@ The permission-scoped facts editor retains drafts, handles stale-version conflic
 Validation: **77 checks passed** — 31 unit tests, 33 local database/HTTP checks and 13 fixture-browser checks. [Database/HTTP evidence](ui-audit-2026-09/module-12-phase-five/database-http-results.json), [browser evidence](ui-audit-2026-09/module-12-phase-five/results.json). Test fixtures were cleaned; no existing application facts were changed. TypeScript, targeted ESLint and whitespace checks passed. Final phase-five production build: passed.
 
 Module 12 remains **6/20 complete** because the full eligibility builder includes additional conditions. Next: extended eligibility criteria and stage gating. These checks do not automatically approve admission, change stages or verify documents.
+
+
+## Module 12 — Eligibility stage gates (2026-09-28)
+
+Closed the pending phase-six verification: 47 local database/HTTP checks passed. Opt-in stages now require a fresh `MET` evaluation and can combine eligibility with verified-document requirements. Initial creation excludes guarded stages; failed transitions retain the editor draft. See [scope and limitations](35_APPLICATION_ELIGIBILITY_STAGE_GATES.md). Module 12 remains 6/20 complete.
+
+## Platform administration — Tenant module selection (2026-09-28)
+
+The creation dialog previously exposed only Opportunities. It now loads the full platform catalog, displays all 28 modules, protects seven core modules, and provides independent API Access/Sales Groups switches. Selections, feature flags, tenant/admin records and initial module audit rows are written in the same transaction. Catalog-load failure blocks provisioning; failed saves retain choices. Existing tenant pages explain module/feature overlap and identify known catalog limitations. See [review and verification](docs/PLATFORM_ADMIN_MODULE_REVIEW.md).

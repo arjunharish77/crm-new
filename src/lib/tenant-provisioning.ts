@@ -1,0 +1,48 @@
+import { z } from 'zod';
+export const TENANT_FEATURE_LABELS = {
+ opportunityEnabled:'Opportunities', automationEnabled:'Automations', salesGroupsEnabled:'Sales Groups',
+ formBuilderEnabled:'Form Builder', advancedReporting:'Advanced Reporting', apiAccessEnabled:'API Access',
+ payoutsEnabled:'Payouts & Commissions', gamificationEnabled:'Gamification',
+} as const;
+export type TenantFeatureKey = keyof typeof TENANT_FEATURE_LABELS;
+export const MODULE_FEATURE_KEYS: Record<string,TenantFeatureKey> = {
+ OPPORTUNITIES:'opportunityEnabled', AUTOMATIONS:'automationEnabled', FORMS:'formBuilderEnabled',
+ REPORTS:'advancedReporting', PAYOUTS:'payoutsEnabled', GAMIFICATION:'gamificationEnabled',
+};
+export type PlatformModuleOption = {key:string;name:string;description?:string;category:string;isCore:boolean};
+const featureShape = Object.fromEntries(Object.keys(TENANT_FEATURE_LABELS).map(key=>[key,z.boolean().optional()])) as Record<TenantFeatureKey,z.ZodOptional<z.ZodBoolean>>;
+export const tenantProvisioningSchema=z.object({
+ name:z.string().trim().min(1).max(200),plan:z.enum(['Basic','Pro','Enterprise','BASIC','PRO','ENTERPRISE']).optional(),
+ adminName:z.string().trim().min(1).max(200),adminEmail:z.email().trim().max(254),adminPassword:z.string().min(1).max(1024),
+ opportunityEnabled:z.boolean().optional(),features:z.object(featureShape).strict().optional(),modules:z.record(z.string().min(1).max(100),z.boolean()).optional(),
+}).strict();
+export type TenantProvisioningInput=z.infer<typeof tenantProvisioningSchema>;
+export function resolveTenantProvisioning(catalog:PlatformModuleOption[], input:TenantProvisioningInput){
+ if(!catalog.length)throw new Error('MODULE_CATALOG_UNAVAILABLE');
+ const keys=new Set(catalog.map(m=>m.key));
+ for(const key of Object.keys(input.modules??{}))if(!keys.has(key))throw new Error('UNKNOWN_MODULE_SELECTION');
+ const features:Record<TenantFeatureKey,boolean>={opportunityEnabled:input.opportunityEnabled??true,automationEnabled:true,salesGroupsEnabled:true,formBuilderEnabled:true,advancedReporting:true,apiAccessEnabled:false,payoutsEnabled:true,gamificationEnabled:true,...input.features};
+ const modules=catalog.map(module=>{
+  const feature=MODULE_FEATURE_KEYS[module.key];
+  const enabled=input.modules?.[module.key]??(feature?features[feature]:true);
+  if(module.isCore&&!enabled)throw new Error('CORE_MODULE_CANNOT_BE_DISABLED');
+  if(feature)features[feature]=enabled;
+  return {moduleKey:module.key,status:enabled?'ENABLED' as const:'DISABLED' as const};
+ });
+ return {features,modules};
+}
+
+export function effectiveTenantFeatures(features:Record<string,boolean>, statuses:Record<string,string>){
+ const result={...features};
+ for(const [module,feature] of Object.entries(MODULE_FEATURE_KEYS))if(statuses[module]==='DISABLED'||statuses[module]==='SUSPENDED')result[feature]=false;
+ return result;
+}
+
+/** Operator-facing limits: catalog membership is not proof of complete feature delivery. */
+export const MODULE_COVERAGE_NOTES:Record<string,string>={
+ TELEPHONY:'Call Center access is not fully controlled by this setting yet.',
+ DATA_PLATFORM:'Integration and export access still depends on individual feature and role permissions; this switch is not a complete access restriction.',
+ COUNSELING:'Catalog entry for counseling workflows; the full workspace is not yet available.',
+ QUALITY_MANAGEMENT:'Catalog entry for quality workflows; the full workspace is not yet available.',
+ DEVOPS_OPS:'Catalog entry for operations workflows; the full workspace is not yet available.',
+};

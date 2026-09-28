@@ -1,3 +1,5 @@
+// Business-data tests use an enabled catalog; combined gate behavior is tested separately.
+vi.mock("@/lib/server/module-entitlements", () => ({isModuleEnabledForTenant:vi.fn().mockResolvedValue(true)}));
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const queryMock = vi.fn();

@@ -1,4 +1,5 @@
 "use client";
+import { MODULE_COVERAGE_NOTES, MODULE_FEATURE_KEYS } from "@/lib/tenant-provisioning";
 
 import { useCallback, useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
@@ -157,7 +158,8 @@ export default function TenantDetailPage() {
 
     const handleModuleStatusChange = async (module: ModuleEntitlement, status: ModuleEntitlement["status"]) => {
         if (status === module.status) return;
-        const reason = status === "DISABLED" || status === "SUSPENDED" ? window.prompt(`Reason for ${status.toLowerCase()}ing ${module.name}? (optional)`) ?? "" : "";
+        const reason = status === "DISABLED" || status === "SUSPENDED" ? window.prompt(`Reason for changing ${module.name} to ${status.toLowerCase()}? (optional)`) : "";
+        if (reason === null) return;
         setSavingModule(module.key);
         try {
             await apiFetch(`/platform-admin/tenants/${tenantId}/modules/${module.key}`, {
@@ -482,6 +484,7 @@ export default function TenantDetailPage() {
                         <Flag className="h-4 w-4" />
                         Feature Flags
                     </CardTitle>
+                    <p className="text-sm text-muted-foreground">These switches control feature access, including API Access. Some overlap with the module catalog; review both sections when changing access. Changes save immediately.</p>
                 </CardHeader>
                 <CardContent>
                     {!featureFlags ? (
@@ -511,6 +514,7 @@ export default function TenantDetailPage() {
                         <LayoutGrid className="h-4 w-4" />
                         Modules
                     </CardTitle>
+                    <p className="text-sm text-muted-foreground">{modules.length} catalog modules. Core modules stay enabled. Enabled and Trial permit module access; also review the separate Feature flags section and tenant role permissions. Changes save immediately.</p>
                 </CardHeader>
                 <CardContent>
                     {modules.length === 0 ? (
@@ -528,6 +532,8 @@ export default function TenantDetailPage() {
                                             {module.isCore && <Badge variant="outline" className="rounded-md text-[0.65rem]">Core</Badge>}
                                         </div>
                                         <p className="text-xs text-muted-foreground">{module.category}</p>
+                                        {MODULE_COVERAGE_NOTES[module.key] && <p className="mt-2 text-xs font-medium">{MODULE_COVERAGE_NOTES[module.key]}</p>}
+                                        {MODULE_FEATURE_KEYS[module.key] && featureFlags?.[MODULE_FEATURE_KEYS[module.key]] === false && <p className="mt-1 text-xs text-destructive">Also blocked by Feature flags: {FEATURE_FLAG_LABELS[MODULE_FEATURE_KEYS[module.key]]}. Enable that flag as well to permit access.</p>}
                                     </div>
                                     <Select
                                         value={module.status}

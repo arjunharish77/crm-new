@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
     Dialog,
@@ -22,8 +22,10 @@ import {
 } from "@/components/ui/select";
 import { apiFetch } from "@/lib/api";
 import { toast } from "sonner";
-import { Plus, Loader2, Sparkles } from "lucide-react";
+import { Plus, Loader2 } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
+
+import { MODULE_COVERAGE_NOTES, type PlatformModuleOption } from "@/lib/tenant-provisioning";
 
 interface CreateTenantDialogProps {
     onSuccess: () => void;
@@ -33,6 +35,10 @@ export function CreateTenantDialog({ onSuccess }: CreateTenantDialogProps) {
     const [open, setOpen] = useState(false);
     const [submitError, setSubmitError] = useState("");
     const [loading, setLoading] = useState(false);
+    const [catalog, setCatalog] = useState<PlatformModuleOption[] | null>(null);
+    const [catalogError, setCatalogError] = useState("");
+    const [catalogAttempt, setCatalogAttempt] = useState(0);
+    const [moduleSearch, setModuleSearch] = useState("");
 
     const [form, setForm] = useState({
         name: "",
@@ -40,12 +46,26 @@ export function CreateTenantDialog({ onSuccess }: CreateTenantDialogProps) {
         adminName: "",
         adminEmail: "",
         adminPassword: "",
-        opportunityEnabled: true,
+        modules: {} as Record<string, boolean>,
+        features: { apiAccessEnabled: false, salesGroupsEnabled: true },
     });
+
+    useEffect(() => {
+        if (!open) return;
+        const controller = new AbortController();
+        setCatalog(null);setCatalogError("");
+        apiFetch<PlatformModuleOption[]>("/platform-admin/modules",{signal:controller.signal}).then(rows=>{
+            if(controller.signal.aborted)return;
+            if(!rows.length)throw new Error("The module catalog is empty. Apply database migrations first.");
+            setCatalog(rows);
+            setForm(previous=>({...previous,modules:Object.fromEntries(rows.map(row=>[row.key,row.isCore || previous.modules[row.key] !== false]))}));
+        }).catch(error=>{if(!controller.signal.aborted)setCatalogError(error.originalMessage || error.message || "Unable to load modules");});
+        return ()=>controller.abort();
+    },[open,catalogAttempt]);
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (loading) return;
+        if (loading || !catalog?.length) return;
         setSubmitError("");
         setLoading(true);
 
@@ -62,11 +82,12 @@ export function CreateTenantDialog({ onSuccess }: CreateTenantDialogProps) {
                 adminName: "",
                 adminEmail: "",
                 adminPassword: "",
-                opportunityEnabled: true,
+                modules: {},
+                features: { apiAccessEnabled: false, salesGroupsEnabled: true },
             });
             onSuccess();
         } catch (error: any) {
-            setSubmitError(error.message || "Failed to provision tenant");
+            setSubmitError(error.originalMessage || error.message || "Failed to provision tenant");
         } finally {
             setLoading(false);
         }
@@ -79,14 +100,14 @@ export function CreateTenantDialog({ onSuccess }: CreateTenantDialogProps) {
                     <Plus className="mr-2 h-4 w-4" /> Create Tenant
                 </Button>
             </DialogTrigger>
-            <DialogContent showCloseButton={!loading} className="sm:max-w-[425px]">
+            <DialogContent showCloseButton={!loading} className="p-4 sm:max-w-2xl sm:p-6">
                 <DialogHeader>
                     <DialogTitle>Provision New Tenant</DialogTitle>
                     <DialogDescription>
                         Create a new tenant workspace and its first admin user.
                     </DialogDescription>
                 </DialogHeader>
-                <form onSubmit={handleSubmit}>
+                <form onSubmit={handleSubmit} className="min-w-0">
                     <fieldset disabled={loading} className="min-w-0 space-y-4">
                     <div className="grid gap-2">
                         <Label htmlFor="name">Tenant Name</Label>
@@ -116,23 +137,27 @@ export function CreateTenantDialog({ onSuccess }: CreateTenantDialogProps) {
                         </Select>
                     </div>
 
-                    <div className="flex items-center justify-between space-x-2 py-2 border-t pt-4">
-                        <div className="min-w-0 space-y-0.5">
-                            <Label htmlFor="opportunity-toggle" className="flex flex-wrap items-center gap-2">
-                                <Sparkles className="h-4 w-4 text-primary" />
-                                Opportunities Module
-                            </Label>
-                            <p className="text-xs text-muted-foreground">
-                                Enable opportunity types and lead conversion for this tenant.
-                            </p>
+                    <section className="min-w-0 space-y-3" aria-label="Tenant access">
+                        <h3 className="text-sm font-semibold">Module access</h3>
+                        <p className="text-xs text-muted-foreground">Core modules remain enabled. Choose optional modules here; these choices and the admin account are saved together. The plan label does not choose modules automatically.</p>
+                        {!catalog && !catalogError && <p role="status" className="text-sm">Loading module catalog…</p>}
+                        {catalogError && <div role="alert" className="space-y-2 text-sm text-destructive"><p>{catalogError}</p><Button className="h-auto min-h-10 max-w-full whitespace-normal break-words" type="button" variant="outline" onClick={()=>setCatalogAttempt(value=>value+1)}>Retry module catalog</Button></div>}
+                        {catalog && <details className="min-w-0 rounded-md border p-2">
+                            <summary className="cursor-pointer text-sm font-medium">{catalog.filter(module=>form.modules[module.key]).length} of {catalog.length} modules enabled — review selection</summary>
+                            <Input aria-label="Find modules" placeholder="Find a module…" className="mt-3" value={moduleSearch} onChange={event=>setModuleSearch(event.target.value)}/>
+                            <div className="mt-3 grid min-w-0 gap-3 sm:grid-cols-2">
+                                {catalog.filter(module=>`${module.name} ${module.category} ${module.description??''}`.toLowerCase().includes(moduleSearch.toLowerCase())).map(module=><div key={module.key} className="flex min-w-0 flex-wrap items-start justify-between gap-3 rounded-md border p-2">
+                                    <div className="min-w-0 flex-1 basis-40 break-words"><Label htmlFor={`module-${module.key}`} className="block break-words text-sm">{module.name}</Label><p className="mt-1 text-xs text-muted-foreground">{module.isCore?'Core · always enabled':module.category}</p>{module.description && <p className="mt-1 text-xs text-muted-foreground">{module.description}</p>}{MODULE_COVERAGE_NOTES[module.key] && <p className="mt-2 text-xs font-medium">{MODULE_COVERAGE_NOTES[module.key]}</p>}</div>
+                                    <Switch id={`module-${module.key}`} disabled={loading||module.isCore} checked={!!form.modules[module.key]} onCheckedChange={checked=>setForm(previous=>({...previous,modules:{...previous.modules,[module.key]:checked}}))}/>
+                                </div>)}
+                            </div>
+                            {!catalog.some(module=>`${module.name} ${module.category} ${module.description??''}`.toLowerCase().includes(moduleSearch.toLowerCase())) && <p className="mt-3 text-sm text-muted-foreground">No modules match this search.</p>}
+                        </details>}
+                        <div className="grid gap-3 sm:grid-cols-2">
+                            <div className="flex min-w-0 flex-wrap items-center justify-between gap-3"><Label htmlFor="tenant-api-access">API Access</Label><Switch id="tenant-api-access" disabled={loading} checked={form.features.apiAccessEnabled} onCheckedChange={checked=>setForm(previous=>({...previous,features:{...previous.features,apiAccessEnabled:checked}}))}/></div>
+                            <div className="flex min-w-0 flex-wrap items-center justify-between gap-3"><Label htmlFor="tenant-sales-groups">Sales Groups</Label><Switch id="tenant-sales-groups" disabled={loading} checked={form.features.salesGroupsEnabled} onCheckedChange={checked=>setForm(previous=>({...previous,features:{...previous.features,salesGroupsEnabled:checked}}))}/></div>
                         </div>
-                        <Switch
-                            disabled={loading}
-                            id="opportunity-toggle"
-                            checked={form.opportunityEnabled}
-                            onCheckedChange={(checked) => setForm({ ...form, opportunityEnabled: checked })}
-                        />
-                    </div>
+                    </section>
 
                     <div className="border-t pt-4 mt-4">
                         <h4 className="text-sm font-medium mb-3">Tenant Admin Account</h4>
@@ -175,8 +200,8 @@ export function CreateTenantDialog({ onSuccess }: CreateTenantDialogProps) {
 
                     {submitError && <p role="alert" className="break-words text-sm text-destructive">{submitError}</p>}
                     <DialogFooter>
-                        <Button type="button" variant="outline" disabled={loading} onClick={() => setOpen(false)}>Cancel</Button>
-                        <Button type="submit" disabled={loading}>
+                        <Button className="h-auto min-h-10 max-w-full whitespace-normal break-words" type="button" variant="outline" disabled={loading} onClick={() => setOpen(false)}>Cancel</Button>
+                        <Button className="h-auto min-h-10 max-w-full whitespace-normal break-words" type="submit" disabled={loading || !catalog?.length}>
                             {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                             {loading ? "Provisioning…" : "Provision Tenant"}
                         </Button>

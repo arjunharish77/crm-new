@@ -452,7 +452,7 @@ export async function createOpportunityForTenant(user: TenantUser, payload: Reco
   const types = await listOpportunityTypesForTenant(user);
   const selectedType = types.find((type) => type.id === payload.opportunityTypeId);
   const stageId = (payload.stageId as string | undefined) ?? selectedType?.stages?.[0]?.id;
-  if (!selectedType || !stageId || !selectedType.stages?.some((stage: {id:string}) => stage.id === stageId)) throw new Error("INVALID_OPPORTUNITY_REFERENCE");
+  if (!selectedType || selectedType.isActive === false || !stageId || !selectedType.stages?.some((stage: {id:string}) => stage.id === stageId)) throw new Error("INVALID_OPPORTUNITY_REFERENCE");
   const id = randomUUID();
   const now = new Date().toISOString();
   let created: any = null;

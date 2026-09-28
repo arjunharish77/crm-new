@@ -1,3 +1,4 @@
+import { type TenantProvisioningInput, resolveTenantProvisioning, effectiveTenantFeatures, type PlatformModuleOption } from "@/lib/tenant-provisioning";
 import bcrypt from "bcryptjs";
 import { randomUUID } from "crypto";
 import { query, queryOne, execute, queryAsSystem, queryOneAsSystem, executeAsSystem, type Queryable } from "@/lib/db/query";
@@ -43,22 +44,7 @@ type UpdateUserInput = {
   isAvailableForAssignment?: boolean;
 };
 
-type CreateTenantInput = {
-  name: string;
-  plan?: string;
-  adminName: string;
-  adminEmail: string;
-  adminPassword: string;
-  opportunityEnabled?: boolean;
-  features?: {
-    opportunityEnabled?: boolean;
-    automationEnabled?: boolean;
-    salesGroupsEnabled?: boolean;
-    formBuilderEnabled?: boolean;
-    advancedReporting?: boolean;
-    apiAccessEnabled?: boolean;
-  };
-};
+type CreateTenantInput = TenantProvisioningInput;
 
 type TenantFeatureFlags = {
   opportunityEnabled: boolean;
@@ -346,7 +332,7 @@ export async function getCurrentUserById(userId: string) {
     platformAdminId: platformAdminRecord?.id ?? null,
     isPartner: !!rolePermissions?.isPartnerRole,
     isTenantAdmin: rolePermissions?.recordAccess === "ALL" || rolePermissions?.modules?.admin === "full",
-    features: tenantFeatureRecord ?? DEFAULT_TENANT_FEATURE_FLAGS,
+    features: effectiveTenantFeatures({...DEFAULT_TENANT_FEATURE_FLAGS,...tenantFeatureRecord},moduleEntitlements),
     moduleEntitlements,
     tenantStatus: tenantRecord?.status ?? "ACTIVE",
     tenantEnvironment: tenantRecord?.environment ?? "PRODUCTION",
@@ -641,7 +627,7 @@ async function seedDefaultOpportunityType(tenantId: string, objectId: string, tx
   }
 }
 
-export async function createTenantWithAdmin(input: CreateTenantInput) {
+export async function createTenantWithAdmin(input: CreateTenantInput, actor?: { id: string }) {
   const tenantId = randomUUID();
   const roleId = randomUUID();
   const userId = randomUUID();
@@ -650,6 +636,8 @@ export async function createTenantWithAdmin(input: CreateTenantInput) {
   const plan = (input.plan ?? "PRO").toUpperCase();
 
   await withTransaction(null, async (tx) => {
+    const catalog=await query<PlatformModuleOption>('select "key", name, category, "isCore" from "PlatformModule" order by "key"',[],tx);
+    const selection=resolveTenantProvisioning(catalog,input);
     await insertReturning("Tenant", { id: tenantId, name: input.name, status: "ACTIVE", plan, createdAt: now, updatedAt: now }, "id", tx);
     await insertReturning("Role", {
       id: roleId,
@@ -676,15 +664,14 @@ export async function createTenantWithAdmin(input: CreateTenantInput) {
       id: randomUUID(),
       tenantId,
       plan,
-      opportunityEnabled: input.features?.opportunityEnabled ?? input.opportunityEnabled ?? true,
-      automationEnabled: input.features?.automationEnabled ?? true,
-      salesGroupsEnabled: input.features?.salesGroupsEnabled ?? true,
-      formBuilderEnabled: input.features?.formBuilderEnabled ?? true,
-      advancedReporting: input.features?.advancedReporting ?? true,
-      apiAccessEnabled: input.features?.apiAccessEnabled ?? false,
+      ...selection.features,
       createdAt: now,
       updatedAt: now,
     }, "id", tx);
+    for (const entitlement of selection.modules) {
+      await insertReturning("TenantModuleEntitlement", {id:randomUUID(),tenantId,...entitlement,updatedBy:actor?.id??null,effectiveAt:now,createdAt:now,updatedAt:now},"id",tx);
+      await insertReturning("TenantModuleAuditLog", {id:randomUUID(),tenantId,moduleKey:entitlement.moduleKey,action:entitlement.status,reason:"Initial tenant provisioning",performedBy:actor?.id??null,performedAt:now},"id",tx);
+    }
     const objectIds = await createCoreObjectDefinitions(tenantId, tx);
     await seedDefaultOpportunityType(tenantId, objectIds.opportunityObjectId, tx);
   });

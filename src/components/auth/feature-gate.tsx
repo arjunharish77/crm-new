@@ -1,6 +1,7 @@
 "use client";
 
 import React from "react";
+import { effectiveTenantFeatures } from "@/lib/tenant-provisioning";
 import { useAuth } from "@/providers/auth-provider";
 
 interface FeatureGateProps {
@@ -38,7 +39,7 @@ export function FeatureGate({
         gamificationEnabled: true,
     };
 
-    const features = { ...defaultFeatures, ...user?.features };
+    const features = effectiveTenantFeatures({ ...defaultFeatures, ...user?.features }, user?.moduleEntitlements ?? {});
     const isEnabled = !!features[feature];
 
     if (invert) {
@@ -66,7 +67,7 @@ export function useFeature(feature: string): boolean {
         gamificationEnabled: true,
     };
 
-    const features = { ...defaultFeatures, ...user?.features };
+    const features = effectiveTenantFeatures({ ...defaultFeatures, ...user?.features }, user?.moduleEntitlements ?? {});
     return !!features[feature];
 }
 

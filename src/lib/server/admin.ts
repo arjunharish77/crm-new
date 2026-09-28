@@ -1,3 +1,4 @@
+import { type TenantProvisioningInput } from "@/lib/tenant-provisioning";
 import * as pgAdmin from "@/lib/repositories/auth-admin-postgres";
 import { signAuthToken } from "@/lib/server/auth";
 import { createAuditLog } from "@/lib/server/crm";
@@ -13,22 +14,7 @@ type PlatformBootstrapInput = {
   password: string;
 };
 
-type CreateTenantInput = {
-  name: string;
-  plan?: string;
-  adminName: string;
-  adminEmail: string;
-  adminPassword: string;
-  opportunityEnabled?: boolean;
-  features?: {
-    opportunityEnabled?: boolean;
-    automationEnabled?: boolean;
-    salesGroupsEnabled?: boolean;
-    formBuilderEnabled?: boolean;
-    advancedReporting?: boolean;
-    apiAccessEnabled?: boolean;
-  };
-};
+type CreateTenantInput = TenantProvisioningInput;
 
 type CreateUserInput = {
   name: string;
@@ -233,8 +219,8 @@ export async function getPlatformAutomationStats() {
   };
 }
 
-export async function createTenantWithAdmin(input: CreateTenantInput) {
-  return pgAdmin.createTenantWithAdmin(input);
+export async function createTenantWithAdmin(input: CreateTenantInput, actor?: { id: string }) {
+  return pgAdmin.createTenantWithAdmin(input, actor);
 }
 
 export async function changeTenantStatus(tenantId: string, status: "ACTIVE" | "SUSPENDED") {
