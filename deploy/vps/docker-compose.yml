@@ -41,6 +41,8 @@ services:
     build:
       context: ../..
       dockerfile: Dockerfile
+      args:
+        APP_URL: https://${APP_DOMAIN}
     restart: unless-stopped
     env_file:
       - .env
@@ -69,6 +71,8 @@ services:
     build:
       context: ../..
       dockerfile: Dockerfile
+      args:
+        APP_URL: https://${APP_DOMAIN}
     restart: unless-stopped
     env_file:
       - .env

@@ -11,6 +11,10 @@ WORKDIR /app
 ENV NEXT_TELEMETRY_DISABLED=1
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
+# The app's public address, for absolute URLs written into pages built ahead of time (the
+# link-share image). The running containers get APP_URL from deploy/vps/.env as usual.
+ARG APP_URL=http://localhost:3000
+ENV APP_URL=$APP_URL
 RUN npm run build
 
 FROM node:20-bookworm-slim AS runner
