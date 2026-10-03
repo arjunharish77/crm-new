@@ -1,12 +1,14 @@
 import { NextResponse } from "next/server";
 import { requireCurrentUser } from "@/lib/server/auth";
-import { listCallCampaignsForTenant, createCallCampaignForTenant } from "@/lib/server/call-campaigns";
+import { listCallCampaignsForTenant, createCallCampaignForTenant, listMyCallCampaigns } from "@/lib/server/call-campaigns";
 import { badRequest, forbidden, serverError, unauthorized } from "@/lib/server/http";
 
 export async function GET(request: Request) {
   try {
     const user = await requireCurrentUser(request);
     if (!user.tenantId) return forbidden("Tenant context required");
+    // ?mine=1: the active campaigns this person can take calls from (Call center page).
+    if (new URL(request.url).searchParams.get("mine") === "1") return NextResponse.json(await listMyCallCampaigns(user));
     const campaigns = await listCallCampaignsForTenant(user);
     return NextResponse.json(campaigns);
   } catch (error) {

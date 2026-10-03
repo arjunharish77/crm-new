@@ -1,5 +1,6 @@
 "use client";
 
+import { useModuleEnabled } from "@/components/auth/feature-gate";
 import { useEffect, useRef, useState } from "react";
 import { Download, Play, PhoneCall, RefreshCw, AlertTriangle } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -7,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { ErrorState } from "@/components/common/error-state";
 import { apiFetch } from "@/lib/api";
 import { formatWorkspaceDateTime } from "@/lib/date-format";
+import { useConfirm } from "@/components/common/dialogs-provider";
 
 type Props = {
     entityType: "LEAD" | "OPPORTUNITY";
@@ -25,7 +27,8 @@ type CallRecording = {
     transcript: string | null;
 };
 
-export function CallRecordingsPanel({ entityType, entityId }: Props) {
+function CallRecordingsPanelContent({ entityType, entityId }: Props) {
+    const confirmAction = useConfirm();
     const [calls, setCalls] = useState<CallRecording[]>([]);
     const [loading, setLoading] = useState(true);
     const [loadError, setLoadError] = useState(false);
@@ -61,7 +64,7 @@ export function CallRecordingsPanel({ entityType, entityId }: Props) {
 
     const openRecording = async (call: CallRecording, action: "PLAY" | "DOWNLOAD") => {
         if (busyRef.current) return;
-        if (!confirm("This call may have been recorded with the caller's consent under your organization's calling policy. Continue?")) return;
+        if (!(await confirmAction({ title: action === "PLAY" ? "Play recording?" : "Download recording?", description: "This call may have been recorded with the caller's consent under your organization's calling policy.", confirmLabel: action === "PLAY" ? "Play" : "Download" }))) return;
         busyRef.current = true;
         setAccessError('');
         setReadyRecording(null);
@@ -151,4 +154,12 @@ export function CallRecordingsPanel({ entityType, entityId }: Props) {
             )}
         </div>
     );
+}
+
+// Renders nothing while the tenant's Telephony module is disabled or suspended (the APIs behind
+// it refuse those requests too); hooks stay unconditional inside CallRecordingsPanelContent.
+export function CallRecordingsPanel(props: Props) {
+    const telephonyEnabled = useModuleEnabled("TELEPHONY");
+    if (!telephonyEnabled) return null;
+    return <CallRecordingsPanelContent {...props} />;
 }

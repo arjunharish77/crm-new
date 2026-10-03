@@ -5,13 +5,18 @@ import { ErrorState } from "@/components/common/error-state";
 import { PageHeader } from "@/components/layout/page-header";
 
 import * as React from "react";
-import { Download, Plus, RefreshCcw, Trash2 } from "lucide-react";
+import { Copy, Download, Link2, RefreshCcw } from "lucide-react";
+import Link from "next/link";
+import { useAuth } from "@/providers/auth-provider";
+import { useConfirm } from "@/components/common/dialogs-provider";
 import { toast } from "sonner";
 import { apiFetch } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { StandardDialog } from "@/components/common/standard-dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   Table,
@@ -21,8 +26,9 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { saveDisplaySettings } from "@/lib/date-format";
+import { formatWorkspaceDate, formatWorkspaceDateTime, saveDisplaySettings } from "@/lib/date-format";
 import { cn } from "@/lib/utils";
+import { formatCount } from "@/lib/display/format";
 
 type ExportRequestStatus = "PENDING_APPROVAL" | "QUEUED" | "RUNNING" | "COMPLETED" | "FAILED" | "CANCELLED" | "REJECTED" | "EXPIRED";
 
@@ -61,6 +67,11 @@ type SensitiveFieldRule = {
   createdAt: string;
 };
 
+// GET /exports returns at most this many of your most recent requests.
+const EXPORT_HISTORY_LIMIT = 100;
+
+type ShareLink = { url: string; expiresAt: number };
+
 const EXPORT_MODULE_OPTIONS = ["LEADS", "OPPORTUNITIES", "ACTIVITIES", "TASKS", "PARTNERS", "PAYOUTS", "REPORTS", "FORMS"];
 
 function requestMetadata(request: ExportRequest): ExportRequestMetadata {
@@ -76,15 +87,15 @@ function requestMetadata(request: ExportRequest): ExportRequestMetadata {
   return request.metadata;
 }
 
-const STATUS_CLASS: Record<ExportRequestStatus, string> = {
-  PENDING_APPROVAL: "bg-amber-50 text-amber-700 border-amber-200",
-  QUEUED: "bg-muted text-muted-foreground",
-  RUNNING: "bg-blue-50 text-blue-700 border-blue-200",
-  COMPLETED: "bg-green-50 text-green-700 border-green-200",
-  FAILED: "bg-red-50 text-red-700 border-red-200",
-  CANCELLED: "bg-muted text-muted-foreground",
-  REJECTED: "bg-red-50 text-red-700 border-red-200",
-  EXPIRED: "bg-muted text-muted-foreground",
+const STATUS_DISPLAY: Record<ExportRequestStatus, { label: string; tone: "warning" | "neutral" | "info" | "success" | "danger" }> = {
+  PENDING_APPROVAL: { label: "Waiting for approval", tone: "warning" },
+  QUEUED: { label: "Queued", tone: "neutral" },
+  RUNNING: { label: "Running", tone: "info" },
+  COMPLETED: { label: "Ready", tone: "success" },
+  FAILED: { label: "Failed", tone: "danger" },
+  CANCELLED: { label: "Cancelled", tone: "neutral" },
+  REJECTED: { label: "Rejected", tone: "danger" },
+  EXPIRED: { label: "Expired", tone: "neutral" },
 };
 
 function formatBytes(value?: number | null) {
@@ -116,12 +127,11 @@ export default function ExportRequestsPage() {
   const [requests, setRequests] = React.useState<ExportRequest[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [fetchError, setFetchError] = React.useState<string | null>(null);
-  const [rulesError, setRulesError] = React.useState<string | null>(null);
-  const [rulesLoading, setRulesLoading] = React.useState(true);
-  const [sensitiveRules, setSensitiveRules] = React.useState<SensitiveFieldRule[]>([]);
-  const [newRuleModule, setNewRuleModule] = React.useState(EXPORT_MODULE_OPTIONS[0]);
-  const [newRuleField, setNewRuleField] = React.useState("");
-
+  const { user } = useAuth();
+  const isAdmin = !!(user?.isTenantAdmin || user?.isPlatformAdmin);
+  const confirm = useConfirm();
+  const [linkingId, setLinkingId] = React.useState<string | null>(null);
+  const [shareLink, setShareLink] = React.useState<ShareLink | null>(null);
   const fetchRequests = React.useCallback(async () => {
     setLoading(true);
     setFetchError(null);
@@ -135,19 +145,6 @@ export default function ExportRequestsPage() {
     }
   }, []);
 
-  const fetchSensitiveRules = React.useCallback(async () => {
-    setRulesLoading(true);
-    setRulesError(null);
-    try {
-      const data = await apiFetch<SensitiveFieldRule[]>("/exports/sensitive-fields");
-      setSensitiveRules(Array.isArray(data) ? data : []);
-    } catch {
-      setRulesError("Sensitive field rules are unavailable. Tenant admin access is required.");
-    } finally {
-      setRulesLoading(false);
-    }
-  }, []);
-
   React.useEffect(() => {
     apiFetch("/settings/general")
       .then((settings) => {
@@ -155,10 +152,10 @@ export default function ExportRequestsPage() {
       })
       .catch(() => undefined);
     fetchRequests();
-    fetchSensitiveRules();
-  }, [fetchRequests, fetchSensitiveRules]);
+  }, [fetchRequests]);
 
   const handleApprove = async (id: string) => {
+    if (!(await confirm({ title: "Approve this export?", description: "It includes fields marked as sensitive. It runs as soon as you approve it.", confirmLabel: "Approve export" }))) return;
     try {
       await apiFetch(`/exports/${id}/approve`, { method: "POST" });
       toast.success("Export approved and queued");
@@ -169,7 +166,7 @@ export default function ExportRequestsPage() {
   };
 
   const handleReject = async (id: string) => {
-    if (!confirm("Reject this export? It will not run.")) return;
+    if (!(await confirm({ title: "Reject this export?", description: "It won't run. The person who asked for it sees that it was rejected.", confirmLabel: "Reject export", destructive: true }))) return;
     try {
       await apiFetch(`/exports/${id}/reject`, { method: "POST" });
       toast.success("Export rejected");
@@ -179,45 +176,57 @@ export default function ExportRequestsPage() {
     }
   };
 
-  const handleAddSensitiveRule = async () => {
-    if (!newRuleField.trim()) {
-      toast.error("Enter a field key");
-      return;
-    }
+  // Download stays on the signed-in route (/api/exports/<id>/download): it checks your session
+  // and needs nothing extra. POST /exports/<id>/signed-url is a separate capability -- a link
+  // that works WITHOUT signing in, for a limited time -- so it's offered as "Share link".
+  const createShareLink = async (request: ExportRequest) => {
+    setLinkingId(request.id);
     try {
-      await apiFetch("/exports/sensitive-fields", {
-        method: "POST",
-        body: JSON.stringify({ moduleName: newRuleModule, fieldKey: newRuleField.trim() }),
+      const created = await apiFetch<{ url: string; expiresAt: number }>(`/exports/${request.id}/signed-url`, { method: "POST" });
+      const linkExpiresAt = Number(created.expiresAt) * 1000;
+      const fileExpiresAt = request.expiresAt ? new Date(request.expiresAt).getTime() : Number.POSITIVE_INFINITY;
+      setShareLink({
+        url: new URL(created.url, window.location.origin).toString(),
+        expiresAt: Math.min(linkExpiresAt, fileExpiresAt),
       });
-      setNewRuleField("");
-      fetchSensitiveRules();
-      toast.success("Sensitive field rule added");
     } catch (error: any) {
-      toast.error(error?.message || "Failed to add rule");
+      toast.error(error?.message || "Couldn't create a download link");
+    } finally {
+      setLinkingId(null);
     }
   };
 
-  const handleDeleteSensitiveRule = async (id: string) => {
+  const copyShareLink = async () => {
+    if (!shareLink) return;
     try {
-      await apiFetch(`/exports/sensitive-fields/${id}`, { method: "DELETE" });
-      setSensitiveRules(sensitiveRules.filter((rule) => rule.id !== id));
+      await navigator.clipboard.writeText(shareLink.url);
+      toast.success("Link copied");
     } catch {
-      toast.error("Failed to remove rule");
+      toast.error("Couldn't copy the link. Select it and copy it yourself.");
     }
   };
 
   const hasRunning = requests.some((item) => item.status === "QUEUED" || item.status === "RUNNING");
+  // While an export is queued or running, check again every few seconds so "Ready" appears
+  // without reloading.
+  React.useEffect(() => {
+    if (!hasRunning) return;
+    const timer = window.setInterval(() => {
+      apiFetch<ExportRequest[]>("/exports").then((data) => setRequests(Array.isArray(data) ? data : [])).catch(() => undefined);
+    }, 5000);
+    return () => window.clearInterval(timer);
+  }, [hasRunning]);
 
   return (
     <div className="flex min-h-0 min-w-0 flex-col gap-5">
-      <PageHeader title="Export Requests" description="Track requested exports and download completed files." actions={
-        <Button variant="outline" onClick={fetchRequests} disabled={loading}><RefreshCcw className="size-4" />Refresh</Button>
+      <PageHeader title="Your exports" description="Exports you've asked for. Files can be downloaded until they expire." secondaryActions={
+        <Button variant="outline" onClick={fetchRequests} isLoading={loading}><RefreshCcw className="size-4" />Refresh</Button>
       } />
 
       <Card className="overflow-hidden">
         <CardHeader className="flex-row flex-wrap items-center justify-between gap-2">
-          <CardTitle className="text-base">Request History</CardTitle>
-          {hasRunning ? <Badge variant="secondary">Worker pending</Badge> : null}
+          <CardTitle className="text-base">History</CardTitle>
+          {hasRunning ? <Badge tone="info">Checking for updates…</Badge> : null}
         </CardHeader>
         <CardContent className="p-0">
           <p className="px-4 pb-2 text-xs text-muted-foreground lg:hidden">Scroll the table horizontally to see dates and download actions.</p>
@@ -254,12 +263,12 @@ export default function ExportRequestsPage() {
                   <TableRow key={request.id}>
                     <TableCell className="font-medium">{request.moduleName}</TableCell>
                     <TableCell>
-                      <Badge variant="outline" className={cn("border", STATUS_CLASS[request.status])}>
-                        {request.status.replace(/_/g, " ")}
+                      <Badge tone={STATUS_DISPLAY[request.status]?.tone ?? "neutral"}>
+                        {STATUS_DISPLAY[request.status]?.label ?? request.status}
                       </Badge>
                       {request.error ? <div className="mt-1 max-w-72 whitespace-normal break-words text-xs text-destructive">{request.error}</div> : null}
                       {metadata.sensitiveColumns?.length ? (
-                        <div className="mt-1 text-xs text-amber-700">Includes: {metadata.sensitiveColumns.join(", ")}</div>
+                        <div className="mt-1 text-xs text-status-warning-foreground">Includes: {metadata.sensitiveColumns.join(", ")}</div>
                       ) : null}
                     </TableCell>
                     <TableCell className={cn(request.status !== "COMPLETED" && "text-xs text-muted-foreground")}>
@@ -268,25 +277,31 @@ export default function ExportRequestsPage() {
                     <TableCell>{request.queuedAtDisplay || "-"}</TableCell>
                     <TableCell>{request.completedAtDisplay || "-"}</TableCell>
                     <TableCell className="text-xs text-muted-foreground">
-                      {request.status === "COMPLETED" && request.expiresAt ? new Date(request.expiresAt).toLocaleDateString() : "-"}
+                      {request.status === "COMPLETED" && request.expiresAt ? formatWorkspaceDate(request.expiresAt) : "-"}
                     </TableCell>
                     <TableCell>{formatBytes(request.byteSize)}</TableCell>
                     <TableCell className="text-right">
-                      {request.status === "PENDING_APPROVAL" ? (
+                      {request.status === "PENDING_APPROVAL" && isAdmin ? (
                         <div className="flex justify-end gap-1">
                           <Button size="sm" variant="outline" onClick={() => handleApprove(request.id)}>Approve</Button>
                           <Button size="sm" variant="ghost" onClick={() => handleReject(request.id)}>Reject</Button>
                         </div>
                       ) : request.status === "COMPLETED" ? (
-                        <Button size="sm" asChild>
-                          <a href={`/api/exports/${request.id}/download`}>
-                            <Download className="size-4" />
-                            Download
-                          </a>
-                        </Button>
+                        <div className="flex justify-end gap-1">
+                          <Button size="sm" asChild>
+                            <a href={`/api/exports/${request.id}/download`}>
+                              <Download className="size-4" />
+                              Download
+                            </a>
+                          </Button>
+                          <Button size="sm" variant="outline" onClick={() => createShareLink(request)} isLoading={linkingId === request.id}>
+                            {linkingId === request.id ? null : <Link2 className="size-4" />}
+                            Share link
+                          </Button>
+                        </div>
                       ) : (
                         <Button size="sm" variant="outline" disabled>
-                          {request.status === "EXPIRED" ? "Expired" : "Pending"}
+                          {request.status === "EXPIRED" ? "Expired" : request.status === "PENDING_APPROVAL" ? "Waiting" : request.status === "FAILED" || request.status === "REJECTED" || request.status === "CANCELLED" ? "Not available" : "Preparing"}
                         </Button>
                       )}
                     </TableCell>
@@ -296,56 +311,39 @@ export default function ExportRequestsPage() {
               )}
             </TableBody>
           </Table>}
+          {!fetchError && !loading && requests.length >= EXPORT_HISTORY_LIMIT ? (
+            <p className="border-t px-4 py-3 text-xs text-muted-foreground">
+              Showing your {formatCount(EXPORT_HISTORY_LIMIT)} most recent exports. Older ones aren&apos;t listed here.
+            </p>
+          ) : null}
         </CardContent>
       </Card>
 
-      <details className="min-w-0 rounded-xl border bg-card">
-        <summary className="cursor-pointer p-4 font-semibold">Sensitive field rules</summary>
-        <CardHeader>
-          <CardTitle className="text-base">Sensitive Field Rules</CardTitle>
-          <CardDescription>
-            Exports that include one of these fields require admin approval before they run. Requires tenant admin access.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          <div className="flex flex-wrap gap-2">
-            <Select value={newRuleModule} onValueChange={setNewRuleModule}>
-              <SelectTrigger aria-label="Sensitive field module" className="w-full sm:w-40">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {EXPORT_MODULE_OPTIONS.map((option) => (
-                  <SelectItem key={option} value={option}>{option}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <Input
-              className="max-w-[220px]"
-              aria-label="Sensitive field key" placeholder="Field key, e.g. ssn"
-              value={newRuleField}
-              onChange={(event) => setNewRuleField(event.target.value)}
-            />
-            <Button variant="outline" onClick={handleAddSensitiveRule}>
-              <Plus className="size-4" />
-              Add Rule
-            </Button>
+      <StandardDialog
+        open={!!shareLink}
+        onClose={() => setShareLink(null)}
+        title="Download link"
+        subtitle="Anyone with this link can download the file without signing in."
+        maxWidth="sm"
+        actions={
+          <>
+            <Button variant="outline" onClick={() => setShareLink(null)}>Close</Button>
+            <Button onClick={copyShareLink}><Copy className="size-4" />Copy link</Button>
+          </>
+        }
+      >
+        {shareLink ? (
+          <div className="grid gap-2 pb-1">
+            <Label htmlFor="export-share-link">Link</Label>
+            <Input id="export-share-link" readOnly value={shareLink.url} onFocus={(event) => event.currentTarget.select()} />
+            <p className="text-xs text-muted-foreground">
+              Works until {formatWorkspaceDateTime(shareLink.expiresAt)}. Only share it with people who should see this data.
+            </p>
           </div>
-          {rulesLoading ? <p className="text-sm text-muted-foreground">Loading rules…</p> : rulesError ? <ErrorState description={rulesError} onRetry={fetchSensitiveRules} /> : sensitiveRules.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No sensitive field rules configured. Other export approval policies may still apply.</p>
-          ) : (
-            <div className="flex flex-wrap gap-2">
-              {sensitiveRules.map((rule) => (
-                <Badge key={rule.id} variant="outline" className="max-w-full whitespace-normal break-all gap-1.5 pr-1">
-                  {rule.moduleName}.{rule.fieldKey}
-                  <button type="button" aria-label={`Remove ${rule.moduleName}.${rule.fieldKey} rule`} onClick={() => handleDeleteSensitiveRule(rule.id)} className="rounded-full p-0.5 hover:bg-muted">
-                    <Trash2 className="size-3 text-destructive" />
-                  </button>
-                </Badge>
-              ))}
-            </div>
-          )}
-        </CardContent>
-      </details>
+        ) : null}
+      </StandardDialog>
+
+      {isAdmin ? <p className="text-sm text-muted-foreground">Fields that make an export wait for approval are set in <Link href="/dashboard/settings/security/export-rules" className="text-primary hover:underline">Settings › Export rules</Link>.</p> : null}
     </div>
   );
 }

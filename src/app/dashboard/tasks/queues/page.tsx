@@ -9,10 +9,14 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { PageHeader } from "@/components/layout/page-header";
+import { ErrorState } from "@/components/common/error-state";
+import { useUrlState } from "@/hooks/use-url-state";
+import { humanizeEnum } from "@/lib/display/status";
 import { EmptyState } from "@/components/common/empty-state";
 import { TableSkeleton } from "@/components/common/skeletons";
 import { formatWorkspaceDateTime } from "@/lib/date-format";
-import { ArrowLeft, Inbox, Scale, Timer, TriangleAlert, UserCheck, UserMinus } from "lucide-react";
+import { Inbox, Scale, Timer, TriangleAlert, UserCheck, UserMinus } from "lucide-react";
 
 type Team = { id: string; name: string; leadId: string | null };
 type UserOption = { id: string; name?: string | null; email?: string | null; teamId?: string | null };
@@ -50,27 +54,36 @@ export default function TaskQueuesPage() {
     const [users, setUsers] = useState<UserOption[]>([]);
     const [health, setHealth] = useState<QueueHealth[]>([]);
     const [loading, setLoading] = useState(true);
-    const [selectedQueueId, setSelectedQueueId] = useState<string | null>(null);
+    const [loadError, setLoadError] = useState(false);
+    const [tasksError, setTasksError] = useState(false);
+    // The chosen queue is in the URL (?queue=), so a reload or shared link keeps it.
+    const [queueParam, setQueueParam] = useUrlState<string>("queue", "");
+    const selectedQueueId = queueParam || null;
+    const setSelectedQueueId = (id: string) => setQueueParam(id);
     const [queueTasks, setQueueTasks] = useState<QueueTask[]>([]);
     const [loadingTasks, setLoadingTasks] = useState(false);
     const [autoBalancing, setAutoBalancing] = useState(false);
 
-    useEffect(() => {
+    const loadQueues = useCallback(() => {
+        setLoading(true);
+        setLoadError(false);
         Promise.all([apiFetch("/teams"), apiFetch("/users"), apiFetch("/task-queues/health")])
             .then(([teamsData, usersData, healthData]) => {
                 setTeams(Array.isArray(teamsData) ? teamsData : []);
                 setUsers(Array.isArray(usersData) ? usersData : []);
                 setHealth(Array.isArray(healthData) ? healthData : []);
             })
-            .catch(() => toast.error("Failed to load team queues"))
+            .catch(() => setLoadError(true))
             .finally(() => setLoading(false));
     }, []);
+    useEffect(() => { loadQueues(); }, [loadQueues]);
 
     const fetchQueueTasks = useCallback((queueId: string) => {
         setLoadingTasks(true);
+        setTasksError(false);
         apiFetch(`/task-queues/${queueId}/tasks`)
             .then((data) => setQueueTasks(Array.isArray(data) ? data : []))
-            .catch(() => toast.error("Failed to load queue"))
+            .catch(() => setTasksError(true))
             .finally(() => setLoadingTasks(false));
     }, []);
 
@@ -130,18 +143,17 @@ export default function TaskQueuesPage() {
 
     return (
         <div className="space-y-4">
-            <div className="flex items-center gap-2">
-                <Button variant="ghost" size="icon-sm" asChild>
-                    <Link href="/dashboard/tasks"><ArrowLeft className="size-4" /></Link>
-                </Button>
-                <div>
-                    <h1 className="text-lg font-bold">Team Queues</h1>
-                    <p className="text-sm text-muted-foreground">Shared task backlogs any team member can claim from, with workload balancing and supervisor reassignment.</p>
-                </div>
-            </div>
+            <PageHeader
+                title="Team queues"
+                description="Shared task backlogs any team member can claim from."
+                backHref="/dashboard/tasks"
+                backLabel="Tasks"
+            />
 
             {loading ? (
                 <TableSkeleton rows={3} columns={4} />
+            ) : loadError ? (
+                <ErrorState description="The team queues couldn't be loaded." onRetry={loadQueues} />
             ) : (
                 <>
                     {health.length > 0 && (
@@ -151,7 +163,7 @@ export default function TaskQueuesPage() {
                                     <div className="flex items-center justify-between">
                                         <p className="font-semibold">{stat.teamName}</p>
                                         {stat.unclaimed > 0 && (
-                                            <Badge variant="secondary" className="rounded-md text-[0.65rem]">{stat.unclaimed} unclaimed</Badge>
+                                            <Badge variant="secondary" className="rounded-md text-xs">{stat.unclaimed} unclaimed</Badge>
                                         )}
                                     </div>
                                     <div className="mt-2 grid grid-cols-2 gap-2 text-xs text-muted-foreground">
@@ -169,7 +181,7 @@ export default function TaskQueuesPage() {
 
                     <div className="flex flex-wrap items-center gap-3">
                         <Select value={selectedQueueId ?? undefined} onValueChange={setSelectedQueueId}>
-                            <SelectTrigger className="w-64"><SelectValue placeholder="Select a team queue" /></SelectTrigger>
+                            <SelectTrigger className="w-64" aria-label="Team queue"><SelectValue placeholder="Choose a team queue" /></SelectTrigger>
                             <SelectContent>
                                 {teams.map((team) => (
                                     <SelectItem key={team.id} value={team.id}>{team.name}</SelectItem>
@@ -188,6 +200,8 @@ export default function TaskQueuesPage() {
                         <EmptyState title="Pick a team queue" description="Select a team above to view and manage its shared task backlog." />
                     ) : loadingTasks ? (
                         <TableSkeleton rows={4} columns={3} />
+                    ) : tasksError ? (
+                        <ErrorState description="This queue's tasks couldn't be loaded." onRetry={() => selectedQueueId && fetchQueueTasks(selectedQueueId)} />
                     ) : queueTasks.length === 0 ? (
                         <EmptyState title="Queue is empty" description="No open tasks are routed to this team's queue right now." />
                     ) : (
@@ -197,16 +211,16 @@ export default function TaskQueuesPage() {
                                     <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                                         <div className="min-w-0">
                                             <div className="flex flex-wrap items-center gap-2">
-                                                <p className="text-sm font-bold">{task.title}</p>
-                                                <Badge variant="outline" className="rounded-md text-[0.65rem] font-semibold">{task.status.replace("_", " ")}</Badge>
-                                                <Badge variant={task.priority === "HIGH" || task.priority === "URGENT" ? "destructive" : "secondary"} className="rounded-md text-[0.65rem] font-semibold">{task.priority}</Badge>
+                                                <Link href={`/dashboard/tasks?taskId=${task.id}`} className="text-sm font-medium hover:underline">{task.title}</Link>
+                                                <Badge tone="neutral">{humanizeEnum(task.status)}</Badge>
+                                                <Badge tone={task.priority === "HIGH" || task.priority === "URGENT" ? "danger" : "neutral"}>{humanizeEnum(task.priority)}</Badge>
                                                 {task.claimedBy ? (
-                                                    <Badge variant="outline" className="rounded-md text-[0.65rem]">Claimed by {task.owner?.name || task.owner?.email || "someone"}</Badge>
+                                                    <Badge variant="outline" className="rounded-md text-xs">Claimed by {task.owner?.name || task.owner?.email || "someone"}</Badge>
                                                 ) : (
-                                                    <Badge variant="secondary" className="rounded-md text-[0.65rem]">Unclaimed</Badge>
+                                                    <Badge variant="secondary" className="rounded-md text-xs">Unclaimed</Badge>
                                                 )}
                                                 {task.slaStatus === "BREACHED" && (
-                                                    <Badge variant="destructive" className="rounded-md text-[0.65rem] font-semibold">
+                                                    <Badge variant="destructive" className="rounded-md text-xs font-semibold">
                                                         <TriangleAlert className="size-3" />
                                                         SLA Breached
                                                     </Badge>
@@ -233,7 +247,7 @@ export default function TaskQueuesPage() {
                                             )}
                                             {isSupervisor && teamMembers.length > 0 && (
                                                 <Select onValueChange={(targetUserId) => reassign(task.id, targetUserId)}>
-                                                    <SelectTrigger className="w-40" size="sm"><SelectValue placeholder="Reassign to..." /></SelectTrigger>
+                                                    <SelectTrigger className="w-40" size="sm" aria-label={`Reassign ${task.title}`}><SelectValue placeholder="Reassign to…" /></SelectTrigger>
                                                     <SelectContent>
                                                         {teamMembers.map((member) => (
                                                             <SelectItem key={member.id} value={member.id}>{member.name || member.email}</SelectItem>

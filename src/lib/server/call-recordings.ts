@@ -1,3 +1,4 @@
+import { assertTenantModule } from "@/lib/server/module-entitlements";
 import { query, queryOne, execute, queryAsSystem, executeAsSystem } from "@/lib/db/query";
 import { createAuditLog } from "@/lib/server/crm";
 import { getLeadForTenant } from "@/lib/repositories/leads-postgres";
@@ -33,6 +34,7 @@ export async function listCallRecordingsForTenant(
   user: TenantUser,
   filter: { leadId?: string | null; opportunityId?: string | null },
 ) {
+  await assertTenantModule(user, "TELEPHONY");
   const tenantId = requireTenantId(user);
   if (filter.leadId) {
     const lead = await getLeadForTenant(user, filter.leadId);
@@ -81,6 +83,7 @@ export async function listCallRecordingsForTenant(
 // the pre-existing Telephony settings route exposed the webhook secret before this session's
 // earlier fix.
 export async function getCallRecordingForTenant(user: TenantUser, callLogId: string, action: "PLAY" | "DOWNLOAD") {
+  await assertTenantModule(user, "TELEPHONY");
   const tenantId = requireTenantId(user);
   const call = await queryOne<any>(
     `select id, "recordingUrl", transcript, "recordingExpiresAt", "agentId", "leadId", "opportunityId"

@@ -10,6 +10,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Checkbox } from "@/components/ui/checkbox";
 import { useSearchParams } from "next/navigation";
 import { matchesLogicRule, type LogicRule } from "@/lib/forms/visibility";
+import { safeFormCss } from "@/lib/forms/custom-css";
+import { storageGet, storageSet, storageRemove } from "@/lib/storage";
+
+type FormField = { id: string; label: string; type?: string; tabId?: string; helpText?: string; [key: string]: any };
 
 interface FormConfig {
     fields: any[];
@@ -45,6 +49,10 @@ export function PublicFormRenderer({ slug, config }: RendererProps) {
     const [formData, setFormData] = useState<Record<string, any>>({});
     const [submitting, setSubmitting] = useState(false);
     const [submitted, setSubmitted] = useState(false);
+    // Problems shown beside each field and summarised at the top (UI/UX plan §5.13; they were a
+    // single toast listing field names).
+    const [errors, setErrors] = useState<Record<string, string>>({});
+    const [submitError, setSubmitError] = useState<string | null>(null);
     const [activeTabId, setActiveTabId] = useState(config.tabs?.[0]?.id || "tab_1");
     // Stable per-page-load id, not tied to any user identity -- just enough to bucket
     // "did this same visit reach tab N" for the drop-off report without correlating to a
@@ -72,14 +80,14 @@ export function PublicFormRenderer({ slug, config }: RendererProps) {
             }
         });
 
-        const savedDraft = typeof window !== "undefined" ? window.localStorage.getItem(draftKey) : null;
+        const savedDraft = typeof window !== "undefined" ? storageGet(draftKey) : null;
         const draftData = parseDraft(savedDraft);
         setFormData(prev => ({ ...prev, ...initialData, ...draftData }));
     }, [fields, searchParams]);
 
     useEffect(() => {
         if (submitted || Object.keys(formData).length === 0) return;
-        window.localStorage.setItem(draftKey, JSON.stringify(formData));
+        storageSet(draftKey, JSON.stringify(formData));
     }, [draftKey, formData, submitted]);
 
     // Drop-off telemetry: fires on mount (tab 0) and every subsequent tab change, completely
@@ -176,10 +184,18 @@ export function PublicFormRenderer({ slug, config }: RendererProps) {
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
 
-        // Validate required fields (only visible ones)
-        const missing = visibleFields.filter(f => f.required && isMissingRequiredValue(formData[f.id]));
-        if (missing.length > 0) {
-            toast.error(`Please fill in required fields: ${missing.map(f => f.label).join(', ')}`);
+        // Check the visible fields only: required ones are filled in, email addresses look right.
+        const found: Record<string, string> = {};
+        for (const field of visibleFields) {
+            const value = formData[field.id];
+            if (field.required && isMissingRequiredValue(value)) found[field.id] = `Enter ${field.label}.`;
+            else if (field.type === 'EMAIL' && typeof value === 'string' && value.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim())) found[field.id] = `Enter a valid email address, like name@example.com.`;
+        }
+        setErrors(found);
+        setSubmitError(null);
+        const firstInvalid = visibleFields.find((field) => found[field.id]);
+        if (firstInvalid) {
+            focusField(firstInvalid);
             return;
         }
 
@@ -225,7 +241,7 @@ export function PublicFormRenderer({ slug, config }: RendererProps) {
                 result.warnings.forEach((warning) => toast.warning(warning));
             }
 
-            window.localStorage.removeItem(draftKey);
+            storageRemove(draftKey);
             setSubmitted(true);
             if (config.redirectUrl) {
                 setTimeout(() => {
@@ -233,18 +249,32 @@ export function PublicFormRenderer({ slug, config }: RendererProps) {
                 }, 2000);
             }
         } catch (error: any) {
-            toast.error(error.message || "Failed to submit form");
+            setSubmitError(error?.message || "Your answers couldn't be sent. Try again.");
             setSubmitting(false);
         }
     };
 
+    // Show the field's tab, then move focus to it.
+    function focusField(field: FormField) {
+        const tabId = field.tabId || tabs[0]?.id;
+        if (tabId && tabId !== activeTabId) setActiveTabId(tabId);
+        window.setTimeout(() => {
+            const element = document.getElementById(field.id) ?? document.querySelector<HTMLElement>(`[name="${CSS.escape(field.id)}"]`) ?? document.getElementById(`${field.id}-error`);
+            element?.focus();
+            element?.scrollIntoView({ block: "center", behavior: "smooth" });
+        }, 0);
+    }
+    const errorEntries = visibleFields.filter((field) => errors[field.id]);
+    const describedBy = (field: FormField) => [field.helpText ? `${field.id}-help` : null, errors[field.id] ? `${field.id}-error` : null].filter(Boolean).join(" ") || undefined;
+    const fieldA11y = (field: FormField) => ({ "aria-invalid": errors[field.id] ? true : undefined, "aria-describedby": describedBy(field) });
+
     if (submitted) {
         return (
             <div className="text-center py-12 animate-in fade-in zoom-in duration-300">
-                <div className="inline-flex items-center justify-center w-20 h-20 rounded-full bg-green-100 mb-6">
-                    <CheckCircle2 className="h-10 w-10 text-green-600" />
+                <div className="inline-flex items-center justify-center w-20 h-20 rounded-full bg-status-success mb-6">
+                    <CheckCircle2 className="h-10 w-10 text-status-success-foreground" aria-hidden />
                 </div>
-                <h2 className="text-3xl font-bold text-foreground mb-2">Success!</h2>
+                <h2 className="text-2xl font-semibold text-foreground mb-2" role="status">Thank you</h2>
                 <p className="text-muted-foreground text-lg">{config.successMessage || "Thank you for your submission."}</p>
             </div>
         );
@@ -252,18 +282,34 @@ export function PublicFormRenderer({ slug, config }: RendererProps) {
 
     const handleChange = (id: string, value: any) => {
         setFormData(prev => ({ ...prev, [id]: value }));
+        if (errors[id]) setErrors((current) => { const next = { ...current }; delete next[id]; return next; });
     };
 
     const clearDraft = () => {
-        window.localStorage.removeItem(draftKey);
+        storageRemove(draftKey);
         setFormData({});
         toast.success("Draft cleared");
     };
 
     return (
         <>
-            {config.customCss && <style dangerouslySetInnerHTML={{ __html: config.customCss }} />}
-            <form onSubmit={handleSubmit} className={`space-y-4 form-theme-${config.theme || 'default'}`}>
+            {config.customCss && <style dangerouslySetInnerHTML={{ __html: safeFormCss(config.customCss) }} />}
+            <form onSubmit={handleSubmit} noValidate className={`space-y-4 form-theme-${config.theme || 'default'}`}>
+                {errorEntries.length > 0 && (
+                    <div role="alert" className="rounded-md border border-destructive/40 bg-destructive/5 px-3 py-2 text-sm">
+                        <p className="font-semibold text-destructive">{errorEntries.length === 1 ? "One answer needs fixing" : `${errorEntries.length} answers need fixing`}</p>
+                        <ul className="mt-1 list-disc space-y-0.5 pl-5">
+                            {errorEntries.map((field) => (
+                                <li key={field.id}>
+                                    <button type="button" className="text-left underline underline-offset-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" onClick={() => focusField(field)}>{errors[field.id]}</button>
+                                </li>
+                            ))}
+                        </ul>
+                    </div>
+                )}
+                {submitError && (
+                    <div role="alert" className="rounded-md border border-destructive/40 bg-destructive/5 px-3 py-2 text-sm text-destructive">{submitError}</div>
+                )}
                 {Object.keys(formData).length > 0 && (
                     <div className="flex min-w-0 flex-wrap items-center justify-between gap-2 rounded-md border border-border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
                         <span>Draft is saved automatically on this device.</span>
@@ -301,7 +347,7 @@ export function PublicFormRenderer({ slug, config }: RendererProps) {
                         {field.type !== 'HIDDEN' && (
                             <Label htmlFor={field.id} className="text-sm font-semibold text-foreground">
                                 {field.label}
-                                {field.required && <span className="text-destructive ml-1">*</span>}
+                                {field.required && <span className="text-destructive ml-1" aria-hidden>*</span>}{field.required && <span className="sr-only"> (required)</span>}
                             </Label>
                         )}
 
@@ -311,6 +357,7 @@ export function PublicFormRenderer({ slug, config }: RendererProps) {
                             ) : field.type === 'TEXTAREA' ? (
                                 <Textarea
                                     id={field.id}
+                                    {...fieldA11y(field)}
                                     placeholder={field.placeholder}
                                     value={formData[field.id] || ''}
                                     onChange={e => handleChange(field.id, e.target.value)}
@@ -318,7 +365,7 @@ export function PublicFormRenderer({ slug, config }: RendererProps) {
                                 />
                             ) : field.type === 'SELECT' ? (
                                 <Select onValueChange={val => handleChange(field.id, val)} value={formData[field.id] || ''}>
-                                    <SelectTrigger id={field.id} className="w-full">
+                                    <SelectTrigger id={field.id} className="w-full" {...fieldA11y(field)}>
                                         <SelectValue placeholder={field.placeholder || "Select option..."} />
                                     </SelectTrigger>
                                     <SelectContent>
@@ -334,6 +381,7 @@ export function PublicFormRenderer({ slug, config }: RendererProps) {
                                             <div key={opt.value} className="flex items-center space-x-2">
                                                 <Checkbox
                                                     id={`${field.id}-${opt.value}`}
+                                                    {...fieldA11y(field)}
                                                     checked={(formData[field.id] || []).includes(opt.value)}
                                                     onCheckedChange={(checked) => {
                                                         const current = formData[field.id] || [];
@@ -353,6 +401,7 @@ export function PublicFormRenderer({ slug, config }: RendererProps) {
                                         <div className="flex items-center space-x-2">
                                             <Checkbox
                                                 id={field.id}
+                                                {...fieldA11y(field)}
                                                 checked={formData[field.id] || false}
                                                 onCheckedChange={(checked) => handleChange(field.id, checked)}
                                             />
@@ -370,6 +419,7 @@ export function PublicFormRenderer({ slug, config }: RendererProps) {
                                                 type="radio"
                                                 id={`${field.id}-${opt.value}`}
                                                 name={field.id}
+                                                {...fieldA11y(field)}
                                                 value={opt.value}
                                                 checked={formData[field.id] === opt.value}
                                                 onChange={e => handleChange(field.id, e.target.value)}
@@ -382,7 +432,7 @@ export function PublicFormRenderer({ slug, config }: RendererProps) {
                                     ))}
                                 </div>
                             ) : field.type === 'FILE' ? (
-                                <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-700">
+                                <div className="rounded-md bg-status-warning px-3 py-2 text-sm text-status-warning-foreground">
                                     File upload fields are not supported in this hosted form yet.
                                 </div>
                             ) : field.type === 'FORMULA' ? (
@@ -396,6 +446,7 @@ export function PublicFormRenderer({ slug, config }: RendererProps) {
                             ) : (
                                 <Input
                                     id={field.id}
+                                    {...fieldA11y(field)}
                                     type={field.type === 'NUMBER' ? 'number' : field.type === 'EMAIL' ? 'email' : field.type === 'DATE' ? 'date' : 'text'}
                                     placeholder={field.placeholder}
                                     value={formData[field.id] || ''}
@@ -404,7 +455,8 @@ export function PublicFormRenderer({ slug, config }: RendererProps) {
                                 />
                             )}
                         </div>
-                        {field.type !== 'HIDDEN' && field.helpText && <p className="text-xs text-muted-foreground mt-1">{field.helpText}</p>}
+                        {field.type !== 'HIDDEN' && field.helpText && <p id={`${field.id}-help`} className="text-xs text-muted-foreground mt-1">{field.helpText}</p>}
+                        {errors[field.id] ? <p id={`${field.id}-error`} tabIndex={-1} className="text-xs font-medium text-destructive">{errors[field.id]}</p> : null}
                     </div>
                 ))}
                             </div>

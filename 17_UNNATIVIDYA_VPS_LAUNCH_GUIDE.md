@@ -1,5 +1,7 @@
 # Unnati Vidya — VPS Launch Guide
 
+> CMS publishing update — 30 September 2026: public catalog readers now use validated published database records. Before upgrading, follow [CMS publishing deployment](apps/unnatividya/docs/CMS_PUBLISHING_DEPLOYMENT.md), including the new image’s read-only readiness check before restart. Older static-source descriptions below are historical.
+
 This is the complete, step-by-step path from "code is pushed to git" to "unnatividya.com is
 live," plus an exact, verified reference for every environment variable involved — which
 ones the code actually reads, and what value to put in each. Everything below was checked
@@ -193,7 +195,7 @@ just the first one):
 deploy/vps/scripts/setup-unnatividya-db.sh
 ```
 
-Populate `course`/`university` from `src/data/catalog.ts` (idempotent — safe to re-run any time):
+Seed missing `course`/`university` records from `src/data/catalog.ts` as unpublished drafts (idempotent; existing records are preserved):
 ```bash
 docker compose -f deploy/vps/docker-compose.yml --env-file deploy/vps/.env run --rm unnatividya-web \
   node scripts/sync-catalog-to-db.js
@@ -245,11 +247,16 @@ Finally, submit the sitemap:
   docker compose -f deploy/vps/docker-compose.yml --env-file deploy/vps/.env run --rm unnatividya-web \
     node scripts/sync-catalog-to-db.js
   ```
-  The sync step mirrors `src/data/catalog.ts` (the public site's real source of truth) into
-  Postgres, so the `/admin/courses` and `/admin/universities` browsers stay accurate instead of
-  drifting out of sync with the live site. It's safe to re-run any time — it's an idempotent
-  upsert keyed by course/university id, and anything catalog.ts no longer lists gets archived,
-  never deleted. See `22_UNNATIVIDYA_PLATFORM_ENHANCEMENTS_PLAN.md` §4 for why this exists.
+  As of 30 September 2026, this command only inserts missing records as unpublished drafts.
+  It preserves existing fields, publication state and timestamps, and never archives CMS-only
+  records. New seed IDs with conflicting slugs fail and roll back the whole seed; resolve the
+  identity conflict in review rather than overwriting existing records. No new environment
+  variable or migration is required for this seed behavior.
+
+  Public pages still read the static catalog during the CMS publishing transition. Saving or
+  marking a record Published in CMS does not yet update those pages. Do not use an older image's
+  sync command: its overwrite/auto-publish behavior can undo editorial changes. See
+  `apps/unnatividya/docs/IMPLEMENTATION_PROGRESS.md` for current rollout status.
 - **New migration added later:** re-run `deploy/vps/scripts/setup-unnatividya-db.sh` — it's
   safe to re-run any time, it only applies migrations that haven't been tracked yet.
 - **Backups:** `deploy/vps/scripts/backup-postgres.sh` already dumps both the CRM and

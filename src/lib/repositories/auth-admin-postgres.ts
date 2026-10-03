@@ -3,6 +3,8 @@ import bcrypt from "bcryptjs";
 import { randomUUID } from "crypto";
 import { query, queryOne, execute, queryAsSystem, queryOneAsSystem, executeAsSystem, type Queryable } from "@/lib/db/query";
 import { withTransaction, type TransactionClient } from "@/lib/db/transaction";
+import { assertSeatAvailable, lockTenantSeats } from "@/lib/server/usage-limits";
+import { seedDefaultLeadStatuses } from "@/lib/repositories/lead-statuses-postgres";
 
 type RoleInput = {
   name: string;
@@ -274,7 +276,7 @@ export async function getCurrentUserById(userId: string) {
     // changeTenantStatus/the suspend+unsuspend API routes have always updated but nothing has
     // ever checked until now, and so the dashboard can render the maintenance banner.
     userRecord.tenantId
-      ? queryOneAsSystem<any>('select status, environment from "Tenant" where id::text = $1 limit 1', [String(userRecord.tenantId)])
+      ? queryOneAsSystem<any>('select status, environment, name from "Tenant" where id::text = $1 limit 1', [String(userRecord.tenantId)])
       : Promise.resolve(null),
     userRecord.tenantId
       ? queryOneAsSystem<any>('select "maintenanceActive", "maintenanceMessage" from "TenantConfig" where "tenantId"::text = $1 limit 1', [String(userRecord.tenantId)])
@@ -334,6 +336,8 @@ export async function getCurrentUserById(userId: string) {
     isTenantAdmin: rolePermissions?.recordAccess === "ALL" || rolePermissions?.modules?.admin === "full",
     features: effectiveTenantFeatures({...DEFAULT_TENANT_FEATURE_FLAGS,...tenantFeatureRecord},moduleEntitlements),
     moduleEntitlements,
+    // Shown in the header and account menu instead of the raw tenant id (UI/UX plan §11.6 M).
+    tenantName: tenantRecord?.name ?? null,
     tenantStatus: tenantRecord?.status ?? "ACTIVE",
     tenantEnvironment: tenantRecord?.environment ?? "PRODUCTION",
     maintenanceActive: tenantConfigRecord?.maintenanceActive ?? false,
@@ -412,7 +416,7 @@ export async function createTenantScopedUser(tenantId: string, input: CreateUser
   await assertUserReferencesBelongToTenant(tenantId, input);
   const now = new Date().toISOString();
   const passwordHash = await bcrypt.hash(input.password, 10);
-  return insertReturning("User", {
+  const row = {
     id: randomUUID(),
     tenantId,
     email: input.email.toLowerCase(),
@@ -427,7 +431,14 @@ export async function createTenantScopedUser(tenantId: string, input: CreateUser
     passwordChangedAt: now,
     createdAt: now,
     updatedAt: now,
-  }, 'id, name, email, status, "roleId", "permissionTemplateId", "managerId", "teamId", skills, "createdAt"');
+  };
+  // Seat limits (Module 21): the tenant seat lock serializes this check with every other user
+  // creation/activation, so two admins cannot both take the last seat.
+  return withTransaction(null, async (tx) => {
+    await lockTenantSeats(tx, tenantId);
+    await assertSeatAvailable(tx, tenantId, { roleId: input.roleId, becomesActive: true });
+    return insertReturning("User", row, 'id, name, email, status, "roleId", "permissionTemplateId", "managerId", "teamId", skills, "createdAt"', tx);
+  });
 }
 
 export async function getTenantScopedUserPermissionSummary(tenantId: string, userId: string) {
@@ -453,7 +464,28 @@ export async function updateTenantScopedUser(tenantId: string, userId: string, i
   if (input.skills !== undefined) patch.skills = input.skills;
   if (input.status !== undefined) patch.status = input.status;
   if (input.isAvailableForAssignment !== undefined) patch.isAvailableForAssignment = input.isAvailableForAssignment;
-  return updateReturning("User", patch, 'where "tenantId"::text = $1 and id::text = $2', [tenantId, userId], 'id, name, email, status, "roleId", "permissionTemplateId", "managerId", "teamId", skills, "isAvailableForAssignment", "createdAt"');
+  const returning = 'id, name, email, status, "roleId", "permissionTemplateId", "managerId", "teamId", skills, "isAvailableForAssignment", "createdAt"';
+  if (input.status === undefined && input.roleId === undefined) {
+    return updateReturning("User", patch, 'where "tenantId"::text = $1 and id::text = $2', [tenantId, userId], returning);
+  }
+  // Reactivation or a role change can consume a seat (internal <-> partner): same seat lock and
+  // limit check as creation, against the user's resulting role and status.
+  return withTransaction(null, async (tx) => {
+    await lockTenantSeats(tx, tenantId);
+    const previous = (await tx.query<{ roleId: string | null; status: string | null; deletedAt: string | null }>(
+      'select "roleId", status, "deletedAt" from "User" where "tenantId"::text = $1 and id::text = $2 for update',
+      [tenantId, userId],
+    )).rows[0];
+    if (previous) {
+      const nextStatus = input.status !== undefined ? input.status : previous.status;
+      await assertSeatAvailable(tx, tenantId, {
+        roleId: input.roleId !== undefined ? input.roleId : previous.roleId,
+        becomesActive: !previous.deletedAt && (nextStatus ?? "ACTIVE") === "ACTIVE",
+        previous: { roleId: previous.roleId, active: !previous.deletedAt && (previous.status ?? "ACTIVE") === "ACTIVE" },
+      });
+    }
+    return updateReturning("User", patch, 'where "tenantId"::text = $1 and id::text = $2', [tenantId, userId], returning, tx);
+  });
 }
 
 async function listTenantRolesBase(tenantId: string | null) {
@@ -639,6 +671,15 @@ export async function createTenantWithAdmin(input: CreateTenantInput, actor?: { 
     const catalog=await query<PlatformModuleOption>('select "key", name, category, "isCore" from "PlatformModule" order by "key"',[],tx);
     const selection=resolveTenantProvisioning(catalog,input);
     await insertReturning("Tenant", { id: tenantId, name: input.name, status: "ACTIVE", plan, createdAt: now, updatedAt: now }, "id", tx);
+    await seedDefaultLeadStatuses(tenantId, tx);
+    // Usage limits chosen at creation (Module 21). Omitted/blank = unlimited: no row at all.
+    const limits = input.limits;
+    if (limits && Object.values(limits).some((value) => value !== null && value !== undefined)) {
+      await tx.query(
+        `insert into "TenantUsageLimit" ("tenantId", "maxActiveUsers", "maxPartnerLogins", "maxStorageMb", "maxMonthlyMessages", "updatedBy", "updatedAt") values ($1, $2, $3, $4, $5, $6, now())`,
+        [tenantId, limits.maxActiveUsers ?? null, limits.maxPartnerLogins ?? null, limits.maxStorageMb ?? null, limits.maxMonthlyMessages ?? null, actor?.id ?? null],
+      );
+    }
     await insertReturning("Role", {
       id: roleId,
       tenantId,
@@ -683,7 +724,8 @@ export async function createTenantWithAdmin(input: CreateTenantInput, actor?: { 
 // suspend/unsuspend routes and the privileged-action-request approval flow, both of which act
 // on a tenantId OTHER than the calling admin's own ambient (typically null) one.
 export async function changeTenantStatus(tenantId: string, status: "ACTIVE" | "SUSPENDED") {
-  await executeAsSystem('update "Tenant" set status = $1 where id = $2', [status, tenantId]);
+  const updated = await executeAsSystem('update "Tenant" set status = $1 where id = $2', [status, tenantId]);
+  if (!updated) throw new Error("TENANT_NOT_FOUND");
 }
 
 export async function getTenantFeatureFlags(tenantId: string): Promise<TenantFeatureFlags> {

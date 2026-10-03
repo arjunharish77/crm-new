@@ -1,8 +1,11 @@
+export const dynamic = "force-dynamic";
+import { PublishedCatalogBoundary } from "@/components/published-catalog-boundary";
+import { getPublishedCatalog } from "@/lib/catalog-snapshot-server";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { CourseExplorer } from "@/components/course-explorer";
 import { JsonLd } from "@/components/json-ld";
-import { courses, courseWithUniversity, formatFee, universityById } from "@/data/catalog";
+import { formatFee } from "@/lib/catalog-format";
 
 const SITE_URL = process.env.NEXT_PUBLIC_UNNATIVIDYA_SITE_URL || "https://unnatividya.com";
 
@@ -12,10 +15,9 @@ export const metadata: Metadata = {
   alternates: { canonical: "/courses" },
 };
 
-export default async function CoursesPage({ searchParams }: { searchParams?: Promise<{ q?: string; university?: string; stream?: string }> }) {
-  const params = await searchParams;
-  const q = params?.q?.toLowerCase().trim() || "";
-  const initialUniversity = params?.university ? universityById[params.university as keyof typeof universityById]?.shortName : undefined;
+export default async function CoursesPage() {
+  const catalog = await getPublishedCatalog();
+  const { courses, courseWithUniversity } = catalog;
   const items = courses.map(courseWithUniversity);
   const shell = { maxWidth: 1200, margin: "0 auto", paddingLeft: 24, paddingRight: 24, width: "100%", boxSizing: "border-box" as const };
 
@@ -34,7 +36,7 @@ export default async function CoursesPage({ searchParams }: { searchParams?: Pro
     })),
   };
 
-  return (
+  return <PublishedCatalogBoundary>{(
     <>
       <JsonLd data={courseListJsonLd} />
       <div style={{ background: "#F7F8F9", flex: 1, display: "flex", flexDirection: "column" }}>
@@ -58,7 +60,8 @@ export default async function CoursesPage({ searchParams }: { searchParams?: Pro
 
         <div style={{ background: "#F4F3FC", borderBottom: "1px solid #EAEAEA" }}>
           <div style={{ ...shell, display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", paddingTop: 12, paddingBottom: 12 }}>
-          <span style={{ color: "#696868", fontSize: 12, fontWeight: 700, letterSpacing: 0.4 }}>TRENDING COMPARISONS</span>
+          <details style={{width:"100%"}}><summary style={{cursor:"pointer",fontSize:14,fontWeight:600,color:"#443b9e"}}>Quick comparisons</summary>
+          <div style={{display:"flex",gap:8,flexWrap:"wrap",marginTop:12}}>
           {[
             ["MBA: MUJ vs Amity", "/compare?add=mba-muj,mba-amity"],
             ["MBA: SMU vs MUJ", "/compare?add=mba-smu,mba-muj"],
@@ -69,13 +72,14 @@ export default async function CoursesPage({ searchParams }: { searchParams?: Pro
               {label}
             </Link>
           ))}
+          </div></details>
           </div>
         </div>
 
         <div style={{ ...shell, paddingTop: 28, paddingBottom: 56, flex: 1 }}>
-          <CourseExplorer courses={items} initialQuery={q} initialStream={params?.stream} initialUniversity={initialUniversity} />
+          <CourseExplorer courses={items} />
         </div>
       </div>
     </>
-  );
+  )}</PublishedCatalogBoundary>;
 }

@@ -75,3 +75,31 @@ export function applyRecordScopeClause(
     : `${col("ownerId")} in (select id from "User" where "teamId"::text = $${teamIdParam})`;
   clauses.push(`(${teamMembershipClause}${shareClause})`);
 }
+
+// Task visibility, by the same three levels (decision 2026-10-02): OWN sees the user's own
+// tasks; TEAM sees their own plus tasks owned by members of their team (their own only when
+// they have no team, as above); ALL sees every task in the tenant. Tasks have no RecordShare,
+// so there is no share clause. Task lists used to narrow only for OWN, so a TEAM user could list
+// every task in the tenant. Queue browsing (tasks-postgres rawQueueTask) is a separate,
+// membership-based path and is unaffected.
+export function applyTaskScopeClause(
+  clauses: string[],
+  values: unknown[],
+  user: ScopedUser,
+  tenantIdParam: number | null,
+  alias?: string,
+) {
+  const level = recordAccessLevel(user);
+  if (level === "ALL") return;
+  const owner = alias ? `${alias}."ownerId"` : `"ownerId"`;
+  values.push(user.recordScopeActorId ?? user.id);
+  const userIdParam = values.length;
+  if (level === "OWN" || !user.teamId) {
+    clauses.push(`${owner} = $${userIdParam}`);
+    return;
+  }
+  values.push(user.teamId);
+  const teamIdParam = values.length;
+  const tenantFilter = tenantIdParam ? `"tenantId" = $${tenantIdParam} and ` : "";
+  clauses.push(`(${owner} = $${userIdParam} or ${owner} in (select id from "User" where ${tenantFilter}"teamId"::text = $${teamIdParam}))`);
+}

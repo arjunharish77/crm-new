@@ -3,8 +3,8 @@ import {
   createActivityTypeForTenant,
   listActivityTypesForTenant,
 } from "@/lib/server/crm";
-import { requireCurrentUser } from "@/lib/server/auth";
-import { badRequest, serverError, unauthorized } from "@/lib/server/http";
+import { requireCurrentUser, requireTenantAdmin } from "@/lib/server/auth";
+import { badRequest, serverError, unauthorized, forbidden } from "@/lib/server/http";
 
 export async function GET(request: Request) {
   try {
@@ -22,7 +22,7 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    const user = await requireCurrentUser(request);
+    const user = await requireTenantAdmin(request);
     const body = await request.json().catch(() => null);
     if (!body?.name) {
       return badRequest("Name is required");
@@ -33,6 +33,7 @@ export async function POST(request: Request) {
     if (error instanceof Error && error.message === "UNAUTHORIZED") {
       return unauthorized();
     }
+    if (error instanceof Error && error.message === "FORBIDDEN") return forbidden("Only admins can do this");
 
     return serverError("Failed to create activity type", error);
   }

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { assertFeatureEnabled } from "@/lib/server/entitlements";
 import { getOpportunityForTenant, getRecordShareForTenant, upsertRecordShareForTenant } from "@/lib/server/crm";
 import { requireCurrentUser } from "@/lib/server/auth";
 import { forbidden, serverError, unauthorized } from "@/lib/server/http";
@@ -15,6 +16,7 @@ function canManageSharing(user: any, opportunity: any) {
 export async function GET(request: Request, { params }: Params) {
   try {
     const user = await requireCurrentUser(request);
+    await assertFeatureEnabled(user.tenantId, "opportunityEnabled", { isPlatformAdmin: user.isPlatformAdmin });
     const { id } = await params;
     const opportunity = await getOpportunityForTenant(user, id);
     if (!opportunity) return NextResponse.json({ message: "Opportunity not found" }, { status: 404 });
@@ -29,6 +31,7 @@ export async function GET(request: Request, { params }: Params) {
 export async function PUT(request: Request, { params }: Params) {
   try {
     const user = await requireCurrentUser(request);
+    await assertFeatureEnabled(user.tenantId, "opportunityEnabled", { isPlatformAdmin: user.isPlatformAdmin });
     const { id } = await params;
     const opportunity = await getOpportunityForTenant(user, id);
     if (!opportunity) return NextResponse.json({ message: "Opportunity not found" }, { status: 404 });

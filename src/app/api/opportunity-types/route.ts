@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { requireCurrentUser } from "@/lib/server/auth";
+import { requireCurrentUser, requireTenantAdmin } from "@/lib/server/auth";
 import {
   createOpportunityTypeConfigForTenant,
 } from "@/lib/server/admin-modules";
@@ -23,7 +23,7 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    const user = await requireCurrentUser(request);
+    const user = await requireTenantAdmin(request);
     if (!user.tenantId) return forbidden("Tenant context required");
     const body = await request.json().catch(() => null);
     if (!body?.name) return badRequest("Name is required");
@@ -33,6 +33,7 @@ export async function POST(request: Request) {
     if (error instanceof Error && error.message === "UNAUTHORIZED") {
       return unauthorized();
     }
+    if (error instanceof Error && error.message === "FORBIDDEN") return forbidden("Only admins can do this");
     if (error instanceof Error && error.message === "PROGRAM_NOT_FOUND") {
       return badRequest("Selected program was not found for this workspace");
     }

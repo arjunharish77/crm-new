@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getAdminSession } from "@/lib/admin-auth";
-import { query } from "@/lib/db";
+import { withCatalogWrite } from "@/lib/catalog-write";
+import { catalogWriteError } from "@/lib/catalog-permissions";
 
 const courseSchema = z.object({
   slug: z.string().trim().min(2),
@@ -35,6 +36,12 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   }
 
   const value = parsed.data;
+  const permissionError = catalogWriteError(session.role, value);
+  if (permissionError) return NextResponse.json({ error: permissionError }, { status: 403 });
+  if (value.isPublished !== (value.status === "PUBLISHED")) {
+    return NextResponse.json({ error: "Published status and public visibility must agree." }, { status: 400 });
+  }
+  return withCatalogWrite(async (query) => {
   const saved = await query<{ id: string }>(
     `update course
      set slug = $1,
@@ -52,6 +59,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
          data = $13,
          updated_at = now()
      where id = $14
+       and ($15 = 'ADMIN' or (not is_published and status in ('DRAFT', 'NEEDS_REVIEW')))
      returning id`,
     [
       value.slug,
@@ -68,10 +76,14 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       value.isPublished,
       value.data,
       id,
+      session.role,
     ],
   );
 
   if (!saved.rowCount) {
+    if (session.role !== "ADMIN") {
+      return NextResponse.json({ error: "Record unavailable for draft editing. Published and archived records require an administrator." }, { status: 403 });
+    }
     return NextResponse.json({ error: "Course not found" }, { status: 404 });
   }
 
@@ -82,4 +94,5 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   );
 
   return NextResponse.json({ id });
+  });
 }

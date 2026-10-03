@@ -1,5 +1,22 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+// Report logic under test; the Reports (advancedReporting) gate is covered by the module-gate audit.
+vi.mock("@/lib/server/entitlements", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/server/entitlements")>()),
+  assertFeatureEnabled: vi.fn(async () => undefined),
+  isFeatureEnabledForTenant: vi.fn(async () => true),
+}));
+
+
+// Telephony business logic under test; the TELEPHONY module gate itself is covered by
+// tests/telephony-module-gate.test.ts.
+vi.mock("@/lib/server/module-entitlements", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/server/module-entitlements")>()),
+  assertTenantModule: vi.fn(async () => undefined),
+  assertModuleEnabled: vi.fn(async () => undefined),
+}));
+
+
 const pgQueryMock = vi.fn();
 const pgQueryOneMock = vi.fn();
 const pgExecuteMock = vi.fn();
@@ -271,6 +288,55 @@ describe("direct Postgres inbuilt report helper lookups", () => {
     expect(typeof issuesParam).toBe("string");
     expect(() => JSON.parse(issuesParam)).not.toThrow();
     expect(JSON.parse(issuesParam)).toEqual(expect.arrayContaining([expect.objectContaining({ type: "duplicate_email" })]));
+  });
+
+  // Fairness fix: one tenant's failure used to end the whole scheduled run for every tenant after
+  // it. (Selection itself -- eligibility, once per local day, oldest first -- is checked against a
+  // real database by scripts/report-sweeps-smoke.ts.)
+  it("keeps scanning the remaining tenants when one tenant's scan fails", async () => {
+    pgQueryMock.mockImplementation(async (sql: string) => {
+      if (String(sql).includes('from "Tenant"')) return [{ id: "tenant-1" }, { id: "tenant-2" }];
+      return [];
+    });
+    pgQueryOneMock.mockResolvedValue(null);
+    listLeadsMock.mockImplementation(async (user: { tenantId: string }) => {
+      if (user.tenantId === "tenant-1") throw new Error("boom");
+      return { data: [] };
+    });
+    listActivitiesMock.mockResolvedValue({ data: [] });
+    listOpportunitiesMock.mockResolvedValue({ data: [] });
+    listOpportunityTypesMock.mockResolvedValue([]);
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
+
+    const { runScheduledDataQualityScan } = await import("@/lib/server/inbuilt-reports");
+    const results = await runScheduledDataQualityScan(10);
+
+    expect(results).toEqual([
+      { tenantId: "tenant-1", totalIssues: null, failed: true },
+      { tenantId: "tenant-2", totalIssues: 0, failed: false },
+    ]);
+    expect(pgExecuteMock).toHaveBeenCalledTimes(1);
+    expect(pgExecuteMock.mock.calls[0][1][1]).toBe("tenant-2");
+    consoleError.mockRestore();
+  });
+
+  it("keeps refreshing case analytics snapshots for the remaining tenants when one fails", async () => {
+    pgQueryMock.mockImplementation(async (sql: string, params: unknown[] = []) => {
+      const text = String(sql);
+      if (text.includes('from "Tenant" t')) return [{ id: "tenant-1" }, { id: "tenant-2" }];
+      if (text.includes('from "Case"') && params[0] === "tenant-1") throw new Error("boom");
+      return [];
+    });
+    pgQueryOneMock.mockResolvedValue(null);
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
+
+    const { refreshCaseAnalyticsSnapshots } = await import("@/lib/server/inbuilt-reports");
+    const outcome = await refreshCaseAnalyticsSnapshots(10);
+
+    expect(outcome).toEqual({ refreshed: 1, failed: 1 });
+    expect(pgExecuteMock).toHaveBeenCalledTimes(1);
+    expect(pgExecuteMock.mock.calls[0][1][0]).toBe("tenant-2");
+    consoleError.mockRestore();
   });
 
   it("lists persisted scorecard history newest-first for a tenant", async () => {

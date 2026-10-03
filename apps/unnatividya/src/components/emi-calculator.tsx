@@ -1,220 +1,84 @@
 "use client";
-
-import { useMemo, useRef, useState } from "react";
+import { useCatalog } from "@/components/catalog-provider";
+import { useRef, useState } from "react";
 import Link from "next/link";
 import { trackEvent } from "@/components/analytics";
-import { courses, courseWithUniversity, formatFee } from "@/data/catalog";
+import { formatFee } from "@/lib/catalog-format";
 
 export function EmiCalculator() {
-  const catalogCourses = useMemo(() => courses.map(courseWithUniversity).sort((a, b) => a.name.localeCompare(b.name)), []);
-  const cheapestByEmi = useMemo(
-    () =>
-      [...catalogCourses]
-        .sort((a, b) => Number(a.emi.replace(/\D/g, "")) - Number(b.emi.replace(/\D/g, "")))
-        .slice(0, 4),
-    [catalogCourses],
-  );
-
+  const { courses, courseWithUniversity } = useCatalog();
+  const catalogCourses = courses.map(courseWithUniversity).sort((a, b) => a.name.localeCompare(b.name));
   const [selectedCourseId, setSelectedCourseId] = useState("");
-  const [fee, setFee] = useState(180000);
-  const [down, setDown] = useState(20000);
-  const [months, setMonths] = useState(24);
-  const [rate, setRate] = useState(0);
+  const [values, setValues] = useState({ fee: "180000", down: "20000", months: "24", rate: "0" });
   const trackedUsage = useRef(false);
-
-  const selectedCourse = catalogCourses.find((course) => course.id === selectedCourseId);
-  const principal = Math.max(0, fee - down);
+  const selectedCourse = catalogCourses.find(course => course.id === selectedCourseId);
+  const fee = Number(values.fee), down = Number(values.down), months = Number(values.months), rate = Number(values.rate);
+  const errors = {
+    fee: values.fee === "" || !Number.isFinite(fee) || fee < 0 || fee > 10000000 ? "Enter a fee from ₹0 to ₹1,00,00,000." : "",
+    down: values.down === "" || !Number.isFinite(down) || down < 0 || down > fee ? "Enter a down payment between zero and the total fee." : "",
+    months: values.months === "" || !Number.isInteger(months) || months < 1 || months > 120 ? "Enter a whole number from 1 to 120 months." : "",
+    rate: values.rate === "" || !Number.isFinite(rate) || rate < 0 || rate > 50 ? "Enter an annual rate from 0% to 50%." : "",
+  };
+  const valid = !Object.values(errors).some(Boolean);
+  const principal = fee - down;
   const monthlyRate = rate / 1200;
-  const rawEmi =
-    monthlyRate === 0
-      ? principal / months
-      : (principal * monthlyRate * Math.pow(1 + monthlyRate, months)) / (Math.pow(1 + monthlyRate, months) - 1);
-  // formatFee() doesn't round (catalog fees are always whole rupees already) -- the amortization
-  // formula produces fractional rupees, so round each displayed figure explicitly, same as the
-  // design's own reference `money()` helper does.
-  const emi = Math.round(rawEmi);
-  const total = Math.round(rawEmi * months);
-  const totalInterest = total - principal;
+  const emi = valid ? (principal === 0 ? 0 : monthlyRate === 0 ? principal / months : principal * monthlyRate / -Math.expm1(-months * Math.log1p(monthlyRate))) : 0;
+  const repayment = emi * months;
+  const money = (amount: number) => formatFee(Math.round(amount));
+  const fields = [
+    { key: "fee", label: "Total program fee (₹)", min: 0, max: 10000000, step: "0.01", help: "Enter tuition and any costs you want included in this estimate." },
+    { key: "down", label: "Down payment (₹)", min: 0, max: fee || 0, step: "0.01", help: "The amount paid upfront, before loan repayments." },
+    { key: "months", label: "Repayment period (months)", min: 1, max: 120, step: "1", help: "Use the repayment period offered by your lender, not the course duration." },
+    { key: "rate", label: "Annual interest rate (%)", min: 0, max: 50, step: "0.01", help: "0% models interest-free repayments; it does not confirm an available offer." },
+  ] as const;
 
-  // Fires once per page view, on the first meaningful slider release/course pick, rather than
-  // on every drag step -- range inputs fire onChange continuously while dragging in most
-  // browsers, so this is gated to mouseup/touchend/blur, matching the pattern already used for
-  // the fee-range slider in course-explorer.tsx.
-  function trackUsage(courseId = selectedCourseId) {
-    if (trackedUsage.current) return;
-    trackedUsage.current = true;
-    trackEvent("emi_calculator_used", { course_id: courseId || undefined, fee, tenure_months: months });
-  }
-
-  // Unlike trackUsage() above (fires once per page view, just to mark engagement),
-  // this fires on every slider release -- capturing the actual fee/tenure/rate combinations
-  // visitors explore, which trackUsage()'s single first-touch snapshot can't show.
   function trackCalculation() {
-    trackEvent("emi_calculation", { fee, down_payment: down, tenure_months: months, rate, emi, total_interest: totalInterest });
-  }
-
-  function handleCourseChange(courseId: string) {
-    setSelectedCourseId(courseId);
-    const course = catalogCourses.find((item) => item.id === courseId);
-    if (course) {
-      setFee(course.fee);
-      setMonths(course.duration.startsWith("36") ? 36 : 24);
+    if (!valid) return;
+    if (!trackedUsage.current) {
+      trackEvent("emi_calculator_used", { course_id: selectedCourseId || undefined, fee, tenure_months: months });
+      trackedUsage.current = true;
     }
-    trackUsage(courseId);
-    // Not calling trackCalculation() here: fee/months were just updated via setFee/setMonths
-    // above in this same synchronous handler, so it would read stale pre-update values from this
-    // render's closure. The slider release handlers below don't have that problem -- onChange has
-    // already committed a re-render by the time a separate mouseup/touchend event fires.
+    trackEvent("emi_calculation", { fee, down_payment: down, tenure_months: months, rate, emi: Math.round(emi), total_interest: Math.round(repayment - principal) });
   }
 
-  const sliderLabelStyle = { fontSize: 12, fontWeight: 700, color: "#363634", letterSpacing: "0.4px" as const };
-  const sliderValueStyle = { fontSize: 18, fontWeight: 700, color: "#363634" };
-
-  return (
-    <div className="emi-layout">
-      <div style={{ background: "#fff", border: "1px solid #CFDAE6", borderRadius: 8, padding: 28 }}>
-        <label htmlFor="emi-course" style={{ display: "block", fontSize: 12, fontWeight: 700, color: "#363634", letterSpacing: "0.4px", marginBottom: 10 }}>
-          PICK A PROGRAM
-        </label>
-        <select
-          id="emi-course"
-          value={selectedCourseId}
-          onChange={(event) => handleCourseChange(event.target.value)}
-          style={{ width: "100%", height: 48, padding: "0 14px", border: "1px solid #CFDAE6", borderRadius: 4, fontSize: 14, color: "#555", background: "#fff", marginBottom: 24 }}
-        >
-          <option value="">Enter fee manually</option>
-          {catalogCourses.map((course) => (
-            <option key={course.id} value={course.id}>
-              {course.name} — {course.university.shortName} · {formatFee(course.fee)}
-            </option>
-          ))}
-        </select>
-
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 8 }}>
-          <label htmlFor="emi-fee" style={sliderLabelStyle}>TOTAL PROGRAM FEE</label>
-          <span style={sliderValueStyle}>{formatFee(fee)}</span>
-        </div>
-        <input
-          id="emi-fee"
-          type="range"
-          min={50000}
-          max={300000}
-          step={5000}
-          value={fee}
-          onChange={(event) => setFee(Number(event.target.value))}
-          onMouseUp={() => { trackUsage(); trackCalculation(); }}
-          onTouchEnd={() => { trackUsage(); trackCalculation(); }}
-          style={{ width: "100%", accentColor: "#544CC8", marginBottom: 24 }}
-        />
-
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 8 }}>
-          <label htmlFor="emi-down" style={sliderLabelStyle}>DOWN PAYMENT</label>
-          <span style={sliderValueStyle}>{formatFee(down)}</span>
-        </div>
-        <input
-          id="emi-down"
-          type="range"
-          min={0}
-          max={150000}
-          step={5000}
-          value={down}
-          onChange={(event) => setDown(Number(event.target.value))}
-          onMouseUp={() => { trackUsage(); trackCalculation(); }}
-          onTouchEnd={() => { trackUsage(); trackCalculation(); }}
-          style={{ width: "100%", accentColor: "#544CC8", marginBottom: 24 }}
-        />
-
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 8 }}>
-          <label htmlFor="emi-tenure" style={sliderLabelStyle}>TENURE</label>
-          <span style={sliderValueStyle}>{months} months</span>
-        </div>
-        <input
-          id="emi-tenure"
-          type="range"
-          min={6}
-          max={48}
-          step={3}
-          value={months}
-          onChange={(event) => setMonths(Number(event.target.value))}
-          onMouseUp={() => { trackUsage(); trackCalculation(); }}
-          onTouchEnd={() => { trackUsage(); trackCalculation(); }}
-          style={{ width: "100%", accentColor: "#544CC8", marginBottom: 24 }}
-        />
-
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 8 }}>
-          <label htmlFor="emi-rate" style={sliderLabelStyle}>INTEREST RATE (ANNUAL)</label>
-          <span style={sliderValueStyle}>{rate === 0 ? "0% (no-cost)" : `${rate}%`}</span>
-        </div>
-        <input
-          id="emi-rate"
-          type="range"
-          min={0}
-          max={16}
-          step={0.5}
-          value={rate}
-          onChange={(event) => setRate(Number(event.target.value))}
-          onMouseUp={() => { trackUsage(); trackCalculation(); }}
-          onTouchEnd={() => { trackUsage(); trackCalculation(); }}
-          style={{ width: "100%", accentColor: "#544CC8" }}
-        />
-        <div style={{ fontSize: 12, color: "#707070", marginTop: 8, lineHeight: 1.6 }}>
-          Set 0% to model the no-cost EMI plans universities offer through finance partners. Actual EMI approval,
-          processing fees, and available tenures depend on the lender and your admission cycle — a counsellor will
-          confirm the exact plan before you pay.
-        </div>
+  return <div className="emi-layout emi-workspace">
+    <section className="emi-input-panel" aria-labelledby="emi-input-title">
+      <h2 id="emi-input-title">Build your estimate</h2>
+      <label htmlFor="emi-course">Choose a program (optional)</label>
+      <select id="emi-course" value={selectedCourseId} onChange={event => {
+        const course = catalogCourses.find(item => item.id === event.target.value);
+        setSelectedCourseId(event.target.value);
+        if (course) setValues(current => ({ ...current, fee: String(course.fee), down: String(Math.min(Number(current.down) || 0, course.fee)) }));
+      }}>
+        <option value="">Enter fee manually</option>
+        {catalogCourses.map(course => <option key={course.id} value={course.id}>{course.name} — {course.university.shortName} · {formatFee(course.fee)}</option>)}
+      </select>
+      <p className="emi-field-help">Choosing a course fills its listed tuition. Confirm current fees and loan terms separately.</p>
+      {fields.map(field => <div className="emi-input-field" key={field.key}>
+        <label htmlFor={`emi-${field.key}`}>{field.label}</label>
+        <input id={`emi-${field.key}`} type="number" inputMode={field.key === "months" ? "numeric" : "decimal"} min={field.min} max={field.max} step={field.step} value={values[field.key]} aria-invalid={Boolean(errors[field.key])} aria-describedby={`emi-${field.key}-help${errors[field.key] ? ` emi-${field.key}-error` : ""}`} onBlur={trackCalculation} onChange={event => {
+          setValues(current => ({ ...current, [field.key]: event.target.value }));
+          if (field.key === "fee") setSelectedCourseId("");
+        }} />
+        <p id={`emi-${field.key}-help`} className="emi-field-help">{field.help}</p>
+        {errors[field.key] && <p id={`emi-${field.key}-error`} className="emi-field-error">{errors[field.key]}</p>}
+      </div>)}
+    </section>
+    <aside className="right-rail emi-output-panel" aria-label="Repayment estimate">
+      <div className="emi-result" aria-live="polite" aria-atomic="true">
+        <h2>Estimated monthly EMI</h2>
+        {valid ? <><p className="emi-result-amount" data-emi="monthly">{money(emi)}</p><p>{principal === 0 ? "No loan needed for these inputs." : `For ${months} months`}</p>
+          <dl>{[
+            ["Down payment", down, "down"], ["Loan amount", principal, "principal"], ["Total interest", repayment - principal, "interest"], ["Loan repayments", repayment, "repayment"], ["Overall payment including down payment", repayment + down, "overall"],
+          ].map(([label, amount, key]) => <div key={key}><dt>{label}</dt><dd data-emi={key}>{money(Number(amount))}</dd></div>)}</dl>
+          <p className="emi-result-note">Rounded to the nearest rupee. Overall payment excludes any fees or charges not entered above.</p>
+        </> : <p role="status">Correct the highlighted inputs to see your estimate.</p>}
       </div>
-
-      <aside className="right-rail">
-        <div style={{ background: "#263238", borderRadius: 8, padding: 26, color: "#fff" }}>
-          <div style={{ fontSize: 13, color: "#B8C4CA" }}>Your monthly EMI</div>
-          <div style={{ fontSize: 38, fontWeight: 700, margin: "6px 0 2px", letterSpacing: "-0.8px" }}>{formatFee(emi)}</div>
-          <div style={{ fontSize: 13, color: "#B8C4CA" }}>for {months} months</div>
-          <div style={{ height: 1, background: "rgba(255,255,255,0.12)", margin: "18px 0" }} />
-          <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, padding: "5px 0" }}>
-            <span style={{ color: "#B8C4CA" }}>Loan amount</span>
-            <span style={{ fontWeight: 700 }}>{formatFee(principal)}</span>
-          </div>
-          <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, padding: "5px 0" }}>
-            <span style={{ color: "#B8C4CA" }}>Total interest</span>
-            <span style={{ fontWeight: 700 }}>{formatFee(totalInterest)}</span>
-          </div>
-          <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, padding: "5px 0" }}>
-            <span style={{ color: "#B8C4CA" }}>Total payable</span>
-            <span style={{ fontWeight: 700 }}>{formatFee(total)}</span>
-          </div>
-        </div>
-
-        <div style={{ background: "#fff", border: "1px solid #CFDAE6", borderRadius: 8, padding: 22 }}>
-          <div style={{ fontSize: 15, fontWeight: 700, color: "#363634" }}>Get the exact loan terms</div>
-          <div style={{ fontSize: 13, color: "#696868", margin: "7px 0 14px", lineHeight: 1.55 }}>
-            A counsellor shares approved partner rates, processing fees and eligibility for your program.
-          </div>
-          <Link
-            href={selectedCourse ? `/lead?intent=emi-calculator&course=${selectedCourse.id}` : "/lead?intent=emi-calculator"}
-            className="btn primary"
-            style={{ width: "100%", height: 46, fontSize: 15, display: "flex", alignItems: "center", justifyContent: "center" }}
-            data-open-lead
-          >
-            Talk to a counsellor
-          </Link>
-        </div>
-
-        <div style={{ background: "#F4F3FC", border: "1px solid #CFDAE6", borderRadius: 8, padding: 20 }}>
-          <div style={{ fontSize: 14, fontWeight: 700, color: "#363634", marginBottom: 8 }}>Cheapest programs by EMI</div>
-          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            {cheapestByEmi.map((course) => (
-              <Link
-                key={course.id}
-                href={`/courses/${course.slug}`}
-                style={{ display: "flex", justifyContent: "space-between", fontSize: 13, color: "#555" }}
-              >
-                <span>{course.name} · {course.university.shortName}</span>
-                <b style={{ color: "#544CC8" }}>{course.emi}</b>
-              </Link>
-            ))}
-          </div>
-        </div>
-      </aside>
-    </div>
-  );
+      <div className="emi-next-step"><h2>Explore your next step</h2><p>This is a planning estimate, not a loan offer or approval. Confirm rates, charges and repayment dates with the lender.</p>
+        {selectedCourse && <Link href={`/courses/${selectedCourse.slug}`} className="btn secondary">View selected course</Link>}
+        <Link href={selectedCourse ? `/lead?intent=emi-calculator&course=${selectedCourse.id}` : "/lead?intent=emi-calculator"} className="btn primary" data-open-lead>Apply now</Link>
+        <Link href="/courses">Browse courses and fees</Link>
+      </div>
+    </aside>
+  </div>;
 }

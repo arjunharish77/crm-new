@@ -1,4 +1,5 @@
 "use client";
+import { storageGet, storageSet } from "@/lib/storage";
 
 // Gap checklist Module 10's "recent/favorite records" item -- extends the earlier, deliberately
 // narrower "jump to recent records" the global command palette pass built (Lead/Opportunity
@@ -40,7 +41,7 @@ function safeParse<T>(raw: string | null): T[] {
 
 function safeWrite(key: string, value: unknown) {
   try {
-    window.localStorage.setItem(key, JSON.stringify(value));
+    storageSet(key, JSON.stringify(value));
   } catch {
     // localStorage can throw in private-browsing/quota-exceeded contexts -- a missed write
     // is a minor UX gap, not worth failing the page render over.
@@ -50,7 +51,7 @@ function safeWrite(key: string, value: unknown) {
 export function getRecentRecords(): RecentRecord[] {
   if (typeof window === "undefined") return [];
   try {
-    return safeParse<RecentRecord>(window.localStorage.getItem(RECENT_STORAGE_KEY));
+    return safeParse<RecentRecord>(storageGet(RECENT_STORAGE_KEY));
   } catch {
     return [];
   }
@@ -59,7 +60,7 @@ export function getRecentRecords(): RecentRecord[] {
 export function recordRecentView(type: RecordType, id: string, label: string) {
   if (typeof window === "undefined" || !id || !label) return;
   try {
-    const existing = safeParse<RecentRecord>(window.localStorage.getItem(RECENT_STORAGE_KEY));
+    const existing = safeParse<RecentRecord>(storageGet(RECENT_STORAGE_KEY));
     const deduped = existing.filter((entry) => !(entry.type === type && entry.id === id));
     const next = [{ type, id, label, viewedAt: new Date().toISOString() }, ...deduped].slice(0, MAX_RECENT);
     safeWrite(RECENT_STORAGE_KEY, next);
@@ -73,7 +74,7 @@ export function recordRecentView(type: RecordType, id: string, label: string) {
 export function getFavoriteRecords(): FavoriteRecord[] {
   if (typeof window === "undefined") return [];
   try {
-    return safeParse<FavoriteRecord>(window.localStorage.getItem(FAVORITES_STORAGE_KEY));
+    return safeParse<FavoriteRecord>(storageGet(FAVORITES_STORAGE_KEY));
   } catch {
     return [];
   }

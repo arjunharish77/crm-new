@@ -1,6 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const dbMocks = vi.hoisted(() => ({ query: vi.fn() }));
+// queryOne: the workspace time zone lookup ("missed today" starts at the workspace's midnight);
+// no TenantConfig row means the default zone.
+const dbMocks = vi.hoisted(() => ({ query: vi.fn(), queryOne: vi.fn().mockResolvedValue(null) }));
 const dispositionsMocks = vi.hoisted(() => ({ listCallDispositionsForTenant: vi.fn().mockResolvedValue([]) }));
 const availabilityMocks = vi.hoisted(() => ({ listAgentAvailabilityForTenant: vi.fn().mockResolvedValue([]) }));
 
@@ -9,6 +11,15 @@ vi.mock("@/lib/server/dispositions", () => dispositionsMocks);
 vi.mock("@/lib/server/agent-availability", () => availabilityMocks);
 
 import { getCallCenterWorkspaceForTenant } from "@/lib/server/call-center";
+
+// Telephony business logic under test; the TELEPHONY module gate itself is covered by
+// tests/telephony-module-gate.test.ts.
+vi.mock("@/lib/server/module-entitlements", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/server/module-entitlements")>()),
+  assertTenantModule: vi.fn(async () => undefined),
+  assertModuleEnabled: vi.fn(async () => undefined),
+}));
+
 
 const rep = { id: "rep-1", tenantId: "tenant-a" };
 const admin = { id: "admin-1", tenantId: "tenant-a", isTenantAdmin: true };

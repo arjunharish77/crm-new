@@ -1,8 +1,9 @@
 import { randomUUID } from "crypto";
+import { assertFeatureEnabled } from "@/lib/server/entitlements";
 import { execute, query, queryOne } from "@/lib/db/query";
 import { createAuditLog } from "@/lib/server/crm";
 
-type TenantUser = { id: string; tenantId: string | null };
+type TenantUser = { id: string; tenantId: string | null; isPlatformAdmin?: boolean };
 
 export type AnnotationCategory = "CAMPAIGN" | "EVENT" | "OUTAGE" | "POLICY_CHANGE" | "INTAKE_DEADLINE" | "FEE_DEADLINE" | "LAUNCH" | "OTHER";
 
@@ -21,6 +22,7 @@ function requireTenantId(user: TenantUser) {
 // Analytics annotations (gap checklist Module 17, item 21) -- marks campaigns/events/outages/
 // policy changes/intake and fee deadlines/launch dates on charts for context.
 export async function listAnnotationsForTenant(user: TenantUser, from?: string | null, to?: string | null) {
+  await assertFeatureEnabled(user.tenantId, "advancedReporting", { isPlatformAdmin: user.isPlatformAdmin });
   const tenantId = requireTenantId(user);
   const conditions = ['"tenantId" = $1'];
   const values: unknown[] = [tenantId];
@@ -40,6 +42,7 @@ export async function listAnnotationsForTenant(user: TenantUser, from?: string |
 }
 
 export async function createAnnotationForTenant(user: TenantUser, input: AnnotationInput) {
+  await assertFeatureEnabled(user.tenantId, "advancedReporting", { isPlatformAdmin: user.isPlatformAdmin });
   const tenantId = requireTenantId(user);
   const label = String(input.label ?? "").trim();
   if (!label) throw new Error("ANNOTATION_LABEL_REQUIRED");
@@ -56,6 +59,7 @@ export async function createAnnotationForTenant(user: TenantUser, input: Annotat
 }
 
 export async function deleteAnnotationForTenant(user: TenantUser, id: string) {
+  await assertFeatureEnabled(user.tenantId, "advancedReporting", { isPlatformAdmin: user.isPlatformAdmin });
   const tenantId = requireTenantId(user);
   await execute(`delete from "ReportAnnotation" where "tenantId" = $1 and id = $2`, [tenantId, id]);
 }

@@ -29,7 +29,7 @@ export async function DELETE(
     const { id } = await params;
     const rule = await deleteNextBestActionRule(user, id);
     if (!rule) return NextResponse.json({ message: "Rule not found" }, { status: 404 });
-    return NextResponse.json({ success: true });
+    return NextResponse.json({ success: true, purgeAfter: rule.purgeAfter ?? null });
   } catch (error) {
     if (error instanceof Error && error.message === "UNAUTHORIZED") return unauthorized();
     return serverError("Failed to delete Next-Best-Action rule", error);

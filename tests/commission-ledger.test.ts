@@ -214,7 +214,7 @@ describe("calculateAndRecordCommissionForOpportunity — trigger-time flow", () 
     dbMocks.state.PartnerProfile = [{ id: "pp-1", tenantId: TENANT, userId: partnerUserId, status: "ACTIVE" }];
     dbMocks.state.CommissionRule = [{ id: "rule-1", tenantId: TENANT, isActive: true, priority: 1, ruleType: "PERCENTAGE", value: 8, conditions: {}, createdAt: new Date().toISOString() }];
     dbMocks.queryOne.mockImplementation(async (sql: string) => {
-      if (sql.includes('from "TenantFeature"')) return { payoutsEnabled: false };
+      if (sql.includes('from "TenantModuleEntitlement"')) return { status: "DISABLED" };
       return null;
     });
 
@@ -226,7 +226,7 @@ describe("calculateAndRecordCommissionForOpportunity — trigger-time flow", () 
 describe("Commission Rule CRUD — entitlement gating", () => {
   it("rejects creating a commission rule when the Payouts module is disabled for the tenant", async () => {
     dbMocks.queryOne.mockImplementation(async (sql: string) => {
-      if (sql.includes('from "TenantFeature"')) return { payoutsEnabled: false };
+      if (sql.includes('from "TenantModuleEntitlement"')) return { status: "DISABLED" };
       return null;
     });
 
@@ -237,7 +237,7 @@ describe("Commission Rule CRUD — entitlement gating", () => {
 
   it("rejects updating a commission rule when the Payouts module is disabled for the tenant", async () => {
     dbMocks.queryOne.mockImplementation(async (sql: string) => {
-      if (sql.includes('from "TenantFeature"')) return { payoutsEnabled: false };
+      if (sql.includes('from "TenantModuleEntitlement"')) return { status: "DISABLED" };
       return null;
     });
 
@@ -246,7 +246,7 @@ describe("Commission Rule CRUD — entitlement gating", () => {
 
   it("rejects deleting a commission rule when the Payouts module is disabled for the tenant", async () => {
     dbMocks.queryOne.mockImplementation(async (sql: string) => {
-      if (sql.includes('from "TenantFeature"')) return { payoutsEnabled: false };
+      if (sql.includes('from "TenantModuleEntitlement"')) return { status: "DISABLED" };
       return null;
     });
 
@@ -255,7 +255,7 @@ describe("Commission Rule CRUD — entitlement gating", () => {
 
   it("allows a platform admin to bypass the Payouts gate", async () => {
     dbMocks.queryOne.mockImplementation(async (sql: string) => {
-      if (sql.includes('from "TenantFeature"')) return { payoutsEnabled: false };
+      if (sql.includes('from "TenantModuleEntitlement"')) return { status: "DISABLED" };
       if (sql.includes('insert into "CommissionRule"')) return { id: "rule-1", tenantId: TENANT, name: "Default" };
       return null;
     });

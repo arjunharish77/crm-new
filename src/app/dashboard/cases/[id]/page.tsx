@@ -2,10 +2,11 @@
 
 import { RecordSummary } from "@/components/detail-shell/record-summary";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, BookOpen, History, LifeBuoy, Lock, MessageSquare, Pause, Paperclip, Play, Sparkles, UserCog } from "lucide-react";
+import { SlaBadge } from "@/components/cases/sla-badge";
+import { ArrowLeft, BookOpen, History, LifeBuoy, Lock, MessageSquare, Pause, Paperclip, Play, Sparkles, ThumbsDown, ThumbsUp, UserCog } from "lucide-react";
 import { toast } from "sonner";
 import { apiFetch } from "@/lib/api";
 import { Badge } from "@/components/ui/badge";
@@ -20,11 +21,13 @@ import { PageSkeleton } from "@/components/common/skeletons";
 import { ErrorState } from "@/components/common/error-state";
 import { formatWorkspaceDateTime, formatWorkspaceRelativeTime } from "@/lib/date-format";
 import { cn } from "@/lib/utils";
+import { useRecordTitle } from "@/components/app-states/page-title";
 
 export default function CaseDetailPage() {
     const params = useParams<{ id: string }>();
     const router = useRouter();
     const [record, setRecord] = useState<any>(null);
+    useRecordTitle(record ? [record.caseNumber ? `#${record.caseNumber}` : "", record.subject].filter(Boolean).join(" ") : null);
     const [loading, setLoading] = useState(true);
     const [fetchError, setFetchError] = useState<string | null>(null);
 
@@ -43,10 +46,14 @@ export default function CaseDetailPage() {
 
     const [slaBusy, setSlaBusy] = useState(false);
     const [suggestedArticles, setSuggestedArticles] = useState<any[]>([]);
+    const [openArticleId, setOpenArticleId] = useState<string | null>(null);
+    // "Was this helpful?" per suggested article: "sending" while posting, "sent" once recorded.
+    const [articleFeedback, setArticleFeedback] = useState<Record<string, "sending" | "sent">>({});
     const [macros, setMacros] = useState<any[]>([]);
     const [selectedMacroId, setSelectedMacroId] = useState("");
     const [macroApplying, setMacroApplying] = useState(false);
     const [historyOpen, setHistoryOpen] = useState(false);
+    const attachmentInput = useRef<HTMLInputElement>(null);
     const [history, setHistory] = useState<any>(null);
     const [attachments, setAttachments] = useState<any[]>([]);
     const [attachmentUploading, setAttachmentUploading] = useState(false);
@@ -136,13 +143,43 @@ export default function CaseDetailPage() {
 
     const userById = new Map(users.map((u) => [u.id, u]));
 
-    const handleFieldChange = async (patch: Record<string, unknown>) => {
+    // Status and priority change as soon as they're picked; the toast offers Undo (UI/UX plan §5.15).
+    const handleFieldChange = async (patch: Record<string, unknown>, undo = true) => {
+        const previous = Object.fromEntries(Object.keys(patch).map((key) => [key, record?.[key] ?? null]));
         try {
             const updated = await apiFetch<any>(`/cases/${params.id}`, { method: "PATCH", body: JSON.stringify(patch) });
             setRecord((prev: any) => ({ ...prev, ...updated }));
-            toast.success("Case updated");
+            const what = "statusId" in patch
+                ? `Status: ${statuses.find((status) => status.id === patch.statusId)?.name ?? "changed"}`
+                : "priorityId" in patch
+                    ? `Priority: ${priorities.find((priority) => priority.id === patch.priorityId)?.name ?? "changed"}`
+                    : "Case updated";
+            toast.success(what, undo ? { action: { label: "Undo", onClick: () => handleFieldChange(previous, false) } } : undefined);
         } catch (error: any) {
-            toast.error(error?.message || "Failed to update case");
+            toast.error(error?.message || "The case couldn't be updated");
+        }
+    };
+
+    // A suggested article goes into the reply box as a customer-visible reply, for the agent to edit.
+    const insertArticle = (article: { title: string; body?: string | null }) => {
+        setCommentBody((current) => [current.trim(), article.body?.trim() || article.title].filter(Boolean).join("\n\n"));
+        setCommentInternal(false);
+        window.setTimeout(() => document.getElementById("case-comment")?.focus(), 0);
+        toast.success("Article added to your reply as a customer-visible reply");
+    };
+
+    const sendArticleFeedback = async (articleId: string, isHelpful: boolean) => {
+        setArticleFeedback((current) => ({ ...current, [articleId]: "sending" }));
+        try {
+            await apiFetch(`/knowledge-base/articles/${articleId}/feedback`, { method: "POST", body: JSON.stringify({ isHelpful, caseId: params.id }) });
+            setArticleFeedback((current) => ({ ...current, [articleId]: "sent" }));
+        } catch (error: any) {
+            setArticleFeedback((current) => {
+                const next = { ...current };
+                delete next[articleId];
+                return next;
+            });
+            toast.error(error?.message || "Your feedback couldn't be saved");
         }
     };
 
@@ -193,7 +230,6 @@ export default function CaseDetailPage() {
         );
     }
 
-    const isBreached = !record.resolvedAt && record.resolutionDueAt && new Date(record.resolutionDueAt).getTime() < Date.now();
 
     return (
         <div className="mx-auto min-w-0 max-w-[1400px]">
@@ -203,7 +239,7 @@ export default function CaseDetailPage() {
                 </Button>
                 <div className="min-w-0 flex-1">
                     <h1 className="[overflow-wrap:anywhere] break-words text-2xl font-semibold">{record.subject}</h1>
-                    <div className="mt-1 flex flex-wrap items-center gap-2 text-sm text-muted-foreground"><span>Case #{record.caseNumber}</span><Badge variant="outline">{statuses.find(status => status.id === record.statusId)?.name || "Status unavailable"}</Badge>{isBreached && <Badge variant="destructive">SLA overdue</Badge>}</div>
+                    <div className="mt-1 flex flex-wrap items-center gap-2 text-sm text-muted-foreground"><span>Case #{record.caseNumber}</span><Badge tone="neutral">{statuses.find(status => status.id === record.statusId)?.name || "Status unavailable"}</Badge></div>
                 </div>
             </div>
 
@@ -211,18 +247,18 @@ export default function CaseDetailPage() {
                 <RecordSummary>
                     <Card className="min-w-0 space-y-3 p-4">
                         <div className="space-y-1.5">
-                            <Label>Status</Label>
+                            <Label htmlFor="case-status">Status</Label>
                             <Select value={record.statusId} onValueChange={(value) => handleFieldChange({ statusId: value })}>
-                                <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                                <SelectTrigger id="case-status" className="w-full"><SelectValue /></SelectTrigger>
                                 <SelectContent>
                                     {statuses.map((s) => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
                                 </SelectContent>
                             </Select>
                         </div>
                         <div className="space-y-1.5">
-                            <Label>Priority</Label>
+                            <Label htmlFor="case-priority">Priority</Label>
                             <Select value={record.priorityId} onValueChange={(value) => handleFieldChange({ priorityId: value })}>
-                                <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                                <SelectTrigger id="case-priority" className="w-full"><SelectValue /></SelectTrigger>
                                 <SelectContent>
                                     {priorities.map((p) => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
                                 </SelectContent>
@@ -238,18 +274,14 @@ export default function CaseDetailPage() {
                                 </Button>
                             </div>
                         </div>
-                        <div className="grid grid-cols-2 gap-3 border-t pt-3 text-xs">
+                        <div className="space-y-2 border-t pt-3 text-xs">
                             <div>
-                                <p className="text-muted-foreground">First response due</p>
-                                <p className={cn("font-semibold", !record.firstRespondedAt && record.firstResponseDueAt && new Date(record.firstResponseDueAt).getTime() < Date.now() && "text-destructive")}>
-                                    {record.firstResponseDueAt ? formatWorkspaceDateTime(record.firstResponseDueAt) : "—"}
-                                </p>
+                                <p className="text-muted-foreground">First response</p>
+                                <SlaBadge due={record.firstResponseDueAt} resolvedAt={record.firstRespondedAt ?? record.resolvedAt} />
                             </div>
                             <div>
-                                <p className="text-muted-foreground">Resolution due</p>
-                                <p className={cn("font-semibold", isBreached && "text-destructive")}>
-                                    {record.resolutionDueAt ? formatWorkspaceDateTime(record.resolutionDueAt) : "—"}
-                                </p>
+                                <p className="text-muted-foreground">Resolution</p>
+                                <SlaBadge due={record.resolutionDueAt} resolvedAt={record.resolvedAt} />
                             </div>
                         </div>
                         <div className="flex flex-wrap items-center justify-between border-t pt-3">
@@ -274,16 +306,46 @@ export default function CaseDetailPage() {
                                 <BookOpen className="size-4 text-muted-foreground" />
                                 <p className="text-sm font-bold">Suggested articles</p>
                             </div>
-                            {suggestedArticles.map((article) => (
-                                <div key={article.id} className="rounded-md border p-2 text-sm">
-                                    <p className="font-medium">{article.title}</p>
-                                </div>
-                            ))}
+                            {suggestedArticles.map((article) => {
+                                const open = openArticleId === article.id;
+                                return (
+                                    <div key={article.id} className="rounded-md border p-2 text-sm">
+                                        <button
+                                            type="button"
+                                            aria-expanded={open}
+                                            aria-controls={`article-${article.id}`}
+                                            onClick={() => setOpenArticleId(open ? null : article.id)}
+                                            className="w-full rounded-sm text-left font-medium hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                                        >
+                                            {article.title}
+                                        </button>
+                                        {open ? (
+                                            <div id={`article-${article.id}`} className="mt-2 space-y-2">
+                                                <p className="max-h-48 overflow-y-auto whitespace-pre-wrap text-xs text-muted-foreground">{article.body}</p>
+                                                <Button size="sm" variant="outline" onClick={() => insertArticle(article)}>Insert in reply</Button>
+                                                {articleFeedback[article.id] === "sent" ? (
+                                                    <p role="status" className="text-xs text-muted-foreground">Thanks for the feedback</p>
+                                                ) : (
+                                                    <div role="group" aria-label={`Was ${article.title} helpful?`} className="flex flex-wrap items-center gap-1 text-xs text-muted-foreground">
+                                                        <span className="mr-1">Was this helpful?</span>
+                                                        <Button size="xs" variant="ghost" disabled={articleFeedback[article.id] === "sending"} onClick={() => sendArticleFeedback(article.id, true)}>
+                                                            <ThumbsUp className="size-3.5" />Yes
+                                                        </Button>
+                                                        <Button size="xs" variant="ghost" disabled={articleFeedback[article.id] === "sending"} onClick={() => sendArticleFeedback(article.id, false)}>
+                                                            <ThumbsDown className="size-3.5" />No
+                                                        </Button>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        ) : null}
+                                    </div>
+                                );
+                            })}
                         </Card>
                     )}
 
                     <Card className="space-y-2 p-4">
-                        <button type="button" className="flex w-full items-center justify-between text-sm font-bold" onClick={loadHistory}>
+                        <button type="button" aria-expanded={historyOpen} className="flex w-full items-center justify-between rounded-sm text-sm font-bold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" onClick={loadHistory}>
                             <span className="flex items-center gap-2"><History className="size-4 text-muted-foreground" />Communication history</span>
                             <span className="text-xs font-normal text-muted-foreground">{historyOpen ? "Hide" : "Show"}</span>
                         </button>
@@ -356,7 +418,7 @@ export default function CaseDetailPage() {
                                             <span className="text-xs font-bold">{userById.get(comment.authorId)?.name ?? userById.get(comment.authorId)?.email ?? "Unknown"}</span>
                                             <div className="flex items-center gap-2">
                                                 {comment.isInternal && (
-                                                    <Badge variant="outline" className="gap-1 text-[10px]">
+                                                    <Badge variant="outline" className="gap-1 text-xs">
                                                         <Lock className="size-3" />
                                                         Internal
                                                     </Badge>
@@ -384,7 +446,7 @@ export default function CaseDetailPage() {
                             </div>
                         )}
                         <div className="mt-4 space-y-2 border-t pt-3">
-                            <Textarea rows={3} placeholder="Add a comment..." value={commentBody} onChange={(e) => setCommentBody(e.target.value)} />
+                            <Textarea id="case-comment" aria-label="Comment" rows={3} placeholder="Add a comment…" value={commentBody} onChange={(e) => setCommentBody(e.target.value)} />
                             <div className="flex flex-wrap items-center justify-between">
                                 <label className="flex items-center gap-2 text-sm">
                                     <Checkbox checked={commentInternal} onCheckedChange={(checked) => setCommentInternal(!!checked)} />
@@ -403,15 +465,19 @@ export default function CaseDetailPage() {
                                 <Paperclip className="size-4 text-muted-foreground" />
                                 <p className="text-sm font-bold">Attachments</p>
                             </div>
-                            <label className="cursor-pointer text-xs text-primary hover:underline">
-                                {attachmentUploading ? "Uploading..." : "Upload"}
-                                <input
-                                    type="file"
-                                    className="hidden"
-                                    disabled={attachmentUploading}
-                                    onChange={(e) => { const file = e.target.files?.[0]; if (file) uploadAttachment(file); e.target.value = ""; }}
-                                />
-                            </label>
+                            {/* A real button that opens the file picker, so it works from the keyboard (UI/UX plan §5.15). */}
+                            <Button size="sm" variant="outline" isLoading={attachmentUploading} onClick={() => attachmentInput.current?.click()}>
+                                <Paperclip className="size-3.5" />Add file
+                            </Button>
+                            <input
+                                ref={attachmentInput}
+                                type="file"
+                                className="sr-only"
+                                tabIndex={-1}
+                                aria-hidden
+                                disabled={attachmentUploading}
+                                onChange={(e) => { const file = e.target.files?.[0]; if (file) uploadAttachment(file); e.target.value = ""; }}
+                            />
                         </div>
                         {attachments.length === 0 ? (
                             <p className="text-sm text-muted-foreground">No attachments yet.</p>

@@ -5,7 +5,7 @@ import { PageHeader } from "@/components/layout/page-header";
 import { ErrorState } from "@/components/common/error-state";
 import { apiFetch } from "@/lib/api";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Users, Building, Coins, Activity } from "lucide-react";
+import { Users, Building, Activity } from "lucide-react";
 
 export default function PlatformAdminDashboard() {
     const [stats, setStats] = useState({
@@ -38,7 +38,7 @@ export default function PlatformAdminDashboard() {
 
     return (
         <div className="@container/platform min-w-0 space-y-6">
-            <PageHeader title="Dashboard Overview" description="Workspace status and platform usage." />
+            <PageHeader title="Overview" description="Workspaces, users and records across the platform." />
 
             <div className="grid gap-4 @min-[550px]/platform:grid-cols-2 @min-[1050px]/platform:grid-cols-4">
                 <Card>
@@ -80,18 +80,6 @@ export default function PlatformAdminDashboard() {
                     </CardContent>
                 </Card>
 
-                <Card>
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Revenue (Est)</CardTitle>
-                        <Coins className="h-4 w-4 text-muted-foreground" />
-                    </CardHeader>
-                    <CardContent>
-                        <div className="text-2xl font-bold">Unavailable</div>
-                        <p className="text-xs text-muted-foreground">
-                            Billing integration pending
-                        </p>
-                    </CardContent>
-                </Card>
             </div>
 
             {/* Recent Activity or Tenant List Snippet could go here */}

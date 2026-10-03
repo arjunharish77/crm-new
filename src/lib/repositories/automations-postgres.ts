@@ -4,6 +4,7 @@ import { withAdvisoryLock, withTransaction } from "@/lib/db/transaction";
 import { getTenantTimeZone, normalizeTenantTimeZone } from "@/lib/server/date-format";
 import { assertFeatureEnabled, isFeatureEnabledForTenant } from "@/lib/server/entitlements";
 import { checkRateLimitWithAlert } from "@/lib/server/rate-limit";
+import { resolveLeadStatusForWrite } from "@/lib/repositories/lead-statuses-postgres";
 
 type TenantUser = {
   id: string;
@@ -13,7 +14,19 @@ type TenantUser = {
   isPlatformAdmin?: boolean;
 };
 
-const AUTOMATION_COLUMNS = 'id, name, description, trigger, workflow, "isActive", "createdAt", "updatedAt", "tenantId"';
+const AUTOMATION_COLUMNS = 'id, name, description, trigger, workflow, "isActive", "createdAt", "updatedAt", "tenantId", "deletedAt", draft, "draftUpdatedAt", "publishedVersion", "publishedAt", "createdBy"';
+
+// Archive, restore and delete for good: the person who created it, or an admin (decided
+// 2026-10-03). An item with no recorded creator (made before this was tracked) is admin-only.
+function assertCreatorOrAdmin(user: TenantUser, createdBy: string | null | undefined) {
+  if ((user as any).isTenantAdmin || (user as any).isPlatformAdmin) return;
+  if (!createdBy || createdBy !== user.id) throw new Error("ITEM_OWNER_OR_ADMIN");
+}
+
+// Archive model (decision 31): deleting an automation archives it (deletedAt); it stops running
+// at once, can be restored as it was for ARCHIVE_RETENTION_DAYS, and is then purged by the worker
+// (purgeArchivedAutomations) together with its run history.
+export const ARCHIVE_RETENTION_DAYS = 30;
 
 function tenantWhere(user: TenantUser, startIndex = 1) {
   return user.tenantId ? { sql: `"tenantId" = $${startIndex}`, values: [user.tenantId] } : { sql: '"tenantId" is null', values: [] };
@@ -272,6 +285,11 @@ function normalizePatchField(field: string) {
 }
 
 async function updateTable(table: "Lead" | "Opportunity" | "Activity" | "Task", tenantId: string | null, id: string, patch: Record<string, unknown>, client?: Queryable) {
+  // Lead status is one of the tenant's statuses (UI/UX plan decision 6), matched by key or label.
+  // An unknown one fails this step (LEAD_STATUS_UNKNOWN) instead of storing a stray value.
+  if (table === "Lead" && patch.status !== undefined) {
+    patch = { ...patch, status: await resolveLeadStatusForWrite(tenantId, patch.status, null, client) };
+  }
   const columns = Object.keys(patch).filter((key) => patch[key] !== undefined);
   if (!columns.length) return;
   const values = columns.map((column) => patch[column]);
@@ -676,6 +694,8 @@ async function executeAutomationAction(
         entityType,
         entityId,
         payload: { automationNode: nodeData.label ?? type, sourceRecord: record },
+        // The node's message is written in the builder with no record values merged in.
+        expandSnippets: true,
         fallback,
         deliveryControls,
       },
@@ -1040,13 +1060,14 @@ export async function executeAutomationWorkflow(
   return log;
 }
 
-export async function listAutomationsForTenant(user: TenantUser) {
+export async function listAutomationsForTenant(user: TenantUser, options: { archived?: boolean } = {}) {
   const tenant = tenantWhere(user);
   const automations = await query<any>(
-    `select id, name, description, trigger, workflow, "isActive", "createdAt", "updatedAt"
+    `select id, name, description, trigger, workflow, "isActive", "createdAt", "updatedAt", "deletedAt",
+            "publishedVersion", (draft is not null) as "hasDraft", draft->>'name' as "draftName"
      from "AutomationV2"
-     where ${tenant.sql}
-     order by "createdAt" desc`,
+     where ${tenant.sql} and ${options.archived ? `"deletedAt" is not null` : `"deletedAt" is null`}
+     order by ${options.archived ? `"deletedAt" desc` : `"createdAt" desc`}`,
     tenant.values,
   );
   const ids = automations.map((item) => item.id);
@@ -1072,13 +1093,53 @@ export async function getAutomationForTenant(user: TenantUser, id: string) {
   );
 }
 
+// Builder save model (decision 29): the live definition (name, description, trigger, workflow)
+// is what runs; `draft` holds unpublished changes; each publish is an AutomationVersion.
+type AutomationDefinition = { name: string; description: string | null; trigger: Record<string, unknown>; workflow: Record<string, unknown> };
+
+function definitionOf(source: Record<string, any>): AutomationDefinition {
+  return {
+    name: String(source.name ?? "").trim(),
+    description: source.description ? String(source.description) : null,
+    trigger: source.trigger && typeof source.trigger === "object" ? source.trigger : { type: "MANUAL" },
+    workflow: source.workflow && typeof source.workflow === "object" ? source.workflow : { nodes: [], edges: [] },
+  };
+}
+
+// jsonb stores object keys in its own order, so compare with keys sorted.
+function canonicalJson(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(",")}]`;
+  if (value && typeof value === "object") {
+    return `{${Object.keys(value as Record<string, unknown>).sort().map((key) => `${JSON.stringify(key)}:${canonicalJson((value as Record<string, unknown>)[key])}`).join(",")}}`;
+  }
+  return JSON.stringify(value ?? null);
+}
+
+function sameDefinition(left: AutomationDefinition, right: AutomationDefinition) {
+  return canonicalJson(left) === canonicalJson(right);
+}
+
+async function recordAutomationVersion(user: TenantUser, automationId: string, version: number, definition: AutomationDefinition, notes: string | null, client: Queryable) {
+  await execute(
+    `insert into "AutomationVersion" (id, "tenantId", "automationId", version, name, description, trigger, workflow, notes, "publishedBy", "publishedAt")
+     values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, now())`,
+    [randomUUID(), user.tenantId, automationId, version, definition.name, definition.description, definition.trigger, definition.workflow, notes, user.id],
+    client,
+  );
+}
+
+// `asDraft` (the builder): a new automation starts as an unpublished draft and stays off until
+// published. Other callers (journeys, the API, apps) create a live automation as before, which
+// is recorded as version 1.
 export async function createAutomationForTenant(user: TenantUser, payload: Record<string, unknown>) {
   await assertFeatureEnabled(user.tenantId, "automationEnabled", { isPlatformAdmin: user.isPlatformAdmin });
+  const asDraft = payload.asDraft === true;
   return withTransaction(user, async (client) => {
     const now = new Date().toISOString();
+    const definition = definitionOf(payload);
     const row = await queryOne<any>(
-      `insert into "AutomationV2" (id, "tenantId", name, description, trigger, steps, workflow, "isActive", "createdAt", "updatedAt")
-       values ($1, $2, $3, $4, $5, null, $6, $7, $8, $8)
+      `insert into "AutomationV2" (id, "tenantId", name, description, trigger, steps, workflow, "isActive", "createdAt", "updatedAt", draft, "draftUpdatedAt", "draftUpdatedBy", "publishedVersion", "publishedAt", "createdBy")
+       values ($1, $2, $3, $4, $5, null, $6, $7, $8, $8, $9, $10, $11, $12, $13, $14)
        returning ${AUTOMATION_COLUMNS}`,
       [
         randomUUID(),
@@ -1087,15 +1148,106 @@ export async function createAutomationForTenant(user: TenantUser, payload: Recor
         payload.description ?? null,
         payload.trigger ?? { type: "MANUAL" },
         payload.workflow ?? { nodes: [], edges: [] },
-        payload.isActive ?? true,
+        asDraft ? false : payload.isActive ?? true,
         now,
+        asDraft ? definition : null,
+        asDraft ? now : null,
+        asDraft ? user.id : null,
+        asDraft ? 0 : 1,
+        asDraft ? null : now,
+        user.id === "system" ? null : user.id,
       ],
       client,
     );
     if (!row) throw new Error("AUTOMATION_INSERT_FAILED");
+    if (!asDraft) await recordAutomationVersion(user, row.id, 1, definitionOf(row), null, client);
     await createAuditLog(user, "CREATE", "AUTOMATION", row.id, null, row, null, client).catch(() => undefined);
     return row;
   });
+}
+
+// Autosave: stores unpublished changes without touching what runs. A draft identical to the
+// live definition is cleared (nothing to publish).
+export async function saveAutomationDraftForTenant(user: TenantUser, id: string, draftInput: Record<string, unknown>) {
+  await assertFeatureEnabled(user.tenantId, "automationEnabled", { isPlatformAdmin: user.isPlatformAdmin });
+  const existing = await getAutomationForTenant(user, id);
+  if (!existing) throw new Error("AUTOMATION_NOT_FOUND");
+  if (existing.deletedAt) throw new Error("AUTOMATION_ARCHIVED");
+  const draft = definitionOf(draftInput);
+  const unchanged = Number(existing.publishedVersion ?? 0) > 0 && sameDefinition(draft, definitionOf(existing));
+  const row = await queryOne<any>(
+    `update "AutomationV2" set draft = $1, "draftUpdatedAt" = $2, "draftUpdatedBy" = $3
+     where id = $4 and "tenantId" = $5 and "deletedAt" is null returning ${AUTOMATION_COLUMNS}`,
+    [unchanged ? null : draft, unchanged ? null : new Date().toISOString(), unchanged ? null : user.id, id, user.tenantId],
+  );
+  if (!row) throw new Error("AUTOMATION_NOT_FOUND");
+  return row;
+}
+
+export async function discardAutomationDraftForTenant(user: TenantUser, id: string) {
+  await assertFeatureEnabled(user.tenantId, "automationEnabled", { isPlatformAdmin: user.isPlatformAdmin });
+  const row = await queryOne<any>(
+    `update "AutomationV2" set draft = null, "draftUpdatedAt" = null, "draftUpdatedBy" = null
+     where id = $1 and "tenantId" = $2 and "deletedAt" is null and "publishedVersion" > 0 returning ${AUTOMATION_COLUMNS}`,
+    [id, user.tenantId],
+  );
+  if (!row) throw new Error("AUTOMATION_NOT_FOUND");
+  return row;
+}
+
+// Publish: the draft becomes what runs, as the next version. Validated first.
+export async function publishAutomationForTenant(user: TenantUser, id: string, notes?: string | null) {
+  await assertFeatureEnabled(user.tenantId, "automationEnabled", { isPlatformAdmin: user.isPlatformAdmin });
+  return withTransaction(user, async (client) => {
+    const existing = await queryOne<any>(
+      `select ${AUTOMATION_COLUMNS} from "AutomationV2" where id = $1 and "tenantId" = $2 for update`,
+      [id, user.tenantId],
+      client,
+    );
+    if (!existing) throw new Error("AUTOMATION_NOT_FOUND");
+    if (existing.deletedAt) throw new Error("AUTOMATION_ARCHIVED");
+    if (!existing.draft && Number(existing.publishedVersion ?? 0) > 0) throw new Error("AUTOMATION_NOTHING_TO_PUBLISH");
+    const definition = definitionOf(existing.draft ?? existing);
+    if (!definition.name) throw new Error("AUTOMATION_NAME_REQUIRED");
+    if (typeof definition.trigger.type !== "string" || !definition.trigger.type) throw new Error("AUTOMATION_TRIGGER_REQUIRED");
+    if (!Array.isArray((definition.workflow as any).nodes)) throw new Error("AUTOMATION_WORKFLOW_INVALID");
+    const version = Number(existing.publishedVersion ?? 0) + 1;
+    const row = await queryOne<any>(
+      `update "AutomationV2"
+       set name = $1, description = $2, trigger = $3, workflow = $4, draft = null, "draftUpdatedAt" = null, "draftUpdatedBy" = null,
+           "publishedVersion" = $5, "publishedAt" = now(), "updatedAt" = now()
+       where id = $6 and "tenantId" = $7 returning ${AUTOMATION_COLUMNS}`,
+      [definition.name, definition.description, definition.trigger, definition.workflow, version, id, user.tenantId],
+      client,
+    );
+    await recordAutomationVersion(user, id, version, definition, notes?.trim() || null, client);
+    await createAuditLog(user, "PUBLISH", "AUTOMATION", id, definitionOf(existing), definition, { version }, client).catch(() => undefined);
+    return row;
+  });
+}
+
+export async function listAutomationVersionsForTenant(user: TenantUser, id: string) {
+  await assertFeatureEnabled(user.tenantId, "automationEnabled", { isPlatformAdmin: user.isPlatformAdmin });
+  return query<any>(
+    `select v.version, v.name, v.notes, v."publishedAt", v."publishedBy", u.name as "publishedByName",
+            jsonb_array_length(coalesce(v.workflow->'nodes', '[]'::jsonb)) as "stepCount", v.trigger->>'type' as "triggerType"
+     from "AutomationVersion" v
+     left join "User" u on u.id = v."publishedBy"
+     where v."tenantId" = $1 and v."automationId" = $2
+     order by v.version desc`,
+    [user.tenantId, id],
+  );
+}
+
+// Restore as draft: the chosen version is loaded into the draft; publishing it makes it live.
+export async function restoreAutomationVersionAsDraftForTenant(user: TenantUser, id: string, version: number) {
+  await assertFeatureEnabled(user.tenantId, "automationEnabled", { isPlatformAdmin: user.isPlatformAdmin });
+  const snapshot = await queryOne<any>(
+    `select name, description, trigger, workflow from "AutomationVersion" where "tenantId" = $1 and "automationId" = $2 and version = $3`,
+    [user.tenantId, id, version],
+  );
+  if (!snapshot) throw new Error("AUTOMATION_VERSION_NOT_FOUND");
+  return saveAutomationDraftForTenant(user, id, snapshot);
 }
 
 export async function updateAutomationForTenant(user: TenantUser, id: string, payload: Record<string, unknown>) {
@@ -1103,6 +1255,8 @@ export async function updateAutomationForTenant(user: TenantUser, id: string, pa
   return withTransaction(user, async (client) => {
     const existing = await getAutomationForTenant(user, id);
     if (!existing) throw new Error("AUTOMATION_NOT_FOUND");
+    if (existing.deletedAt) throw new Error("AUTOMATION_ARCHIVED");
+    if (payload.isActive === true && Number(existing.publishedVersion ?? 0) === 0) throw new Error("AUTOMATION_NOT_PUBLISHED");
     const patch = {
       name: payload.name,
       description: payload.description,
@@ -1115,7 +1269,7 @@ export async function updateAutomationForTenant(user: TenantUser, id: string, pa
     const values = columns.map((key) => (patch as Record<string, unknown>)[key]);
     const assignments = columns.map((column, index) => `"${column}" = $${index + 1}`).join(", ");
     const row = await queryOne<any>(
-      `update "AutomationV2" set ${assignments} where id = $${columns.length + 1} and "tenantId" = $${columns.length + 2} returning ${AUTOMATION_COLUMNS}`,
+      `update "AutomationV2" set ${assignments} where id = $${columns.length + 1} and "tenantId" = $${columns.length + 2} and "deletedAt" is null returning ${AUTOMATION_COLUMNS}`,
       [...values, id, user.tenantId],
       client,
     );
@@ -1124,14 +1278,82 @@ export async function updateAutomationForTenant(user: TenantUser, id: string, pa
     for (const key of ["name", "description", "trigger", "workflow", "isActive"] as const) {
       if (JSON.stringify(existing[key]) !== JSON.stringify(row[key])) diff[key] = { before: existing[key], after: row[key] };
     }
+    // A direct change to what runs (journeys, the API) is still kept in the version history.
+    if (["name", "description", "trigger", "workflow"].some((key) => key in diff)) {
+      const version = Number(existing.publishedVersion ?? 0) + 1;
+      await execute(`update "AutomationV2" set "publishedVersion" = $1, "publishedAt" = now() where id = $2 and "tenantId" = $3`, [version, row.id, user.tenantId], client);
+      await recordAutomationVersion(user, row.id, version, definitionOf(row), "Changed outside the builder", client);
+      row.publishedVersion = version;
+    }
     await createAuditLog(user, "UPDATE", "AUTOMATION", row.id, existing, row, Object.keys(diff).length ? diff : null, client).catch(() => undefined);
     return row;
   });
 }
 
+// Archive (the Delete action): refused while a journey runs on this automation, because the
+// journey would silently stop -- archive the journey instead.
+export async function archiveAutomationForTenant(user: TenantUser, id: string) {
+  const tenant = tenantWhere(user, 2);
+  const journeys = await query<{ name: string }>(
+    `select name from "MarketingJourney" where "automationId" = $1 and ${tenant.sql} and status <> 'ARCHIVED'`,
+    [id, ...tenant.values],
+  );
+  if (journeys.length) throw Object.assign(new Error("AUTOMATION_USED_BY_JOURNEY"), { journeys: journeys.map((row) => row.name) });
+  const current = await queryOne<{ createdBy: string | null }>(`select "createdBy" from "AutomationV2" where id = $1 and ${tenant.sql} and "deletedAt" is null`, [id, ...tenant.values]);
+  if (!current) throw new Error("AUTOMATION_NOT_FOUND");
+  assertCreatorOrAdmin(user, current.createdBy);
+  const row = await queryOne<any>(
+    `update "AutomationV2" set "deletedAt" = now(), "deletedBy" = $${tenant.values.length + 2}
+     where id = $1 and ${tenant.sql} and "deletedAt" is null returning ${AUTOMATION_COLUMNS}`,
+    [id, ...tenant.values, user.id],
+  );
+  if (!row) throw new Error("AUTOMATION_NOT_FOUND");
+  await createAuditLog(user, "ARCHIVE", "AUTOMATION", id, null, row, null).catch(() => undefined);
+  return { ...row, purgeAfter: new Date(new Date(row.deletedAt).getTime() + ARCHIVE_RETENTION_DAYS * 86_400_000).toISOString() };
+}
+
+// Restore puts it back exactly as it was, on or off.
+export async function restoreAutomationForTenant(user: TenantUser, id: string) {
+  const tenant = tenantWhere(user, 2);
+  const current = await queryOne<{ createdBy: string | null }>(`select "createdBy" from "AutomationV2" where id = $1 and ${tenant.sql} and "deletedAt" is not null`, [id, ...tenant.values]);
+  if (!current) throw new Error("AUTOMATION_NOT_FOUND");
+  assertCreatorOrAdmin(user, current.createdBy);
+  const row = await queryOne<any>(
+    `update "AutomationV2" set "deletedAt" = null, "deletedBy" = null, "updatedAt" = now()
+     where id = $1 and ${tenant.sql} and "deletedAt" is not null returning ${AUTOMATION_COLUMNS}`,
+    [id, ...tenant.values],
+  );
+  if (!row) throw new Error("AUTOMATION_NOT_FOUND");
+  await createAuditLog(user, "RESTORE", "AUTOMATION", id, null, row, null).catch(() => undefined);
+  return row;
+}
+
+// Permanent delete, only for an archived automation; its run history goes with it.
 export async function deleteAutomationForTenant(user: TenantUser, id: string) {
   const tenant = tenantWhere(user, 2);
-  await execute(`delete from "AutomationV2" where id = $1 and ${tenant.sql}`, [id, ...tenant.values]);
+  const existing = await queryOne<any>(`select ${AUTOMATION_COLUMNS} from "AutomationV2" where id = $1 and ${tenant.sql}`, [id, ...tenant.values]);
+  if (!existing) throw new Error("AUTOMATION_NOT_FOUND");
+  assertCreatorOrAdmin(user, existing.createdBy);
+  if (!existing.deletedAt) throw new Error("AUTOMATION_NOT_ARCHIVED");
+  await execute(`delete from "AutomationV2" where id = $1 and ${tenant.sql} and "deletedAt" is not null`, [id, ...tenant.values]);
+  await createAuditLog(user, "DELETE", "AUTOMATION", id, existing, null, null).catch(() => undefined);
+}
+
+// Worker: removes automations archived more than ARCHIVE_RETENTION_DAYS ago (all workspaces).
+// One still referenced by a journey is left alone.
+export async function purgeArchivedAutomations(limit = 200) {
+  const rows = await queryAsSystem<{ id: string }>(
+    `delete from "AutomationV2" a
+     where a.id in (
+       select id from "AutomationV2"
+       where "deletedAt" < now() - make_interval(days => $1)
+         and not exists (select 1 from "MarketingJourney" j where j."automationId" = "AutomationV2".id)
+       order by "deletedAt" limit $2
+     )
+     returning a.id`,
+    [ARCHIVE_RETENTION_DAYS, limit],
+  );
+  return rows.length;
 }
 
 export async function listAutomationExecutionsForTenant(user: TenantUser, automationId: string) {
@@ -1157,14 +1379,17 @@ export async function testAutomationForTenant(user: TenantUser, automationId: st
   await assertFeatureEnabled(user.tenantId, "automationEnabled", { isPlatformAdmin: user.isPlatformAdmin });
   const automation = await getAutomationForTenant(user, automationId);
   if (!automation) throw new Error("AUTOMATION_NOT_FOUND");
+  if (automation.deletedAt) throw new Error("AUTOMATION_ARCHIVED");
+  // A test run tries what's in the builder: the draft if there is one (decision 29).
+  const tested = automation.draft ? { ...automation, ...definitionOf(automation.draft) } : automation;
   const record = await loadAutomationTestRecord(user, input.entityType, input.entityId);
-  const log = await executeAutomationWorkflow(user, automation, input.entityType, input.entityId, record, "TEST");
+  const log = await executeAutomationWorkflow(user, tested, input.entityType, input.entityId, record, "TEST");
   const now = new Date().toISOString();
   await execute(
     `insert into "AutomationExecution"
       (id, "tenantId", "automationId", status, "entityType", "entityId", context, "executionLog", "workflowSnapshot", "startedAt", "completedAt", error)
      values ($1, $2, $3, 'COMPLETED', $4, $5, $6, $7, $8, $9, $9, null)`,
-    [randomUUID(), user.tenantId, automationId, input.entityType, input.entityId, { mode: "TEST" }, { steps: log, mode: "TEST" }, automation.workflow, now],
+    [randomUUID(), user.tenantId, automationId, input.entityType, input.entityId, { mode: "TEST", draft: !!automation.draft }, { steps: log, mode: "TEST" }, tested.workflow, now],
   );
   return { success: true, log };
 }
@@ -1199,7 +1424,7 @@ export async function runAutomationsForEvent(user: TenantUser, eventType: string
   const automations = await query<any>(
     `select id, name, trigger, workflow, "isActive"
      from "AutomationV2"
-     where "tenantId" = $1 and "isActive" = true`,
+     where "tenantId" = $1 and "isActive" = true and "deletedAt" is null and "publishedVersion" > 0`,
     [user.tenantId],
   );
   const matched = automations.filter((automation) => triggerMatches((automation.trigger ?? {}) as Record<string, unknown>, eventType, record));
@@ -1264,7 +1489,7 @@ export async function enrollRecordsInAutomation(
   if (!ids.length) throw new Error("NO_RECORDS_PROVIDED");
 
   const automation = await queryOne<any>(
-    'select id, name, trigger, workflow, "isActive" from "AutomationV2" where id = $1 and "tenantId" = $2 and "deletedAt" is null',
+    'select id, name, trigger, workflow, "isActive" from "AutomationV2" where id = $1 and "tenantId" = $2 and "deletedAt" is null and "publishedVersion" > 0',
     [automationId, user.tenantId],
   );
   if (!automation) throw new Error("AUTOMATION_NOT_FOUND");

@@ -1,5 +1,5 @@
 import { randomUUID } from "crypto";
-import { execute, query, queryOne, type Queryable } from "@/lib/db/query";
+import { execute, jsonbParam, query, queryAsSystem, queryOne, type Queryable } from "@/lib/db/query";
 import { withTransaction } from "@/lib/db/transaction";
 import { formatExportDateValue, getTenantTimeZone } from "@/lib/server/date-format";
 import { checkRateLimit } from "@/lib/server/rate-limit";
@@ -7,6 +7,7 @@ import { runAutomationsForEvent } from "@/lib/repositories/automations-postgres"
 import { distributeRecord } from "@/lib/server/distribution-engine";
 import { assertFeatureEnabled, isFeatureEnabledForTenant } from "@/lib/server/entitlements";
 import { recordAttributionTouch } from "@/lib/server/marketing-journeys";
+import { resolveLeadStatusForWrite } from "@/lib/repositories/lead-statuses-postgres";
 
 type TenantUser = {
   id: string;
@@ -14,7 +15,19 @@ type TenantUser = {
   isPlatformAdmin?: boolean;
 };
 
-const FORM_COLUMNS = 'id, name, description, fields, config, "isActive", "submitButtonText", "successMessage", "redirectUrl", "spamProtection", "rateLimit", "duplicateAction", "defaultOwnerId", theme, "createdAt", "updatedAt"';
+const FORM_COLUMNS = 'id, name, description, fields, config, "isActive", "submitButtonText", "successMessage", "redirectUrl", "spamProtection", "rateLimit", "duplicateAction", "defaultOwnerId", theme, "createdAt", "updatedAt", "deletedAt", draft, "draftUpdatedAt", "publishedVersion", "publishedAt", "createdBy"';
+
+// Archive, restore and delete for good: the person who created it, or an admin (decided
+// 2026-10-03). An item with no recorded creator (made before this was tracked) is admin-only.
+function assertCreatorOrAdmin(user: TenantUser, createdBy: string | null | undefined) {
+  if ((user as any).isTenantAdmin || (user as any).isPlatformAdmin) return;
+  if (!createdBy || createdBy !== user.id) throw new Error("ITEM_OWNER_OR_ADMIN");
+}
+
+// Archive model (decision 31): deleting a form archives it (deletedAt). Its public link stops
+// working at once; it can be restored, with its submissions, for ARCHIVE_RETENTION_DAYS, and is
+// then purged by the worker (purgeArchivedForms) together with its submissions.
+export const FORM_ARCHIVE_RETENTION_DAYS = 30;
 
 function tenantWhere(user: TenantUser, startIndex = 1) {
   return user.tenantId ? { sql: `"tenantId" = $${startIndex}`, values: [user.tenantId] } : { sql: '"tenantId" is null', values: [] };
@@ -28,6 +41,12 @@ function formatFormRecord(record: any, submissionCount = 0) {
     description: record.description,
     slug: record.id,
     isActive: record.isActive,
+    deletedAt: record.deletedAt ?? null,
+    createdBy: record.createdBy ?? null,
+    draft: record.draft ?? null,
+    draftUpdatedAt: record.draftUpdatedAt ?? null,
+    publishedVersion: Number(record.publishedVersion ?? 0),
+    publishedAt: record.publishedAt ?? null,
     createdAt: record.createdAt,
     updatedAt: record.updatedAt,
     fields: Array.isArray(record.fields) ? record.fields : [],
@@ -157,10 +176,11 @@ async function updateReturning<T>(
   return updated as T;
 }
 
-export async function listFormsForTenant(user: TenantUser) {
+export async function listFormsForTenant(user: TenantUser, options: { archived?: boolean } = {}) {
   const tenant = tenantWhere(user);
   const forms = await query<any>(
-    `select ${FORM_COLUMNS} from "Form" where ${tenant.sql} order by "createdAt" desc`,
+    `select ${FORM_COLUMNS} from "Form" where ${tenant.sql} and ${options.archived ? `"deletedAt" is not null` : `"deletedAt" is null`}
+     order by ${options.archived ? `"deletedAt" desc` : `"createdAt" desc`}`,
     tenant.values,
   );
   const formIds = forms.map((form) => form.id);
@@ -253,8 +273,12 @@ export async function createFormForTenant(user: TenantUser, payload: Record<stri
       objectId,
       name: payload.name,
       description: payload.description ?? null,
-      fields: [],
-      isActive: payload.isActive ?? true,
+      // jsonbParam: a bare JS array is sent as a Postgres array literal, and `[]` became `{}`.
+      fields: jsonbParam([]),
+      // The form editor creates a draft (decision 29): off and unpublished until published.
+      isActive: payload.asDraft === true ? false : payload.isActive ?? true,
+      publishedVersion: payload.asDraft === true ? 0 : 1,
+      publishedAt: payload.asDraft === true ? null : now,
       submitButtonText: "Submit",
       successMessage: "Thank you for your submission!",
       redirectUrl: null,
@@ -270,6 +294,7 @@ export async function createFormForTenant(user: TenantUser, payload: Record<stri
         visibleTeamIds: [],
         visibleSalesGroupIds: [],
       },
+      createdBy: user.id === "system" ? null : user.id,
       createdAt: now,
       updatedAt: now,
     }, FORM_COLUMNS, client);
@@ -286,13 +311,21 @@ export async function getFormForTenant(user: TenantUser, formId: string) {
   return form ? formatFormRecord(form, 0) : null;
 }
 
+// UI/UX plan B5. The builder and the CRM placement tab each save their own part of the form.
+// This used to replace the whole stored config on every save (with {} when no config was sent),
+// so whichever editor saved last silently undid the other. Now only the config keys a request
+// sends are replaced, and a request carrying `expectedUpdatedAt` is refused with
+// FORM_VERSION_CONFLICT if the form changed since that version was loaded.
 export async function updateFormForTenant(user: TenantUser, formId: string, payload: Record<string, unknown>) {
   await assertFeatureEnabled(user.tenantId, "formBuilderEnabled", { isPlatformAdmin: user.isPlatformAdmin });
-  const config = (payload.config as Record<string, unknown> | undefined) ?? {};
+  const hasConfig = !!payload.config && typeof payload.config === "object";
+  const config = hasConfig ? (payload.config as Record<string, unknown>) : {};
   const updatePayload: Record<string, unknown> = { updatedAt: new Date().toISOString() };
   if (payload.name !== undefined) updatePayload.name = payload.name;
   if (payload.description !== undefined) updatePayload.description = payload.description;
-  if (config.fields !== undefined || payload.fields !== undefined) updatePayload.fields = config.fields ?? payload.fields;
+  // jsonbParam: a bare JS array is sent as a Postgres array literal, which is not valid JSON, so
+  // every builder save of a form with fields used to fail (and an empty list was stored as {}).
+  if (config.fields !== undefined || payload.fields !== undefined) updatePayload.fields = jsonbParam(config.fields ?? payload.fields);
   if (payload.isActive !== undefined) updatePayload.isActive = payload.isActive;
   if (config.submitButtonText !== undefined) updatePayload.submitButtonText = config.submitButtonText;
   if (config.successMessage !== undefined) updatePayload.successMessage = config.successMessage;
@@ -301,28 +334,204 @@ export async function updateFormForTenant(user: TenantUser, formId: string, payl
   if (config.rateLimit !== undefined) updatePayload.rateLimit = config.rateLimit;
   if (config.duplicateAction !== undefined) updatePayload.duplicateAction = config.duplicateAction;
   if (config.theme !== undefined) updatePayload.theme = config.theme;
-  const { fields: _ignoredFields, ...formConfig } = config;
-  updatePayload.config = formConfig;
 
   const tenant = tenantWhere(user, 2);
-  const form = await updateReturning<any>(
-    "Form",
-    updatePayload,
-    `where id = $1 and ${tenant.sql}`,
-    [formId, ...tenant.values],
-    FORM_COLUMNS,
-  );
-  return formatFormRecord(form, 0);
+  return withTransaction(user, async (client) => {
+    const current = await queryOne<{ config: unknown; updatedAt: string }>(
+      `select config, "updatedAt", "deletedAt", "publishedVersion" from "Form" where id = $1 and ${tenant.sql} for update`,
+      [formId, ...tenant.values],
+      client,
+    );
+    if (!current) throw new Error("FORM_NOT_FOUND");
+    if ((current as any).deletedAt) throw new Error("FORM_ARCHIVED");
+    if (payload.isActive === true && Number((current as any).publishedVersion ?? 0) === 0) throw new Error("FORM_NOT_PUBLISHED");
+    if (payload.expectedUpdatedAt !== undefined && payload.expectedUpdatedAt !== null) {
+      const expected = new Date(payload.expectedUpdatedAt as string | number | Date);
+      if (Number.isNaN(expected.getTime()) || expected.getTime() !== new Date(current.updatedAt).getTime()) {
+        throw new Error("FORM_VERSION_CONFLICT");
+      }
+    }
+    if (hasConfig) {
+      const { fields: _ignoredFields, ...formConfig } = config;
+      const stored = current.config && typeof current.config === "object" ? (current.config as Record<string, unknown>) : {};
+      updatePayload.config = jsonbParam({ ...stored, ...formConfig });
+    }
+    const form = await updateReturning<any>(
+      "Form",
+      updatePayload,
+      `where id = $1 and ${tenant.sql}`,
+      [formId, ...tenant.values],
+      FORM_COLUMNS,
+      client,
+    );
+    return formatFormRecord(form, 0);
+  });
 }
 
+// --- Builder save model (decision 29) ---------------------------------------------------------
+// Drafted: the fields and the form's content settings. Not drafted (they apply at once, as
+// before): on/off, and where and to whom the form appears inside the CRM.
+const FORM_LIVE_CONFIG_KEYS = ["placements", "placementRules", "visibilityMode", "visibleUserIds", "visibleTeamIds", "visibleSalesGroupIds", "isActive", "fields"];
+const FORM_CONFIG_COLUMNS = ["submitButtonText", "successMessage", "redirectUrl", "spamProtection", "rateLimit", "duplicateAction", "theme"] as const;
+type FormContent = { fields: unknown[]; config: Record<string, unknown> };
+
+function formContentOf(input: Record<string, any>): FormContent {
+  const source = input.config && typeof input.config === "object" ? input.config : {};
+  const config = Object.fromEntries(Object.entries(source).filter(([key]) => !FORM_LIVE_CONFIG_KEYS.includes(key)));
+  const fields = Array.isArray(input.fields) ? input.fields : Array.isArray(source.fields) ? source.fields : [];
+  return { fields, config };
+}
+
+function canonicalFormJson(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(canonicalFormJson).join(",")}]`;
+  if (value && typeof value === "object") {
+    return `{${Object.keys(value as Record<string, unknown>).filter((key) => (value as Record<string, unknown>)[key] !== undefined).sort().map((key) => `${JSON.stringify(key)}:${canonicalFormJson((value as Record<string, unknown>)[key])}`).join(",")}}`;
+  }
+  return JSON.stringify(value ?? null);
+}
+
+// The draft matches what's published when its fields and every setting it carries are equal.
+function draftMatchesPublished(draft: FormContent, published: ReturnType<typeof formatFormRecord>) {
+  if (canonicalFormJson(draft.fields) !== canonicalFormJson(published.fields)) return false;
+  return Object.entries(draft.config).every(([key, value]) => canonicalFormJson(value) === canonicalFormJson((published.config as Record<string, unknown>)[key]));
+}
+
+async function lockFormForUser(user: TenantUser, formId: string, client: Queryable) {
+  const row = await queryOne<any>(`select ${FORM_COLUMNS} from "Form" where id = $1 and "tenantId" = $2 for update`, [formId, user.tenantId], client);
+  if (!row) throw new Error("FORM_NOT_FOUND");
+  if (row.deletedAt) throw new Error("FORM_ARCHIVED");
+  return row;
+}
+
+export async function saveFormDraftForTenant(user: TenantUser, formId: string, input: Record<string, unknown>) {
+  await assertFeatureEnabled(user.tenantId, "formBuilderEnabled", { isPlatformAdmin: user.isPlatformAdmin });
+  return withTransaction(user, async (client) => {
+    const current = await lockFormForUser(user, formId, client);
+    const content = formContentOf(input);
+    const unchanged = Number(current.publishedVersion ?? 0) > 0 && draftMatchesPublished(content, formatFormRecord(current, 0));
+    const row = await queryOne<any>(
+      `update "Form" set draft = $1, "draftUpdatedAt" = $2, "draftUpdatedBy" = $3 where id = $4 and "tenantId" = $5 returning ${FORM_COLUMNS}`,
+      [unchanged ? null : jsonbParam(content), unchanged ? null : new Date().toISOString(), unchanged ? null : user.id, formId, user.tenantId],
+      client,
+    );
+    return formatFormRecord(row, 0);
+  });
+}
+
+export async function discardFormDraftForTenant(user: TenantUser, formId: string) {
+  await assertFeatureEnabled(user.tenantId, "formBuilderEnabled", { isPlatformAdmin: user.isPlatformAdmin });
+  const row = await queryOne<any>(
+    `update "Form" set draft = null, "draftUpdatedAt" = null, "draftUpdatedBy" = null
+     where id = $1 and "tenantId" = $2 and "deletedAt" is null and "publishedVersion" > 0 returning ${FORM_COLUMNS}`,
+    [formId, user.tenantId],
+  );
+  if (!row) throw new Error("FORM_NOT_FOUND");
+  return formatFormRecord(row, 0);
+}
+
+// Publish: the draft's fields and settings become the public form, as the next version. Settings
+// are merged onto the current config, so placements saved in the meantime are kept.
+export async function publishFormForTenant(user: TenantUser, formId: string, notes?: string | null) {
+  await assertFeatureEnabled(user.tenantId, "formBuilderEnabled", { isPlatformAdmin: user.isPlatformAdmin });
+  return withTransaction(user, async (client) => {
+    const current = await lockFormForUser(user, formId, client);
+    const version = Number(current.publishedVersion ?? 0) + 1;
+    if (!current.draft && version > 1) throw new Error("FORM_NOTHING_TO_PUBLISH");
+    const content = current.draft ? formContentOf(current.draft) : formContentOf(formatFormRecord(current, 0));
+    if (!content.fields.length) throw new Error("FORM_HAS_NO_FIELDS");
+    const stored = current.config && typeof current.config === "object" ? current.config : {};
+    const update: Record<string, unknown> = {
+      fields: jsonbParam(content.fields),
+      config: jsonbParam({ ...stored, ...content.config }),
+      draft: null,
+      draftUpdatedAt: null,
+      draftUpdatedBy: null,
+      publishedVersion: version,
+      publishedAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    for (const key of FORM_CONFIG_COLUMNS) if (key in content.config) update[key] = content.config[key];
+    const row = await updateReturning<any>("Form", update, `where id = $1 and "tenantId" = $2`, [formId, user.tenantId], FORM_COLUMNS, client);
+    await execute(
+      `insert into "FormVersion" (id, "tenantId", "formId", version, name, fields, config, notes, "publishedBy", "publishedAt")
+       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, now())`,
+      [randomUUID(), user.tenantId, formId, version, current.name, jsonbParam(content.fields), jsonbParam(content.config), notes?.trim() || null, user.id],
+      client,
+    );
+    return formatFormRecord(row, 0);
+  });
+}
+
+export async function listFormVersionsForTenant(user: TenantUser, formId: string) {
+  await assertFeatureEnabled(user.tenantId, "formBuilderEnabled", { isPlatformAdmin: user.isPlatformAdmin });
+  return query<any>(
+    `select v.version, v.notes, v."publishedAt", u.name as "publishedByName", jsonb_array_length(v.fields) as "fieldCount"
+     from "FormVersion" v left join "User" u on u.id = v."publishedBy"
+     where v."tenantId" = $1 and v."formId" = $2 order by v.version desc`,
+    [user.tenantId, formId],
+  );
+}
+
+export async function restoreFormVersionAsDraftForTenant(user: TenantUser, formId: string, version: number) {
+  await assertFeatureEnabled(user.tenantId, "formBuilderEnabled", { isPlatformAdmin: user.isPlatformAdmin });
+  const snapshot = await queryOne<any>(`select fields, config from "FormVersion" where "tenantId" = $1 and "formId" = $2 and version = $3`, [user.tenantId, formId, version]);
+  if (!snapshot) throw new Error("FORM_VERSION_NOT_FOUND");
+  return saveFormDraftForTenant(user, formId, { fields: snapshot.fields, config: snapshot.config });
+}
+
+export async function archiveFormForTenant(user: TenantUser, formId: string) {
+  const tenant = tenantWhere(user, 2);
+  const current = await queryOne<{ createdBy: string | null }>(`select "createdBy" from "Form" where id = $1 and ${tenant.sql} and "deletedAt" is null`, [formId, ...tenant.values]);
+  if (!current) throw new Error("FORM_NOT_FOUND");
+  assertCreatorOrAdmin(user, current.createdBy);
+  const row = await queryOne<any>(
+    `update "Form" set "deletedAt" = now(), "deletedBy" = $${tenant.values.length + 2}
+     where id = $1 and ${tenant.sql} and "deletedAt" is null returning id, name, "deletedAt"`,
+    [formId, ...tenant.values, user.id],
+  );
+  if (!row) throw new Error("FORM_NOT_FOUND");
+  return { ...row, purgeAfter: new Date(new Date(row.deletedAt).getTime() + FORM_ARCHIVE_RETENTION_DAYS * 86_400_000).toISOString() };
+}
+
+export async function restoreFormForTenant(user: TenantUser, formId: string) {
+  const tenant = tenantWhere(user, 2);
+  const current = await queryOne<{ createdBy: string | null }>(`select "createdBy" from "Form" where id = $1 and ${tenant.sql} and "deletedAt" is not null`, [formId, ...tenant.values]);
+  if (!current) throw new Error("FORM_NOT_FOUND");
+  assertCreatorOrAdmin(user, current.createdBy);
+  const row = await queryOne<any>(
+    `update "Form" set "deletedAt" = null, "deletedBy" = null, "updatedAt" = now()
+     where id = $1 and ${tenant.sql} and "deletedAt" is not null returning ${FORM_COLUMNS}`,
+    [formId, ...tenant.values],
+  );
+  if (!row) throw new Error("FORM_NOT_FOUND");
+  return formatFormRecord(row, 0);
+}
+
+// Permanent delete, only for an archived form; its submissions go with it.
 export async function deleteFormForTenant(user: TenantUser, formId: string) {
   const tenant = tenantWhere(user, 2);
-  await execute(`delete from "Form" where id = $1 and ${tenant.sql}`, [formId, ...tenant.values]);
+  const existing = await queryOne<any>(`select id, "deletedAt", "createdBy" from "Form" where id = $1 and ${tenant.sql}`, [formId, ...tenant.values]);
+  if (!existing) throw new Error("FORM_NOT_FOUND");
+  assertCreatorOrAdmin(user, existing.createdBy);
+  if (!existing.deletedAt) throw new Error("FORM_NOT_ARCHIVED");
+  await execute(`delete from "Form" where id = $1 and ${tenant.sql} and "deletedAt" is not null`, [formId, ...tenant.values]);
 }
 
+// Worker: removes forms archived more than FORM_ARCHIVE_RETENTION_DAYS ago (all workspaces).
+export async function purgeArchivedForms(limit = 200) {
+  const rows = await queryAsSystem<{ id: string }>(
+    `delete from "Form" where id in (
+       select id from "Form" where "deletedAt" < now() - make_interval(days => $1) order by "deletedAt" limit $2
+     ) returning id`,
+    [FORM_ARCHIVE_RETENTION_DAYS, limit],
+  );
+  return rows.length;
+}
+
+// Public links, public submissions and progress beacons: an archived form is unknown.
 async function getPublicFormRow(identifier: string) {
   return queryOne<any>(
-    `select ${FORM_COLUMNS}, "tenantId" from "Form" where id = $1 limit 1`,
+    `select ${FORM_COLUMNS}, "tenantId" from "Form" where id = $1 and "deletedAt" is null limit 1`,
     [identifier],
   );
 }
@@ -330,6 +539,9 @@ async function getPublicFormRow(identifier: string) {
 export async function getPublicForm(identifier: string) {
   const form = await getPublicFormRow(identifier);
   if (!form) return null;
+  // A public link for a tenant whose Forms module is off behaves like an unknown form (submission
+  // is refused the same way in submitPublicForm).
+  if (form.tenantId && !(await isFeatureEnabledForTenant(form.tenantId, "formBuilderEnabled"))) return null;
   const formatted = formatFormRecord(form, 0);
   if (form.tenantId && !(await isFeatureEnabledForTenant(form.tenantId, "opportunityEnabled"))) {
     const fields = Array.isArray(formatted.config?.fields) ? formatted.config.fields : [];
@@ -345,6 +557,7 @@ export async function getPublicForm(identifier: string) {
 export async function recordFormProgressEvent(identifier: string, input: { sessionId: string; tabId: string; tabIndex: number }) {
   const formRow = await getPublicFormRow(identifier);
   if (!formRow || !formRow.tenantId) return;
+  if (!(await isFeatureEnabledForTenant(formRow.tenantId, "formBuilderEnabled"))) return;
   if (!input.sessionId || !input.tabId) return;
   await execute(
     `insert into "FormProgressEvent" (id, "tenantId", "formId", "sessionId", "tabId", "tabIndex", "createdAt")
@@ -403,7 +616,8 @@ export async function submitPublicForm(identifier: string, payload: Record<strin
         phone: typeof leadData.phone === "string" ? leadData.phone : typeof leadData.Phone === "string" ? leadData.Phone : null,
         company: typeof leadData.company === "string" ? leadData.company : null,
         source: "FORM",
-        status: "NEW",
+        // The tenant's first Open status (tenant-configurable, UI/UX plan decision 6).
+        status: await resolveLeadStatusForWrite(tenantId, null, null, client),
         score: 0,
         tags: [],
         createdBy: null,
@@ -420,6 +634,13 @@ export async function submitPublicForm(identifier: string, payload: Record<strin
       const updatePayload: Record<string, unknown> = { updatedAt: now };
       for (const key of ["name", "email", "phone", "company", "source", "status"]) {
         if (leadData[key] !== undefined && leadData[key] !== "") updatePayload[key] = leadData[key];
+      }
+      // A submitted status must be one of the tenant's statuses; an unknown one is ignored so a
+      // public submission never fails over it.
+      if (updatePayload.status !== undefined) {
+        const resolved = await resolveLeadStatusForWrite(tenantId, updatePayload.status, null, client).catch(() => null);
+        if (resolved) updatePayload.status = resolved;
+        else delete updatePayload.status;
       }
       await updateReturning("Lead", updatePayload, 'where "tenantId" = $1 and id = $2', [tenantId, leadId], "id", client);
     }
@@ -788,8 +1009,13 @@ export async function getFormSubmissionsForTenant(user: TenantUser, formId: stri
 
 export async function exportFormSubmissionsForTenant(user: TenantUser, formId: string) {
   const timeZone = await getTenantTimeZone(user.tenantId);
-  const submissions = await getFormSubmissionsForTenant(user, formId, 1000, 0);
-  const rows = submissions.submissions;
+  // Every submission (complete data): the reader returns at most 100 per call, so page through.
+  const rows: any[] = [];
+  for (let offset = 0; ; offset += 100) {
+    const page = await getFormSubmissionsForTenant(user, formId, 100, offset);
+    rows.push(...page.submissions);
+    if (page.submissions.length < 100) break;
+  }
   const headers = ["id", "createdAt", "status", "spamScore", "leadName", "leadEmail", "data"];
   return [
     headers.join(","),

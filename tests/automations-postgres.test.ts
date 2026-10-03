@@ -525,7 +525,7 @@ describe("direct Postgres automations repository", () => {
   describe("entitlement gating", () => {
     it("rejects creating an automation when the Automations module is disabled for the tenant", async () => {
       queryOneMock.mockImplementation(async (sql: string) => {
-        if (String(sql).includes('from "TenantFeature"')) return { automationEnabled: false };
+        if (String(sql).includes('from "TenantModuleEntitlement"')) return { status: "DISABLED" };
         return null;
       });
 
@@ -537,7 +537,7 @@ describe("direct Postgres automations repository", () => {
 
     it("rejects enrolling records when the Automations module is disabled for the tenant", async () => {
       queryOneMock.mockImplementation(async (sql: string) => {
-        if (String(sql).includes('from "TenantFeature"')) return { automationEnabled: false };
+        if (String(sql).includes('from "TenantModuleEntitlement"')) return { status: "DISABLED" };
         return null;
       });
 
@@ -549,7 +549,7 @@ describe("direct Postgres automations repository", () => {
 
     it("silently skips (no-op) running event automations when the Automations module is disabled, without throwing", async () => {
       queryOneMock.mockImplementation(async (sql: string) => {
-        if (String(sql).includes('from "TenantFeature"')) return { automationEnabled: false };
+        if (String(sql).includes('from "TenantModuleEntitlement"')) return { status: "DISABLED" };
         return null;
       });
 
@@ -584,7 +584,7 @@ describe("direct Postgres automations repository", () => {
         const text = String(sql);
         if (text.includes('from "User"')) return { id: "user-1", tenantId: "tenant-1" };
         if (text.includes('from "AutomationV2"')) return { id: "automation-1", tenantId: "tenant-1", isActive: true, trigger: {}, workflow: { nodes: [], edges: [] } };
-        if (text.includes('from "TenantFeature"')) return { automationEnabled: false };
+        if (text.includes('from "TenantModuleEntitlement"')) return { status: "DISABLED" };
         return null;
       });
       executeMock.mockResolvedValue(undefined);
@@ -599,7 +599,7 @@ describe("direct Postgres automations repository", () => {
     it("allows a platform admin to bypass the Automations gate", async () => {
       queryOneMock.mockImplementation(async (sql: string) => {
         const text = String(sql);
-        if (text.includes('from "TenantFeature"')) return { automationEnabled: false };
+        if (text.includes('from "TenantModuleEntitlement"')) return { status: "DISABLED" };
         if (text.includes('insert into "AutomationV2"')) return { id: "automation-1", tenantId: "tenant-1", name: "New Automation" };
         return null;
       });

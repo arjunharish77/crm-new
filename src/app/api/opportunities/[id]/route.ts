@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { assertFeatureEnabled } from "@/lib/server/entitlements";
 import {
   getOpportunityForTenant,
   deleteOpportunityForTenant,
@@ -13,6 +14,7 @@ export async function GET(
 ) {
   try {
     const user = await requireCurrentUser(request);
+    await assertFeatureEnabled(user.tenantId, "opportunityEnabled", { isPlatformAdmin: user.isPlatformAdmin });
     const { id } = await params;
     const opportunity = await getOpportunityForTenant(user, id);
 
@@ -67,8 +69,16 @@ export async function DELETE(
     if (error instanceof Error && error.message === "UNAUTHORIZED") {
       return unauthorized();
     }
+    if (error instanceof Error && error.message === "OPPORTUNITY_NOT_FOUND") {
+      return NextResponse.json({ message: "Opportunity not found" }, { status: 404 });
+    }
     if (error instanceof Error && error.message.startsWith("FEATURE_DISABLED")) {
       return badRequest("Opportunities is not enabled for this workspace");
+    }
+    // Tasks, notes and commission entries keep their opportunity, so it can't be deleted while
+    // they point at it (was a 500).
+    if ((error as { code?: string })?.code === "23503") {
+      return NextResponse.json({ message: "This opportunity is still linked to tasks, notes or commission entries, so it can't be deleted." }, { status: 409 });
     }
 
     return serverError("Failed to delete opportunity", error);

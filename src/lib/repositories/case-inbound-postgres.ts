@@ -27,7 +27,7 @@ async function assertServiceDeskEnabled(user: TenantUser) {
 const ADDRESS_COLUMNS = 'id, "tenantId", channel, address, "defaultQueueId", "defaultCaseTypeId", "autoAckMacroId", "isActive", "createdAt", "updatedAt"';
 
 export async function listCaseInboundAddressesForTenant(user: TenantUser) {
-  const tenantId = requireTenantId(user);
+  const tenantId = await assertServiceDeskEnabled(user);
   return query<any>(`select ${ADDRESS_COLUMNS} from "CaseInboundAddress" where "tenantId" = $1 order by channel asc, address asc`, [tenantId]);
 }
 

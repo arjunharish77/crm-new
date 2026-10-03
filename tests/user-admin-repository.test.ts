@@ -5,6 +5,11 @@ vi.mock("@/lib/db/query", () => dbMocks);
 
 import { updateTenantScopedUser, createTenantScopedUser, createTenantRole } from "@/lib/repositories/auth-admin-postgres";
 
+// User-reference validation under test; seat limits are covered by tests/usage-limits.test.ts.
+vi.mock("@/lib/server/usage-limits", () => ({ lockTenantSeats: vi.fn(async () => undefined), assertSeatAvailable: vi.fn(async () => undefined) }));
+vi.mock("@/lib/db/transaction", () => ({ withTransaction: async (_user: unknown, fn: (tx: unknown) => unknown) => fn({ query: async () => ({ rows: [] }) }) }));
+
+
 const TENANT = "tenant-1";
 
 describe("updateTenantScopedUser — F28 fix: omitted fields must not be cleared", () => {

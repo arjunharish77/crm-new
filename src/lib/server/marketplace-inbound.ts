@@ -1,3 +1,4 @@
+import { isModuleEnabledForTenant } from "@/lib/server/module-entitlements";
 import { randomUUID, timingSafeEqual } from "crypto";
 import { query, queryOne, execute, queryOneAsSystem, queryAsSystem } from "@/lib/db/query";
 import { checkRateLimit } from "@/lib/server/rate-limit";
@@ -16,6 +17,7 @@ type PermissionScope = "read" | "write";
 // exact credential shown once at registration/rotation) and gets exactly the module access an
 // admin actually approved, nothing more.
 export type MarketplaceAppAuthReason =
+  | "MODULE_DISABLED"
   | "MISSING_CREDENTIALS"
   | "APP_NOT_FOUND"
   | "APP_SUSPENDED"
@@ -124,6 +126,10 @@ export async function authenticateMarketplaceAppRequest(request: Request) {
     [tenantId, appId],
   );
   if (!install) throw new MarketplaceAppAuthenticationError("APP_NOT_INSTALLED");
+  // Installed-app credentials must stop working the moment a platform admin turns the tenant's
+  // Marketplace module off -- otherwise an app keeps reading/writing the tenant's leads and
+  // opportunities through /api/v1/apps/** after it was supposedly disabled.
+  if (!(await isModuleEnabledForTenant(tenantId, "MARKETPLACE"))) throw new MarketplaceAppAuthenticationError("MODULE_DISABLED");
 
   // Per-installing-tenant budget against the app's own configured rate limit -- keying only by
   // appId would let one noisy tenant exhaust the shared bucket for every other tenant that

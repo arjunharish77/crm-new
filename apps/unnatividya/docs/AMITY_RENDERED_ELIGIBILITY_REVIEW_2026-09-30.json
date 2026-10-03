@@ -1,0 +1,138 @@
+{
+  "checkedAt": "2026-09-30",
+  "method": "Read-only Chromium rendering of official program pages; no forms submitted. Text hashes cover the rendered body. Paraphrased eligibility summaries only.",
+  "programs": [
+    {
+      "courseId": "mba-amity",
+      "sourceUrl": "https://amityonline.com/master-of-business-administration-online",
+      "checkedAt": "2026-09-30",
+      "sourceTextSha256": "dff4054068648b493ca57d8ae44f7e7e16f6fe5ab647f91d345ed915e3b88d34",
+      "evidenceType": "official_program_page_rendered_eligibility",
+      "publicationStatus": "not_applied",
+      "domesticSummary": "A bachelor’s degree in any discipline with at least 40%; applicants below 40% must take an admission test. English proficiency is required.",
+      "foreignSummary": "A recognised university degree and AIU equivalence are required. Confirm applicable marks and test requirements with admissions; the foreign-applicant section does not specify them.",
+      "status": "prepared_correction_pending_admin_review"
+    },
+    {
+      "courseId": "bba-amity",
+      "sourceUrl": "https://amityonline.com/bachelor-of-business-administration-online",
+      "checkedAt": "2026-09-30",
+      "sourceTextSha256": "31adaeff5efafb2fa61d9305e18dd58602b245079376a4f2bf80f6bbbae02826",
+      "evidenceType": "official_program_page_rendered_eligibility",
+      "publicationStatus": "not_applied",
+      "domesticSummary": "Class 10 and Class 12 completion certificates are required. Sufficient understanding of English is required.",
+      "foreignSummary": "School qualifications covering 10 and 12 years (O/A levels or the stated equivalent) and AIU equivalence are required; diplomas are not accepted in place of these school qualifications. Sufficient understanding of English is required.",
+      "status": "prepared_correction_pending_admin_review"
+    },
+    {
+      "courseId": "bca-amity",
+      "sourceUrl": "https://amityonline.com/bachelor-of-computer-applications-online",
+      "checkedAt": "2026-09-30",
+      "sourceTextSha256": "3e790e1c6dc06c77269c69a182bae9a135453248c77b2ec2f8fbc4cb22278844",
+      "evidenceType": "official_program_page_rendered_eligibility",
+      "publicationStatus": "not_applied",
+      "domesticSummary": "Class 10 and Class 12 completion certificates are required.",
+      "foreignSummary": "School qualifications covering 10 and 12 years (O/A levels or the stated equivalent) and AIU equivalence are required; diplomas are not accepted in place of these school qualifications.",
+      "status": "prepared_correction_pending_admin_review"
+    },
+    {
+      "courseId": "mca-amity",
+      "sourceUrl": "https://amityonline.com/master-of-computer-applications-online",
+      "checkedAt": "2026-09-30",
+      "sourceTextSha256": "53eeeec48bcb2ab6b7fe3b8fc3ce7e164138596e249d7ef26f05e0b823fdd873",
+      "evidenceType": "official_program_page_rendered_eligibility",
+      "publicationStatus": "not_applied",
+      "domesticSummary": "A bachelor’s degree is required; BCA or equivalent is preferred. The page also lists science, commerce or arts degrees with school-level mathematics. Applicants without mathematics at school or graduation must complete a bridge course.",
+      "foreignSummary": "A bachelor’s degree (BCA or equivalent preferred), written and spoken English proficiency, and AIU equivalence are required. Confirm how the mathematics bridge route applies to foreign qualifications.",
+      "status": "prepared_correction_pending_admin_review"
+    },
+    {
+      "courseId": "bcom-amity",
+      "sourceUrl": "https://amityonline.com/bachelor-of-commerce-online",
+      "checkedAt": "2026-09-30",
+      "sourceTextSha256": "c14864268d0bfcdf3abc0073c66f621b3c7e415de7a49860183ec786381d3672",
+      "evidenceType": "official_program_page_rendered_eligibility",
+      "publicationStatus": "not_applied",
+      "domesticSummary": "Class 10 and Class 12 completion certificates are required. Basic English proficiency is required.",
+      "foreignSummary": "School qualifications covering 10 and 12 years (O/A levels or the stated equivalent) and AIU equivalence are required; diplomas are not accepted in place of these school qualifications. Basic English proficiency is required.",
+      "status": "prepared_correction_pending_admin_review"
+    },
+    {
+      "courseId": "majmc-amity",
+      "sourceUrl": "https://amityonline.com/master-of-arts-journalism-and-mass-communication-online",
+      "checkedAt": "2026-09-30",
+      "sourceTextSha256": "ff09f74490ea20c385de9612dbbf4cbd16d2b33aa2b3a1e70ee3a780c64b070b",
+      "evidenceType": "official_program_page_rendered_eligibility",
+      "publicationStatus": "not_applied",
+      "domesticSummary": "A bachelor’s degree in any discipline with at least 40%; below 40%, an admission test is required. English proficiency is required.",
+      "foreignSummary": "O/A-level school certificates (10 and 12 years; diplomas are not substitutes), a recognised university degree and AIU equivalence are required. Confirm marks, test and language requirements for your category.",
+      "status": "prepared_correction_pending_admin_review"
+    },
+    {
+      "courseId": "ba-amity",
+      "sourceUrl": "https://amityonline.com/bachelor-of-arts-online",
+      "checkedAt": "2026-09-30",
+      "sourceTextSha256": "9d9c4d2d7fe8101fb13a6e35c9b7d5c9826e8d83d4f549f8988c1f103617f7cd",
+      "evidenceType": "official_program_page_rendered_eligibility",
+      "publicationStatus": "not_applied",
+      "status": "domestic_observed_foreign_section_unresolved",
+      "domesticSummary": "Class 10/12 certificates, basic English, and three years of English-medium education for non-English-medium applicants.",
+      "requiredReview": "The rendered BA page did not expose a foreign-applicant section. Do not turn the metadata-only international route into a confirmed correction."
+    },
+    {
+      "courseId": "bcom-honours-amity",
+      "sourceUrl": "https://amityonline.com/bachelor-of-commerce-honours",
+      "checkedAt": "2026-09-30",
+      "sourceTextSha256": "e28faadad3e10e314c653aa739f5d615806e3acf11914e245c1758d3b1b1a251",
+      "evidenceType": "official_program_page_rendered_eligibility",
+      "publicationStatus": "not_applied",
+      "domesticSummary": "Class 12 completion with at least 55% is required.",
+      "foreignSummary": "School qualifications covering 10 and 12 years (O/A levels or the stated equivalent) and AIU equivalence are required; diplomas are not accepted in place of these school qualifications. The page states a general 55% requirement; confirm its equivalence for your qualification.",
+      "status": "prepared_correction_pending_admin_review"
+    },
+    {
+      "courseId": "mcom-amity",
+      "sourceUrl": "https://amityonline.com/master-of-commerce-financial-management-online",
+      "checkedAt": "2026-09-30",
+      "sourceTextSha256": "348206a6db97e06eb7e034dc9e6d949c3ea698c20efad7444e75309aaa350841",
+      "evidenceType": "official_program_page_rendered_eligibility",
+      "publicationStatus": "not_applied",
+      "domesticSummary": "Class 10 and Class 12 completion certificates are required. A bachelor’s degree in any discipline is required; a diploma is not accepted in place of graduation.",
+      "foreignSummary": "O/A-level school certificates (10 and 12 years; diplomas are not substitutes), a recognised university degree and AIU equivalence are required. The foreign-applicant section additionally lists 36 months of executive work experience.",
+      "status": "prepared_correction_pending_admin_review"
+    },
+    {
+      "courseId": "bajmc-amity",
+      "sourceUrl": "https://amityonline.com/bachelor-of-arts-journalism-and-mass-communication-online",
+      "checkedAt": "2026-09-30",
+      "sourceTextSha256": "42d97026cee5db7c1ca7db9db790cacae7c8e2423f5e1153366fb8e3625f2696",
+      "evidenceType": "official_program_page_rendered_eligibility",
+      "publicationStatus": "not_applied",
+      "domesticSummary": "Class 10 and Class 12 completion certificates are required. At least three years of English-medium education are required.",
+      "foreignSummary": "School qualifications covering 10 and 12 years (O/A levels or the stated equivalent) and AIU equivalence are required; diplomas are not accepted in place of these school qualifications. At least three years of English-medium education are required.",
+      "status": "prepared_correction_pending_admin_review"
+    },
+    {
+      "courseId": "msc-data-science-amity",
+      "sourceUrl": "https://amityonline.com/msc-in-data-science",
+      "checkedAt": "2026-09-30",
+      "sourceTextSha256": "00fdffbb2948c070359362bf70336dc6f1cf1b9f9c64400fcd345b7b2a658e6e",
+      "evidenceType": "official_program_page_rendered_eligibility",
+      "publicationStatus": "not_applied",
+      "domesticSummary": "A bachelor’s degree in a science discipline is required.",
+      "foreignSummary": "A recognised university degree and AIU equivalence are required. Confirm which degree subjects qualify; the foreign section does not repeat the domestic science condition.",
+      "status": "prepared_correction_pending_admin_review"
+    },
+    {
+      "courseId": "ma-public-policy-governance-amity",
+      "sourceUrl": "https://amityonline.com/ma-public-policy",
+      "checkedAt": "2026-09-30",
+      "sourceTextSha256": "ae3cc0381dc7d4cef87c41f3d169b28f7296cc4e0f8327923ac391a7cc202dce",
+      "evidenceType": "official_program_page_rendered_eligibility",
+      "publicationStatus": "not_applied",
+      "domesticSummary": "A bachelor’s degree in any discipline and English proficiency are required; a diploma is not accepted in place of graduation.",
+      "foreignSummary": "O/A-level school certificates (10 and 12 years; diplomas are not substitutes), a recognised university degree and AIU equivalence are required. Confirm the English-language evidence required.",
+      "status": "prepared_correction_pending_admin_review"
+    }
+  ]
+}

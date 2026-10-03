@@ -1,334 +1,131 @@
 "use client";
+import { useCatalog } from "@/components/catalog-provider";
 
-import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import Image from "next/image";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { trackEvent } from "@/components/analytics";
 import type { LeadFormContext } from "@/components/lead-form-loader";
 import { COUNTRY_CODES, DEFAULT_COUNTRY, countryFromTimezone, flagEmoji } from "@/lib/country-codes";
 import { leadCourseOptions } from "@/lib/lead-course-options";
 
-type Status = "idle" | "saving" | "otp" | "verifying" | "done" | "error";
-type Step = 1 | 2 | 3;
-
-function unlockCompare() {
-  try {
-    window.localStorage.setItem("uv_lead_unlocked", "1");
-    window.dispatchEvent(new CustomEvent("uv-lead-unlocked"));
-    trackEvent("compare_unlock");
-  } catch {
-    // Verification should not fail if localStorage is unavailable.
-  }
-}
-
-function ProgressDots({ step }: { step: Step }) {
-  return (
-    <div style={{ display: "flex", gap: 6, paddingBottom: 20 }}>
-      {[1, 2, 3].map((item) => (
-        <div key={item} style={{ flex: 1, height: 4, borderRadius: 999, background: item <= step ? "#544CC8" : "#EAEAEA", transition: "background 200ms ease" }} />
-      ))}
-    </div>
-  );
-}
+import { CONTACT_CONSENT_TEXT } from "@/lib/lead-consent";
 
 export function LeadForm({ context = {} }: { context?: LeadFormContext }) {
-  const courseOptions = useMemo(() => leadCourseOptions(), []);
-  const groupedByStream = useMemo(() => {
-    const map = new Map<string, typeof courseOptions>();
-    for (const option of courseOptions) {
-      const list = map.get(option.stream) || [];
-      list.push(option);
-      map.set(option.stream, list);
-    }
-    return [...map.entries()];
-  }, [courseOptions]);
-
-  // A course is already known from where the wizard was opened (e.g. "Enquire" on a specific
-  // course page) -- asking "which course?" again would be redundant, so skip straight to the
-  // contact step.
-  const hasCourseContext = Boolean(context.course);
-  const [step, setStep] = useState<Step>(hasCourseContext ? 2 : 1);
-  const [selectedLabel, setSelectedLabel] = useState("");
-  const [selectedUniversityId, setSelectedUniversityId] = useState("");
-  const [status, setStatus] = useState<Status>("idle");
-  const [leadId, setLeadId] = useState<string | null>(null);
-  const [message, setMessage] = useState("");
-  const [contact, setContact] = useState({ name: context.name || "", email: context.email || "", phone: context.phone || "" });
+  const catalog = useCatalog();
+  const { courses } = catalog;
+  const options = useMemo(() => leadCourseOptions(catalog), [catalog]);
+  const contextualCourse = courses.find(c => c.id === context.course || c.slug === context.course);
+  const contextualOption = options.find(o => o.universities.some(u => u.courseId === contextualCourse?.id) || o.label.replace(/^Online /i, "").toLowerCase().replace(/[^a-z0-9]+/g, "-") === context.course);
+  const [step, setStep] = useState(1);
+  const [contact, setContact] = useState({ name: "", email: "", phone: "" });
   const [dial, setDial] = useState(DEFAULT_COUNTRY.dial);
-  // F27 fix (WP16): the real, user-driven consent signal -- see the checkbox in step 2 below and
-  // its use in submitLead's payload.
-  const [consentChecked, setConsentChecked] = useState(false);
+  const [consent, setConsent] = useState(false);
+  const [course, setCourse] = useState(contextualOption?.label || "");
+  const [university, setUniversity] = useState(contextualCourse?.universityId || context.university || "");
+  const [leadId, setLeadId] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const busyRef = useRef(false);
+  const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
+  const [done, setDone] = useState(false);
+  const [cooldown, setCooldown] = useState(0);
+  const session = useRef<{ key: string; token: string } | null>(null);
+  const heading = useRef<HTMLHeadingElement>(null);
+  const [returnTo, setReturnTo] = useState("/compare");
+  const choices = options.find(o => o.label === course)?.universities || [];
 
   useEffect(() => {
-    // The device's configured timezone tracks real physical location far more reliably than the
-    // browser's UI language does -- see countryFromTimezone's own comment for why.
     setDial(countryFromTimezone(Intl.DateTimeFormat().resolvedOptions().timeZone).dial);
-  }, []);
-
-  // Fires once per mount -- covers both entry points this one shared component renders behind
-  // (the modal, opened via a data-open-lead click, and the standalone /lead page, opened via a
-  // direct visit with no click at all) -- so this is a broader "the form was actually presented"
-  // signal than lead_cta_click, which only fires for the click-triggered case.
+    if (window.location.pathname === "/compare") setReturnTo(window.location.pathname + window.location.search);
+    trackEvent("wizard_open", { intent: context.intent });
+  }, [context.intent]);
+  useEffect(() => { heading.current?.focus(); }, [step, done]);
   useEffect(() => {
-    trackEvent("wizard_open", {
-      intent: context.intent || undefined,
-      course_id: context.course || undefined,
-      university_id: context.university || undefined,
-    });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    if (!cooldown) return;
+    const timer = setTimeout(() => setCooldown(cooldown - 1), 1000);
+    return () => clearTimeout(timer);
+  }, [cooldown]);
 
-  const selectedOption = courseOptions.find((option) => option.label === selectedLabel);
-  const universityChoices = selectedOption?.universities || [];
-
-  async function submitLead(formData: FormData) {
-    setStatus("saving");
-    setMessage("");
-    const phoneDigits = String(formData.get("phone") || "").replace(/\D/g, "").slice(0, 14);
-    const resolvedCourseId = context.course || universityChoices.find((uni) => uni.id === selectedUniversityId)?.courseId;
-    const payload = {
-      name: formData.get("name"),
-      email: formData.get("email"),
-      phone: `${dial}${phoneDigits}`,
-      course: resolvedCourseId || undefined,
-      university: context.university || (resolvedCourseId ? undefined : selectedUniversityId || undefined),
-      intent: context.intent || "lead_wizard",
-      interest: selectedLabel || context.goal || "General enquiry",
-      goal: context.goal,
-      // F27 fix (WP16): real, user-driven consent evidence -- the `required` checkbox below is
-      // the only way this becomes `true`; the API rejects anything else instead of assuming
-      // consent from the mere fact that a request arrived (see api/leads/route.ts).
-      consent: formData.get("consent") === "on",
+  function getSession() {
+    if (!session.current) session.current = {
+      key: crypto.randomUUID(),
+      token: Array.from(crypto.getRandomValues(new Uint8Array(32)), b => b.toString(16).padStart(2, "0")).join(""),
     };
-    const response = await fetch("/api/leads", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
+    return session.current;
+  }
+  async function api(url: string, method: string, body: unknown) {
+    const response = await fetch(url, { method, headers: { "Content-Type": "application/json", Authorization: `Bearer ${getSession().token}` }, body: JSON.stringify(body) });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok || result.ok === false) throw new Error(result.error || "We could not complete this step. Please try again.");
+    return result;
+  }
+  async function run(work: () => Promise<void>) {
+    if (busyRef.current) return;
+    busyRef.current = true; setBusy(true); setError(""); setNotice("");
+    try { await work(); } catch (e) { setError(e instanceof Error ? e.message : "Connection failed. Please try again."); }
+    finally { busyRef.current = false; setBusy(false); }
+  }
+  async function saveContact() {
+    await run(async () => {
+      const body = { ...contact, phone: `${dial}${contact.phone}`, consent, submissionKey: getSession().key, intent: context.intent || "apply_now" };
+      const result = await api(leadId ? `/api/leads/${leadId}` : "/api/leads", leadId ? "PATCH" : "POST", leadId ? { contact: body } : body);
+      setLeadId(result.leadId || leadId);
+      window.dispatchEvent(new Event("uv-lead-unlocked"));
+      trackEvent("lead_contact_saved", { intent: context.intent });
+      setStep(2); setNotice("Your details are saved. Our team may follow up even if you leave before finishing.");
     });
-    if (!response.ok) {
-      setStatus("error");
-      setMessage("Could not save your enquiry. Please try again.");
-      return;
-    }
-    const data = (await response.json()) as { leadId: string };
-    setLeadId(data.leadId);
-    trackEvent("lead_form_submit", { intent: context.intent || "lead_wizard" });
-    const otpResponse = await fetch("/api/otp/send", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ leadId: data.leadId }),
+  }
+  async function sendOtp() {
+    await api("/api/otp/send", "POST", { leadId });
+    setCooldown(60); setNotice(`A verification code was sent to ${contact.email}.`);
+    trackEvent("otp_sent", { intent: context.intent });
+  }
+  async function savePreferences() {
+    await run(async () => {
+      await api(`/api/leads/${leadId}`, "PATCH", { coursePreference: course, university });
+      trackEvent("lead_preferences_saved", { intent: context.intent });
+      setStep(3);
+      await sendOtp();
     });
-    if (!otpResponse.ok) {
-      setStatus("error");
-      setMessage("Your enquiry is saved, but we could not send the email OTP. Please try again.");
-      return;
-    }
-    trackEvent("otp_sent", { intent: context.intent || "lead_wizard" });
-    setStep(3);
-    setStatus("otp");
-    setMessage("We saved your enquiry and sent an email OTP.");
   }
 
-  async function verifyOtp(formData: FormData) {
-    setStatus("verifying");
-    const response = await fetch("/api/otp/verify", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ leadId, otp: formData.get("otp") }),
-    });
-    if (!response.ok) {
-      setStatus("otp");
-      setMessage("OTP could not be verified. Please try again.");
-      return;
-    }
-    unlockCompare();
-    trackEvent("lead_verified", { intent: context.intent || "lead_wizard" });
-    trackEvent("otp_verified", { intent: context.intent || "lead_wizard" });
-    setStatus("done");
-    setMessage("Your email is verified. Compare access is unlocked and our counsellor can now guide you with better context.");
-  }
+  if (done) return <div className="form-grid lead-step-enter">
+    <Image className="state-illustration state-illustration-confirmation" src="/states/application-enquiry-received.webp" alt="" width={800} height={600} sizes="160px" />
+    <h2 ref={heading} tabIndex={-1}>Your details are received</h2>
+    <p>Your email is verified and comparison access is unlocked. Our team will follow up about your enquiry. This is not confirmation of university admission.</p>
+    <Link href={returnTo} className="btn primary" onClick={() => window.dispatchEvent(new Event("uv-close-lead"))}>Return to comparison</Link>
+    <Link href="/courses" className="btn ghost" onClick={() => window.dispatchEvent(new Event("uv-close-lead"))}>Browse courses</Link>
+  </div>;
 
-  if (status === "done") {
-    return (
-      <div className="lead-step-enter" style={{ padding: "32px 24px" }}>
-        <ProgressDots step={3} />
-        <div style={{ textAlign: "center" }}>
-          <div style={{ width: 56, height: 56, borderRadius: "50%", background: "rgba(46,125,50,0.10)", color: "#2E7D32", fontSize: 26, lineHeight: "56px", margin: "0 auto 14px" }}>
-            ✓
-          </div>
-          <div style={{ color: "#363634", fontSize: 19, fontWeight: 700 }}>
-            You&apos;re all set{contact.name.trim() ? `, ${contact.name.trim().split(" ")[0]}` : ""}
-          </div>
-          <div style={{ color: "#696868", fontSize: 14, marginTop: 8 }}>{message}</div>
-          <div style={{ display: "flex", gap: 10, marginTop: 20, justifyContent: "center" }}>
-            <Link href="/compare" className="btn primary">Open compare</Link>
-            <Link href="/courses" className="btn ghost">Keep browsing courses</Link>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  const canContinueStep2 = Boolean(contact.name.trim() && contact.email.trim() && contact.phone.trim()) && consentChecked && status !== "saving";
-
-  return (
-    <div style={{ marginTop: 22 }}>
-      <ProgressDots step={step} />
-
-      {step === 1 ? (
-        <div className="lead-step lead-step-enter">
-          <div style={{ color: "#363634", fontSize: 15, fontWeight: 700, marginBottom: 12 }}>
-            Which course are you interested in?
-          </div>
-          {groupedByStream.map(([stream, options]) => (
-            <div key={stream} style={{ marginBottom: 14 }}>
-              <div style={{ fontSize: 12, fontWeight: 700, color: "#707070", letterSpacing: 0.4, marginBottom: 8 }}>{stream.toUpperCase()}</div>
-              <div className="lead-interest-grid">
-                {options.map((option) => (
-                  <button
-                    className={selectedLabel === option.label ? "lead-interest active" : "lead-interest"}
-                    type="button"
-                    key={option.label}
-                    onClick={() => {
-                      setSelectedLabel(option.label);
-                      setSelectedUniversityId("");
-                    }}
-                  >
-                    {option.label.replace(/^Online /, "")}
-                  </button>
-                ))}
-              </div>
-            </div>
-          ))}
-
-          {selectedOption && universityChoices.length > 1 ? (
-            <div style={{ marginTop: 4, marginBottom: 4 }}>
-              <div style={{ fontSize: 13, fontWeight: 700, color: "#363634", marginBottom: 8 }}>
-                Which university? <span style={{ color: "#707070", fontWeight: 400 }}>(optional)</span>
-              </div>
-              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                {universityChoices.map((uni) => (
-                  <button
-                    key={uni.id}
-                    type="button"
-                    className={selectedUniversityId === uni.id ? "lead-interest active" : "lead-interest"}
-                    style={{ flex: "0 0 auto", padding: "8px 16px" }}
-                    onClick={() => setSelectedUniversityId((current) => (current === uni.id ? "" : uni.id))}
-                  >
-                    {uni.shortName}
-                  </button>
-                ))}
-              </div>
-            </div>
-          ) : null}
-
-          <button className="btn primary" type="button" disabled={!selectedLabel} style={{ marginTop: 18, width: "100%" }} onClick={() => setStep(2)}>
-            Continue
-          </button>
-        </div>
-      ) : null}
-
-      {step === 2 ? (
-        <form action={submitLead} className="form-grid lead-step-enter">
-          <div style={{ color: "#363634", fontSize: 15, fontWeight: 700 }}>
-            Tell us about yourself
-          </div>
-          <div className="field">
-            <label htmlFor="name">Name</label>
-            <input id="name" name="name" required value={contact.name} onChange={(event) => setContact((current) => ({ ...current, name: event.target.value }))} />
-          </div>
-          <div className="field">
-            <label htmlFor="email">Email</label>
-            <input id="email" name="email" type="email" required value={contact.email} onChange={(event) => setContact((current) => ({ ...current, email: event.target.value }))} />
-          </div>
-          <div className="field">
-            <label htmlFor="phone">Mobile number</label>
-            <div style={{ display: "flex", gap: 8 }}>
-              <select
-                aria-label="Country code"
-                value={dial}
-                onChange={(event) => setDial(event.target.value)}
-                style={{ width: 110, flexShrink: 0, border: "1px solid var(--uv-border)", borderRadius: "var(--uv-radius-control)", background: "#fff", padding: "0 6px", fontSize: 13 }}
-              >
-                {COUNTRY_CODES.map((country) => (
-                  <option key={country.iso2} value={country.dial}>
-                    {flagEmoji(country.iso2)} {country.dial}
-                  </option>
-                ))}
-              </select>
-              <input
-                id="phone"
-                name="phone"
-                inputMode="tel"
-                minLength={dial === "+91" ? 10 : 4}
-                maxLength={dial === "+91" ? 10 : 14}
-                required
-                style={{ flex: 1 }}
-                value={contact.phone}
-                onChange={(event) => setContact((current) => ({ ...current, phone: event.target.value.replace(/\D/g, "").slice(0, 14) }))}
-              />
-            </div>
-          </div>
-          <label style={{ display: "flex", alignItems: "flex-start", gap: 8, fontSize: 12, color: "#707070", cursor: "pointer" }}>
-            <input
-              name="consent"
-              type="checkbox"
-              required
-              checked={consentChecked}
-              onChange={(event) => setConsentChecked(event.target.checked)}
-              style={{ marginTop: 2 }}
-            />
-            <span>I agree to receive counselling calls and WhatsApp updates about my enquiry.</span>
-          </label>
-          <div className="lead-form-actions">
-            {hasCourseContext ? null : (
-              <button className="btn ghost" type="button" onClick={() => setStep(1)}>
-                Back
-              </button>
-            )}
-            <button
-              className="btn primary"
-              type="submit"
-              disabled={!canContinueStep2}
-              style={canContinueStep2 ? undefined : { background: "#D8D7D6", borderColor: "#D8D7D6", cursor: "not-allowed" }}
-            >
-              {status === "saving" ? "Saving..." : "Save and send OTP"}
-            </button>
-          </div>
-        </form>
-      ) : null}
-
-      {step === 3 && (status === "otp" || status === "verifying") ? (
-        <form action={verifyOtp} className="form-grid lead-step-enter" style={{ marginTop: 20 }}>
-          <div style={{ color: "#2E7D32", background: "rgba(46,125,50,0.10)", padding: "8px 12px", borderRadius: 4, fontSize: 13 }}>
-            Email OTP sent. Verify now to mark this lead as verified.
-          </div>
-          <div className="field">
-            <label htmlFor="otp">Email OTP</label>
-            <input id="otp" name="otp" inputMode="numeric" minLength={4} maxLength={6} required style={{ fontSize: 18, letterSpacing: 8 }} />
-          </div>
-          <div className="lead-form-actions">
-            <button
-              className="btn ghost"
-              type="button"
-              onClick={() => {
-                setStep(2);
-                setStatus("idle");
-                setMessage("");
-              }}
-            >
-              Back
-            </button>
-            <button className="btn primary" type="submit" disabled={status === "verifying"}>
-              {status === "verifying" ? "Verifying..." : "Verify email"}
-            </button>
-          </div>
-        </form>
-      ) : null}
-
-      {message ? <p style={{ color: status === "error" ? "#b00020" : "#707070", fontSize: 13 }}>{message}</p> : null}
-      <div style={{ color: "#707070", fontSize: 12, marginTop: 12 }}>
-        By continuing you agree to receive counselling calls and WhatsApp updates. We never share your number with third parties.
-      </div>
-    </div>
-  );
+  return <div className="form-grid">
+    <p className="lead-progress" aria-label={`Step ${step} of 3`}>{step === 1 ? "1. Your details" : step === 2 ? "2. Course preferences" : "3. Verify email"}</p>
+    <h2 ref={heading} tabIndex={-1} className="lead-step-title">{step === 1 ? "Start your application enquiry" : step === 2 ? "Choose your preferences" : "Verify your email"}</h2>
+    {step === 1 && <form className="form-grid lead-step-enter" onSubmit={e => { e.preventDefault(); void saveContact(); }}>
+      <div className="field"><label htmlFor="uv-name">Name</label><input id="uv-name" autoComplete="name" minLength={2} maxLength={150} required value={contact.name} onChange={e => setContact({ ...contact, name: e.target.value })} /></div>
+      <div className="field"><label htmlFor="uv-email">Email</label><input id="uv-email" type="email" autoComplete="email" maxLength={254} required value={contact.email} onChange={e => setContact({ ...contact, email: e.target.value })} /></div>
+      <div className="field"><label htmlFor="uv-phone">Phone</label><div className="lead-phone-row">
+        <select aria-label="Country code" autoComplete="tel-country-code" value={dial} onChange={e => setDial(e.target.value)}>{COUNTRY_CODES.map(c => <option key={c.iso2} value={c.dial}>{flagEmoji(c.iso2)} {c.dial} {c.iso2}</option>)}</select>
+        <input id="uv-phone" type="tel" autoComplete="tel-national" required minLength={dial === "+91" ? 10 : 4} maxLength={15 - dial.length + 1} pattern={dial === "+91" ? "[0-9]{10}" : "[0-9]{4,14}"} value={contact.phone} onChange={e => setContact({ ...contact, phone: e.target.value.replace(/\D/g, "") })} />
+      </div></div>
+      <label className="lead-consent"><input type="checkbox" required checked={consent} onChange={e => setConsent(e.target.checked)} /><span>{CONTACT_CONSENT_TEXT}</span></label>
+      <p className="lead-help">Your details will be saved when you continue. <Link href="/privacy">Privacy policy</Link></p>
+      <button className="btn primary" disabled={busy || !consent}>{busy ? "Saving…" : "Continue"}</button>
+    </form>}
+    {step === 2 && <form className="form-grid lead-step-enter" onSubmit={e => { e.preventDefault(); void savePreferences(); }}>
+      <div className="field"><label htmlFor="uv-course">Course</label><select id="uv-course" required value={course} onChange={e => { setCourse(e.target.value); setUniversity(""); }}><option value="">Select a course</option>{options.map(o => <option key={o.label} value={o.label}>{o.label}</option>)}</select></div>
+      <div className="field"><label htmlFor="uv-university">University (optional)</label><select id="uv-university" value={choices.some(u => u.id === university) ? university : ""} onChange={e => setUniversity(e.target.value)}><option value="">No preference</option>{choices.map(u => <option key={u.id} value={u.id}>{u.shortName === "MUJ" ? "Manipal University Jaipur" : u.shortName === "SMU" ? "Sikkim Manipal University" : "Amity Online"}</option>)}</select></div>
+      <div className="lead-form-actions"><button type="button" className="btn ghost" disabled={busy} onClick={() => setStep(1)}>Back</button><button className="btn primary" disabled={busy || !course}>{busy ? "Saving…" : "Save and verify email"}</button></div>
+    </form>}
+    {step === 3 && <form className="form-grid lead-step-enter" onSubmit={e => { e.preventDefault(); const otp = new FormData(e.currentTarget).get("otp"); void run(async () => { await api("/api/otp/verify", "POST", { leadId, otp }); window.dispatchEvent(new Event("uv-lead-unlocked")); trackEvent("otp_verified", { intent: context.intent }); setDone(true); }); }}>
+      <p className="lead-help">Enter the code sent to {contact.email}. Your enquiry is already saved.</p>
+      <div className="field"><label htmlFor="uv-otp">Email verification code</label><input id="uv-otp" name="otp" autoComplete="one-time-code" inputMode="numeric" pattern="[0-9]{4,6}" required minLength={4} maxLength={6} /></div>
+      <button className="btn primary" disabled={busy}>{busy ? "Please wait…" : "Verify email"}</button>
+      <button className="btn ghost" type="button" disabled={busy || cooldown > 0} onClick={() => void run(sendOtp)}>{cooldown ? `Resend in ${cooldown}s` : "Resend code"}</button>
+      <button className="btn ghost" type="button" disabled={busy} onClick={() => { setStep(1); setError(""); }}>Edit contact details</button>
+      <button className="btn ghost" type="button" disabled={busy} onClick={() => { setStep(2); setError(""); }}>Edit preferences</button>
+    </form>}
+    {error && <p role="alert" className="lead-error">{error}</p>}
+    {notice && <p role="status" className="lead-help">{notice}</p>}
+  </div>;
 }

@@ -15,6 +15,16 @@ import {
   verifyInboundWebhookRequest,
 } from "@/lib/server/inbound-webhooks";
 
+// Webhook/integration logic under test; the DATA_PLATFORM module gate itself is covered by
+// tests/data-platform-module-gate.test.ts.
+vi.mock("@/lib/server/module-entitlements", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/server/module-entitlements")>()),
+  assertTenantModule: vi.fn(async () => undefined),
+  assertModuleEnabled: vi.fn(async () => undefined),
+  isModuleEnabledForTenant: vi.fn(async () => true),
+}));
+
+
 const TENANT_ID = "tenant-a";
 const SECRET = "abc123secret";
 

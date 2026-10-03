@@ -1,3 +1,5 @@
+import { assertTenantModule } from "@/lib/server/module-entitlements";
+import { assertFeatureEnabled } from "@/lib/server/entitlements";
 import {
   listActivitiesForTenant,
   listLeadsForTenant,
@@ -17,6 +19,7 @@ import {
   getLeadSourceRoiAggregateForTenant,
 } from "@/lib/repositories/opportunities-postgres";
 import { randomUUID } from "crypto";
+import { DEFAULT_SERVER_TIME_ZONE } from "@/lib/timezone";
 
 type TenantUser = {
   id: string;
@@ -426,6 +429,7 @@ export type DataQualityReport = {
 // is no longer called from this wrapper; `buildFunnelByStageReportFromAggregateRows` is its
 // pre-aggregated-rows equivalent.
 export async function getFunnelByStageReportForTenant(user: TenantUser): Promise<FunnelByStageReport> {
+  await assertFeatureEnabled(user.tenantId, "advancedReporting", { isPlatformAdmin: user.isPlatformAdmin });
   const stageRows = await getFunnelByStageAggregateForTenant(user);
   return buildFunnelByStageReportFromAggregateRows(stageRows, new Date());
 }
@@ -464,6 +468,7 @@ export function buildFunnelByStageReportFromAggregateRows(
 }
 
 export async function getFunnelBySourceCampaignReportForTenant(user: TenantUser): Promise<FunnelBySourceCampaignReport> {
+  await assertFeatureEnabled(user.tenantId, "advancedReporting", { isPlatformAdmin: user.isPlatformAdmin });
   const [leads, opportunities, campaignLookup] = await Promise.all([
     listLeadsForTenant(user, 1, 1000),
     listOpportunitiesForTenant(user, 1000),
@@ -603,6 +608,7 @@ export async function getFunnelExplorerForTenant(
   user: TenantUser,
   segmentDimension: FunnelExplorerSegmentDimension = "SOURCE"
 ): Promise<FunnelExplorerReport> {
+  await assertFeatureEnabled(user.tenantId, "advancedReporting", { isPlatformAdmin: user.isPlatformAdmin });
   const [leads, opportunities, opportunityTypes, users] = await Promise.all([
     listLeadsForTenant(user, 1, 1000),
     listOpportunitiesForTenant(user, 1000),
@@ -829,6 +835,7 @@ export async function getSegmentComparisonReportForTenant(
   segmentA: ComparisonSegmentInput,
   segmentB: ComparisonSegmentInput,
 ): Promise<SegmentComparisonReport> {
+  await assertFeatureEnabled(user.tenantId, "advancedReporting", { isPlatformAdmin: user.isPlatformAdmin });
   const [leads, opportunities, opportunityTypes, users] = await Promise.all([
     listLeadsForTenant(user, 1, 1000),
     listOpportunitiesForTenant(user, 1000),
@@ -952,6 +959,7 @@ export function fillDailySeries(rows: Array<{ day: string; value: number | strin
 }
 
 export async function getAnomalyDetectionReportForTenant(user: TenantUser): Promise<AnomalyDetectionReport> {
+  await assertFeatureEnabled(user.tenantId, "advancedReporting", { isPlatformAdmin: user.isPlatformAdmin });
   const now = new Date();
   const empty: AnomalyDetectionReport = { reportKey: "anomaly_detection", generatedAt: now.toISOString(), windowDays: ANOMALY_WINDOW_DAYS, domains: [] };
   if (!user.tenantId) return empty;
@@ -1099,6 +1107,7 @@ function buildForecastDomain(domain: ForecastDomain, history: ForecastPoint[]): 
 }
 
 export async function getForecastReportForTenant(user: TenantUser): Promise<ForecastReport> {
+  await assertFeatureEnabled(user.tenantId, "advancedReporting", { isPlatformAdmin: user.isPlatformAdmin });
   const now = new Date();
   const empty: ForecastReport = { reportKey: "forecast", generatedAt: now.toISOString(), historyDays: FORECAST_HISTORY_DAYS, horizonDays: FORECAST_HORIZON_DAYS, domains: [] };
   if (!user.tenantId) return empty;
@@ -1173,6 +1182,7 @@ export type ExecutiveScorecardReport = {
 };
 
 export async function getExecutiveScorecardReportForTenant(user: TenantUser): Promise<ExecutiveScorecardReport> {
+  await assertFeatureEnabled(user.tenantId, "advancedReporting", { isPlatformAdmin: user.isPlatformAdmin });
   assertSensitiveReportAccess(user, "campaign_roi");
   const now = new Date().toISOString();
   if (!user.tenantId) return { reportKey: "executive_scorecard", generatedAt: now, sections: [] };
@@ -1397,6 +1407,7 @@ export async function getPeriodComparisonReportForTenant(
   user: TenantUser,
   preset: PeriodComparisonPreset = "THIS_MONTH_VS_LAST"
 ): Promise<PeriodComparisonReport> {
+  await assertFeatureEnabled(user.tenantId, "advancedReporting", { isPlatformAdmin: user.isPlatformAdmin });
   const { current, previous } = periodRangeForPreset(preset, new Date());
   const [leadCounts, oppMetrics] = await Promise.all([
     getLeadPeriodCountsForTenant(user, current, previous),
@@ -1439,6 +1450,7 @@ export async function getPeriodComparisonReportForTenant(
 }
 
 export async function getRepPerformanceReportForTenant(user: TenantUser): Promise<RepPerformanceReport> {
+  await assertFeatureEnabled(user.tenantId, "advancedReporting", { isPlatformAdmin: user.isPlatformAdmin });
   const [leads, opportunities, activities, users] = await Promise.all([
     listLeadsForTenant(user, 1, 1000),
     listOpportunitiesForTenant(user, 1000),
@@ -1474,6 +1486,7 @@ export async function getSlaResponseBreachReportForTenant(
   user: TenantUser,
   thresholdHours = 24
 ): Promise<SlaResponseBreachReport> {
+  await assertFeatureEnabled(user.tenantId, "advancedReporting", { isPlatformAdmin: user.isPlatformAdmin });
   const [leads, activities, users] = await Promise.all([
     listLeadsForTenant(user, 1, 1000),
     listActivitiesForTenant(user, 1000, null),
@@ -1484,6 +1497,7 @@ export async function getSlaResponseBreachReportForTenant(
 }
 
 export async function getTaskSlaPerformanceReportForTenant(user: TenantUser): Promise<TaskSlaPerformanceReport> {
+  await assertFeatureEnabled(user.tenantId, "advancedReporting", { isPlatformAdmin: user.isPlatformAdmin });
   if (!user.tenantId) {
     return { reportKey: "task_sla_performance", generatedAt: new Date().toISOString(), totals: { totalTasks: 0, firstActionBreaches: 0, completionBreaches: 0, completionMet: 0 }, rows: [], byModule: [] };
   }
@@ -1511,6 +1525,7 @@ export async function getTaskSlaPerformanceReportForTenant(user: TenantUser): Pr
 }
 
 export async function getAutomationPerformanceReportForTenant(user: TenantUser): Promise<AutomationPerformanceReport> {
+  await assertFeatureEnabled(user.tenantId, "advancedReporting", { isPlatformAdmin: user.isPlatformAdmin });
   if (!user.tenantId) {
     return { reportKey: "automation_performance", generatedAt: new Date().toISOString(), totals: { totalRuns: 0, completed: 0, failed: 0, waiting: 0 }, rows: [] };
   }
@@ -1532,6 +1547,7 @@ export async function getAutomationPerformanceReportForTenant(user: TenantUser):
 // stamped by automationBranchLabelForNode at run time) -- this is a pure new report over
 // existing data, no new instrumentation needed.
 export async function getSplitTestPerformanceReportForTenant(user: TenantUser): Promise<SplitTestPerformanceReport> {
+  await assertFeatureEnabled(user.tenantId, "advancedReporting", { isPlatformAdmin: user.isPlatformAdmin });
   if (!user.tenantId) {
     return { reportKey: "split_test_performance", generatedAt: new Date().toISOString(), totals: { totalSplitNodes: 0, totalExecutions: 0 }, rows: [] };
   }
@@ -1552,6 +1568,7 @@ export async function getSplitTestPerformanceReportForTenant(user: TenantUser): 
 // param), so this returns one row per (form, tab) instead of requiring a form picker --
 // still genuinely useful, and rows naturally group by formId/tabIndex when sorted.
 export async function getFormDropOffReportForTenant(user: TenantUser): Promise<FormDropOffReport> {
+  await assertFeatureEnabled(user.tenantId, "advancedReporting", { isPlatformAdmin: user.isPlatformAdmin });
   if (!user.tenantId) {
     return { reportKey: "form_drop_off", generatedAt: new Date().toISOString(), totals: { totalForms: 0, totalSessions: 0, totalSubmissions: 0 }, rows: [] };
   }
@@ -1577,6 +1594,7 @@ export async function getFormDropOffReportForTenant(user: TenantUser): Promise<F
 // version applied per-lead, which is why the merge happens in JS (over a small, per-source row
 // count -- one row per distinct source, not one per record) rather than in SQL.
 export async function getLeadSourceRoiReportForTenant(user: TenantUser): Promise<LeadSourceRoiReport> {
+  await assertFeatureEnabled(user.tenantId, "advancedReporting", { isPlatformAdmin: user.isPlatformAdmin });
   assertSensitiveReportAccess(user, "lead_source_roi");
   const { leadRows, oppRows } = await getLeadSourceRoiAggregateForTenant(user);
   return buildLeadSourceRoiReportFromAggregates(leadRows, oppRows, new Date());
@@ -1638,6 +1656,7 @@ export async function getReassignmentImpactReportForTenant(
   user: TenantUser,
   thresholdHours = 24
 ): Promise<ReassignmentImpactReport> {
+  await assertFeatureEnabled(user.tenantId, "advancedReporting", { isPlatformAdmin: user.isPlatformAdmin });
   const [leads, opportunities, activities, assignmentEvents] = await Promise.all([
     listLeadsForTenant(user, 1, 1000),
     listOpportunitiesForTenant(user, 1000),
@@ -1659,6 +1678,7 @@ export async function getReassignmentImpactReportForTenant(
 // every real distribution pick) already carry everything needed here -- no new
 // instrumentation required, same flat-fetch + JS bucketing convention as every other report.
 export async function getDistributionFairnessReportForTenant(user: TenantUser): Promise<DistributionFairnessReport> {
+  await assertFeatureEnabled(user.tenantId, "advancedReporting", { isPlatformAdmin: user.isPlatformAdmin });
   if (!user.tenantId) {
     return { reportKey: "distribution_fairness", generatedAt: new Date().toISOString(), totals: { totalAssignments: 0, totalUsers: 0, meanPerUser: 0 }, rows: [] };
   }
@@ -1675,6 +1695,7 @@ export async function getActivityCallVolumeTrendReportForTenant(
   startDate?: string | null,
   endDate?: string | null
 ): Promise<ActivityCallVolumeTrendReport> {
+  await assertFeatureEnabled(user.tenantId, "advancedReporting", { isPlatformAdmin: user.isPlatformAdmin });
   const activities = await listActivitiesForTenant(user, 1000, null);
   return calculateActivityCallVolumeTrendReport(activities.data, grain, startDate, endDate, new Date());
 }
@@ -1682,6 +1703,7 @@ export async function getActivityCallVolumeTrendReportForTenant(
 export async function getCommissionPayoutSummaryReportForTenant(
   user: TenantUser
 ): Promise<CommissionPayoutSummaryReport> {
+  await assertFeatureEnabled(user.tenantId, "advancedReporting", { isPlatformAdmin: user.isPlatformAdmin });
   const data = await listCommissionPayoutSummaryInputs(user);
   return calculateCommissionPayoutSummaryReport(
     data.ledgerEntries,
@@ -1699,6 +1721,7 @@ export async function getCohortReportForTenant(
   grain: "week" | "month" = "month",
   dimension: CohortDimension = "CREATED_DATE"
 ): Promise<CohortReport> {
+  await assertFeatureEnabled(user.tenantId, "advancedReporting", { isPlatformAdmin: user.isPlatformAdmin });
   const [leads, opportunities, opportunityTypes] = await Promise.all([
     listLeadsForTenant(user, 1, 1000),
     listOpportunitiesForTenant(user, 1000),
@@ -1770,6 +1793,7 @@ export async function getDataQualityReportForTenant(
   user: TenantUser,
   staleDays = 30
 ): Promise<DataQualityReport> {
+  await assertFeatureEnabled(user.tenantId, "advancedReporting", { isPlatformAdmin: user.isPlatformAdmin });
   const [leads, activities, requiredFields, customFieldValues, attributionTouches, slaBreachCount, opportunities, opportunityTypes] =
     await Promise.all([
       listLeadsForTenant(user, 1, 1000),
@@ -1809,6 +1833,7 @@ async function countBreachedTasksForTenant(user: TenantUser) {
 
 export async function listDataQualityScorecardHistoryForTenant(user: TenantUser, limit = 90) {
   if (!user.tenantId) return [];
+  await assertFeatureEnabled(user.tenantId, "advancedReporting", { isPlatformAdmin: user.isPlatformAdmin });
   return pgQuery<{ id: string; generatedAt: string; staleDays: number; totals: Record<string, number>; issues: DataQualityIssue[] }>(
     `select id, "generatedAt", "staleDays", totals, issues
      from "DataQualityScorecard"
@@ -1819,6 +1844,26 @@ export async function listDataQualityScorecardHistoryForTenant(user: TenantUser,
   );
 }
 
+// Scheduled-sweep eligibility, in SQL so ineligible tenants are never selected (selecting and then
+// skipping them would keep them at the front of a least-recently-refreshed queue forever). Same
+// rule as isFeatureEnabledForTenant("advancedReporting"): the Reports module is not disabled or
+// suspended (decision 15: the module alone decides). Expects the tenant aliased as t.
+const moduleOnSql = (moduleKey: string) =>
+  `not exists (select 1 from "TenantModuleEntitlement" e where e."tenantId" = t.id and e."moduleKey" = '${moduleKey}' and e.status not in ('ENABLED', 'TRIAL'))`;
+const REPORTING_ENABLED_SQL = moduleOnSql("REPORTS");
+// Each tenant's configured time zone (TenantConfig generalSettings.timezone, as getTenantTimeZone
+// reads it), falling back to the server default when unset or not a valid zone name.
+// Used as `with ${TENANT_TIME_ZONE_CTES} ...` -> a "tz" CTE of ("tenantId", tz). The zone list
+// is read once per statement (pg_timezone_names is expensive to scan per row).
+const TENANT_TIME_ZONE_CTES =
+  `zones as materialized (select name from pg_timezone_names),
+   tz as (
+     select t.id as "tenantId", coalesce(z.name, '${DEFAULT_SERVER_TIME_ZONE}') as tz
+     from "Tenant" t
+     left join lateral (select tc."featureFlags" -> 'generalSettings' ->> 'timezone' as zone from "TenantConfig" tc where tc."tenantId" = t.id limit 1) cfg on true
+     left join zones z on z.name = cfg.zone
+   )`;
+
 // Scheduled sweep: reuses getDataQualityReportForTenant per tenant rather than re-deriving
 // duplicate/required-field/UTM logic as a second, cross-tenant SQL implementation -- one
 // source of truth for what "a data quality issue" means, at the cost of one query set per
@@ -1828,11 +1873,35 @@ export async function listDataQualityScorecardHistoryForTenant(user: TenantUser,
 // tenants across the whole platform at once (the per-tenant getDataQualityReportForTenant call
 // below runs with an explicit `{ id: "system", tenantId: tenant.id }` actor, not through the
 // ambient-context mechanism, so it is unaffected either way).
+//
+// Fairness fix (2026-09-29): this used to take the first `limit` ACTIVE tenants by creation date
+// on every 60s tick, so it rescanned the same tenants every minute (one scorecard row each per
+// minute) and never reached tenants beyond the limit; and one tenant with reporting switched off
+// threw FEATURE_DISABLED and ended the run for everyone after it. Now: one scorecard per tenant
+// per tenant-local day, least recently scanned first, only tenants whose reporting is on, and a
+// failing tenant is logged and skipped.
 export async function runScheduledDataQualityScan(limit = 100) {
-  const tenants = await pgQueryAsSystem<{ id: string }>(`select id from "Tenant" where status = 'ACTIVE' order by "createdAt" asc limit $1`, [limit]);
+  const tenants = await pgQueryAsSystem<{ id: string }>(
+    `with ${TENANT_TIME_ZONE_CTES}
+     select t.id from "Tenant" t
+     join tz on tz."tenantId" = t.id
+     left join lateral (select max(s."generatedAt") as last from "DataQualityScorecard" s where s."tenantId" = t.id) s on true
+     where t.status = 'ACTIVE' and ${REPORTING_ENABLED_SQL}
+       and (s.last is null or (s.last at time zone tz.tz)::date < (now() at time zone tz.tz)::date)
+     order by s.last asc nulls first, t."createdAt" asc
+     limit $1`,
+    [limit],
+  );
   const results = [];
   for (const tenant of tenants) {
-    const report = await getDataQualityReportForTenant({ id: "system", tenantId: tenant.id }, 30);
+    let report: DataQualityReport;
+    try {
+      report = await getDataQualityReportForTenant({ id: "system", tenantId: tenant.id }, 30);
+    } catch (error) {
+      console.error(`[data-quality] scheduled scan failed for tenant ${tenant.id}`, error);
+      results.push({ tenantId: tenant.id, totalIssues: null, failed: true });
+      continue;
+    }
     // node-postgres serializes a plain object parameter as JSON automatically, but a plain
     // ARRAY parameter is instead converted to a Postgres array literal (`{...,...}`) -- not
     // valid JSON syntax -- which a jsonb column then rejects with "invalid input syntax for
@@ -1843,7 +1912,7 @@ export async function runScheduledDataQualityScan(limit = 100) {
        values ($1, $2, $3, $4, $5, $6, $3)`,
       [randomUUID(), tenant.id, report.generatedAt, report.staleDays, report.totals, JSON.stringify(report.issues)],
     );
-    results.push({ tenantId: tenant.id, totalIssues: report.issues.reduce((sum, item) => sum + item.count, 0) });
+    results.push({ tenantId: tenant.id, totalIssues: report.issues.reduce((sum, item) => sum + item.count, 0), failed: false });
   }
   return results;
 }
@@ -3481,6 +3550,7 @@ export type NextBestActionPerformanceReport = {
 };
 
 export async function getNextBestActionPerformanceReportForTenant(user: TenantUser): Promise<NextBestActionPerformanceReport> {
+  await assertFeatureEnabled(user.tenantId, "advancedReporting", { isPlatformAdmin: user.isPlatformAdmin });
   const empty: NextBestActionPerformanceReport = {
     reportKey: "next_best_action_performance",
     generatedAt: new Date().toISOString(),
@@ -3533,7 +3603,7 @@ export async function getNextBestActionPerformanceReportForTenant(user: TenantUs
     ? await pgQuery<any>('select id, source from "Lead" where "tenantId" = $1 and id = any($2::text[])', [user.tenantId, leadIds])
     : [];
   const leadStatuses = leadIds.length
-    ? await pgQuery<any>('select id, status from "Lead" where "tenantId" = $1 and id = any($2::text[])', [user.tenantId, leadIds])
+    ? await pgQuery<any>('select id, status, crm_lead_status_category("tenantId", status) as "statusCategory" from "Lead" where "tenantId" = $1 and id = any($2::text[])', [user.tenantId, leadIds])
     : [];
 
   const opportunityIds = [...new Set(recommendations.filter((row) => row.recordType === "OPPORTUNITY").map((row) => row.recordId))];
@@ -3573,7 +3643,7 @@ export function calculateNextBestActionPerformanceReport(
     teams?: Array<{ id: string; name: string }>;
     rules?: Array<{ id: string; name: string }>;
     leadSources?: Array<{ id: string; source: string | null }>;
-    leadStatuses?: Array<{ id: string; status: string | null }>;
+    leadStatuses?: Array<{ id: string; status: string | null; statusCategory?: string | null }>;
     opportunityStages?: Array<{ id: string; stageName: string | null }>;
     opportunityWonFlags?: Array<{ id: string; isWon: boolean | null }>;
     suppressionBreakdown?: Array<{ reason: string; count: number }>;
@@ -3583,7 +3653,8 @@ export function calculateNextBestActionPerformanceReport(
   const teamNameById = new Map((context.teams ?? []).map((team) => [team.id, team.name]));
   const ruleNameById = new Map((context.rules ?? []).map((rule) => [rule.id, rule.name]));
   const leadSourceById = new Map((context.leadSources ?? []).map((lead) => [lead.id, lead.source]));
-  const leadStatusById = new Map((context.leadStatuses ?? []).map((lead) => [lead.id, lead.status]));
+  // "Converted" is the status category when known (tenant-configurable statuses), else the name.
+  const leadConvertedById = new Map((context.leadStatuses ?? []).map((lead) => [lead.id, lead.statusCategory ? lead.statusCategory === "CONVERTED" : lead.status === "CONVERTED"]));
   const opportunityStageById = new Map((context.opportunityStages ?? []).map((opportunity) => [opportunity.id, opportunity.stageName]));
   const opportunityWonById = new Map((context.opportunityWonFlags ?? []).map((opportunity) => [opportunity.id, !!opportunity.isWon]));
 
@@ -3609,7 +3680,7 @@ export function calculateNextBestActionPerformanceReport(
   const conversionImpact = { accepted: { total: 0, convertedOrWon: 0 }, notAccepted: { total: 0, convertedOrWon: 0 } };
   const responseImpact = { responded: { total: 0, convertedOrWon: 0 }, noResponse: { total: 0, convertedOrWon: 0 } };
   const isConvertedOrWon = (rec: { recordType: string; recordId?: string }) => {
-    if (rec.recordType === "LEAD" && rec.recordId) return leadStatusById.get(rec.recordId) === "CONVERTED";
+    if (rec.recordType === "LEAD" && rec.recordId) return !!leadConvertedById.get(rec.recordId);
     if (rec.recordType === "OPPORTUNITY" && rec.recordId) return !!opportunityWonById.get(rec.recordId);
     return false;
   };
@@ -3715,6 +3786,7 @@ export function calculateNextBestActionPerformanceReport(
 // --- Marketing Journey Performance ---
 
 export async function getJourneyPerformanceReportForTenant(user: TenantUser) {
+  await assertFeatureEnabled(user.tenantId, "advancedReporting", { isPlatformAdmin: user.isPlatformAdmin });
   const empty = { reportKey: "journey_performance" as const, generatedAt: new Date().toISOString(), journeys: [] as any[] };
   if (!user.tenantId) return empty;
 
@@ -3776,6 +3848,7 @@ export async function getMarketingAttributionSummaryReportForTenant(
     | "CUSTOM_WEIGHTED" = "FIRST_TOUCH",
   customWeights?: Record<string, number>
 ) {
+  await assertFeatureEnabled(user.tenantId, "advancedReporting", { isPlatformAdmin: user.isPlatformAdmin });
   const { getAttributionSummaryForTenant } = await import("@/lib/server/marketing-journeys");
   const summary = await getAttributionSummaryForTenant(user, model, customWeights);
   return { reportKey: "marketing_attribution_summary" as const, generatedAt: new Date().toISOString(), ...summary };
@@ -3797,6 +3870,7 @@ export async function getAttributionExplorerReportForTenant(
     | "CUSTOM_WEIGHTED" = "LINEAR",
   customWeights?: Record<string, number>
 ) {
+  await assertFeatureEnabled(user.tenantId, "advancedReporting", { isPlatformAdmin: user.isPlatformAdmin });
   const { getAttributionExplorerForTenant } = await import("@/lib/server/marketing-journeys");
   const explorer = await getAttributionExplorerForTenant(user, model, customWeights);
   return { reportKey: "attribution_explorer" as const, ...explorer };
@@ -3808,6 +3882,7 @@ export async function getAttributionExplorerReportForTenant(
 // bounce/complaint/unsubscribe signals are detected via pattern matching on that text rather
 // than an exact-match enum, since different providers name these events differently.
 export async function getSenderReputationReportForTenant(user: TenantUser, days = 30) {
+  await assertFeatureEnabled(user.tenantId, "advancedReporting", { isPlatformAdmin: user.isPlatformAdmin });
   const empty = {
     reportKey: "sender_reputation" as const,
     generatedAt: new Date().toISOString(),
@@ -3884,6 +3959,7 @@ export async function getSenderReputationReportForTenant(user: TenantUser, days 
 // Deliberately NOT payout/commission-integrated -- revenue is Opportunity.amount for won deals
 // attributed to a journey, not a downstream commission calculation (see marketing-cost.ts).
 export async function getCampaignRoiReportForTenant(user: TenantUser) {
+  await assertFeatureEnabled(user.tenantId, "advancedReporting", { isPlatformAdmin: user.isPlatformAdmin });
   assertSensitiveReportAccess(user, "campaign_roi");
   const empty = { reportKey: "campaign_roi" as const, generatedAt: new Date().toISOString(), journeys: [] as any[] };
   if (!user.tenantId) return empty;
@@ -4027,7 +4103,9 @@ export function calculateTelephonyCallPerformanceReport(
 }
 
 export async function getTelephonyCallPerformanceReportForTenant(user: TenantUser): Promise<TelephonyCallPerformanceReport> {
+  await assertFeatureEnabled(user.tenantId, "advancedReporting", { isPlatformAdmin: user.isPlatformAdmin });
   if (!user.tenantId) return calculateTelephonyCallPerformanceReport([], [], new Date());
+  await assertTenantModule(user, "TELEPHONY");
   const [callLogs, users] = await Promise.all([
     pgQuery<any>(
       `select id, provider, "callId", direction, status, duration, "agentId", "leadId", "opportunityId", "startedAt"
@@ -4205,6 +4283,7 @@ function weekStartIso(date: Date) {
 }
 
 export async function getCaseAnalyticsReportForTenant(user: TenantUser): Promise<CaseAnalyticsReport> {
+  await assertFeatureEnabled(user.tenantId, "advancedReporting", { isPlatformAdmin: user.isPlatformAdmin });
   if (!user.tenantId) {
     return calculateCaseAnalyticsReport([], new Map(), [], [], new Date());
   }
@@ -4235,14 +4314,35 @@ export async function getCaseAnalyticsReportForTenant(user: TenantUser): Promise
 // recomputation on every page load.
 // WP07 (F04): BACKGROUND_JOB, disposition B -- worker-invoked recurring job, discovers every
 // tenant with at least one case across the whole platform at once.
+//
+// Fairness fix (2026-09-29): this used to take `limit` tenants with cases in no particular order
+// on every tick, so the same tenants were refreshed every minute and the rest never were, and a
+// tenant with reporting off threw and ended the run. Now: ACTIVE tenants with cases, reporting and
+// Service Desk on, whose snapshot is missing or older than CASE_SNAPSHOT_REFRESH_MINUTES, oldest
+// first; a failing tenant is logged and skipped.
+export const CASE_SNAPSHOT_REFRESH_MINUTES = 15;
 export async function refreshCaseAnalyticsSnapshots(limit = 50) {
   const tenants = await pgQueryAsSystem<{ id: string }>(
-    `select distinct t.id from "Tenant" t join "Case" c on c."tenantId" = t.id limit $1`,
+    `select t.id from "Tenant" t
+     left join "CaseAnalyticsSnapshot" snap on snap."tenantId" = t.id
+     where t.status = 'ACTIVE' and ${REPORTING_ENABLED_SQL} and ${moduleOnSql("SERVICE_DESK")}
+       and exists (select 1 from "Case" c where c."tenantId" = t.id)
+       and (snap."generatedAt" is null or snap."generatedAt" < now() - interval '${CASE_SNAPSHOT_REFRESH_MINUTES} minutes')
+     order by snap."generatedAt" asc nulls first, t.id
+     limit $1`,
     [limit],
   );
   let refreshed = 0;
+  let failed = 0;
   for (const tenant of tenants) {
-    const report = await getCaseAnalyticsReportForTenant({ id: "system", tenantId: tenant.id } as TenantUser);
+    let report: CaseAnalyticsReport;
+    try {
+      report = await getCaseAnalyticsReportForTenant({ id: "system", tenantId: tenant.id } as TenantUser);
+    } catch (error) {
+      console.error(`[case-analytics] snapshot refresh failed for tenant ${tenant.id}`, error);
+      failed += 1;
+      continue;
+    }
     await pgExecuteAsSystem(
       `insert into "CaseAnalyticsSnapshot" ("tenantId", "generatedAt", payload) values ($1,$2,$3)
        on conflict ("tenantId") do update set "generatedAt" = excluded."generatedAt", payload = excluded.payload`,
@@ -4250,11 +4350,12 @@ export async function refreshCaseAnalyticsSnapshots(limit = 50) {
     );
     refreshed += 1;
   }
-  return { refreshed };
+  return { refreshed, failed };
 }
 
 export async function getCaseAnalyticsSnapshotForTenant(user: TenantUser) {
   if (!user.tenantId) return null;
+  await assertFeatureEnabled(user.tenantId, "advancedReporting", { isPlatformAdmin: user.isPlatformAdmin });
   return pgQueryOne<{ tenantId: string; generatedAt: string; payload: CaseAnalyticsReport }>(
     `select "tenantId", "generatedAt", payload from "CaseAnalyticsSnapshot" where "tenantId" = $1`,
     [user.tenantId],

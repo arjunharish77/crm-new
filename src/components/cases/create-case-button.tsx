@@ -10,6 +10,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { StandardDialog } from "@/components/common/standard-dialog";
 import { LifeBuoy } from "lucide-react";
+import { Slot } from "@radix-ui/react-slot";
 
 interface CreateCaseButtonProps {
     relatedLeadId?: string;
@@ -17,15 +18,21 @@ interface CreateCaseButtonProps {
     requesterName?: string | null;
     requesterEmail?: string | null;
     trigger?: React.ReactNode;
+    // Controlled: open from elsewhere (a record's "More" menu); then no trigger is rendered.
+    open?: boolean;
+    onOpenChange?: (open: boolean) => void;
 }
 
 // Reusable "Create Case" entry point for Lead/Opportunity detail pages -- pre-links the new
 // case to whichever record it's opened from, and prefills the requester from that record
 // when available. Follows the same trigger-prop convention CreateActivityDialog/
 // CreateOpportunityDialog already use, so it drops into the same action-button rows.
-export function CreateCaseButton({ relatedLeadId, relatedOpportunityId, requesterName, requesterEmail, trigger }: CreateCaseButtonProps) {
+export function CreateCaseButton({ relatedLeadId, relatedOpportunityId, requesterName, requesterEmail, trigger, open: controlledOpen, onOpenChange }: CreateCaseButtonProps) {
     const router = useRouter();
-    const [open, setOpen] = useState(false);
+    const [internalOpen, setInternalOpen] = useState(false);
+    const controlled = controlledOpen !== undefined;
+    const open = controlled ? controlledOpen : internalOpen;
+    const setOpen = (next: boolean) => (controlled ? onOpenChange?.(next) : setInternalOpen(next));
     const [submitting, setSubmitting] = useState(false);
     const [subject, setSubject] = useState("");
     const [description, setDescription] = useState("");
@@ -62,18 +69,21 @@ export function CreateCaseButton({ relatedLeadId, relatedOpportunityId, requeste
 
     return (
         <>
-            <span onClick={() => setOpen(true)}>
-                {trigger ?? (
-                    <Button variant="outline" className="h-9 rounded-[10px] px-3.5">
-                        <LifeBuoy className="size-4" />
-                        Case
-                    </Button>
-                )}
-            </span>
+            {/* Slot, not a <span onClick> (UI/UX plan gap check D6). */}
+            {controlled ? null : (
+                <Slot onClick={() => setOpen(true)}>
+                    {trigger ?? (
+                        <Button variant="outline">
+                            <LifeBuoy className="size-4" />
+                            Create case
+                        </Button>
+                    )}
+                </Slot>
+            )}
             <StandardDialog
                 open={open}
                 onClose={() => setOpen(false)}
-                title="Create Case"
+                title="Create case"
                 icon={<LifeBuoy className="size-5" />}
                 maxWidth="xs"
                 actions={

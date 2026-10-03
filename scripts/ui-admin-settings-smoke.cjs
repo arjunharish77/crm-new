@@ -26,7 +26,7 @@ async function main() {
         results.push({ scenario: name, width, fixture, result: 'passed' });
       }
     }
-    await page.goto(base + '/dashboard/settings/roles');
+    await page.goto(base + '/dashboard/settings/access/roles');
     await page.getByRole('button', { name: 'Create Role', exact: true }).first().waitFor();
     await page.waitForTimeout(2000);
     await page.getByRole('button', { name: 'Create Role', exact: true }).first().click();
@@ -40,7 +40,7 @@ async function main() {
     await page.keyboard.press('Escape');
     await dialog.waitFor({ state: 'detached' });
     await page.setViewportSize({ width: 390, height: 720 });
-    await page.goto(base + '/dashboard/settings/users');
+    await page.goto(base + '/dashboard/settings/access/users');
     await page.getByRole('button', { name: 'Invite User', exact: true }).first().click();
     dialog = page.getByRole('dialog');
     await dialog.getByLabel('Full Name', { exact: true }).fill('Unsaved invitation');
@@ -48,7 +48,7 @@ async function main() {
     assert.equal(await dialog.getByLabel('Full Name', { exact: true }).inputValue(), 'Unsaved invitation');
     await page.keyboard.press('Escape');
     await dialog.waitFor({ state: 'detached' });
-    await page.goto(base + '/dashboard/settings/assignment-rules');
+    await page.goto(base + '/dashboard/settings/automation/assignment-rules');
     await page.getByRole('button', { name: 'Create Rule', exact: true }).click();
     dialog = page.getByRole('dialog');
     await dialog.getByLabel('Rule Name', { exact: true }).fill('Unsaved assignment rule');
@@ -77,11 +77,11 @@ async function main() {
       await page.unroute(pattern, handler);
       console.log('PASS Retry', routePath);
     }
-    await page.goto(base + '/dashboard/settings/governance/audit-logs');
+    await page.goto(base + '/dashboard/settings/security/audit-log');
     await page.setViewportSize({ width: 390, height: 720 });
     await page.screenshot({ path: path.join(output, 'audit-navigation.png') });
     console.log('Navigation URL', page.url());
-    assert.equal(await page.getByRole('combobox', { name: /^Settings section/ }).inputValue(), '/dashboard/settings/governance/audit-logs');
+    assert.equal(await page.getByRole('combobox', { name: /^Settings section/ }).inputValue(), '/dashboard/settings/security/audit-log');
     await fit('audit-filter-controls', page.locator('[data-slot="settings-content"]'));
     fs.writeFileSync(path.join(output, 'results.json'), JSON.stringify(results, null, 2));
     console.log('PASS ' + results.length + ' admin settings checks');

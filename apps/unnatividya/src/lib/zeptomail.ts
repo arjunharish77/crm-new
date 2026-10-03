@@ -26,6 +26,7 @@ export async function sendOtpEmail(input: SendOtpEmailInput) {
 
   const response = await fetch(apiUrl, {
     method: "POST",
+    signal: AbortSignal.timeout(15000),
     headers: {
       Accept: "application/json",
       "Content-Type": "application/json",

@@ -1,5 +1,9 @@
 # Unnati Vidya — Design Refresh + SEO Enhancement Plan
 
+> CMS publishing update — 30 September 2026: public catalog readers now use validated published database records. Before upgrading, follow [CMS publishing deployment](apps/unnatividya/docs/CMS_PUBLISHING_DEPLOYMENT.md), including the new image’s read-only readiness check before restart. Older static-source descriptions below are historical.
+
+> Update — 30 September 2026: the historical catalog-mirror behavior described below is superseded. `sync-catalog-to-db.js` now inserts missing records as unpublished drafts, preserves all existing records and never archives entries missing from the code export. Public pages still use static catalog data pending the publishing migration. Current status: [implementation progress](apps/unnatividya/docs/IMPLEMENTATION_PROGRESS.md).
+
 Synthesizes `handoff_v2/` (design package: `README.md`, `GAP_ANALYSIS.md`, `PAGE_SPECS.md`, `PROMPT.md`, 18 `designs/*.dc.html` screens, asset set) and `handoff_v2/google_seo.md` (SEO recommendations) into one validated, phased build plan. Companion to `20_UNNATIVIDYA_CONTENT_SEO_MASTER_PLAN.md` (content/SEO expansion, complete), `21_UNNATIVIDYA_NEW_ASSETS_CHECKLIST.md`, and `22_UNNATIVIDYA_PLATFORM_ENHANCEMENTS_PLAN.md` (conversion tracking, shortlist, DB sync, sitewide FAQs — **re-audited while writing this document**: fully complete except two items explicitly left open in its own §7, carried forward into §0.4/§9 below so they don't get lost between documents). Status: **plan only, no development started.**
 
 **Decisions already confirmed with you (2026-08-11):**

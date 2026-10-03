@@ -1,280 +1,299 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { apiFetch } from "@/lib/api";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { formatWorkspaceRelativeTime } from "@/lib/date-format";
-import {
-    Filter as FilterListIcon,
-    FileText as DescriptionIcon,
-    Loader2,
-    MoreVertical as MoreVertIcon,
-    Pencil as EditIcon,
-    Plus as PlusIcon,
-    Search as SearchIcon,
-    Trash2 as DeleteIcon,
-    Eye as VisibilityIcon,
-} from "lucide-react";
+import { ColumnDef } from "@tanstack/react-table";
 import { toast } from "sonner";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
-import { Label } from "@/components/ui/label";
-import {
-    DropdownMenu,
-    DropdownMenuContent,
-    DropdownMenuItem,
-    DropdownMenuSeparator,
-    DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import {
-    Dialog,
-    DialogContent,
-    DialogDescription,
-    DialogFooter,
-    DialogHeader,
-    DialogTitle,
-} from "@/components/ui/dialog";
-import { EmptyState } from "@/components/common/empty-state";
+import { Archive, ArchiveRestore, Copy, ExternalLink, FileText, MoreHorizontal, Pencil, Plus, Trash2 } from "lucide-react";
+import { purgeDate, useArchiveActions } from "@/hooks/use-archive-actions";
+import { apiFetch } from "@/lib/api";
+import { PageHeader } from "@/components/layout/page-header";
+import { ListToolbar } from "@/components/common/list-toolbar";
 import { QueueExportButton } from "@/components/exports/queue-export-button";
+import { DataTable } from "@/components/ui/data-table";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { StandardDialog } from "@/components/common/standard-dialog";
+import { useUrlState } from "@/hooks/use-url-state";
+import { useAuth } from "@/providers/auth-provider";
+import { formatWorkspaceDate } from "@/lib/date-format";
+import { formatCount } from "@/lib/display/format";
+import { publicFormPath, publicFormUrl } from "@/lib/forms/public-url";
 
 interface Form {
     id: string;
     name: string;
+    createdBy?: string | null;
     description?: string;
     slug: string;
     isActive: boolean;
     createdAt: string;
-    _count?: {
-        submissions: number;
-    };
+    deletedAt?: string | null;
+    publishedVersion?: number;
+    draft?: unknown;
+    _count?: { submissions: number };
 }
 
+const STATUS_FILTERS = ["all", "live", "draft", "archived"] as const;
+type StatusFilter = (typeof STATUS_FILTERS)[number];
+
+// Marketing & automation › Forms (UI/UX plan §5.13): a table instead of clickable cards with an
+// "Edit" button that did nothing; a working Live/Draft filter instead of a Filters button that
+// did nothing; a load error shows an error; the row menu is labelled.
 export default function FormsPage() {
+    const { user } = useAuth();
+    // Archive, restore and delete for good: the creator or an admin (decided 2026-10-03).
+    const canManage = (item: { createdBy?: string | null }) => !user || !!(user as any).isTenantAdmin || !!(user as any).isPlatformAdmin || (!!item.createdBy && item.createdBy === user.id);
+    const router = useRouter();
     const [forms, setForms] = useState<Form[]>([]);
     const [loading, setLoading] = useState(true);
+    const [failed, setFailed] = useState(false);
+    const [search, setSearch] = useUrlState<string>("q", "");
+    const [status, setStatus] = useUrlState<StatusFilter>("status", "all", { allowed: STATUS_FILTERS });
     const [createOpen, setCreateOpen] = useState(false);
     const [newFormName, setNewFormName] = useState("");
+    const [nameError, setNameError] = useState<string | null>(null);
     const [creating, setCreating] = useState(false);
-    const [searchQuery, setSearchQuery] = useState("");
-    const router = useRouter();
 
-    const fetchForms = async () => {
+    const [archivedForms, setArchivedForms] = useState<Form[]>([]);
+    const showArchived = status === "archived";
+    const fetchForms = useCallback(async () => {
         setLoading(true);
+        setFailed(false);
         try {
-            const data: any = await apiFetch("/forms");
+            // Archived forms come from their own list (decision 31).
+            const [data, archivedData] = await Promise.all([
+                apiFetch<Form[]>("/forms"),
+                showArchived ? apiFetch<Form[]>("/forms?archived=1") : Promise.resolve(null),
+            ]);
             setForms(Array.isArray(data) ? data : []);
-        } catch (error: any) {
-            toast.error(error.message || "Failed to load forms");
+            if (archivedData) setArchivedForms(Array.isArray(archivedData) ? archivedData : []);
+        } catch {
+            setFailed(true);
         } finally {
             setLoading(false);
         }
-    };
-
-    useEffect(() => {
-        fetchForms();
-    }, []);
+    }, [showArchived]);
+    useEffect(() => { fetchForms(); }, [fetchForms]);
 
     const handleCreate = async () => {
-        if (!newFormName.trim()) return;
+        if (!newFormName.trim()) {
+            setNameError("Give the form a name.");
+            return;
+        }
         setCreating(true);
         try {
-            const newForm: any = await apiFetch("/forms", {
-                method: "POST",
-                body: JSON.stringify({ name: newFormName, isActive: true }),
-            });
+            const created = await apiFetch<{ id: string }>("/forms", { method: "POST", body: JSON.stringify({ name: newFormName.trim(), asDraft: true }) });
             toast.success("Form created");
             setCreateOpen(false);
             setNewFormName("");
-            router.push(`/dashboard/forms/${newForm.id}`);
+            router.push(`/dashboard/forms/${created.id}`);
         } catch (error: any) {
-            toast.error(error.message || "Failed to create form");
+            setNameError(error?.message || "The form couldn't be created. Try again.");
         } finally {
             setCreating(false);
         }
     };
 
-    const handleDelete = async (formId: string) => {
-        if (!confirm("Are you sure? This will delete the form and all submissions.")) return;
-
+    const copyLink = async (form: Form) => {
         try {
-            await apiFetch(`/forms/${formId}`, { method: "DELETE" });
-            toast.success("Form deleted");
-            fetchForms();
-        } catch (error) {
-            toast.error("Failed to delete form");
+            await navigator.clipboard.writeText(publicFormUrl(form.slug));
+            toast.success("Public link copied");
+        } catch {
+            toast.error("The link couldn't be copied");
         }
     };
 
-    const filteredForms = forms.filter(f =>
-        f.name.toLowerCase().includes(searchQuery.toLowerCase())
-    );
+    // Delete archives, with Undo; archived forms restore or delete for good (UI/UX plan §11.6 D).
+    const archiveActions = useArchiveActions({
+        basePath: "/forms",
+        noun: "form",
+        consequence: (item) => {
+            const submissions = (item as Form)._count?.submissions ?? 0;
+            return submissions ? `its ${formatCount(submissions)} submissions` : null;
+        },
+        onChange: fetchForms,
+    });
+    // The table's columns are memoised; the row menu reaches the latest handlers through a ref.
+    const handlers = useRef({ copyLink, archiveActions });
+    useEffect(() => { handlers.current = { copyLink, archiveActions }; });
 
-    const getFormSlug = (slug: string) => {
-        // Use window.location.origin if available, otherwise just relative
-        if (typeof window !== 'undefined') {
-            return `${window.location.origin}/f/${slug}`;
-        }
-        return `/f/${slug}`;
-    };
+    const counts = useMemo(() => ({
+        all: forms.length,
+        live: forms.filter((form) => form.isActive).length,
+        draft: forms.filter((form) => !form.isActive).length,
+    }), [forms]);
+    const visible = useMemo(() => {
+        const term = search.trim().toLowerCase();
+        return (showArchived ? archivedForms : forms).filter((form) =>
+            (status === "all" || status === "archived" || (status === "live") === form.isActive) &&
+            (!term || form.name.toLowerCase().includes(term) || (form.description ?? "").toLowerCase().includes(term)),
+        );
+    }, [forms, archivedForms, showArchived, search, status]);
+
+    const columns = useMemo<ColumnDef<Form, any>[]>(() => [
+        {
+            accessorKey: "name",
+            header: "Name",
+            size: 320,
+            cell: ({ row }) => (
+                <div className="min-w-0 py-1">
+                    <Link href={`/dashboard/forms/${row.original.id}`} className="font-medium hover:underline" onClick={(event) => event.stopPropagation()}>
+                        {row.original.name}
+                    </Link>
+                    {row.original.description ? <div className="max-w-[360px] truncate text-xs text-muted-foreground">{row.original.description}</div> : null}
+                </div>
+            ),
+        },
+        {
+            accessorKey: "isActive",
+            header: "Status",
+            size: 100,
+            cell: ({ row }) => row.original.deletedAt
+                ? <span className="flex flex-col gap-0.5"><Badge tone="warning">Archived</Badge><span className="text-xs text-muted-foreground">Deleted on {purgeDate(row.original.deletedAt)}</span></span>
+                : !row.original.publishedVersion
+                    ? <Badge tone="info">Draft</Badge>
+                    : <span className="flex flex-col gap-0.5">
+                        <Badge tone={row.original.isActive ? "success" : "neutral"}>{row.original.isActive ? "Live" : "Off"}</Badge>
+                        {row.original.draft ? <span className="text-xs text-muted-foreground">Unpublished changes</span> : null}
+                    </span>,
+        },
+        {
+            id: "submissions",
+            accessorFn: (form) => form._count?.submissions ?? 0,
+            header: "Submissions",
+            size: 120,
+            cell: ({ row }) => <span className="text-sm tabular-nums">{formatCount(row.original._count?.submissions ?? 0)}</span>,
+        },
+        {
+            accessorKey: "createdAt",
+            header: "Created",
+            size: 120,
+            cell: ({ row }) => <span className="text-sm text-muted-foreground">{formatWorkspaceDate(row.original.createdAt)}</span>,
+        },
+    ], []);
+
+    const narrowed = !!search.trim() || status !== "all";
 
     return (
-        <div className="mx-auto max-w-[1600px] px-4 py-4 md:px-6">
-            {/* Header Section */}
-            <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-                <div>
-                    <h1 className="text-xl font-semibold tracking-normal text-foreground">Forms</h1>
-                    <p className="mt-1 text-sm text-muted-foreground">
-                        Create and manage lead capture forms for your campaigns.
-                    </p>
-                </div>
-                <div className="flex items-center gap-2">
-                    <QueueExportButton moduleName="FORMS" filters={{ search: searchQuery || null }} />
-                    <Button onClick={() => setCreateOpen(true)}>
-                        <PlusIcon className="size-4" />
-                        Create Form
-                    </Button>
-                </div>
-            </div>
-
-            {/* Filter Bar */}
-            <Card className="mb-4 flex-row items-center gap-3 rounded-xl p-3">
-                <div className="relative max-w-[400px] flex-1">
-                    <SearchIcon className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-                    <Input
-                        placeholder="Search forms..."
-                        value={searchQuery}
-                        onChange={(e) => setSearchQuery(e.target.value)}
-                        className="pl-8"
+        <div className="mx-auto min-w-0 max-w-[1600px]">
+            <PageHeader
+                title="Forms"
+                description="Lead capture forms for your website and campaigns."
+                meta={loading || failed ? undefined : <span className="tabular-nums">{formatCount(counts.live)} live · {formatCount(counts.draft)} off</span>}
+                secondaryActions={<QueueExportButton moduleName="FORMS" filters={{ search: search || null }} />}
+                primaryAction={<Button onClick={() => { setNameError(null); setCreateOpen(true); }}><Plus className="size-4" />New form</Button>}
+            />
+            <DataTable
+                storageKey="forms-table"
+                data={visible}
+                columns={columns}
+                loading={loading}
+                error={failed ? "The forms couldn't be loaded." : null}
+                onRetry={fetchForms}
+                clientSort
+                getRowId={(row) => row.id}
+                onRowClick={(row) => router.push(`/dashboard/forms/${row.id}`)}
+                toolbarActions={
+                    <ListToolbar
+                        search={{ value: search, onChange: setSearch, placeholder: "Search forms", label: "Search forms", inputId: "forms-search" }}
+                        quickFilters={[
+                            { value: "all", label: "All", count: counts.all },
+                            { value: "live", label: "Live", count: counts.live },
+                            { value: "draft", label: "Off", count: counts.draft },
+                            { value: "archived", label: "Archived" },
+                        ]}
+                        quickFilter={status}
+                        onQuickFilterChange={(value) => setStatus(value as StatusFilter)}
                     />
-                </div>
-                <Button variant="outline">
-                    <FilterListIcon className="size-4" />
-                    Filters
-                </Button>
-            </Card>
-
-            {/* Content Area */}
-            {loading ? (
-                <div className="flex justify-center py-16">
-                    <Loader2 className="size-8 animate-spin text-primary" />
-                </div>
-            ) : filteredForms.length === 0 ? (
-                <div className="rounded-xl border border-dashed bg-primary/[0.02]">
-                    <EmptyState
-                        icon={<DescriptionIcon className="size-10 text-muted-foreground opacity-50" />}
-                        title="No forms found"
-                        description={searchQuery ? "Try adjusting your search terms" : "Create your first form to start collecting leads"}
-                        action={!searchQuery && (
-                            <Button onClick={() => setCreateOpen(true)}>Create Form</Button>
-                        )}
-                    />
-                </div>
-            ) : (
-                <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-                    {filteredForms.map((form) => (
-                        <Card
-                            key={form.id}
-                            className="cursor-pointer gap-0 rounded-xl py-0 transition-all hover:-translate-y-0.5 hover:border-primary hover:shadow-md"
-                            onClick={() => router.push(`/dashboard/forms/${form.id}`)}
-                        >
-                            <CardContent className="p-4">
-                                <div className="mb-3 flex items-start justify-between gap-2">
-                                    <div className="min-w-0">
-                                        <p className="truncate text-base font-semibold">{form.name}</p>
-                                        <div className="mt-1 flex items-center gap-1.5">
-                                            <Badge variant={form.isActive ? "default" : "outline"} className="h-5 rounded-md text-[10px] font-bold">
-                                                {form.isActive ? "Active" : "Draft"}
-                                            </Badge>
-                                            <span className="text-xs text-muted-foreground">
-                                                &bull; {formatWorkspaceRelativeTime(form.createdAt)}
-                                            </span>
-                                        </div>
-                                    </div>
-                                    <DropdownMenu>
-                                        <DropdownMenuTrigger asChild>
-                                            <Button
-                                                variant="ghost"
-                                                size="icon-sm"
-                                                onClick={(e) => e.stopPropagation()}
-                                            >
-                                                <MoreVertIcon className="size-4" />
-                                            </Button>
-                                        </DropdownMenuTrigger>
-                                        <DropdownMenuContent align="end" className="w-40" onClick={(e) => e.stopPropagation()}>
-                                            <DropdownMenuItem onClick={() => router.push(`/dashboard/forms/${form.id}`)}>
-                                                <EditIcon className="size-4 text-muted-foreground" />
-                                                Edit
-                                            </DropdownMenuItem>
-                                            <DropdownMenuItem onClick={() => window.open(getFormSlug(form.slug), '_blank')}>
-                                                <VisibilityIcon className="size-4 text-muted-foreground" />
-                                                View Public
-                                            </DropdownMenuItem>
-                                            <DropdownMenuSeparator />
-                                            <DropdownMenuItem
-                                                variant="destructive"
-                                                onClick={() => handleDelete(form.id)}
-                                            >
-                                                <DeleteIcon className="size-4" />
-                                                Delete
-                                            </DropdownMenuItem>
-                                        </DropdownMenuContent>
-                                    </DropdownMenu>
-                                </div>
-
-                                <p className="mb-3 line-clamp-2 min-h-10 text-sm text-muted-foreground">
-                                    {form.description || "No description provided."}
-                                </p>
-
-                                <div className="my-2 h-px w-full bg-border" />
-
-                                <div className="flex items-center justify-between">
-                                    <span className="text-xs text-muted-foreground">
-                                        <b>{form._count?.submissions || 0}</b> Submissions
-                                    </span>
-                                    <Button variant="ghost" size="sm">
-                                        Edit
-                                        <EditIcon className="size-3.5" />
-                                    </Button>
-                                </div>
-                            </CardContent>
-                        </Card>
-                    ))}
-                </div>
-            )}
-
-            {/* Create Dialog */}
-            <Dialog open={createOpen} onOpenChange={setCreateOpen}>
-                <DialogContent className="sm:max-w-[400px]">
-                    <DialogHeader>
-                        <DialogTitle>Create New Form</DialogTitle>
-                        <DialogDescription>
-                            Give your form a name to get started. You can configure fields later.
-                        </DialogDescription>
-                    </DialogHeader>
-                    <div className="space-y-1.5">
-                        <Label htmlFor="new-form-name">Form Name</Label>
-                        <Input
-                            id="new-form-name"
-                            autoFocus
-                            placeholder="e.g. Contact Us"
-                            value={newFormName}
-                            onChange={(e) => setNewFormName(e.target.value)}
-                            onKeyDown={(e) => e.key === "Enter" && handleCreate()}
-                        />
+                }
+                rowActions={(form) => (
+                    <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" size="icon-sm" aria-label={`More actions for ${form.name}`} onClick={(event) => event.stopPropagation()}>
+                                <MoreHorizontal className="size-4" />
+                            </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" onClick={(event) => event.stopPropagation()}>
+                            {form.deletedAt ? (
+                                <>
+                                    {canManage(form) ? <>
+                                        <DropdownMenuItem onSelect={() => handlers.current.archiveActions.restore(form)}><ArchiveRestore className="size-4" />Restore</DropdownMenuItem>
+                                        <DropdownMenuSeparator />
+                                        <DropdownMenuItem variant="destructive" onSelect={() => handlers.current.archiveActions.deletePermanently(form)}><Trash2 className="size-4" />Delete for good</DropdownMenuItem>
+                                    </> : <DropdownMenuItem disabled>Only its creator or an admin can restore it</DropdownMenuItem>}
+                                </>
+                            ) : (
+                                <>
+                                    <DropdownMenuItem asChild><Link href={`/dashboard/forms/${form.id}`}><Pencil className="size-4" />Open in editor</Link></DropdownMenuItem>
+                                    <DropdownMenuItem onSelect={() => handlers.current.copyLink(form)}><Copy className="size-4" />Copy public link</DropdownMenuItem>
+                                    <DropdownMenuItem asChild><a href={publicFormPath(form.slug)} target="_blank" rel="noreferrer"><ExternalLink className="size-4" />Open public form</a></DropdownMenuItem>
+                                    {canManage(form) ? <DropdownMenuSeparator /> : null}
+                                    {canManage(form) ? <DropdownMenuItem variant="destructive" onSelect={() => handlers.current.archiveActions.archive(form)}><Archive className="size-4" />Archive</DropdownMenuItem> : null}
+                                </>
+                            )}
+                        </DropdownMenuContent>
+                    </DropdownMenu>
+                )}
+                mobileCard={(form) => (
+                    <div className="space-y-1">
+                        <div className="flex items-start justify-between gap-2">
+                            <span className="min-w-0 break-words font-medium">{form.name}</span>
+                            <Badge tone={!form.publishedVersion ? "info" : form.isActive ? "success" : "neutral"}>{!form.publishedVersion ? "Draft" : form.isActive ? "Live" : "Off"}</Badge>
+                        </div>
+                        {form.description ? <p className="line-clamp-2 text-sm text-muted-foreground">{form.description}</p> : null}
+                        <p className="text-xs text-muted-foreground">{formatCount(form._count?.submissions ?? 0)} submissions · created {formatWorkspaceDate(form.createdAt)}</p>
                     </div>
-                    <DialogFooter>
-                        <Button variant="outline" onClick={() => setCreateOpen(false)}>
-                            Cancel
-                        </Button>
-                        <Button onClick={handleCreate} disabled={!newFormName.trim() || creating}>
-                            {creating ? <Loader2 className="size-4 animate-spin" /> : null}
-                            {creating ? "Creating..." : "Create & Edit"}
-                        </Button>
-                    </DialogFooter>
-                </DialogContent>
-            </Dialog>
+                )}
+                emptyState={showArchived && !search.trim() ? {
+                    icon: <Archive />,
+                    title: "Nothing archived",
+                    description: "Archived forms stay here for 30 days, then they're deleted with their submissions.",
+                } : narrowed ? {
+                    kind: "no-match",
+                    title: "No forms match",
+                    description: "Try another search or status.",
+                    action: <Button variant="outline" onClick={() => { setSearch(""); setStatus("all"); }}>Clear search and filter</Button>,
+                } : {
+                    icon: <FileText />,
+                    title: "No forms yet",
+                    description: "Create a form to collect leads from your website or a campaign.",
+                    action: <Button onClick={() => { setNameError(null); setCreateOpen(true); }}><Plus className="size-4" />New form</Button>,
+                }}
+            />
+
+            <StandardDialog
+                open={createOpen}
+                onClose={() => setCreateOpen(false)}
+                title="New form"
+                subtitle="Name it now; add fields in the editor."
+                maxWidth="xs"
+                actions={
+                    <>
+                        <Button variant="outline" onClick={() => setCreateOpen(false)}>Cancel</Button>
+                        <Button onClick={handleCreate} isLoading={creating}>Create and edit</Button>
+                    </>
+                }
+            >
+                <div className="space-y-1.5">
+                    <Label htmlFor="new-form-name">Form name</Label>
+                    <Input
+                        id="new-form-name"
+                        autoFocus
+                        placeholder="For example: Contact us"
+                        value={newFormName}
+                        aria-invalid={!!nameError}
+                        aria-describedby={nameError ? "new-form-name-error" : undefined}
+                        onChange={(e) => { setNewFormName(e.target.value); if (nameError) setNameError(null); }}
+                        onKeyDown={(e) => { if (e.key === "Enter") handleCreate(); }}
+                    />
+                    {nameError ? <p id="new-form-name-error" className="text-xs text-destructive">{nameError}</p> : null}
+                </div>
+            </StandardDialog>
         </div>
     );
 }

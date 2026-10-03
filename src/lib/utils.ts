@@ -1,26 +1,17 @@
 import { clsx, type ClassValue } from "clsx"
 import { twMerge } from "tailwind-merge"
+import { formatMoney, workspaceCurrency } from "@/lib/display/format"
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
 }
 
-const DISPLAY_SETTINGS_STORAGE_KEY = "unnatify.generalSettings";
-
+// Kept for existing callers; new code uses lib/display/format.ts. Defaults to ₹ INR when the
+// workspace hasn't set a currency (UI/UX plan decision 4; this used to fall back to USD).
 export function getWorkspaceCurrency() {
-  if (typeof window === "undefined") return "USD";
-  try {
-    const parsed = JSON.parse(window.localStorage.getItem(DISPLAY_SETTINGS_STORAGE_KEY) || "{}");
-    return typeof parsed.currency === "string" && parsed.currency ? parsed.currency : "USD";
-  } catch {
-    return "USD";
-  }
+  return workspaceCurrency()
 }
 
 export function formatCurrency(amount: number, currency: string = getWorkspaceCurrency(), options: Intl.NumberFormatOptions = {}) {
-  return new Intl.NumberFormat(currency === "INR" ? "en-IN" : "en-US", {
-    style: "currency",
-    currency,
-    ...options,
-  }).format(amount);
+  return formatMoney(amount, { currency, ...options })
 }

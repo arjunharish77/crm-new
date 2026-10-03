@@ -25,7 +25,7 @@ const MACRO_COLUMNS =
   'id, "tenantId", name, description, channel, "bodyTemplate", "isInternalNote", "requiresApprovalForExternalReply", "restrictedToRoleIds", "isActive", "createdBy", "updatedBy", "createdAt", "updatedAt"';
 
 export async function listCaseMacrosForTenant(user: TenantUser) {
-  const tenantId = requireTenantId(user);
+  const tenantId = await assertServiceDeskEnabled(user);
   return query<any>(`select ${MACRO_COLUMNS} from "CaseMacro" where "tenantId" = $1 order by name asc`, [tenantId]);
 }
 

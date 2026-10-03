@@ -1,3 +1,6 @@
+export const dynamic = "force-dynamic";
+import { PublishedCatalogBoundary } from "@/components/published-catalog-boundary";
+import { getPublishedCatalog } from "@/lib/catalog-snapshot-server";
 import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
@@ -7,16 +10,14 @@ import { JsonLd } from "@/components/json-ld";
 import { SaveButton } from "@/components/save-button";
 import { SectionPillNav } from "@/components/section-pill-nav";
 import { StickyMobileBar } from "@/components/sticky-mobile-bar";
-import { courses, formatFee, getUniversityBySlug, universities, universityEnrichmentById } from "@/data/catalog";
+import { formatFee } from "@/lib/catalog-format";
 import { universityMedia } from "@/data/media";
 import { publicAssetExists } from "@/lib/asset-exists";
 import { getApprovalIcon } from "@/lib/approval-icons";
 
-export function generateStaticParams() {
-  return universities.map((university) => ({ slug: university.slug }));
-}
-
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
+  const catalog = await getPublishedCatalog();
+  const { getUniversityBySlug } = catalog;
   const { slug } = await params;
   const university = getUniversityBySlug(slug);
   if (!university) return {};
@@ -31,6 +32,8 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
 }
 
 export default async function UniversityDetailPage({ params }: { params: Promise<{ slug: string }> }) {
+  const catalog = await getPublishedCatalog();
+  const { courses, getUniversityBySlug, universities, universityEnrichmentById } = catalog;
   const { slug } = await params;
   const university = getUniversityBySlug(slug);
   if (!university) notFound();
@@ -39,7 +42,6 @@ export default async function UniversityDetailPage({ params }: { params: Promise
   const otherUniversities = universities.filter((other) => other.id !== university.id);
   const enrichment = universityEnrichmentById[university.id] || {};
   const media = universityMedia[university.id];
-  const availableMoments = media.moments.filter((moment) => publicAssetExists(moment.src));
   const availablePartnerLogos = media.partnerLogos.filter((logo) => publicAssetExists(logo));
   const displayedFaqs: Array<[string, string]> = enrichment.faqs || [
     [`Are ${university.shortName} online degrees UGC-entitled?`, `${university.name} programs listed on Unnati Vidya are maintained for UGC-entitled online degree comparison and should be verified for the current admission cycle before enrolment.`],
@@ -90,7 +92,7 @@ export default async function UniversityDetailPage({ params }: { params: Promise
     })),
   };
 
-  return (
+  return <PublishedCatalogBoundary>{(
     <>
       <JsonLd data={[universityJsonLd, breadcrumbJsonLd, faqJsonLd]} />
       <section className="detail-hero">
@@ -215,26 +217,15 @@ export default async function UniversityDetailPage({ params }: { params: Promise
 
             <section className="detail-section" id="sec-programs">
               <h2>Online programs offered</h2>
-              <div style={{ border: "1px solid #CFDAE6", borderRadius: 8, overflowX: "auto" }}>
-                <div style={{ display: "grid", gridTemplateColumns: "1.6fr 1fr 1fr 1fr auto", background: "#F5F5F5", fontSize: 12, fontWeight: 700, color: "#696868", padding: "12px 18px", letterSpacing: 0.3, gap: 12, minWidth: 640 }}>
-                  <span>PROGRAM</span><span>DURATION</span><span>TOTAL FEE</span><span>EMI FROM</span><span />
-                </div>
-                {universityCourses.map((course) => (
-                  <div style={{ display: "grid", gridTemplateColumns: "1.6fr 1fr 1fr 1fr auto", padding: "14px 18px", borderTop: "1px solid #EAEAEA", fontSize: 14, alignItems: "center", gap: 12, minWidth: 640 }} key={course.id}>
-                    <span>
-                      <Link href={`/courses/${course.slug}`} style={{ fontWeight: 700, color: "#363634" }}>{course.name}</Link>
-                      <span style={{ fontSize: 11, fontWeight: 700, color: course.level === "PG" ? "#4D00FF" : "#0F5BB8", background: course.level === "PG" ? "rgba(77,0,255,0.10)" : "rgba(79,168,255,0.12)", borderRadius: 999, whiteSpace: "nowrap", padding: "2px 8px", marginLeft: 8 }}>{course.level}</span>
-                    </span>
-                    <span>{course.duration}</span>
-                    <span style={{ fontWeight: 600, color: "#363634" }}>{formatFee(course.fee)}</span>
-                    <span>{course.emi}</span>
-                    <div style={{ display: "flex", alignItems: "center", gap: 10, justifyContent: "flex-end" }}>
-                      <Link href={`/courses/${course.slug}`} style={{ fontSize: 13, fontWeight: 700 }}>View →</Link>
-                      <SaveButton courseId={course.id} size={26} />
-                    </div>
-                  </div>
-                ))}
+              <div className="university-program-cards">
+                {universityCourses.map(course => <article className="guide-fee-card university-program-card" key={course.id} aria-labelledby={`university-program-${course.id}`}>
+                  <div className="university-program-heading"><h3 id={`university-program-${course.id}`}><Link href={`/courses/${course.slug}`}>{course.name}</Link></h3><SaveButton courseId={course.id} size={44} /></div>
+                  <p className="lead-help">{course.level === "PG" ? "Postgraduate" : "Undergraduate"}</p>
+                  <dl><div><dt>Duration</dt><dd>{course.duration}</dd></div><div><dt>Listed total tuition</dt><dd>{formatFee(course.fee)}</dd></div><div><dt>EMI from</dt><dd>{course.emi}</dd></div></dl>
+                  <Link href={`/courses/${course.slug}`} className="btn secondary">View program</Link>
+                </article>)}
               </div>
+              {!universityCourses.length && <p>There are no published programs for this university yet.</p>}
             </section>
 
             <section className="detail-section" id="sec-placements">
@@ -260,27 +251,6 @@ export default async function UniversityDetailPage({ params }: { params: Promise
               <div style={{ fontSize: 12, color: "#707070", marginTop: 10 }}>Placement assistance, not a guaranteed offer — as stated on the university&apos;s own pages.</div>
             </section>
 
-            <section className="detail-section">
-              <h2>Campus & learner moments</h2>
-              <div className="grid three">
-                {media.moments.map((moment, index) => {
-                  const fallback = [
-                    ["https://commons.wikimedia.org/wiki/Special:FilePath/Online%20class%20shooting%20during%20covid.jpg?width=900", "Campus moment 1"],
-                    ["https://commons.wikimedia.org/wiki/Special:FilePath/Monsoon%20Expo%202022%20at%20Ahmedabad%20University%2001.jpg?width=900", "Campus moment 2"],
-                    ["https://commons.wikimedia.org/wiki/Special:FilePath/Classroom%20in%20Mother%27s%20International%20School%2C%20Delhi.JPG?width=900", "Campus moment 3"],
-                  ][index];
-                  const hasLocal = availableMoments.some((available) => available.src === moment.src);
-                  const src = hasLocal ? moment.src : fallback[0];
-                  const alt = hasLocal ? moment.alt : fallback[1];
-                  return (
-                    <div style={{ height: 150, border: "1px solid #EAEAEA", borderRadius: 8, overflow: "hidden" }} key={moment.src}>
-                      <Image src={src} alt={alt} width={320} height={180} sizes="(max-width: 900px) 100vw, 260px" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-                    </div>
-                  );
-                })}
-              </div>
-            </section>
-
             <section className="detail-section" id="sec-admission">
               <h2>Admission process</h2>
               <div className="grid four">
@@ -301,25 +271,12 @@ export default async function UniversityDetailPage({ params }: { params: Promise
 
             <section className="detail-section" id="sec-scholarships">
               <h2>Scholarships & fee concessions</h2>
-              <div style={{ border: "1px solid #CFDAE6", borderRadius: 8, overflowX: "auto" }}>
-                <div style={{ display: "grid", gridTemplateColumns: "1.4fr 1fr 1.4fr", background: "#F5F5F5", fontSize: 12, fontWeight: 700, color: "#696868", padding: "12px 18px", letterSpacing: 0.3, gap: 12, minWidth: 480 }}>
-                  <span>CATEGORY</span><span>CONCESSION</span><span>PROOF REQUIRED</span>
-                </div>
-                {(enrichment.scholarships || [
-                  ["Merit (75%+ in qualifying exam)", "20%", "Final mark sheet"],
-                  ["Defence personnel & family", "20%", "Service / dependent ID"],
-                  ["Government employees", "10%", "Employee ID"],
-                  ["Divyaang (PwD)", "20%", "Disability certificate"],
-                  ["Alumni of the university", "15%", "Previous degree certificate"],
-                ]).map((row) => (
-                  <div style={{ display: "grid", gridTemplateColumns: "1.4fr 1fr 1.4fr", padding: "13px 18px", borderTop: "1px solid #EAEAEA", fontSize: 14, gap: 12, minWidth: 480 }} key={row[0]}>
-                    <span style={{ fontWeight: 600, color: "#363634" }}>{row[0]}</span>
-                    <span style={{ fontWeight: 700, color: "#2E7D32" }}>{row[1]}</span>
-                    <span>{row[2]}</span>
-                  </div>
-                ))}
-              </div>
-              <p style={{ fontSize: 13, color: "#707070", marginTop: 10 }}>One scholarship per learner; applied on tuition fee at admission. Eligibility confirmed during free counselling.</p>
+              {enrichment.scholarships?.length ? <div className="guide-fee-cards university-scholarship-cards">
+                {enrichment.scholarships.map((row,index) => <article className="guide-fee-card" key={`${row[0]}-${index}`}>
+                  <h3>{row[0]}</h3><dl><div><dt>Listed concession</dt><dd>{row[1]}</dd></div><div><dt>Proof required</dt><dd>{row[2]}</dd></div></dl>
+                </article>)}
+              </div> : <p>Scholarship details are not listed yet. Confirm current offers and eligibility with the university.</p>}
+              <p className="lead-help">Confirm the current admission session, eligibility, required documents and whether concessions can be combined directly with the university.</p>
             </section>
 
             <section className="detail-section" id="sec-faq">
@@ -355,7 +312,7 @@ export default async function UniversityDetailPage({ params }: { params: Promise
             <div style={{ background: "#fff", border: "1px solid #CFDAE6", borderRadius: 8, padding: 22, boxShadow: "0 1px 3px rgba(0,0,0,0.06)" }}>
               <div style={{ fontSize: 16, fontWeight: 700, color: "#363634" }}>Get {university.shortName} brochure & fee details</div>
               <div style={{ fontSize: 13, color: "#696868", margin: "6px 0 14px", lineHeight: 1.5 }}>Talk to a counsellor about eligibility, scholarships and the next batch.</div>
-              <Link href={`/lead?university=${university.id}`} className="btn primary" style={{ width: "100%", height: 44, fontSize: 15 }} data-open-lead>Enquire now</Link>
+              <Link href={`/lead?university=${university.id}`} className="btn primary" style={{ width: "100%", height: 44, fontSize: 15 }} data-open-lead>Apply now</Link>
               <Link href="/compare" style={{ display: "block", textAlign: "center", marginTop: 10, border: "1.5px solid #555", borderRadius: 4, height: 42, lineHeight: "42px", fontSize: 14, fontWeight: 700, color: "#555" }}>Compare with others</Link>
             </div>
             <div style={{ border: "1px solid #CFDAE6", borderRadius: 8, padding: 18, background: "#F4F3FC" }}>
@@ -382,7 +339,7 @@ export default async function UniversityDetailPage({ params }: { params: Promise
             ) : null}
           </aside>
       </div>
-      <StickyMobileBar primary={{ label: `Get ${university.shortName} brochure`, href: `/lead?university=${university.id}`, openLead: true }} />
+      <StickyMobileBar primary={{ label: "Apply now", href: `/lead?university=${university.id}`, openLead: true }} />
     </>
-  );
+  )}</PublishedCatalogBoundary>;
 }

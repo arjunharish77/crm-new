@@ -1,8 +1,9 @@
-import { getGamificationSettingsForTenant } from "@/lib/server/gamification";
+import { readGamificationSettings } from "@/lib/server/gamification";
+import { assertFeatureEnabled } from "@/lib/server/entitlements";
 import { userMatchesTargetingConfig } from "@/lib/server/partner-access";
 import { query as pgQuery } from "@/lib/db/query";
 
-type TenantUser = { id: string; tenantId: string | null };
+type TenantUser = { id: string; tenantId: string | null; isPlatformAdmin?: boolean };
 
 // Computed-on-read rather than a materialized view: leaderboards need to be
 // date-range filterable (a materialized view would need one per possible range, or
@@ -19,6 +20,7 @@ export async function getLeaderboard(
   params: { from?: string | null; to?: string | null; scope?: "INDIVIDUAL" | "TEAM" } = {}
 ) {
   if (!user.tenantId) return [];
+  await assertFeatureEnabled(user.tenantId, "gamificationEnabled", { isPlatformAdmin: user.isPlatformAdmin });
   const filters = ['"tenantId" = $1'];
   const values: unknown[] = [user.tenantId];
   if (params.from) {
@@ -38,7 +40,7 @@ export async function getLeaderboard(
   );
 
   const pointsByUser = new Map<string, number>();
-  const settings = await getGamificationSettingsForTenant(user);
+  const settings = await readGamificationSettings(user); // getLeaderboard itself checks the module first
   for (const entry of entries) {
     if (!(await userMatchesTargetingConfig(user.tenantId, entry.userId, settings?.participantConfig, "ALL"))) continue;
     pointsByUser.set(entry.userId, (pointsByUser.get(entry.userId) ?? 0) + Number(entry.points ?? 0));

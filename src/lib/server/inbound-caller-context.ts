@@ -1,3 +1,4 @@
+import { assertTenantModule } from "@/lib/server/module-entitlements";
 import { query } from "@/lib/db/query";
 
 type TenantUser = {
@@ -39,6 +40,7 @@ export type InboundCallerContext = {
 // its matching logic or response shape risks breaking an integration this app doesn't control.
 // This is a new, richer, additive lookup instead.
 export async function getInboundCallerContextForTenant(user: TenantUser, phoneNumber: string): Promise<InboundCallerContext> {
+  await assertTenantModule(user, "TELEPHONY");
   const tenantId = requireTenantId(user);
   const normalized = normalizedLast10(phoneNumber);
 

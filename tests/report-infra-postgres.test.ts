@@ -138,7 +138,7 @@ describe("direct Postgres report infrastructure", () => {
   describe("entitlement gating", () => {
     it("rejects creating a report schedule when Advanced Reporting is disabled for the tenant", async () => {
       queryOneMock.mockImplementation(async (sql: string) => {
-        if (String(sql).includes('from "TenantFeature"')) return { advancedReporting: false };
+        if (String(sql).includes('from "TenantModuleEntitlement"')) return { status: "DISABLED" };
         return null;
       });
 
@@ -170,7 +170,7 @@ describe("direct Postgres report infrastructure", () => {
       queryOneMock.mockImplementation(async (sql: string) => {
         const text = String(sql);
         if (text.includes('from "User"')) return { id: "user-1", tenantId: "tenant-1", email: "admin@example.com", rolePermissions: {} };
-        if (text.includes('from "TenantFeature"')) return { advancedReporting: false };
+        if (text.includes('from "TenantModuleEntitlement"')) return { status: "DISABLED" };
         return null;
       });
       executeMock.mockResolvedValue(undefined);

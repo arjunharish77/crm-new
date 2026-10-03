@@ -1,70 +1,29 @@
+export const dynamic = "force-dynamic";
+import { PublishedCatalogBoundary } from "@/components/published-catalog-boundary";
+import { getPublishedCatalog } from "@/lib/catalog-snapshot-server";
 import type { Metadata } from "next";
+import Link from "next/link";
 import { LeadFormLoader } from "@/components/lead-form-loader";
-import { getCourseBySlug, getUniversityBySlug } from "@/data/catalog";
 
-export const metadata: Metadata = {
-  title: "Request Guidance",
-  robots: { index: false, follow: false },
-};
+export const metadata: Metadata = { title: "Apply now", robots: { index: false, follow: false } };
 
-export default async function LeadPage({
-  searchParams,
-}: {
-  searchParams?: Promise<{ course?: string; university?: string; intent?: string; goal?: string }>;
-}) {
-  const params = (await searchParams) || {};
-  const course = params.course ? getCourseBySlug(params.course) : undefined;
-  const university = params.university ? getUniversityBySlug(params.university) : undefined;
-  const contextLabel = course ? `${course.name} — ${course.university.shortName}` : university ? university.name : null;
-
-  return (
-    <section className="section alt">
-      <div className="container uv-2col">
-        <div>
-          <h1 style={{ color: "#363634", fontSize: 30, fontWeight: 700, margin: "0 0 14px" }}>
-            Talk to a counsellor who has no reason to oversell{contextLabel ? ` you on ${contextLabel}` : ""}
-          </h1>
-          <p style={{ color: "#696868", fontSize: 15, lineHeight: 1.6, maxWidth: 480 }}>
-            We&apos;re an aggregator, not a university — our counsellors get paid the same whichever program you
-            pick. They check your fee, eligibility and entitlement status against the university&apos;s own
-            published pages before the call, not after.
-          </p>
-          <ul style={{ listStyle: "none", padding: 0, margin: "22px 0 0", display: "flex", flexDirection: "column", gap: 10 }}>
-            {["Fee and scholarship check", "Entitlement verification", "Documents and loan paperwork"].map((item) => (
-              <li key={item} style={{ display: "flex", alignItems: "center", gap: 10, color: "#363634", fontSize: 14, fontWeight: 600 }}>
-                <span style={{ width: 20, height: 20, borderRadius: "50%", background: "rgba(46,125,50,0.10)", color: "#2E7D32", fontSize: 12, lineHeight: "20px", textAlign: "center", flexShrink: 0 }}>✓</span>
-                {item}
-              </li>
-            ))}
-          </ul>
-          <div className="uv-3col" style={{ marginTop: 28, maxWidth: 480 }}>
-            {[
-              ["1.75L+", "learners guided"],
-              ["< 24 hrs", "callback time"],
-              ["₹0", "you pay us"],
-            ].map(([stat, label]) => (
-              <div key={label}>
-                <div style={{ color: "#544CC8", fontSize: 22, fontWeight: 700 }}>{stat}</div>
-                <div style={{ color: "#707070", fontSize: 12, marginTop: 2 }}>{label}</div>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        <div className="card" style={{ overflow: "hidden" }}>
-          <div style={{ display: "flex", justifyContent: "space-between", padding: "20px 24px", borderBottom: "1px solid #D3D9EA" }}>
-            <div>
-              <div style={{ color: "#363634", fontSize: 18, fontWeight: 700 }}>
-                {contextLabel ? `Get guidance on ${contextLabel}` : "Get free expert counselling"}
-              </div>
-              <div style={{ color: "#696868", fontSize: 13, marginTop: 2 }}>Free counselling · No spam, ever</div>
-            </div>
-          </div>
-          <div style={{ padding: "20px 24px 24px" }}>
-            <LeadFormLoader context={{ course: params.course, university: params.university, intent: params.intent, goal: params.goal }} />
-          </div>
-        </div>
-      </div>
-    </section>
-  );
+type LeadParams = { course?: string | string[]; university?: string | string[]; intent?: string | string[]; goal?: string | string[] };
+export default async function LeadPage({ searchParams }: { searchParams?: Promise<LeadParams> }) {
+  const catalog = await getPublishedCatalog();
+  const raw = (await searchParams) || {};
+  const first = (value: string | string[] | undefined) => Array.isArray(value) ? value[0] : value;
+  const params = {course:first(raw.course),university:first(raw.university),intent:first(raw.intent),goal:first(raw.goal)};
+  const course = catalog.courses.find(item => item.id === params.course || item.slug === params.course);
+  const university = catalog.universities.find(item => item.id === (course?.universityId || params.university) || item.slug === params.university);
+  const contextLabel = course ? `${course.name}${university ? ` — ${university.shortName}` : ""}` : university?.name;
+  return <PublishedCatalogBoundary><section className="application-page container">
+    <header><p className="breadcrumb"><Link href="/courses">Browse courses</Link> &gt; Application enquiry</p><h1>Apply now{contextLabel ? ` — ${contextLabel}` : ""}</h1><p>Start with your contact details. Choose a course and optional university preference next.</p></header>
+    <div className="application-layout">
+      <div className="application-form-panel"><LeadFormLoader context={{...params, course: course?.id || params.course, university: university?.id || params.university}} /></div>
+      <aside className="application-explanation" aria-labelledby="application-next-title"><h2 id="application-next-title">What happens next</h2>
+        <ol><li><strong>Save your details</strong><p>Your details are saved when you continue. Our team may follow up even if you leave before finishing.</p></li><li><strong>Choose your preferences</strong><p>Select a course. You can leave the university choice open.</p></li><li><strong>Verify your email</strong><p>Enter the email code to unlock interactive course comparison.</p></li></ol>
+        <p>This is an enquiry to Unnati Vidya. University admission is confirmed separately by the university.</p><Link href="/privacy">Read our privacy policy</Link>
+      </aside>
+    </div>
+  </section></PublishedCatalogBoundary>;
 }

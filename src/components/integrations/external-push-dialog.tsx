@@ -1,5 +1,6 @@
 "use client";
 
+import { useModuleEnabled } from "@/components/auth/feature-gate";
 import { useEffect, useMemo, useState } from "react";
 import { Share2, Send, CheckCircle2, XCircle, Loader2 } from "lucide-react";
 import { StandardDialog } from "@/components/common/standard-dialog";
@@ -30,7 +31,7 @@ interface PreviewState {
     authType: string;
 }
 
-export function ExternalPushDialog({ open, onClose, leadId, opportunityId, linkedOpportunities, onPushed }: ExternalPushDialogProps) {
+function ExternalPushDialogContent({ open, onClose, leadId, opportunityId, linkedOpportunities, onPushed }: ExternalPushDialogProps) {
     const [integrations, setIntegrations] = useState<any[]>([]);
     const [integrationId, setIntegrationId] = useState("");
     const [selectedOpportunityId, setSelectedOpportunityId] = useState<string>("");
@@ -175,7 +176,7 @@ export function ExternalPushDialog({ open, onClose, leadId, opportunityId, linke
                                     )}
                                     <pre className="max-h-40 overflow-auto whitespace-pre-wrap font-mono">{JSON.stringify(preview.body, null, 2)}</pre>
                                     {preview.unresolvedTokens?.length > 0 && (
-                                        <p className="text-amber-600">
+                                        <p className="text-status-warning-foreground">
                                             Unresolved tokens (will send empty): {preview.unresolvedTokens.join(", ")}
                                         </p>
                                     )}
@@ -214,4 +215,11 @@ export function ExternalPushDialog({ open, onClose, leadId, opportunityId, linke
             )}
         </StandardDialog>
     );
+}
+
+// Hidden while the tenant's Data Platform module is off (external pushes are refused server-side).
+export function ExternalPushDialog(props: ExternalPushDialogProps) {
+    const dataPlatformEnabled = useModuleEnabled("DATA_PLATFORM");
+    if (!dataPlatformEnabled) return null;
+    return <ExternalPushDialogContent {...props} />;
 }

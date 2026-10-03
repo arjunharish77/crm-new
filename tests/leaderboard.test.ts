@@ -40,7 +40,7 @@ vi.mock("@/lib/db/query", () => ({
 }));
 
 vi.mock("@/lib/server/gamification", () => ({
-  getGamificationSettingsForTenant: vi.fn(async () => ({ participantConfig: { mode: "ALL" } })),
+  readGamificationSettings: vi.fn(async () => ({ participantConfig: { mode: "ALL" } })),
 }));
 
 vi.mock("@/lib/server/partner-access", () => ({
@@ -48,6 +48,20 @@ vi.mock("@/lib/server/partner-access", () => ({
 }));
 
 import { getLeaderboard } from "@/lib/server/leaderboard";
+
+// Business logic under test; module/feature gates are covered by the module-gate tests.
+vi.mock("@/lib/server/entitlements", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/server/entitlements")>()),
+  assertFeatureEnabled: vi.fn(async () => undefined),
+  isFeatureEnabledForTenant: vi.fn(async () => true),
+}));
+vi.mock("@/lib/server/module-entitlements", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/server/module-entitlements")>()),
+  assertTenantModule: vi.fn(async () => undefined),
+  assertModuleEnabled: vi.fn(async () => undefined),
+  isModuleEnabledForTenant: vi.fn(async () => true),
+}));
+
 
 const TENANT = "tenant-a";
 const adminUser = { id: "admin-1", tenantId: TENANT };

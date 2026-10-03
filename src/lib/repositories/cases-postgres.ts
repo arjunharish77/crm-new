@@ -202,12 +202,14 @@ export type CaseFilters = {
   queueId?: string | null;
   ownerId?: string | null;
   typeId?: string | null;
+  // Free text: matches the subject, the requester's name or email, or the case number ("#42" or "42").
+  q?: string | null;
   page?: number;
   limit?: number;
 };
 
 export async function listCasesForTenant(user: TenantUser, filters: CaseFilters = {}) {
-  const tenantId = requireTenantId(user);
+  const tenantId = await assertServiceDeskEnabled(user);
   const clauses = ['"tenantId" = $1'];
   const values: unknown[] = [tenantId];
   for (const [column, value] of [
@@ -221,6 +223,15 @@ export async function listCasesForTenant(user: TenantUser, filters: CaseFilters 
       values.push(value);
       clauses.push(`${column} = $${values.length}`);
     }
+  }
+
+  const search = filters.q?.trim();
+  if (search) {
+    values.push(`%${search.replace(/[\\%_]/g, (match) => `\\${match}`)}%`);
+    const pattern = values.length;
+    const number = /^#?(\d{1,9})$/.exec(search)?.[1];
+    if (number) values.push(Number(number));
+    clauses.push(`(subject ilike $${pattern} or coalesce("requesterName", '') ilike $${pattern} or coalesce("requesterEmail", '') ilike $${pattern}${number ? ` or "caseNumber" = $${values.length}` : ""})`);
   }
 
   const page = Math.max(1, filters.page ?? 1);
@@ -239,7 +250,7 @@ export async function listCasesForTenant(user: TenantUser, filters: CaseFilters 
 }
 
 export async function getCaseForTenant(user: TenantUser, id: string) {
-  const tenantId = requireTenantId(user);
+  const tenantId = await assertServiceDeskEnabled(user);
   const row = await queryOne<any>(`select ${CASE_COLUMNS} from "Case" where "tenantId" = $1 and id = $2 limit 1`, [tenantId, id]);
   if (!row) return null;
 
@@ -464,7 +475,7 @@ export async function assignCaseToUser(user: TenantUser, caseId: string, input: 
 // ─── Settings: types, statuses, priorities, queues, SLA policies ─────────────────────────
 
 export async function listCaseTypesForTenant(user: TenantUser) {
-  const tenantId = requireTenantId(user);
+  const tenantId = await assertServiceDeskEnabled(user);
   await ensureCaseDefaultsForTenant(tenantId);
   return query<any>('select id, "tenantId", name, description, "order", "isActive", "createdAt", "updatedAt" from "CaseType" where "tenantId" = $1 order by "order" asc', [tenantId]);
 }
@@ -506,7 +517,7 @@ export async function deleteCaseTypeForTenant(user: TenantUser, id: string) {
 }
 
 export async function listCaseStatusesForTenant(user: TenantUser) {
-  const tenantId = requireTenantId(user);
+  const tenantId = await assertServiceDeskEnabled(user);
   await ensureCaseDefaultsForTenant(tenantId);
   return query<any>('select id, "tenantId", name, category, "order", "isDefault", "isClosedStatus", "createdAt", "updatedAt" from "CaseStatus" where "tenantId" = $1 order by "order" asc', [tenantId]);
 }
@@ -560,7 +571,7 @@ export async function deleteCaseStatusForTenant(user: TenantUser, id: string) {
 }
 
 export async function listCasePrioritiesForTenant(user: TenantUser) {
-  const tenantId = requireTenantId(user);
+  const tenantId = await assertServiceDeskEnabled(user);
   await ensureCaseDefaultsForTenant(tenantId);
   return query<any>('select id, "tenantId", name, level, color, "isDefault", "createdAt", "updatedAt" from "CasePriority" where "tenantId" = $1 order by level asc', [tenantId]);
 }
@@ -614,7 +625,7 @@ export async function deleteCasePriorityForTenant(user: TenantUser, id: string) 
 }
 
 export async function listCaseQueuesForTenant(user: TenantUser) {
-  const tenantId = requireTenantId(user);
+  const tenantId = await assertServiceDeskEnabled(user);
   await ensureCaseDefaultsForTenant(tenantId);
   const queues = await query<any>('select id, "tenantId", name, description, "isDefault", "createdAt", "updatedAt" from "CaseQueue" where "tenantId" = $1 order by name asc', [tenantId]);
   const memberships = await query<{ queueId: string; userId: string }>('select "queueId", "userId" from "CaseQueueMembership" where "tenantId" = $1', [tenantId]);
@@ -675,7 +686,7 @@ export async function setCaseQueueMembers(user: TenantUser, queueId: string, use
 }
 
 export async function listCaseSlaPoliciesForTenant(user: TenantUser) {
-  const tenantId = requireTenantId(user);
+  const tenantId = await assertServiceDeskEnabled(user);
   await ensureCaseDefaultsForTenant(tenantId);
   return query<any>(
     'select id, "tenantId", name, "caseTypeId", "casePriorityId", "firstResponseMinutes", "resolutionMinutes", "isDefault", "isActive", "createdAt", "updatedAt" from "CaseSlaPolicy" where "tenantId" = $1 order by "createdAt" asc',
@@ -864,7 +875,7 @@ export async function processCaseSlaEscalations(limit = 200, now = new Date()) {
 // to matching CommunicationOutbox rows directly by recipient address, a real if less structured
 // history rather than nothing. Previous cases from the same requester are found the same way.
 export async function getCaseCommunicationHistoryForTenant(user: TenantUser, caseId: string) {
-  const tenantId = requireTenantId(user);
+  const tenantId = await assertServiceDeskEnabled(user);
   const existing = await queryOne<any>(`select ${CASE_COLUMNS} from "Case" where "tenantId" = $1 and id = $2 limit 1`, [tenantId, caseId]);
   if (!existing) return null;
 

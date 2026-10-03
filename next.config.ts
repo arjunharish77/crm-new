@@ -1,4 +1,5 @@
 import type { NextConfig } from "next";
+import { LEGACY_REDIRECTS } from "./src/lib/legacy-routes";
 
 // Gap checklist: "Add security headers and browser protections." Confirmed by direct audit
 // that this config had zero security headers before this change -- no CSP, frame policy,
@@ -81,6 +82,12 @@ const nextConfig: NextConfig = {
       { source: "/f/:slug*", headers: EMBEDDABLE_FORM_HEADERS },
       { source: "/public-form/:id*", headers: EMBEDDABLE_FORM_HEADERS },
     ];
+  },
+  // Moved pages (src/lib/legacy-routes.ts). A config redirect answers before any layout or guard
+  // renders (the dashboard layout doesn't render pages for platform admins without a tenant,
+  // and Settings' admin guard would send a non-admin away before an in-page redirect fired).
+  async redirects() {
+    return LEGACY_REDIRECTS.map((entry) => ({ ...entry, permanent: false }));
   },
 };
 

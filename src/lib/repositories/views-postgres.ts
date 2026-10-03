@@ -1,3 +1,4 @@
+import { archiveItemForTenant } from "@/lib/server/archive-items";
 import { randomUUID } from "crypto";
 import { query, queryOne, type Queryable } from "@/lib/db/query";
 import { withTransaction } from "@/lib/db/transaction";
@@ -352,7 +353,7 @@ export async function listSavedViewsForTenant(user: TenantUser, module: string) 
   const rows = await query<any>(
     `select ${SAVED_VIEW_COLUMNS}
      from "CustomReport"
-     where "chartType" = 'SAVED_VIEW' and ${tenantClause}
+     where "chartType" = 'SAVED_VIEW' and "deletedAt" is null and ${tenantClause}
      order by "createdAt" asc`,
     values,
   );
@@ -391,7 +392,7 @@ export async function recordSavedViewOpened(user: TenantUser, id: string) {
   if (!user.tenantId) return;
   await query(
     `update "CustomReport" set "viewCount" = "viewCount" + 1, "lastOpenedAt" = $1
-     where id = $2 and "tenantId" = $3 and "chartType" = 'SAVED_VIEW'`,
+     where id = $2 and "tenantId" = $3 and "chartType" = 'SAVED_VIEW' and "deletedAt" is null`,
     [new Date().toISOString(), id, user.tenantId],
   );
 }
@@ -434,7 +435,7 @@ export async function updateSavedViewForTenant(user: TenantUser, id: string, inp
     const existing = await queryOne<any>(
       `select ${SAVED_VIEW_COLUMNS}
        from "CustomReport"
-       where id = $1 and "chartType" = 'SAVED_VIEW' and ${tenantClause}
+       where id = $1 and "chartType" = 'SAVED_VIEW' and "deletedAt" is null and ${tenantClause}
        limit 1`,
       values,
       client,
@@ -495,7 +496,7 @@ export async function addSavedViewCommentForTenant(user: TenantUser, id: string,
   if (!trimmed) throw new Error("COMMENT_BODY_REQUIRED");
   const tenantClause = '"tenantId" = $2';
   const existing = await queryOne<any>(
-    `select ${SAVED_VIEW_COLUMNS} from "CustomReport" where id = $1 and "chartType" = 'SAVED_VIEW' and ${tenantClause} limit 1`,
+    `select ${SAVED_VIEW_COLUMNS} from "CustomReport" where id = $1 and "chartType" = 'SAVED_VIEW' and "deletedAt" is null and ${tenantClause} limit 1`,
     [id, user.tenantId],
   );
   if (!existing) throw new Error("SAVED_VIEW_NOT_FOUND");
@@ -521,7 +522,7 @@ export async function addSavedViewCommentForTenant(user: TenantUser, id: string,
 export async function requestSavedViewAccessForTenant(user: TenantUser, id: string) {
   if (!user.tenantId) throw new Error("TENANT_CONTEXT_REQUIRED");
   const row = await queryOne<any>(
-    `select ${SAVED_VIEW_COLUMNS} from "CustomReport" where id = $1 and "tenantId" = $2 and "chartType" = 'SAVED_VIEW' limit 1`,
+    `select ${SAVED_VIEW_COLUMNS} from "CustomReport" where id = $1 and "tenantId" = $2 and "chartType" = 'SAVED_VIEW' and "deletedAt" is null limit 1`,
     [id, user.tenantId],
   );
   if (!row) throw new Error("SAVED_VIEW_NOT_FOUND");
@@ -546,7 +547,7 @@ export async function getSavedViewSummaryForTenant(user: TenantUser, id: string)
     `select cr.id, cr.name, cr."createdBy", u.name as "ownerName", u.email as "ownerEmail"
      from "CustomReport" cr
      left join "User" u on u.id = cr."createdBy"
-     where cr.id = $1 and cr."tenantId" = $2 and cr."chartType" = 'SAVED_VIEW'
+     where cr.id = $1 and cr."tenantId" = $2 and cr."chartType" = 'SAVED_VIEW' and cr."deletedAt" is null
      limit 1`,
     [id, user.tenantId],
   );
@@ -560,7 +561,7 @@ export async function cloneSavedViewForTenant(user: TenantUser, id: string) {
   const row = await queryOne<any>(
     `select ${SAVED_VIEW_COLUMNS}
      from "CustomReport"
-     where id = $1 and "chartType" = 'SAVED_VIEW' and ${tenantClause}
+     where id = $1 and "chartType" = 'SAVED_VIEW' and "deletedAt" is null and ${tenantClause}
      limit 1`,
     values,
   );
@@ -584,18 +585,19 @@ export async function cloneSavedViewForTenant(user: TenantUser, id: string) {
   });
 }
 
+// Delete archives the view (decision 31): it leaves every list at once and can be restored for 30
+// days from "Recently deleted"; the existing Archive / Show archived is a separate, kept state.
 export async function deleteSavedViewForTenant(user: TenantUser, id: string) {
   const tenantClause = user.tenantId ? '"tenantId" = $2' : '"tenantId" is null';
   const values = user.tenantId ? [id, user.tenantId] : [id];
   const existing = await queryOne<any>(
     `select ${SAVED_VIEW_COLUMNS}
      from "CustomReport"
-     where id = $1 and "chartType" = 'SAVED_VIEW' and ${tenantClause}
+     where id = $1 and "chartType" = 'SAVED_VIEW' and "deletedAt" is null and ${tenantClause}
      limit 1`,
     values,
   );
-  if (!existing) return;
+  if (!existing) return null;
   if (existing.createdBy !== user.id && !isSavedViewAdmin(user)) throw new Error("FORBIDDEN");
-  await query(`delete from "CustomReport" where id = $1 and "chartType" = 'SAVED_VIEW' and ${tenantClause}`, values);
-  await auditSavedView(user, "DELETE", id, existing, null);
+  return archiveItemForTenant(user as any, "saved-view", id);
 }

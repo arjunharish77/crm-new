@@ -1,8 +1,17 @@
+import { assertModuleEnabled, assertTenantModule } from "@/lib/server/module-entitlements";
 import { randomUUID } from "crypto";
 import { createTenantScopedUser } from "@/lib/server/admin";
 import { createAuditLog } from "@/lib/server/crm";
 import { execute, query, queryOne } from "@/lib/db/query";
-import { assertModuleEnabled } from "@/lib/server/module-entitlements";
+import { getEffectiveSecurityPolicy } from "@/lib/server/security-policy";
+import { validatePasswordStrength } from "@/lib/server/password-policy";
+
+// Partner logins follow the workspace password policy like every other account (they skipped
+// it, so a partner login could have a 6-character password).
+async function assertPartnerPasswordMeetsPolicy(tenantId: string, password: string) {
+  const errors = validatePasswordStrength(String(password ?? ""), await getEffectiveSecurityPolicy(tenantId));
+  if (errors.length) throw Object.assign(new Error("PASSWORD_POLICY"), { userMessage: errors.join(", ") });
+}
 
 type TenantUser = {
   id: string;
@@ -58,6 +67,7 @@ async function assertRoleIsPartnerRole(tenantId: string, roleId: string) {
 
 export async function listPartnerProfilesForTenant(user: TenantUser) {
   if (!user.tenantId) return [];
+  await assertTenantModule(user, "PARTNERS");
 
   const profiles = await query<any>(
     `select id, "tenantId", "userId", "legalBusinessName", gstin, "panNumber", "registeredAddress",
@@ -85,6 +95,7 @@ export async function listPartnerProfilesForTenant(user: TenantUser) {
 // fetch, which didn't exist before (only PATCH did).
 export async function getPartnerProfileForTenant(user: TenantUser, partnerProfileId: string) {
   if (!user.tenantId) return null;
+  await assertTenantModule(user, "PARTNERS");
   const profile = await queryOne<any>(
     `select id, "tenantId", "userId", "legalBusinessName", gstin, "panNumber", "registeredAddress",
             "registeredState", status, "invoiceNumberPrefix", "invoiceNumberCounter",
@@ -111,6 +122,7 @@ export async function getPartnerProfileForTenant(user: TenantUser, partnerProfil
 // the caller's own partner rollup target, which is empty for a real tenant admin (confirmed by
 // reading it fully before reusing it, not assumed).
 export async function getPartnerDashboardForTenant(user: TenantUser, partnerProfileId: string) {
+  await assertTenantModule(user, "PARTNERS");
   const profile = await getPartnerProfileForTenant(user, partnerProfileId);
   if (!profile) return null;
 
@@ -161,6 +173,7 @@ export async function listPartnerLoginsForOrganization(user: TenantUser, partner
 
 export async function getPartnerProfileForUser(user: TenantUser) {
   if (!user.tenantId) return null;
+  await assertTenantModule(user, "PARTNERS");
   return queryOne<any>(
     `select id, "tenantId", "userId", "legalBusinessName", gstin, "panNumber", "registeredAddress",
             "registeredState", status, "invoiceNumberPrefix", "invoiceNumberCounter",
@@ -181,6 +194,7 @@ export async function createPartnerForTenant(user: TenantUser, input: CreatePart
 
   await assertRoleIsPartnerRole(user.tenantId, input.roleId);
 
+  await assertPartnerPasswordMeetsPolicy(user.tenantId, input.password);
   const createdUser = await createTenantScopedUser(user.tenantId, {
     name: input.name,
     email: input.email,
@@ -278,6 +292,7 @@ export async function createPartnerLoginForTenant(
     );
   }
 
+  await assertPartnerPasswordMeetsPolicy(user.tenantId, input.password);
   const createdUser = await createTenantScopedUser(user.tenantId, {
     name: input.name,
     email: input.email,

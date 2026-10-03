@@ -104,7 +104,7 @@ export function SubmissionsTable({ formId }: SubmissionsTableProps) {
             header: "Status",
             size: 120,
             cell: ({ row }) => (
-                <Badge variant="outline" className={cn("font-bold text-[11px]", STATUS_BADGE_CLASSNAMES[row.original.status])}>
+                <Badge variant="outline" className={cn("font-bold text-xs", STATUS_BADGE_CLASSNAMES[row.original.status])}>
                     {row.original.status}
                 </Badge>
             ),
@@ -191,7 +191,7 @@ export function SubmissionsTable({ formId }: SubmissionsTableProps) {
         <div className="flex flex-col gap-4">
             <div className="flex flex-col justify-between gap-3 md:flex-row md:items-center">
                 <div>
-                    <h2 className="text-lg font-extrabold tracking-tight">
+                    <h2 className="text-lg font-semibold tracking-tight">
                         Submissions ({total})
                     </h2>
                     <p className="text-sm text-muted-foreground">
@@ -220,7 +220,7 @@ export function SubmissionsTable({ formId }: SubmissionsTableProps) {
                     <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                         Processed
                     </p>
-                    <p className="mt-0.5 text-lg font-extrabold">
+                    <p className="mt-0.5 text-lg font-semibold">
                         {summary.processed}
                     </p>
                 </Card>
@@ -228,7 +228,7 @@ export function SubmissionsTable({ formId }: SubmissionsTableProps) {
                     <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                         Needs Review
                     </p>
-                    <p className="mt-0.5 text-lg font-extrabold">
+                    <p className="mt-0.5 text-lg font-semibold">
                         {summary.flagged}
                     </p>
                 </Card>

@@ -1,3 +1,5 @@
+import { assertTenantModule } from "@/lib/server/module-entitlements";
+import { assertFeatureEnabled, isFeatureEnabledForTenant } from "@/lib/server/entitlements";
 import { randomUUID } from "crypto";
 import { execute, query, queryOne, jsonbParam, queryOneAsSystem } from "@/lib/db/query";
 import * as pgActivities from "@/lib/repositories/activities-postgres";
@@ -6,6 +8,7 @@ import * as pgForms from "@/lib/repositories/forms-postgres";
 import * as pgLeadLists from "@/lib/repositories/lead-lists-postgres";
 import * as pgLeads from "@/lib/repositories/leads-postgres";
 import * as pgOpportunities from "@/lib/repositories/opportunities-postgres";
+import * as pgTasks from "@/lib/repositories/tasks-postgres";
 import * as pgRecordShare from "@/lib/repositories/record-share-postgres";
 import * as pgReportsDashboards from "@/lib/repositories/reports-dashboards-postgres";
 import * as pgViews from "@/lib/repositories/views-postgres";
@@ -16,6 +19,7 @@ import { enqueueImportJob } from "@/lib/server/job-queue";
 import { assertSafeOutboundUrl } from "@/lib/server/outbound-request-guard";
 import { createUserNotification } from "@/lib/server/notifications";
 import { DatabaseError } from "@/lib/db/errors";
+import { applyRecordScopeClause, recordAccessLevel } from "@/lib/server/record-scope";
 
 type TenantUser = {
   id: string;
@@ -26,6 +30,7 @@ type TenantUser = {
   role?: { permissions?: any } | string | null;
   isTenantAdmin?: boolean;
   isPlatformAdmin?: boolean;
+  teamId?: string | null;
   // WP04 fix: see record-scope.ts's ScopedUser.
   recordScopeActorId?: string | null;
 };
@@ -123,9 +128,9 @@ type WebhookInput = {
 };
 
 type GlobalSearchResults = {
-  leads: Array<{ id: string; type: "lead"; name: string; company: string | null }>;
+  leads: Array<{ id: string; type: "lead"; name: string; company: string | null; email: string | null; phone: string | null }>;
   opportunities: Array<{ id: string; type: "opportunity"; title: string; amount: number | null }>;
-  activities: Array<{ id: string; type: "activity"; notes: string | null }>;
+  activities: Array<{ id: string; type: "activity"; notes: string | null; leadId: string | null; opportunityId: string | null }>;
   tasks: Array<{ id: string; type: "task"; title: string }>;
   partners: Array<{ id: string; type: "partner"; name: string; company: string | null }>;
 };
@@ -339,9 +344,10 @@ export async function listLeadsForTenant(
   user: TenantUser,
   page: number,
   limit: number,
-  filters: LeadFilterInput[] | null = null
+  filters: LeadFilterInput[] | null = null,
+  options: pgLeads.LeadListOptions = {}
 ) {
-  return pgLeads.listLeadsForTenant(user, page, limit, filters);
+  return pgLeads.listLeadsForTenant(user, page, limit, filters, options);
 }
 
 export async function getLeadStatusCountsForTenant(user: TenantUser) {
@@ -374,6 +380,7 @@ export async function deleteLeadsForTenant(user: TenantUser, ids: string[]) {
 }
 
 export async function listOpportunityTypesForTenant(user: TenantUser) {
+  if (!user.isPlatformAdmin && !(await isFeatureEnabledForTenant(user.tenantId, "opportunityEnabled"))) return []; // ~14 pages use this for filters/dropdowns: empty, not an error
   return pgOpportunities.listOpportunityTypesForTenant(user);
 }
 
@@ -396,9 +403,10 @@ export async function listOpportunitiesForTenantByType(
   limit: number,
   opportunityTypeId: string | null,
   filters: LeadFilterInput[] | null = null,
-  page = 1
+  page = 1,
+  options: pgOpportunities.OpportunityListOptions = {}
 ) {
-  return pgOpportunities.listOpportunitiesForTenantByType(user, limit, opportunityTypeId, filters, page);
+  return pgOpportunities.listOpportunitiesForTenantByType(user, limit, opportunityTypeId, filters, page, options);
 }
 
 export async function getOpportunityForTenant(user: TenantUser, id: string) {
@@ -410,6 +418,7 @@ export async function createOpportunityForTenant(user: TenantUser, payload: Reco
 }
 
 export async function getOpportunityHistoryForTenant(user: TenantUser, opportunityId: string) {
+  await assertFeatureEnabled(user.tenantId, "opportunityEnabled", { isPlatformAdmin: user.isPlatformAdmin });
   return pgOpportunities.getOpportunityHistoryForTenant(user, opportunityId);
 }
 
@@ -440,9 +449,10 @@ export async function listActivitiesForTenant(
   user: TenantUser,
   limit: number,
   filters: ActivityFilterInput[] | null,
-  page = 1
+  page = 1,
+  options: pgActivities.ActivityListOptions = {},
 ) {
-  return pgActivities.listActivitiesForTenant(user, limit, filters, page);
+  return pgActivities.listActivitiesForTenant(user, limit, filters, page, options);
 }
 
 export async function createActivityForTenant(user: TenantUser, payload: Record<string, unknown>) {
@@ -454,10 +464,12 @@ export async function updateActivityForTenant(user: TenantUser, id: string, payl
 }
 
 export async function getOpportunityStatsForTenant(user: TenantUser) {
+  await assertFeatureEnabled(user.tenantId, "opportunityEnabled", { isPlatformAdmin: user.isPlatformAdmin });
   return pgOpportunities.getOpportunityStatsForTenant(user);
 }
 
 export async function getOpportunityStageCountsForTenant(user: TenantUser) {
+  await assertFeatureEnabled(user.tenantId, "opportunityEnabled", { isPlatformAdmin: user.isPlatformAdmin });
   return pgOpportunities.getOpportunityStageCountsForTenant(user);
 }
 
@@ -471,6 +483,26 @@ export async function getGovernanceHistoryForTenant(
   entityId: string
 ) {
   const normalizedType = entityType.toUpperCase();
+  // A record's history is only for people who can open that record (it used to answer for any
+  // id in the tenant). Leads, opportunities and tasks go through their scoped readers; other
+  // record types (settings, users, roles...) are admin-only. Not visible → "not found".
+  try {
+    await assertRecordVisibleForUser(user, normalizedType, entityId);
+  } catch {
+    throw new Error("HISTORY_NOT_FOUND");
+  }
+  const historyTypeId = normalizedType === "OPPORTUNITY" ? ((await getOpportunityForTenant(user, entityId)) as any)?.opportunityTypeId ?? null : null;
+  // Fields hidden from this user by field permissions stay hidden in the history too.
+  const historyModule = normalizedType === "LEAD" ? "leads" : normalizedType === "OPPORTUNITY" ? "opportunities" : null;
+  const hiddenFields = historyModule
+    ? Object.entries(fieldPermissionMap(user as any, historyModule, historyTypeId)).filter(([, access]) => access === "hidden").map(([field]) => field)
+    : [];
+  const stripHidden = (value: any) => {
+    if (!hiddenFields.length || !value || typeof value !== "object" || Array.isArray(value)) return value;
+    const copy = { ...value };
+    for (const field of hiddenFields) delete copy[field];
+    return copy;
+  };
   const data = await query<any>(
     `select id, action, before, after, diff, "createdAt", "userId"
      from "AuditLog"
@@ -492,7 +524,7 @@ export async function getGovernanceHistoryForTenant(
     listActivityTypesForTenant(user).catch(() => []),
   ]);
   const stageMap = new Map(
-    (opportunityTypes as any[]).flatMap((type) => (type.stages ?? []).map((stage: any) => [stage.id, stage.label || stage.name || stage.id]))
+    (opportunityTypes as any[]).flatMap((type) => [...(type.stages ?? []), ...(type.archivedStages ?? [])].map((stage: any) => [stage.id, stage.label || stage.name || stage.id]))
   );
   const opportunityTypeMap = new Map((opportunityTypes as any[]).map((type) => [type.id, type.name]));
   const activityTypeMap = new Map((activityTypes as any[]).map((type) => [type.id, type.name]));
@@ -508,9 +540,9 @@ export async function getGovernanceHistoryForTenant(
       activityTypes: Object.fromEntries(activityTypeMap),
     },
     changes: {
-      before: item.before,
-      after: item.after,
-      diff: item.diff,
+      before: stripHidden(item.before),
+      after: stripHidden(item.after),
+      diff: stripHidden(item.diff),
     },
   }));
 }
@@ -553,8 +585,12 @@ export async function listAuditLogsForTenant(
     values.push(filters.action.toUpperCase());
     clauses.push(`action = $${values.length}`);
   }
-  if (filters?.userId) {
-    values.push(filters.userId);
+  // The workspace audit log is for admins; anyone else gets only their own entries, whatever
+  // userId they ask for (the API returned every entry to any signed-in user before).
+  const auditAdmin = !!((user as any).isTenantAdmin || (user as any).isPlatformAdmin);
+  const auditUserId = auditAdmin ? filters?.userId : user.id;
+  if (auditUserId) {
+    values.push(auditUserId);
     clauses.push(`"userId" = $${values.length}`);
   }
   // "Status" + "anomaly flags" + "retention/legal hold" sub-items -- gap checklist: "audit
@@ -620,12 +656,29 @@ export async function listAuditLogsForTenant(
   }));
 }
 
+// Whether this user can open the record a note or history entry belongs to: leads, opportunities,
+// activities and tasks through their own scoped readers (the same access as their lists).
+// Anything else is admin-only. Not visible → "RECORD_NOT_FOUND", the same answer as a missing
+// record.
+export async function assertRecordVisibleForUser(user: TenantUser, entityType: string, entityId: string) {
+  const type = entityType.toUpperCase();
+  let visible = false;
+  if (type === "LEAD") visible = !!(await getLeadForTenant(user, entityId));
+  else if (type === "OPPORTUNITY") visible = !!(await getOpportunityForTenant(user, entityId));
+  else if (type === "ACTIVITY") visible = await pgActivities.isActivityVisibleForTenant(user as any, entityId);
+  else if (type === "TASK") visible = !!(await pgTasks.getTaskForTenant(user as any, entityId));
+  else visible = !!((user as any).isTenantAdmin || (user as any).isPlatformAdmin);
+  if (!visible) throw new Error("RECORD_NOT_FOUND");
+}
+
 export async function listNotesForTenant(
   user: TenantUser,
   entityType: string,
   entityId: string
 ) {
   const normalizedType = normalizeEntityType(entityType);
+  // Notes are only for people who can open the record (any id in the tenant worked before).
+  await assertRecordVisibleForUser(user, normalizedType, entityId);
   const data = await query<any>(
     `select id, content, "authorId", "isPinned", "createdAt", "updatedAt"
      from "Note"
@@ -659,6 +712,7 @@ export async function createNoteForTenant(
   content: string
 ) {
   const normalizedType = normalizeEntityType(entityType);
+  await assertRecordVisibleForUser(user, normalizedType, entityId);
   const now = new Date().toISOString();
   const data = await queryOne<any>(
     `insert into "Note" (
@@ -703,13 +757,19 @@ export async function deleteNoteForTenant(user: TenantUser, noteId: string) {
 
 export async function toggleNotePinForTenant(user: TenantUser, noteId: string) {
   const existing = await queryOne<any>(
-    `select id, "isPinned"
+    `select id, "isPinned", "entityType", "entityId"
      from "Note"
      where id = $1 and ${user.tenantId ? '"tenantId" = $2' : '"tenantId" is null'}
      limit 1`,
     user.tenantId ? [noteId, user.tenantId] : [noteId],
   );
   if (!existing) throw new Error("NOTE_NOT_FOUND");
+  // Pinning is for people who can open the note's record.
+  try {
+    await assertRecordVisibleForUser(user, existing.entityType, existing.entityId);
+  } catch {
+    throw new Error("NOTE_NOT_FOUND");
+  }
   const data = await queryOne<any>(
     `update "Note"
      set "isPinned" = $1, "updatedAt" = $2
@@ -1243,11 +1303,13 @@ function getDashboardPresetWidgets(persona: string): DashboardWidgetInput[] {
   return presets[persona] ?? presets.rep;
 }
 
-export async function listFormsForTenant(user: TenantUser) {
-  return pgForms.listFormsForTenant(user);
+export async function listFormsForTenant(user: TenantUser, options: { archived?: boolean } = {}) {
+  await assertFeatureEnabled(user.tenantId, "formBuilderEnabled", { isPlatformAdmin: user.isPlatformAdmin });
+  return pgForms.listFormsForTenant(user, options);
 }
 
 export async function listAvailableFormsForPlacement(user: TenantUser, placement: string) {
+  if (!user.isPlatformAdmin && !(await isFeatureEnabledForTenant(user.tenantId, "formBuilderEnabled"))) return []; // lead/opportunity pages embed this panel: empty, not an error
   return pgForms.listAvailableFormsForPlacement(user, placement);
 }
 
@@ -1256,6 +1318,7 @@ export async function createFormForTenant(user: TenantUser, payload: Record<stri
 }
 
 export async function getFormForTenant(user: TenantUser, formId: string) {
+  await assertFeatureEnabled(user.tenantId, "formBuilderEnabled", { isPlatformAdmin: user.isPlatformAdmin });
   return pgForms.getFormForTenant(user, formId);
 }
 
@@ -1264,7 +1327,23 @@ export async function updateFormForTenant(user: TenantUser, formId: string, payl
 }
 
 export async function deleteFormForTenant(user: TenantUser, formId: string) {
-  return pgForms.deleteFormForTenant(user, formId);
+  await assertFeatureEnabled(user.tenantId, "formBuilderEnabled", { isPlatformAdmin: user.isPlatformAdmin });
+  await pgForms.deleteFormForTenant(user, formId);
+  await createAuditLog(user as any, "DELETE", "FORM", formId, null, null, null).catch(() => undefined);
+}
+
+export async function archiveFormForTenant(user: TenantUser, formId: string) {
+  await assertFeatureEnabled(user.tenantId, "formBuilderEnabled", { isPlatformAdmin: user.isPlatformAdmin });
+  const archived = await pgForms.archiveFormForTenant(user, formId);
+  await createAuditLog(user as any, "ARCHIVE", "FORM", formId, null, archived, null).catch(() => undefined);
+  return archived;
+}
+
+export async function restoreFormForTenant(user: TenantUser, formId: string) {
+  await assertFeatureEnabled(user.tenantId, "formBuilderEnabled", { isPlatformAdmin: user.isPlatformAdmin });
+  const restored = await pgForms.restoreFormForTenant(user, formId);
+  await createAuditLog(user as any, "RESTORE", "FORM", formId, null, restored, null).catch(() => undefined);
+  return restored;
 }
 
 export async function getPublicForm(identifier: string) {
@@ -1288,18 +1367,22 @@ export async function upsertRecordShareForTenant(user: TenantUser, recordType: p
 }
 
 export async function getFormStatsForTenant(user: TenantUser, formId: string) {
+  await assertFeatureEnabled(user.tenantId, "formBuilderEnabled", { isPlatformAdmin: user.isPlatformAdmin });
   return pgForms.getFormStatsForTenant(user, formId);
 }
 
 export async function getFormSubmissionsForTenant(user: TenantUser, formId: string, limit: number, offset: number) {
+  await assertFeatureEnabled(user.tenantId, "formBuilderEnabled", { isPlatformAdmin: user.isPlatformAdmin });
   return pgForms.getFormSubmissionsForTenant(user, formId, limit, offset);
 }
 
 export async function exportFormSubmissionsForTenant(user: TenantUser, formId: string) {
+  await assertFeatureEnabled(user.tenantId, "formBuilderEnabled", { isPlatformAdmin: user.isPlatformAdmin });
   return pgForms.exportFormSubmissionsForTenant(user, formId);
 }
 
 export async function getLeadsReportForTenant(user: TenantUser) {
+  await assertFeatureEnabled(user.tenantId, "advancedReporting", { isPlatformAdmin: user.isPlatformAdmin });
   const leads = await listLeadsForTenant(user, 1, 500);
   const bySource = new Map<string, number>();
   leads.data.forEach((item: any) => {
@@ -1313,6 +1396,7 @@ export async function getLeadsReportForTenant(user: TenantUser) {
 }
 
 export async function getOpportunitiesReportForTenant(user: TenantUser) {
+  await assertFeatureEnabled(user.tenantId, "advancedReporting", { isPlatformAdmin: user.isPlatformAdmin });
   const opportunities = await listOpportunitiesForTenant(user, 500);
   const byStage = new Map<string, { stage: string; count: number; value: number }>();
   let totalRevenue = 0;
@@ -1332,6 +1416,7 @@ export async function getOpportunitiesReportForTenant(user: TenantUser) {
 }
 
 export async function getActivitiesReportForTenant(user: TenantUser) {
+  await assertFeatureEnabled(user.tenantId, "advancedReporting", { isPlatformAdmin: user.isPlatformAdmin });
   const activities = await listActivitiesForTenant(user, 500, null);
   return {
     total: activities.meta.total,
@@ -1340,6 +1425,7 @@ export async function getActivitiesReportForTenant(user: TenantUser) {
 }
 
 export async function listCustomReportsForTenant(user: TenantUser) {
+  await assertFeatureEnabled(user.tenantId, "advancedReporting", { isPlatformAdmin: user.isPlatformAdmin });
   return pgReportsDashboards.listCustomReportsForTenant(user);
 }
 
@@ -1357,7 +1443,12 @@ export async function deleteCustomReportForTenant(user: TenantUser, reportId: st
 
 export async function exportCustomReportForTenant(user: TenantUser, reportId: string) {
   const data = await pgReportsDashboards.getCustomReportForTenant(user, reportId);
-  if (!data) return "id,name\n";
+  // A report that's gone or not shared with this person fails the export instead of producing
+  // an empty file that looks like a report with no rows.
+  if (!data) throw new Error("CUSTOM_REPORT_NOT_FOUND");
+  // A report that hasn't been published has nothing to export yet (its config is empty, which
+  // used to fall through to a whole-module summary).
+  if (Number((data as any).currentVersion ?? 0) === 0) throw new Error("CUSTOM_REPORT_NOT_PUBLISHED");
   const timeZone = await getTenantTimeZone(user.tenantId);
 
   const queryDefinition = (data.config as any)?.queryDefinition;
@@ -1456,6 +1547,10 @@ export async function createLeadListForTenant(user: TenantUser, input: LeadListI
 
 export async function getLeadListForTenant(user: TenantUser, id: string) {
   return pgLeadLists.getLeadListForTenant(user, id);
+}
+
+export async function getLeadListPageForTenant(user: TenantUser, id: string, options: { page?: number; limit?: number; search?: string | null }) {
+  return pgLeadLists.getLeadListPageForTenant(user, id, options);
 }
 
 export async function addLeadsToLeadListForTenant(user: TenantUser, id: string, leadIds: string[]) {
@@ -1855,7 +1950,7 @@ export async function listImportTemplatesForTenant(user: TenantUser) {
   if (!user.tenantId) return [];
   return query<any>(
     `select id, name, module, mapping, "duplicateMode", "createdAt", "updatedAt"
-     from "ImportTemplate" where "tenantId" = $1 order by name asc`,
+     from "ImportTemplate" where "tenantId" = $1 and "deletedAt" is null order by name asc`,
     [user.tenantId],
   );
 }
@@ -1884,14 +1979,14 @@ export async function createImportTemplateForTenant(
   }
 }
 
+// Delete archives the template (decision 31); restore within 30 days.
 export async function deleteImportTemplateForTenant(user: TenantUser, templateId: string) {
-  await execute(
-    `delete from "ImportTemplate" where id = $1 and ${user.tenantId ? '"tenantId" = $2' : '"tenantId" is null'}`,
-    user.tenantId ? [templateId, user.tenantId] : [templateId],
-  );
+  const { archiveItemForTenant } = await import("@/lib/server/archive-items");
+  return archiveItemForTenant(user as any, "import-template", templateId);
 }
 
 export async function listWebhooksForTenant(user: TenantUser) {
+  await assertTenantModule(user, "DATA_PLATFORM");
   return query(
     `select id,
             coalesce(nullif(url, ''), 'Webhook') as name,
@@ -1910,6 +2005,7 @@ export async function listWebhooksForTenant(user: TenantUser) {
 }
 
 export async function createWebhookForTenant(user: TenantUser, input: WebhookInput) {
+  await assertTenantModule(user, "DATA_PLATFORM");
   const name = String(input.name ?? "").trim();
   const url = String(input.url ?? "").trim();
   if (!name || !url) throw new Error("WEBHOOK_NAME_URL_REQUIRED");
@@ -1943,6 +2039,7 @@ export async function createWebhookForTenant(user: TenantUser, input: WebhookInp
 // previously no update path at all for a WebhookSubscription (create/delete only), so a
 // subscription's events could never actually be changed once created.
 export async function updateWebhookForTenant(user: TenantUser, id: string, input: Partial<WebhookInput>) {
+  await assertTenantModule(user, "DATA_PLATFORM");
   const existing = await queryOne<any>(
     `select id, url, events, "isActive", secret, "rateLimitPerMinute" from "WebhookSubscription" where id = $1 and ${user.tenantId ? '"tenantId" = $2' : '"tenantId" is null'}`,
     user.tenantId ? [id, user.tenantId] : [id],
@@ -1974,6 +2071,7 @@ export async function updateWebhookForTenant(user: TenantUser, id: string, input
 }
 
 export async function deleteWebhookForTenant(user: TenantUser, id: string) {
+  await assertTenantModule(user, "DATA_PLATFORM");
   await execute(
     `delete from "WebhookSubscription"
      where id = $1 and ${user.tenantId ? '"tenantId" = $2' : '"tenantId" is null'}`,
@@ -1983,6 +2081,7 @@ export async function deleteWebhookForTenant(user: TenantUser, id: string) {
 }
 
 export async function getTelephonySettingsForTenant(user: TenantUser) {
+  await assertTenantModule(user, "TELEPHONY");
   const data = await queryOne<any>(
     `select id, type, config, "isActive", "updatedAt"
      from "IntegrationSetting"
@@ -1994,6 +2093,7 @@ export async function getTelephonySettingsForTenant(user: TenantUser) {
 }
 
 export async function saveTelephonySettingsForTenant(user: TenantUser, config: Record<string, unknown>) {
+  await assertTenantModule(user, "TELEPHONY");
   const now = new Date().toISOString();
   const existing = await getTelephonySettingsForTenant(user) as { id?: string; config?: Record<string, unknown> };
   // The webhook secret (and its rotation-grace-window fields) are managed exclusively via
@@ -2029,6 +2129,7 @@ export async function saveTelephonySettingsForTenant(user: TenantUser, config: R
 }
 
 export async function listTelephonyCallLogsForTenant(user: TenantUser, limit = 100) {
+  await assertTenantModule(user, "TELEPHONY");
   const currentLimit = Math.min(500, Math.max(1, Number.isFinite(limit) ? limit : 100));
   return query(
     `select id, provider, "callId", direction, "fromNumber", "toNumber", status, duration,
@@ -2043,6 +2144,7 @@ export async function listTelephonyCallLogsForTenant(user: TenantUser, limit = 1
 }
 
 export async function createTelephonyCallLogForTenant(user: TenantUser, input: Record<string, unknown>) {
+  await assertTenantModule(user, "TELEPHONY");
   const now = new Date().toISOString();
   const callTypeId = await ensureSystemActivityType(user, "Call", "Phone", "#3b82f6");
   let activityId: string | null = null;
@@ -2099,6 +2201,7 @@ export async function createTelephonyCallLogForTenant(user: TenantUser, input: R
 }
 
 export async function buildClickToCallPayloadForTenant(user: TenantUser, input: Record<string, unknown>) {
+  await assertTenantModule(user, "TELEPHONY");
   const settings = await getTelephonySettingsForTenant(user);
   const config = (settings as any)?.config ?? {};
   const phoneNumber = String(input.phoneNumber ?? input.toNumber ?? "");
@@ -2237,6 +2340,7 @@ export async function buildClickToCallPayloadForTenant(user: TenantUser, input: 
 }
 
 export async function getAgentPopupContextForTenant(user: TenantUser, input: Record<string, unknown>) {
+  await assertTenantModule(user, "TELEPHONY");
   const phone = String(input.phoneNumber ?? input.fromNumber ?? input.toNumber ?? "");
   let lead: any = null;
   if (phone) {
@@ -2263,56 +2367,62 @@ export async function searchTenantData(user: TenantUser, term: string): Promise<
     return { leads: [], opportunities: [], activities: [], tasks: [], partners: [] };
   }
 
+  // Global search applies the same record access as each record's own list (step 0,
+  // 2026-10-02). It used to search the whole tenant, so a user with "Own records" access could
+  // read the name of any lead or opportunity by typing it. Merged-away leads/opportunities are
+  // excluded like everywhere else; partner results link to an admin-only page, so only admins
+  // get them.
   const pattern = `%${normalized}%`;
-  const tenantWhere = user.tenantId ? '"tenantId" = $2' : '"tenantId" is null';
+  const scoped = (table: "Lead" | "Opportunity" | "Activity" | "Task", match: string) => {
+    const values: unknown[] = [pattern];
+    const clauses = [match];
+    let tenantIdParam: number | null = null;
+    if (user.tenantId) {
+      values.push(user.tenantId);
+      tenantIdParam = values.length;
+      clauses.push(`"tenantId" = $${tenantIdParam}`);
+    } else {
+      clauses.push('"tenantId" is null');
+    }
+    if (table === "Lead") { clauses.push('"mergedIntoId" is null'); applyRecordScopeClause(clauses, values, user, "LEAD", tenantIdParam); }
+    if (table === "Opportunity") { clauses.push('"mergedIntoId" is null'); applyRecordScopeClause(clauses, values, user, "OPPORTUNITY", tenantIdParam); }
+    if (table === "Activity") pgActivities.applyActivityScopeClause(clauses, values, user, tenantIdParam);
+    if (table === "Task" && (recordAccessLevel(user) === "OWN")) { values.push(user.id); clauses.push(`"ownerId" = $${values.length}`); }
+    return { where: clauses.join(" and "), values };
+  };
+  // Phone too (UI/UX plan §11.6 M): reps search by the number on their screen. Digits-only
+  // comparison, so "+91 90000 00601" finds "+919000000601".
+  // The digits come from the bound search term ($1) inside SQL; only "has 4+ digits" is decided here.
+  const phoneMatch = normalized.replace(/\D/g, "").length >= 4
+    ? ` or regexp_replace(coalesce(phone, ''), '\\D', '', 'g') like '%' || regexp_replace($1, '\\D', '', 'g') || '%'`
+    : "";
+  const leadQuery = scoped("Lead", `(name ilike $1 or email ilike $1 or company ilike $1${phoneMatch})`);
+  const opportunityQuery = scoped("Opportunity", "title ilike $1");
+  const activityQuery = scoped("Activity", "notes ilike $1");
+  const taskQuery = scoped("Task", "title ilike $1");
+  const canSearchPartners = !!(user.isTenantAdmin || user.isPlatformAdmin);
   const partnerTenantWhere = user.tenantId ? '"PartnerProfile"."tenantId" = $2' : '"PartnerProfile"."tenantId" is null';
-  const values = user.tenantId ? [pattern, user.tenantId] : [pattern];
+  const partnerValues = user.tenantId ? [pattern, user.tenantId] : [pattern];
   const [leads, opportunities, activities, tasks, partners] = await Promise.all([
-    query<any>(
-      `select id, name, company
-       from "Lead"
-       where (name ilike $1 or email ilike $1 or company ilike $1) and ${tenantWhere}
-       order by "updatedAt" desc
-       limit 8`,
-      values,
-    ),
-    query<any>(
-      `select id, title, amount
-       from "Opportunity"
-       where title ilike $1 and ${tenantWhere}
-       order by "updatedAt" desc
-       limit 8`,
-      values,
-    ),
-    query<any>(
-      `select id, notes
-       from "Activity"
-       where notes ilike $1 and ${tenantWhere}
-       order by "updatedAt" desc
-       limit 8`,
-      values,
-    ),
-    query<any>(
-      `select id, title
-       from "Task"
-       where title ilike $1 and ${tenantWhere}
-       order by "updatedAt" desc
-       limit 8`,
-      values,
-    ),
-    query<any>(
-      `select "PartnerProfile".id, "PartnerProfile"."legalBusinessName", "User".name, "User".email
-       from "PartnerProfile"
-       join "User" on "User".id = "PartnerProfile"."userId"
-       where (
-         "PartnerProfile"."legalBusinessName" ilike $1
-         or "User".name ilike $1
-         or "User".email ilike $1
-       ) and ${partnerTenantWhere}
-       order by "PartnerProfile"."updatedAt" desc
-       limit 8`,
-      values,
-    ),
+    query<any>(`select id, name, company, email, phone from "Lead" where ${leadQuery.where} order by "updatedAt" desc limit 8`, leadQuery.values),
+    query<any>(`select id, title, amount from "Opportunity" where ${opportunityQuery.where} order by "updatedAt" desc limit 8`, opportunityQuery.values),
+    query<any>(`select id, notes, "leadId", "opportunityId" from "Activity" where ${activityQuery.where} order by "updatedAt" desc limit 8`, activityQuery.values),
+    query<any>(`select id, title from "Task" where ${taskQuery.where} order by "updatedAt" desc limit 8`, taskQuery.values),
+    canSearchPartners
+      ? query<any>(
+          `select "PartnerProfile".id, "PartnerProfile"."legalBusinessName", "User".name, "User".email
+           from "PartnerProfile"
+           join "User" on "User".id = "PartnerProfile"."userId"
+           where (
+             "PartnerProfile"."legalBusinessName" ilike $1
+             or "User".name ilike $1
+             or "User".email ilike $1
+           ) and ${partnerTenantWhere}
+           order by "PartnerProfile"."updatedAt" desc
+           limit 8`,
+          partnerValues,
+        )
+      : Promise.resolve([]),
   ]);
 
   return {
@@ -2321,6 +2431,8 @@ export async function searchTenantData(user: TenantUser, term: string): Promise<
       type: "lead" as const,
       name: item.name,
       company: item.company ?? null,
+      email: item.email ?? null,
+      phone: item.phone ?? null,
     })),
     opportunities: opportunities.map((item: any) => ({
       id: item.id,
@@ -2332,6 +2444,8 @@ export async function searchTenantData(user: TenantUser, term: string): Promise<
       id: item.id,
       type: "activity" as const,
       notes: item.notes ?? null,
+      leadId: item.leadId ?? null,
+      opportunityId: item.opportunityId ?? null,
     })),
     tasks: tasks.map((item: any) => ({
       id: item.id,
@@ -2347,11 +2461,13 @@ export async function searchTenantData(user: TenantUser, term: string): Promise<
   };
 }
 
-export async function listAutomationsForTenant(user: TenantUser) {
-  return pgAutomations.listAutomationsForTenant(user);
+export async function listAutomationsForTenant(user: TenantUser, options: { archived?: boolean } = {}) {
+  await assertFeatureEnabled(user.tenantId, "automationEnabled", { isPlatformAdmin: user.isPlatformAdmin });
+  return pgAutomations.listAutomationsForTenant(user, options);
 }
 
 export async function getAutomationForTenant(user: TenantUser, id: string) {
+  await assertFeatureEnabled(user.tenantId, "automationEnabled", { isPlatformAdmin: user.isPlatformAdmin });
   return pgAutomations.getAutomationForTenant(user, id);
 }
 
@@ -2453,10 +2569,22 @@ export async function updateAutomationForTenant(user: TenantUser, id: string, pa
 }
 
 export async function deleteAutomationForTenant(user: TenantUser, id: string) {
+  await assertFeatureEnabled(user.tenantId, "automationEnabled", { isPlatformAdmin: user.isPlatformAdmin });
   return pgAutomations.deleteAutomationForTenant(user, id);
 }
 
+export async function archiveAutomationForTenant(user: TenantUser, id: string) {
+  await assertFeatureEnabled(user.tenantId, "automationEnabled", { isPlatformAdmin: user.isPlatformAdmin });
+  return pgAutomations.archiveAutomationForTenant(user, id);
+}
+
+export async function restoreAutomationForTenant(user: TenantUser, id: string) {
+  await assertFeatureEnabled(user.tenantId, "automationEnabled", { isPlatformAdmin: user.isPlatformAdmin });
+  return pgAutomations.restoreAutomationForTenant(user, id);
+}
+
 export async function listAutomationExecutionsForTenant(user: TenantUser, automationId: string) {
+  await assertFeatureEnabled(user.tenantId, "automationEnabled", { isPlatformAdmin: user.isPlatformAdmin });
   return pgAutomations.listAutomationExecutionsForTenant(user, automationId);
 }
 
@@ -2492,6 +2620,7 @@ export async function enrollRecordsInAutomation(
 }
 
 export async function listAutomationEnrollmentJobsForTenant(user: TenantUser, automationId: string) {
+  await assertFeatureEnabled(user.tenantId, "automationEnabled", { isPlatformAdmin: user.isPlatformAdmin });
   return pgAutomations.listAutomationEnrollmentJobsForTenant(user, automationId);
 }
 
@@ -2509,4 +2638,8 @@ export async function updateOpportunityForTenant(
 
 export async function deleteOpportunityForTenant(user: TenantUser, id: string) {
   return pgOpportunities.deleteOpportunityForTenant(user, id);
+}
+
+export async function deleteOpportunitiesForTenant(user: TenantUser, ids: string[]) {
+  return pgOpportunities.deleteOpportunitiesForTenant(user, ids);
 }

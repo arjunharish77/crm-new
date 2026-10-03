@@ -269,7 +269,7 @@ describe("direct Postgres forms repository", () => {
       queryOneMock.mockImplementation(async (sql: string) => {
         const text = String(sql);
         if (text.includes('from "Form" where id')) return BASE_FORM;
-        if (text.includes('from "TenantFeature"')) return { formBuilderEnabled: false };
+        if (text.includes('from "TenantModuleEntitlement"')) return { status: "DISABLED" };
         return null;
       });
 
@@ -285,7 +285,7 @@ describe("direct Postgres forms repository", () => {
     it("rejects creating a form when the Form Builder module is disabled for the tenant", async () => {
       queryOneMock.mockImplementation(async (sql: string) => {
         const text = String(sql);
-        if (text.includes('from "TenantFeature"')) return { formBuilderEnabled: false };
+        if (text.includes('from "TenantModuleEntitlement"')) return { status: "DISABLED" };
         return null;
       });
 
@@ -298,7 +298,7 @@ describe("direct Postgres forms repository", () => {
     it("rejects updating a form when the Form Builder module is disabled for the tenant", async () => {
       queryOneMock.mockImplementation(async (sql: string) => {
         const text = String(sql);
-        if (text.includes('from "TenantFeature"')) return { formBuilderEnabled: false };
+        if (text.includes('from "TenantModuleEntitlement"')) return { status: "DISABLED" };
         return null;
       });
 
@@ -311,7 +311,7 @@ describe("direct Postgres forms repository", () => {
     it("allows a platform admin to bypass the Form Builder gate", async () => {
       queryOneMock.mockImplementation(async (sql: string) => {
         const text = String(sql);
-        if (text.includes('from "TenantFeature"')) return { formBuilderEnabled: false };
+        if (text.includes('from "TenantModuleEntitlement"')) return { status: "DISABLED" };
         if (text.includes('"Form"')) {
           return {
             id: "form-1",

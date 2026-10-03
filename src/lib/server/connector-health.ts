@@ -153,7 +153,16 @@ async function checkCommunicationChannels(user: TenantUser): Promise<ConnectorHe
 }
 
 async function checkTelephony(user: TenantUser): Promise<ConnectorHealthCheck> {
-  const settings: any = await getTelephonySettingsForTenant(user);
+  let settings: any;
+  try {
+    settings = await getTelephonySettingsForTenant(user);
+  } catch (error) {
+    // A disabled Telephony module is a deliberate platform-admin choice, not a connector fault.
+    if (error instanceof Error && error.message === "MODULE_DISABLED:TELEPHONY") {
+      return { key: "telephony", label: "Telephony", status: "not_configured", detail: "Telephony module is disabled for this workspace" };
+    }
+    throw error;
+  }
   if (!settings.config?.provider) return { key: "telephony", label: "Telephony", status: "not_configured" };
   return {
     key: "telephony",
@@ -164,7 +173,15 @@ async function checkTelephony(user: TenantUser): Promise<ConnectorHealthCheck> {
 }
 
 async function checkWebhooks(user: TenantUser): Promise<ConnectorHealthCheck> {
-  const webhooks: any[] = await listWebhooksForTenant(user);
+  let webhooks: any[];
+  try {
+    webhooks = await listWebhooksForTenant(user);
+  } catch (error) {
+    if (error instanceof Error && error.message === "MODULE_DISABLED:DATA_PLATFORM") {
+      return { key: "webhooks", label: "Outbound Webhooks", status: "not_configured", detail: "Data Platform module is disabled for this workspace" };
+    }
+    throw error;
+  }
   if (!webhooks.length) return { key: "webhooks", label: "Outbound Webhooks", status: "not_configured" };
   const activeCount = webhooks.filter((wh) => wh.isActive).length;
   return {

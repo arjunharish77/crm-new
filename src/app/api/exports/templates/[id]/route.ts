@@ -7,10 +7,12 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
   try {
     const user = await requireCurrentUser(request);
     const { id } = await params;
-    await deleteExportTemplateForTenant(user, id);
-    return NextResponse.json({ success: true });
+    const archived = await deleteExportTemplateForTenant(user, id);
+    return NextResponse.json({ success: true, purgeAfter: archived?.purgeAfter ?? null });
   } catch (error) {
     if (error instanceof Error && error.message === "UNAUTHORIZED") return unauthorized();
+    // Not found, or saved by someone else (only they or an admin can delete it).
+    if (error instanceof Error && error.message === "EXPORT_TEMPLATE_NOT_FOUND") return NextResponse.json({ message: "Template not found" }, { status: 404 });
     return serverError("Failed to delete export template", error);
   }
 }

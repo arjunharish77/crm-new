@@ -1,4 +1,5 @@
-import { formatFee, type courseWithUniversity } from "@/data/catalog";
+import { formatFee } from "@/lib/catalog-format";
+import { type courseWithUniversity } from "@/data/catalog";
 
 type EnrichedCourse = ReturnType<typeof courseWithUniversity>;
 

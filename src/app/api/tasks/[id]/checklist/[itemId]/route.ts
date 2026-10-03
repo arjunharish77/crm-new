@@ -17,6 +17,7 @@ export async function PATCH(request: Request, { params }: Params) {
     return NextResponse.json(task);
   } catch (error) {
     if (error instanceof Error && error.message === "UNAUTHORIZED") return unauthorized();
+    if (error instanceof Error && error.message === "TASK_NOT_FOUND") return NextResponse.json({ message: "Task not found" }, { status: 404 });
     if (error instanceof Error && error.message === "CHECKLIST_ITEM_NOT_FOUND") return badRequest("Checklist item not found");
     return serverError("Failed to update checklist item", error);
   }

@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { BrainCircuit, TrendingDown, TrendingUp } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { StatusBadge } from "@/components/common/status-badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { apiFetch } from "@/lib/api";
@@ -11,13 +12,7 @@ import { cn } from "@/lib/utils";
 import { PredictiveRecordScore } from "@/types/leads";
 import { toast } from "sonner";
 import { useModuleEnabled } from "@/components/auth/feature-gate";
-
-const BAND_CLASSNAMES: Record<string, string> = {
-    HOT: "border-destructive/25 bg-destructive/10 text-destructive",
-    WARM: "border-tertiary/30 bg-tertiary/12 text-tertiary",
-    COLD: "border-muted bg-muted text-muted-foreground",
-    RISK: "border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300",
-};
+import { useAskText } from "@/components/common/dialogs-provider";
 
 type ScoreHistoryRow = {
     id: string;
@@ -35,23 +30,16 @@ export function PredictiveScoreBadge({ score, compact = false }: { score?: Predi
     }
     const primary = score.recordType === "OPPORTUNITY" ? score.winProbability : score.conversionProbability;
     return (
-        <div className="flex items-center gap-2">
-            <Badge
-                variant="outline"
-                className={cn("font-bold uppercase tracking-wide", BAND_CLASSNAMES[score.scoreBand] ?? BAND_CLASSNAMES.COLD)}
-            >
-                {score.scoreBand}
-            </Badge>
-            {!compact ? (
-                <span className="text-xs font-semibold text-muted-foreground">
-                    {primary ?? 0}% · {score.confidence ?? 0}% conf.
-                </span>
-            ) : null}
+        // Band as a status pill; probability as the value and confidence as plain metadata in the
+        // tooltip-style title (UI/UX plan rule R4: badges carry status, metadata is text).
+        <div className="flex items-center gap-2" title={`${score.confidence ?? 0}% confidence`}>
+            <StatusBadge kind="scoreBand" value={score.scoreBand} />
+            {!compact ? <span className="text-sm tabular-nums text-muted-foreground">{primary ?? 0}%</span> : null}
         </div>
     );
 }
 
-export function PredictiveScorePanel({
+function PredictiveScorePanelContent({
     recordType,
     recordId,
     score,
@@ -60,6 +48,7 @@ export function PredictiveScorePanel({
     recordId: string;
     score?: PredictiveRecordScore | null;
 }) {
+    const askText = useAskText();
     const [history, setHistory] = useState<ScoreHistoryRow[]>([]);
     const [overrideBusy, setOverrideBusy] = useState(false);
     const moduleEnabled = useModuleEnabled("PREDICTIVE_SCORING");
@@ -86,7 +75,7 @@ export function PredictiveScorePanel({
             <Card className="@container/score min-w-0 break-words rounded-xl p-3">
                 <div className="flex items-center gap-2">
                     <BrainCircuit className="size-4 text-muted-foreground" />
-                    <h3 className="text-sm font-extrabold">Predictive Scoring</h3>
+                    <h3 className="text-sm font-semibold">Predictive Scoring</h3>
                 </div>
                 <p className="mt-2 text-sm text-muted-foreground">
                     No predictive score has been calculated for this {recordType.toLowerCase()} yet.
@@ -107,9 +96,17 @@ export function PredictiveScorePanel({
     const similarRecordCount = score.similarRecordIds?.length ?? 0;
 
     const applyOverride = async () => {
-        const value = window.prompt(`Override ${primaryLabel.toLowerCase()} (0-100)`, String(primaryValue ?? 0));
+        const value = await askText({
+            title: "Override score",
+            label: `${primaryLabel} (0–100)`,
+            defaultValue: String(primaryValue ?? 0),
+            confirmLabel: "Continue",
+            singleLine: true,
+            required: true,
+            validate: (text) => /^\d{1,3}(\.\d+)?$/.test(text) && Number(text) <= 100 ? null : "Enter a number from 0 to 100",
+        });
         if (value === null) return;
-        const reason = window.prompt("Reason for override");
+        const reason = await askText({ title: "Override score", label: "Reason for override", confirmLabel: "Apply override", required: true });
         if (!reason) return;
         setOverrideBusy(true);
         try {
@@ -151,14 +148,14 @@ export function PredictiveScorePanel({
                 <div>
                     <div className="flex items-center gap-2">
                         <BrainCircuit className="size-4 text-primary" />
-                        <h3 className="text-sm font-extrabold">Predictive Scoring</h3>
+                        <h3 className="text-sm font-semibold">Predictive Scoring</h3>
                     </div>
                     <div className="mt-2">
                         <PredictiveScoreBadge score={score} />
                     </div>
                 </div>
                 {delta !== null ? (
-                    <Badge variant="outline" className={cn("rounded-md font-semibold", delta >= 0 ? "text-emerald-700 dark:text-emerald-300" : "text-destructive")}>
+                    <Badge variant="outline" className={cn("rounded-md font-semibold", delta >= 0 ? "text-status-success-foreground" : "text-destructive")}>
                         {delta >= 0 ? <TrendingUp className="size-3.5" /> : <TrendingDown className="size-3.5" />}
                         {delta >= 0 ? "+" : ""}{delta}
                     </Badge>
@@ -262,8 +259,8 @@ function TextList({ title, items, empty }: { title: string; items: string[]; emp
 function ScoreMetric({ label, value }: { label: string; value: string }) {
     return (
         <div className="min-w-0 break-words rounded-lg border bg-surface-container-lowest p-2">
-            <p className="text-[0.68rem] font-bold uppercase tracking-wide text-muted-foreground">{label}</p>
-            <p className="mt-0.5 text-sm font-extrabold">{value}</p>
+            <p className="text-xs font-bold uppercase tracking-wide text-muted-foreground">{label}</p>
+            <p className="mt-0.5 text-sm font-semibold">{value}</p>
         </div>
     );
 }
@@ -296,4 +293,11 @@ function ReasonList({
             )}
         </div>
     );
+}
+
+// Hidden while Predictive Scoring is off (its history/override APIs refuse those requests).
+export function PredictiveScorePanel(props: { recordType: "LEAD" | "OPPORTUNITY"; recordId: string; score?: PredictiveRecordScore | null }) {
+    const moduleEnabled = useModuleEnabled("PREDICTIVE_SCORING");
+    if (!moduleEnabled) return null;
+    return <PredictiveScorePanelContent {...props} />;
 }

@@ -1,0 +1,390 @@
+{
+  "checkedAt": "2026-10-03",
+  "scope": "All nine existing MUJ programs, 27 applicant-category schedules",
+  "method": "Direct read-only official-page GET; parse live DOM nodes inside course-fee only (duplicate IDs elsewhere excluded); base totals before promotion amounts. Cross-check against independent visual transcription of combined prospectus PDF page 36.",
+  "prospectus": {
+    "url": "https://www.onlinemanipal.com/wp-content/uploads/2022/11/MUJ-Combined-Brochure.pdf",
+    "label": "2026-27",
+    "pdfPage": 36,
+    "sha256": "b8903be746760772a87bcfaac544499d4e68977c3b5e3cd5ebbe54023555b7e9"
+  },
+  "programs": [
+    {
+      "courseId": "mba-muj",
+      "sourceUrl": "https://www.onlinemanipal.com/online-mba-manipal-university-jaipur",
+      "httpStatus": 200,
+      "htmlSha256": "59328622c09b7e33b6cd70512ae31d9d66fc898367da2762059a714876015244",
+      "categories": [
+        {
+          "category": "Indian Nationals",
+          "currency": "INR",
+          "semesterFee": 45000,
+          "baseTotal": 180000,
+          "semesterCount": 4,
+          "reconciles": true,
+          "matchesProspectus": true,
+          "matchesSeptemberObservation": true
+        },
+        {
+          "category": "Non-Resident Indians",
+          "currency": "USD",
+          "semesterFee": 693,
+          "baseTotal": 2772,
+          "semesterCount": 4,
+          "reconciles": true,
+          "matchesProspectus": true,
+          "matchesSeptemberObservation": true
+        },
+        {
+          "category": "Foreign Nationals",
+          "currency": "USD",
+          "semesterFee": 809,
+          "baseTotal": 3236,
+          "semesterCount": 4,
+          "reconciles": true,
+          "matchesProspectus": true,
+          "matchesSeptemberObservation": true
+        }
+      ],
+      "domesticApplicationFeeInr": 500,
+      "publicationStatus": "not_applied",
+      "verificationScope": "Displayed base tuition and semester schedule only; not full mandatory cost or current admission availability."
+    },
+    {
+      "courseId": "bba-muj",
+      "sourceUrl": "https://www.onlinemanipal.com/online-bba-degree-muj",
+      "httpStatus": 200,
+      "htmlSha256": "0dad8433b06355656d9b972bf6f2d258be7e24db115106193ebb0889c380b7a8",
+      "categories": [
+        {
+          "category": "Indian Nationals",
+          "currency": "INR",
+          "semesterFee": 23250,
+          "baseTotal": 139500,
+          "semesterCount": 6,
+          "reconciles": true,
+          "matchesProspectus": true,
+          "matchesSeptemberObservation": true
+        },
+        {
+          "category": "Non-Resident Indians",
+          "currency": "USD",
+          "semesterFee": 379,
+          "baseTotal": 2274,
+          "semesterCount": 6,
+          "reconciles": true,
+          "matchesProspectus": true,
+          "matchesSeptemberObservation": true
+        },
+        {
+          "category": "Foreign Nationals",
+          "currency": "USD",
+          "semesterFee": 441,
+          "baseTotal": 2646,
+          "semesterCount": 6,
+          "reconciles": true,
+          "matchesProspectus": true,
+          "matchesSeptemberObservation": true
+        }
+      ],
+      "domesticApplicationFeeInr": 500,
+      "publicationStatus": "not_applied",
+      "verificationScope": "Displayed base tuition and semester schedule only; not full mandatory cost or current admission availability."
+    },
+    {
+      "courseId": "bca-muj",
+      "sourceUrl": "https://www.onlinemanipal.com/online-bca-degree-muj",
+      "httpStatus": 200,
+      "htmlSha256": "3764ac852230ffadf6ae953e8ea1b29294bfd87bde897f78a1ab0f69e4442f45",
+      "categories": [
+        {
+          "category": "Indian Nationals",
+          "currency": "INR",
+          "semesterFee": 23250,
+          "baseTotal": 139500,
+          "semesterCount": 6,
+          "reconciles": true,
+          "matchesProspectus": true,
+          "matchesSeptemberObservation": true
+        },
+        {
+          "category": "Non-Resident Indians",
+          "currency": "USD",
+          "semesterFee": 379,
+          "baseTotal": 2274,
+          "semesterCount": 6,
+          "reconciles": true,
+          "matchesProspectus": true,
+          "matchesSeptemberObservation": true
+        },
+        {
+          "category": "Foreign Nationals",
+          "currency": "USD",
+          "semesterFee": 441,
+          "baseTotal": 2646,
+          "semesterCount": 6,
+          "reconciles": true,
+          "matchesProspectus": true,
+          "matchesSeptemberObservation": true
+        }
+      ],
+      "domesticApplicationFeeInr": 500,
+      "publicationStatus": "not_applied",
+      "verificationScope": "Displayed base tuition and semester schedule only; not full mandatory cost or current admission availability."
+    },
+    {
+      "courseId": "mca-muj",
+      "sourceUrl": "https://www.onlinemanipal.com/online-mca-degree-muj",
+      "httpStatus": 200,
+      "htmlSha256": "c3d736ce8bb7cb050726b59807a3d9bfcc6af82386f1ea5d8ea7b603dd9e8c1b",
+      "categories": [
+        {
+          "category": "Indian Nationals",
+          "currency": "INR",
+          "semesterFee": 39500,
+          "baseTotal": 158000,
+          "semesterCount": 4,
+          "reconciles": true,
+          "matchesProspectus": true,
+          "matchesSeptemberObservation": true
+        },
+        {
+          "category": "Non-Resident Indians",
+          "currency": "USD",
+          "semesterFee": 608,
+          "baseTotal": 2432,
+          "semesterCount": 4,
+          "reconciles": true,
+          "matchesProspectus": true,
+          "matchesSeptemberObservation": true
+        },
+        {
+          "category": "Foreign Nationals",
+          "currency": "USD",
+          "semesterFee": 709,
+          "baseTotal": 2836,
+          "semesterCount": 4,
+          "reconciles": true,
+          "matchesProspectus": true,
+          "matchesSeptemberObservation": true
+        }
+      ],
+      "domesticApplicationFeeInr": 500,
+      "publicationStatus": "not_applied",
+      "verificationScope": "Displayed base tuition and semester schedule only; not full mandatory cost or current admission availability."
+    },
+    {
+      "courseId": "bcom-muj",
+      "sourceUrl": "https://www.onlinemanipal.com/online-bcom-degree-muj",
+      "httpStatus": 200,
+      "htmlSha256": "94e516d768f0baae58ff7630c2db061a4a57b51237f06ae429a96730d6738ffe",
+      "categories": [
+        {
+          "category": "Indian Nationals",
+          "currency": "INR",
+          "semesterFee": 16500,
+          "baseTotal": 99000,
+          "semesterCount": 6,
+          "reconciles": true,
+          "matchesProspectus": true,
+          "matchesSeptemberObservation": true
+        },
+        {
+          "category": "Non-Resident Indians",
+          "currency": "USD",
+          "semesterFee": 243,
+          "baseTotal": 1458,
+          "semesterCount": 6,
+          "reconciles": true,
+          "matchesProspectus": true,
+          "matchesSeptemberObservation": true
+        },
+        {
+          "category": "Foreign Nationals",
+          "currency": "USD",
+          "semesterFee": 283,
+          "baseTotal": 1698,
+          "semesterCount": 6,
+          "reconciles": true,
+          "matchesProspectus": true,
+          "matchesSeptemberObservation": true
+        }
+      ],
+      "domesticApplicationFeeInr": 500,
+      "publicationStatus": "not_applied",
+      "verificationScope": "Displayed base tuition and semester schedule only; not full mandatory cost or current admission availability."
+    },
+    {
+      "courseId": "mcom-muj",
+      "sourceUrl": "https://www.onlinemanipal.com/online-mcom-degree-muj",
+      "httpStatus": 200,
+      "htmlSha256": "44b1d815332aab4f083142485b93a4310cdb5d31a9fa4bb2d4fa4d85b5314f9a",
+      "categories": [
+        {
+          "category": "Indian Nationals",
+          "currency": "INR",
+          "semesterFee": 27000,
+          "baseTotal": 108000,
+          "semesterCount": 4,
+          "reconciles": true,
+          "matchesProspectus": true,
+          "matchesSeptemberObservation": true
+        },
+        {
+          "category": "Non-Resident Indians",
+          "currency": "USD",
+          "semesterFee": 405,
+          "baseTotal": 1620,
+          "semesterCount": 4,
+          "reconciles": true,
+          "matchesProspectus": true,
+          "matchesSeptemberObservation": true
+        },
+        {
+          "category": "Foreign Nationals",
+          "currency": "USD",
+          "semesterFee": 473,
+          "baseTotal": 1892,
+          "semesterCount": 4,
+          "reconciles": true,
+          "matchesProspectus": true,
+          "matchesSeptemberObservation": true
+        }
+      ],
+      "domesticApplicationFeeInr": 500,
+      "publicationStatus": "not_applied",
+      "verificationScope": "Displayed base tuition and semester schedule only; not full mandatory cost or current admission availability."
+    },
+    {
+      "courseId": "ma-economics-muj",
+      "sourceUrl": "https://www.onlinemanipal.com/online-ma-economics-degree",
+      "httpStatus": 200,
+      "htmlSha256": "0a5124c29b7957eb6020ed6503aa4ff4218428dd8147dd2b755eb7c00f3c9fec",
+      "categories": [
+        {
+          "category": "Indian Nationals",
+          "currency": "INR",
+          "semesterFee": 20000,
+          "baseTotal": 80000,
+          "semesterCount": 4,
+          "reconciles": true,
+          "matchesProspectus": true,
+          "matchesSeptemberObservation": true
+        },
+        {
+          "category": "Non-Resident Indians",
+          "currency": "USD",
+          "semesterFee": 290,
+          "baseTotal": 1160,
+          "semesterCount": 4,
+          "reconciles": true,
+          "matchesProspectus": true,
+          "matchesSeptemberObservation": true
+        },
+        {
+          "category": "Foreign Nationals",
+          "currency": "USD",
+          "semesterFee": 335,
+          "baseTotal": 1340,
+          "semesterCount": 4,
+          "reconciles": true,
+          "matchesProspectus": true,
+          "matchesSeptemberObservation": true
+        }
+      ],
+      "domesticApplicationFeeInr": 500,
+      "publicationStatus": "not_applied",
+      "verificationScope": "Displayed base tuition and semester schedule only; not full mandatory cost or current admission availability."
+    },
+    {
+      "courseId": "majmc-muj",
+      "sourceUrl": "https://www.onlinemanipal.com/online-ma-journalism-and-mass-communication",
+      "httpStatus": 200,
+      "htmlSha256": "e1e08ba1efdf4bfc9d86c7f6fb06da8c2b5eb83ac9ebdc486cdcc8cb88766ad7",
+      "categories": [
+        {
+          "category": "Indian Nationals",
+          "currency": "INR",
+          "semesterFee": 20000,
+          "baseTotal": 80000,
+          "semesterCount": 4,
+          "reconciles": true,
+          "matchesProspectus": true,
+          "matchesSeptemberObservation": true
+        },
+        {
+          "category": "Non-Resident Indians",
+          "currency": "USD",
+          "semesterFee": 300,
+          "baseTotal": 1200,
+          "semesterCount": 4,
+          "reconciles": true,
+          "matchesProspectus": true,
+          "matchesSeptemberObservation": true
+        },
+        {
+          "category": "Foreign Nationals",
+          "currency": "USD",
+          "semesterFee": 350,
+          "baseTotal": 1400,
+          "semesterCount": 4,
+          "reconciles": true,
+          "matchesProspectus": true,
+          "matchesSeptemberObservation": true
+        }
+      ],
+      "domesticApplicationFeeInr": 500,
+      "publicationStatus": "not_applied",
+      "verificationScope": "Displayed base tuition and semester schedule only; not full mandatory cost or current admission availability."
+    },
+    {
+      "courseId": "msc-mathematics-muj",
+      "sourceUrl": "https://www.onlinemanipal.com/online-msc-mathematics-muj",
+      "httpStatus": 200,
+      "htmlSha256": "27c5a374baf115f4b4e4d2d8933b02424a0b3695bc92212edc5ed21761f29fa6",
+      "categories": [
+        {
+          "category": "Indian Nationals",
+          "currency": "INR",
+          "semesterFee": 20000,
+          "baseTotal": 80000,
+          "semesterCount": 4,
+          "reconciles": true,
+          "matchesProspectus": true,
+          "matchesSeptemberObservation": true
+        },
+        {
+          "category": "Non-Resident Indians",
+          "currency": "USD",
+          "semesterFee": 290,
+          "baseTotal": 1160,
+          "semesterCount": 4,
+          "reconciles": true,
+          "matchesProspectus": true,
+          "matchesSeptemberObservation": true
+        },
+        {
+          "category": "Foreign Nationals",
+          "currency": "USD",
+          "semesterFee": 335,
+          "baseTotal": 1340,
+          "semesterCount": 4,
+          "reconciles": true,
+          "matchesProspectus": true,
+          "matchesSeptemberObservation": true
+        }
+      ],
+      "domesticApplicationFeeInr": 500,
+      "publicationStatus": "not_applied",
+      "verificationScope": "Displayed base tuition and semester schedule only; not full mandatory cost or current admission availability."
+    }
+  ],
+  "sharedNotes": [
+    "NRI and foreign/other-nationality prices are distinct; do not merge or convert them.",
+    "The prospectus specifies INR payments for Nepal, Bhutan, Bangladesh and Sri Lanka; confirm their applicable tuition category.",
+    "INR 500 non-refundable application charge is stated for Indian, Nepalese, Bhutanese, Bangladeshi and Sri Lankan applicants. Absence of a fee in another category is not a waiver.",
+    "Domestic fee panels state that financing cannot be combined with additional offers; promotions and loan terms require separate current review.",
+    "No claim is made that base tuition includes exam, resit, convocation, certificate, tax, payment-processing or other charges. Their applicability remains to be checked."
+  ],
+  "publicationStatus": "evidence_only_pending_administrator_review"
+}

@@ -45,7 +45,7 @@ export async function getOnboardingReadinessForTenant(user: TenantUser): Promise
     count('select count(*)::int as count from "User" where "tenantId" = $1', tenantId),
     count('select count(*)::int as count from "Lead" where "tenantId" = $1', tenantId),
     count('select count(*)::int as count from "AutomationV2" where "tenantId" = $1', tenantId),
-    count(`select count(*)::int as count from "CustomReport" where "tenantId" = $1 and "chartType" = 'SAVED_VIEW'`, tenantId),
+    count(`select count(*)::int as count from "CustomReport" where "tenantId" = $1 and "chartType" = 'SAVED_VIEW' and "deletedAt" is null`, tenantId),
     count('select count(*)::int as count from "CommunicationProviderConfig" where "tenantId" = $1', tenantId),
     queryOne<{ featureFlags: Record<string, unknown> | null }>('select "featureFlags" from "TenantConfig" where "tenantId" = $1 limit 1', [tenantId]),
   ]);
@@ -61,14 +61,14 @@ export async function getOnboardingReadinessForTenant(user: TenantUser): Promise
       label: "Set up your first pipeline",
       description: "Configure an opportunity type and its stages so deals have somewhere to live.",
       done: pipelineCount > 0,
-      href: "/dashboard/settings/opportunity-types",
+      href: "/dashboard/settings/data/opportunity-types",
     },
     {
       key: "team",
       label: "Invite your team",
       description: "Add teammates so leads and deals can be assigned and shared.",
       done: userCount > 1,
-      href: "/dashboard/settings/users",
+      href: "/dashboard/settings/access/users",
     },
     {
       key: "leads",

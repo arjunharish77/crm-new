@@ -1,4 +1,6 @@
+import { reserveMonthlyMessage } from "@/lib/server/usage-limits";
 import { randomUUID } from "crypto";
+import { assertTenantModule } from "@/lib/server/module-entitlements";
 import net from "net";
 import tls from "tls";
 import { query, queryOne, execute, jsonbParam, queryAsSystem, queryOneAsSystem, executeAsSystem, type Queryable } from "@/lib/db/query";
@@ -82,6 +84,11 @@ type OutboxInput = {
   entityType?: string | null;
   entityId?: string | null;
   payload?: Record<string, unknown>;
+  // The caller wrote `subject`/`body` itself (a manual message, an automation step), with no
+  // record values merged in, so {{snippet:key}} in it is expanded. Text that already contains
+  // record values must expand snippets before merging them (see expandSnippetsForTenant), or a
+  // value like a lead's name could pull in snippets.
+  expandSnippets?: boolean;
   // Journey channel-fallback (gap checklist Module 8, item 8): when the primary send is blocked
   // (suppressed/opted-out/fatigue-capped) or later exhausts its retries and reaches FAILED, a
   // fallback send is queued on `fallback.channel` to `fallback.recipient` -- never chained
@@ -202,7 +209,7 @@ export async function upsertCommunicationProviderForTenant(user: TenantUser, inp
 }
 
 const TEMPLATE_COLUMNS = `id, "tenantId", channel, name, subject, body, tokens, metadata, version, locale, "approvalStatus",
-  "declaredTokens", "tokenDefaults", "lockedHeader", "lockedFooter", "approvedBy", "approvedAt", "isActive", "createdAt", "updatedAt"`;
+  "declaredTokens", "tokenDefaults", "lockedHeader", "lockedFooter", "approvedBy", "approvedAt", "isActive", "createdBy", "createdAt", "updatedAt"`;
 
 // "Current" = the highest-numbered isActive row per (channel, name, locale) -- editing a
 // template inserts a new version rather than overwriting (Module 8 item 12), matching the
@@ -339,6 +346,17 @@ export async function upsertCommunicationConsentForTenant(user: TenantUser, inpu
   return row;
 }
 
+// Current consent per channel for one record (one row per channel that has been recorded).
+export async function listCurrentConsentForTenant(user: TenantUser, entityType: string, entityId: string) {
+  const tenantId = requireTenantId(user);
+  return query(
+    `select channel, status, "lawfulBasis", source, "capturedAt", "updatedAt"
+     from "CommunicationConsent"
+     where "tenantId" = $1 and "entityType" = $2 and "entityId" = $3`,
+    [tenantId, entityType.toUpperCase(), entityId],
+  );
+}
+
 export async function listConsentHistoryForTenant(user: TenantUser, entityType: string, entityId: string) {
   const tenantId = requireTenantId(user);
   return query(
@@ -449,25 +467,92 @@ export async function upsertCommunicationTemplateForTenant(user: TenantUser, inp
   return { ...row, tokenWarnings: findUndeclaredTokens(`${row.subject ?? ""}\n${row.body}`, declaredTokens) };
 }
 
+// Workspace messaging settings (decided 2026-10-03). No row = defaults (approval not required).
+export async function getMessagingSettingsForTenant(user: TenantUser) {
+  const tenantId = requireTenantId(user);
+  const row = await queryOne<any>(
+    `select "requireTemplateApproval", "updatedBy", "updatedAt" from "MessagingSettings" where "tenantId" = $1`,
+    [tenantId],
+  );
+  return { requireTemplateApproval: !!row?.requireTemplateApproval, updatedBy: row?.updatedBy ?? null, updatedAt: row?.updatedAt ?? null };
+}
+
+export async function updateMessagingSettingsForTenant(user: TenantUser, input: { requireTemplateApproval?: unknown }) {
+  const tenantId = requireTenantId(user);
+  if (typeof input.requireTemplateApproval !== "boolean") throw new Error("MESSAGING_SETTINGS_INVALID");
+  const before = await getMessagingSettingsForTenant(user);
+  const now = new Date().toISOString();
+  await execute(
+    `insert into "MessagingSettings" ("tenantId", "requireTemplateApproval", "updatedBy", "updatedAt")
+     values ($1, $2, $3, $4)
+     on conflict ("tenantId") do update set "requireTemplateApproval" = excluded."requireTemplateApproval",
+       "updatedBy" = excluded."updatedBy", "updatedAt" = excluded."updatedAt"`,
+    [tenantId, input.requireTemplateApproval, user.id === "system" ? null : user.id, now],
+  );
+  const after = await getMessagingSettingsForTenant(user);
+  await createAuditLog(user as any, "UPDATE", "MESSAGING_SETTINGS", tenantId, before, after, { requireTemplateApproval: input.requireTemplateApproval }).catch(() => undefined);
+  return after;
+}
+
+async function templateApprovalRequired(tenantId: string, client?: Queryable) {
+  const row = await queryOne<{ requireTemplateApproval: boolean }>(
+    `select "requireTemplateApproval" from "MessagingSettings" where "tenantId" = $1`,
+    [tenantId],
+    client,
+  );
+  return !!row?.requireTemplateApproval;
+}
+
+// When the workspace requires template approval, every template version a send uses must be
+// Approved. Campaigns check this before launching so a launch never stops halfway.
+export async function assertTemplatesSendableForTenant(tenantId: string, templateIds: Array<string | null | undefined>, client?: Queryable) {
+  const ids = [...new Set(templateIds.filter((id): id is string => !!id))];
+  if (!ids.length || !(await templateApprovalRequired(tenantId, client))) return;
+  const rows = await query<{ id: string; approvalStatus: string }>(
+    `select id, "approvalStatus" from "CommunicationTemplate" where "tenantId" = $1 and id = any($2::text[])`,
+    [tenantId, ids],
+    client,
+  );
+  if (rows.some((row) => row.approvalStatus !== "APPROVED")) throw new Error("TEMPLATE_NOT_APPROVED");
+}
+
+// Review order (decided 2026-10-03): Draft or Rejected -> Waiting for approval -> Approved or
+// Rejected. An Approved version stays Approved; editing creates a new Draft version. When the
+// workspace requires approval, the template's author can't approve it themselves.
+const TEMPLATE_APPROVAL_FROM: Record<"PENDING_APPROVAL" | "APPROVED" | "REJECTED", string[]> = {
+  PENDING_APPROVAL: ["DRAFT", "REJECTED"],
+  APPROVED: ["PENDING_APPROVAL"],
+  REJECTED: ["PENDING_APPROVAL"],
+};
+
 export async function setTemplateApprovalStatusForTenant(
   user: TenantUser,
   templateId: string,
   status: "PENDING_APPROVAL" | "APPROVED" | "REJECTED",
 ) {
   const tenantId = requireTenantId(user);
+  const current = await queryOne<{ approvalStatus: string; createdBy: string | null }>(
+    `select "approvalStatus", "createdBy" from "CommunicationTemplate" where "tenantId" = $1 and id = $2`,
+    [tenantId, templateId],
+  );
+  if (!current) throw new Error("COMMUNICATION_TEMPLATE_NOT_FOUND");
+  if (status === "APPROVED" && current.createdBy && current.createdBy === user.id && (await templateApprovalRequired(tenantId))) {
+    throw new Error("TEMPLATE_SELF_APPROVAL");
+  }
   const now = new Date().toISOString();
+  // The status guard is part of the update, so two reviewers acting at once can't both win.
   const row = await queryOne<any>(
     `update "CommunicationTemplate"
      set "approvalStatus" = $1,
          "approvedBy" = case when $1 = 'APPROVED' then $2 else "approvedBy" end,
          "approvedAt" = case when $1 = 'APPROVED' then $3::timestamptz else "approvedAt" end,
          "updatedAt" = $3
-     where "tenantId" = $4 and id = $5
+     where "tenantId" = $4 and id = $5 and "approvalStatus" = any($6::text[])
      returning ${TEMPLATE_COLUMNS}`,
-    [status, user.id, now, tenantId, templateId],
+    [status, user.id, now, tenantId, templateId, TEMPLATE_APPROVAL_FROM[status]],
   );
-  if (!row) throw new Error("COMMUNICATION_TEMPLATE_NOT_FOUND");
-  await createAuditLog(user as any, "UPDATE", "COMMUNICATION_TEMPLATE", row.id, null, { approvalStatus: status }, {}).catch(() => undefined);
+  if (!row) throw new Error("TEMPLATE_APPROVAL_INVALID_TRANSITION");
+  await createAuditLog(user as any, "UPDATE", "COMMUNICATION_TEMPLATE", row.id, { approvalStatus: current.approvalStatus }, { approvalStatus: status }, {}).catch(() => undefined);
   return row;
 }
 
@@ -513,9 +598,15 @@ async function substituteSnippets(tenantId: string, text: string, client?: Query
 // require re-editing every template that uses it.
 async function applyTemplateGovernance(tenantId: string, template: any, body: string, client?: Queryable): Promise<string> {
   let result = body;
-  if (template.lockedHeader) result = `${template.lockedHeader}\n${result}`;
-  if (template.lockedFooter) result = `${result}\n${template.lockedFooter}`;
-  return substituteSnippets(tenantId, result, client);
+  if (template.lockedHeader) result = `${await substituteSnippets(tenantId, template.lockedHeader, client)}\n${result}`;
+  if (template.lockedFooter) result = `${result}\n${await substituteSnippets(tenantId, template.lockedFooter, client)}`;
+  return result;
+}
+
+// Expands {{snippet:key}} in text someone wrote (a campaign body, a template). Call it before
+// merging record values into the text, so a value can't pull in snippets.
+export async function expandSnippetsForTenant(tenantId: string, text: string, client?: Queryable) {
+  return substituteSnippets(tenantId, text, client);
 }
 
 export async function isSuppressed(tenantId: string, channel: Channel, recipient: string, client?: Queryable) {
@@ -604,6 +695,7 @@ async function checkFatigueCap(
 }
 
 export async function getFatigueSettingsForTenant(user: TenantUser) {
+  await assertTenantModule(user, "MARKETING");
   const tenantId = requireTenantId(user);
   const row = await queryOne<any>(`select * from "MarketingFatigueSettings" where "tenantId" = $1`, [tenantId]);
   return (
@@ -628,6 +720,7 @@ export async function upsertFatigueSettingsForTenant(
     exclusionWindows?: Array<{ startDate: string; endDate: string; reason?: string }>;
   },
 ) {
+  await assertTenantModule(user, "MARKETING");
   const tenantId = requireTenantId(user);
   const row = await queryOne<any>(
     `insert into "MarketingFatigueSettings"
@@ -716,7 +809,7 @@ export async function removePhoneSuppressionForTenant(user: TenantUser, suppress
 
 async function getTemplate(tenantId: string, templateId: string, client?: Queryable) {
   return queryOne<any>(
-    `select id, channel, subject, body, "tokenDefaults", "lockedHeader", "lockedFooter"
+    `select id, channel, subject, body, "tokenDefaults", "lockedHeader", "lockedFooter", "approvalStatus"
      from "CommunicationTemplate"
      where "tenantId" = $1 and id = $2 and "isActive" = true
      limit 1`,
@@ -742,7 +835,7 @@ export async function queueCommunicationForTenant(user: TenantUser, input: Outbo
   if (!suppressed && (input.sourceType === "MARKETING_CAMPAIGN" || input.sourceType === "AUTOMATION")) {
     fatigueReason = (await checkExclusionWindow(tenantId, client)) || (await checkFatigueCap(tenantId, channel, input.entityType, input.entityId, client));
   }
-  const blocked = suppressed || !!fatigueReason;
+  let blocked = suppressed || !!fatigueReason;
 
   let subject = input.subject ?? null;
   let body = input.body ?? "";
@@ -750,11 +843,25 @@ export async function queueCommunicationForTenant(user: TenantUser, input: Outbo
     const template = await getTemplate(tenantId, input.templateId, client);
     if (!template) throw new Error("COMMUNICATION_TEMPLATE_NOT_FOUND");
     if (template.channel !== channel) throw new Error("TEMPLATE_CHANNEL_MISMATCH");
-    subject = template.subject ? renderTemplate(template.subject, input.tokens, template.tokenDefaults) : subject;
-    body = renderTemplate(template.body, input.tokens, template.tokenDefaults);
+    if (template.approvalStatus !== "APPROVED" && (await templateApprovalRequired(tenantId, client))) throw new Error("TEMPLATE_NOT_APPROVED");
+    // Snippets expand in the template's own text before tokens are filled in (they used to expand
+    // afterwards, so a token value such as a lead's name could pull in a snippet).
+    subject = template.subject ? renderTemplate(await substituteSnippets(tenantId, template.subject, client), input.tokens, template.tokenDefaults) : subject;
+    body = renderTemplate(await substituteSnippets(tenantId, template.body, client), input.tokens, template.tokenDefaults);
     body = await applyTemplateGovernance(tenantId, template, body, client);
+  } else if (input.expandSnippets) {
+    if (subject) subject = await substituteSnippets(tenantId, subject, client);
+    body = await substituteSnippets(tenantId, body, client);
   }
   if (!body.trim()) throw new Error("COMMUNICATION_BODY_REQUIRED");
+  // Monthly message limit (Module 21): reserved only for a send that would otherwise go out, and
+  // only after validation, in the caller's transaction -- so a refused or rolled-back send never
+  // consumes the allowance. A send over the limit is recorded as SUPPRESSED with the reason.
+  let limitReason: string | null = null;
+  if (!blocked && !(await reserveMonthlyMessage(tenantId, input.sourceType, client))) {
+    limitReason = "MONTHLY_MESSAGE_LIMIT_REACHED";
+    blocked = true;
+  }
   const now = new Date().toISOString();
   const payload = {
     ...(input.payload ?? {}),
@@ -797,7 +904,7 @@ export async function queueCommunicationForTenant(user: TenantUser, input: Outbo
       row.id,
       channel,
       "SUPPRESSED",
-      fatigueReason ? { reason: fatigueReason } : {},
+      fatigueReason || limitReason ? { reason: fatigueReason ?? limitReason } : {},
       input.entityType,
       input.entityId,
       client,

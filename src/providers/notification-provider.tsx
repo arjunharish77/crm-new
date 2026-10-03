@@ -12,6 +12,7 @@ interface Notification {
     message: string;
     data: any;
     timestamp: string;
+    read?: boolean;
 }
 
 type NotificationSnapshotItem = {
@@ -27,6 +28,15 @@ interface NotificationContextType {
     unreadCount: number;
     clearNotifications: () => void;
     markAsRead: (id: string | undefined) => void;
+    markAllAsRead: () => void;
+}
+
+function patchRead(ids: string[], read: boolean) {
+    return fetch(`/api/notifications`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids, read }),
+    }).then((response) => { if (!response.ok) throw new Error("Couldn't update notifications"); });
 }
 
 const NotificationContext = createContext<NotificationContextType | undefined>(undefined);
@@ -36,7 +46,9 @@ const API_URL = '/api';
 export function NotificationProvider({ children }: { children: React.ReactNode }) {
     const { isAuthenticated } = useAuth();
     const [notifications, setNotifications] = useState<Notification[]>([]);
-    const [unreadCount, setUnreadCount] = useState(0);
+    // Read items stay in the list, dimmed, until the next load (UI/UX plan §11.6 M), so the
+    // count comes from the list rather than a separate counter that could drift.
+    const unreadCount = notifications.filter((item) => !item.read).length;
 
     useEffect(() => {
         if (!isAuthenticated) return;
@@ -71,7 +83,6 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
                     const seen = new Set(prev.map((item) => item.id).filter(Boolean));
                     return [...normalized.filter((item) => !item.id || !seen.has(item.id)), ...prev];
                 });
-                setUnreadCount((prev) => Math.max(prev, normalized.length));
                 return;
             }
 
@@ -85,7 +96,6 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
                 if (newNotification.id && prev.some((item) => item.id === newNotification.id)) return prev;
                 return [newNotification, ...prev];
             });
-            setUnreadCount(prev => prev + 1);
 
             // Inbound calls get their own rich popup (InboundCallPopupProvider), driven off
             // this same `notifications` array -- the default toast is redundant for that type.
@@ -105,31 +115,45 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
         };
     }, [isAuthenticated]);
 
-    const clearNotifications = () => {
-        const ids = notifications.map((item) => item.id).filter((id): id is string => typeof id === "string" && id.length > 0);
-        setNotifications([]);
-        setUnreadCount(0);
-        if (ids.length) {
-            fetch(`${API_URL}/notifications`, {
-                method: "PATCH",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ ids }),
-            }).catch(() => undefined);
-        }
+    const unreadIds = () => notifications.filter((item) => !item.read && item.id).map((item) => item.id as string);
+    const setRead = (ids: string[], read: boolean) => {
+        const target = new Set(ids);
+        setNotifications((prev) => prev.map((item) => (item.id && target.has(item.id) ? { ...item, read } : item)));
     };
 
-    // Marks a single notification read (as opposed to "Clear all") -- used when a user
-    // clicks through a notification to its record, since reading one shouldn't dismiss the
-    // rest of the list.
+    // "Mark all as read", with Undo (§11.6 D: a reversible change is done, then undoable).
+    const markAllAsRead = () => {
+        const ids = unreadIds();
+        if (!ids.length) return;
+        setRead(ids, true);
+        patchRead(ids, true).catch(() => {
+            setRead(ids, false);
+            toast.error("Couldn't mark notifications as read");
+        });
+        toast.success(`${ids.length} notification${ids.length === 1 ? "" : "s"} marked as read`, {
+            duration: 6000,
+            action: {
+                label: "Undo",
+                onClick: () => {
+                    setRead(ids, false);
+                    patchRead(ids, false).catch(() => toast.error("Couldn't undo"));
+                },
+            },
+        });
+    };
+
+    // Kept for existing callers: marks everything read and empties the list.
+    const clearNotifications = () => {
+        const ids = unreadIds();
+        setNotifications([]);
+        if (ids.length) patchRead(ids, true).catch(() => undefined);
+    };
+
+    // Opening one notification marks only that one read.
     const markAsRead = (id: string | undefined) => {
         if (!id) return;
-        setNotifications((prev) => prev.filter((item) => item.id !== id));
-        setUnreadCount((prev) => Math.max(0, prev - 1));
-        fetch(`${API_URL}/notifications`, {
-            method: "PATCH",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ ids: [id] }),
-        }).catch(() => undefined);
+        setRead([id], true);
+        patchRead([id], true).catch(() => undefined);
     };
 
     return (
@@ -138,6 +162,7 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
             unreadCount,
             clearNotifications,
             markAsRead,
+            markAllAsRead,
         }}>
             {children}
         </NotificationContext.Provider>

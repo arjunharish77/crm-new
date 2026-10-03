@@ -129,7 +129,7 @@ describe("cancelAndReissuePartnerInvoice — entitlement gating ordering", () =>
 
   it("rejects the cancellation before writing any state when Payouts is disabled for the tenant", async () => {
     queryOneMock.mockImplementation(async (sql: string) => {
-      if (String(sql).includes('from "TenantFeature"')) return { payoutsEnabled: false };
+      if (String(sql).includes('from "TenantModuleEntitlement"')) return { status: "DISABLED" };
       // If the gate check didn't run first, the code would reach this select next --
       // returning a real row here would let the bug (cancel-before-gate) proceed further.
       if (String(sql).includes('from "PartnerInvoice"')) return { id: "invoice-1", status: "ISSUED", payoutId: "payout-1" };

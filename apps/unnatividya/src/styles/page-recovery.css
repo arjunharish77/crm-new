@@ -1,0 +1,18 @@
+/* Page errors stay readable even when catalog data cannot load. */
+.page-recovery { box-sizing: border-box; width: 100%; margin-inline: auto; padding-inline: 24px; max-width: 760px; padding-top: 48px; padding-bottom: 64px; overflow-wrap: anywhere; }
+.page-recovery-label { color: #544cc8; font-size: 14px; font-weight: 700; }
+.page-recovery h1 { font-size: clamp(28px, 5vw, 38px); line-height: 1.2; margin: 12px 0 16px; scroll-margin-top: 100px; }
+.page-recovery p { line-height: 1.7; }
+.page-recovery-actions { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 24px; }
+.page-recovery-actions .btn { min-height: 48px; height: auto; white-space: normal; text-align: center; padding: 12px 20px; }
+.page-recovery-help { font-size: 14px; color: #626262; margin-top: 24px; }
+.page-recovery :is(a, button, h1):focus-visible { outline: 3px solid #544cc8; outline-offset: 4px; }
+@media (max-width: 640px) {
+  .page-recovery { padding-top: 28px; padding-bottom: 40px; }
+  .page-recovery-actions { flex-direction: column; }
+}
+
+.page-recovery-actions .btn { display: inline-flex; justify-content: center; align-items: center; box-sizing: border-box; border: 1px solid #544cc8; border-radius: 6px; font: inherit; font-weight: 600; cursor: pointer; color: #544cc8; background: #fff; text-decoration: none; }
+.page-recovery-actions .btn.primary { background: #544cc8; color: #fff; }
+.page-recovery-actions .btn:hover { background: #f4f3fc; }
+.page-recovery-actions .btn.primary:hover { background: #453db8; }

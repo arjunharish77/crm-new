@@ -17,10 +17,11 @@ export type EntitlementFeature =
 // functions directly, bypassing HTTP, are covered by the same gate.
 export async function isFeatureEnabledForTenant(tenantId: string | null | undefined, feature: EntitlementFeature) {
   if (!tenantId) return false;
-  const flags = await getTenantFeatureFlags(tenantId);
-  if (flags[feature] === false) return false;
+  // A feature that is a module is decided by the module entitlement alone (decision 15).
   const moduleKey = Object.keys(MODULE_FEATURE_KEYS).find(key=>MODULE_FEATURE_KEYS[key]===feature);
-  return moduleKey ? isModuleEnabledForTenant(tenantId,moduleKey) : true;
+  if (moduleKey) return isModuleEnabledForTenant(tenantId,moduleKey);
+  const flags = await getTenantFeatureFlags(tenantId);
+  return flags[feature] !== false;
 }
 
 // Platform admins bypass everywhere else in the app (feature-gate.tsx) and do so here

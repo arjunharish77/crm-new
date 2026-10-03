@@ -1,3 +1,6 @@
+export const dynamic = "force-dynamic";
+import { PublishedCatalogBoundary } from "@/components/published-catalog-boundary";
+import { getPublishedCatalog } from "@/lib/catalog-snapshot-server";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -11,24 +14,15 @@ import {
   getEligibilityGuideBySlug,
   getUgcApprovalGuideBySlug,
 } from "@/data/guide-content";
-import { universityById } from "@/data/catalog";
 
 const SITE_URL = process.env.NEXT_PUBLIC_UNNATIVIDYA_SITE_URL || "https://unnatividya.com";
 
-export function generateStaticParams() {
-  return [
-    ...feeGuides().map((guide) => ({ slug: guide.slug })),
-    ...allEligibilityGuides().map((guide) => ({ slug: guide.slug })),
-    ...allCareerScopeGuides().map((guide) => ({ slug: guide.slug })),
-    ...allUgcApprovalGuides().map((guide) => ({ slug: guide.slug })),
-  ];
-}
-
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
+  const catalog = await getPublishedCatalog();
   const { slug } = await params;
 
   if (slug.endsWith("-fees")) {
-    const guide = getFeeGuideBySlug(slug);
+    const guide = getFeeGuideBySlug(catalog, slug);
     if (!guide) return {};
     const title = guide.isComparison ? `${guide.label} Fees Compared Across Universities` : `${guide.label} Fees Explained`;
     const description = guide.isComparison
@@ -73,11 +67,19 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
 export default async function GuidePage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
 
-  if (slug.endsWith("-fees")) return <FeeGuideContent slug={slug} />;
-  if (slug.endsWith("-eligibility")) return <EligibilityGuideContent slug={slug} />;
-  if (slug.endsWith("-career-scope")) return <CareerScopeGuideContent slug={slug} />;
-  if (slug.endsWith("-ugc-approval")) return <UgcApprovalGuideContent slug={slug} />;
+  if (slug.endsWith("-fees")) return <PublishedCatalogBoundary>{<FeeGuideContent slug={slug} />}</PublishedCatalogBoundary>;
+  if (slug.endsWith("-eligibility")) return <PublishedCatalogBoundary>{<EligibilityGuideContent slug={slug} />}</PublishedCatalogBoundary>;
+  if (slug.endsWith("-career-scope")) return <PublishedCatalogBoundary>{<CareerScopeGuideContent slug={slug} />}</PublishedCatalogBoundary>;
+  if (slug.endsWith("-ugc-approval")) return <PublishedCatalogBoundary>{<UgcApprovalGuideContent slug={slug} />}</PublishedCatalogBoundary>;
   notFound();
+}
+
+function GuideNavigation({ fees = false }: { fees?: boolean }) {
+  return <nav className="guide-detail-nav" aria-label="Guide sections">
+    <a href="#guide-overview">Overview</a>{fees && <a href="#guide-fees">Fees by university</a>}
+    <a href="#guide-related">Related guides</a><a href="#guide-faq">Questions</a>
+    {!fees && <a href="#guide-sources">Sources</a>}
+  </nav>;
 }
 
 function GuideCrossLinks({ courseKey, label, current }: { courseKey: string; label: string; current: "fees" | "eligibility" | "career-scope" | "ugc-approval" }) {
@@ -91,7 +93,7 @@ function GuideCrossLinks({ courseKey, label, current }: { courseKey: string; lab
   if (!links.length) return null;
 
   return (
-    <section className="detail-section">
+    <section className="detail-section" id="guide-related" tabIndex={-1}>
       <h2>Related guides</h2>
       <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
         {links.map((link) => (
@@ -110,7 +112,7 @@ function LastReviewed({ date }: { date: string }) {
 
 function SourceList({ urls, guideSlug }: { urls: string[]; guideSlug: string }) {
   return (
-    <div style={{ fontSize: 12, color: "#707070" }}>
+    <div id="guide-sources" tabIndex={-1} className="guide-source-list" style={{ fontSize: 12, color: "#707070" }}>
       Sources:{" "}
       {urls.map((url, index) => {
         const hostname = new URL(url).hostname;
@@ -134,8 +136,9 @@ function SourceList({ urls, guideSlug }: { urls: string[]; guideSlug: string }) 
   );
 }
 
-function FeeGuideContent({ slug }: { slug: string }) {
-  const guide = getFeeGuideBySlug(slug);
+async function FeeGuideContent({ slug }: { slug: string }) {
+  const catalog = await getPublishedCatalog();
+  const guide = getFeeGuideBySlug(catalog, slug);
   if (!guide) notFound();
   const faqs = feeGuideFaqs(guide);
   const intro = feeGuideIntro(guide);
@@ -167,51 +170,39 @@ function FeeGuideContent({ slug }: { slug: string }) {
             <h1 style={{ color: "#363634", fontSize: 28, fontWeight: 700, margin: 0 }}>
               {guide.isComparison ? `${guide.label} fees compared across universities` : `${guide.label} fees explained`}
             </h1>
-            <div style={{ color: "#696868", fontSize: 13, marginTop: 8 }}>Fees last reviewed: July 2026 admission cycle</div>
+          <p className="lead-help">By <Link href="/authors/content-team">Content Team, Unnati Vidya</Link></p>
+            <div style={{ color: "#696868", fontSize: 13, marginTop: 8 }}>Tuition from the listed catalog. Confirm current fees and additional charges with the university.</div>
           </div>
         </div>
 
-        <div className="container detail-layout">
-          <div style={{ display: "flex", flexDirection: "column", gap: 28 }}>
-            <section className="detail-section">
+        <div className="container detail-layout guide-reading-layout">
+          <div className="guide-reading-main">
+            <GuideNavigation fees />
+            <section className="detail-section" id="guide-overview" tabIndex={-1}>
               <p style={{ margin: 0, color: "#555", fontSize: 15, lineHeight: 1.65 }}>{intro}</p>
             </section>
 
-            <section className="detail-section">
+            <section className="detail-section" id="guide-fees" tabIndex={-1}>
               <h2>{guide.isComparison ? "Fee, EMI, and duration by university" : "Fee and EMI breakdown"}</h2>
-              <div style={{ border: "1px solid #CFDAE6", borderRadius: 8, overflow: "hidden" }}>
-                <div style={{ display: "grid", gridTemplateColumns: "1.6fr 1fr 1fr 0.9fr 1fr", background: "#F5F5F5", fontSize: 12, fontWeight: 700, color: "#696868", padding: "12px 18px", letterSpacing: 0.3 }}>
-                  <span>UNIVERSITY</span><span>TOTAL FEE</span><span>EMI FROM</span><span>DURATION</span><span></span>
-                </div>
-                {guide.courses.map((course) => (
-                  <div style={{ display: "grid", gridTemplateColumns: "1.6fr 1fr 1fr 0.9fr 1fr", padding: "14px 18px", borderTop: "1px solid #EAEAEA", fontSize: 14, alignItems: "center" }} key={course.id}>
-                    <span style={{ fontWeight: 600, color: "#363634" }}>{course.university.name}</span>
-                    <span style={{ fontWeight: 700, color: course.fee === guide.lowestFee ? "#2E7D32" : "#363634" }}>{formatFee(course.fee)}</span>
-                    <span>{course.emi}</span>
-                    <span>{course.duration}</span>
-                    <Link href={`/courses/${course.slug}`} style={{ color: "#544CC8", fontWeight: 700, fontSize: 13 }}>View program</Link>
-                  </div>
-                ))}
+              <div className="guide-fee-cards">
+                {guide.courses.map(course => <article className="guide-fee-card" key={course.id}>
+                  <h3>{course.university.name}</h3>
+                  <dl><div><dt>Listed total tuition</dt><dd>{formatFee(course.fee)}</dd></div><div><dt>EMI from</dt><dd>{course.emi}</dd></div><div><dt>Duration</dt><dd>{course.duration}</dd></div></dl>
+                  <Link href={`/courses/${course.slug}`} className="btn secondary">View program</Link>
+                </article>)}
               </div>
               <div style={{ fontSize: 13, color: "#707070", marginTop: 10 }}>
-                All programs listed above are UGC-entitled online degrees. Confirm the current admission-cycle fee with a counsellor before you pay.
+                Confirm current tuition, applicant category, recognition and available payment terms with the university before applying.
               </div>
             </section>
 
             {!guide.isComparison && guide.courses[0].scholarships?.length ? (
               <section className="detail-section">
                 <h2>Scholarships available</h2>
-                <div style={{ border: "1px solid #CFDAE6", borderRadius: 8, overflow: "hidden" }}>
-                  <div style={{ display: "grid", gridTemplateColumns: "1.4fr 1fr 1.2fr", background: "#F5F5F5", fontSize: 12, fontWeight: 700, color: "#696868", padding: "12px 18px", letterSpacing: 0.3 }}>
-                    <span>CATEGORY</span><span>DISCOUNT</span><span>PROOF REQUIRED</span>
-                  </div>
-                  {guide.courses[0].scholarships.map((row) => (
-                    <div style={{ display: "grid", gridTemplateColumns: "1.4fr 1fr 1.2fr", padding: "14px 18px", borderTop: "1px solid #EAEAEA", fontSize: 14, alignItems: "center" }} key={row[0]}>
-                      <span style={{ fontWeight: 600, color: "#363634" }}>{row[0]}</span>
-                      <span>{row[1]}</span>
-                      <span style={{ color: "#707070", fontSize: 13 }}>{row[2]}</span>
-                    </div>
-                  ))}
+                <div className="guide-fee-cards">
+                  {guide.courses[0].scholarships.map((row,index) => <article className="guide-fee-card" key={`${row[0]}-${index}`}>
+                    <h3>{row[0]}</h3><dl><div><dt>Listed discount</dt><dd>{row[1]}</dd></div><div><dt>Proof required</dt><dd>{row[2]}</dd></div></dl>
+                  </article>)}
                 </div>
                 <div style={{ fontSize: 13, color: "#707070", marginTop: 10 }}>
                   Scholarship eligibility and proof requirements can change by admission cycle. See our <Link href="/refund-policy" style={{ color: "#544CC8" }}>refund policy</Link> for what happens if you discontinue after admission.
@@ -221,7 +212,7 @@ function FeeGuideContent({ slug }: { slug: string }) {
 
             <GuideCrossLinks courseKey={guide.key} label={guide.label} current="fees" />
 
-            <section className="detail-section">
+            <section className="detail-section" id="guide-faq" tabIndex={-1}>
               <h2>Frequently asked questions</h2>
               <div className="faq-list">
                 {faqs.map(([question, answer]) => (
@@ -238,11 +229,11 @@ function FeeGuideContent({ slug }: { slug: string }) {
             <div style={{ background: "#fff", border: "1px solid #CFDAE6", borderRadius: 8, padding: 22, boxShadow: "0 1px 3px rgba(0,0,0,0.06)" }}>
               <div style={{ fontSize: 16, fontWeight: 700, color: "#363634" }}>Get the exact fee breakup</div>
               <div style={{ fontSize: 13, color: "#696868", margin: "6px 0 14px", lineHeight: 1.5 }}>A counsellor will confirm the current fee, EMI plan, and scholarship eligibility for {guide.label}.</div>
-              <Link href={`/lead?intent=fee-guide&course=${guide.key}`} className="btn primary" style={{ width: "100%", height: 44, fontSize: 15 }} data-open-lead>Ask a counsellor</Link>
+              <Link href={`/lead?intent=fee-guide&course=${guide.key}`} className="btn primary" style={{ width: "100%", height: 44, fontSize: 15 }} data-open-lead>Apply now</Link>
               <div style={{ fontSize: 11, color: "#707070", marginTop: 10 }}>Free service · no spam · unbiased advice</div>
             </div>
             {guide.isComparison ? (
-              <Link href={`/compare?add=${guide.courses[0].id}`} style={{ display: "block", textAlign: "center", border: "1.5px solid #555", borderRadius: 4, height: 44, lineHeight: "44px", fontSize: 14, fontWeight: 700, color: "#555", background: "#fff", marginTop: 12 }}>
+              <Link href={`/compare?add=${guide.courses.slice(0,3).map(course => course.id).join(",")}`} className="btn secondary guide-compare-link">
                 Compare {guide.label} side by side
               </Link>
             ) : null}
@@ -253,7 +244,9 @@ function FeeGuideContent({ slug }: { slug: string }) {
   );
 }
 
-function EligibilityGuideContent({ slug }: { slug: string }) {
+async function EligibilityGuideContent({ slug }: { slug: string }) {
+  const catalog = await getPublishedCatalog();
+  const { universityById } = catalog;
   const guide = getEligibilityGuideBySlug(slug);
   if (!guide) notFound();
 
@@ -282,13 +275,15 @@ function EligibilityGuideContent({ slug }: { slug: string }) {
               <Link href="/">Home</Link> &gt; <Link href="/online-degree-guides">Online Degree Guides</Link> &gt; {guide.label} Eligibility
             </div>
             <h1 style={{ color: "#363634", fontSize: 28, fontWeight: 700, margin: 0 }}>{guide.label} eligibility and admission process</h1>
+          <p className="lead-help">By <Link href="/authors/content-team">Content Team, Unnati Vidya</Link></p>
             <LastReviewed date={guide.lastReviewed} />
           </div>
         </div>
 
-        <div className="container detail-layout">
-          <div style={{ display: "flex", flexDirection: "column", gap: 28 }}>
-            <section className="detail-section">
+        <div className="container detail-layout guide-reading-layout">
+          <div className="guide-reading-main">
+            <GuideNavigation />
+            <section className="detail-section" id="guide-overview" tabIndex={-1}>
               <h2>Eligibility by university</h2>
               <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
                 {guide.facts.map((row) => (
@@ -307,7 +302,7 @@ function EligibilityGuideContent({ slug }: { slug: string }) {
 
             <GuideCrossLinks courseKey={guide.key} label={guide.label} current="eligibility" />
 
-            <section className="detail-section">
+            <section className="detail-section" id="guide-faq" tabIndex={-1}>
               <h2>Frequently asked questions</h2>
               <div className="faq-list">
                 {guide.faqs.map(([question, answer]) => (
@@ -326,7 +321,7 @@ function EligibilityGuideContent({ slug }: { slug: string }) {
             <div style={{ background: "#fff", border: "1px solid #CFDAE6", borderRadius: 8, padding: 22, boxShadow: "0 1px 3px rgba(0,0,0,0.06)" }}>
               <div style={{ fontSize: 16, fontWeight: 700, color: "#363634" }}>Not sure you qualify?</div>
               <div style={{ fontSize: 13, color: "#696868", margin: "6px 0 14px", lineHeight: 1.5 }}>A counsellor will check your specific background against {guide.label}&apos;s current eligibility rules at each university.</div>
-              <Link href={`/lead?intent=eligibility-guide&course=${guide.key}`} className="btn primary" style={{ width: "100%", height: 44, fontSize: 15 }} data-open-lead>Ask a counsellor</Link>
+              <Link href={`/lead?intent=eligibility-guide&course=${guide.key}`} className="btn primary" style={{ width: "100%", height: 44, fontSize: 15 }} data-open-lead>Apply now</Link>
               <div style={{ fontSize: 11, color: "#707070", marginTop: 10 }}>Free service · no spam · unbiased advice</div>
             </div>
           </aside>
@@ -336,7 +331,9 @@ function EligibilityGuideContent({ slug }: { slug: string }) {
   );
 }
 
-function CareerScopeGuideContent({ slug }: { slug: string }) {
+async function CareerScopeGuideContent({ slug }: { slug: string }) {
+  const catalog = await getPublishedCatalog();
+  const { universityById } = catalog;
   const guide = getCareerScopeGuideBySlug(slug);
   if (!guide) notFound();
 
@@ -365,13 +362,15 @@ function CareerScopeGuideContent({ slug }: { slug: string }) {
               <Link href="/">Home</Link> &gt; <Link href="/online-degree-guides">Online Degree Guides</Link> &gt; {guide.label} Career Scope
             </div>
             <h1 style={{ color: "#363634", fontSize: 28, fontWeight: 700, margin: 0 }}>{guide.label} career scope, roles, and salary</h1>
+          <p className="lead-help">By <Link href="/authors/content-team">Content Team, Unnati Vidya</Link></p>
             <LastReviewed date={guide.lastReviewed} />
           </div>
         </div>
 
-        <div className="container detail-layout">
-          <div style={{ display: "flex", flexDirection: "column", gap: 28 }}>
-            <section className="detail-section">
+        <div className="container detail-layout guide-reading-layout">
+          <div className="guide-reading-main">
+            <GuideNavigation />
+            <section className="detail-section" id="guide-overview" tabIndex={-1}>
               <h2>Roles and industries, by university</h2>
               <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
                 {guide.universityHighlights.map((row) => (
@@ -399,7 +398,7 @@ function CareerScopeGuideContent({ slug }: { slug: string }) {
 
             <GuideCrossLinks courseKey={guide.key} label={guide.label} current="career-scope" />
 
-            <section className="detail-section">
+            <section className="detail-section" id="guide-faq" tabIndex={-1}>
               <h2>Frequently asked questions</h2>
               <div className="faq-list">
                 {guide.faqs.map(([question, answer]) => (
@@ -418,7 +417,7 @@ function CareerScopeGuideContent({ slug }: { slug: string }) {
             <div style={{ background: "#fff", border: "1px solid #CFDAE6", borderRadius: 8, padding: 22, boxShadow: "0 1px 3px rgba(0,0,0,0.06)" }}>
               <div style={{ fontSize: 16, fontWeight: 700, color: "#363634" }}>Want a realistic outcome estimate?</div>
               <div style={{ fontSize: 13, color: "#696868", margin: "6px 0 14px", lineHeight: 1.5 }}>A counsellor can give you role- and experience-specific guidance instead of an unverified average.</div>
-              <Link href={`/lead?intent=career-scope-guide&course=${guide.key}`} className="btn primary" style={{ width: "100%", height: 44, fontSize: 15 }} data-open-lead>Ask a counsellor</Link>
+              <Link href={`/lead?intent=career-scope-guide&course=${guide.key}`} className="btn primary" style={{ width: "100%", height: 44, fontSize: 15 }} data-open-lead>Apply now</Link>
               <div style={{ fontSize: 11, color: "#707070", marginTop: 10 }}>Free service · no spam · unbiased advice</div>
             </div>
           </aside>
@@ -428,7 +427,9 @@ function CareerScopeGuideContent({ slug }: { slug: string }) {
   );
 }
 
-function UgcApprovalGuideContent({ slug }: { slug: string }) {
+async function UgcApprovalGuideContent({ slug }: { slug: string }) {
+  const catalog = await getPublishedCatalog();
+  const { universityById } = catalog;
   const guide = getUgcApprovalGuideBySlug(slug);
   if (!guide) notFound();
   const allEntitled = guide.approvals.every((row) => row.ugcDebEntitled);
@@ -458,13 +459,15 @@ function UgcApprovalGuideContent({ slug }: { slug: string }) {
               <Link href="/">Home</Link> &gt; <Link href="/online-degree-guides">Online Degree Guides</Link> &gt; Is {guide.label} UGC Approved
             </div>
             <h1 style={{ color: "#363634", fontSize: 28, fontWeight: 700, margin: 0 }}>Is {guide.label} UGC approved? Validity explained</h1>
+          <p className="lead-help">By <Link href="/authors/content-team">Content Team, Unnati Vidya</Link></p>
             <LastReviewed date={guide.lastReviewed} />
           </div>
         </div>
 
-        <div className="container detail-layout">
-          <div style={{ display: "flex", flexDirection: "column", gap: 28 }}>
-            <section className="detail-section">
+        <div className="container detail-layout guide-reading-layout">
+          <div className="guide-reading-main">
+            <GuideNavigation />
+            <section className="detail-section" id="guide-overview" tabIndex={-1}>
               {allEntitled ? (
                 <div style={{ background: "#ECFDF5", border: "1px solid #A7F3D0", borderRadius: 8, padding: 16, fontSize: 14, color: "#065F46", lineHeight: 1.6, marginBottom: 20 }}>
                   Verified directly against the official <strong>UGC-DEB &quot;Entitled Online&quot; list</strong> (deb.ugc.ac.in) — a primary government source, not a university marketing claim.
@@ -478,7 +481,7 @@ function UgcApprovalGuideContent({ slug }: { slug: string }) {
               <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
                 {guide.approvals.map((row) => (
                   <div key={row.universityId} style={{ border: "1px solid #CFDAE6", borderRadius: 8, padding: 18 }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10, flexWrap: "wrap" }}>
                       <span style={{ fontWeight: 700, color: "#363634" }}>{universityById[row.universityId].name}</span>
                       {row.ugcDebEntitled ? (
                         <span style={{ fontSize: 11, fontWeight: 700, color: "#2E7D32", background: "rgba(46,125,50,0.10)", borderRadius: 999, padding: "3px 9px" }}>UGC-DEB ENTITLED</span>
@@ -496,7 +499,7 @@ function UgcApprovalGuideContent({ slug }: { slug: string }) {
 
             <GuideCrossLinks courseKey={guide.key} label={guide.label} current="ugc-approval" />
 
-            <section className="detail-section">
+            <section className="detail-section" id="guide-faq" tabIndex={-1}>
               <h2>Frequently asked questions</h2>
               <div className="faq-list">
                 {guide.faqs.map(([question, answer]) => (
@@ -515,7 +518,7 @@ function UgcApprovalGuideContent({ slug }: { slug: string }) {
             <div style={{ background: "#fff", border: "1px solid #CFDAE6", borderRadius: 8, padding: 22, boxShadow: "0 1px 3px rgba(0,0,0,0.06)" }}>
               <div style={{ fontSize: 16, fontWeight: 700, color: "#363634" }}>Still unsure about validity?</div>
               <div style={{ fontSize: 13, color: "#696868", margin: "6px 0 14px", lineHeight: 1.5 }}>A counsellor can walk you through the exact entitlement documentation for {guide.label}.</div>
-              <Link href={`/lead?intent=ugc-approval-guide&course=${guide.key}`} className="btn primary" style={{ width: "100%", height: 44, fontSize: 15 }} data-open-lead>Ask a counsellor</Link>
+              <Link href={`/lead?intent=ugc-approval-guide&course=${guide.key}`} className="btn primary" style={{ width: "100%", height: 44, fontSize: 15 }} data-open-lead>Apply now</Link>
               <div style={{ fontSize: 11, color: "#707070", marginTop: 10 }}>Free service · no spam · unbiased advice</div>
             </div>
           </aside>

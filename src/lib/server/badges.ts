@@ -27,6 +27,7 @@ const UPDATABLE_FIELDS = ["name", "description", "iconEmoji", "audienceScope", "
 
 export async function listBadgesForTenant(user: TenantUser) {
   if (!user.tenantId) return [];
+  await assertFeatureEnabled(user.tenantId, "gamificationEnabled", { isPlatformAdmin: user.isPlatformAdmin });
   return query<any>(
     `select id, "tenantId", name, description, "iconEmoji", "audienceScope", "criteriaRules",
             "isActive", "createdAt", "updatedAt"
@@ -132,6 +133,7 @@ export function computeBadgeWindow(windowDays: number | null | undefined, asOfDa
 
 export async function listUserBadges(user: TenantUser, targetUserId: string) {
   if (!user.tenantId) return [];
+  await assertFeatureEnabled(user.tenantId, "gamificationEnabled", { isPlatformAdmin: user.isPlatformAdmin });
   return query<any>(
     `select ub.id, ub."tenantId", ub."userId", ub."badgeId", ub."earnedAt", ub."sourcePeriodStart",
             ub."sourcePeriodEnd",

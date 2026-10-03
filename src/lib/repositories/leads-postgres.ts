@@ -9,10 +9,11 @@ import { enqueueWebhookEvent } from "@/lib/server/webhook-outbox";
 import { enqueueAppEvent } from "@/lib/server/marketplace-events";
 import { checkRateLimit } from "@/lib/server/rate-limit";
 import { invalidateReportRollupsForTenant } from "@/lib/server/report-rollups";
-import { applyFilterCondition, buildGroupedFilterClause, type FilterColumnEntry, type FilterValueKind } from "@/lib/query-filters";
+import { applyFilterCondition, assertFilterGroupsSupported, buildGroupedFilterClause, normalizeFilterGroups, type FilterColumnEntry, type FilterValueKind } from "@/lib/query-filters";
 import { substituteUserTokens } from "@/lib/server/user-token-filters";
 import { maskFieldsForUser, sanitizeWritePayload } from "@/lib/server/field-permissions";
-import { applyRecordScopeClause } from "@/lib/server/record-scope";
+import { applyRecordScopeClause, recordAccessLevel } from "@/lib/server/record-scope";
+import { resolveLeadStatusForWrite } from "@/lib/repositories/lead-statuses-postgres";
 
 type TenantUser = {
   apiKeyId?: string;
@@ -59,7 +60,10 @@ const LEAD_FILTER_COLUMNS = new Map<string, FilterColumnEntry>([
   ["phone", { column: "phone", kind: "text" }],
   ["company", { column: "company", kind: "text" }],
   ["source", { column: "source", kind: "text" }],
-  ["status", { column: "status", kind: "select" }],
+  // Compared as the status key, so a stored "Hot" matches the key HOT.
+  ["status", { column: "status", kind: "select", expression: "crm_lead_status_key(status)" }],
+  // Open / Converted / Lost, from the tenant's statuses (UI/UX plan decision 6).
+  ["statusCategory", { column: "statusCategory", kind: "select", expression: 'crm_lead_status_category("tenantId", status)' }],
   ["score", { column: "score", kind: "number" }],
   ["createdBy", { column: "createdBy", kind: "user" }],
   ["ownerId", { column: "ownerId", kind: "user" }],
@@ -76,9 +80,8 @@ const LEAD_FILTER_COLUMNS = new Map<string, FilterColumnEntry>([
   ["predictiveStaleRisk", { column: "staleRisk", kind: "number", subquery: RECORD_SCORE_SUBQUERY }],
 ]);
 
-function normalizeLeadFilters(filters: LeadFilterInput[] | null) {
-  if (!Array.isArray(filters)) return [];
-  return filters;
+function normalizeLeadFilters(filters: LeadFilterInput[] | LeadFilterInput | null) {
+  return normalizeFilterGroups(filters) as LeadFilterInput[];
 }
 
 // WP09 (F11 follow-up): exported (was previously private to this file) so opportunities-postgres.ts
@@ -251,11 +254,75 @@ function fieldDiff(before: Record<string, any>, after: Record<string, any>) {
   return diff;
 }
 
+// --- List search, sort and row details (UI/UX plan decision 5, Phase 2 Leads list) ---
+// strictFilters: refuse a filter that can't be applied instead of skipping it (Smart Views).
+export type LeadListOptions = { search?: string | null; sort?: { id: string; desc: boolean } | null; strictFilters?: boolean };
+
+// Name, email, company, or the phone's digits (ignoring spaces, "+" and dashes).
+export function applyLeadSearch(where: { sql: string; values: unknown[] }, search?: string | null) {
+  const term = typeof search === "string" ? search.trim() : "";
+  if (!term) return where;
+  const values = [...where.values, `%${term}%`];
+  const n = values.length;
+  const phone = term.replace(/\D/g, "").length >= 4
+    ? ` or regexp_replace(coalesce(phone, ''), '\\D', '', 'g') like '%' || regexp_replace($${n}, '\\D', '', 'g') || '%'`
+    : "";
+  const clause = `(name ilike $${n} or email ilike $${n} or company ilike $${n}${phone})`;
+  return { sql: where.sql ? `${where.sql} and ${clause}` : `where ${clause}`, values };
+}
+
+// Whitelisted sort columns only; anything else falls back to newest first.
+const LEAD_SORTS: Record<string, string> = {
+  name: "lower(name)",
+  status: "crm_lead_status_key(status)",
+  source: "lower(source)",
+  score: "score",
+  createdAt: '"createdAt"',
+  updatedAt: '"updatedAt"',
+  owner: '(select lower(coalesce(u.name, u.email)) from "User" u where u.id = "Lead"."ownerId")',
+  lastActivityAt: '(select max(a."createdAt") from "Activity" a where a."leadId" = "Lead".id)',
+};
+function leadOrderBy(sort?: LeadListOptions["sort"]) {
+  const expression = sort?.id ? LEAD_SORTS[sort.id] : undefined;
+  if (!expression) return '"createdAt" desc';
+  return `${expression} ${sort!.desc ? "desc" : "asc"} nulls last, "createdAt" desc`;
+}
+
+// Owner name, last activity and the next open task for a page of leads. The next task follows
+// the tasks page's own access: people with "own records" access only see their own tasks.
+async function getLeadRowDetails(user: TenantUser, leads: Array<{ id: string; ownerId?: string | null }>) {
+  const ids = leads.map((lead) => lead.id);
+  const ownerIds = [...new Set(leads.map((lead) => lead.ownerId).filter((id): id is string => !!id))];
+  if (!ids.length) return { owners: new Map<string, string>(), lastActivity: new Map<string, string>(), nextTask: new Map<string, { id: string; title: string; dueAt: string | null }>() };
+  const ownTasksOnly = recordAccessLevel(user as any) === "OWN";
+  const [owners, activities, tasks] = await Promise.all([
+    ownerIds.length ? query<{ id: string; name: string | null; email: string }>('select id, name, email from "User" where id = any($1::text[])', [ownerIds]) : Promise.resolve([]),
+    query<{ leadId: string; at: string }>(
+      `select "leadId", max("createdAt") as at from "Activity" where "tenantId" ${user.tenantId ? "= $2" : "is null"} and "leadId" = any($1::text[]) group by "leadId"`,
+      user.tenantId ? [ids, user.tenantId] : [ids],
+    ),
+    query<{ leadId: string; id: string; title: string; dueAt: string | null }>(
+      `select distinct on ("leadId") "leadId", id, title, "dueAt" from "Task"
+       where "tenantId" ${user.tenantId ? "= $2" : "is null"} and "leadId" = any($1::text[])
+         and coalesce(upper(status), '') not in ('COMPLETED', 'DONE', 'CANCELLED')
+         ${ownTasksOnly ? `and "ownerId" = $${user.tenantId ? 3 : 2}` : ""}
+       order by "leadId", "dueAt" asc nulls last, "createdAt" asc`,
+      [ids, ...(user.tenantId ? [user.tenantId] : []), ...(ownTasksOnly ? [user.id] : [])],
+    ),
+  ]);
+  return {
+    owners: new Map((owners ?? []).map((owner) => [owner.id, owner.name || owner.email])),
+    lastActivity: new Map((activities ?? []).map((row) => [row.leadId, row.at])),
+    nextTask: new Map((tasks ?? []).map((row) => [row.leadId, { id: row.id, title: row.title, dueAt: row.dueAt }])),
+  };
+}
+
 export async function listLeadsForTenant(
   user: TenantUser,
   page: number,
   limit: number,
   filters: LeadFilterInput[] | null = null,
+  options: LeadListOptions = {},
 ) {
   const currentPage = Math.max(1, Number.isFinite(page) ? page : 1);
   // WP09 (F11): raised from 200 to 1000 -- inbuilt-reports.ts calls this with limit=1000 in
@@ -272,22 +339,29 @@ export async function listLeadsForTenant(
   // buildLeadWhere runs, rather than making buildLeadWhere itself async (which would ripple
   // into its several other no-filter call sites below).
   const resolvedFilters = await substituteUserTokens(normalizeLeadFilters(filters), user);
-  const where = buildLeadWhere(user, resolvedFilters);
+  if (options.strictFilters) assertFilterGroupsSupported(resolvedFilters, LEAD_FILTER_COLUMNS);
+  const where = applyLeadSearch(buildLeadWhere(user, resolvedFilters), options.search);
 
   const [countRow, data] = await Promise.all([
     queryOne<{ count: number }>(`select count(*)::int as count from "Lead" ${where.sql}`, where.values),
     query<any>(
-      `select ${LEAD_COLUMNS} from "Lead" ${where.sql} order by "createdAt" desc limit $${where.values.length + 1} offset $${where.values.length + 2}`,
+      `select ${LEAD_COLUMNS} from "Lead" ${where.sql} order by ${leadOrderBy(options.sort)} limit $${where.values.length + 1} offset $${where.values.length + 2}`,
       where.values.concat([currentLimit, offset]),
     ),
   ]);
-  const [scoreMap, nbaCountMap] = await Promise.all([
+  const [scoreMap, nbaCountMap, details] = await Promise.all([
     getPredictiveScoreMap(user.tenantId, data.map((lead) => lead.id)),
     getPendingNbaCountMap(user.tenantId, data.map((lead) => lead.id)),
+    getLeadRowDetails(user, data),
   ]);
 
   return {
-    data: data.map((lead) => formatLead(user, lead, scoreMap.get(lead.id) ?? null, nbaCountMap.get(lead.id) ?? 0)),
+    data: data.map((lead) => ({
+      ...formatLead(user, lead, scoreMap.get(lead.id) ?? null, nbaCountMap.get(lead.id) ?? 0),
+      ownerName: lead.ownerId ? details.owners.get(lead.ownerId) ?? null : null,
+      lastActivityAt: details.lastActivity.get(lead.id) ?? null,
+      nextTask: details.nextTask.get(lead.id) ?? null,
+    })),
     meta: {
       total: countRow?.count ?? 0,
       page: currentPage,
@@ -310,7 +384,7 @@ export async function listLeadsForTenant(
 // what they're actually allowed to see, not a raw tenant-wide count.
 export async function getLeadStatusCountsForTenant(user: TenantUser) {
   const where = buildLeadWhere(user, null);
-  return query<{ status: string; count: number }>(`select status, count(*)::int as count from "Lead" ${where.sql} group by status`, where.values);
+  return query<{ status: string; count: number }>(`select crm_lead_status_key(status) as status, count(*)::int as count from "Lead" ${where.sql} group by 1`, where.values);
 }
 
 // WP09 (F11): real SQL aggregation for `getPeriodComparisonReportForTenant` in inbuilt-reports.ts.
@@ -388,6 +462,8 @@ export async function createLeadForTenant(user: TenantUser, payload: Record<stri
   const objectId = await getObjectId(user);
   const now = new Date().toISOString();
   const id = randomUUID();
+  // The tenant's first Open status when none is given (was a fixed "NEW").
+  const status = await resolveLeadStatusForWrite(user.tenantId, payload.status);
 
   const insertLeadAndReplayRow = async () => {
     const write = async (client: Queryable) => {
@@ -402,7 +478,7 @@ export async function createLeadForTenant(user: TenantUser, payload: Record<stri
           payload.phone || null,
           payload.company || null,
           payload.source || null,
-          payload.status || "NEW",
+          status,
           user.tenantId,
           user.id,
           objectId,
@@ -485,7 +561,13 @@ async function fetchRawLead(user: TenantUser, id: string) {
 export async function getLeadForTenant(user: TenantUser, id: string) {
   const raw = await fetchRawLead(user, id);
   if (!raw) return null;
-  return maskFieldsForUser(user, "leads", raw);
+  // Owner name and last activity for the record header and summary (UI/UX plan §10.5).
+  const details = await getLeadRowDetails(user, [raw]);
+  return {
+    ...maskFieldsForUser(user, "leads", raw),
+    ownerName: raw.ownerId ? details.owners.get(raw.ownerId) ?? null : null,
+    lastActivityAt: details.lastActivity.get(raw.id) ?? null,
+  };
 }
 
 export async function updateLeadForTenant(user: TenantUser, id: string, payload: Record<string, unknown>) {
@@ -502,7 +584,11 @@ export async function updateLeadForTenant(user: TenantUser, id: string, payload:
   const nextPhone = sanitized.phone !== undefined ? sanitized.phone : existing.phone;
   const nextCompany = sanitized.company !== undefined ? sanitized.company : existing.company;
   const nextSource = sanitized.source !== undefined ? sanitized.source : existing.source;
-  const nextStatus = sanitized.status !== undefined ? sanitized.status : existing.status;
+  // Tenant-configurable statuses (UI/UX plan decision 6): stored as the status key; an unknown
+  // status is refused (LEAD_STATUS_UNKNOWN) unless it is the lead's current one.
+  const nextStatus = sanitized.status !== undefined
+    ? await resolveLeadStatusForWrite(user.tenantId, sanitized.status, existing.status)
+    : existing.status;
   const nextOwnerId = sanitized.ownerId !== undefined ? sanitized.ownerId : existing.ownerId;
 
   // WP08 (F13): atomic core -- the update, its mandatory audit row, and durable WebhookOutbox
@@ -544,6 +630,19 @@ export async function updateLeadForTenant(user: TenantUser, id: string, payload:
   return maskFieldsForUser(user, "leads", rawUpdated);
 }
 
+// "Select all N matching" (UI/UX plan B8): the ids of every record the list would show for these
+// filters, under the same record access, so a bulk action changes exactly what the count said.
+// At most `cap` ids; `truncated` says more match, and callers refuse rather than act on part.
+export async function listLeadIdsForTenant(user: TenantUser, filters: LeadFilterInput[] | LeadFilterInput | null, cap = 5000, search?: string | null) {
+  const resolvedFilters = await substituteUserTokens(normalizeLeadFilters(filters), user);
+  const where = applyLeadSearch(buildLeadWhere(user, resolvedFilters), search);
+  const rows = await query<{ id: string }>(
+    `select id from "Lead" ${where.sql} order by "createdAt" desc limit $${where.values.length + 1}`,
+    where.values.concat([cap + 1]),
+  );
+  return { ids: rows.slice(0, cap).map((row) => row.id), truncated: rows.length > cap, cap };
+}
+
 export async function deleteLeadsForTenant(user: TenantUser, ids: string[]) {
   if (!ids.length) return 0;
   const where = buildLeadWhere(user, null);
@@ -551,4 +650,52 @@ export async function deleteLeadsForTenant(user: TenantUser, ids: string[]) {
   const deleted = await execute(`delete from "Lead" ${where.sql} and id = any($${values.length}::text[])`, values);
   await invalidateReportRollupsForTenant(user.tenantId).catch(() => undefined);
   return deleted;
+}
+
+// Which of these lead ids this user may see: the same conditions as the leads list (workspace,
+// not merged away, record scope). Used where ids arrive from elsewhere, e.g. list membership.
+// Campaign and journey audiences (§8 #24: they were cut off at 500, 1,000 or 5,000 leads without
+// saying so). Every matching lead, in id order, a batch at a time: keyset paging, so a long send
+// neither skips nor repeats leads. Same record access and filters as the leads list;
+// `staticListId` limits it to that list's members.
+export type LeadAudienceQuery = { filters?: LeadFilterInput[] | null; strictFilters?: boolean; staticListId?: string | null };
+
+async function leadAudienceWhere(user: TenantUser, input: LeadAudienceQuery) {
+  const resolvedFilters = await substituteUserTokens(normalizeLeadFilters(input.filters ?? null), user);
+  if (input.strictFilters) assertFilterGroupsSupported(resolvedFilters, LEAD_FILTER_COLUMNS);
+  const where = buildLeadWhere(user, resolvedFilters);
+  if (!input.staticListId) return where;
+  const values = [...where.values, String(input.staticListId)];
+  const listParam = values.length;
+  const tenantSql = user.tenantId ? `m."tenantId" = "Lead"."tenantId"` : `m."tenantId" is null`;
+  const member = `exists (select 1 from "LeadListMember" m where m."listId"::text = $${listParam} and ${tenantSql} and m."leadId" = "Lead".id)`;
+  return { sql: where.sql ? `${where.sql} and ${member}` : `where ${member}`, values };
+}
+
+export async function countLeadAudienceForTenant(user: TenantUser, input: LeadAudienceQuery) {
+  const where = await leadAudienceWhere(user, input);
+  const row = await queryOne<{ count: number }>(`select count(*)::int as count from "Lead" ${where.sql}`, where.values);
+  return row?.count ?? 0;
+}
+
+export async function listLeadAudiencePageForTenant(user: TenantUser, input: LeadAudienceQuery, afterId: string | null, limit: number) {
+  const where = await leadAudienceWhere(user, input);
+  const values = [...where.values];
+  let sql = where.sql;
+  if (afterId) {
+    values.push(String(afterId));
+    sql = `${sql ? `${sql} and` : "where"} id > $${values.length}`;
+  }
+  values.push(Math.min(1000, Math.max(1, Math.trunc(limit) || 200)));
+  return query<any>(`select ${LEAD_COLUMNS} from "Lead" ${sql} order by id limit $${values.length}`, values);
+}
+
+export async function filterVisibleLeadIds(user: TenantUser, leadIds: string[]): Promise<Set<string>> {
+  const unique = [...new Set(leadIds.map(String))];
+  if (!unique.length || !user.tenantId) return new Set();
+  const clauses = ['"tenantId" = $1', '"mergedIntoId" is null', 'id::text = any($2::text[])'];
+  const values: unknown[] = [user.tenantId, unique];
+  applyRecordScopeClause(clauses, values, user, "LEAD", 1);
+  const rows = await query<{ id: string }>(`select id from "Lead" where ${clauses.join(" and ")}`, values);
+  return new Set(rows.map((row) => String(row.id)));
 }

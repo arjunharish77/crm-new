@@ -247,19 +247,43 @@ describe("custom report versioning", () => {
     executeMock.mockReset();
   });
 
-  it("publishes a version snapshotting the report's own definition", async () => {
+  // Decision 29: the builder saves a draft; Publish makes it what runs and snapshots it.
+  const draftDefinition = { queryDefinition: { root: "lead", fields: [{ object: "lead", field: "name", label: "Name" }] } };
+  const draftReport = { ...baseReport, draft: { module: "LEADS", config: draftDefinition, chartType: "TABLE" } };
+
+  it("publishes the draft as a version snapshotting the report's definition", async () => {
     queryOneMock.mockImplementation(async (sql: string) => {
       const text = String(sql);
       if (text.includes('from "TenantFeature"')) return null;
-      if (text.includes('from "CustomReport"') && text.includes('"createdBy"')) return baseReport;
-      if (text.includes('update "CustomReport"') && text.includes('"currentVersion"')) return { ...baseReport, currentVersion: 1 };
+      if (text.includes('from "CustomReport"') && text.includes('"createdBy"')) return draftReport;
+      if (text.includes('update "CustomReport"') && text.includes('"currentVersion"')) return { ...baseReport, config: draftDefinition, currentVersion: 1, draft: null };
       return null;
     });
     const { publishCustomReportVersion } = await import("@/lib/repositories/reports-dashboards-postgres");
     const updated = await publishCustomReportVersion(owner, "report-1", "v1");
     expect(updated.currentVersion).toBe(1);
+    const publishUpdate = queryOneMock.mock.calls.find((call) => String(call[0]).includes('update "CustomReport"'));
+    expect(String(publishUpdate![0])).toContain("draft = null");
+    expect(publishUpdate![1].slice(0, 4)).toEqual(["LEADS", draftDefinition, "TABLE", 1]);
     const insertCall = executeMock.mock.calls.find((call) => String(call[0]).includes('insert into "CustomReportVersion"'));
-    expect(insertCall![1][4]).toEqual({ name: "Conversion", description: null, module: "LEADS", config: { root: "lead" }, chartType: "TABLE" });
+    expect(insertCall![1][4]).toEqual({ name: "Conversion", description: null, module: "LEADS", config: draftDefinition, chartType: "TABLE" });
+  });
+
+  it("refuses to publish when there's nothing new, or no columns", async () => {
+    queryOneMock.mockImplementation(async (sql: string) => {
+      const text = String(sql);
+      if (text.includes('from "TenantFeature"')) return null;
+      if (text.includes('from "CustomReport"') && text.includes('"createdBy"')) return { ...baseReport, currentVersion: 2, draft: null };
+      return null;
+    });
+    const { publishCustomReportVersion } = await import("@/lib/repositories/reports-dashboards-postgres");
+    await expect(publishCustomReportVersion(owner, "report-1", null)).rejects.toThrow("CUSTOM_REPORT_NOTHING_TO_PUBLISH");
+    queryOneMock.mockImplementation(async (sql: string) => {
+      const text = String(sql);
+      if (text.includes('from "CustomReport"') && text.includes('"createdBy"')) return { ...baseReport, draft: { module: "LEADS", config: { queryDefinition: { root: "lead", fields: [] } }, chartType: "TABLE" } };
+      return null;
+    });
+    await expect(publishCustomReportVersion(owner, "report-1", null)).rejects.toThrow("CUSTOM_REPORT_NO_COLUMNS");
   });
 
   it("rejects publishing a version for someone else's report when the caller isn't an admin", async () => {
@@ -277,7 +301,7 @@ describe("custom report versioning", () => {
     queryOneMock.mockImplementation(async (sql: string) => {
       const text = String(sql);
       if (text.includes('from "TenantFeature"')) return null;
-      if (text.includes('from "CustomReport"') && text.includes('"createdBy"')) return { ...baseReport, createdBy: "someone-else" };
+      if (text.includes('from "CustomReport"') && text.includes('"createdBy"')) return { ...draftReport, createdBy: "someone-else" };
       if (text.includes('update "CustomReport"') && text.includes('"currentVersion"')) return { ...baseReport, currentVersion: 1, createdBy: "someone-else" };
       return null;
     });
@@ -286,22 +310,26 @@ describe("custom report versioning", () => {
     expect(updated.currentVersion).toBe(1);
   });
 
-  it("restores a report's definition from an old version and republishes as a new tip version", async () => {
+  it("restores an old version as the draft, leaving what runs unchanged", async () => {
     queryOneMock.mockImplementation(async (sql: string) => {
       const text = String(sql);
       if (text.includes('from "TenantFeature"')) return null;
       if (text.includes('from "CustomReport"') && text.includes('"createdBy"')) return { ...baseReport, currentVersion: 2 };
       if (text.includes('select snapshot from "CustomReportVersion"')) {
-        return { snapshot: { name: "Old Name", description: "old", module: "LEADS", config: { root: "lead" }, chartType: "TABLE" } };
+        return { snapshot: { name: "Old Name", description: "old", module: "LEADS", config: { root: "old" }, chartType: "TABLE" } };
       }
-      if (text.includes('update "CustomReport"') && text.includes('"currentVersion"')) return { ...baseReport, currentVersion: 3, name: "Old Name" };
+      if (text.includes('update "CustomReport" set draft')) return { ...baseReport, currentVersion: 2, draft: { module: "LEADS", config: { root: "old" }, chartType: "TABLE" } };
       return null;
     });
     const { restoreCustomReportVersion } = await import("@/lib/repositories/reports-dashboards-postgres");
-    const result = await restoreCustomReportVersion(owner, "report-1", 1);
-    expect(result.currentVersion).toBe(3);
-    const restoreUpdate = executeMock.mock.calls.find((call) => String(call[0]).includes('set name = $1') && String(call[0]).includes('"CustomReport"'));
-    expect(restoreUpdate![1][0]).toBe("Old Name");
+    const result: any = await restoreCustomReportVersion(owner, "report-1", 1);
+    expect(result.currentVersion).toBe(2);
+    expect(result.draft.config).toEqual({ root: "old" });
+    const draftUpdate = queryOneMock.mock.calls.find((call) => String(call[0]).includes('update "CustomReport" set draft'));
+    expect(draftUpdate![1][0]).toEqual({ module: "LEADS", config: { root: "old" }, chartType: "TABLE" });
+    // Nothing is published: no new version, and the live definition isn't touched.
+    expect(executeMock.mock.calls.some((call) => String(call[0]).includes('insert into "CustomReportVersion"'))).toBe(false);
+    expect(queryOneMock.mock.calls.some((call) => String(call[0]).includes("config = $2"))).toBe(false);
   });
 
   it("throws restoring a version that doesn't exist", async () => {
@@ -316,18 +344,23 @@ describe("custom report versioning", () => {
     await expect(restoreCustomReportVersion(owner, "report-1", 99)).rejects.toThrow("CUSTOM_REPORT_VERSION_NOT_FOUND");
   });
 
-  it("clones a report under a new name with a fresh currentVersion of 0", async () => {
+  it("clones a report under a new name as a fresh history: published as its own version 1", async () => {
     queryOneMock.mockImplementation(async (sql: string) => {
       const text = String(sql);
       if (text.includes('from "TenantFeature"')) return null;
       if (text.includes('select name, description, module, config')) return { name: "Conversion", description: null, module: "LEADS", config: { root: "lead" }, chartType: "TABLE", isPublic: false };
-      if (text.includes('insert into "CustomReport"')) return { ...baseReport, id: "report-2", name: "Conversion (Copy)", currentVersion: 0 };
+      if (text.includes('insert into "CustomReport"')) return { ...baseReport, id: "report-2", name: "Conversion (Copy)", config: { root: "lead" }, currentVersion: 1 };
       return null;
     });
     const { cloneCustomReportForTenant } = await import("@/lib/repositories/reports-dashboards-postgres");
     const cloned = await cloneCustomReportForTenant(owner, "report-1", "Conversion (Copy)");
     expect(cloned.name).toBe("Conversion (Copy)");
-    expect(cloned.currentVersion).toBe(0);
+    expect(cloned.currentVersion).toBe(1);
+    const insert = queryOneMock.mock.calls.find((call) => String(call[0]).includes('insert into "CustomReport"'));
+    expect(String(insert![0])).toContain('"currentVersion")');
+    const version = executeMock.mock.calls.find((call) => String(call[0]).includes('insert into "CustomReportVersion"'));
+    expect(version![1][2]).toBe("report-2");
+    expect(version![1][3]).toBe(1);
   });
 
   it("transfers report ownership to a new user", async () => {
@@ -374,7 +407,9 @@ describe("custom report versioning", () => {
     await recordCustomReportOpened(owner, "report-1");
     expect(executeMock).toHaveBeenCalledWith(
       expect.stringContaining(`"chartType" <> 'SAVED_VIEW'`),
-      [expect.any(String), "report-1", "tenant-1"],
+      [expect.any(String), "report-1", "tenant-1", owner.id],
     );
+    // ...and only for a report this person can see (shared with everyone, or theirs).
+    expect(String(executeMock.mock.calls.at(-1)?.[0])).toContain(`(("isPublic" = true and "currentVersion" > 0) or "createdBy" = $4)`);
   });
 });

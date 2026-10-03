@@ -8,7 +8,7 @@ import { badRequest, tooManyRequests, unauthorized } from "@/lib/server/http";
 import { checkRateLimit, peekRateLimit, clientIpFromRequest } from "@/lib/server/rate-limit";
 import { getEffectiveSecurityPolicy } from "@/lib/server/security-policy";
 import { resolveMfaRequirement, isPastMfaGracePeriod, isTrustedDevice } from "@/lib/server/mfa";
-import { isPasswordExpired } from "@/lib/server/password-policy";
+import { isPasswordExpired, passwordRuleForForms } from "@/lib/server/password-policy";
 
 const TRUSTED_DEVICE_COOKIE = "mfa_trusted_device";
 
@@ -206,7 +206,7 @@ export async function POST(request: Request) {
   // with a one-time password-change token, it doesn't grant access on its own.
   if (lockoutPolicy && isPasswordExpired(user.passwordChangedAt, lockoutPolicy)) {
     const passwordChangeToken = await signPasswordChangeToken(user.id);
-    return NextResponse.json({ passwordExpired: true, passwordChangeToken });
+    return NextResponse.json({ passwordExpired: true, passwordChangeToken, passwordRule: passwordRuleForForms(lockoutPolicy) });
   }
 
   // Real UserSession row (gap checklist: "session and device management") -- see login-flow.ts.

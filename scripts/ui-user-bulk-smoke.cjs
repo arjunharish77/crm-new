@@ -24,7 +24,7 @@ async function main() {
    if(fail && id==='ui-fixture-user-2') return r.fulfill({status:403,contentType:'application/json',body:JSON.stringify({message:'Fixture: user cannot be changed'})});
    user.status='INACTIVE';return r.fulfill({status:200,contentType:'application/json',body:JSON.stringify(user)});
   });
-  await p.goto((process.env.CRM_UI_BASE_URL || 'http://localhost:3000')+'/dashboard/settings/users');
+  await p.goto((process.env.CRM_UI_BASE_URL || 'http://localhost:3000')+'/dashboard/settings/access/users');
   await p.getByText('UI fixture user 1',{exact:true}).waitFor();await p.waitForTimeout(2000);
   await p.getByRole('checkbox',{name:'Select all rows on this page',exact:true}).check();
   assert.equal(await p.getByRole('checkbox',{name:'Select row',exact:true}).count(),3);

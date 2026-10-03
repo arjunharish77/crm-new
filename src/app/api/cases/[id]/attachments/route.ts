@@ -1,5 +1,7 @@
 import { randomUUID } from "crypto";
 import { NextResponse } from "next/server";
+import { assertTenantModule } from "@/lib/server/module-entitlements";
+import { assertStorageAvailable } from "@/lib/server/usage-limits";
 import { requireInternalUser } from "@/lib/server/auth";
 import { badRequest, forbidden, serverError, unauthorized } from "@/lib/server/http";
 import { query, execute } from "@/lib/db/query";
@@ -13,6 +15,7 @@ import { upsertFileObjectForTenant } from "@/lib/repositories/files-postgres";
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const user = await requireInternalUser(request);
+    await assertTenantModule(user, "SERVICE_DESK");
     if (!user.tenantId) return forbidden("Tenant context required");
     const { id } = await params;
     const rows = await query<any>(
@@ -29,6 +32,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const user = await requireInternalUser(request);
+    await assertTenantModule(user, "SERVICE_DESK");
     if (!user.tenantId) return forbidden("Tenant context required");
     const { id } = await params;
     const body = await request.json().catch(() => null);
@@ -36,6 +40,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
     const buffer = Buffer.from(String(body.base64), "base64");
     const storageKey = `cases/${user.tenantId}/${id}/${randomUUID()}-${body.filename}`;
+    // Storage limit (Module 21): refuse before anything is written to disk.
+    await assertStorageAvailable(user.tenantId!, buffer.length);
     const written = await writePrivateFile(storageKey, buffer, { bucket: "case-attachments", contentType: body.contentType ?? null });
     const fileObject = await upsertFileObjectForTenant(user, {
       bucket: written.bucket, storageKey: written.storageKey, storageDriver: written.driver,

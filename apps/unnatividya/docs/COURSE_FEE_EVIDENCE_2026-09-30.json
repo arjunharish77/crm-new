@@ -1,0 +1,1000 @@
+{
+  "checkedAt": "2026-09-30",
+  "scope": "30 existing programs; fees and duration only",
+  "publicationStatus": "research_only",
+  "programs": [
+    {
+      "courseId": "mba-muj",
+      "universityId": "muj",
+      "sourceUrl": "https://www.onlinemanipal.com/online-mba-manipal-university-jaipur",
+      "checkedAt": "2026-09-30",
+      "retrieval": "Direct HTTPS GET, HTTP 200; no form submission",
+      "sourceTextSha256": "291195f442b846b52854dea602121fa2b8556938efc8bbe6450602f7c7221f06",
+      "observedDurationMonths": 24,
+      "observedBaseFeeInr": 180000,
+      "cmsFeeInrAtReview": 180000,
+      "feeMatchesCms": true,
+      "categories": [
+        {
+          "category": "Indian Nationals",
+          "currency": "INR",
+          "baseAmount": 180000
+        },
+        {
+          "category": "Non-Resident Indians",
+          "currency": "USD",
+          "baseAmount": 2772
+        },
+        {
+          "category": "Foreign Nationals",
+          "currency": "USD",
+          "baseAmount": 3236
+        }
+      ],
+      "status": "official_page_observed_pending_editorial_review",
+      "publicationStatus": "not_published_from_this_review",
+      "categoryEvidence": "Fee-section button data-tab matched to panel id; commented-out tabs excluded. Base amount precedes promotional discounted amount.",
+      "domesticApplicationFeeInr": 500,
+      "termsPending": [
+        "Current admission cycle and fee validity",
+        "Full inclusions/exclusions for each student category",
+        "Eligibility and documents per category",
+        "Scholarship and financing conditions; no promotional price selected"
+      ]
+    },
+    {
+      "courseId": "mba-smu",
+      "universityId": "smu",
+      "sourceUrl": "https://www.onlinemanipal.com/online-mba-degree-dual-specialization-smu",
+      "checkedAt": "2026-09-30",
+      "retrieval": "Direct HTTPS GET, HTTP 200; no form submission",
+      "sourceTextSha256": "096a4fc5dd128dad1a48a7ef357399e17bd39ff6e4453021298deead4e73db55",
+      "observedDurationMonths": 24,
+      "observedBaseFeeInr": 120000,
+      "cmsFeeInrAtReview": 120000,
+      "feeMatchesCms": true,
+      "categories": [
+        {
+          "category": "Indian Nationals",
+          "currency": "INR",
+          "baseAmount": 120000
+        },
+        {
+          "category": "International students",
+          "currency": "USD",
+          "baseAmount": 1500
+        }
+      ],
+      "status": "official_page_observed_pending_editorial_review",
+      "publicationStatus": "not_published_from_this_review",
+      "categoryEvidence": "Fee-section button data-tab matched to panel id; commented-out tabs excluded. Base amount precedes promotional discounted amount.",
+      "domesticApplicationFeeInr": 500,
+      "termsPending": [
+        "Current admission cycle and fee validity",
+        "Full inclusions/exclusions for each student category",
+        "Eligibility and documents per category",
+        "Scholarship and financing conditions; no promotional price selected"
+      ]
+    },
+    {
+      "courseId": "mba-amity",
+      "universityId": "amity",
+      "sourceUrl": "https://amityonline.com/master-of-business-administration-online",
+      "checkedAt": "2026-09-30",
+      "retrieval": "Direct HTTPS GET, HTTP 200; no form submission",
+      "sourceTextSha256": "4ce9ff07e21cd63ab9ab72860495434b4c872a45bfa7d5d4fd956f35a6ba5a55",
+      "observedDurationMonths": 24,
+      "observedBaseFeeInr": 225000,
+      "cmsFeeInrAtReview": 225000,
+      "feeMatchesCms": true,
+      "categories": [
+        {
+          "category": "INR page response; domestic applicability to confirm",
+          "currency": "INR",
+          "baseAmount": 225000
+        }
+      ],
+      "status": "regional_response_requires_review",
+      "publicationStatus": "not_published_from_this_review",
+      "categoryEvidence": "Local direct response contains INR; web research tool returns USD or a fetch error for some identical URLs. Currency is not proof of student-category eligibility.",
+      "termsPending": [
+        "Confirm domestic/international/NRI fee schedule for current intake",
+        "Reconcile rounded instalments with stated total",
+        "Application/exam/other charges",
+        "Payment-plan and promotion validity"
+      ]
+    },
+    {
+      "courseId": "bba-muj",
+      "universityId": "muj",
+      "sourceUrl": "https://www.onlinemanipal.com/online-bba-degree-muj",
+      "checkedAt": "2026-09-30",
+      "retrieval": "Direct HTTPS GET, HTTP 200; no form submission",
+      "sourceTextSha256": "a396f00309f49477b00126a58417875b90b13feb9f2bc67bf78ee2bb46b58bbc",
+      "observedDurationMonths": 36,
+      "observedBaseFeeInr": 139500,
+      "cmsFeeInrAtReview": 139500,
+      "feeMatchesCms": true,
+      "categories": [
+        {
+          "category": "Indian Nationals",
+          "currency": "INR",
+          "baseAmount": 139500
+        },
+        {
+          "category": "Non-Resident Indians",
+          "currency": "USD",
+          "baseAmount": 2274
+        },
+        {
+          "category": "Foreign Nationals",
+          "currency": "USD",
+          "baseAmount": 2646
+        }
+      ],
+      "status": "official_page_observed_pending_editorial_review",
+      "publicationStatus": "not_published_from_this_review",
+      "categoryEvidence": "Fee-section button data-tab matched to panel id; commented-out tabs excluded. Base amount precedes promotional discounted amount.",
+      "domesticApplicationFeeInr": 500,
+      "termsPending": [
+        "Current admission cycle and fee validity",
+        "Full inclusions/exclusions for each student category",
+        "Eligibility and documents per category",
+        "Scholarship and financing conditions; no promotional price selected"
+      ]
+    },
+    {
+      "courseId": "bba-amity",
+      "universityId": "amity",
+      "sourceUrl": "https://amityonline.com/bachelor-of-business-administration-online",
+      "checkedAt": "2026-09-30",
+      "retrieval": "Direct HTTPS GET, HTTP 200; no form submission",
+      "sourceTextSha256": "137e3af59afaa0e3a85d4e2ebc11d8c7de87cc8f77ee02ee9cc4a407178f7794",
+      "observedDurationMonths": 36,
+      "observedBaseFeeInr": 199000,
+      "cmsFeeInrAtReview": 199000,
+      "feeMatchesCms": true,
+      "categories": [
+        {
+          "category": "INR page response; domestic applicability to confirm",
+          "currency": "INR",
+          "baseAmount": 199000
+        }
+      ],
+      "status": "regional_response_requires_review",
+      "publicationStatus": "not_published_from_this_review",
+      "categoryEvidence": "Local direct response contains INR; web research tool returns USD or a fetch error for some identical URLs. Currency is not proof of student-category eligibility.",
+      "termsPending": [
+        "Confirm domestic/international/NRI fee schedule for current intake",
+        "Reconcile rounded instalments with stated total",
+        "Application/exam/other charges",
+        "Payment-plan and promotion validity"
+      ]
+    },
+    {
+      "courseId": "bca-muj",
+      "universityId": "muj",
+      "sourceUrl": "https://www.onlinemanipal.com/online-bca-degree-muj",
+      "checkedAt": "2026-09-30",
+      "retrieval": "Direct HTTPS GET, HTTP 200; no form submission",
+      "sourceTextSha256": "cc488fb7f54381114aeb6d15e294f6b1c08d7957b373aaa928d24ec0fe086929",
+      "observedDurationMonths": 36,
+      "observedBaseFeeInr": 139500,
+      "cmsFeeInrAtReview": 139500,
+      "feeMatchesCms": true,
+      "categories": [
+        {
+          "category": "Indian Nationals",
+          "currency": "INR",
+          "baseAmount": 139500
+        },
+        {
+          "category": "Non-Resident Indians",
+          "currency": "USD",
+          "baseAmount": 2274
+        },
+        {
+          "category": "Foreign Nationals",
+          "currency": "USD",
+          "baseAmount": 2646
+        }
+      ],
+      "status": "official_page_observed_pending_editorial_review",
+      "publicationStatus": "not_published_from_this_review",
+      "categoryEvidence": "Fee-section button data-tab matched to panel id; commented-out tabs excluded. Base amount precedes promotional discounted amount.",
+      "domesticApplicationFeeInr": 500,
+      "termsPending": [
+        "Current admission cycle and fee validity",
+        "Full inclusions/exclusions for each student category",
+        "Eligibility and documents per category",
+        "Scholarship and financing conditions; no promotional price selected"
+      ]
+    },
+    {
+      "courseId": "bca-amity",
+      "universityId": "amity",
+      "sourceUrl": "https://amityonline.com/bachelor-of-computer-applications-online",
+      "checkedAt": "2026-09-30",
+      "retrieval": "Direct HTTPS GET, HTTP 200; no form submission",
+      "sourceTextSha256": "7d462c5a6e47c9ecaa96cc1d78cf3b5cd399dd6b7597cccc14b7b0ac0539b603",
+      "observedDurationMonths": 36,
+      "observedBaseFeeInr": 175000,
+      "cmsFeeInrAtReview": 175000,
+      "feeMatchesCms": true,
+      "categories": [
+        {
+          "category": "INR page response; domestic applicability to confirm",
+          "currency": "INR",
+          "baseAmount": 175000
+        }
+      ],
+      "status": "regional_response_requires_review",
+      "publicationStatus": "not_published_from_this_review",
+      "categoryEvidence": "Local direct response contains INR; web research tool returns USD or a fetch error for some identical URLs. Currency is not proof of student-category eligibility.",
+      "termsPending": [
+        "Confirm domestic/international/NRI fee schedule for current intake",
+        "Reconcile rounded instalments with stated total",
+        "Application/exam/other charges",
+        "Payment-plan and promotion validity"
+      ]
+    },
+    {
+      "courseId": "mca-muj",
+      "universityId": "muj",
+      "sourceUrl": "https://www.onlinemanipal.com/online-mca-degree-muj",
+      "checkedAt": "2026-09-30",
+      "retrieval": "Direct HTTPS GET, HTTP 200; no form submission",
+      "sourceTextSha256": "5890a377d905ded9b9c3f874b5766d0afbdef9afbd8973b99bcbeae540c16416",
+      "observedDurationMonths": 24,
+      "observedBaseFeeInr": 158000,
+      "cmsFeeInrAtReview": 158000,
+      "feeMatchesCms": true,
+      "categories": [
+        {
+          "category": "Indian Nationals",
+          "currency": "INR",
+          "baseAmount": 158000
+        },
+        {
+          "category": "Non-Resident Indians",
+          "currency": "USD",
+          "baseAmount": 2432
+        },
+        {
+          "category": "Foreign Nationals",
+          "currency": "USD",
+          "baseAmount": 2836
+        }
+      ],
+      "status": "official_page_observed_pending_editorial_review",
+      "publicationStatus": "not_published_from_this_review",
+      "categoryEvidence": "Fee-section button data-tab matched to panel id; commented-out tabs excluded. Base amount precedes promotional discounted amount.",
+      "domesticApplicationFeeInr": 500,
+      "termsPending": [
+        "Current admission cycle and fee validity",
+        "Full inclusions/exclusions for each student category",
+        "Eligibility and documents per category",
+        "Scholarship and financing conditions; no promotional price selected"
+      ]
+    },
+    {
+      "courseId": "mca-amity",
+      "universityId": "amity",
+      "sourceUrl": "https://amityonline.com/master-of-computer-applications-online",
+      "checkedAt": "2026-09-30",
+      "retrieval": "Direct HTTPS GET, HTTP 200; no form submission",
+      "sourceTextSha256": "343052fd5dbfb1183c6b85d70090ad578803ec1b1b9dda4b561182545cefa115",
+      "observedDurationMonths": 24,
+      "observedBaseFeeInr": 199000,
+      "cmsFeeInrAtReview": 199000,
+      "feeMatchesCms": true,
+      "categories": [
+        {
+          "category": "INR page response; domestic applicability to confirm",
+          "currency": "INR",
+          "baseAmount": 199000
+        }
+      ],
+      "status": "regional_response_requires_review",
+      "publicationStatus": "not_published_from_this_review",
+      "categoryEvidence": "Local direct response contains INR; web research tool returns USD or a fetch error for some identical URLs. Currency is not proof of student-category eligibility.",
+      "termsPending": [
+        "Confirm domestic/international/NRI fee schedule for current intake",
+        "Reconcile rounded instalments with stated total",
+        "Application/exam/other charges",
+        "Payment-plan and promotion validity"
+      ]
+    },
+    {
+      "courseId": "bcom-muj",
+      "universityId": "muj",
+      "sourceUrl": "https://www.onlinemanipal.com/online-bcom-degree-muj",
+      "checkedAt": "2026-09-30",
+      "retrieval": "Direct HTTPS GET, HTTP 200; no form submission",
+      "sourceTextSha256": "36cf46ca8f7c6d8e879a4905e526bb933d0fe71a85a81e0fa05e0ce33198003a",
+      "observedDurationMonths": 36,
+      "observedBaseFeeInr": 99000,
+      "cmsFeeInrAtReview": 99000,
+      "feeMatchesCms": true,
+      "categories": [
+        {
+          "category": "Indian Nationals",
+          "currency": "INR",
+          "baseAmount": 99000
+        },
+        {
+          "category": "Non-Resident Indians",
+          "currency": "USD",
+          "baseAmount": 1458
+        },
+        {
+          "category": "Foreign Nationals",
+          "currency": "USD",
+          "baseAmount": 1698
+        }
+      ],
+      "status": "official_page_observed_pending_editorial_review",
+      "publicationStatus": "not_published_from_this_review",
+      "categoryEvidence": "Fee-section button data-tab matched to panel id; commented-out tabs excluded. Base amount precedes promotional discounted amount.",
+      "domesticApplicationFeeInr": 500,
+      "termsPending": [
+        "Current admission cycle and fee validity",
+        "Full inclusions/exclusions for each student category",
+        "Eligibility and documents per category",
+        "Scholarship and financing conditions; no promotional price selected"
+      ]
+    },
+    {
+      "courseId": "bcom-smu",
+      "universityId": "smu",
+      "sourceUrl": "https://www.onlinemanipal.com/online-bcom-degree-smu",
+      "checkedAt": "2026-09-30",
+      "retrieval": "Direct HTTPS GET, HTTP 200; no form submission",
+      "sourceTextSha256": "18afd9aeb44a19d04bf7c107b42d4d144232bcf103e658fa6fd28b015ac4c714",
+      "observedDurationMonths": 36,
+      "observedBaseFeeInr": 75000,
+      "cmsFeeInrAtReview": 75000,
+      "feeMatchesCms": true,
+      "categories": [
+        {
+          "category": "Indian Nationals",
+          "currency": "INR",
+          "baseAmount": 75000
+        },
+        {
+          "category": "International students",
+          "currency": "USD",
+          "baseAmount": 1020
+        }
+      ],
+      "status": "official_page_observed_pending_editorial_review",
+      "publicationStatus": "not_published_from_this_review",
+      "categoryEvidence": "Fee-section button data-tab matched to panel id; commented-out tabs excluded. Base amount precedes promotional discounted amount.",
+      "domesticApplicationFeeInr": 500,
+      "termsPending": [
+        "Current admission cycle and fee validity",
+        "Full inclusions/exclusions for each student category",
+        "Eligibility and documents per category",
+        "Scholarship and financing conditions; no promotional price selected"
+      ]
+    },
+    {
+      "courseId": "mcom-muj",
+      "universityId": "muj",
+      "sourceUrl": "https://www.onlinemanipal.com/online-mcom-degree-muj",
+      "checkedAt": "2026-09-30",
+      "retrieval": "Direct HTTPS GET, HTTP 200; no form submission",
+      "sourceTextSha256": "5ca9104ffa814c79294b12e8614f4cc19025d821a99f0e99471806b25adacc16",
+      "observedDurationMonths": 24,
+      "observedBaseFeeInr": 108000,
+      "cmsFeeInrAtReview": 108000,
+      "feeMatchesCms": true,
+      "categories": [
+        {
+          "category": "Indian Nationals",
+          "currency": "INR",
+          "baseAmount": 108000
+        },
+        {
+          "category": "Non-Resident Indians",
+          "currency": "USD",
+          "baseAmount": 1620
+        },
+        {
+          "category": "Foreign Nationals",
+          "currency": "USD",
+          "baseAmount": 1892
+        }
+      ],
+      "status": "official_page_observed_pending_editorial_review",
+      "publicationStatus": "not_published_from_this_review",
+      "categoryEvidence": "Fee-section button data-tab matched to panel id; commented-out tabs excluded. Base amount precedes promotional discounted amount.",
+      "domesticApplicationFeeInr": 500,
+      "termsPending": [
+        "Current admission cycle and fee validity",
+        "Full inclusions/exclusions for each student category",
+        "Eligibility and documents per category",
+        "Scholarship and financing conditions; no promotional price selected"
+      ]
+    },
+    {
+      "courseId": "ba-smu",
+      "universityId": "smu",
+      "sourceUrl": "https://www.onlinemanipal.com/online-ba-degree-smu",
+      "checkedAt": "2026-09-30",
+      "retrieval": "Direct HTTPS GET, HTTP 200; no form submission",
+      "sourceTextSha256": "110b63e05c4264664151cf198e0563953e121b5fee601f8eed243a31da7b38a1",
+      "observedDurationMonths": 36,
+      "observedBaseFeeInr": 75000,
+      "cmsFeeInrAtReview": 75000,
+      "feeMatchesCms": true,
+      "categories": [
+        {
+          "category": "Indian Nationals",
+          "currency": "INR",
+          "baseAmount": 75000
+        },
+        {
+          "category": "International students",
+          "currency": "USD",
+          "baseAmount": 1020
+        }
+      ],
+      "status": "official_page_observed_pending_editorial_review",
+      "publicationStatus": "not_published_from_this_review",
+      "categoryEvidence": "Fee-section button data-tab matched to panel id; commented-out tabs excluded. Base amount precedes promotional discounted amount.",
+      "domesticApplicationFeeInr": 500,
+      "termsPending": [
+        "Current admission cycle and fee validity",
+        "Full inclusions/exclusions for each student category",
+        "Eligibility and documents per category",
+        "Scholarship and financing conditions; no promotional price selected"
+      ]
+    },
+    {
+      "courseId": "bba-smu",
+      "universityId": "smu",
+      "sourceUrl": "https://www.onlinemanipal.com/online-bba-degree-smu",
+      "checkedAt": "2026-09-30",
+      "retrieval": "Direct HTTPS GET, HTTP 200; no form submission",
+      "sourceTextSha256": "029ba78f2e56d469dfacf59093aa4b143e1f2f70618da1b273f479177e2b1396",
+      "observedDurationMonths": 36,
+      "observedBaseFeeInr": 90000,
+      "cmsFeeInrAtReview": 90000,
+      "feeMatchesCms": true,
+      "categories": [
+        {
+          "category": "Indian Nationals",
+          "currency": "INR",
+          "baseAmount": 90000
+        },
+        {
+          "category": "International students",
+          "currency": "USD",
+          "baseAmount": 1200
+        }
+      ],
+      "status": "official_page_observed_pending_editorial_review",
+      "publicationStatus": "not_published_from_this_review",
+      "categoryEvidence": "Fee-section button data-tab matched to panel id; commented-out tabs excluded. Base amount precedes promotional discounted amount.",
+      "domesticApplicationFeeInr": 500,
+      "termsPending": [
+        "Current admission cycle and fee validity",
+        "Full inclusions/exclusions for each student category",
+        "Eligibility and documents per category",
+        "Scholarship and financing conditions; no promotional price selected"
+      ]
+    },
+    {
+      "courseId": "mca-smu",
+      "universityId": "smu",
+      "sourceUrl": "https://www.onlinemanipal.com/online-mca-degree-smu",
+      "checkedAt": "2026-09-30",
+      "retrieval": "Direct HTTPS GET, HTTP 200; no form submission",
+      "sourceTextSha256": "b1b7d3628fd9a45e202b2888cfc8dd599ab53f31eef21637d9f1d50ab00544e1",
+      "observedDurationMonths": 24,
+      "observedBaseFeeInr": 110000,
+      "cmsFeeInrAtReview": 110000,
+      "feeMatchesCms": true,
+      "categories": [
+        {
+          "category": "Indian Nationals",
+          "currency": "INR",
+          "baseAmount": 110000
+        },
+        {
+          "category": "International students",
+          "currency": "USD",
+          "baseAmount": 1360
+        }
+      ],
+      "status": "official_page_observed_pending_editorial_review",
+      "publicationStatus": "not_published_from_this_review",
+      "categoryEvidence": "Fee-section button data-tab matched to panel id; commented-out tabs excluded. Base amount precedes promotional discounted amount.",
+      "domesticApplicationFeeInr": 500,
+      "termsPending": [
+        "Current admission cycle and fee validity",
+        "Full inclusions/exclusions for each student category",
+        "Eligibility and documents per category",
+        "Scholarship and financing conditions; no promotional price selected"
+      ]
+    },
+    {
+      "courseId": "mcom-smu",
+      "universityId": "smu",
+      "sourceUrl": "https://www.onlinemanipal.com/online-mcom-degree-smu",
+      "checkedAt": "2026-09-30",
+      "retrieval": "Direct HTTPS GET, HTTP 200; no form submission",
+      "sourceTextSha256": "68a90235710470d5fbe155807232d9e215af0d7208454f4fe89e44095969a73b",
+      "observedDurationMonths": 24,
+      "observedBaseFeeInr": 75000,
+      "cmsFeeInrAtReview": 75000,
+      "feeMatchesCms": true,
+      "categories": [
+        {
+          "category": "Indian Nationals",
+          "currency": "INR",
+          "baseAmount": 75000
+        },
+        {
+          "category": "International students",
+          "currency": "USD",
+          "baseAmount": 980
+        }
+      ],
+      "status": "official_page_observed_pending_editorial_review",
+      "publicationStatus": "not_published_from_this_review",
+      "categoryEvidence": "Fee-section button data-tab matched to panel id; commented-out tabs excluded. Base amount precedes promotional discounted amount.",
+      "domesticApplicationFeeInr": 500,
+      "termsPending": [
+        "Current admission cycle and fee validity",
+        "Full inclusions/exclusions for each student category",
+        "Eligibility and documents per category",
+        "Scholarship and financing conditions; no promotional price selected"
+      ]
+    },
+    {
+      "courseId": "ma-english-smu",
+      "universityId": "smu",
+      "sourceUrl": "https://www.onlinemanipal.com/online-ma-english-degree",
+      "checkedAt": "2026-09-30",
+      "retrieval": "Direct HTTPS GET, HTTP 200; no form submission",
+      "sourceTextSha256": "cd21c6d341dc6ea68d4300f69bfa68ccd048e60ca04ad4233d32fbd7c9f14cfe",
+      "observedDurationMonths": 24,
+      "observedBaseFeeInr": 75000,
+      "cmsFeeInrAtReview": 75000,
+      "feeMatchesCms": true,
+      "categories": [
+        {
+          "category": "Indian Nationals",
+          "currency": "INR",
+          "baseAmount": 75000
+        },
+        {
+          "category": "International students",
+          "currency": "USD",
+          "baseAmount": 980
+        }
+      ],
+      "status": "official_page_observed_pending_editorial_review",
+      "publicationStatus": "not_published_from_this_review",
+      "categoryEvidence": "Fee-section button data-tab matched to panel id; commented-out tabs excluded. Base amount precedes promotional discounted amount.",
+      "domesticApplicationFeeInr": 500,
+      "termsPending": [
+        "Current admission cycle and fee validity",
+        "Full inclusions/exclusions for each student category",
+        "Eligibility and documents per category",
+        "Scholarship and financing conditions; no promotional price selected"
+      ]
+    },
+    {
+      "courseId": "ma-political-science-smu",
+      "universityId": "smu",
+      "sourceUrl": "https://www.onlinemanipal.com/online-ma-political-science-degree",
+      "checkedAt": "2026-09-30",
+      "retrieval": "Direct HTTPS GET, HTTP 200; no form submission",
+      "sourceTextSha256": "0294e7e6b34559acfd5fd542be882e15a24a49d4de4c74e9c9cbcdb722634c9d",
+      "observedDurationMonths": 24,
+      "observedBaseFeeInr": 75000,
+      "cmsFeeInrAtReview": 75000,
+      "feeMatchesCms": true,
+      "categories": [
+        {
+          "category": "Indian Nationals",
+          "currency": "INR",
+          "baseAmount": 75000
+        },
+        {
+          "category": "International students",
+          "currency": "USD",
+          "baseAmount": 980
+        }
+      ],
+      "status": "official_page_observed_pending_editorial_review",
+      "publicationStatus": "not_published_from_this_review",
+      "categoryEvidence": "Fee-section button data-tab matched to panel id; commented-out tabs excluded. Base amount precedes promotional discounted amount.",
+      "domesticApplicationFeeInr": 500,
+      "termsPending": [
+        "Current admission cycle and fee validity",
+        "Full inclusions/exclusions for each student category",
+        "Eligibility and documents per category",
+        "Scholarship and financing conditions; no promotional price selected"
+      ]
+    },
+    {
+      "courseId": "ma-sociology-smu",
+      "universityId": "smu",
+      "sourceUrl": "https://www.onlinemanipal.com/online-ma-sociology-degree",
+      "checkedAt": "2026-09-30",
+      "retrieval": "Direct HTTPS GET, HTTP 200; no form submission",
+      "sourceTextSha256": "34c0f3d7b717d0aa833ca54440ede6f56191950106c1610dea0df220e632c80a",
+      "observedDurationMonths": 24,
+      "observedBaseFeeInr": 75000,
+      "cmsFeeInrAtReview": 75000,
+      "feeMatchesCms": true,
+      "categories": [
+        {
+          "category": "Indian Nationals",
+          "currency": "INR",
+          "baseAmount": 75000
+        },
+        {
+          "category": "International students",
+          "currency": "USD",
+          "baseAmount": 980
+        }
+      ],
+      "status": "official_page_observed_pending_editorial_review",
+      "publicationStatus": "not_published_from_this_review",
+      "categoryEvidence": "Fee-section button data-tab matched to panel id; commented-out tabs excluded. Base amount precedes promotional discounted amount.",
+      "domesticApplicationFeeInr": 500,
+      "termsPending": [
+        "Current admission cycle and fee validity",
+        "Full inclusions/exclusions for each student category",
+        "Eligibility and documents per category",
+        "Scholarship and financing conditions; no promotional price selected"
+      ]
+    },
+    {
+      "courseId": "ma-economics-muj",
+      "universityId": "muj",
+      "sourceUrl": "https://www.onlinemanipal.com/online-ma-economics-degree",
+      "checkedAt": "2026-09-30",
+      "retrieval": "Direct HTTPS GET, HTTP 200; no form submission",
+      "sourceTextSha256": "82ea99108bf813362c5353cc61bbb14b7496c6571bf37f68bc0ca047454f4b94",
+      "observedDurationMonths": 24,
+      "observedBaseFeeInr": 80000,
+      "cmsFeeInrAtReview": 80000,
+      "feeMatchesCms": true,
+      "categories": [
+        {
+          "category": "Indian Nationals",
+          "currency": "INR",
+          "baseAmount": 80000
+        },
+        {
+          "category": "Non-Resident Indians",
+          "currency": "USD",
+          "baseAmount": 1160
+        },
+        {
+          "category": "Foreign Nationals",
+          "currency": "USD",
+          "baseAmount": 1340
+        }
+      ],
+      "status": "official_page_observed_pending_editorial_review",
+      "publicationStatus": "not_published_from_this_review",
+      "categoryEvidence": "Fee-section button data-tab matched to panel id; commented-out tabs excluded. Base amount precedes promotional discounted amount.",
+      "domesticApplicationFeeInr": 500,
+      "termsPending": [
+        "Current admission cycle and fee validity",
+        "Full inclusions/exclusions for each student category",
+        "Eligibility and documents per category",
+        "Scholarship and financing conditions; no promotional price selected"
+      ]
+    },
+    {
+      "courseId": "majmc-muj",
+      "universityId": "muj",
+      "sourceUrl": "https://www.onlinemanipal.com/online-ma-journalism-and-mass-communication",
+      "checkedAt": "2026-09-30",
+      "retrieval": "Direct HTTPS GET, HTTP 200; no form submission",
+      "sourceTextSha256": "446eb87594eb2735749c64457a99880174970b112c0dbc3961144e6b262143e7",
+      "observedDurationMonths": 24,
+      "observedBaseFeeInr": 80000,
+      "cmsFeeInrAtReview": 80000,
+      "feeMatchesCms": true,
+      "categories": [
+        {
+          "category": "Indian Nationals",
+          "currency": "INR",
+          "baseAmount": 80000
+        },
+        {
+          "category": "Non-Resident Indians",
+          "currency": "USD",
+          "baseAmount": 1200
+        },
+        {
+          "category": "Foreign Nationals",
+          "currency": "USD",
+          "baseAmount": 1400
+        }
+      ],
+      "status": "official_page_observed_pending_editorial_review",
+      "publicationStatus": "not_published_from_this_review",
+      "categoryEvidence": "Fee-section button data-tab matched to panel id; commented-out tabs excluded. Base amount precedes promotional discounted amount.",
+      "domesticApplicationFeeInr": 500,
+      "termsPending": [
+        "Current admission cycle and fee validity",
+        "Full inclusions/exclusions for each student category",
+        "Eligibility and documents per category",
+        "Scholarship and financing conditions; no promotional price selected"
+      ]
+    },
+    {
+      "courseId": "bcom-amity",
+      "universityId": "amity",
+      "sourceUrl": "https://amityonline.com/bachelor-of-commerce-online",
+      "checkedAt": "2026-09-30",
+      "retrieval": "Direct HTTPS GET, HTTP 200; no form submission",
+      "sourceTextSha256": "945fa46a6c1ccfd2ac8dbd09e1d607ecd758beaea9a32129ba0d596632cbd973",
+      "observedDurationMonths": 36,
+      "observedBaseFeeInr": 115000,
+      "cmsFeeInrAtReview": 115000,
+      "feeMatchesCms": true,
+      "categories": [
+        {
+          "category": "INR page response; domestic applicability to confirm",
+          "currency": "INR",
+          "baseAmount": 115000
+        }
+      ],
+      "status": "regional_response_requires_review",
+      "publicationStatus": "not_published_from_this_review",
+      "categoryEvidence": "Local direct response contains INR; web research tool returns USD or a fetch error for some identical URLs. Currency is not proof of student-category eligibility.",
+      "termsPending": [
+        "Confirm domestic/international/NRI fee schedule for current intake",
+        "Reconcile rounded instalments with stated total",
+        "Application/exam/other charges",
+        "Payment-plan and promotion validity"
+      ]
+    },
+    {
+      "courseId": "majmc-amity",
+      "universityId": "amity",
+      "sourceUrl": "https://amityonline.com/master-of-arts-journalism-and-mass-communication-online",
+      "checkedAt": "2026-09-30",
+      "retrieval": "Direct HTTPS GET, HTTP 200; no form submission",
+      "sourceTextSha256": "09d699c56c29cf1096eaf4c8e22d5c61a6abab9a326db6dcd980fffce9781003",
+      "observedDurationMonths": 24,
+      "observedBaseFeeInr": 190000,
+      "cmsFeeInrAtReview": 130000,
+      "feeMatchesCms": false,
+      "categories": [
+        {
+          "category": "INR page response; domestic applicability to confirm",
+          "currency": "INR",
+          "baseAmount": 190000
+        }
+      ],
+      "status": "regional_response_requires_review",
+      "publicationStatus": "not_published_from_this_review",
+      "categoryEvidence": "Local direct response contains INR; web research tool returns USD or a fetch error for some identical URLs. Currency is not proof of student-category eligibility.",
+      "termsPending": [
+        "Confirm domestic/international/NRI fee schedule for current intake",
+        "Reconcile rounded instalments with stated total",
+        "Application/exam/other charges",
+        "Payment-plan and promotion validity"
+      ]
+    },
+    {
+      "courseId": "ba-amity",
+      "universityId": "amity",
+      "sourceUrl": "https://amityonline.com/bachelor-of-arts-online",
+      "checkedAt": "2026-09-30",
+      "retrieval": "Direct HTTPS GET, HTTP 200; no form submission",
+      "sourceTextSha256": "ae093055fb8d3abc6e1479414275e777e3a35f90c0027a4f8fd420a17565cd7b",
+      "observedDurationMonths": 36,
+      "observedBaseFeeInr": 115000,
+      "cmsFeeInrAtReview": 115000,
+      "feeMatchesCms": true,
+      "categories": [
+        {
+          "category": "INR page response; domestic applicability to confirm",
+          "currency": "INR",
+          "baseAmount": 115000
+        }
+      ],
+      "status": "regional_response_requires_review",
+      "publicationStatus": "not_published_from_this_review",
+      "categoryEvidence": "Local direct response contains INR; web research tool returns USD or a fetch error for some identical URLs. Currency is not proof of student-category eligibility.",
+      "termsPending": [
+        "Confirm domestic/international/NRI fee schedule for current intake",
+        "Reconcile rounded instalments with stated total",
+        "Application/exam/other charges",
+        "Payment-plan and promotion validity"
+      ]
+    },
+    {
+      "courseId": "bcom-honours-amity",
+      "universityId": "amity",
+      "sourceUrl": "https://amityonline.com/bachelor-of-commerce-honours",
+      "checkedAt": "2026-09-30",
+      "retrieval": "Direct HTTPS GET, HTTP 200; no form submission",
+      "sourceTextSha256": "c0f157e08e276e44a88846179f1dd1716d00a4e86852a116b275eaff2f846ebb",
+      "observedDurationMonths": 36,
+      "observedBaseFeeInr": 175000,
+      "cmsFeeInrAtReview": 175000,
+      "feeMatchesCms": true,
+      "categories": [
+        {
+          "category": "INR page response; domestic applicability to confirm",
+          "currency": "INR",
+          "baseAmount": 175000
+        }
+      ],
+      "status": "regional_response_requires_review",
+      "publicationStatus": "not_published_from_this_review",
+      "categoryEvidence": "Local direct response contains INR; web research tool returns USD or a fetch error for some identical URLs. Currency is not proof of student-category eligibility.",
+      "termsPending": [
+        "Confirm domestic/international/NRI fee schedule for current intake",
+        "Reconcile rounded instalments with stated total",
+        "Application/exam/other charges",
+        "Payment-plan and promotion validity"
+      ]
+    },
+    {
+      "courseId": "mcom-amity",
+      "universityId": "amity",
+      "sourceUrl": "https://amityonline.com/master-of-commerce-financial-management-online",
+      "checkedAt": "2026-09-30",
+      "retrieval": "Direct HTTPS GET, HTTP 200; no form submission",
+      "sourceTextSha256": "3b5e9e8ec49103fd12b47f85a0679f32cee12617f90b5b0ade4b5bb4e179bb5c",
+      "observedDurationMonths": 24,
+      "observedBaseFeeInr": 150000,
+      "cmsFeeInrAtReview": 150000,
+      "feeMatchesCms": true,
+      "categories": [
+        {
+          "category": "INR page response; domestic applicability to confirm",
+          "currency": "INR",
+          "baseAmount": 150000
+        }
+      ],
+      "status": "regional_response_requires_review",
+      "publicationStatus": "not_published_from_this_review",
+      "categoryEvidence": "Local direct response contains INR; web research tool returns USD or a fetch error for some identical URLs. Currency is not proof of student-category eligibility.",
+      "termsPending": [
+        "Confirm domestic/international/NRI fee schedule for current intake",
+        "Reconcile rounded instalments with stated total",
+        "Application/exam/other charges",
+        "Payment-plan and promotion validity"
+      ]
+    },
+    {
+      "courseId": "bajmc-amity",
+      "universityId": "amity",
+      "sourceUrl": "https://amityonline.com/bachelor-of-arts-journalism-and-mass-communication-online",
+      "checkedAt": "2026-09-30",
+      "retrieval": "Direct HTTPS GET, HTTP 200; no form submission",
+      "sourceTextSha256": "96f34a392e8df00cd60fe11fb2ba60af928df3342d8f7f9768813fd0047b9002",
+      "observedDurationMonths": 36,
+      "observedBaseFeeInr": 190000,
+      "cmsFeeInrAtReview": 190000,
+      "feeMatchesCms": true,
+      "categories": [
+        {
+          "category": "INR page response; domestic applicability to confirm",
+          "currency": "INR",
+          "baseAmount": 190000
+        }
+      ],
+      "status": "regional_response_requires_review",
+      "publicationStatus": "not_published_from_this_review",
+      "categoryEvidence": "Local direct response contains INR; web research tool returns USD or a fetch error for some identical URLs. Currency is not proof of student-category eligibility.",
+      "termsPending": [
+        "Confirm domestic/international/NRI fee schedule for current intake",
+        "Reconcile rounded instalments with stated total",
+        "Application/exam/other charges",
+        "Payment-plan and promotion validity"
+      ]
+    },
+    {
+      "courseId": "msc-data-science-amity",
+      "universityId": "amity",
+      "sourceUrl": "https://amityonline.com/msc-in-data-science",
+      "checkedAt": "2026-09-30",
+      "retrieval": "Direct HTTPS GET, HTTP 200; no form submission",
+      "sourceTextSha256": "a4f6f896599d9f1dd7870e2eecb3ae568afb54db31f661820f30b36c4b9158cf",
+      "observedDurationMonths": 24,
+      "observedBaseFeeInr": 275000,
+      "cmsFeeInrAtReview": 275000,
+      "feeMatchesCms": true,
+      "categories": [
+        {
+          "category": "INR page response; domestic applicability to confirm",
+          "currency": "INR",
+          "baseAmount": 275000
+        }
+      ],
+      "status": "regional_response_requires_review",
+      "publicationStatus": "not_published_from_this_review",
+      "categoryEvidence": "Local direct response contains INR; web research tool returns USD or a fetch error for some identical URLs. Currency is not proof of student-category eligibility.",
+      "termsPending": [
+        "Confirm domestic/international/NRI fee schedule for current intake",
+        "Reconcile rounded instalments with stated total",
+        "Application/exam/other charges",
+        "Payment-plan and promotion validity"
+      ]
+    },
+    {
+      "courseId": "msc-mathematics-muj",
+      "universityId": "muj",
+      "sourceUrl": "https://www.onlinemanipal.com/online-msc-mathematics-muj",
+      "checkedAt": "2026-09-30",
+      "retrieval": "Direct HTTPS GET, HTTP 200; no form submission",
+      "sourceTextSha256": "b6b7426f8af2ca34ac60a1a2281850699bbcbe2b9421e9d55651e4709d58c8aa",
+      "observedDurationMonths": 24,
+      "observedBaseFeeInr": 80000,
+      "cmsFeeInrAtReview": 80000,
+      "feeMatchesCms": true,
+      "categories": [
+        {
+          "category": "Indian Nationals",
+          "currency": "INR",
+          "baseAmount": 80000
+        },
+        {
+          "category": "Non-Resident Indians",
+          "currency": "USD",
+          "baseAmount": 1160
+        },
+        {
+          "category": "Foreign Nationals",
+          "currency": "USD",
+          "baseAmount": 1340
+        }
+      ],
+      "status": "official_page_observed_pending_editorial_review",
+      "publicationStatus": "not_published_from_this_review",
+      "categoryEvidence": "Fee-section button data-tab matched to panel id; commented-out tabs excluded. Base amount precedes promotional discounted amount.",
+      "domesticApplicationFeeInr": 500,
+      "termsPending": [
+        "Current admission cycle and fee validity",
+        "Full inclusions/exclusions for each student category",
+        "Eligibility and documents per category",
+        "Scholarship and financing conditions; no promotional price selected"
+      ]
+    },
+    {
+      "courseId": "ma-public-policy-governance-amity",
+      "universityId": "amity",
+      "sourceUrl": "https://amityonline.com/ma-public-policy",
+      "checkedAt": "2026-09-30",
+      "retrieval": "Direct HTTPS GET, HTTP 200; no form submission",
+      "sourceTextSha256": "5ce8f3a1afeddfd40aa1bbabe206585c6c3032555462ce31c052027a7da274e7",
+      "observedDurationMonths": 24,
+      "observedBaseFeeInr": 150000,
+      "cmsFeeInrAtReview": 150000,
+      "feeMatchesCms": true,
+      "categories": [
+        {
+          "category": "INR page response; domestic applicability to confirm",
+          "currency": "INR",
+          "baseAmount": 150000
+        }
+      ],
+      "status": "regional_response_requires_review",
+      "publicationStatus": "not_published_from_this_review",
+      "categoryEvidence": "Local direct response contains INR; web research tool returns USD or a fetch error for some identical URLs. Currency is not proof of student-category eligibility.",
+      "termsPending": [
+        "Confirm domestic/international/NRI fee schedule for current intake",
+        "Reconcile rounded instalments with stated total",
+        "Application/exam/other charges",
+        "Payment-plan and promotion validity"
+      ]
+    }
+  ]
+}

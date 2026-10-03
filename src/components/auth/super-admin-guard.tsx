@@ -4,6 +4,7 @@ import { useAuth } from "@/providers/auth-provider";
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 import { Loader2 } from "lucide-react";
+import { loginPathFromHere } from "@/lib/safe-return-path";
 
 export function SuperAdminGuard({ children }: { children: React.ReactNode }) {
     const { user, isLoading } = useAuth();
@@ -17,7 +18,7 @@ export function SuperAdminGuard({ children }: { children: React.ReactNode }) {
                 router.push("/dashboard");
             }
         } else if (!isLoading && !user) {
-            router.push("/login");
+            router.push(loginPathFromHere());
         }
     }, [user, isLoading, router]);
 

@@ -1,4 +1,8 @@
-import { courseWithUniversity, courses, formatFee, type Course } from "@/data/catalog";
+import type { courseWithUniversity } from "@/data/catalog";
+
+import type { CatalogReader } from "@/lib/catalog-snapshot";
+import { formatFee } from "@/lib/catalog-format";
+import { type Course } from "@/data/catalog";
 import { courseKey, courseLabel } from "@/lib/programmatic-seo";
 
 export type EnrichedCourse = ReturnType<typeof courseWithUniversity>;
@@ -11,7 +15,8 @@ export type ComparisonPair = {
   right: EnrichedCourse;
 };
 
-export function allComparisonPairs(): ComparisonPair[] {
+export function allComparisonPairs(catalog: CatalogReader): ComparisonPair[] {
+  const { courseWithUniversity, courses } = catalog;
   const byKey = new Map<string, Course[]>();
   for (const course of courses) {
     const key = courseKey(course.name);
@@ -40,8 +45,8 @@ export function allComparisonPairs(): ComparisonPair[] {
   return pairs;
 }
 
-export function getComparisonPair(courseKeyParam: string, pairSlug: string) {
-  return allComparisonPairs().find((pair) => pair.key === courseKeyParam && pair.slug === pairSlug) || null;
+export function getComparisonPair(catalog: CatalogReader, courseKeyParam: string, pairSlug: string) {
+  return allComparisonPairs(catalog).find((pair) => pair.key === courseKeyParam && pair.slug === pairSlug) || null;
 }
 
 export type ComparisonRow = { label: string; cells: Array<{ value: string; best?: boolean }> };

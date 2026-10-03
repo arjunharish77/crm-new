@@ -1,8 +1,9 @@
-import { randomUUID, createHmac } from "crypto";
+import { assertTenantModule, isModuleEnabledForTenant } from "@/lib/server/module-entitlements";
+import { randomUUID } from "crypto";
 import { query, queryOne, execute, queryAsSystem, queryOneAsSystem } from "@/lib/db/query";
 import { createUserNotification } from "@/lib/server/notifications";
 import { WEBHOOK_EVENT_TYPES, type WebhookEventType } from "@/lib/server/webhook-outbox";
-import { decryptSecretAtRestOrNull } from "@/lib/server/secret-encryption";
+import { APP_SIGNING_COLUMNS, appSignatureHeaders, type AppSigningRow } from "@/lib/server/app-signing";
 import { assertSafeOutboundUrl } from "@/lib/server/outbound-request-guard";
 
 type TenantUser = { id: string; tenantId: string | null };
@@ -15,10 +16,6 @@ const STALE_CREDENTIAL_MS = 90 * 24 * 60 * 60 * 1000; // 90 days
 function backoffMs(attempts: number) {
   const minutes = BACKOFF_MINUTES[Math.min(attempts, BACKOFF_MINUTES.length - 1)];
   return minutes * 60 * 1000;
-}
-
-function signPayload(secret: string, timestamp: string, rawBody: string) {
-  return createHmac("sha256", secret).update(`${timestamp}.${rawBody}`).digest("hex");
 }
 
 // Same event vocabulary as WEBHOOK_EVENT_TYPES (outbound webhook governance) -- re-exported
@@ -59,6 +56,8 @@ export async function enqueueAppEvent(tenantId: string | null, eventType: Webhoo
     [tenantId, eventType],
   );
   if (!apps.length) return;
+  // Never thrown: this runs inside record writes. A tenant with Marketplace off sends nothing.
+  if (!(await isModuleEnabledForTenant(tenantId, "MARKETPLACE"))) return;
 
   const now = new Date().toISOString();
   const today = now.slice(0, 10);
@@ -123,9 +122,10 @@ async function deliverOne(row: { id: string; tenantId: string; appId: string; ev
   // Scoped by tenantId too, not just appId -- an app with multiple installing tenants has one
   // TenantAppSecret row per tenant (migration 0066); fetching by appId alone would pick an
   // arbitrary tenant's signingSecret to sign EVERY delivery, including ones for other tenants.
-  const secretRowEncrypted = await queryOne<{ signingSecret: string }>(`select "signingSecret" from "TenantAppSecret" where "tenantId" = $1 and "appId" = $2`, [row.tenantId, row.appId]);
-  const secretRow = secretRowEncrypted ? { signingSecret: decryptSecretAtRestOrNull(secretRowEncrypted.signingSecret) } : null;
-  if (!app?.webhookUrl) {
+  const signingRow = await queryOne<NonNullable<AppSigningRow>>(`select ${APP_SIGNING_COLUMNS} from "TenantAppSecret" where "tenantId" = $1 and "appId" = $2`, [row.tenantId, row.appId]);
+  // A delivery queued before Marketplace was switched off is cancelled, not sent (no replay of a
+  // stale backlog to third-party apps when the module is re-enabled).
+  if (!app?.webhookUrl || !(await isModuleEnabledForTenant(row.tenantId, "MARKETPLACE"))) {
     await execute(`update "TenantAppDelivery" set status = 'CANCELLED', "updatedAt" = $1 where id = $2`, [new Date().toISOString(), row.id]);
     return;
   }
@@ -147,7 +147,7 @@ async function deliverOne(row: { id: string; tenantId: string; appId: string; ev
     // same SSRF exposure as a tenant webhook subscription, revalidated immediately before send.
     await assertSafeOutboundUrl(app.webhookUrl);
     const headers: Record<string, string> = { "content-type": "application/json", "x-app-timestamp": timestamp, "x-app-event": row.eventType };
-    if (secretRow?.signingSecret) headers["x-app-signature"] = signPayload(secretRow.signingSecret, timestamp, rawBody);
+    Object.assign(headers, appSignatureHeaders(signingRow, timestamp, rawBody));
     const response = await fetch(app.webhookUrl, { method: "POST", headers, body: rawBody, signal: controller.signal, redirect: "manual" });
     httpStatus = response.status;
     responseBody = (await response.text().catch(() => "")).slice(0, 2000);
@@ -227,6 +227,7 @@ export async function processAppEventDeliveries(limit = 25) {
 
 export async function listAppDeliveriesForTenant(user: TenantUser, appId: string, limit = 50) {
   if (!user.tenantId) return [];
+  await assertTenantModule(user, "MARKETPLACE");
   return query<any>(
     `select id, "eventType", status, attempts, "httpStatus", "responseBody", "latencyMs", error, "createdAt", "processedAt"
      from "TenantAppDelivery"
@@ -282,6 +283,7 @@ export async function getSuspectedProviderOutages() {
 // long-lived static secret rather than a literal reinterpretation of "expired".
 export async function getAppHealthForTenant(user: TenantUser, appId: string) {
   if (!user.tenantId) return null;
+  await assertTenantModule(user, "MARKETPLACE");
   const [health, backlog, secret, app] = await Promise.all([
     queryOne<any>(`select status, "lastCheckedAt", "lastSuccessAt", "lastError" from "TenantAppHealth" where "tenantId" = $1 and "appId" = $2`, [user.tenantId, appId]),
     queryOne<{ count: string }>(`select count(*) as count from "TenantAppDelivery" where "tenantId" = $1 and "appId" = $2 and status = 'PENDING'`, [user.tenantId, appId]),
@@ -317,6 +319,7 @@ export async function getAppHealthForTenant(user: TenantUser, appId: string) {
 
 export async function getAppUsageForTenant(user: TenantUser, appId: string, days = 14) {
   if (!user.tenantId) return [];
+  await assertTenantModule(user, "MARKETPLACE");
   return query<any>(
     `select date, "requestCount", "webhookDeliveryCount", "errorCount" from "TenantAppUsage" where "tenantId" = $1 and "appId" = $2 order by date desc limit $3`,
     [user.tenantId, appId, Math.min(90, Math.max(1, days))],

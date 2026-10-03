@@ -1,5 +1,6 @@
 import { apiOpportunityCreate, createApiRecords, validIdempotencyKey } from "@/lib/server/create-records";
 import { NextResponse } from "next/server";
+import { assertFeatureEnabled } from "@/lib/server/entitlements";
 import { buildApiKeyWriteActor, ApiKeyAuthenticationError, authenticateApiKeyRequest, hasApiKeyPermission } from "@/lib/server/api-keys";
 import { listOpportunitiesForTenant } from "@/lib/server/crm";
 import { apiKeyAuthErrorResponse, badRequest, forbidden, serverError } from "@/lib/server/http";
@@ -12,6 +13,7 @@ export async function GET(request: Request) {
   try {
     const url = new URL(request.url);
     const { apiKey, tenantId } = await authenticateApiKeyRequest(request, { method: "GET", path: url.pathname, rawBody: "" });
+    await assertFeatureEnabled(tenantId, "opportunityEnabled");
     if (!hasApiKeyPermission(apiKey.permissions, "opportunities", "read")) {
       return forbidden("This API key does not have permission to read opportunities");
     }

@@ -1,3 +1,5 @@
+import { getTenantTodayRange } from "@/lib/server/date-format";
+import { assertTenantModule } from "@/lib/server/module-entitlements";
 import { randomUUID } from "crypto";
 import { query, queryOne } from "@/lib/db/query";
 import { createAuditLog } from "@/lib/server/crm";
@@ -58,6 +60,7 @@ function defaultAvailability(userId: string) {
 // No row yet just means "never set a status" -- returned as a synthetic OFFLINE default
 // instead of lazily inserting a row on a read, so simply viewing a page never creates data.
 export async function getMyAvailabilityForTenant(user: TenantUser) {
+  await assertTenantModule(user, "TELEPHONY");
   const tenantId = requireTenantId(user);
   const row = await queryOne<any>(`select * from "AgentAvailability" where "tenantId" = $1 and "userId" = $2 limit 1`, [
     tenantId,
@@ -67,6 +70,7 @@ export async function getMyAvailabilityForTenant(user: TenantUser) {
 }
 
 export async function setMyAvailabilityStatus(user: TenantUser, status: string, reason?: string | null) {
+  await assertTenantModule(user, "TELEPHONY");
   const tenantId = requireTenantId(user);
   if (!STATUSES.has(status)) throw new Error("INVALID_STATUS");
   const now = new Date().toISOString();
@@ -88,11 +92,12 @@ export async function setMyAvailabilityStatus(user: TenantUser, status: string, 
 // maxSimultaneousAssignments -- rather than just showing the static config values with no
 // signal of whether anyone is actually near them.
 export async function listAgentAvailabilityForTenant(user: TenantUser) {
+  await assertTenantModule(user, "TELEPHONY");
   const tenantId = requireTenantId(user);
   if (!hasAvailabilityAdminAccess(user)) throw new Error("FORBIDDEN");
 
-  const startOfToday = new Date();
-  startOfToday.setHours(0, 0, 0, 0);
+  // Today's calls count from the workspace's midnight, not the server's.
+  const startOfToday = new Date((await getTenantTodayRange(tenantId)).start);
 
   const [users, availability, callCounts, taskCounts] = await Promise.all([
     query<any>(`select id, name, email, "managerId" from "User" where "tenantId" = $1 and "deletedAt" is null order by name asc`, [
@@ -148,6 +153,7 @@ export async function supervisorUpdateAgentAvailability(
   targetUserId: string,
   patch: Record<string, unknown>,
 ) {
+  await assertTenantModule(user, "TELEPHONY");
   const tenantId = requireTenantId(user);
   const target = await queryOne<{ id: string; managerId: string | null }>(
     `select id, "managerId" from "User" where "tenantId" = $1 and id = $2 and "deletedAt" is null limit 1`,

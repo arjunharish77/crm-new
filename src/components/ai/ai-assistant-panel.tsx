@@ -24,6 +24,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useAiMessageDraft } from "@/providers/ai-message-draft-provider";
 import { Card } from "@/components/ui/card";
+import { useConfirm } from "@/components/common/dialogs-provider";
 
 type EntityType = "LEAD" | "OPPORTUNITY";
 
@@ -50,6 +51,7 @@ export function AiAssistantPanel({ entityType, entityId, entityLabel, recipientE
     recipientEmail?: string | null;
     recipientPhone?: string | null;
 }) {
+    const confirmAction = useConfirm();
     const [open, setOpen] = useState(false);
     const [workflow, setWorkflow] = useState<AiRecordWorkflow>(AI_RECORD_WORKFLOWS[0].key);
     const [runningAction, setRunningAction] = useState<string | null>(null);
@@ -92,9 +94,9 @@ export function AiAssistantPanel({ entityType, entityId, entityLabel, recipientE
         document.addEventListener("click", navigate, true);
         return () => { document.removeEventListener("click", navigate, true); };
     }, [composing, sending]);
-    const changeChannel = (next: "EMAIL" | "WHATSAPP" | "SMS") => {
+    const changeChannel = async (next: "EMAIL" | "WHATSAPP" | "SMS") => {
         if (sendPending.current || currentDraft().sending || draftRequest.current) return;
-        if (composing && !window.confirm("Change channel and discard your unsent message?")) return;
+        if (composing && !(await confirmAction({ title: "Change channel?", description: "Your unsent message will be discarded.", confirmLabel: "Change channel", destructive: true }))) return;
         setChannel(next); setVariants([]); setComposing(null); setSendError(''); setDraftError('');
     };
 
@@ -142,9 +144,9 @@ export function AiAssistantPanel({ entityType, entityId, entityLabel, recipientE
         }
     };
 
-    const applyVariant = (text: string) => {
+    const applyVariant = async (text: string) => {
         if (sendPending.current || currentDraft().sending || draftRequest.current) return;
-        if (composing && !window.confirm("Replace your unsent message with this draft?")) return;
+        if (composing && !(await confirmAction({ title: "Replace your message?", description: "Your unsent message will be replaced with this draft.", confirmLabel: "Replace" }))) return;
         setSendError('');
         const recipient = channel === "EMAIL" ? recipientEmail ?? "" : recipientPhone ?? "";
         setComposing({ recipient, subject: channel === "EMAIL" ? `Re: ${entityLabel}` : "", body: text });
@@ -185,7 +187,7 @@ export function AiAssistantPanel({ entityType, entityId, entityLabel, recipientE
 
     return (
         <>
-            <Button ref={opener} variant="outline" className="h-9 rounded-[10px] px-3.5" onClick={() => { if (composing) setDraftOpen(true); setOpen(true); }}>
+            <Button ref={opener} variant="outline" className="h-9 rounded-xl px-3.5" onClick={() => { if (composing) setDraftOpen(true); setOpen(true); }}>
                 <Sparkles className="size-4" />
                 AI Assistant
             </Button>
@@ -287,8 +289,8 @@ export function AiAssistantPanel({ entityType, entityId, entityLabel, recipientE
                                             )}
                                             <Label htmlFor="ai-draft-message" className="text-xs">Message (edit before sending)</Label>
                                             <Textarea id="ai-draft-message" disabled={sending} rows={5} value={composing.body} onChange={(e) => setComposing({ ...composing, body: e.target.value })} />
-                                            <Button size="sm" variant="ghost" disabled={sending} onClick={() => {
-                                                if (window.confirm("Discard this unsent message?")) updateDraft({ composing: null, error: "" });
+                                            <Button size="sm" variant="ghost" disabled={sending} onClick={async () => {
+                                                if (await confirmAction({ title: "Discard message?", description: "Your unsent message will be lost.", confirmLabel: "Discard", destructive: true })) updateDraft({ composing: null, error: "" });
                                             }}>Discard message</Button>
                                             {sendError && <p role="alert" className="break-words text-sm text-destructive">{sendError}</p>}
                                             {sending && <p role="status" className="text-sm text-muted-foreground">Submitting message…</p>}

@@ -126,7 +126,7 @@ describe("processDueReportSchedules", () => {
     expect(result.processed[0]).toEqual({ scheduleId: "sched-1", deliveryId: "delivery-2", status: "PENDING" });
     expect(communicationsMocks.queueCommunicationForTenant).toHaveBeenCalledTimes(1);
     const [, message] = communicationsMocks.queueCommunicationForTenant.mock.calls[0];
-    expect(message.body).toContain("/dashboard/reports?report=rep_performance");
+    expect(message.body).toContain("/dashboard/reports/standard/rep_performance");
   });
 
   it("marks a LINK-format schedule FAILED, without queueing an email, when the report fails to resolve", async () => {

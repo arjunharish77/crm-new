@@ -5,17 +5,11 @@ import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { Phone } from "lucide-react";
 
-// These specific pages render their own full-width StickyMobileBar (see sticky-mobile-bar.tsx)
-// on narrow viewports, matching Mobile.dc.html's per-page bottom-bar pattern -- the generic
-// floating pair below would otherwise sit on top of it.
-const MOBILE_BAR_PAGES = [/^\/$/, /^\/courses\/[^/]+$/, /^\/universities\/[^/]+$/, /^\/tools\/emi-calculator$/];
-
 // Temporarily hidden on request -- flip back to true to re-enable. Markup/logic below is left intact.
 const SHOW_WHATSAPP = false;
 
 export function StickyCtas() {
   const pathname = usePathname();
-  const hasOwnMobileBar = MOBILE_BAR_PAGES.some((pattern) => pattern.test(pathname || ""));
   // Any full-page panel that can scroll tall enough to land under this fixed corner button
   // (currently just the Compare picker) dispatches these events to temporarily hide it, rather
   // than living with the floating button covering a row's action while that panel is open.
@@ -32,22 +26,22 @@ export function StickyCtas() {
     };
   }, []);
 
-  if (temporarilyHidden) return null;
+  if (temporarilyHidden || pathname === "/lead") return null;
 
   return (
     <div
       aria-label="Quick actions"
-      className={hasOwnMobileBar ? "uv-sticky-ctas uv-hide-on-mobile" : "uv-sticky-ctas"}
+      className="uv-sticky-ctas uv-hide-on-mobile"
       style={{ position: "fixed", right: 20, bottom: 20, zIndex: 150, display: "flex", flexDirection: "column", gap: 10, alignItems: "flex-end" }}
     >
       <Link
         href="/lead?intent=request-callback"
         data-open-lead
-        title="Request a callback"
+        title="Apply now"
         style={{ height: 46, display: "inline-flex", alignItems: "center", gap: 8, padding: "0 22px", background: "#fff", border: "1.5px solid #544CC8", color: "#544CC8", borderRadius: 999, boxShadow: "0 4px 8px rgba(36,36,36,0.12)", fontSize: 14, fontWeight: 700, whiteSpace: "nowrap" }}
       >
         <Phone size={18} strokeWidth={2.5} aria-hidden="true" />
-        Request a callback
+        Apply now
       </Link>
       {SHOW_WHATSAPP ? (
         <Link

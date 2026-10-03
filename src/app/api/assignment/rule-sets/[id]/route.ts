@@ -24,8 +24,8 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
     const user = await requireTenantAdmin(request);
     if (!user.tenantId) return forbidden("Tenant context required");
     const { id } = await params;
-    await deleteDistributionRuleSetForTenant(user, id);
-    return NextResponse.json({ success: true });
+    const archived = await deleteDistributionRuleSetForTenant(user, id);
+    return NextResponse.json({ success: true, purgeAfter: archived?.purgeAfter ?? null });
   } catch (error) {
     if (error instanceof Error && error.message === "UNAUTHORIZED") return unauthorized();
     if (error instanceof Error && error.message === "FORBIDDEN") return forbidden();

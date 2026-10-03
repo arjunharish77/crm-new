@@ -3,141 +3,94 @@
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
-import { useEffect, useState } from "react";
-import { Heart, Menu, X } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { Heart, Menu, X, ChevronDown } from "lucide-react";
 import { useShortlist } from "@/lib/use-shortlist";
 
 const nav = [
   { href: "/courses", label: "Courses" },
   { href: "/universities", label: "Universities" },
   { href: "/compare", label: "Compare" },
-  { href: "/recommender", label: "AI Recommender", ai: true },
-  { href: "/blog", label: "Blog" },
-  { href: "/online-degree-guides", label: "Guides" },
+];
+const groups = [
+  { label: "Resources", links: [
+    {href:"/online-degree-guides",label:"Degree guides",description:"Explore fees, eligibility and recognition by degree."},
+    {href:"/blog",label:"Articles",description:"Read about online learning and career choices."},
+    {href:"/how-we-verify",label:"How we verify",description:"Understand our sources and review process."},
+  ]},
+  { label: "Tools", links: [
+    {href:"/recommender",label:"Find my course",description:"Explore options based on your preferences."},
+    {href:"/tools/emi-calculator",label:"EMI calculator",description:"Estimate payments using your own assumptions."},
+  ]},
 ];
 
 export function SiteHeader() {
   const pathname = usePathname();
-  const isActive = (href: string) => href === "/" ? pathname === "/" : pathname === href || pathname.startsWith(`${href}/`);
+  if (pathname.startsWith("/admin")) return null;
+  // A route change resets disclosure state, including browser back/forward navigation.
+  return <HeaderNavigation key={pathname} pathname={pathname}/>;
+}
+
+function HeaderNavigation({pathname}:{pathname:string}) {
+  const isActive = (href: string) => pathname === href || pathname.startsWith(`${href}/`);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const [openGroup, setOpenGroup] = useState<string | null>(null);
+  const header = useRef<HTMLElement>(null);
+  const toggle = useRef<HTMLButtonElement>(null);
   const { count: shortlistCount } = useShortlist();
-
-  useEffect(() => {
-    setMobileNavOpen(false);
-  }, [pathname]);
-
-  // The admin CMS has its own dark sidebar shell (see admin/layout.tsx) -- the public marketing
-  // header/nav has no business wrapping around it.
-  if (pathname?.startsWith("/admin")) return null;
-
-  return (
-    <>
-      <header style={{ position: "sticky", top: 0, zIndex: 100, background: "#fff", boxShadow: "0 3px 6px rgba(194,194,194,0.16)" }}>
-        <div style={{ maxWidth: 1200, margin: "0 auto", minHeight: 68, display: "flex", alignItems: "center", gap: 30, padding: "0 24px" }}>
-          <Link href="/" aria-label="Unnati Vidya home">
-            <Image
-              src="/brand/unnatividya-logo-gradient.svg"
-              alt="Unnati Vidya"
-              width={174}
-              height={32}
-              style={{ height: 24, width: "auto", display: "block" }}
-              priority
-            />
-          </Link>
-          <nav className="uv-header-nav" aria-label="Main navigation" style={{ display: "flex", gap: 24, fontSize: 14, fontWeight: 600, flex: 1 }}>
-            {nav.map((item) => (
-              <Link
-                href={item.href}
-                key={item.href}
-                style={{
-                  color: isActive(item.href) ? "#544CC8" : "#555",
-                  borderBottom: isActive(item.href) ? "2px solid #544CC8" : undefined,
-                  paddingBottom: isActive(item.href) ? 2 : undefined,
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 5,
-                }}
-              >
-                {item.ai ? <span style={{ width: 7, height: 7, borderRadius: "50%", background: "#FDB515", display: "inline-block" }} aria-hidden="true" /> : null}
-                {item.label}
-              </Link>
-            ))}
-          </nav>
-          <Link
-            href="/shortlist"
-            className="uv-header-shortlist"
-            aria-label={`Shortlist${shortlistCount ? `, ${shortlistCount} saved` : ""}`}
-            style={{
-              display: "inline-flex",
-              alignItems: "center",
-              gap: 7,
-              border: `1px solid ${isActive("/shortlist") ? "#544CC8" : "#CFDAE6"}`,
-              borderRadius: 999,
-              padding: "7px 13px",
-              fontSize: 13,
-              fontWeight: 600,
-              color: isActive("/shortlist") ? "#544CC8" : "#555",
-            }}
-          >
-            <Heart size={14} strokeWidth={2.5} fill={shortlistCount ? "currentColor" : "none"} aria-hidden="true" />
-            Shortlist
-            {shortlistCount ? <span style={{ color: "#707070", fontWeight: 700 }}>{shortlistCount}</span> : null}
-          </Link>
-          <Link
-            href="/lead?intent=talk-to-expert"
-            data-open-lead
-            className="uv-header-cta"
-            style={{
-              height: 42,
-              display: "inline-flex",
-              alignItems: "center",
-              padding: "0 18px",
-              background: "#544CC8",
-              color: "#fff",
-              borderRadius: 4,
-              fontSize: 14,
-              fontWeight: 700,
-            }}
-          >
-            Talk to an expert
-          </Link>
-          <button
-            type="button"
-            className="uv-header-toggle"
-            style={{ marginLeft: "auto" }}
-            aria-label={mobileNavOpen ? "Close menu" : "Open menu"}
-            aria-expanded={mobileNavOpen}
-            aria-controls="uv-mobile-nav-panel"
-            onClick={() => setMobileNavOpen((open) => !open)}
-          >
-            {mobileNavOpen ? <X size={24} /> : <Menu size={24} />}
+  function closeNavigation() { setMobileNavOpen(false); setOpenGroup(null); }
+  useEffect(()=>{
+    const outside = (event:PointerEvent)=>{if(!header.current?.contains(event.target as Node)){setOpenGroup(null);setMobileNavOpen(false);}};
+    const media=window.matchMedia("(max-width: 1100px)");
+    const resize=()=>{setMobileNavOpen(false);setOpenGroup(null);};
+    document.addEventListener("pointerdown",outside);media.addEventListener("change",resize);
+    return ()=>{document.removeEventListener("pointerdown",outside);media.removeEventListener("change",resize);};
+  },[]);
+  function navigationLinks(context:"desktop"|"mobile") {
+    return <>
+      {nav.map(item=><Link key={item.href} href={item.href} aria-current={isActive(item.href)?"page":undefined} onClick={closeNavigation}>{item.label}</Link>)}
+      {groups.map(group=>{
+        const id=`uv-${context}-${group.label.toLowerCase()}`;
+        const expanded=openGroup===id;
+        const active=group.links.some(link=>isActive(link.href));
+        return <div className="uv-nav-group" key={id}>
+          <button id={`${id}-button`} type="button" className={active?"uv-nav-group-trigger uv-active":"uv-nav-group-trigger"} aria-expanded={expanded} aria-controls={id} onClick={()=>setOpenGroup(expanded?null:id)}>
+            {group.label}<ChevronDown size={14} aria-hidden="true"/>
           </button>
-        </div>
-        {mobileNavOpen ? (
-          <nav className="uv-header-mobile-panel" id="uv-mobile-nav-panel" aria-label="Mobile navigation">
-            {nav.map((item) => (
-              <Link
-                href={item.href}
-                key={item.href}
-                style={{ color: isActive(item.href) ? "#544CC8" : "#555" }}
-              >
-                {item.ai ? <span style={{ width: 7, height: 7, borderRadius: "50%", background: "#FDB515", display: "inline-block" }} aria-hidden="true" /> : null}
-                {item.label}
-              </Link>
-            ))}
-            <Link href="/shortlist" style={{ color: isActive("/shortlist") ? "#544CC8" : "#555" }}>
-              Shortlist{shortlistCount ? ` (${shortlistCount})` : ""}
-            </Link>
-            <Link href="/lead?intent=talk-to-expert" data-open-lead className="uv-header-mobile-cta">
-              Talk to an expert
-            </Link>
-          </nav>
-        ) : null}
-      </header>
-      <div style={{ background: "#263238", color: "#fff", fontSize: 12, textAlign: "center", padding: "7px 16px" }}>
-        Admissions open for the July 2026 batch · Last date to apply: 20 August ·{" "}
-        <Link href="/courses" style={{ color: "#FDB515", fontWeight: 600 }}>Explore courses</Link>
+          <div id={id} className="uv-nav-group-links" hidden={!expanded}>
+            {group.links.map(link=><Link key={link.href} href={link.href} aria-current={isActive(link.href)?"page":undefined} onClick={closeNavigation}>
+              <span>{link.label}</span><small>{link.description}</small>
+            </Link>)}
+          </div>
+        </div>;
+      })}
+    </>;
+  }
+  return <>
+    <header ref={header} className="uv-public-header" onKeyDown={event=>{
+      if(event.key!=="Escape") return;
+      if(openGroup){event.preventDefault();document.getElementById(`${openGroup}-button`)?.focus();setOpenGroup(null);}
+      else if(mobileNavOpen){event.preventDefault();closeNavigation();toggle.current?.focus();}
+    }}>
+      <div className="uv-header-inner">
+        <Link href="/" aria-label="Unnati Vidya home" onClick={closeNavigation}>
+          <Image src="/brand/unnatividya-logo-gradient.svg" alt="Unnati Vidya" width={174} height={32} style={{height:24,width:"auto",display:"block"}} priority/>
+        </Link>
+        <nav className="uv-header-nav" aria-label="Main navigation">{navigationLinks("desktop")}</nav>
+        <Link href="/shortlist" className="uv-header-shortlist" aria-current={isActive("/shortlist")?"page":undefined} aria-label={`Saved courses${shortlistCount?`, ${shortlistCount} saved`:""}`}>
+          <Heart size={14} fill={shortlistCount?"currentColor":"none"} aria-hidden="true"/>Saved courses{shortlistCount?` (${shortlistCount})`:""}
+        </Link>
+        <Link href="/lead?intent=enquire" data-open-lead className="uv-header-cta">Apply now</Link>
+        <button ref={toggle} type="button" className="uv-header-toggle" style={{marginLeft:"auto"}} aria-label={mobileNavOpen?"Close menu":"Open menu"} aria-expanded={mobileNavOpen} aria-controls="uv-mobile-nav-panel" onClick={()=>{setMobileNavOpen(!mobileNavOpen);setOpenGroup(null);}}>
+          {mobileNavOpen?<X size={24} aria-hidden="true"/>:<Menu size={24} aria-hidden="true"/>}
+        </button>
       </div>
-    </>
-  );
+      <nav hidden={!mobileNavOpen} className="uv-header-mobile-panel" id="uv-mobile-nav-panel" aria-label="Mobile navigation">
+        {navigationLinks("mobile")}
+        <Link href="/shortlist" aria-current={isActive("/shortlist")?"page":undefined} onClick={closeNavigation}>Saved courses{shortlistCount?` (${shortlistCount})`:""}</Link>
+        <Link href="/lead?intent=enquire" data-open-lead className="uv-header-mobile-cta" onClick={closeNavigation}>Apply now</Link>
+      </nav>
+    </header>
+    <div style={{background:"#263238",color:"#fff",fontSize:12,textAlign:"center",padding:"7px 16px"}}>Compare courses, fees and eligibility · <Link href="/courses" style={{color:"#FDB515",fontWeight:600}}>Explore courses</Link></div>
+  </>;
 }

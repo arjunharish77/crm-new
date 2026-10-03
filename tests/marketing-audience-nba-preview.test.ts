@@ -9,11 +9,13 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const dbMocks = vi.hoisted(() => ({ query: vi.fn(), queryOne: vi.fn(), execute: vi.fn() }));
 vi.mock("@/lib/db/query", () => dbMocks);
 
-const leadListMock = vi.hoisted(() => ({ getLeadListForTenant: vi.fn() }));
+const leadListMock = vi.hoisted(() => ({ leadAudienceForList: vi.fn() }));
 vi.mock("@/lib/repositories/lead-lists-postgres", () => leadListMock);
 
+// The list as an audience is read in pages (§8 #24): a count plus the first page.
 const leadsPostgresMocks = vi.hoisted(() => ({
-  listLeadsForTenant: vi.fn(),
+  countLeadAudienceForTenant: vi.fn(),
+  listLeadAudiencePageForTenant: vi.fn(),
   getPendingNbaCountMap: vi.fn(),
 }));
 vi.mock("@/lib/repositories/leads-postgres", () => leadsPostgresMocks);
@@ -23,7 +25,8 @@ vi.mock("@/lib/server/communications", () => ({
   queueCommunicationForTenant: vi.fn(),
   renderTemplate: vi.fn((text: string) => text),
 }));
-vi.mock("@/lib/server/module-entitlements", () => ({ assertModuleEnabled: vi.fn().mockResolvedValue(undefined) }));
+vi.mock("@/lib/repositories/auth-admin-postgres", () => ({ getCurrentUserById: vi.fn() }));
+vi.mock("@/lib/server/module-entitlements", () => ({ assertModuleEnabled: vi.fn().mockResolvedValue(undefined), assertTenantModule: vi.fn().mockResolvedValue(undefined) }));
 
 const TENANT_USER = { id: "user-1", tenantId: "tenant-1" };
 
@@ -32,19 +35,18 @@ describe("previewMarketingCampaignAudienceForTenant NBA attachment", () => {
     dbMocks.query.mockReset();
     dbMocks.queryOne.mockReset();
     dbMocks.execute.mockReset();
-    leadListMock.getLeadListForTenant.mockReset();
-    leadsPostgresMocks.listLeadsForTenant.mockReset();
+    leadListMock.leadAudienceForList.mockReset().mockResolvedValue({ staticListId: "list-1" });
+    leadsPostgresMocks.countLeadAudienceForTenant.mockReset();
+    leadsPostgresMocks.listLeadAudiencePageForTenant.mockReset();
     leadsPostgresMocks.getPendingNbaCountMap.mockReset();
   });
 
   it("attaches a per-recipient pendingNbaCount and computes the tenant-wide aggregate", async () => {
-    leadListMock.getLeadListForTenant.mockResolvedValueOnce({
-      leads: [
-        { id: "lead-1", name: "Alice", email: "alice@example.com" },
-        { id: "lead-2", name: "Bob", email: "bob@example.com" },
-      ],
-      count: 2,
-    });
+    leadsPostgresMocks.countLeadAudienceForTenant.mockResolvedValueOnce(2);
+    leadsPostgresMocks.listLeadAudiencePageForTenant.mockResolvedValueOnce([
+      { id: "lead-1", name: "Alice", email: "alice@example.com" },
+      { id: "lead-2", name: "Bob", email: "bob@example.com" },
+    ]);
     leadsPostgresMocks.getPendingNbaCountMap.mockResolvedValueOnce(new Map([["lead-1", 3]]));
 
     const { previewMarketingCampaignAudienceForTenant } = await import("@/lib/server/marketing-communications");
@@ -66,7 +68,8 @@ describe("previewMarketingCampaignAudienceForTenant NBA attachment", () => {
   });
 
   it("skips the pending-count lookup entirely when there are no LEAD-backed recipients", async () => {
-    leadListMock.getLeadListForTenant.mockResolvedValueOnce({ leads: [], count: 0 });
+    leadsPostgresMocks.countLeadAudienceForTenant.mockResolvedValueOnce(0);
+    leadsPostgresMocks.listLeadAudiencePageForTenant.mockResolvedValueOnce([]);
 
     const { previewMarketingCampaignAudienceForTenant } = await import("@/lib/server/marketing-communications");
     const preview = await previewMarketingCampaignAudienceForTenant(TENANT_USER, {

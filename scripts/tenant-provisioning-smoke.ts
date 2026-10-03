@@ -14,6 +14,7 @@ async function main(){
  const catalog=(await q('select "key","isCore" from "PlatformModule"')).rows;
  const entitlements=await getTenantModuleEntitlements(result.tenantId);check(entitlements.length===catalog.length);check(entitlements.length===28);check(entitlements.filter(e=>e.isCore).every(e=>e.status==='ENABLED'));
  for(const key of ['OPPORTUNITIES','AI_COPILOT','PAYOUTS'])check(entitlements.find(e=>e.key===key)?.status==='DISABLED');
+ const statusRows=await pool.query('select key, category from "LeadStatusDefinition" where "tenantId"=$1 order by "order"',[result.tenantId]);check(statusRows.rows.map((r:any)=>r.key).join(',')==='NEW,CONTACTED,QUALIFIED,CONVERTED,LOST'); // UI/UX plan decision 6: new tenants get the default lead statuses
  const flags=await getTenantFeatureFlags(result.tenantId);check(flags.opportunityEnabled===false);check(flags.payoutsEnabled===false);check(flags.apiAccessEnabled===true);check(flags.salesGroupsEnabled===false);
  check(Number((await q('select count(*) from "TenantModuleAuditLog" where "tenantId"=$1 and "performedBy"=$2',[result.tenantId,actor.id])).rows[0].count)===catalog.length);
  check((await q('select id from "User" where id=$1 and "tenantId"=$2',[result.userId,result.tenantId])).rowCount===1);

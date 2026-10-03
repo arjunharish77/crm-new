@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { requireCurrentUser } from "@/lib/server/auth";
 import { listCommunicationEventsForTenant } from "@/lib/server/communications";
-import { badRequest, serverError, unauthorized } from "@/lib/server/http";
+import { assertRecordVisibleForUser } from "@/lib/server/crm";
+import { badRequest, notFound, serverError, unauthorized } from "@/lib/server/http";
 
 export async function GET(request: Request) {
   try {
@@ -10,6 +11,8 @@ export async function GET(request: Request) {
     const entityType = searchParams.get("entityType");
     const entityId = searchParams.get("entityId");
     if (!entityType || !entityId) return badRequest("entityType and entityId are required");
+    // Only for people who can open the record (any id in the workspace worked before).
+    await assertRecordVisibleForUser(user, entityType, entityId);
     return NextResponse.json(await listCommunicationEventsForTenant(user, {
       entityType,
       entityId,
@@ -17,6 +20,7 @@ export async function GET(request: Request) {
     }));
   } catch (error) {
     if (error instanceof Error && error.message === "UNAUTHORIZED") return unauthorized();
+    if (error instanceof Error && error.message === "RECORD_NOT_FOUND") return notFound("Record not found");
     return serverError("Failed to fetch communication events", error);
   }
 }

@@ -17,6 +17,8 @@ export async function POST(
     return NextResponse.json(list);
   } catch (error) {
     if (error instanceof Error && error.message === "UNAUTHORIZED") return unauthorized();
+    if (error instanceof Error && error.message === "LEADS_NOT_VISIBLE") return badRequest("Some of those leads don't exist or you can't see them");
+    if (error instanceof Error && error.message === "LEAD_LIST_NOT_FOUND") return NextResponse.json({ message: "List not found" }, { status: 404 });
     return serverError("Failed to add leads to list", error);
   }
 }

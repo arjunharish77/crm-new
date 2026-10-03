@@ -241,7 +241,7 @@ export default function AuditLogsPage() {
                                                 <TableCell>
                                                     {log.changes ? (
                                                         <details className="max-w-xs">
-                                                            <summary className="cursor-pointer text-xs text-blue-600 hover:underline">
+                                                            <summary className="cursor-pointer text-xs text-status-info-foreground hover:underline">
                                                                 View changes
                                                             </summary>
                                                             <pre className="mt-2 text-xs bg-muted p-2 rounded overflow-x-auto">

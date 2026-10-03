@@ -153,7 +153,7 @@ export function RecordHistory({ entityType, entityId }: RecordHistoryProps) {
                         <Button
                             variant="outline"
                             size="sm"
-                            className="h-auto min-h-[34px] max-w-full whitespace-normal w-full justify-start rounded-[10px] font-semibold sm:w-80"
+                            className="h-auto min-h-[34px] max-w-full whitespace-normal w-full justify-start rounded-xl font-semibold sm:w-80"
                         >
                             <ListFilter className="size-4" />
                             {fieldFilter.length > 0 ? `${fieldFilter.length} selected` : "Filter fields"}
@@ -215,7 +215,7 @@ export function RecordHistory({ entityType, entityId }: RecordHistoryProps) {
                             return (
                                 <>
                                     <div className="mb-1 flex flex-wrap items-start justify-between gap-1">
-                                        <span className="min-w-0 max-w-full break-words text-sm font-extrabold">
+                                        <span className="min-w-0 max-w-full break-words text-sm font-semibold">
                                             {actionLabel}
                                         </span>
                                         <span className="text-xs text-muted-foreground">
@@ -231,7 +231,7 @@ export function RecordHistory({ entityType, entityId }: RecordHistoryProps) {
                                         <div className="mt-1 flex flex-col gap-1.5">
                                             {fields.map((field: { field: string; before: any; after: any }) => (
                                                 <div key={field.field} className="rounded-lg border bg-surface-container-lowest p-2">
-                                                    <p className="text-xs font-extrabold text-muted-foreground">
+                                                    <p className="text-xs font-semibold text-muted-foreground">
                                                         {labelForField(field.field)}
                                                     </p>
                                                     <div className="flex flex-wrap items-center gap-1.5">
@@ -239,7 +239,7 @@ export function RecordHistory({ entityType, entityId }: RecordHistoryProps) {
                                                             {formatValue(field.before, field.field, item)}
                                                         </Badge>
                                                         <ArrowRight className="size-3.5 text-muted-foreground/60" />
-                                                        <Badge variant="outline" className="min-w-0 max-w-full whitespace-normal break-all border-emerald-500/40 text-emerald-700 dark:text-emerald-300">
+                                                        <Badge variant="outline" className="min-w-0 max-w-full whitespace-normal break-all border-emerald-500/40 text-status-success-foreground">
                                                             {formatValue(field.after, field.field, item)}
                                                         </Badge>
                                                     </div>

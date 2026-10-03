@@ -1,0 +1,1190 @@
+[
+  {
+    "courseId": "bba-muj",
+    "checkedAt": "2026-09-30",
+    "sourceUrl": "https://www.onlinemanipal.com/online-bba-degree-muj",
+    "scope": "Paraphrased semester overview; not an exhaustive syllabus or exact subject titles. Confirm elective choices and the admission session before approval.",
+    "notes": [],
+    "curriculum": [
+      {
+        "term": "Semester 1",
+        "subjects": [
+          "Management foundations, accounting, microeconomics, entrepreneurship, human values and office tools."
+        ]
+      },
+      {
+        "term": "Semester 2",
+        "subjects": [
+          "Macroeconomics, business finance, organisational behaviour, community work, introductory Python, statistics and communication."
+        ]
+      },
+      {
+        "term": "Semester 3",
+        "subjects": [
+          "Operations, people management, marketing, cost accounting, interview skills, business law and the business environment."
+        ]
+      },
+      {
+        "term": "Semester 4",
+        "subjects": [
+          "India’s financial system, research methods, supply chains, online commerce, design thinking, environmental studies and technology management."
+        ]
+      },
+      {
+        "term": "Semester 5",
+        "subjects": [
+          "Business analytics and international business, plus three subjects from the selected elective group."
+        ]
+      },
+      {
+        "term": "Semester 6",
+        "subjects": [
+          "Strategy, management information systems and a project, plus three subjects from the selected elective group."
+        ]
+      }
+    ]
+  },
+  {
+    "courseId": "bba-smu",
+    "checkedAt": "2026-09-30",
+    "sourceUrl": "https://www.onlinemanipal.com/online-bba-degree-smu",
+    "scope": "Paraphrased semester overview; not an exhaustive syllabus or exact subject titles. Confirm elective choices and the admission session before approval.",
+    "notes": [],
+    "curriculum": [
+      {
+        "term": "Semester 1",
+        "subjects": [
+          "Management practice, accounting, economics, legal foundations and business communication."
+        ]
+      },
+      {
+        "term": "Semester 2",
+        "subjects": [
+          "People and organisational behaviour, the business environment, statistics, finance and marketing."
+        ]
+      },
+      {
+        "term": "Semester 3",
+        "subjects": [
+          "International business, rural markets, entrepreneurship, management accounting and financial services."
+        ]
+      },
+      {
+        "term": "Semester 4",
+        "subjects": [
+          "Strategy, market research, service marketing, leadership and consumer behaviour."
+        ]
+      },
+      {
+        "term": "Semester 5",
+        "subjects": [
+          "Online commerce and advertising communications, plus three subjects from the chosen specialization."
+        ]
+      },
+      {
+        "term": "Semester 6",
+        "subjects": [
+          "International marketing and taxation, plus three subjects from the chosen specialization."
+        ]
+      }
+    ]
+  },
+  {
+    "courseId": "bca-muj",
+    "checkedAt": "2026-09-30",
+    "sourceUrl": "https://www.onlinemanipal.com/online-bca-degree-muj",
+    "scope": "Paraphrased semester overview; not an exhaustive syllabus or exact subject titles. Confirm elective choices and the admission session before approval.",
+    "notes": [],
+    "curriculum": [
+      {
+        "term": "Semester 1",
+        "subjects": [
+          "Mathematics, communication, C coding, digital systems, web development and environmental studies, with programming labs."
+        ]
+      },
+      {
+        "term": "Semester 2",
+        "subjects": [
+          "Probability and statistics, data structures, databases, language principles and object-oriented C++, with labs."
+        ]
+      },
+      {
+        "term": "Semester 3",
+        "subjects": [
+          "Computer architecture, Java, data communication, operating systems and AI problem-solving, with labs."
+        ]
+      },
+      {
+        "term": "Semester 4",
+        "subjects": [
+          "Python, software engineering, data mining and visualisation, and network security, with practical labs."
+        ]
+      },
+      {
+        "term": "Semester 5",
+        "subjects": [
+          "Mobile development, machine learning, cloud applications and technical preparation, with a lab and one elective from the available tracks."
+        ]
+      },
+      {
+        "term": "Semester 6",
+        "subjects": [
+          "Wireless communication, Unix/shell work, big data and a project, with practical work and a further track elective."
+        ]
+      }
+    ]
+  },
+  {
+    "courseId": "bcom-muj",
+    "checkedAt": "2026-09-30",
+    "sourceUrl": "https://www.onlinemanipal.com/online-bcom-degree-muj",
+    "scope": "Paraphrased semester overview; not an exhaustive syllabus or exact subject titles. Confirm elective choices and the admission session before approval.",
+    "notes": [],
+    "curriculum": [
+      {
+        "term": "Semester 1",
+        "subjects": [
+          "English, economic foundations, introductory accounting, business organisation and management."
+        ]
+      },
+      {
+        "term": "Semester 2",
+        "subjects": [
+          "Computers and internet use, marketing, further accounting, commercial law and entrepreneurship."
+        ]
+      },
+      {
+        "term": "Semester 3",
+        "subjects": [
+          "Business communication, finance, cost accounting, financial services and online commerce, with simulation work."
+        ]
+      },
+      {
+        "term": "Semester 4",
+        "subjects": [
+          "Direct taxation, statistics, the business environment, environmental studies and people management."
+        ]
+      },
+      {
+        "term": "Semester 5",
+        "subjects": [
+          "Management accounting and indirect taxation, plus three subjects from the chosen elective group."
+        ]
+      },
+      {
+        "term": "Semester 6",
+        "subjects": [
+          "Auditing and a project, plus three subjects from the chosen elective group."
+        ]
+      }
+    ]
+  },
+  {
+    "courseId": "bcom-smu",
+    "checkedAt": "2026-09-30",
+    "sourceUrl": "https://www.onlinemanipal.com/online-bcom-degree-smu",
+    "scope": "Paraphrased semester overview; not an exhaustive syllabus or exact subject titles. Confirm elective choices and the admission session before approval.",
+    "notes": [],
+    "curriculum": [
+      {
+        "term": "Semester 1",
+        "subjects": [
+          "Initial financial accounting, business organisation, corporate law, digital skills and English communication."
+        ]
+      },
+      {
+        "term": "Semester 2",
+        "subjects": [
+          "Further financial accounting, financial literacy, economics, environmental studies and functional English."
+        ]
+      },
+      {
+        "term": "Semester 3",
+        "subjects": [
+          "Corporate accounting, marketing, governance and social responsibility, quantitative foundations and leadership."
+        ]
+      },
+      {
+        "term": "Semester 4",
+        "subjects": [
+          "Cost and management accounting, financial institutions and services, entrepreneurship and digital business."
+        ]
+      },
+      {
+        "term": "Semester 5",
+        "subjects": [
+          "Direct tax and GST, people management, auditing, financial management and international reporting standards."
+        ]
+      },
+      {
+        "term": "Semester 6",
+        "subjects": [
+          "Investment funds, financial strategy, international finance, research methods and the societal effects of globalisation."
+        ]
+      }
+    ]
+  },
+  {
+    "courseId": "bba-amity",
+    "checkedAt": "2026-09-30",
+    "sourceUrl": "https://amityonline.com/bachelor-of-business-administration-online",
+    "scope": "Paraphrased semester overview; not an exhaustive syllabus or exact subject titles. Confirm elective choices and the admission session before approval.",
+    "notes": [],
+    "curriculum": [
+      {
+        "term": "Semester 1",
+        "subjects": [
+          "Foundations of accounting, marketing and management, alongside statistics and communication."
+        ]
+      },
+      {
+        "term": "Semester 2",
+        "subjects": [
+          "People management, business finance, personal development, business computing and environmental studies."
+        ]
+      },
+      {
+        "term": "Semester 3",
+        "subjects": [
+          "Organisational behaviour, production and operations, management research, cross-cultural work and financial markets."
+        ]
+      },
+      {
+        "term": "Semester 4",
+        "subjects": [
+          "Operational research, consumer behaviour, entrepreneurship, sales/distribution and project fundamentals."
+        ]
+      },
+      {
+        "term": "Semester 5",
+        "subjects": [
+          "Digital-era marketing, strategy and ethics; the page also labels customer relationships, financial planning and quality modules as electives."
+        ]
+      },
+      {
+        "term": "Semester 6",
+        "subjects": [
+          "International people management, brands, retailing and a dissertation."
+        ]
+      }
+    ]
+  },
+  {
+    "courseId": "bca-amity",
+    "checkedAt": "2026-09-30",
+    "sourceUrl": "https://amityonline.com/bachelor-of-computer-applications-online",
+    "scope": "Paraphrased semester overview; not an exhaustive syllabus or exact subject titles. Confirm elective choices and the admission session before approval.",
+    "notes": [
+      "The source has provisional wording about a machine-learning mini-project; do not treat it as a settled assessment requirement."
+    ],
+    "curriculum": [
+      {
+        "term": "Semester 1",
+        "subjects": [
+          "Communication, computing foundations, C coding, cyber-law awareness and mathematics."
+        ]
+      },
+      {
+        "term": "Semester 2",
+        "subjects": [
+          "Data structures in C, operating-system concepts, personal development, environmental studies and software modelling."
+        ]
+      },
+      {
+        "term": "Semester 3",
+        "subjects": [
+          "Sustainable computing, object-oriented Java, networks, database foundations and Python."
+        ]
+      },
+      {
+        "term": "Semester 4",
+        "subjects": [
+          "AI and machine-learning foundations, Unix/shell work, digital marketing, IT projects, cloud systems, security and generative AI."
+        ]
+      },
+      {
+        "term": "Semester 5",
+        "subjects": [
+          "Deep learning, ethics, online commerce, enterprise systems, applied SQL and connected devices. The source includes an unresolved mini-project wording note."
+        ]
+      },
+      {
+        "term": "Semester 6",
+        "subjects": [
+          "A major project, people management, blockchain, language processing and responsible AI."
+        ]
+      }
+    ]
+  },
+  {
+    "courseId": "bcom-amity",
+    "checkedAt": "2026-09-30",
+    "sourceUrl": "https://amityonline.com/bachelor-of-commerce-online",
+    "scope": "Paraphrased semester overview; not an exhaustive syllabus or exact subject titles. Confirm elective choices and the admission session before approval.",
+    "notes": [],
+    "curriculum": [
+      {
+        "term": "Semester 1",
+        "subjects": [
+          "Initial business mathematics and accounting, commercial law, environmental studies and communication."
+        ]
+      },
+      {
+        "term": "Semester 2",
+        "subjects": [
+          "Further mathematics and accounting, company-law foundations, macroeconomics and marketing."
+        ]
+      },
+      {
+        "term": "Semester 3",
+        "subjects": [
+          "Personal development, corporate and cost accounting, direct taxation and statistics."
+        ]
+      },
+      {
+        "term": "Semester 4",
+        "subjects": [
+          "Auditing, further corporate accounting and taxation, management accounting and research methods."
+        ]
+      },
+      {
+        "term": "Semester 5",
+        "subjects": [
+          "Business organisation, accounting software, reporting, finance, India’s economy and professional ethics."
+        ]
+      },
+      {
+        "term": "Semester 6",
+        "subjects": [
+          "Governance and ethics, a major project, corporate tax planning, international finance and investment portfolios."
+        ]
+      }
+    ]
+  },
+  {
+    "courseId": "bcom-honours-amity",
+    "checkedAt": "2026-09-30",
+    "sourceUrl": "https://amityonline.com/bachelor-of-commerce-honours",
+    "scope": "Paraphrased semester overview; not an exhaustive syllabus or exact subject titles. Confirm elective choices and the admission session before approval.",
+    "notes": [
+      "Confirm the awarding institution and ACCA/non-ACCA route before publication."
+    ],
+    "curriculum": [
+      {
+        "term": "Semester 1",
+        "subjects": [
+          "Business organisation, commercial/company law, accounting, microeconomics, the business environment and communication."
+        ]
+      },
+      {
+        "term": "Semester 2",
+        "subjects": [
+          "Audit and assurance, further accounting and microeconomics, income tax, data analysis and research statistics."
+        ]
+      },
+      {
+        "term": "Semester 3",
+        "subjects": [
+          "Financial management and reporting, cost/management accounting, indirect taxes and environmental studies."
+        ]
+      },
+      {
+        "term": "Semester 4",
+        "subjects": [
+          "Further reporting and accounting, strategic leadership/reporting and business research."
+        ]
+      },
+      {
+        "term": "Semester 5",
+        "subjects": [
+          "Advanced leadership/reporting, analytical skills and an internship; choose two subjects from the listed domain electives."
+        ]
+      },
+      {
+        "term": "Semester 6",
+        "subjects": [
+          "Further leadership, financial analytics and a dissertation; the non-ACCA route lists two additional domain electives."
+        ]
+      }
+    ]
+  },
+  {
+    "courseId": "bajmc-amity",
+    "checkedAt": "2026-09-30",
+    "sourceUrl": "https://amityonline.com/bachelor-of-arts-journalism-and-mass-communication-online",
+    "scope": "Paraphrased semester overview; not an exhaustive syllabus or exact subject titles. Confirm elective choices and the admission session before approval.",
+    "notes": [],
+    "curriculum": [
+      {
+        "term": "Semester 1",
+        "subjects": [
+          "Communication theory, print journalism, visual communication and business writing/speaking."
+        ]
+      },
+      {
+        "term": "Semester 2",
+        "subjects": [
+          "Radio/audio work, photography, media law and ethics, and environmental studies."
+        ]
+      },
+      {
+        "term": "Semester 3",
+        "subjects": [
+          "Advertising, television production, media research, global media and personal development."
+        ]
+      },
+      {
+        "term": "Semester 4",
+        "subjects": [
+          "Digital journalism, public relations, sustainable-development communication, marketing and specialist writing."
+        ]
+      },
+      {
+        "term": "Semester 5",
+        "subjects": [
+          "Events, filmmaking, client/creative work, branding and professional ethics."
+        ]
+      },
+      {
+        "term": "Semester 6",
+        "subjects": [
+          "Campaign planning for public relations and advertising, camera work, digital content/marketing and a major project."
+        ]
+      }
+    ]
+  },
+  {
+    "courseId": "mba-muj",
+    "checkedAt": "2026-09-30",
+    "sourceUrl": "https://www.onlinemanipal.com/online-mba-manipal-university-jaipur",
+    "scope": "Paraphrased semester overview; not an exhaustive syllabus or exact subject titles. Confirm elective choices and the admission session before approval.",
+    "notes": [
+      "The source distinguishes super and dual specialization arrangements; confirm the selected route before assigning elective modules."
+    ],
+    "curriculum": [
+      {
+        "term": "Semester 1",
+        "subjects": [
+          "Entrepreneurial practice, communication, economics, accounting, data visualisation, organisational behaviour and marketing."
+        ]
+      },
+      {
+        "term": "Semester 2",
+        "subjects": [
+          "Research using analytical tools, operations, people management, accounting, finance, business law and communication."
+        ]
+      },
+      {
+        "term": "Semester 3",
+        "subjects": [
+          "Strategy and a term paper, with four modules determined by the chosen elective arrangement."
+        ]
+      },
+      {
+        "term": "Semester 4",
+        "subjects": [
+          "International business and a project, with four further modules determined by the chosen elective arrangement."
+        ]
+      }
+    ]
+  },
+  {
+    "courseId": "mba-smu",
+    "checkedAt": "2026-09-30",
+    "sourceUrl": "https://www.onlinemanipal.com/online-mba-degree-dual-specialization-smu",
+    "scope": "Paraphrased semester overview; not an exhaustive syllabus or exact subject titles. Confirm elective choices and the admission session before approval.",
+    "notes": [],
+    "curriculum": [
+      {
+        "term": "Semester 1",
+        "subjects": [
+          "Management and organisational behaviour, marketing, accounting, economics, communication, law and business computing."
+        ]
+      },
+      {
+        "term": "Semester 2",
+        "subjects": [
+          "Quantitative methods, people management, finance, operations, statistical research, economic policy and information systems."
+        ]
+      },
+      {
+        "term": "Semester 3",
+        "subjects": [
+          "Project management and strategy, with subjects from the two selected specializations."
+        ]
+      },
+      {
+        "term": "Semester 4",
+        "subjects": [
+          "Banking/insurance management and project work, with further subjects from both selected specializations."
+        ]
+      }
+    ]
+  },
+  {
+    "courseId": "mba-amity",
+    "checkedAt": "2026-09-30",
+    "sourceUrl": "https://amityonline.com/master-of-business-administration-online",
+    "scope": "Paraphrased semester overview; not an exhaustive syllabus or exact subject titles. Confirm elective choices and the admission session before approval.",
+    "notes": [],
+    "curriculum": [
+      {
+        "term": "Semester 1",
+        "subjects": [
+          "Economics for managers, statistics, communication, accounting and marketing."
+        ]
+      },
+      {
+        "term": "Semester 2",
+        "subjects": [
+          "Business law and research, finance, people management and conflict resolution."
+        ]
+      },
+      {
+        "term": "Semester 3",
+        "subjects": [
+          "Strategy, a minor project, ethics and four specialization electives."
+        ]
+      },
+      {
+        "term": "Semester 4",
+        "subjects": [
+          "A major project, social/economic/ethical management issues, digital marketing, AI applications and two specialization electives."
+        ]
+      }
+    ]
+  },
+  {
+    "courseId": "mca-muj",
+    "checkedAt": "2026-09-30",
+    "sourceUrl": "https://www.onlinemanipal.com/online-mca-degree-muj",
+    "scope": "Paraphrased semester overview; not an exhaustive syllabus or exact subject titles. Confirm elective choices and the admission session before approval.",
+    "notes": [
+      "Computing/mathematics bridge requirements depend on prior qualifications; a curriculum summary does not replace the eligibility assessment."
+    ],
+    "curriculum": [
+      {
+        "term": "Semester 1",
+        "subjects": [
+          "Computing and mathematical foundations, discrete structures, Python and C problem-solving, relational databases and visualisation, with labs."
+        ]
+      },
+      {
+        "term": "Semester 2",
+        "subjects": [
+          "Networks, Java, operating systems, algorithms and architecture, with labs and one track elective."
+        ]
+      },
+      {
+        "term": "Semester 3",
+        "subjects": [
+          "Unix/shell work, web technologies and software/project management, with labs and two track electives."
+        ]
+      },
+      {
+        "term": "Semester 4",
+        "subjects": [
+          "Mobile development and a project, plus a further track elective."
+        ]
+      }
+    ]
+  },
+  {
+    "courseId": "mca-smu",
+    "checkedAt": "2026-09-30",
+    "sourceUrl": "https://www.onlinemanipal.com/online-mca-degree-smu",
+    "scope": "Paraphrased semester overview; not an exhaustive syllabus or exact subject titles. Confirm elective choices and the admission session before approval.",
+    "notes": [
+      "Confirm which foundation/bridge requirements apply to the learner’s prior qualifications."
+    ],
+    "curriculum": [
+      {
+        "term": "Semester 1",
+        "subjects": [
+          "Computational mathematics, Java, operating systems and databases, with labs and computing/mathematics foundations."
+        ]
+      },
+      {
+        "term": "Semester 2",
+        "subjects": [
+          "Python, software modelling, algorithm design and analysis, and web frameworks, with practical labs."
+        ]
+      },
+      {
+        "term": "Semester 3",
+        "subjects": [
+          ".NET and networking with labs, plus two electives from the selected technical track."
+        ]
+      },
+      {
+        "term": "Semester 4",
+        "subjects": [
+          "Mobile development and a project, plus two further technical-track electives."
+        ]
+      }
+    ]
+  },
+  {
+    "courseId": "mca-amity",
+    "checkedAt": "2026-09-30",
+    "sourceUrl": "https://amityonline.com/master-of-computer-applications-online",
+    "scope": "Paraphrased semester overview; not an exhaustive syllabus or exact subject titles. Confirm elective choices and the admission session before approval.",
+    "notes": [
+      "The source includes internal-looking annotations about existing data-structure/deep-learning content. Confirm the current admissions syllabus and elective choices."
+    ],
+    "curriculum": [
+      {
+        "term": "Semester 1",
+        "subjects": [
+          "Python data structures, Java, advanced databases, software engineering and professional communication."
+        ]
+      },
+      {
+        "term": "Semester 2",
+        "subjects": [
+          "Professional analytical/social skills, network protocols, security, cryptography and research, with technical elective options."
+        ]
+      },
+      {
+        "term": "Semester 3",
+        "subjects": [
+          "Cloud services, Unix/Linux, a seminar, data interpretation and ethics, with additional technical elective options."
+        ]
+      },
+      {
+        "term": "Semester 4",
+        "subjects": [
+          "A major project."
+        ]
+      }
+    ]
+  },
+  {
+    "courseId": "mcom-muj",
+    "checkedAt": "2026-09-30",
+    "sourceUrl": "https://www.onlinemanipal.com/online-mcom-degree-muj",
+    "scope": "Paraphrased semester overview; not an exhaustive syllabus or exact subject titles. Confirm elective choices and the admission session before approval.",
+    "notes": [],
+    "curriculum": [
+      {
+        "term": "Semester 1",
+        "subjects": [
+          "Management and organisational behaviour, economics, finance, cost control, business law and financial reporting."
+        ]
+      },
+      {
+        "term": "Semester 2",
+        "subjects": [
+          "Statistical research, management accounting, marketing, business context, project appraisal and financial institutions/services."
+        ]
+      },
+      {
+        "term": "Semester 3",
+        "subjects": [
+          "Strategy, digital commerce, international business, corporate tax planning, investment portfolios and information systems."
+        ]
+      },
+      {
+        "term": "Semester 4",
+        "subjects": [
+          "Advanced company accounting, audit/insurance, risk, governance and ethics, GST and a project report."
+        ]
+      }
+    ]
+  },
+  {
+    "courseId": "mcom-smu",
+    "checkedAt": "2026-09-30",
+    "sourceUrl": "https://www.onlinemanipal.com/online-mcom-degree-smu",
+    "scope": "Paraphrased semester overview; not an exhaustive syllabus or exact subject titles. Confirm elective choices and the admission session before approval.",
+    "notes": [],
+    "curriculum": [
+      {
+        "term": "Semester 1",
+        "subjects": [
+          "Management and organisational behaviour, marketing, reporting, managerial economics and corporate finance."
+        ]
+      },
+      {
+        "term": "Semester 2",
+        "subjects": [
+          "Advanced company accounting, business law, cost control, people management and assurance."
+        ]
+      },
+      {
+        "term": "Semester 3",
+        "subjects": [
+          "Governance and ethics, strategy and management accounting, with a finance or marketing elective route."
+        ]
+      },
+      {
+        "term": "Semester 4",
+        "subjects": [
+          "Statistical research and project work, with further subjects from the chosen finance or marketing route."
+        ]
+      }
+    ]
+  },
+  {
+    "courseId": "ma-english-smu",
+    "checkedAt": "2026-09-30",
+    "sourceUrl": "https://www.onlinemanipal.com/online-ma-english-degree",
+    "scope": "Paraphrased semester overview; not an exhaustive syllabus or exact subject titles. Confirm elective choices and the admission session before approval.",
+    "notes": [],
+    "curriculum": [
+      {
+        "term": "Semester 1",
+        "subjects": [
+          "Initial studies in drama, poetry, fiction and criticism, alongside gender in literature."
+        ]
+      },
+      {
+        "term": "Semester 2",
+        "subjects": [
+          "Further drama, poetry, fiction and criticism, alongside environmental and climate issues."
+        ]
+      },
+      {
+        "term": "Semester 3",
+        "subjects": [
+          "American and Indian writing in English, postcolonial literature, research methods and literary approaches to the environment."
+        ]
+      },
+      {
+        "term": "Semester 4",
+        "subjects": [
+          "Diaspora writing, further postcolonial and world literature, and a dissertation."
+        ]
+      }
+    ]
+  },
+  {
+    "courseId": "ma-political-science-smu",
+    "checkedAt": "2026-09-30",
+    "sourceUrl": "https://www.onlinemanipal.com/online-ma-political-science-degree",
+    "scope": "Paraphrased semester overview; not an exhaustive syllabus or exact subject titles. Confirm elective choices and the admission session before approval.",
+    "notes": [],
+    "curriculum": [
+      {
+        "term": "Semester 1",
+        "subjects": [
+          "Political theory, Indian government, public administration, comparative methods and interpretations of modern India."
+        ]
+      },
+      {
+        "term": "Semester 2",
+        "subjects": [
+          "Western political ideas, international politics, Indian politics and political sociology, and environmental issues."
+        ]
+      },
+      {
+        "term": "Semester 3",
+        "subjects": [
+          "Modern Indian political ideas, research, governance/public policy, democracy and Indian foreign policy."
+        ]
+      },
+      {
+        "term": "Semester 4",
+        "subjects": [
+          "Gender in politics, Indo-Pacific developments, international political economy, and a dissertation with oral examination."
+        ]
+      }
+    ]
+  },
+  {
+    "courseId": "ma-sociology-smu",
+    "checkedAt": "2026-09-30",
+    "sourceUrl": "https://www.onlinemanipal.com/online-ma-sociology-degree",
+    "scope": "Paraphrased semester overview; not an exhaustive syllabus or exact subject titles. Confirm elective choices and the admission session before approval.",
+    "notes": [],
+    "curriculum": [
+      {
+        "term": "Semester 1",
+        "subjects": [
+          "Sociological foundations and thought, Indian stratification, gender and globalisation."
+        ]
+      },
+      {
+        "term": "Semester 2",
+        "subjects": [
+          "Classical theory, perspectives on India, rural/urban life, family and kinship, and environmental issues."
+        ]
+      },
+      {
+        "term": "Semester 3",
+        "subjects": [
+          "Contemporary theory, culture and personality, research methods, religion, ethnicity and nationalism."
+        ]
+      },
+      {
+        "term": "Semester 4",
+        "subjects": [
+          "Development, health, Indian social movements and a participatory-sociology dissertation."
+        ]
+      }
+    ]
+  },
+  {
+    "courseId": "ma-economics-muj",
+    "checkedAt": "2026-09-30",
+    "sourceUrl": "https://www.onlinemanipal.com/online-ma-economics-degree",
+    "scope": "Paraphrased semester overview; not an exhaustive syllabus or exact subject titles. Confirm elective choices and the admission session before approval.",
+    "notes": [],
+    "curriculum": [
+      {
+        "term": "Semester 1",
+        "subjects": [
+          "Initial micro/macro theory, mathematical and statistical foundations, India’s economy and public policy."
+        ]
+      },
+      {
+        "term": "Semester 2",
+        "subjects": [
+          "Further micro/macro theory, econometrics, the history of economic ideas, innovation and entrepreneurship."
+        ]
+      },
+      {
+        "term": "Semester 3",
+        "subjects": [
+          "Economic applications of data science, environmental/development economics, game theory and a term paper; choose one listed elective."
+        ]
+      },
+      {
+        "term": "Semester 4",
+        "subjects": [
+          "International and monetary economics, operational research and a dissertation; choose one further listed elective."
+        ]
+      }
+    ]
+  },
+  {
+    "courseId": "majmc-muj",
+    "checkedAt": "2026-09-30",
+    "sourceUrl": "https://www.onlinemanipal.com/online-ma-journalism-and-mass-communication",
+    "scope": "Paraphrased semester overview; not an exhaustive syllabus or exact subject titles. Confirm elective choices and the admission session before approval.",
+    "notes": [],
+    "curriculum": [
+      {
+        "term": "Semester 1",
+        "subjects": [
+          "Media foundations and communication theory, reporting/editing, new media, photography and current social affairs."
+        ]
+      },
+      {
+        "term": "Semester 2",
+        "subjects": [
+          "Broadcasting, audio/video editing, digital publishing, advertising, public relations, development communication and political affairs."
+        ]
+      },
+      {
+        "term": "Semester 3",
+        "subjects": [
+          "Media law/ethics, intercultural communication, research and an internship, with subjects from a chosen media elective track."
+        ]
+      },
+      {
+        "term": "Semester 4",
+        "subjects": [
+          "Mobile journalism, political communication, media management, film study and a dissertation, with a further track elective."
+        ]
+      }
+    ]
+  },
+  {
+    "courseId": "majmc-amity",
+    "checkedAt": "2026-09-30",
+    "sourceUrl": "https://amityonline.com/master-of-arts-journalism-and-mass-communication-online",
+    "scope": "Paraphrased semester overview; not an exhaustive syllabus or exact subject titles. Confirm elective choices and the admission session before approval.",
+    "notes": [],
+    "curriculum": [
+      {
+        "term": "Semester 1",
+        "subjects": [
+          "Communication theory, print analysis, visual design, photography and professional communication."
+        ]
+      },
+      {
+        "term": "Semester 2",
+        "subjects": [
+          "Marketing, development communication, media law/ethics, investigative reporting and professional analytical/social skills."
+        ]
+      },
+      {
+        "term": "Semester 3",
+        "subjects": [
+          "Media research, digital technologies, financial journalism, video editing and professional ethics."
+        ]
+      },
+      {
+        "term": "Semester 4",
+        "subjects": [
+          "Digital marketing, political communication, gender/rights in media, a dissertation and media sustainability/social responsibility."
+        ]
+      }
+    ]
+  },
+  {
+    "courseId": "mcom-amity",
+    "checkedAt": "2026-09-30",
+    "sourceUrl": "https://amityonline.com/master-of-commerce-financial-management-online",
+    "scope": "Paraphrased semester overview; not an exhaustive syllabus or exact subject titles. Confirm elective choices and the admission session before approval.",
+    "notes": [
+      "This draft follows the Financial Management program page. Resolve the generic M.Com record scope before publication; do not combine it with the separate FinTech program."
+    ],
+    "curriculum": [
+      {
+        "term": "Semester 1",
+        "subjects": [
+          "Advanced accounting, managerial economics, finance, statistics and communication."
+        ]
+      },
+      {
+        "term": "Semester 2",
+        "subjects": [
+          "Risk, business research, professional analytical/social skills, investment portfolios and financial engineering."
+        ]
+      },
+      {
+        "term": "Semester 3",
+        "subjects": [
+          "Financial reporting and decision-making, a minor project and professional ethics."
+        ]
+      },
+      {
+        "term": "Semester 4",
+        "subjects": [
+          "Treasury management and a dissertation."
+        ]
+      }
+    ]
+  },
+  {
+    "courseId": "msc-data-science-amity",
+    "checkedAt": "2026-09-30",
+    "sourceUrl": "https://amityonline.com/msc-in-data-science",
+    "scope": "Paraphrased semester overview; not an exhaustive syllabus or exact subject titles. Confirm elective choices and the admission session before approval.",
+    "notes": [
+      "Resolve the awarding institution and current-session recognition before publication."
+    ],
+    "curriculum": [
+      {
+        "term": "Semester 1",
+        "subjects": [
+          "Probability/statistics, Python, data-science foundations, data storage/mining and professional communication."
+        ]
+      },
+      {
+        "term": "Semester 2",
+        "subjects": [
+          "Linear algebra, R, data engineering, business analytics, visualisation and professional analytical/social skills."
+        ]
+      },
+      {
+        "term": "Semester 3",
+        "subjects": [
+          "Optimisation, machine/deep learning, language processing, large-scale analytics, AI and product development, with a minor project and ethics."
+        ]
+      },
+      {
+        "term": "Semester 4",
+        "subjects": [
+          "Project work and an internship."
+        ]
+      }
+    ]
+  },
+  {
+    "courseId": "msc-mathematics-muj",
+    "checkedAt": "2026-09-30",
+    "sourceUrl": "https://www.onlinemanipal.com/online-msc-mathematics-muj",
+    "scope": "Paraphrased semester overview; not an exhaustive syllabus or exact subject titles. Confirm elective choices and the admission session before approval.",
+    "notes": [
+      "Current-session recognition matching remains pending; elective subjects depend on the chosen track."
+    ],
+    "curriculum": [
+      {
+        "term": "Semester 1",
+        "subjects": [
+          "Advanced linear algebra, analysis, differential equations, complex analysis, topology and rigid-body dynamics."
+        ]
+      },
+      {
+        "term": "Semester 2",
+        "subjects": [
+          "Partial differential equations, optimisation, functional analysis, measure/integration, research writing and a seminar."
+        ]
+      },
+      {
+        "term": "Semester 3",
+        "subjects": [
+          "Fluid dynamics, special functions, integral equations/variations and field extensions, with two subjects from the chosen elective track."
+        ]
+      },
+      {
+        "term": "Semester 4",
+        "subjects": [
+          "A project and two further subjects from the selected elective track."
+        ]
+      }
+    ]
+  },
+  {
+    "courseId": "ma-public-policy-governance-amity",
+    "checkedAt": "2026-09-30",
+    "sourceUrl": "https://amityonline.com/ma-public-policy",
+    "scope": "Paraphrased semester overview; not an exhaustive syllabus or exact subject titles. Confirm elective choices and the admission session before approval.",
+    "notes": [],
+    "curriculum": [
+      {
+        "term": "Semester 1",
+        "subjects": [
+          "Public administration, India’s political system, policy foundations, political theory and communication, with a term paper."
+        ]
+      },
+      {
+        "term": "Semester 2",
+        "subjects": [
+          "Professional analytical/social skills, state administration, law, personnel administration and policy models, with a seminar."
+        ]
+      },
+      {
+        "term": "Semester 3",
+        "subjects": [
+          "Governance, globalisation and civil services, elective options, a postgraduate internship and ethics."
+        ]
+      },
+      {
+        "term": "Semester 4",
+        "subjects": [
+          "Policy evaluation, civil society, digital government, public finance, diplomacy and a dissertation."
+        ]
+      }
+    ]
+  },
+  {
+    "courseId": "ba-smu",
+    "checkedAt": "2026-09-30",
+    "sourceUrl": "https://www.onlinemanipal.com/online-ba-degree-smu",
+    "scope": "Paraphrased semester overview of alternative subject routes, not a combined compulsory syllabus or exhaustive subject list. Confirm the permitted subject combination and admission session before approval.",
+    "notes": [
+      "Route-labelled entries are alternatives. Do not combine every route into one learner’s required subjects.",
+      "Confirm subject-combination rules with the university; this outline does not select a route for the learner."
+    ],
+    "curriculum": [
+      {
+        "term": "Semester 1",
+        "subjects": [
+          "Shared introduction: Indian English writing, communication, political foundations, sociology and natural science."
+        ]
+      },
+      {
+        "term": "Semester 2",
+        "subjects": [
+          "Shared themes: world writing, functional English, political theory, Indian sociology and environmental studies."
+        ]
+      },
+      {
+        "term": "Semester 3",
+        "subjects": [
+          "Shared themes: essays/poetry, human values, comparative politics, rural sociology and digital skills."
+        ]
+      },
+      {
+        "term": "Semester 4",
+        "subjects": [
+          "Shared themes: new English writing, Indian political ideas and urban society.",
+          "English combination: literary forms and women’s writing.",
+          "Sociology combination: family/kinship and sociological principles.",
+          "Political Science combination: international relations and political economy."
+        ]
+      },
+      {
+        "term": "Semester 5",
+        "subjects": [
+          "Shared themes: children’s literature, human rights and Indian social problems.",
+          "English combination: Victorian/modern writing and poetry.",
+          "Sociology combination: classical thinkers and demography.",
+          "Political Science combination: Indian political processes and foreign policy."
+        ]
+      },
+      {
+        "term": "Semester 6",
+        "subjects": [
+          "Shared themes: American writing, global conflicts and social change.",
+          "English combination: short plays, novels and stories.",
+          "Sociology combination: education and Indian social movements.",
+          "Political Science combination: Indian public policy and gender politics."
+        ]
+      }
+    ]
+  },
+  {
+    "courseId": "ba-amity",
+    "checkedAt": "2026-09-30",
+    "sourceUrl": "https://amityonline.com/bachelor-of-arts-online",
+    "scope": "Paraphrased semester overview of alternative subject routes, not a combined compulsory syllabus or exhaustive subject list. Confirm the permitted subject combination and admission session before approval.",
+    "notes": [
+      "Route-labelled entries are alternatives. Do not combine every route into one learner’s required subjects.",
+      "Confirm subject-combination rules with the university; this outline does not select a route for the learner."
+    ],
+    "curriculum": [
+      {
+        "term": "Semester 1",
+        "subjects": [
+          "English route: literary history, drama, poetry.",
+          "Economics route: micro/macro foundations, Indian economic history.",
+          "Political Science route: nationalism, foundations, Indian thought.",
+          "Sociology route: Indian society, families and institutions.",
+          "Common: communication."
+        ]
+      },
+      {
+        "term": "Semester 2",
+        "subjects": [
+          "English route: later poetry and Indian English writing.",
+          "Economics route: statistics and further micro/macro theory.",
+          "Political Science route: ideas, constitutional history, politics.",
+          "Sociology route: population, classical thinkers, movements and research.",
+          "Common: environmental studies."
+        ]
+      },
+      {
+        "term": "Semester 3",
+        "subjects": [
+          "English route: criticism, novels and creative writing.",
+          "Economics route: international economics, statistics and demography.",
+          "Political Science route: administration, comparative government and diplomacy.",
+          "Sociology route: research, deviance and stratification.",
+          "Common: behavioural studies."
+        ]
+      },
+      {
+        "term": "Semester 4",
+        "subjects": [
+          "English route: drama, translation, literary theory and sociolinguistics.",
+          "Economics route: applied international economics, research and development.",
+          "Political Science route: comparison, global concerns, policy and elections.",
+          "Sociology route: politics, development, gender and urban life."
+        ]
+      },
+      {
+        "term": "Semester 5",
+        "subjects": [
+          "English route: modern poetry, drama and African writing.",
+          "Economics route: growth, regions, health, labour and environment.",
+          "Political Science route: law, Western thought, Indian politics.",
+          "Sociology route: health, industry, ageing, law and marginalisation."
+        ]
+      },
+      {
+        "term": "Semester 6",
+        "subjects": [
+          "English route: modern fiction, drama, poetry and dissertation.",
+          "Economics route: operational research, planning, markets and project.",
+          "Political Science route: diplomacy, legislation, thought, project.",
+          "Sociology route: religion, economy, environment and project."
+        ]
+      }
+    ]
+  }
+]

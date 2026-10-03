@@ -227,6 +227,31 @@ export async function changeTenantStatus(tenantId: string, status: "ACTIVE" | "S
   return pgAdmin.changeTenantStatus(tenantId, status);
 }
 
+// Suspending a workspace needs a reason, and suspending or reactivating one leaves an entry in
+// that workspace's audit log with who did it and why (Section 8 #12: neither was recorded).
+// `requestId` is set when the change ran on approval of a privileged-action request.
+export async function setTenantStatusForPlatformAdmin(
+  actor: { id: string },
+  tenantId: string,
+  status: "ACTIVE" | "SUSPENDED",
+  input: { reason?: string | null; requestId?: string; approvedBy?: string | null } = {},
+) {
+  const reason = String(input.reason ?? "").trim().slice(0, 1000);
+  if (status === "SUSPENDED" && !reason) throw new Error("SUSPEND_REASON_REQUIRED");
+  await pgAdmin.changeTenantStatus(tenantId, status);
+  // Attributed to the workspace (not the platform admin's own, usually-null tenant) so it shows
+  // in that workspace's audit log, as impersonation does.
+  await createAuditLog(
+    { id: actor.id, tenantId },
+    status === "SUSPENDED" ? "TENANT_SUSPENDED" : "TENANT_REACTIVATED",
+    "TENANT",
+    tenantId,
+    null,
+    { status },
+    { platformAdminUserId: actor.id, reason: reason || null, ...(input.requestId ? { requestId: input.requestId, approvedBy: input.approvedBy ?? null } : {}) },
+  );
+}
+
 export async function changeTenantEnvironment(tenantId: string, environment: "PRODUCTION" | "SANDBOX" | "TEST") {
   return pgAdmin.changeTenantEnvironment(tenantId, environment);
 }

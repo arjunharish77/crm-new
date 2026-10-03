@@ -7,6 +7,8 @@ const { queryMock, queryOneMock, executeMock } = vi.hoisted(() => ({
 }));
 
 vi.mock("@/lib/db/query", () => ({
+  // The real helper: lists for jsonb columns are sent as JSON text.
+  jsonbParam: (value: unknown) => JSON.stringify(value ?? null),
   query: queryMock,
   queryOne: queryOneMock,
   execute: executeMock,

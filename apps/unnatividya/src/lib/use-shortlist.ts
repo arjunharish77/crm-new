@@ -9,7 +9,8 @@ const EVENT_NAME = "uv-shortlist-changed";
 function readIds(): string[] {
   try {
     const raw = window.localStorage.getItem(STORAGE_KEY);
-    return raw ? (JSON.parse(raw) as string[]) : [];
+    const parsed: unknown = raw ? JSON.parse(raw) : [];
+    return Array.isArray(parsed) ? [...new Set(parsed.filter((id): id is string => typeof id === "string" && id.length > 0))] : [];
   } catch {
     return [];
   }
@@ -29,10 +30,12 @@ function writeIds(ids: string[]) {
 // (header pill, save buttons, the /shortlist page) stays in sync without a shared state library.
 export function useShortlist() {
   const [ids, setIds] = useState<string[]>([]);
+  const [ready, setReady] = useState(false);
 
   useEffect(() => {
     function sync() {
       setIds(readIds());
+      setReady(true);
     }
     sync();
     window.addEventListener(EVENT_NAME, sync);
@@ -53,5 +56,12 @@ export function useShortlist() {
     trackEvent(alreadySaved ? "shortlist_remove" : "shortlist_add", { course_id: courseId });
   }, []);
 
-  return { ids, count: ids.length, isSaved, toggle };
+  const setSaved = useCallback((courseId: string, saved: boolean) => {
+    const current = readIds();
+    if (current.includes(courseId) === saved) return;
+    writeIds(saved ? [...current, courseId] : current.filter(id => id !== courseId));
+    trackEvent(saved ? "shortlist_add" : "shortlist_remove", { course_id: courseId });
+  }, []);
+
+  return { ids, ready, count: ids.length, isSaved, toggle, setSaved };
 }

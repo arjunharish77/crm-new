@@ -141,7 +141,9 @@ export function BulkActionsToolbar({
                     animate={{ y: 0, opacity: 1, scale: 1 }}
                     exit={{ y: 40, opacity: 0, scale: 0.95 }}
                     transition={spring.expressive}
-                    className="fixed bottom-4 left-1/2 z-[1300] w-max max-w-[calc(100vw-32px)] -translate-x-1/2"
+                    // z-40: below the dialog/sheet overlay layer (z-50), so a confirmation dialog
+                    // opened from this bar is never hidden behind it (UI/UX plan B9).
+                    className="fixed bottom-4 left-1/2 z-40 w-max max-w-[calc(100vw-32px)] -translate-x-1/2"
                 >
                     <div className="flex flex-wrap items-center justify-center gap-2 rounded-2xl border border-white/10 bg-inverse-surface px-4 py-2 text-inverse-foreground shadow-[0_8px_32px_rgba(0,0,0,0.24)] backdrop-blur-md">
                         {/* Selection count + clear */}
@@ -172,7 +174,7 @@ export function BulkActionsToolbar({
                                     className={cn(
                                         "disabled:cursor-not-allowed disabled:opacity-50 flex min-w-0 items-center gap-1.5 rounded-full px-3 py-1.5 text-[13px] font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inverse-foreground/60",
                                         action.color === "error"
-                                            ? "text-red-300 hover:bg-red-500/20"
+                                            ? "text-destructive hover:bg-red-500/20"
                                             : "hover:bg-current/10"
                                     )}
                                 >

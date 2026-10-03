@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 import { RateLimitExceededError } from "@/lib/server/rate-limit";
+import { ModuleAccessError } from "@/lib/server/module-access-error";
+import { UnsupportedFilterError } from "@/lib/query-filters";
 
 export function unauthorized(message = "Unauthorized") {
   return NextResponse.json({ message }, { status: 401 });
@@ -16,8 +18,19 @@ export function forbidden(message = "Forbidden") {
 // WP08 (F13): a retried request reusing an Idempotency-Key with a different body hash than the
 // original -- distinct from a normal validation failure, so callers can tell "you changed the
 // payload under a key you already used" apart from "this request itself is malformed".
+export function notFound(message = "Not found") {
+  return NextResponse.json({ message }, { status: 404 });
+}
+
 export function conflict(message = "Conflict") {
   return NextResponse.json({ message }, { status: 409 });
+}
+
+// A refusal whose message is written for the end user (e.g. "Payouts requires Partners. Enable
+// Partners first."). The stable code tells apiFetch to show `message` verbatim instead of its
+// generic per-status text.
+export function moduleDependencyConflict(message: string, status = 409) {
+  return NextResponse.json({ code: "MODULE_DEPENDENCY", message }, { status });
 }
 
 export function tooManyRequests(message = "Too many requests", retryAfterSeconds?: number) {
@@ -122,6 +135,7 @@ const MARKETPLACE_APP_AUTH_ERROR_MESSAGES: Record<string, string> = {
   APP_NOT_INSTALLED: "This app is not installed for this workspace",
   INVALID_SECRET: "Invalid app credentials",
   RATE_LIMITED: "Rate limit exceeded for this app",
+  MODULE_DISABLED: "Marketplace is not enabled for this workspace",
 };
 
 // Shared HTTP mapping for MarketplaceAppAuthenticationError, mirroring apiKeyAuthErrorResponse
@@ -129,7 +143,7 @@ const MARKETPLACE_APP_AUTH_ERROR_MESSAGES: Record<string, string> = {
 export function marketplaceAppAuthErrorResponse(reason: string) {
   const message = MARKETPLACE_APP_AUTH_ERROR_MESSAGES[reason] ?? "App authentication failed";
   if (reason === "RATE_LIMITED") return tooManyRequests(message, 60);
-  if (reason === "APP_SUSPENDED" || reason === "APP_NOT_INSTALLED") return forbidden(message);
+  if (reason === "APP_SUSPENDED" || reason === "APP_NOT_INSTALLED" || reason === "MODULE_DISABLED") return forbidden(message);
   return unauthorized(message);
 }
 
@@ -153,6 +167,22 @@ function getErrorDetail(error: unknown) {
   return { message: "Unknown error" };
 }
 
+// Display names for module-disabled responses (mirrors the PlatformModule catalog seed in
+// migrations/0037_module_entitlements.sql).
+const FEATURE_FLAG_MODULES: Record<string, string> = {
+  opportunityEnabled: "OPPORTUNITIES", automationEnabled: "AUTOMATIONS", formBuilderEnabled: "FORMS",
+  advancedReporting: "REPORTS", payoutsEnabled: "PAYOUTS", gamificationEnabled: "GAMIFICATION",
+};
+const MODULE_DISPLAY_NAMES: Record<string, string> = {
+  OPPORTUNITIES: "Opportunities", FORMS: "Forms", AUTOMATIONS: "Automations", REPORTS: "Reports",
+  MARKETING: "Marketing Communications", JOURNEY_ORCHESTRATION: "Journey Orchestration",
+  PREDICTIVE_SCORING: "Predictive Scoring", NEXT_BEST_ACTION: "Next-Best Action", AI_COPILOT: "AI Copilot",
+  DISTRIBUTION: "Distribution Engine", PARTNERS: "Partners", PAYOUTS: "Payouts", GAMIFICATION: "Gamification",
+  PRODUCT_CATALOG: "Product Catalog", COUNSELING: "Learning and Counseling Operations", TELEPHONY: "Telephony",
+  SERVICE_DESK: "Service Desk", QUALITY_MANAGEMENT: "Quality Management", DATA_PLATFORM: "Data Platform",
+  MARKETPLACE: "Marketplace", DEVOPS_OPS: "DevOps & Ops",
+};
+
 export function serverError(message = "Internal server error", error?: unknown) {
   // The single choke point that makes the general per-user/per-tenant rate limit (rate-
   // limit.ts's assertGeneralRateLimit, thrown from requireCurrentUser) produce a real 429 +
@@ -160,6 +190,39 @@ export function serverError(message = "Internal server error", error?: unknown) 
   // call serverError(...) as their final catch-all, so this one check covers them without each
   // needing its own `error.message === "RATE_LIMITED"` branch added individually.
   if (error instanceof RateLimitExceededError) return tooManyRequests("Too many requests -- please slow down.", error.retryAfterSeconds);
+  // Role module permissions (thrown from requireCurrentUser): a 403 naming the module.
+  if (error instanceof ModuleAccessError) return forbidden(error.userMessage);
+  // Campaigns: content is locked once a campaign has started.
+  if (error instanceof Error && error.message === "CAMPAIGN_LOCKED") return NextResponse.json({ message: "This campaign has started, so what it sends can't change. Create a new campaign to send something different." }, { status: 409 });
+  // Custom fields exist for leads, opportunities and activities only.
+  if (error instanceof Error && error.message.startsWith("Unsupported object type:")) return NextResponse.json({ message: `${error.message}. Custom fields exist for leads, opportunities and activities.` }, { status: 400 });
+  // Forms and automations: archive, restore and delete for good are the creator's or an admin's.
+  if (error instanceof Error && error.message === "ITEM_OWNER_OR_ADMIN") return NextResponse.json({ message: "Only the person who created it, or an admin, can archive, restore or delete it." }, { status: 403 });
+  // Suspending a workspace needs a reason (Section 8 #12).
+  if (error instanceof Error && error.message === "SUSPEND_REASON_REQUIRED") return NextResponse.json({ message: "Give a reason for suspending this workspace." }, { status: 400 });
+  // A password that doesn't meet the workspace policy (the message lists what's missing).
+  if (error instanceof Error && error.message === "PASSWORD_POLICY") return NextResponse.json({ message: (error as any).userMessage ?? "The password doesn't meet the workspace's password rules." }, { status: 400 });
+  // Report drafts (decision 29).
+  if (error instanceof Error && error.message === "CUSTOM_REPORT_NOTHING_TO_PUBLISH") return NextResponse.json({ message: "There are no unpublished changes to publish." }, { status: 400 });
+  if (error instanceof Error && error.message === "CUSTOM_REPORT_NO_COLUMNS") return NextResponse.json({ message: "Add at least one column before publishing." }, { status: 400 });
+  if (error instanceof Error && error.message === "CUSTOM_REPORT_NOT_PUBLISHED") return NextResponse.json({ message: "This report hasn't been published yet. Publish it first." }, { status: 400 });
+  // Archive model (archive-items.ts), shared by every archivable configuration item.
+  if (error instanceof Error && error.message === "ARCHIVE_ITEM_NOT_FOUND") return NextResponse.json({ message: "Not found -- it may already be archived or restored." }, { status: 404 });
+  if (error instanceof Error && error.message === "ARCHIVE_ITEM_NOT_ARCHIVED") return NextResponse.json({ message: "Only an archived item can be deleted for good. Archive it first." }, { status: 400 });
+  if (error instanceof Error && error.message === "ARCHIVE_ITEM_IN_USE") {
+    return NextResponse.json({ message: "Past payouts or points refer to this rule, so it stays archived instead of being deleted for good." }, { status: 409 });
+  }
+  // A send or enrolment whose Smart View audience can't be worked out exactly.
+  if (error instanceof Error && error.message === "AUDIENCE_VIEW_NOT_FOUND") {
+    return NextResponse.json({ message: "This audience's Smart View was deleted or archived. Choose another audience.", code: error.message }, { status: 400 });
+  }
+  if (error instanceof Error && error.message === "AUDIENCE_FILTER_UNSUPPORTED") {
+    return NextResponse.json({ message: `This audience's Smart View uses a filter (${(error as any).field ?? "unknown"}) that can't be applied to a send. Edit the view or choose another audience.`, code: error.message }, { status: 400 });
+  }
+  // A strict filter (Smart Views) the server can't apply: say which, never widen the result.
+  if (error instanceof UnsupportedFilterError) {
+    return NextResponse.json({ message: `This filter can't be applied on the server: ${error.field} (${error.operator.replace(/_/g, " ")})`, code: "FILTER_UNSUPPORTED", field: error.field, operator: error.operator }, { status: 400 });
+  }
 
   // Same centralized-choke-point pattern as RateLimitExceededError above: assertNotImpersonating
   // (sessions.ts) throws a plain Error with this prefix from several sensitive-action call
@@ -172,6 +235,26 @@ export function serverError(message = "Internal server error", error?: unknown) 
 
   if (error instanceof Error && error.message === "IDEMPOTENCY_KEY_CONFLICT") return conflict("This Idempotency-Key was already used with a different request body");
   if (error instanceof Error && error.message === "INVALID_OPPORTUNITY_REFERENCE") return badRequest("Choose an accessible Lead and a valid Opportunity type and stage from this workspace");
+  // Same choke-point pattern for tenant module entitlements: assertModuleEnabled throws
+  // "MODULE_DISABLED:<KEY>". Routes with their own branch for this keep their wording; every
+  // other route (e.g. the whole Telephony family) gets an accurate 403 naming the module,
+  // instead of a misleading 500.
+  // Usage limits (Module 21): UsageLimitError carries a user-facing explanation.
+  if (error instanceof Error && error.message.startsWith("USAGE_LIMIT_REACHED:")) {
+    const explanation = (error as Error & { explanation?: string }).explanation ?? "This workspace has reached a usage limit.";
+    return NextResponse.json({ code: "USAGE_LIMIT_REACHED", metric: error.message.slice("USAGE_LIMIT_REACHED:".length), message: explanation }, { status: 409 });
+  }
+  // assertFeatureEnabled throws "FEATURE_DISABLED:<flag>" for the six modules that still have a
+  // legacy feature flag (the check already includes the module status): same 403 shape.
+  if (error instanceof Error && error.message.startsWith("FEATURE_DISABLED:")) {
+    const flag = error.message.slice("FEATURE_DISABLED:".length);
+    const key = FEATURE_FLAG_MODULES[flag];
+    return NextResponse.json({ code: "MODULE_DISABLED", module: key ?? flag, message: `${(key && MODULE_DISPLAY_NAMES[key]) ?? flag} is not enabled for this workspace` }, { status: 403 });
+  }
+  if (error instanceof Error && error.message.startsWith("MODULE_DISABLED:")) {
+    const key = error.message.slice("MODULE_DISABLED:".length);
+    return NextResponse.json({ code: "MODULE_DISABLED", module: key, message: `${MODULE_DISPLAY_NAMES[key] ?? key} is not enabled for this workspace` }, { status: 403 });
+  }
   if (error instanceof Error && error.message.startsWith("DUPLICATE_RULE_BLOCK: ")) {
     return NextResponse.json({ code: "DUPLICATE_RULE_BLOCK", message: `Duplicate blocked by rule: ${error.message.slice("DUPLICATE_RULE_BLOCK: ".length)}` }, { status: 409 });
   }

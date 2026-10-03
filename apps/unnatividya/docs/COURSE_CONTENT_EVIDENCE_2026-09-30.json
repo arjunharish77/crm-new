@@ -1,0 +1,1099 @@
+{
+  "checkedAt": "2026-09-30",
+  "scope": "Eligibility observations, curriculum coverage and provisional regulator matching; not complete verification",
+  "programs": [
+    {
+      "courseId": "mba-muj",
+      "sourceUrl": "https://www.onlinemanipal.com/online-mba-manipal-university-jaipur",
+      "checkedAt": "2026-09-30",
+      "sourceTextSha256": "291195f442b846b52854dea602121fa2b8556938efc8bbe6450602f7c7221f06",
+      "eligibility": {
+        "evidenceType": "official_page_eligibility_section",
+        "status": "observed_pending_editorial_application",
+        "summary": "A recognised 10+2+3 bachelor’s degree is required: 50% overall, or 45% for reserved categories. The international section states 50%.",
+        "cmsTextAtReview": "Bachelor's degree (10+2+3) in any discipline with a minimum of 50% marks (45% for reserved categories). No work experience or entrance test required.",
+        "requiredReview": "Confirm the unconditional no-entrance-test/no-experience claims separately; preserve the domestic/international marks distinction."
+      },
+      "curriculum": {
+        "officialSemesterHeadings": [
+          1,
+          2,
+          3,
+          4
+        ],
+        "cmsTermCount": 4,
+        "cmsVerificationMarker": null,
+        "status": "subjects_and_electives_not_verified",
+        "note": "Semester headings were observed; complete subject-by-subject validation is pending."
+      },
+      "recognition": {
+        "status": "session_and_institution_confirmation_pending",
+        "directoryUrl": "https://deb.ugc.ac.in/Home/HEI_Prog_List",
+        "candidateRowId": "349",
+        "academicYear": "2025-26",
+        "mode": "Online(OL)",
+        "institution": "Manipal University",
+        "state": "Rajasthan",
+        "program": "MASTER OF BUSINESS ADMINISTRATION"
+      },
+      "publicationStatus": "not_applied"
+    },
+    {
+      "courseId": "mba-smu",
+      "sourceUrl": "https://www.onlinemanipal.com/online-mba-degree-dual-specialization-smu",
+      "checkedAt": "2026-09-30",
+      "sourceTextSha256": "096a4fc5dd128dad1a48a7ef357399e17bd39ff6e4453021298deead4e73db55",
+      "eligibility": {
+        "evidenceType": "official_page_eligibility_section",
+        "status": "observed_pending_editorial_application",
+        "summary": "Accepted bachelor’s routes include 10+2+3, 10+2+4 and 10+3+3. The page states 50% overall, or 45% for reserved categories.",
+        "cmsTextAtReview": "Bachelor's degree (10+2+3/4) in any discipline with a minimum of 50% marks (45% for reserved categories). Dual specialization: choose any 2 of 6 tracks.",
+        "requiredReview": "Add the 10+3+3 route. Keep specialization choices outside eligibility."
+      },
+      "curriculum": {
+        "officialSemesterHeadings": [
+          1,
+          2,
+          3,
+          4
+        ],
+        "cmsTermCount": 4,
+        "cmsVerificationMarker": null,
+        "status": "subjects_and_electives_not_verified",
+        "note": "Semester headings were observed; complete subject-by-subject validation is pending."
+      },
+      "recognition": {
+        "status": "session_and_institution_confirmation_pending",
+        "directoryUrl": "https://deb.ugc.ac.in/Home/HEI_Prog_List",
+        "candidateRowId": "2289",
+        "academicYear": "2025-26",
+        "mode": "Online(OL)",
+        "institution": "Sikkim- Manipal University",
+        "state": "Sikkim",
+        "program": "MASTER OF BUSINESS ADMINISTRATION"
+      },
+      "publicationStatus": "not_applied"
+    },
+    {
+      "courseId": "mba-amity",
+      "sourceUrl": "https://amityonline.com/master-of-business-administration-online",
+      "checkedAt": "2026-09-30",
+      "sourceTextSha256": "4ce9ff07e21cd63ab9ab72860495434b4c872a45bfa7d5d4fd956f35a6ba5a55",
+      "eligibility": {
+        "evidenceType": "official_structured_metadata_only",
+        "status": "needs_visible_or_admissions_document_confirmation",
+        "summary": "Metadata generally requires a recognised bachelor’s degree or graduate certificate and 40%; lower marks may require an internal eligibility test.",
+        "cmsTextAtReview": "Bachelor's degree in any discipline with a minimum of 40% marks (an internal eligibility test is available for below 40%). No work experience or entrance test required.",
+        "requiredReview": "An unconditional no-entrance-test statement conflicts with the described lower-marks eligibility-test route."
+      },
+      "curriculum": {
+        "officialSemesterHeadings": [
+          1,
+          2,
+          3,
+          4
+        ],
+        "cmsTermCount": 4,
+        "cmsVerificationMarker": null,
+        "status": "subjects_and_electives_not_verified",
+        "note": "Semester headings were observed; complete subject-by-subject validation is pending."
+      },
+      "recognition": {
+        "status": "session_and_institution_confirmation_pending",
+        "directoryUrl": "https://deb.ugc.ac.in/Home/HEI_Prog_List",
+        "candidateRowId": "1001",
+        "academicYear": "2025-26",
+        "mode": "Online(OL)",
+        "institution": "Amity University",
+        "state": "Uttar Pradesh",
+        "program": "MASTER OF BUSINESS ADMINISTRATION"
+      },
+      "publicationStatus": "not_applied"
+    },
+    {
+      "courseId": "bba-muj",
+      "sourceUrl": "https://www.onlinemanipal.com/online-bba-degree-muj",
+      "checkedAt": "2026-09-30",
+      "sourceTextSha256": "a396f00309f49477b00126a58417875b90b13feb9f2bc67bf78ee2bb46b58bbc",
+      "eligibility": {
+        "evidenceType": "official_page_eligibility_section",
+        "status": "observed_pending_editorial_application",
+        "summary": "A recognised 10+2 qualification or a recognised 10+3 diploma is accepted.",
+        "cmsTextAtReview": "10+2 or equivalent from a recognised board.",
+        "requiredReview": "Add the explicit 10+3 diploma route and review international equivalence conditions."
+      },
+      "curriculum": {
+        "officialSemesterHeadings": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          6
+        ],
+        "cmsTermCount": 4,
+        "cmsVerificationMarker": null,
+        "status": "semester_coverage_differs",
+        "note": "Semester headings were observed; complete subject-by-subject validation is pending."
+      },
+      "recognition": {
+        "status": "session_and_institution_confirmation_pending",
+        "directoryUrl": "https://deb.ugc.ac.in/Home/HEI_Prog_List",
+        "candidateRowId": "1227",
+        "academicYear": "2025-26",
+        "mode": "Online(OL)",
+        "institution": "Manipal University",
+        "state": "Rajasthan",
+        "program": "BACHELOR OF BUSINESS ADMINISTRATION"
+      },
+      "publicationStatus": "not_applied"
+    },
+    {
+      "courseId": "bba-amity",
+      "sourceUrl": "https://amityonline.com/bachelor-of-business-administration-online",
+      "checkedAt": "2026-09-30",
+      "sourceTextSha256": "137e3af59afaa0e3a85d4e2ebc11d8c7de87cc8f77ee02ee9cc4a407178f7794",
+      "eligibility": {
+        "evidenceType": "official_structured_metadata_only",
+        "status": "needs_visible_or_admissions_document_confirmation",
+        "summary": "Metadata requires recognised 10+2 and basic English communication.",
+        "cmsTextAtReview": "10+2 or equivalent from a recognised board.",
+        "requiredReview": "Review category-specific equivalence and document requirements."
+      },
+      "curriculum": {
+        "officialSemesterHeadings": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          6
+        ],
+        "cmsTermCount": 4,
+        "cmsVerificationMarker": null,
+        "status": "semester_coverage_differs",
+        "note": "Semester headings were observed; complete subject-by-subject validation is pending."
+      },
+      "recognition": {
+        "status": "session_and_institution_confirmation_pending",
+        "directoryUrl": "https://deb.ugc.ac.in/Home/HEI_Prog_List",
+        "candidateRowId": "772",
+        "academicYear": "2025-26",
+        "mode": "Online(OL)",
+        "institution": "Amity University",
+        "state": "Uttar Pradesh",
+        "program": "BACHELOR OF BUSINESS ADMINISTRATION (GENERAL)"
+      },
+      "publicationStatus": "not_applied"
+    },
+    {
+      "courseId": "bca-muj",
+      "sourceUrl": "https://www.onlinemanipal.com/online-bca-degree-muj",
+      "checkedAt": "2026-09-30",
+      "sourceTextSha256": "cc488fb7f54381114aeb6d15e294f6b1c08d7957b373aaa928d24ec0fe086929",
+      "eligibility": {
+        "evidenceType": "official_page_eligibility_section",
+        "status": "observed_pending_editorial_application",
+        "summary": "A recognised 10+2 qualification or a recognised 10+3 diploma is accepted.",
+        "cmsTextAtReview": "10+2 or equivalent from a recognised board, any stream. Mathematics is not a mandatory subject.",
+        "requiredReview": "Add the explicit 10+3 diploma route and review international equivalence conditions."
+      },
+      "curriculum": {
+        "officialSemesterHeadings": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          6
+        ],
+        "cmsTermCount": 4,
+        "cmsVerificationMarker": null,
+        "status": "semester_coverage_differs",
+        "note": "Semester headings were observed; complete subject-by-subject validation is pending."
+      },
+      "recognition": {
+        "status": "session_and_institution_confirmation_pending",
+        "directoryUrl": "https://deb.ugc.ac.in/Home/HEI_Prog_List",
+        "candidateRowId": "787",
+        "academicYear": "2025-26",
+        "mode": "Online(OL)",
+        "institution": "Manipal University",
+        "state": "Rajasthan",
+        "program": "BACHELOR OF COMPUTER APPLICATIONS"
+      },
+      "publicationStatus": "not_applied"
+    },
+    {
+      "courseId": "bca-amity",
+      "sourceUrl": "https://amityonline.com/bachelor-of-computer-applications-online",
+      "checkedAt": "2026-09-30",
+      "sourceTextSha256": "7d462c5a6e47c9ecaa96cc1d78cf3b5cd399dd6b7597cccc14b7b0ac0539b603",
+      "eligibility": {
+        "evidenceType": "official_structured_metadata_only",
+        "status": "needs_visible_or_admissions_document_confirmation",
+        "summary": "Metadata requires recognised 10+2 or equivalent; it does not establish the subject-preference claims currently in CMS.",
+        "cmsTextAtReview": "10+2 or equivalent from a recognised board, any stream. Mathematics/Computer Science/Informatics Practices are preferred but not mandatory.",
+        "requiredReview": "Review category-specific equivalence and document requirements."
+      },
+      "curriculum": {
+        "officialSemesterHeadings": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          6
+        ],
+        "cmsTermCount": 4,
+        "cmsVerificationMarker": null,
+        "status": "semester_coverage_differs",
+        "note": "Semester headings were observed; complete subject-by-subject validation is pending."
+      },
+      "recognition": {
+        "status": "session_and_institution_confirmation_pending",
+        "directoryUrl": "https://deb.ugc.ac.in/Home/HEI_Prog_List",
+        "candidateRowId": "4364",
+        "academicYear": "2025-26",
+        "mode": "Online(OL)",
+        "institution": "Amity University",
+        "state": "Uttar Pradesh",
+        "program": "BACHELOR OF COMPUTER APPLICATIONS (GENERAL)",
+        "additionalNote": "A 2026-27 Amity BCA row exists but state/session fields are blank; identity still needs confirmation."
+      },
+      "publicationStatus": "not_applied"
+    },
+    {
+      "courseId": "mca-muj",
+      "sourceUrl": "https://www.onlinemanipal.com/online-mca-degree-muj",
+      "checkedAt": "2026-09-30",
+      "sourceTextSha256": "5890a377d905ded9b9c3f874b5766d0afbdef9afbd8973b99bcbeae540c16416",
+      "eligibility": {
+        "evidenceType": "official_page_eligibility_section",
+        "status": "observed_pending_editorial_application",
+        "summary": "A recognised three-year bachelor’s degree is required, with 50% overall (45% for reserved categories). Graduates outside computing must complete the computing/IT bridge course; applicants without mathematics at school or degree level must also complete a mathematics bridge course in semester 1.",
+        "cmsTextAtReview": "Bachelor's degree, any discipline (50% marks, 45% reserved). A compulsory mathematics/computing bridge course applies in Semester 1 if not studied at 10+2 or graduation.",
+        "requiredReview": "Separate the computing bridge trigger from the mathematics bridge trigger."
+      },
+      "curriculum": {
+        "officialSemesterHeadings": [
+          1,
+          2,
+          3,
+          4
+        ],
+        "cmsTermCount": 4,
+        "cmsVerificationMarker": null,
+        "status": "subjects_and_electives_not_verified",
+        "note": "Semester headings were observed; complete subject-by-subject validation is pending."
+      },
+      "recognition": {
+        "status": "session_and_institution_confirmation_pending",
+        "directoryUrl": "https://deb.ugc.ac.in/Home/HEI_Prog_List",
+        "candidateRowId": "3664",
+        "academicYear": "2025-26",
+        "mode": "Online(OL)",
+        "institution": "Manipal University",
+        "state": "Rajasthan",
+        "program": "MASTER OF COMPUTER APPLICATIONS"
+      },
+      "publicationStatus": "not_applied"
+    },
+    {
+      "courseId": "mca-amity",
+      "sourceUrl": "https://amityonline.com/master-of-computer-applications-online",
+      "checkedAt": "2026-09-30",
+      "sourceTextSha256": "343052fd5dbfb1183c6b85d70090ad578803ec1b1b9dda4b561182545cefa115",
+      "eligibility": {
+        "evidenceType": "official_structured_metadata_only",
+        "status": "needs_visible_or_admissions_document_confirmation",
+        "summary": "Metadata prefers BCA/equivalent, or a science/commerce/arts degree with school-level mathematics. A mathematics bridge route is also described.",
+        "cmsTextAtReview": "BCA, or a bachelor's degree (Science/Commerce/Arts) with Mathematics, or a B.Tech/BE in a CS-related field. A qualifying bridge course applies if Mathematics wasn't studied at 10+2 or graduation.",
+        "requiredReview": "Review category-specific equivalence and document requirements."
+      },
+      "curriculum": {
+        "officialSemesterHeadings": [
+          1,
+          2,
+          3,
+          4
+        ],
+        "cmsTermCount": 4,
+        "cmsVerificationMarker": null,
+        "status": "subjects_and_electives_not_verified",
+        "note": "Semester headings were observed; complete subject-by-subject validation is pending."
+      },
+      "recognition": {
+        "status": "session_and_institution_confirmation_pending",
+        "directoryUrl": "https://deb.ugc.ac.in/Home/HEI_Prog_List",
+        "candidateRowId": "537",
+        "academicYear": "2025-26",
+        "mode": "Online(OL)",
+        "institution": "Amity University",
+        "state": "Uttar Pradesh",
+        "program": "MASTER OF COMPUTER APPLICATIONS"
+      },
+      "publicationStatus": "not_applied"
+    },
+    {
+      "courseId": "bcom-muj",
+      "sourceUrl": "https://www.onlinemanipal.com/online-bcom-degree-muj",
+      "checkedAt": "2026-09-30",
+      "sourceTextSha256": "36cf46ca8f7c6d8e879a4905e526bb933d0fe71a85a81e0fa05e0ce33198003a",
+      "eligibility": {
+        "evidenceType": "official_page_eligibility_section",
+        "status": "observed_pending_editorial_application",
+        "summary": "A recognised 10+2 qualification or a recognised 10+3 diploma is accepted.",
+        "cmsTextAtReview": "10+2 or equivalent from a recognised board.",
+        "requiredReview": "Add the explicit 10+3 diploma route and review international equivalence conditions."
+      },
+      "curriculum": {
+        "officialSemesterHeadings": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          6
+        ],
+        "cmsTermCount": 4,
+        "cmsVerificationMarker": null,
+        "status": "semester_coverage_differs",
+        "note": "Semester headings were observed; complete subject-by-subject validation is pending."
+      },
+      "recognition": {
+        "status": "session_and_institution_confirmation_pending",
+        "directoryUrl": "https://deb.ugc.ac.in/Home/HEI_Prog_List",
+        "candidateRowId": "3240",
+        "academicYear": "2025-26",
+        "mode": "Online(OL)",
+        "institution": "Manipal University",
+        "state": "Rajasthan",
+        "program": "BACHELOR OF COMMERCE (GENERAL)"
+      },
+      "publicationStatus": "not_applied"
+    },
+    {
+      "courseId": "bcom-smu",
+      "sourceUrl": "https://www.onlinemanipal.com/online-bcom-degree-smu",
+      "checkedAt": "2026-09-30",
+      "sourceTextSha256": "18afd9aeb44a19d04bf7c107b42d4d144232bcf103e658fa6fd28b015ac4c714",
+      "eligibility": {
+        "evidenceType": "official_page_eligibility_section",
+        "status": "observed_pending_editorial_application",
+        "summary": "A recognised 10+2 qualification or a recognised 10+3 diploma is accepted.",
+        "cmsTextAtReview": "10+2 or equivalent from a recognised board.",
+        "requiredReview": "Add the explicit 10+3 diploma route and review international equivalence conditions."
+      },
+      "curriculum": {
+        "officialSemesterHeadings": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          6
+        ],
+        "cmsTermCount": 4,
+        "cmsVerificationMarker": null,
+        "status": "semester_coverage_differs",
+        "note": "Semester headings were observed; complete subject-by-subject validation is pending."
+      },
+      "recognition": {
+        "status": "session_and_institution_confirmation_pending",
+        "directoryUrl": "https://deb.ugc.ac.in/Home/HEI_Prog_List",
+        "candidateRowId": "296",
+        "academicYear": "2025-26",
+        "mode": "Online(OL)",
+        "institution": "Sikkim- Manipal University",
+        "state": "Sikkim",
+        "program": "BACHELOR OF COMMERCE (GENERAL)"
+      },
+      "publicationStatus": "not_applied"
+    },
+    {
+      "courseId": "mcom-muj",
+      "sourceUrl": "https://www.onlinemanipal.com/online-mcom-degree-muj",
+      "checkedAt": "2026-09-30",
+      "sourceTextSha256": "5ca9104ffa814c79294b12e8614f4cc19025d821a99f0e99471806b25adacc16",
+      "eligibility": {
+        "evidenceType": "official_page_eligibility_section",
+        "status": "observed_pending_editorial_application",
+        "summary": "A recognised bachelor’s degree following 10+2+3, or an accepted equivalent qualification, is required.",
+        "cmsTextAtReview": "Graduation in commerce or related discipline as per university criteria.",
+        "requiredReview": "Remove the unsupported commerce/related-discipline restriction after review."
+      },
+      "curriculum": {
+        "officialSemesterHeadings": [
+          1,
+          2,
+          3,
+          4
+        ],
+        "cmsTermCount": 4,
+        "cmsVerificationMarker": null,
+        "status": "subjects_and_electives_not_verified",
+        "note": "Semester headings were observed; complete subject-by-subject validation is pending."
+      },
+      "recognition": {
+        "status": "session_and_institution_confirmation_pending",
+        "directoryUrl": "https://deb.ugc.ac.in/Home/HEI_Prog_List",
+        "candidateRowId": "3239",
+        "academicYear": "2025-26",
+        "mode": "Online(OL)",
+        "institution": "Manipal University",
+        "state": "Rajasthan",
+        "program": "MASTER OF COMMERCE (GENERAL)"
+      },
+      "publicationStatus": "not_applied"
+    },
+    {
+      "courseId": "ba-smu",
+      "sourceUrl": "https://www.onlinemanipal.com/online-ba-degree-smu",
+      "checkedAt": "2026-09-30",
+      "sourceTextSha256": "110b63e05c4264664151cf198e0563953e121b5fee601f8eed243a31da7b38a1",
+      "eligibility": {
+        "evidenceType": "official_page_eligibility_section",
+        "status": "observed_pending_editorial_application",
+        "summary": "A recognised 10+2 qualification or a recognised 10+3 diploma is accepted.",
+        "cmsTextAtReview": "10+2 or equivalent from a recognised board.",
+        "requiredReview": "Add the explicit 10+3 diploma route and review international equivalence conditions."
+      },
+      "curriculum": {
+        "officialSemesterHeadings": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          6
+        ],
+        "cmsTermCount": 4,
+        "cmsVerificationMarker": null,
+        "status": "semester_coverage_differs",
+        "note": "Semester headings were observed; complete subject-by-subject validation is pending."
+      },
+      "recognition": {
+        "status": "session_and_institution_confirmation_pending",
+        "directoryUrl": "https://deb.ugc.ac.in/Home/HEI_Prog_List",
+        "candidateRowId": "3618",
+        "academicYear": "2025-26",
+        "mode": "Online(OL)",
+        "institution": "Sikkim- Manipal University",
+        "state": "Sikkim",
+        "program": "BACHELOR OF ARTS (COMBINATION OF 3 SUBJECTS)-ENGLISH, POLITICAL SCIENCE AND SOCIOLOGY"
+      },
+      "publicationStatus": "not_applied"
+    },
+    {
+      "courseId": "bba-smu",
+      "sourceUrl": "https://www.onlinemanipal.com/online-bba-degree-smu",
+      "checkedAt": "2026-09-30",
+      "sourceTextSha256": "029ba78f2e56d469dfacf59093aa4b143e1f2f70618da1b273f479177e2b1396",
+      "eligibility": {
+        "evidenceType": "official_page_eligibility_section",
+        "status": "observed_pending_editorial_application",
+        "summary": "A recognised 10+2 qualification or a recognised 10+3 diploma is accepted.",
+        "cmsTextAtReview": "10+2 or equivalent from a recognised board.",
+        "requiredReview": "Add the explicit 10+3 diploma route and review international equivalence conditions."
+      },
+      "curriculum": {
+        "officialSemesterHeadings": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          6
+        ],
+        "cmsTermCount": 4,
+        "cmsVerificationMarker": null,
+        "status": "semester_coverage_differs",
+        "note": "Semester headings were observed; complete subject-by-subject validation is pending."
+      },
+      "recognition": {
+        "status": "session_and_institution_confirmation_pending",
+        "directoryUrl": "https://deb.ugc.ac.in/Home/HEI_Prog_List",
+        "candidateRowId": "724",
+        "academicYear": "2025-26",
+        "mode": "Online(OL)",
+        "institution": "Sikkim- Manipal University",
+        "state": "Sikkim",
+        "program": "BACHELOR OF BUSINESS ADMINISTRATION"
+      },
+      "publicationStatus": "not_applied"
+    },
+    {
+      "courseId": "mca-smu",
+      "sourceUrl": "https://www.onlinemanipal.com/online-mca-degree-smu",
+      "checkedAt": "2026-09-30",
+      "sourceTextSha256": "b1b7d3628fd9a45e202b2888cfc8dd599ab53f31eef21637d9f1d50ab00544e1",
+      "eligibility": {
+        "evidenceType": "official_page_eligibility_section",
+        "status": "observed_pending_editorial_application",
+        "summary": "A recognised three-year bachelor’s degree is required, with 50% overall (45% for reserved categories). Graduates outside computing must complete the computing/IT bridge course; applicants without mathematics at school or degree level must also complete a mathematics bridge course in semester 1.",
+        "cmsTextAtReview": "Bachelor's degree in Computer Applications/CS/IT preferred; a compulsory bridge course in computing fundamentals applies if not studied at 10+2 or graduation.",
+        "requiredReview": "Add the marks threshold and both distinct bridge-course conditions."
+      },
+      "curriculum": {
+        "officialSemesterHeadings": [
+          1,
+          2,
+          3,
+          4
+        ],
+        "cmsTermCount": 4,
+        "cmsVerificationMarker": null,
+        "status": "subjects_and_electives_not_verified",
+        "note": "Semester headings were observed; complete subject-by-subject validation is pending."
+      },
+      "recognition": {
+        "status": "session_and_institution_confirmation_pending",
+        "directoryUrl": "https://deb.ugc.ac.in/Home/HEI_Prog_List",
+        "candidateRowId": "4318",
+        "academicYear": "2025-26",
+        "mode": "Online(OL)",
+        "institution": "Sikkim- Manipal University",
+        "state": "Sikkim",
+        "program": "MASTER OF COMPUTER APPLICATIONS"
+      },
+      "publicationStatus": "not_applied"
+    },
+    {
+      "courseId": "mcom-smu",
+      "sourceUrl": "https://www.onlinemanipal.com/online-mcom-degree-smu",
+      "checkedAt": "2026-09-30",
+      "sourceTextSha256": "68a90235710470d5fbe155807232d9e215af0d7208454f4fe89e44095969a73b",
+      "eligibility": {
+        "evidenceType": "official_page_eligibility_section",
+        "status": "observed_pending_editorial_application",
+        "summary": "A recognised bachelor’s degree following 10+2+3, or an accepted equivalent qualification, is required.",
+        "cmsTextAtReview": "Graduation in commerce or related discipline as per university criteria.",
+        "requiredReview": "Remove the unsupported commerce/related-discipline restriction after review."
+      },
+      "curriculum": {
+        "officialSemesterHeadings": [
+          1,
+          2,
+          3,
+          4
+        ],
+        "cmsTermCount": 4,
+        "cmsVerificationMarker": null,
+        "status": "subjects_and_electives_not_verified",
+        "note": "Semester headings were observed; complete subject-by-subject validation is pending."
+      },
+      "recognition": {
+        "status": "session_and_institution_confirmation_pending",
+        "directoryUrl": "https://deb.ugc.ac.in/Home/HEI_Prog_List",
+        "candidateRowId": "295",
+        "academicYear": "2025-26",
+        "mode": "Online(OL)",
+        "institution": "Sikkim- Manipal University",
+        "state": "Sikkim",
+        "program": "MASTER OF COMMERCE (GENERAL)"
+      },
+      "publicationStatus": "not_applied"
+    },
+    {
+      "courseId": "ma-english-smu",
+      "sourceUrl": "https://www.onlinemanipal.com/online-ma-english-degree",
+      "checkedAt": "2026-09-30",
+      "sourceTextSha256": "cd21c6d341dc6ea68d4300f69bfa68ccd048e60ca04ad4233d32fbd7c9f14cfe",
+      "eligibility": {
+        "evidenceType": "official_page_eligibility_section",
+        "status": "observed_pending_editorial_application",
+        "summary": "A recognised bachelor’s degree following 10+2+3, or an accepted equivalent qualification, is required.",
+        "cmsTextAtReview": "Graduation from a recognised university.",
+        "requiredReview": "Expand the qualification route and international equivalence requirements."
+      },
+      "curriculum": {
+        "officialSemesterHeadings": [
+          1,
+          2,
+          3,
+          4
+        ],
+        "cmsTermCount": 4,
+        "cmsVerificationMarker": null,
+        "status": "subjects_and_electives_not_verified",
+        "note": "Semester headings were observed; complete subject-by-subject validation is pending."
+      },
+      "recognition": {
+        "status": "session_and_institution_confirmation_pending",
+        "directoryUrl": "https://deb.ugc.ac.in/Home/HEI_Prog_List",
+        "candidateRowId": "3176",
+        "academicYear": "2025-26",
+        "mode": "Online(OL)",
+        "institution": "Sikkim- Manipal University",
+        "state": "Sikkim",
+        "program": "MASTER OF ARTS (ENGLISH)"
+      },
+      "publicationStatus": "not_applied"
+    },
+    {
+      "courseId": "ma-political-science-smu",
+      "sourceUrl": "https://www.onlinemanipal.com/online-ma-political-science-degree",
+      "checkedAt": "2026-09-30",
+      "sourceTextSha256": "0294e7e6b34559acfd5fd542be882e15a24a49d4de4c74e9c9cbcdb722634c9d",
+      "eligibility": {
+        "evidenceType": "official_page_eligibility_section",
+        "status": "observed_pending_editorial_application",
+        "summary": "A recognised bachelor’s degree following 10+2+3, or an accepted equivalent qualification, is required.",
+        "cmsTextAtReview": "Graduation from a recognised university.",
+        "requiredReview": "Expand the qualification route and international equivalence requirements."
+      },
+      "curriculum": {
+        "officialSemesterHeadings": [
+          1,
+          2,
+          3,
+          4
+        ],
+        "cmsTermCount": 4,
+        "cmsVerificationMarker": null,
+        "status": "subjects_and_electives_not_verified",
+        "note": "Semester headings were observed; complete subject-by-subject validation is pending."
+      },
+      "recognition": {
+        "status": "session_and_institution_confirmation_pending",
+        "directoryUrl": "https://deb.ugc.ac.in/Home/HEI_Prog_List",
+        "candidateRowId": "1401",
+        "academicYear": "2025-26",
+        "mode": "Online(OL)",
+        "institution": "Sikkim- Manipal University",
+        "state": "Sikkim",
+        "program": "MASTER OF ARTS (POLITICAL SCIENCE)"
+      },
+      "publicationStatus": "not_applied"
+    },
+    {
+      "courseId": "ma-sociology-smu",
+      "sourceUrl": "https://www.onlinemanipal.com/online-ma-sociology-degree",
+      "checkedAt": "2026-09-30",
+      "sourceTextSha256": "34c0f3d7b717d0aa833ca54440ede6f56191950106c1610dea0df220e632c80a",
+      "eligibility": {
+        "evidenceType": "official_page_eligibility_section",
+        "status": "observed_pending_editorial_application",
+        "summary": "A recognised bachelor’s degree following 10+2+3, or an accepted equivalent qualification, is required.",
+        "cmsTextAtReview": "Graduation from a recognised university.",
+        "requiredReview": "Expand the qualification route and international equivalence requirements."
+      },
+      "curriculum": {
+        "officialSemesterHeadings": [
+          1,
+          2,
+          3,
+          4
+        ],
+        "cmsTermCount": 4,
+        "cmsVerificationMarker": null,
+        "status": "subjects_and_electives_not_verified",
+        "note": "Semester headings were observed; complete subject-by-subject validation is pending."
+      },
+      "recognition": {
+        "status": "session_and_institution_confirmation_pending",
+        "directoryUrl": "https://deb.ugc.ac.in/Home/HEI_Prog_List",
+        "candidateRowId": "1612",
+        "academicYear": "2025-26",
+        "mode": "Online(OL)",
+        "institution": "Sikkim- Manipal University",
+        "state": "Sikkim",
+        "program": "MASTER OF ARTS (SOCIOLOGY)"
+      },
+      "publicationStatus": "not_applied"
+    },
+    {
+      "courseId": "ma-economics-muj",
+      "sourceUrl": "https://www.onlinemanipal.com/online-ma-economics-degree",
+      "checkedAt": "2026-09-30",
+      "sourceTextSha256": "82ea99108bf813362c5353cc61bbb14b7496c6571bf37f68bc0ca047454f4b94",
+      "eligibility": {
+        "evidenceType": "official_page_eligibility_section",
+        "status": "observed_pending_editorial_application",
+        "summary": "A recognised bachelor’s degree following 10+2+3, or an accepted equivalent qualification, is required.",
+        "cmsTextAtReview": "Graduation from a recognised university.",
+        "requiredReview": "Expand the qualification route and international equivalence requirements."
+      },
+      "curriculum": {
+        "officialSemesterHeadings": [
+          1,
+          2,
+          3,
+          4
+        ],
+        "cmsTermCount": 4,
+        "cmsVerificationMarker": null,
+        "status": "subjects_and_electives_not_verified",
+        "note": "Semester headings were observed; complete subject-by-subject validation is pending."
+      },
+      "recognition": {
+        "status": "session_and_institution_confirmation_pending",
+        "directoryUrl": "https://deb.ugc.ac.in/Home/HEI_Prog_List",
+        "candidateRowId": "2129",
+        "academicYear": "2025-26",
+        "mode": "Online(OL)",
+        "institution": "Manipal University",
+        "state": "Rajasthan",
+        "program": "MASTER OF ARTS (ECONOMICS)"
+      },
+      "publicationStatus": "not_applied"
+    },
+    {
+      "courseId": "majmc-muj",
+      "sourceUrl": "https://www.onlinemanipal.com/online-ma-journalism-and-mass-communication",
+      "checkedAt": "2026-09-30",
+      "sourceTextSha256": "446eb87594eb2735749c64457a99880174970b112c0dbc3961144e6b262143e7",
+      "eligibility": {
+        "evidenceType": "official_page_eligibility_section",
+        "status": "observed_pending_editorial_application",
+        "summary": "A recognised bachelor’s degree following 10+2+3, or an accepted equivalent qualification, is required.",
+        "cmsTextAtReview": "Graduation from a recognised university.",
+        "requiredReview": "Expand the qualification route and international equivalence requirements."
+      },
+      "curriculum": {
+        "officialSemesterHeadings": [
+          1,
+          2,
+          3,
+          4
+        ],
+        "cmsTermCount": 4,
+        "cmsVerificationMarker": null,
+        "status": "subjects_and_electives_not_verified",
+        "note": "Semester headings were observed; complete subject-by-subject validation is pending."
+      },
+      "recognition": {
+        "status": "session_and_institution_confirmation_pending",
+        "directoryUrl": "https://deb.ugc.ac.in/Home/HEI_Prog_List",
+        "candidateRowId": "553",
+        "academicYear": "2025-26",
+        "mode": "Online(OL)",
+        "institution": "Manipal University",
+        "state": "Rajasthan",
+        "program": "MASTER OF ARTS (JOURNALISM & MASS COMMUNICATION)"
+      },
+      "publicationStatus": "not_applied"
+    },
+    {
+      "courseId": "bcom-amity",
+      "sourceUrl": "https://amityonline.com/bachelor-of-commerce-online",
+      "checkedAt": "2026-09-30",
+      "sourceTextSha256": "945fa46a6c1ccfd2ac8dbd09e1d607ecd758beaea9a32129ba0d596632cbd973",
+      "eligibility": {
+        "evidenceType": "official_structured_metadata_only",
+        "status": "needs_visible_or_admissions_document_confirmation",
+        "summary": "Metadata lists recognised 10+2/equivalent but itself asks for confirmation against the eligibility panel.",
+        "cmsTextAtReview": "10+2 or equivalent from a recognised board.",
+        "requiredReview": "Review category-specific equivalence and document requirements."
+      },
+      "curriculum": {
+        "officialSemesterHeadings": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          6
+        ],
+        "cmsTermCount": 4,
+        "cmsVerificationMarker": null,
+        "status": "semester_coverage_differs",
+        "note": "Semester headings were observed; complete subject-by-subject validation is pending."
+      },
+      "recognition": {
+        "status": "session_and_institution_confirmation_pending",
+        "directoryUrl": "https://deb.ugc.ac.in/Home/HEI_Prog_List",
+        "candidateRowId": "102",
+        "academicYear": "2025-26",
+        "mode": "Online(OL)",
+        "institution": "Amity University",
+        "state": "Uttar Pradesh",
+        "program": "BACHELOR OF COMMERCE (GENERAL)"
+      },
+      "publicationStatus": "not_applied"
+    },
+    {
+      "courseId": "majmc-amity",
+      "sourceUrl": "https://amityonline.com/master-of-arts-journalism-and-mass-communication-online",
+      "checkedAt": "2026-09-30",
+      "sourceTextSha256": "09d699c56c29cf1096eaf4c8e22d5c61a6abab9a326db6dcd980fffce9781003",
+      "eligibility": {
+        "evidenceType": "official_structured_metadata_only",
+        "status": "needs_visible_or_admissions_document_confirmation",
+        "summary": "Metadata accepts a recognised bachelor’s degree in any discipline and lists AIU equivalence for international graduates.",
+        "cmsTextAtReview": "Graduation from a recognised university.",
+        "requiredReview": "Review category-specific equivalence and document requirements."
+      },
+      "curriculum": {
+        "officialSemesterHeadings": [
+          1,
+          2,
+          3,
+          4
+        ],
+        "cmsTermCount": 4,
+        "cmsVerificationMarker": null,
+        "status": "subjects_and_electives_not_verified",
+        "note": "Semester headings were observed; complete subject-by-subject validation is pending."
+      },
+      "recognition": {
+        "status": "session_and_institution_confirmation_pending",
+        "directoryUrl": "https://deb.ugc.ac.in/Home/HEI_Prog_List",
+        "candidateRowId": "1646",
+        "academicYear": "2025-26",
+        "mode": "Online(OL)",
+        "institution": "Amity University",
+        "state": "Uttar Pradesh",
+        "program": "MASTER OF ARTS (JOURNALISM & MASS COMMUNICATION)"
+      },
+      "publicationStatus": "not_applied"
+    },
+    {
+      "courseId": "ba-amity",
+      "sourceUrl": "https://amityonline.com/bachelor-of-arts-online",
+      "checkedAt": "2026-09-30",
+      "sourceTextSha256": "ae093055fb8d3abc6e1479414275e777e3a35f90c0027a4f8fd420a17565cd7b",
+      "eligibility": {
+        "evidenceType": "official_structured_metadata_only",
+        "status": "needs_visible_or_admissions_document_confirmation",
+        "summary": "Metadata lists school-leaving certificates for Indian applicants and O/A-level plus AIU equivalence documents for overseas applicants.",
+        "cmsTextAtReview": "10+2 or equivalent from a recognised board.",
+        "requiredReview": "Review category-specific equivalence and document requirements."
+      },
+      "curriculum": {
+        "officialSemesterHeadings": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          6
+        ],
+        "cmsTermCount": 4,
+        "cmsVerificationMarker": null,
+        "status": "semester_coverage_differs",
+        "note": "Semester headings were observed; complete subject-by-subject validation is pending."
+      },
+      "recognition": {
+        "status": "session_and_institution_confirmation_pending",
+        "directoryUrl": "https://deb.ugc.ac.in/Home/HEI_Prog_List",
+        "candidateRowId": "2562",
+        "academicYear": "2025-26",
+        "mode": "Online(OL)",
+        "institution": "Amity University",
+        "state": "Uttar Pradesh",
+        "program": "BACHELOR OF ARTS (POLITICAL SCIENCE,ECONOMICS,ENGLISH,SOCIOLOGY)"
+      },
+      "publicationStatus": "not_applied"
+    },
+    {
+      "courseId": "bcom-honours-amity",
+      "sourceUrl": "https://amityonline.com/bachelor-of-commerce-honours",
+      "checkedAt": "2026-09-30",
+      "sourceTextSha256": "c0f157e08e276e44a88846179f1dd1716d00a4e86852a116b275eaff2f846ebb",
+      "eligibility": {
+        "evidenceType": "official_structured_metadata_only",
+        "status": "needs_visible_or_admissions_document_confirmation",
+        "summary": "Metadata requires recognised school completion through class 12. The CMS 55% threshold is not supported by the retrieved prerequisites.",
+        "cmsTextAtReview": "10+2 or equivalent from a recognised board with a minimum of 55% marks.",
+        "requiredReview": "Confirm the 55% threshold before retaining or removing it."
+      },
+      "curriculum": {
+        "officialSemesterHeadings": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          6
+        ],
+        "cmsTermCount": 4,
+        "cmsVerificationMarker": null,
+        "status": "semester_coverage_differs",
+        "note": "Semester headings were observed; complete subject-by-subject validation is pending."
+      },
+      "recognition": {
+        "status": "session_and_institution_confirmation_pending",
+        "directoryUrl": "https://deb.ugc.ac.in/Home/HEI_Prog_List",
+        "note": "Similar 2025-26 entries appear under Amity, Rajasthan. Do not attribute those to the Uttar Pradesh institution without awarding-body confirmation."
+      },
+      "publicationStatus": "not_applied"
+    },
+    {
+      "courseId": "mcom-amity",
+      "sourceUrl": "https://amityonline.com/master-of-commerce-financial-management-online",
+      "checkedAt": "2026-09-30",
+      "sourceTextSha256": "3b5e9e8ec49103fd12b47f85a0679f32cee12617f90b5b0ade4b5bb4e179bb5c",
+      "eligibility": {
+        "evidenceType": "official_structured_metadata_only",
+        "status": "needs_visible_or_admissions_document_confirmation",
+        "summary": "Metadata lists a bachelor’s degree without a commerce-only restriction. Confirm eligibility and the Financial Management specialization.",
+        "cmsTextAtReview": "Graduation in commerce or related discipline as per university criteria.",
+        "requiredReview": "Resolve the generic M.Com versus Financial Management scope and the commerce restriction."
+      },
+      "curriculum": {
+        "officialSemesterHeadings": [
+          1,
+          2,
+          3,
+          4
+        ],
+        "cmsTermCount": 4,
+        "cmsVerificationMarker": null,
+        "status": "subjects_and_electives_not_verified",
+        "note": "Semester headings were observed; complete subject-by-subject validation is pending."
+      },
+      "recognition": {
+        "status": "session_and_institution_confirmation_pending",
+        "directoryUrl": "https://deb.ugc.ac.in/Home/HEI_Prog_List",
+        "candidateRowId": "336",
+        "academicYear": "2025-26",
+        "mode": "Online(OL)",
+        "institution": "Amity University",
+        "state": "Uttar Pradesh",
+        "program": "MASTER OF COMMERCE (FINANCIAL MANAGEMENT/ FINANCIAL TECHNOLOGY)"
+      },
+      "publicationStatus": "not_applied"
+    },
+    {
+      "courseId": "bajmc-amity",
+      "sourceUrl": "https://amityonline.com/bachelor-of-arts-journalism-and-mass-communication-online",
+      "checkedAt": "2026-09-30",
+      "sourceTextSha256": "96f34a392e8df00cd60fe11fb2ba60af928df3342d8f7f9768813fd0047b9002",
+      "eligibility": {
+        "evidenceType": "official_structured_metadata_only",
+        "status": "needs_visible_or_admissions_document_confirmation",
+        "summary": "Metadata lists recognised 10+2 or an equivalent qualification.",
+        "cmsTextAtReview": "10+2 or equivalent from a recognised board.",
+        "requiredReview": "Review category-specific equivalence and document requirements."
+      },
+      "curriculum": {
+        "officialSemesterHeadings": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          6
+        ],
+        "cmsTermCount": 4,
+        "cmsVerificationMarker": null,
+        "status": "semester_coverage_differs",
+        "note": "Semester headings were observed; complete subject-by-subject validation is pending."
+      },
+      "recognition": {
+        "status": "session_and_institution_confirmation_pending",
+        "directoryUrl": "https://deb.ugc.ac.in/Home/HEI_Prog_List",
+        "candidateRowId": "1003",
+        "academicYear": "2025-26",
+        "mode": "Online(OL)",
+        "institution": "Amity University",
+        "state": "Uttar Pradesh",
+        "program": "BACHELOR OF ARTS (JOURNALISM AND MASS COMMUNICATION)"
+      },
+      "publicationStatus": "not_applied"
+    },
+    {
+      "courseId": "msc-data-science-amity",
+      "sourceUrl": "https://amityonline.com/msc-in-data-science",
+      "checkedAt": "2026-09-30",
+      "sourceTextSha256": "a4f6f896599d9f1dd7870e2eecb3ae568afb54db31f661820f30b36c4b9158cf",
+      "eligibility": {
+        "evidenceType": "official_structured_metadata_only",
+        "status": "needs_visible_or_admissions_document_confirmation",
+        "summary": "Metadata accepts a recognised bachelor’s degree in any science discipline.",
+        "cmsTextAtReview": "Bachelor's degree in any Science discipline — not restricted to computer science, mathematics, or statistics specifically.",
+        "requiredReview": "Review category-specific equivalence and document requirements."
+      },
+      "curriculum": {
+        "officialSemesterHeadings": [
+          1,
+          2,
+          3,
+          4
+        ],
+        "cmsTermCount": 4,
+        "cmsVerificationMarker": null,
+        "status": "subjects_and_electives_not_verified",
+        "note": "Semester headings were observed; complete subject-by-subject validation is pending."
+      },
+      "recognition": {
+        "status": "session_and_institution_confirmation_pending",
+        "directoryUrl": "https://deb.ugc.ac.in/Home/HEI_Prog_List",
+        "note": "Similar 2025-26 entries appear under Amity, Rajasthan. Do not attribute those to the Uttar Pradesh institution without awarding-body confirmation."
+      },
+      "publicationStatus": "not_applied"
+    },
+    {
+      "courseId": "msc-mathematics-muj",
+      "sourceUrl": "https://www.onlinemanipal.com/online-msc-mathematics-muj",
+      "checkedAt": "2026-09-30",
+      "sourceTextSha256": "b6b7426f8af2ca34ac60a1a2281850699bbcbe2b9421e9d55651e4709d58c8aa",
+      "eligibility": {
+        "evidenceType": "official_page_eligibility_section",
+        "status": "conflicting_official_sources_pending_admissions_clarification",
+        "summary": "The page lists a BSc route or an equivalent three/four-year bachelor’s route with compulsory mathematics. Confirm how the mathematics condition applies to each route before simplifying it.",
+        "cmsTextAtReview": "A BSc degree, or a 10+2+3/4-year bachelor's degree with Mathematics as a compulsory subject.",
+        "requiredReview": "Obtain current admissions clarification covering mathematics prerequisites for each degree route and the applicable marks threshold. Do not infer that omitted conditions have been waived; no prepared correction is offered.",
+        "additionalSourceUrl": "https://muj.onlinemanipal.com/wp-content/uploads/sites/2/2026/08/M.Sc-Mathematics-PPR.pdf",
+        "additionalSourceLocation": "Printed page 45, section 6.1.1",
+        "additionalSourceSummary": "The programme project report describes a recognised three-year BSc or equivalent, with 50% overall (45% reserved categories); it does not repeat the course page’s compulsory-mathematics wording."
+      },
+      "curriculum": {
+        "officialSemesterHeadings": [
+          1,
+          2,
+          3,
+          4
+        ],
+        "cmsTermCount": 4,
+        "cmsVerificationMarker": null,
+        "status": "subjects_and_electives_not_verified",
+        "note": "Semester headings were observed; complete subject-by-subject validation is pending."
+      },
+      "recognition": {
+        "status": "session_and_institution_confirmation_pending",
+        "directoryUrl": "https://deb.ugc.ac.in/Home/HEI_Prog_List",
+        "note": "Exact institution/program match not resolved in this directory pass."
+      },
+      "publicationStatus": "not_applied"
+    },
+    {
+      "courseId": "ma-public-policy-governance-amity",
+      "sourceUrl": "https://amityonline.com/ma-public-policy",
+      "checkedAt": "2026-09-30",
+      "sourceTextSha256": "5ce8f3a1afeddfd40aa1bbabe206585c6c3032555462ce31c052027a7da274e7",
+      "eligibility": {
+        "evidenceType": "official_structured_metadata_only",
+        "status": "needs_visible_or_admissions_document_confirmation",
+        "summary": "Metadata requires a three/four-year bachelor’s degree and spoken/written English proficiency; it excludes diplomas.",
+        "cmsTextAtReview": "Graduation from a recognised university.",
+        "requiredReview": "Review the missing degree-duration, English and diploma-exclusion conditions."
+      },
+      "curriculum": {
+        "officialSemesterHeadings": [
+          1,
+          2,
+          3,
+          4
+        ],
+        "cmsTermCount": 4,
+        "cmsVerificationMarker": null,
+        "status": "subjects_and_electives_not_verified",
+        "note": "Semester headings were observed; complete subject-by-subject validation is pending."
+      },
+      "recognition": {
+        "status": "session_and_institution_confirmation_pending",
+        "directoryUrl": "https://deb.ugc.ac.in/Home/HEI_Prog_List",
+        "candidateRowId": "1205",
+        "academicYear": "2025-26",
+        "mode": "Online(OL)",
+        "institution": "Amity University",
+        "state": "Uttar Pradesh",
+        "program": "MASTER OF ARTS PUBLIC POLICY & GOVERNANCE"
+      },
+      "publicationStatus": "not_applied"
+    }
+  ]
+}

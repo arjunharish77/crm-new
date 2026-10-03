@@ -1,0 +1,151 @@
+[
+  {
+    "path": "/",
+    "url": "https://unnatividya.com/",
+    "axe": [],
+    "metrics": {
+      "height": 10138,
+      "resources": 52,
+      "loadMs": 452.5
+    }
+  },
+  {
+    "path": "/courses",
+    "url": "https://unnatividya.com/courses",
+    "axe": [
+      {
+        "id": "select-name",
+        "impact": "critical",
+        "count": 1,
+        "examples": [
+          [
+            "select"
+          ]
+        ]
+      }
+    ],
+    "metrics": {
+      "height": 15685,
+      "resources": 48,
+      "loadMs": 238.19999992847443
+    }
+  },
+  {
+    "path": "/compare?add=mba-muj,mba-smu",
+    "url": "https://unnatividya.com/compare?add=mba-muj,mba-smu",
+    "axe": [
+      {
+        "id": "color-contrast",
+        "impact": "serious",
+        "count": 2,
+        "examples": [
+          [
+            ".grid > div:nth-child(1) > div:nth-child(4)"
+          ],
+          [
+            ".grid > div:nth-child(2) > div:nth-child(4)"
+          ]
+        ]
+      }
+    ],
+    "metrics": {
+      "height": 3858,
+      "resources": 41,
+      "loadMs": 184.80000007152557
+    }
+  },
+  {
+    "path": "/recommender",
+    "url": "https://unnatividya.com/recommender",
+    "axe": [],
+    "metrics": {
+      "height": 2383,
+      "resources": 28,
+      "loadMs": 188.90000009536743
+    }
+  },
+  {
+    "path": "/universities/manipal-university-jaipur",
+    "url": "https://unnatividya.com/universities/manipal-university-jaipur",
+    "axe": [
+      {
+        "id": "color-contrast",
+        "impact": "serious",
+        "count": 5,
+        "examples": [
+          [
+            ".stats-band-grid > div:nth-child(1) > span"
+          ],
+          [
+            ".stats-band-grid > div:nth-child(2) > span"
+          ],
+          [
+            ".stats-band-grid > div:nth-child(3) > span"
+          ]
+        ]
+      },
+      {
+        "id": "scrollable-region-focusable",
+        "impact": "serious",
+        "count": 1,
+        "examples": [
+          [
+            "#sec-scholarships > div"
+          ]
+        ]
+      }
+    ],
+    "metrics": {
+      "height": 8079,
+      "resources": 42,
+      "loadMs": 249.60000002384186
+    }
+  },
+  {
+    "path": "/how-we-verify",
+    "url": "https://unnatividya.com/how-we-verify",
+    "axe": [],
+    "metrics": {
+      "height": 5347,
+      "resources": 25,
+      "loadMs": 135.39999997615814
+    }
+  },
+  {
+    "path": "/specializations",
+    "url": "https://unnatividya.com/specializations",
+    "axe": [],
+    "metrics": {
+      "height": 15709,
+      "resources": 39,
+      "loadMs": 261.89999997615814
+    }
+  },
+  {
+    "path": "/online-degree-guides/online-mba-fees",
+    "url": "https://unnatividya.com/online-degree-guides/online-mba-fees",
+    "axe": [],
+    "metrics": {
+      "height": 1879,
+      "resources": 29,
+      "loadMs": 432.10000002384186
+    }
+  },
+  {
+    "path": "/privacy",
+    "url": "https://unnatividya.com/privacy",
+    "axe": [],
+    "metrics": {
+      "height": 3076,
+      "resources": 29,
+      "loadMs": 184
+    }
+  },
+  {
+    "modal": {
+      "active": "<body style=\"overflow: hidden;\"><div hidden=\"\"><!--$--><!--/$--></div><script type=\"application/ld+json\">[{\"@context\":\"https://schema.org\",\"@type\":\"Organization\",\"name\":\"Unnati Vidya\",\"url\":\"https://u",
+      "dialog": true,
+      "backgroundInert": false
+    }
+  }
+]

@@ -5,7 +5,8 @@ import { badRequest, serverError, unauthorized } from "@/lib/server/http";
 
 // Synchronous by design, matching this codebase's existing bulk-action convention (e.g.
 // bulkUpdateTasksForTenant) rather than a background worker job -- capped at 500 records per
-// call (enforced in enrollRecordsInAutomation) to keep the request bounded.
+// call to keep the request bounded. More than that is refused here (it used to be cut to the first
+// 500 without saying so).
 export async function POST(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
@@ -17,6 +18,7 @@ export async function POST(
     const entityType = body?.entityType === "OPPORTUNITY" ? "OPPORTUNITY" : body?.entityType === "LEAD" ? "LEAD" : null;
     if (!entityType) return badRequest("entityType must be LEAD or OPPORTUNITY");
     if (!Array.isArray(body?.recordIds) || body.recordIds.length === 0) return badRequest("recordIds is required");
+    if (new Set(body.recordIds.filter(Boolean).map(String)).size > 500) return badRequest("At most 500 records can be enrolled at once. Select fewer and enrol the rest separately.");
     const result = await enrollRecordsInAutomation(user, id, entityType, body.recordIds);
     return NextResponse.json(result);
   } catch (error) {

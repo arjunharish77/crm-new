@@ -23,7 +23,7 @@ export function CustomFieldsCard({ fields, onAdd, onEdit }: CustomFieldsCardProp
             <div className="flex items-center justify-between border-b p-3">
                 <div className="flex items-center gap-2">
                     <Tag className="size-[18px] text-primary" />
-                    <span className="text-base font-extrabold">Custom Fields</span>
+                    <span className="text-base font-semibold">Custom Fields</span>
                 </div>
                 <Button
                     size="icon-sm"

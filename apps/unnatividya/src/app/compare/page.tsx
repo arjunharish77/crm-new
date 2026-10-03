@@ -1,7 +1,10 @@
+export const dynamic = "force-dynamic";
+import { PublishedCatalogBoundary } from "@/components/published-catalog-boundary";
+import { getPublishedCatalog } from "@/lib/catalog-snapshot-server";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { ComparePicker } from "@/components/compare-picker";
-import { courses, courseWithUniversity } from "@/data/catalog";
+
 import { allComparisonPairs } from "@/lib/comparisons";
 
 export const metadata: Metadata = {
@@ -10,15 +13,17 @@ export const metadata: Metadata = {
   alternates: { canonical: "/compare" },
 };
 
-export default async function ComparePage({ searchParams }: { searchParams?: Promise<{ add?: string }> }) {
+export default async function ComparePage({ searchParams }: { searchParams?: Promise<{ add?: string | string[] }> }) {
+  const catalog = await getPublishedCatalog();
+  const { courses, courseWithUniversity } = catalog;
   const params = await searchParams;
   // params.add === undefined means the query param is absent entirely (first visit) -> use the
   // default pair. params.add === "" means the user explicitly cleared every selection (by
   // removing the last picked course) -> must stay empty so the "select a program" state shows,
   // not silently repopulate with the default pair (that made the empty state unreachable).
-  const selectedIds = params?.add !== undefined ? params.add.split(",").filter(Boolean).slice(0, 3) : ["mba-muj", "mba-amity"];
+  const selectedIds = params?.add !== undefined ? [...new Set((Array.isArray(params.add) ? params.add : [params.add]).flatMap(value => value.split(",")))].filter(id => courses.some(course => course.id === id)).slice(0, 3) : ["mba-muj", "mba-amity"];
   const allCourses = courses.map(courseWithUniversity);
-  const comparisonPairs = allComparisonPairs();
+  const comparisonPairs = allComparisonPairs(catalog);
   const presets = [
     ["MBA: all three", "mba-muj,mba-smu,mba-amity"],
     ["BCA: MUJ vs Amity", "bca-muj,bca-amity"],
@@ -27,7 +32,7 @@ export default async function ComparePage({ searchParams }: { searchParams?: Pro
   ];
   const shell = { maxWidth: 1200, margin: "0 auto", paddingLeft: 24, paddingRight: 24, width: "100%", boxSizing: "border-box" as const };
 
-  return (
+  return <PublishedCatalogBoundary>{(
     <>
       <div style={{ background: "#F7F8F9", flex: 1, display: "flex", flexDirection: "column" }}>
         <div style={{ background: "#fff", borderBottom: "1px solid #EAEAEA" }}>
@@ -37,14 +42,14 @@ export default async function ComparePage({ searchParams }: { searchParams?: Pro
             </div>
             <h1 style={{ fontSize: 28, fontWeight: 700, color: "#363634", margin: 0 }}>Compare programs side by side</h1>
             <div style={{ fontSize: 14, color: "#696868", marginTop: 6 }}>
-              Up to three programs. Total fee, EMI, approvals and placement records — the best value in each row is highlighted.
+              Choose up to three programs to compare fees, duration and course details. Email verification is required to view the interactive comparison.
             </div>
           </div>
         </div>
 
         <div style={{ ...shell, paddingTop: 28, paddingBottom: 64, flex: 1 }}>
           <div style={{ marginBottom: 18 }}>
-            <div style={{ fontSize: 12, fontWeight: 700, color: "#696868", letterSpacing: 0.4, marginBottom: 8 }}>TOP COMPARISONS THIS WEEK</div>
+            <div style={{ fontSize: 12, fontWeight: 700, color: "#696868", letterSpacing: 0.4, marginBottom: 8 }}>QUICK START COMPARISONS</div>
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
               {presets.map(([label, add]) => (
                 <Link href={`/compare?add=${add}`} style={{ border: "1px solid #CFDAE6", background: "#fff", borderRadius: 6, padding: "10px 14px", fontSize: 13, fontWeight: 600, color: "#363634" }} key={add}>
@@ -75,5 +80,5 @@ export default async function ComparePage({ searchParams }: { searchParams?: Pro
         </div>
       </div>
     </>
-  );
+  )}</PublishedCatalogBoundary>;
 }

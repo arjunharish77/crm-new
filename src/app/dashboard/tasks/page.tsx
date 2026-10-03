@@ -1,26 +1,39 @@
 "use client";
 
-import { PageHeader } from "@/components/layout/page-header";
-
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
+import { ColumnDef } from "@tanstack/react-table";
+import { CalendarClock, CalendarDays, CheckCircle2, Inbox, ListChecks, MoreHorizontal, Pencil, Plus, RotateCcw, SkipForward, Star, Trash2, UserCog } from "lucide-react";
+import { toast } from "sonner";
 import { apiFetch } from "@/lib/api";
+import { PageHeader } from "@/components/layout/page-header";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { IconButton } from "@/components/ui/icon-button";
+import { DataTable } from "@/components/ui/data-table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Checkbox } from "@/components/ui/checkbox";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { useRetainedEditorDraft } from "@/providers/editor-draft-provider";
 import { useEditorDismissGuard } from "@/hooks/use-editor-dismiss-guard";
+import { useUrlState } from "@/hooks/use-url-state";
+import { isAbortError, useAbortableRequest } from "@/hooks/use-abortable-request";
+import { useAuth } from "@/providers/auth-provider";
 import { StandardDialog } from "@/components/common/standard-dialog";
 import { EmptyState } from "@/components/common/empty-state";
 import { ErrorState } from "@/components/common/error-state";
-import { TableSkeleton } from "@/components/common/skeletons";
-import { formatWorkspaceDateTime, formatWorkspaceDateTimeInput, workspaceDateTimeInputToIso } from "@/lib/date-format";
+import { ListToolbar } from "@/components/common/list-toolbar";
+import { SelectionBar } from "@/components/common/selection-bar";
+import { SegmentedControl } from "@/components/common/page-tabs";
+import { RecordPicker } from "@/components/common/record-picker";
+import { useConfirm } from "@/components/common/dialogs-provider";
+import { formatWorkspaceDateParts, formatWorkspaceDateTime, formatWorkspaceDateTimeInput, formatWorkspaceTime, isPastDate, isWorkspaceToday, workspaceDateTimeInputToIso, workspaceDayStart } from "@/lib/date-format";
+import { statusDisplay } from "@/lib/display/status";
+import { formatCount } from "@/lib/display/format";
+import { plural } from "@/lib/bulk-selection";
+import { useRecordsChanged } from "@/lib/records-events";
 import { cn } from "@/lib/utils";
-import { AlertTriangle, CalendarDays, CheckCircle2, ChevronLeft, ChevronRight, Clock, Edit3, Inbox, ListChecks, Plus, RefreshCw, Star, Trash2 } from "lucide-react";
-import { toast } from "sonner";
 import { QueueExportButton } from "@/components/exports/queue-export-button";
 import { TaskChecklistDependenciesPanel } from "@/components/tasks/task-checklist-dependencies-panel";
 import { TaskRecurrenceEscalationFields, type RecurrenceRule } from "@/components/tasks/task-recurrence-escalation-fields";
@@ -65,29 +78,9 @@ type Task = {
     claimedBy?: string | null;
 };
 
-function taskSlaBadge(task: Task) {
-    const isOpen = task.status !== "COMPLETED" && task.status !== "CANCELLED";
-    const breached = task.slaStatus === "BREACHED" || (isOpen && !!task.slaTarget && new Date(task.slaTarget).getTime() < Date.now());
-    if (breached) {
-        return (
-            <Badge variant="destructive" className="rounded-md text-[0.65rem] font-semibold">
-                <AlertTriangle className="size-3" />
-                SLA Breached
-            </Badge>
-        );
-    }
-    if (task.slaStatus === "MET") {
-        return <Badge variant="outline" className="rounded-md text-[0.65rem] font-semibold">SLA Met</Badge>;
-    }
-    return null;
-}
-
 type UserOption = { id: string; name?: string | null; email?: string | null };
-type LeadOption = { id: string; name?: string | null; email?: string | null; company?: string | null };
-type OpportunityOption = { id: string; title?: string | null; leadId?: string | null };
 type ActivityOption = {
     id: string;
-    typeId?: string | null;
     leadId?: string | null;
     opportunityId?: string | null;
     outcome?: string | null;
@@ -97,6 +90,7 @@ type ActivityOption = {
     lead?: { name?: string | null; email?: string | null } | null;
     opportunity?: { title?: string | null } | null;
 };
+type Paged<T> = { data: T[]; meta: { total: number; page: number; limit: number; last_page: number } };
 
 const EMPTY_FORM = {
     title: "",
@@ -117,7 +111,7 @@ const EMPTY_FORM = {
 
 const STATUS_OPTIONS = [
     { value: "OPEN", label: "Open" },
-    { value: "IN_PROGRESS", label: "In Progress" },
+    { value: "IN_PROGRESS", label: "In progress" },
     { value: "COMPLETED", label: "Completed" },
     { value: "CANCELLED", label: "Cancelled" },
 ];
@@ -129,34 +123,82 @@ const PRIORITY_OPTIONS = [
     { value: "URGENT", label: "Urgent" },
 ];
 
-const QUICK_FILTERS = [
-    { value: "ALL", label: "All" },
-    { value: "today", label: "Today" },
-    { value: "overdue", label: "Overdue" },
-    { value: "upcoming", label: "Upcoming" },
-    { value: "completed", label: "Completed" },
-];
+// Quick views (UI/UX plan §10.4): open work first, then due-based views.
+const VIEWS = ["open", "overdue", "today", "upcoming", "completed", "all"] as const;
+type View = (typeof VIEWS)[number];
+const VIEW_LABEL: Record<View, string> = { open: "Open", overdue: "Overdue", today: "Due today", upcoming: "Upcoming", completed: "Completed", all: "All" };
+const PRIORITIES = ["all", "URGENT", "HIGH", "MEDIUM", "LOW"] as const;
 
-function toLocalInputValue(value: string | null) {
-    return formatWorkspaceDateTimeInput(value);
+function isClosedTask(task: Task) {
+    return task.status === "COMPLETED" || task.status === "CANCELLED";
 }
 
-function fromLocalInputValue(value: string) {
-    return workspaceDateTimeInputToIso(value);
+function viewParams(view: View, params: URLSearchParams) {
+    if (view === "open") params.set("open", "1");
+    else if (view !== "all") params.set("due", view);
 }
+
+// Due as people read it: "Overdue · date", "Today, time", or the date and time.
+function DueText({ task }: { task: Task }) {
+    if (!task.dueAt) return <span className="text-muted-foreground">No due date</span>;
+    if (!isClosedTask(task) && isPastDate(task.dueAt) && !isWorkspaceToday(task.dueAt)) {
+        return <span className="text-destructive">Overdue · {formatWorkspaceDateTime(task.dueAt)}</span>;
+    }
+    if (isWorkspaceToday(task.dueAt)) {
+        return <span className={cn(!isClosedTask(task) && isPastDate(task.dueAt) ? "text-destructive" : "text-foreground")}>Today, {formatWorkspaceTime(task.dueAt)}</span>;
+    }
+    return <span className="text-muted-foreground">{formatWorkspaceDateTime(task.dueAt)}</span>;
+}
+
+// Small flags next to the title, only when they matter.
+function TaskFlags({ task }: { task: Task }) {
+    const breached = task.slaStatus === "BREACHED" || (!isClosedTask(task) && !!task.slaTarget && isPastDate(task.slaTarget));
+    const done = task.checklist?.filter((item) => item.isDone).length ?? 0;
+    return (
+        <>
+            {task.isBlocked ? <Badge tone="danger">Blocked</Badge> : null}
+            {breached ? <Badge tone="danger">SLA breached</Badge> : null}
+            {task.checklist?.length ? <span className="text-xs tabular-nums text-muted-foreground">{done}/{task.checklist.length}</span> : null}
+            {task.queueId && !task.claimedBy ? <Badge tone="neutral">Unclaimed</Badge> : null}
+            {task.recurrenceRule ? <span className="text-xs text-muted-foreground">Repeats</span> : null}
+        </>
+    );
+}
+
+const TASK_SORTABLE = ["title", "dueAt", "priority", "owner", "status"];
 
 export default function TasksPage() {
+    const { user } = useAuth();
+    const confirm = useConfirm();
+    // An older list or count request can't land after a newer one.
+    const nextListSignal = useAbortableRequest();
+    const nextCountSignal = useAbortableRequest();
     const [tasks, setTasks] = useState<Task[]>([]);
+    const [totalItems, setTotalItems] = useState(0);
+    const [counts, setCounts] = useState<Record<View, number | null>>({ open: null, overdue: null, today: null, upcoming: null, completed: null, all: null });
     const [users, setUsers] = useState<UserOption[]>([]);
     const [teams, setTeams] = useState<Array<{ id: string; name: string }>>([]);
-    const [leads, setLeads] = useState<LeadOption[]>([]);
-    const [opportunities, setOpportunities] = useState<OpportunityOption[]>([]);
-    const [activities, setActivities] = useState<ActivityOption[]>([]);
     const [loading, setLoading] = useState(true);
-    const [quickFilter, setQuickFilter] = useState("ALL");
-    const [statusFilter, setStatusFilter] = useState("ALL");
-    const [priorityFilter, setPriorityFilter] = useState("ALL");
-    const [ownerFilter, setOwnerFilter] = useState("ALL");
+    const [fetchError, setFetchError] = useState<string | null>(null);
+
+    const [search, setSearch] = useUrlState<string>("q", "");
+    // Column sort, on the server (?sort=title or ?sort=-dueAt).
+    const [sortParam, setSortParam] = useUrlState<string>("sort", "");
+    const sort = useMemo(() => {
+        const id = sortParam.replace(/^-/, "");
+        return TASK_SORTABLE.includes(id) ? { id, desc: sortParam.startsWith("-") } : null;
+    }, [sortParam]);
+    const [view, setView] = useUrlState<View>("view", "open", { allowed: VIEWS });
+    // "me" by default: the page opens on "My open tasks".
+    const [owner, setOwner] = useUrlState<string>("owner", "me");
+    const [priority, setPriority] = useUrlState<(typeof PRIORITIES)[number]>("priority", "all", { allowed: PRIORITIES });
+    const [paginationModel, setPaginationModel] = useState({ page: 0, pageSize: 25 });
+    const [selectedTaskIds, setSelectedTaskIds] = useState<string[]>([]);
+    const [viewMode, setViewModeState] = useState<"list" | "calendar">(() => (getSavedViewMode("tasks") === "calendar" ? "calendar" : "list"));
+    const setViewMode = (mode: "list" | "calendar") => { setViewModeState(mode); saveViewMode("tasks", mode); };
+    const [calendarMode, setCalendarMode] = useState<"day" | "week" | "month">("week");
+    const [favoriteTaskIds, setFavoriteTaskIds] = useState<string[]>([]);
+
     const [dialogOpen, setDialogOpen] = useState(false);
     const [editingTask, setEditingTask] = useState<Task | null>(null);
     const [initialForm, setInitialForm] = useState(EMPTY_FORM);
@@ -173,54 +215,88 @@ export default function TasksPage() {
     useEffect(() => { taskVersion.current += 1; return () => { taskVersion.current += 1; }; }, [draftKey]);
     const canCloseEditor = useEditorDismissGuard(dialogOpen && taskDraft.dirty, dialogOpen && taskDraft.pending, () => updateTaskDraft({ values: null, dirty: false, error: "" }));
     const closeEditor = () => { if (canCloseEditor()) setDialogOpen(false); };
-    const [paginationModel, setPaginationModel] = useState({ page: 0, pageSize: 10 });
-    const [selectedTaskIds, setSelectedTaskIds] = useState<string[]>([]);
-    const [viewMode, setViewModeState] = useState<"list" | "calendar">(() => {
-        const saved = getSavedViewMode("tasks");
-        return saved === "calendar" ? "calendar" : "list";
-    });
-    const setViewMode = (mode: "list" | "calendar") => {
-        setViewModeState(mode);
-        saveViewMode("tasks", mode);
-    };
-    const [favoriteTaskIds, setFavoriteTaskIds] = useState<string[]>([]);
+
+    const [assignOpen, setAssignOpen] = useState(false);
+    const [assignUserId, setAssignUserId] = useState<string | null>(null);
+    const [rescheduleOpen, setRescheduleOpen] = useState(false);
+    const [rescheduleAt, setRescheduleAt] = useState("");
+    const [bulkBusy, setBulkBusy] = useState(false);
 
     useEffect(() => {
         setFavoriteTaskIds(getFavoriteRecords().filter((record) => record.type === "task").map((record) => record.id));
+        apiFetch<UserOption[]>("/users").then((data) => setUsers(Array.isArray(data) ? data : [])).catch(() => undefined);
+        apiFetch<any>("/teams").then((data) => setTeams(Array.isArray(data) ? data : [])).catch(() => undefined);
     }, []);
 
-    const toggleFavoriteTask = (task: Task) => {
-        const updated = toggleFavoriteRecord("task", task.id, task.title);
-        setFavoriteTaskIds(updated.filter((record) => record.type === "task").map((record) => record.id));
-    };
-    const [calendarMode, setCalendarMode] = useState<"day" | "week" | "month">("week");
-    const [bulkOwnerId, setBulkOwnerId] = useState("");
-    const [bulkDueAt, setBulkDueAt] = useState("");
-
-    const [fetchError, setFetchError] = useState<string | null>(null);
+    const baseParams = useCallback(() => {
+        const params = new URLSearchParams();
+        if (owner !== "all") params.set("ownerId", owner);
+        if (priority !== "all") params.set("priority", priority);
+        if (search.trim()) params.set("q", search.trim());
+        return params;
+    }, [owner, priority, search]);
+    const listParams = useCallback(() => {
+        const params = baseParams();
+        if (sort) {
+            params.set("sort", sort.id);
+            params.set("dir", sort.desc ? "desc" : "asc");
+        }
+        return params;
+    }, [baseParams, sort]);
 
     const fetchTasks = useCallback(async () => {
         setLoading(true);
         setFetchError(null);
+        const signal = nextListSignal();
         try {
-            const params = new URLSearchParams();
-            if (quickFilter !== "ALL") params.set("due", quickFilter);
-            if (statusFilter !== "ALL") params.set("status", statusFilter);
-            if (priorityFilter !== "ALL") params.set("priority", priorityFilter);
-            if (ownerFilter !== "ALL") params.set("ownerId", ownerFilter);
-            const data = await apiFetch<Task[]>(`/tasks${params.toString() ? `?${params.toString()}` : ""}`);
-            setTasks(Array.isArray(data) ? data : []);
+            const params = listParams();
+            // The calendar shows overdue and upcoming open work, so it always asks for open tasks.
+            if (viewMode === "calendar") {
+                params.set("open", "1");
+                params.set("page", "1");
+                params.set("limit", "200");
+            } else {
+                viewParams(view, params);
+                params.set("page", String(paginationModel.page + 1));
+                params.set("limit", String(paginationModel.pageSize));
+            }
+            const response = await apiFetch<Paged<Task>>(`/tasks?${params.toString()}`, { signal });
+            setTasks(Array.isArray(response?.data) ? response.data : []);
+            setTotalItems(Number(response?.meta?.total ?? 0));
         } catch (error: any) {
-            toast.error(error.message || "Failed to load tasks");
-            setFetchError(error.message || "Failed to load tasks.");
+            if (isAbortError(error)) return;
+            setFetchError(error?.message || "Tasks couldn't be loaded.");
         } finally {
-            setLoading(false);
+            if (!signal.aborted) setLoading(false);
         }
-    }, [ownerFilter, priorityFilter, quickFilter, statusFilter]);
+    }, [listParams, view, viewMode, paginationModel, nextListSignal]);
 
-    useEffect(() => {
-        fetchTasks();
-    }, [fetchTasks]);
+    const fetchCounts = useCallback(async () => {
+        const signal = nextCountSignal();
+        const entries = await Promise.all(VIEWS.map(async (value) => {
+            try {
+                const params = baseParams();
+                viewParams(value, params);
+                params.set("page", "1");
+                params.set("limit", "1");
+                const response = await apiFetch<Paged<Task>>(`/tasks?${params.toString()}`, { signal });
+                return [value, Number(response?.meta?.total ?? 0)] as const;
+            } catch {
+                return [value, null] as const;
+            }
+        }));
+        if (!signal.aborted) setCounts(Object.fromEntries(entries) as Record<View, number | null>);
+    }, [baseParams, nextCountSignal]);
+
+    const refresh = useCallback(() => { fetchTasks(); fetchCounts(); }, [fetchTasks, fetchCounts]);
+    useEffect(() => { fetchTasks(); }, [fetchTasks]);
+    useEffect(() => { fetchCounts(); }, [fetchCounts]);
+    useRecordsChanged(["task"], refresh);
+
+    const resetPaging = () => {
+        setPaginationModel((current) => ({ ...current, page: 0 }));
+        setSelectedTaskIds([]);
+    };
 
     // Keep the open edit dialog's task snapshot in sync whenever the list refetches (e.g.
     // after toggling a checklist item or saving dependencies from within the dialog itself).
@@ -230,72 +306,32 @@ export default function TasksPage() {
         if (fresh && fresh !== editingTask) setEditingTask(fresh);
     }, [tasks, editingTask]);
 
-    const siblingTasksForEditingTask = useMemo(() => {
-        if (!editingTask) return [];
-        return tasks.filter((task) =>
-            task.id !== editingTask.id &&
-            ((editingTask.leadId && task.leadId === editingTask.leadId) ||
-                (editingTask.opportunityId && task.opportunityId === editingTask.opportunityId))
-        );
-    }, [tasks, editingTask]);
-
+    // The editor's sibling tasks (for dependencies) and activity options come from the server
+    // for the linked record, not from whatever page of the list happens to be loaded.
+    const [siblingTasks, setSiblingTasks] = useState<Task[]>([]);
+    const [activityOptions, setActivityOptions] = useState<ActivityOption[]>([]);
     useEffect(() => {
-        apiFetch<UserOption[]>("/users").then((data) => setUsers(Array.isArray(data) ? data : [])).catch(() => undefined);
-        apiFetch<any>("/teams").then((data) => setTeams(Array.isArray(data) ? data : [])).catch(() => undefined);
-        apiFetch<any>("/leads?limit=200")
-            .then((response) => setLeads(Array.isArray(response) ? response : Array.isArray(response?.data) ? response.data : []))
-            .catch(() => setLeads([]));
-        apiFetch<any>("/opportunities?limit=200")
-            .then((response) => setOpportunities(Array.isArray(response) ? response : Array.isArray(response?.data) ? response.data : []))
-            .catch(() => setOpportunities([]));
-        apiFetch<any>("/activities?limit=300")
-            .then((response) => setActivities(Array.isArray(response) ? response : Array.isArray(response?.data) ? response.data : []))
-            .catch(() => setActivities([]));
-    }, []);
-
-    const activityOptions = useMemo(() => {
-        return activities.filter((activity) => {
-            if (form.opportunityId && activity.opportunityId !== form.opportunityId) return false;
-            if (!form.opportunityId && form.leadId && activity.leadId !== form.leadId) return false;
-            return true;
-        });
-    }, [activities, form.leadId, form.opportunityId]);
+        if (!dialogOpen) return;
+        const field = form.opportunityId ? "opportunityId" : form.leadId ? "leadId" : null;
+        const id = form.opportunityId || form.leadId;
+        if (!field || !id) { setActivityOptions([]); setSiblingTasks([]); return; }
+        let cancelled = false;
+        const filters = JSON.stringify([{ logic: "AND", conditions: [{ field, operator: "equals", value: id }] }]);
+        apiFetch<any>(`/activities?limit=50&filters=${encodeURIComponent(filters)}`)
+            .then((response) => { if (!cancelled) setActivityOptions(Array.isArray(response?.data) ? response.data : Array.isArray(response) ? response : []); })
+            .catch(() => { if (!cancelled) setActivityOptions([]); });
+        apiFetch<Task[]>(`/tasks?${field}=${encodeURIComponent(id)}`)
+            .then((rows) => { if (!cancelled) setSiblingTasks(Array.isArray(rows) ? rows : []); })
+            .catch(() => { if (!cancelled) setSiblingTasks([]); });
+        return () => { cancelled = true; };
+    }, [dialogOpen, form.leadId, form.opportunityId]);
+    const siblingTasksForEditingTask = useMemo(() => (editingTask ? siblingTasks.filter((task) => task.id !== editingTask.id) : []), [siblingTasks, editingTask]);
 
     const formatActivityLabel = (activity: ActivityOption) => {
         const type = activity.type?.name || "Activity";
         const related = activity.opportunity?.title || activity.lead?.name || activity.lead?.email;
         const date = activity.createdAt ? formatWorkspaceDateTime(activity.createdAt) : "";
-        return [type, related, date].filter(Boolean).join(" - ");
-    };
-
-    const stats = useMemo(() => {
-        const now = Date.now();
-        return {
-            open: tasks.filter((task) => task.status !== "COMPLETED" && task.status !== "CANCELLED").length,
-            overdue: tasks.filter((task) => task.dueAt && new Date(task.dueAt).getTime() < now && task.status !== "COMPLETED").length,
-            completed: tasks.filter((task) => task.status === "COMPLETED").length,
-        };
-    }, [tasks]);
-
-    const totalPages = Math.max(1, Math.ceil(tasks.length / paginationModel.pageSize));
-    const pageStart = paginationModel.page * paginationModel.pageSize;
-    const pageEnd = pageStart + paginationModel.pageSize;
-    const currentPageTasks = useMemo(
-        () => tasks.slice(pageStart, pageEnd),
-        [pageEnd, pageStart, tasks]
-    );
-    const currentPageIds = useMemo(() => currentPageTasks.map((task) => task.id), [currentPageTasks]);
-
-    useEffect(() => {
-        setPaginationModel((current) => ({ ...current, page: 0 }));
-        setSelectedTaskIds([]);
-    }, [ownerFilter, priorityFilter, quickFilter, statusFilter]);
-
-    const toggleTaskSelection = (taskId: string, checked: boolean) => {
-        setSelectedTaskIds((current) => {
-            if (checked) return Array.from(new Set([...current, taskId]));
-            return current.filter((id) => id !== taskId);
-        });
+        return [type, related, date].filter(Boolean).join(" · ");
     };
 
     const openCreate = () => {
@@ -304,33 +340,7 @@ export default function TasksPage() {
         setDialogOpen(true);
     };
 
-    // Lets the global command palette's "Create Task" command, and the global create menu's
-    // contextual "New Task" (header.tsx, from a Lead/Opportunity detail page), open the real
-    // creation dialog pre-linked to that record -- read via window.location, not next/
-    // navigation's useSearchParams, matching this app's existing convention (views/page.tsx)
-    // since this page isn't wrapped in a Suspense boundary.
-    useEffect(() => {
-        const params = new URLSearchParams(window.location.search);
-        if (params.get("create") === "1") {
-            openCreate();
-            const leadId = params.get("leadId");
-            const opportunityId = params.get("opportunityId");
-            if (leadId || opportunityId) {
-                setInitialForm((current) => ({ ...current, leadId: leadId ?? current.leadId, opportunityId: opportunityId ?? current.opportunityId }));
-            }
-        }
-        // "Quick-open from command palette" / recent-records deep link (gap checklist's
-        // "recent/favorite records" item) -- Tasks has no per-record detail route, so opening a
-        // specific task means fetching it and opening the existing edit dialog, same as the
-        // Edit button on each row already does.
-        const taskId = params.get("taskId");
-        if (taskId) {
-            apiFetch<Task>(`/tasks/${taskId}`).then(openEdit).catch(() => toast.error("Failed to load task"));
-        }
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, []);
-
-    const openEdit = (task: Task) => {
+    const openEdit = useCallback((task: Task) => {
         recordRecentView("task", task.id, task.title);
         setEditingTask(task);
         setInitialForm({
@@ -342,23 +352,44 @@ export default function TasksPage() {
             leadId: task.leadId ?? "",
             opportunityId: task.opportunityId ?? "",
             activityId: task.activityId ?? "",
-            dueAt: toLocalInputValue(task.dueAt),
-            reminderAt: toLocalInputValue(task.reminderAt),
+            dueAt: formatWorkspaceDateTimeInput(task.dueAt),
+            reminderAt: formatWorkspaceDateTimeInput(task.reminderAt),
             comment: "",
             recurrenceRule: task.recurrenceRule ?? null,
             escalateAfterMinutes: task.escalateAfterMinutes ?? null,
             escalateToUserId: task.escalateToUserId ?? null,
         });
         setDialogOpen(true);
-    };
+    }, []);
+
+    // Deep links: the command palette's and the header Create menu's "?create=1" (optionally
+    // pre-linked to a lead or opportunity), and "?taskId=" from recent records and
+    // notifications, which opens that task's editor. Read via window.location, matching this
+    // app's convention, since this page isn't wrapped in a Suspense boundary.
+    useEffect(() => {
+        const params = new URLSearchParams(window.location.search);
+        if (params.get("create") === "1") {
+            openCreate();
+            const leadId = params.get("leadId");
+            const opportunityId = params.get("opportunityId");
+            if (leadId || opportunityId) {
+                setInitialForm((current) => ({ ...current, leadId: leadId ?? current.leadId, opportunityId: opportunityId ?? current.opportunityId }));
+            }
+        }
+        const taskId = params.get("taskId");
+        if (taskId) {
+            apiFetch<Task>(`/tasks/${taskId}`).then(openEdit).catch(() => toast.error("That task couldn't be opened"));
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
 
     useEffect(() => {
         if (!taskDraft.savedValues || taskDraft.pending) return;
         updateTaskDraft({ savedValues: null, values: null, dirty: false, error: "" });
         setDialogOpen(false);
-        toast.success("Your previous task save completed successfully");
-        fetchTasks();
-    }, [taskDraft.savedValues, taskDraft.pending, updateTaskDraft, fetchTasks]);
+        toast.success("Your earlier task save finished");
+        refresh();
+    }, [taskDraft.savedValues, taskDraft.pending, updateTaskDraft, refresh]);
 
     const saveTask = async () => {
         if (currentTaskDraft().pending || !form.title.trim()) return;
@@ -371,8 +402,8 @@ export default function TasksPage() {
                 leadId: form.leadId || null,
                 opportunityId: form.opportunityId || null,
                 activityId: form.activityId || null,
-                dueAt: fromLocalInputValue(form.dueAt),
-                reminderAt: fromLocalInputValue(form.reminderAt),
+                dueAt: workspaceDateTimeInputToIso(form.dueAt),
+                reminderAt: workspaceDateTimeInputToIso(form.reminderAt),
                 metadata: form.comment.trim()
                     ? {
                         ...(editingTask?.metadata ?? {}),
@@ -389,11 +420,11 @@ export default function TasksPage() {
             });
             updateTaskDraft({ values: null, dirty: false, error: "", savedValues: version === taskVersion.current ? null : saved });
             if (version !== taskVersion.current) return;
-            toast.success(editingTask ? "Task updated" : "Task created");
+            toast.success(editingTask ? "Task saved" : "Task created");
             setDialogOpen(false);
-            fetchTasks();
+            refresh();
         } catch (error: any) {
-            updateTaskDraft({ error: error.message || "Failed to save task. Your draft is still here." });
+            updateTaskDraft({ error: error.message || "The task couldn't be saved. Your draft is still here." });
         } finally {
             updateTaskDraft({ pending: false });
         }
@@ -402,20 +433,34 @@ export default function TasksPage() {
     const skipTaskOccurrence = async (task: Task) => {
         try {
             const result = await apiFetch<{ nextTask?: Task | null }>(`/tasks/${task.id}/skip`, { method: "POST" });
-            toast.success(result.nextTask ? "Skipped -- next occurrence created" : "Task skipped");
-            fetchTasks();
+            toast.success(result.nextTask ? "Skipped; the next one is created" : "Task skipped");
+            refresh();
         } catch (error: any) {
-            toast.error(error.message || "Failed to skip task");
+            toast.error(error.message || "Couldn't skip the task");
         }
     };
 
-    const updateTaskStatus = async (task: Task, status: Task["status"]) => {
+    // Complete with Undo (reopen), since it is one click from the list.
+    const setTaskStatus = async (task: Task, status: Task["status"]) => {
         try {
             await apiFetch(`/tasks/${task.id}`, { method: "PATCH", body: JSON.stringify({ status }) });
-            toast.success(status === "COMPLETED" ? "Task completed" : "Task updated");
-            fetchTasks();
+            refresh();
+            toast.success(status === "COMPLETED" ? `Completed: ${task.title}` : `Reopened: ${task.title}`, {
+                duration: 6000,
+                action: status === "COMPLETED" ? {
+                    label: "Undo",
+                    onClick: async () => {
+                        try {
+                            await apiFetch(`/tasks/${task.id}`, { method: "PATCH", body: JSON.stringify({ status: task.status }) });
+                            refresh();
+                        } catch {
+                            toast.error("Couldn't undo");
+                        }
+                    },
+                } : undefined,
+            });
         } catch (error: any) {
-            toast.error(error.message || "Failed to update task");
+            toast.error(error.message || "Couldn't update the task");
         }
     };
 
@@ -423,578 +468,478 @@ export default function TasksPage() {
         try {
             await apiFetch(`/tasks/${task.id}`, { method: "PATCH", body: JSON.stringify({ dueAt }) });
             toast.success("Task rescheduled");
-            fetchTasks();
+            refresh();
         } catch (error: any) {
-            toast.error(error.message || "Failed to reschedule task");
+            toast.error(error.message || "Couldn't reschedule the task");
         }
     };
 
-    const handleBulkDelete = async () => {
-        if (!selectedTaskIds.length) return;
-        if (!confirm(`Are you sure you want to delete ${selectedTaskIds.length} task${selectedTaskIds.length === 1 ? "" : "s"}?`)) return;
-        try {
-            await Promise.all(selectedTaskIds.map((id) => apiFetch(`/tasks/${id}`, { method: "DELETE" })));
-            toast.success(`${selectedTaskIds.length} task${selectedTaskIds.length === 1 ? "" : "s"} deleted`);
-            setSelectedTaskIds([]);
-            fetchTasks();
-        } catch (error: any) {
-            toast.error(error.message || "Failed to delete selected tasks");
-        }
+    const deleteTasks = async (ids: string[], label: string) => {
+        const ok = await confirm({
+            title: `Delete ${label}?`,
+            description: "Checklist items and comments go with it. This can't be undone.",
+            confirmLabel: "Delete",
+            destructive: true,
+            typedConfirmation: ids.length > 25 ? `DELETE ${ids.length}` : undefined,
+        });
+        if (!ok) return;
+        const results = await Promise.allSettled(ids.map((id) => apiFetch(`/tasks/${id}`, { method: "DELETE" })));
+        const failed = results.filter((result) => result.status === "rejected").length;
+        if (failed) toast.warning(`${plural(ids.length - failed, "task", "tasks")} deleted; ${failed.toLocaleString()} couldn't be deleted`);
+        else toast.success(`${ids.length === 1 ? "Task" : plural(ids.length, "task", "tasks")} deleted`);
+        setSelectedTaskIds([]);
+        refresh();
     };
 
     const bulkUpdateTasks = async (patch: { status?: Task["status"]; ownerId?: string | null; dueAt?: string | null }) => {
-        if (!selectedTaskIds.length) return;
+        if (!selectedTaskIds.length) return false;
+        setBulkBusy(true);
         try {
-            const result = await apiFetch<{ updated?: Task[]; skipped?: number }>("/tasks", {
-                method: "PATCH",
-                body: JSON.stringify({ ids: selectedTaskIds, ...patch }),
-            });
-            toast.success(`${result.updated?.length ?? 0} task${(result.updated?.length ?? 0) === 1 ? "" : "s"} updated`);
+            const result = await apiFetch<{ updated?: Task[]; skipped?: number }>("/tasks", { method: "PATCH", body: JSON.stringify({ ids: selectedTaskIds, ...patch }) });
+            const updated = result.updated?.length ?? 0;
+            const skipped = Number(result.skipped ?? 0);
+            const message = `${plural(updated, "task", "tasks")} updated${skipped ? `; ${skipped.toLocaleString()} skipped` : ""}`;
+            if (skipped) toast.warning(message); else toast.success(message);
             setSelectedTaskIds([]);
-            setBulkOwnerId("");
-            setBulkDueAt("");
-            fetchTasks();
+            refresh();
+            return true;
         } catch (error: any) {
-            toast.error(error.message || "Failed to update selected tasks");
-        }
-    };
-
-    const deleteTask = async (task: Task) => {
-        if (!confirm(`Delete task "${task.title}"?`)) return;
-        try {
-            await apiFetch(`/tasks/${task.id}`, { method: "DELETE" });
-            toast.success("Task deleted");
-            fetchTasks();
-        } catch (error: any) {
-            toast.error(error.message || "Failed to delete task");
+            toast.error(error.message || "Couldn't update the selected tasks");
+            return false;
+        } finally {
+            setBulkBusy(false);
         }
     };
 
     const sendTaskToQueue = async (task: Task, queueId: string) => {
         try {
             await apiFetch(`/tasks/${task.id}/queue`, { method: "POST", body: JSON.stringify({ queueId }) });
-            toast.success("Task sent to queue");
-            fetchTasks();
+            toast.success("Task sent to the queue");
+            refresh();
         } catch (error: any) {
-            toast.error(error.message || "Failed to send task to queue");
+            toast.error(error.message || "Couldn't send the task to the queue");
         }
     };
 
-    const claimTask = async (task: Task) => {
+    const claimTask = async (task: Task, claim: boolean) => {
         try {
-            await apiFetch(`/tasks/${task.id}/claim`, { method: "POST" });
-            toast.success("Task claimed");
-            fetchTasks();
+            await apiFetch(`/tasks/${task.id}/${claim ? "claim" : "unclaim"}`, { method: "POST" });
+            toast.success(claim ? "Task claimed" : "Task released");
+            refresh();
         } catch (error: any) {
-            toast.error(error.message || "Failed to claim task");
+            toast.error(error.message || (claim ? "Couldn't claim the task" : "Couldn't release the task"));
         }
     };
 
-    const unclaimTask = async (task: Task) => {
+    const toggleFavoriteTask = (task: Task) => {
+        const updated = toggleFavoriteRecord("task", task.id, task.title);
+        setFavoriteTaskIds(updated.filter((record) => record.type === "task").map((record) => record.id));
+    };
+
+    const pickOpportunity = async (opportunityId: string | null) => {
+        setForm((current) => ({ ...current, opportunityId: opportunityId ?? "", activityId: "" }));
+        if (!opportunityId) return;
         try {
-            await apiFetch(`/tasks/${task.id}/unclaim`, { method: "POST" });
-            toast.success("Task unclaimed");
-            fetchTasks();
-        } catch (error: any) {
-            toast.error(error.message || "Failed to unclaim task");
+            const opportunity = await apiFetch<{ leadId?: string | null }>(`/opportunities/${opportunityId}`);
+            if (opportunity?.leadId) setForm((current) => ({ ...current, leadId: current.leadId || opportunity.leadId || "" }));
+        } catch {
+            // The link to the opportunity is enough; its lead can be chosen by hand.
         }
     };
 
-    return (
-        <div className="mx-auto min-w-0 max-w-[1400px]">
-            <PageHeader title="Tasks" description="Manage follow-ups, reminders, and work linked to your CRM records." actions={<>
+    // The columns are built once; their buttons call the latest handler through this ref, not
+    // the first render's (which would refresh with the first render's filters).
+    const setTaskStatusRef = useRef(setTaskStatus);
+    useEffect(() => { setTaskStatusRef.current = setTaskStatus; });
 
-                    <QueueExportButton
-                        moduleName="TASKS"
-                        filters={{
-                            due: quickFilter !== "ALL" ? quickFilter : null,
-                            status: statusFilter !== "ALL" ? statusFilter : null,
-                            priority: priorityFilter !== "ALL" ? priorityFilter : null,
-                            ownerId: ownerFilter !== "ALL" ? ownerFilter : null,
-                        }}
-                        selectedIds={selectedTaskIds}
-                        currentPageIds={currentPageIds}
-                        totalItems={tasks.length}
-                    />
-                    <Button variant="outline" onClick={fetchTasks}>
-                        <RefreshCw className="size-4" />
-                        Refresh
-                    </Button>
-                    <Button variant="outline" asChild>
-                        <Link href="/dashboard/tasks/queues">
-                            <Inbox className="size-4" />
-                            Team Queues
-                        </Link>
-                    </Button>
-                    <Button onClick={openCreate}>
-                        <Plus className="size-4" />
-                        New Task
-                    </Button>
-                            </>} />
-
-            <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-3 md:gap-3">
-                <div className="rounded-xl border bg-card p-4">
-                    <p className="text-xs font-bold uppercase text-muted-foreground">Open Work</p>
-                    <p className="mt-2 text-2xl font-extrabold">{loading || fetchError ? "—" : stats.open}</p>
-                </div>
-                <div className="rounded-xl border bg-card p-4">
-                    <p className="text-xs font-bold uppercase text-muted-foreground">Overdue</p>
-                    <p className="mt-2 text-2xl font-extrabold text-destructive">{loading || fetchError ? "—" : stats.overdue}</p>
-                </div>
-                <div className="rounded-xl border bg-card p-4">
-                    <p className="text-xs font-bold uppercase text-muted-foreground">Completed</p>
-                    <p className="mt-2 text-2xl font-extrabold text-primary">{loading || fetchError ? "—" : stats.completed}</p>
-                </div>
-            </div>
-
-            <div className="mt-4 flex flex-wrap items-end gap-3 rounded-xl border bg-card p-3">
-                <div className="flex max-w-full flex-wrap rounded-md border bg-background p-1">
-                    <Button
-                        type="button"
-                        size="sm"
-                        variant={viewMode === "list" ? "secondary" : "ghost"}
-                        aria-pressed={viewMode === "list"}
-                        onClick={() => setViewMode("list")}
+    const columns = useMemo<ColumnDef<Task, any>[]>(() => [
+        {
+            id: "done", header: () => <span className="sr-only">Complete</span>, size: 44,
+            cell: ({ row }) => {
+                const task = row.original;
+                const closed = isClosedTask(task);
+                return (
+                    <IconButton
+                        label={closed ? `Reopen ${task.title}` : `Complete ${task.title}`}
+                        onClick={(event) => { event.stopPropagation(); setTaskStatusRef.current(task, closed ? "OPEN" : "COMPLETED"); }}
+                        className={closed ? "text-status-success-foreground" : "text-muted-foreground"}
                     >
-                        <ListChecks className="size-4" />
-                        List
-                    </Button>
-                    <Button
-                        type="button"
-                        size="sm"
-                        variant={viewMode === "calendar" ? "secondary" : "ghost"}
-                        aria-pressed={viewMode === "calendar"}
-                        onClick={() => setViewMode("calendar")}
-                    >
-                        <CalendarDays className="size-4" />
-                        Calendar
-                    </Button>
-                </div>
-                <div className="min-w-0 flex-1 basis-52 space-y-1">
-                    <Label htmlFor="task-filter-quickFilter">Due range</Label>
-                <Select value={quickFilter} onValueChange={setQuickFilter}>
-                    <SelectTrigger id="task-filter-quickFilter" className="w-full min-h-9 h-auto data-[size=default]:h-auto whitespace-normal text-left [&_[data-slot=select-value]]:line-clamp-none [&_[data-slot=select-value]]:break-words [&_[data-slot=select-value]]:whitespace-normal"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                        {QUICK_FILTERS.map((option) => <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>)}
+                        <CheckCircle2 className={cn("size-5", closed && "fill-status-success")} />
+                    </IconButton>
+                );
+            },
+        },
+        {
+            accessorKey: "title", id: "title", header: "Task", size: 320, enableSorting: true,
+            cell: ({ row }) => {
+                const task = row.original;
+                return (
+                    <div className="min-w-0 max-w-[26rem]">
+                        <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+                            <span className={cn("truncate font-medium", isClosedTask(task) && "text-muted-foreground line-through")}>{task.title}</span>
+                            <TaskFlags task={task} />
+                        </div>
+                        {task.description ? <span className="block truncate text-xs text-muted-foreground">{task.description}</span> : null}
+                    </div>
+                );
+            },
+        },
+        {
+            id: "related", header: "Related to", size: 200,
+            cell: ({ row }) => {
+                const task = row.original;
+                if (task.opportunityId && task.opportunity) {
+                    return (
+                        <RecordPreviewPopover entityType="opportunity" entityId={task.opportunityId}>
+                            <button type="button" onClick={(event) => event.stopPropagation()} className="block max-w-48 truncate text-left hover:underline">{task.opportunity.title}</button>
+                        </RecordPreviewPopover>
+                    );
+                }
+                if (task.leadId && task.lead) {
+                    return (
+                        <RecordPreviewPopover entityType="lead" entityId={task.leadId}>
+                            <button type="button" onClick={(event) => event.stopPropagation()} className="block max-w-48 truncate text-left hover:underline">{task.lead.name || task.lead.email}</button>
+                        </RecordPreviewPopover>
+                    );
+                }
+                return <span className="text-muted-foreground">—</span>;
+            },
+        },
+        { accessorKey: "dueAt", id: "dueAt", header: "Due", size: 190, enableSorting: true, cell: ({ row }) => <DueText task={row.original} /> },
+        {
+            accessorKey: "priority", id: "priority", header: "Priority", size: 100, enableSorting: true,
+            cell: ({ row }) => {
+                const shown = statusDisplay("priority", row.original.priority);
+                return <span className={cn(shown.tone === "danger" ? "text-destructive" : shown.tone === "warning" ? "text-status-warning-foreground" : "text-muted-foreground")}>{shown.label}</span>;
+            },
+        },
+        { id: "owner", header: "Owner", size: 140, enableSorting: true, cell: ({ row }) => <span className="block max-w-32 truncate">{row.original.owner?.name || row.original.owner?.email || "—"}</span> },
+        { accessorKey: "status", id: "status", header: "Status", size: 110, enableSorting: true, cell: ({ row }) => <span className="text-muted-foreground">{statusDisplay("taskStatus", row.original.status).label}</span> },
+    ], []);
+
+    const ownerLabel = owner === "me" ? "Me" : owner === "all" ? "Anyone" : users.find((item) => item.id === owner)?.name || "Someone";
+    const selectedCount = selectedTaskIds.length;
+    const hasNarrowing = !!search.trim() || view !== "all" || owner !== "all" || priority !== "all";
+
+    const toolbar = (
+        <ListToolbar
+            search={{ value: search, onChange: (value) => { setSearch(value); resetPaging(); }, placeholder: "Search tasks", label: "Search tasks", inputId: "tasks-search" }}
+            quickFilters={viewMode === "list" ? VIEWS.map((value) => ({ value, label: VIEW_LABEL[value], count: counts[value] ?? undefined })) : undefined}
+            quickFilter={view}
+            onQuickFilterChange={(value) => { setView(value as View); resetPaging(); }}
+            actions={<>
+                <Select value={owner} onValueChange={(value) => { setOwner(value); resetPaging(); }}>
+                    <SelectTrigger size="sm" aria-label="Owner" className="w-40"><span className="truncate">Owner: {ownerLabel}</span></SelectTrigger>
+                    {/* popper: the trigger shows its own text, so the menu can't align to an item. */}
+                    <SelectContent position="popper">
+                        <SelectItem value="me">Me</SelectItem>
+                        <SelectItem value="all">Anyone</SelectItem>
+                        {users.filter((item) => item.id !== user?.id).map((item) => <SelectItem key={item.id} value={item.id}>{item.name || item.email || "User"}</SelectItem>)}
                     </SelectContent>
                 </Select>
-                </div>
-                <div className="min-w-0 flex-1 basis-52 space-y-1">
-                    <Label htmlFor="task-filter-statusFilter">Task status</Label>
-                <Select value={statusFilter} onValueChange={setStatusFilter}>
-                    <SelectTrigger id="task-filter-statusFilter" className="w-full min-h-9 h-auto data-[size=default]:h-auto whitespace-normal text-left [&_[data-slot=select-value]]:line-clamp-none [&_[data-slot=select-value]]:break-words [&_[data-slot=select-value]]:whitespace-normal"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                        <SelectItem value="ALL">All statuses</SelectItem>
-                        {STATUS_OPTIONS.map((option) => <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>)}
-                    </SelectContent>
-                </Select>
-                </div>
-                <div className="min-w-0 flex-1 basis-52 space-y-1">
-                    <Label htmlFor="task-filter-priorityFilter">Task priority</Label>
-                <Select value={priorityFilter} onValueChange={setPriorityFilter}>
-                    <SelectTrigger id="task-filter-priorityFilter" className="w-full min-h-9 h-auto data-[size=default]:h-auto whitespace-normal text-left [&_[data-slot=select-value]]:line-clamp-none [&_[data-slot=select-value]]:break-words [&_[data-slot=select-value]]:whitespace-normal"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                        <SelectItem value="ALL">All priorities</SelectItem>
+                <Select value={priority} onValueChange={(value) => { setPriority(value as (typeof PRIORITIES)[number]); resetPaging(); }}>
+                    <SelectTrigger size="sm" aria-label="Priority" className="w-36"><span className="truncate">{priority === "all" ? "Any priority" : statusDisplay("priority", priority).label}</span></SelectTrigger>
+                    <SelectContent position="popper">
+                        <SelectItem value="all">Any priority</SelectItem>
                         {PRIORITY_OPTIONS.map((option) => <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>)}
                     </SelectContent>
                 </Select>
-                </div>
-                <div className="min-w-0 flex-1 basis-52 space-y-1">
-                    <Label htmlFor="task-filter-ownerFilter">Task owner</Label>
-                <Select value={ownerFilter} onValueChange={setOwnerFilter}>
-                    <SelectTrigger id="task-filter-ownerFilter" className="w-full min-h-9 h-auto data-[size=default]:h-auto whitespace-normal text-left [&_[data-slot=select-value]]:line-clamp-none [&_[data-slot=select-value]]:break-words [&_[data-slot=select-value]]:whitespace-normal"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                        <SelectItem value="ALL">All owners</SelectItem>
-                        {users.map((user) => (
-                            <SelectItem key={user.id} value={user.id}>{user.name || user.email || "User"}</SelectItem>
-                        ))}
-                    </SelectContent>
-                </Select>
-                </div>
-            </div>
+            </>}
+        />
+    );
 
-            {selectedTaskIds.length > 0 ? (
-                <div className="mt-3 flex flex-col gap-3 rounded-xl border border-primary/30 bg-primary/5 p-3 lg:flex-row lg:items-center lg:justify-between">
-                    <div className="text-sm">
-                        <span className="font-extrabold">{selectedTaskIds.length}</span>
-                        <span className="text-muted-foreground"> selected</span>
-                    </div>
-                    <div className="flex flex-wrap items-center gap-2">
-                        <Button size="sm" onClick={() => bulkUpdateTasks({ status: "COMPLETED" })}>
-                            <CheckCircle2 className="size-4" />
-                            Complete
-                        </Button>
-                        <Select value={bulkOwnerId || "__none__"} onValueChange={(value) => setBulkOwnerId(value === "__none__" ? "" : value)}>
-                            <SelectTrigger className="h-9 w-[220px]"><SelectValue placeholder="Reassign owner" /></SelectTrigger>
-                            <SelectContent>
-                                <SelectItem value="__none__">Choose owner</SelectItem>
-                                {users.map((user) => (
-                                    <SelectItem key={user.id} value={user.id}>{user.name || user.email || "User"}</SelectItem>
-                                ))}
-                            </SelectContent>
-                        </Select>
-                        <Button size="sm" variant="outline" disabled={!bulkOwnerId} onClick={() => bulkUpdateTasks({ ownerId: bulkOwnerId })}>Reassign</Button>
-                        <Input aria-label="Bulk due date" className="h-9 w-[210px]" type="datetime-local" value={bulkDueAt} onChange={(event) => setBulkDueAt(event.target.value)} />
-                        <Button size="sm" variant="outline" disabled={!bulkDueAt} onClick={() => bulkUpdateTasks({ dueAt: fromLocalInputValue(bulkDueAt) })}>Reschedule</Button>
-                        <Button size="sm" variant="outline" className="text-destructive hover:bg-destructive/10 hover:text-destructive" onClick={handleBulkDelete}>
-                            <Trash2 className="size-4" />
-                            Delete
-                        </Button>
-                        <Button size="sm" variant="ghost" onClick={() => setSelectedTaskIds([])}>Clear</Button>
-                    </div>
-                </div>
-            ) : null}
+    return (
+        <div className="mx-auto min-w-0 max-w-[1400px]">
+            <PageHeader
+                title="Tasks"
+                meta={counts.open != null ? <span className="tabular-nums">{owner === "me" ? "You have " : ""}{plural(counts.open, "open task", "open tasks")}{counts.overdue ? <>, <span className="text-destructive">{formatCount(counts.overdue)} overdue</span></> : null}</span> : undefined}
+                primaryAction={<Button onClick={openCreate}><Plus className="size-4" />Create task</Button>}
+                secondaryActions={<>
+                    <SegmentedControl
+                        label="View"
+                        value={viewMode}
+                        onChange={(mode) => { setViewMode(mode); resetPaging(); }}
+                        options={[{ value: "list", label: "List", icon: <ListChecks /> }, { value: "calendar", label: "Calendar", icon: <CalendarDays /> }]}
+                    />
+                    <QueueExportButton
+                        moduleName="TASKS"
+                        filters={{
+                            due: view !== "all" && view !== "open" ? view : null,
+                            open: view === "open" || null,
+                            priority: priority !== "all" ? priority : null,
+                            ownerId: owner === "me" ? user?.id ?? null : owner !== "all" ? owner : null,
+                            q: search.trim() || null,
+                        }}
+                        selectedIds={selectedTaskIds}
+                        currentPageIds={tasks.map((task) => task.id)}
+                        totalItems={totalItems}
+                    />
+                    <Button variant="outline" asChild><Link href="/dashboard/tasks/queues"><Inbox className="size-4" />Team queues</Link></Button>
+                </>}
+            />
 
-            <div className="mt-4">
-                {loading ? (
-                    <TableSkeleton rows={5} columns={4} />
-                ) : fetchError ? (
-                    <ErrorState description={fetchError} onRetry={fetchTasks} />
-                ) : tasks.length === 0 ? (
-                    <EmptyState
-                        icon={<CheckCircle2 className="size-12 text-muted-foreground opacity-50" />}
-                        title="No tasks found"
-                        description="Create a task or adjust filters to see upcoming work."
-                        action={<Button onClick={openCreate}><Plus className="size-4" />New Task</Button>}
-                    />
-                ) : viewMode === "calendar" ? (
-                    <TaskCalendar
-                        tasks={tasks}
-                        mode={calendarMode}
-                        onModeChange={setCalendarMode}
-                        onEdit={openEdit}
-                        onComplete={(task) => updateTaskStatus(task, "COMPLETED")}
-                        onReschedule={updateTaskDueAt}
-                    />
-                ) : (
-                    <div className="space-y-2">
-                        {currentPageTasks.map((task) => (
-                            <div key={task.id} className="rounded-xl border bg-card p-4">
-                                <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-                                    <div className="flex min-w-0 gap-3">
-                                        <Checkbox
-                                            className="mt-0.5"
-                                            checked={selectedTaskIds.includes(task.id)}
-                                            onCheckedChange={(value) => toggleTaskSelection(task.id, !!value)}
-                                            aria-label={`Select ${task.title}`}
-                                        />
-                                        <div className="min-w-0 break-words">
-                                        <div className="flex flex-wrap items-center gap-2">
-                                            <h2 className={cn("min-w-0 max-w-full break-words text-sm font-bold", task.status === "COMPLETED" && "text-muted-foreground line-through")}>{task.title}</h2>
-                                            <Badge variant="outline" className="rounded-md text-[0.65rem] font-semibold">{task.status.replace("_", " ")}</Badge>
-                                            <Badge variant={task.priority === "URGENT" || task.priority === "HIGH" ? "destructive" : "secondary"} className="rounded-md text-[0.65rem] font-semibold">
-                                                {task.priority}
-                                            </Badge>
-                                            {task.isBlocked && (
-                                                <Badge variant="destructive" className="rounded-md text-[0.65rem] font-semibold">
-                                                    <AlertTriangle className="size-3" />
-                                                    Blocked
-                                                </Badge>
-                                            )}
-                                            {task.checklist?.length ? (
-                                                <Badge variant="outline" className="rounded-md text-[0.65rem]">
-                                                    {task.checklist.filter((item) => item.isDone).length}/{task.checklist.length}
-                                                </Badge>
-                                            ) : null}
-                                            {taskSlaBadge(task)}
-                                            {task.queueId && !task.claimedBy ? (
-                                                <Badge variant="secondary" className="rounded-md text-[0.65rem]">Unclaimed in queue</Badge>
-                                            ) : null}
-                                        </div>
-                                        {task.description ? <p className="mt-1 text-xs text-muted-foreground">{task.description}</p> : null}
-                                        <div className="mt-2 flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
-                                            <span>Owner: {task.owner?.name || task.owner?.email || "Unknown user"}</span>
-                                            {task.dueAt ? <span className="inline-flex items-center gap-1"><CalendarDays className="size-3" />{formatWorkspaceDateTime(task.dueAt)}</span> : null}
-                                            {task.reminderAt ? <span className="inline-flex items-center gap-1"><Clock className="size-3" />Reminder {formatWorkspaceDateTime(task.reminderAt)}</span> : null}
-                                            {task.lead && task.leadId ? (
-                                                <RecordPreviewPopover entityType="lead" entityId={task.leadId}>
-                                                    <button type="button" className="min-w-0 max-w-full break-all text-left underline decoration-dotted underline-offset-2 hover:text-foreground">
-                                                        Lead: {task.lead.name}
-                                                    </button>
-                                                </RecordPreviewPopover>
-                                            ) : null}
-                                            {task.opportunity && task.opportunityId ? (
-                                                <RecordPreviewPopover entityType="opportunity" entityId={task.opportunityId}>
-                                                    <button type="button" className="min-w-0 max-w-full break-all text-left underline decoration-dotted underline-offset-2 hover:text-foreground">
-                                                        Opportunity: {task.opportunity.title}
-                                                    </button>
-                                                </RecordPreviewPopover>
-                                            ) : null}
-                                        </div>
-                                        </div>
-                                    </div>
-                                    <div className="flex shrink-0 flex-wrap items-center gap-2">
-                                        {task.status !== "COMPLETED" ? (
-                                            <Button size="sm" variant="outline" onClick={() => updateTaskStatus(task, "COMPLETED")}>
-                                                <CheckCircle2 className="size-4" />
-                                                Complete
-                                            </Button>
-                                        ) : (
-                                            <Button size="sm" variant="outline" onClick={() => updateTaskStatus(task, "OPEN")}>Reopen</Button>
-                                        )}
-                                        {task.recurrenceRule && task.status !== "COMPLETED" && task.status !== "CANCELLED" && (
-                                            <Button size="sm" variant="ghost" onClick={() => skipTaskOccurrence(task)}>Skip</Button>
-                                        )}
-                                        <Button
-                                            size="icon-sm"
-                                            variant="ghost"
-                                            onClick={() => toggleFavoriteTask(task)}
-                                            aria-label={favoriteTaskIds.includes(task.id) ? `Unfavorite ${task.title}` : `Favorite ${task.title}`}
-                                        >
-                                            <Star className={cn("size-4", favoriteTaskIds.includes(task.id) ? "fill-amber-500 text-amber-500" : "text-muted-foreground")} />
-                                        </Button>
-                                        <Button size="icon-sm" variant="ghost" onClick={() => openEdit(task)} aria-label={`Edit ${task.title}`}>
-                                            <Edit3 className="size-4" />
-                                        </Button>
-                                        <Button size="icon-sm" variant="ghost" onClick={() => deleteTask(task)} aria-label={`Delete ${task.title}`}>
-                                            <Trash2 className="size-4" />
-                                        </Button>
-                                    </div>
-                                </div>
+            {viewMode === "calendar" ? (
+                <div className="space-y-3">
+                    <div className="rounded-xl border bg-card px-3 py-1.5">{toolbar}</div>
+                    {loading ? (
+                        <div className="h-80 animate-pulse rounded-xl bg-muted" aria-busy="true" />
+                    ) : fetchError ? (
+                        <ErrorState description={fetchError} onRetry={fetchTasks} />
+                    ) : tasks.length === 0 ? (
+                        <EmptyState icon={<CalendarClock />} title="No open tasks" description={hasNarrowing ? "Nothing open matches this owner, priority or search." : "Open tasks with a due date show here."} action={<Button onClick={openCreate}><Plus className="size-4" />Create task</Button>} />
+                    ) : (
+                        <>
+                            {totalItems > tasks.length ? <p role="status" className="rounded-lg border border-status-warning-foreground/30 bg-status-warning px-3 py-2 text-sm text-status-warning-foreground">Showing the first {tasks.length.toLocaleString()} of {totalItems.toLocaleString()} open tasks. Narrow the owner or priority, or use the list for the rest.</p> : null}
+                            <TaskCalendar tasks={tasks} mode={calendarMode} onModeChange={setCalendarMode} onEdit={openEdit} onComplete={(task) => setTaskStatus(task, "COMPLETED")} onReschedule={updateTaskDueAt} />
+                        </>
+                    )}
+                </div>
+            ) : (
+                <DataTable
+                    storageKey="tasks-table"
+                    data={tasks}
+                    columns={columns}
+                    loading={loading}
+                    error={fetchError}
+                    onRetry={fetchTasks}
+                    getRowId={(row) => row.id}
+                    onRowClick={openEdit}
+                    enableRowSelection
+                    rowSelectionIds={selectedTaskIds}
+                    onRowSelectionIdsChange={setSelectedTaskIds}
+                    totalItems={totalItems}
+                    sort={sort}
+                    onSortChange={(next) => { setSortParam(next ? `${next.desc ? "-" : ""}${next.id}` : ""); setPaginationModel((current) => ({ ...current, page: 0 })); }}
+                    pageIndex={paginationModel.page}
+                    pageSize={paginationModel.pageSize}
+                    pageSizeOptions={[25, 50, 100]}
+                    onPaginationChange={({ pageIndex, pageSize }) => { setPaginationModel({ page: pageIndex, pageSize }); setSelectedTaskIds([]); }}
+                    toolbarActions={toolbar}
+                    rowActions={(task) => (
+                        <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                                <Button variant="ghost" size="icon-sm" aria-label={`More actions for ${task.title}`}><MoreHorizontal className="size-4" /></Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                                <DropdownMenuItem onSelect={() => openEdit(task)}><Pencil className="size-4" />Edit</DropdownMenuItem>
+                                {isClosedTask(task)
+                                    ? <DropdownMenuItem onSelect={() => setTaskStatus(task, "OPEN")}><RotateCcw className="size-4" />Reopen</DropdownMenuItem>
+                                    : <DropdownMenuItem onSelect={() => setTaskStatus(task, "COMPLETED")}><CheckCircle2 className="size-4" />Complete</DropdownMenuItem>}
+                                {task.recurrenceRule && !isClosedTask(task) ? <DropdownMenuItem onSelect={() => skipTaskOccurrence(task)}><SkipForward className="size-4" />Skip this one</DropdownMenuItem> : null}
+                                <DropdownMenuItem onSelect={() => toggleFavoriteTask(task)}>
+                                    <Star className={cn("size-4", favoriteTaskIds.includes(task.id) && "fill-amber-500 text-amber-500")} />
+                                    {favoriteTaskIds.includes(task.id) ? "Remove from favorites" : "Add to favorites"}
+                                </DropdownMenuItem>
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem variant="destructive" onSelect={() => deleteTasks([task.id], "this task")}><Trash2 className="size-4" />Delete</DropdownMenuItem>
+                            </DropdownMenuContent>
+                        </DropdownMenu>
+                    )}
+                    mobileCard={(task) => (
+                        <div className="space-y-1">
+                            <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+                                <span className={cn("min-w-0 truncate font-medium", isClosedTask(task) && "text-muted-foreground line-through")}>{task.title}</span>
+                                <TaskFlags task={task} />
                             </div>
-                        ))}
-                        <div className="flex flex-col gap-3 rounded-xl border bg-card px-3 py-2 sm:flex-row sm:items-center sm:justify-between">
-                            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                                <span>Rows per page</span>
-                                <Select
-                                    value={String(paginationModel.pageSize)}
-                                    onValueChange={(value) => setPaginationModel({ page: 0, pageSize: Number(value) })}
-                                >
-                                    <SelectTrigger size="sm" className="w-[72px]" aria-label="Rows per page">
-                                        <SelectValue />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        {[10, 25, 50, 100].map((size) => (
-                                            <SelectItem key={size} value={String(size)}>{size}</SelectItem>
-                                        ))}
-                                    </SelectContent>
-                                </Select>
-                                {selectedTaskIds.length > 0 ? (
-                                    <span className="text-primary">{selectedTaskIds.length} selected</span>
-                                ) : null}
-                            </div>
-                            <div className="flex items-center gap-3 text-sm text-muted-foreground">
-                                <span>{tasks.length ? `${pageStart + 1}-${Math.min(pageEnd, tasks.length)} of ${tasks.length}` : ""}</span>
-                                <div className="flex gap-1">
-                                    <Button
-                                        variant="outline"
-                                        size="icon-sm"
-                                        disabled={paginationModel.page === 0}
-                                        onClick={() => setPaginationModel((current) => ({ ...current, page: Math.max(0, current.page - 1) }))}
-                                        aria-label="Previous page"
-                                    >
-                                        <ChevronLeft className="size-4" />
-                                    </Button>
-                                    <Button
-                                        variant="outline"
-                                        size="icon-sm"
-                                        disabled={paginationModel.page + 1 >= totalPages}
-                                        onClick={() => setPaginationModel((current) => ({ ...current, page: current.page + 1 }))}
-                                        aria-label="Next page"
-                                    >
-                                        <ChevronRight className="size-4" />
-                                    </Button>
-                                </div>
+                            <div className="text-sm"><DueText task={task} /></div>
+                            <div className="truncate text-xs text-muted-foreground">
+                                {[task.opportunity?.title || task.lead?.name, statusDisplay("priority", task.priority).label, task.owner?.name].filter(Boolean).join(" · ")}
                             </div>
                         </div>
-                    </div>
-                )}
-            </div>
+                    )}
+                    emptyState={hasNarrowing && view !== "open" ? {
+                        title: "No tasks match", description: "Try another view, owner, priority or search.", kind: "no-match",
+                        action: <Button variant="outline" onClick={() => { setSearch(""); setView("open"); setOwner("me"); setPriority("all"); resetPaging(); }}>Back to my open tasks</Button>,
+                    } : view === "open" && owner === "me" && !search.trim() ? {
+                        title: "You're all caught up", description: "No open tasks. Create one, or add a task from a lead or opportunity.",
+                        action: <Button onClick={openCreate}><Plus className="size-4" />Create task</Button>,
+                    } : {
+                        title: "No open tasks match", description: "Try another owner, priority or search.", kind: "no-match",
+                    }}
+                />
+            )}
+
+            <SelectionBar
+                count={selectedCount}
+                onClear={() => setSelectedTaskIds([])}
+                actions={[
+                    { label: "Complete", icon: <CheckCircle2 className="size-4" />, onClick: () => bulkUpdateTasks({ status: "COMPLETED" }), disabled: bulkBusy },
+                    { label: "Assign", icon: <UserCog className="size-4" />, onClick: () => { setAssignUserId(null); setAssignOpen(true); } },
+                    { label: "Reschedule", icon: <CalendarClock className="size-4" />, onClick: () => { setRescheduleAt(""); setRescheduleOpen(true); } },
+                    { label: "Delete", icon: <Trash2 className="size-4" />, onClick: () => deleteTasks(selectedTaskIds, plural(selectedCount, "task", "tasks")), destructive: true },
+                ]}
+            />
+
+            <StandardDialog
+                open={assignOpen}
+                onClose={() => setAssignOpen(false)}
+                title={`Assign ${plural(selectedCount, "task", "tasks")}`}
+                maxWidth="xs"
+                actions={<>
+                    <Button variant="outline" onClick={() => setAssignOpen(false)}>Cancel</Button>
+                    <Button isLoading={bulkBusy} disabled={!assignUserId} onClick={async () => { if (await bulkUpdateTasks({ ownerId: assignUserId })) setAssignOpen(false); }}>Assign</Button>
+                </>}
+            >
+                <div className="space-y-1.5 pb-1">
+                    <Label htmlFor="tasks-bulk-owner">New owner</Label>
+                    <RecordPicker id="tasks-bulk-owner" entity="user" value={assignUserId} allowClear={false} onChange={(id) => setAssignUserId(id)} placeholder="Choose a person" />
+                </div>
+            </StandardDialog>
+
+            <StandardDialog
+                open={rescheduleOpen}
+                onClose={() => setRescheduleOpen(false)}
+                title={`Reschedule ${plural(selectedCount, "task", "tasks")}`}
+                maxWidth="xs"
+                actions={<>
+                    <Button variant="outline" onClick={() => setRescheduleOpen(false)}>Cancel</Button>
+                    <Button isLoading={bulkBusy} disabled={!rescheduleAt} onClick={async () => { if (await bulkUpdateTasks({ dueAt: workspaceDateTimeInputToIso(rescheduleAt) })) setRescheduleOpen(false); }}>Reschedule</Button>
+                </>}
+            >
+                <div className="space-y-1.5 pb-1">
+                    <Label htmlFor="tasks-bulk-due">New due date</Label>
+                    <Input id="tasks-bulk-due" type="datetime-local" value={rescheduleAt} onChange={(event) => setRescheduleAt(event.target.value)} />
+                </div>
+            </StandardDialog>
 
             <StandardDialog
                 open={dialogOpen}
                 onClose={closeEditor}
-                title={editingTask ? "Edit Task" : "Create Task"}
+                title={editingTask ? "Edit task" : "Create task"}
                 maxWidth="sm"
                 actions={
                     <>
-                        <Button variant="ghost" disabled={taskDraft.pending} onClick={closeEditor}>Cancel</Button>
-                        <Button onClick={saveTask} disabled={taskDraft.pending || !form.title.trim()}>{taskDraft.pending ? "Saving…" : "Save Task"}</Button>
+                        <Button variant="outline" disabled={taskDraft.pending} onClick={closeEditor}>Cancel</Button>
+                        <Button onClick={saveTask} disabled={!form.title.trim()} isLoading={taskDraft.pending}>{editingTask ? "Save changes" : "Create task"}</Button>
                     </>
                 }
             >
-                {taskDraft.dirty && <p role="status" className="mb-3 text-xs text-muted-foreground">This task draft is kept while you navigate in the app. Refreshing or signing out clears it.</p>}
+                {taskDraft.dirty && <p role="status" className="mb-3 text-xs text-muted-foreground">This draft is kept while you move around the app. Refreshing or signing out clears it.</p>}
                 {taskDraft.error && <p role="alert" className="mb-3 break-words text-sm text-destructive">{taskDraft.error}</p>}
                 <fieldset disabled={taskDraft.pending} className="min-w-0">
-                <div className="space-y-4">
-                    <div className="space-y-2">
-                        <Label htmlFor="task-edit-title">Title</Label>
-                        <Input id="task-edit-title" value={form.title} onChange={(e) => setForm((current) => ({ ...current, title: e.target.value }))} />
-                    </div>
-                    <div className="space-y-2">
-                        <Label htmlFor="task-edit-description">Description</Label>
-                        <Input id="task-edit-description" value={form.description} onChange={(e) => setForm((current) => ({ ...current, description: e.target.value }))} />
-                    </div>
-                    <div className="grid gap-4 sm:grid-cols-3">
-                        <div className="space-y-2">
-                            <Label htmlFor="task-edit-status">Status</Label>
-                            <Select value={form.status} onValueChange={(value) => setForm((current) => ({ ...current, status: value as Task["status"] }))}>
-                                <SelectTrigger id="task-edit-status" className="w-full"><SelectValue /></SelectTrigger>
-                                <SelectContent>{STATUS_OPTIONS.map((option) => <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>)}</SelectContent>
-                            </Select>
+                    <div className="space-y-4">
+                        <div className="space-y-1.5">
+                            <Label htmlFor="task-edit-title">Title <span aria-hidden className="text-destructive">*</span></Label>
+                            <Input id="task-edit-title" aria-required value={form.title} onChange={(e) => setForm((current) => ({ ...current, title: e.target.value }))} />
                         </div>
-                        <div className="space-y-2">
-                            <Label htmlFor="task-edit-priority">Priority</Label>
-                            <Select value={form.priority} onValueChange={(value) => setForm((current) => ({ ...current, priority: value as Task["priority"] }))}>
-                                <SelectTrigger id="task-edit-priority" className="w-full"><SelectValue /></SelectTrigger>
-                                <SelectContent>{PRIORITY_OPTIONS.map((option) => <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>)}</SelectContent>
-                            </Select>
+                        <div className="space-y-1.5">
+                            <Label htmlFor="task-edit-description">Description</Label>
+                            <Input id="task-edit-description" value={form.description} onChange={(e) => setForm((current) => ({ ...current, description: e.target.value }))} />
                         </div>
-                        <div className="space-y-2">
-                            <Label htmlFor="task-edit-owner">Owner</Label>
-                            <Select value={form.ownerId || "__me__"} onValueChange={(value) => setForm((current) => ({ ...current, ownerId: value === "__me__" ? "" : value }))}>
-                                <SelectTrigger id="task-edit-owner" className="w-full"><SelectValue /></SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="__me__">Me</SelectItem>
-                                    {users.map((user) => <SelectItem key={user.id} value={user.id}>{user.name || user.email || "User"}</SelectItem>)}
-                                </SelectContent>
-                            </Select>
-                        </div>
-                    </div>
-                    <div className="grid gap-4 sm:grid-cols-2">
-                        <div className="space-y-2">
-                            <Label htmlFor="task-edit-due">Due</Label>
-                            <Input id="task-edit-due" type="datetime-local" value={form.dueAt} onChange={(e) => setForm((current) => ({ ...current, dueAt: e.target.value }))} />
-                        </div>
-                        <div className="space-y-2">
-                            <Label htmlFor="task-edit-reminder">Reminder</Label>
-                            <Input id="task-edit-reminder" type="datetime-local" value={form.reminderAt} onChange={(e) => setForm((current) => ({ ...current, reminderAt: e.target.value }))} />
-                        </div>
-                    </div>
-                    <TaskRecurrenceEscalationFields
-                        value={{ recurrenceRule: form.recurrenceRule, escalateAfterMinutes: form.escalateAfterMinutes, escalateToUserId: form.escalateToUserId }}
-                        onChange={(next) => setForm((current) => ({ ...current, ...next }))}
-                        users={users}
-                    />
-                    <div className="grid gap-4 sm:grid-cols-2">
-                        <div className="space-y-2">
-                            <Label htmlFor="task-edit-lead">Lead</Label>
-                            <Select
-                                value={form.leadId || "__none__"}
-                                onValueChange={(value) => setForm((current) => ({ ...current, leadId: value === "__none__" ? "" : value, activityId: "" }))}
-                            >
-                                <SelectTrigger id="task-edit-lead" className="w-full"><SelectValue /></SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="__none__">No lead</SelectItem>
-                                    {leads.map((lead) => (
-                                        <SelectItem key={lead.id} value={lead.id}>
-                                            {lead.name || lead.email || lead.company || "Lead"}
-                                        </SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
-                        </div>
-                        <div className="space-y-2">
-                            <Label htmlFor="task-edit-opportunity">Opportunity</Label>
-                            <Select
-                                value={form.opportunityId || "__none__"}
-                                onValueChange={(value) => {
-                                    const opportunity = opportunities.find((item) => item.id === value);
-                                    setForm((current) => ({
-                                        ...current,
-                                        opportunityId: value === "__none__" ? "" : value,
-                                        leadId: opportunity?.leadId || current.leadId,
-                                        activityId: "",
-                                    }));
-                                }}
-                            >
-                                <SelectTrigger id="task-edit-opportunity" className="w-full"><SelectValue /></SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="__none__">No opportunity</SelectItem>
-                                    {opportunities.map((opportunity) => (
-                                        <SelectItem key={opportunity.id} value={opportunity.id}>
-                                            {opportunity.title || "Opportunity"}
-                                        </SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
-                        </div>
-                    </div>
-                    <div className="space-y-2">
-                        <Label htmlFor="task-edit-activity">Related Activity</Label>
-                        <Select
-                            value={form.activityId || "__none__"}
-                            onValueChange={(value) => setForm((current) => ({ ...current, activityId: value === "__none__" ? "" : value }))}
-                        >
-                            <SelectTrigger id="task-edit-activity" className="w-full"><SelectValue /></SelectTrigger>
-                            <SelectContent>
-                                <SelectItem value="__none__">No activity</SelectItem>
-                                {activityOptions.map((activity) => (
-                                    <SelectItem key={activity.id} value={activity.id}>
-                                        {formatActivityLabel(activity)}
-                                    </SelectItem>
-                                ))}
-                            </SelectContent>
-                        </Select>
-                    </div>
-                    {editingTask ? (
-                        <div className="rounded-xl border bg-surface-container-low p-3">
-                            <p className="text-sm font-extrabold">Related Record Preview</p>
-                            <div className="mt-2 grid gap-2 text-xs text-muted-foreground sm:grid-cols-3">
-                                <span>Lead: {editingTask.lead?.name || editingTask.lead?.email || "None"}</span>
-                                <span>Opportunity: {editingTask.opportunity?.title || "None"}</span>
-                                <span>Activity: {editingTask.activity?.notes || editingTask.activity?.outcome || "None"}</span>
+                        <div className="grid gap-4 sm:grid-cols-3">
+                            <div className="space-y-1.5">
+                                <Label htmlFor="task-edit-status">Status</Label>
+                                <Select value={form.status} onValueChange={(value) => setForm((current) => ({ ...current, status: value as Task["status"] }))}>
+                                    <SelectTrigger id="task-edit-status" className="w-full"><SelectValue /></SelectTrigger>
+                                    <SelectContent>{STATUS_OPTIONS.map((option) => <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>)}</SelectContent>
+                                </Select>
                             </div>
-                            {editingTask.completedAt ? (
-                                <p className="mt-2 text-xs text-muted-foreground">Completed {formatWorkspaceDateTime(editingTask.completedAt)}</p>
-                            ) : null}
-                            {editingTask.metadata?.comments?.length ? (
-                                <div className="mt-3 space-y-1">
-                                    <p className="text-xs font-bold uppercase text-muted-foreground">Comments</p>
-                                    {editingTask.metadata.comments.slice(-3).map((comment, index) => (
-                                        <p key={`${comment.createdAt}-${index}`} className="rounded-md bg-background px-2 py-1 text-xs">
-                                            {comment.body}
-                                        </p>
-                                    ))}
-                                </div>
-                            ) : null}
+                            <div className="space-y-1.5">
+                                <Label htmlFor="task-edit-priority">Priority</Label>
+                                <Select value={form.priority} onValueChange={(value) => setForm((current) => ({ ...current, priority: value as Task["priority"] }))}>
+                                    <SelectTrigger id="task-edit-priority" className="w-full"><SelectValue /></SelectTrigger>
+                                    <SelectContent>{PRIORITY_OPTIONS.map((option) => <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>)}</SelectContent>
+                                </Select>
+                            </div>
+                            <div className="space-y-1.5">
+                                <Label htmlFor="task-edit-owner">Owner</Label>
+                                <Select value={form.ownerId || "__me__"} onValueChange={(value) => setForm((current) => ({ ...current, ownerId: value === "__me__" ? "" : value }))}>
+                                    <SelectTrigger id="task-edit-owner" className="w-full"><SelectValue /></SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="__me__">Me</SelectItem>
+                                        {users.filter((item) => item.id !== user?.id).map((item) => <SelectItem key={item.id} value={item.id}>{item.name || item.email || "User"}</SelectItem>)}
+                                    </SelectContent>
+                                </Select>
+                            </div>
                         </div>
-                    ) : null}
-                    {editingTask && (editingTask.opportunityId || editingTask.leadId) ? (
-                        // Prefer the Opportunity's recommendations when the task is linked to both
-                        // -- more specific than the parent Lead's.
-                        <NextBestActionPanel
-                            recordType={editingTask.opportunityId ? "OPPORTUNITY" : "LEAD"}
-                            recordId={(editingTask.opportunityId || editingTask.leadId) as string}
-                            title="Recommended Next Actions"
+                        <div className="grid gap-4 sm:grid-cols-2">
+                            <div className="space-y-1.5">
+                                <Label htmlFor="task-edit-due">Due</Label>
+                                <Input id="task-edit-due" type="datetime-local" value={form.dueAt} onChange={(e) => setForm((current) => ({ ...current, dueAt: e.target.value }))} />
+                            </div>
+                            <div className="space-y-1.5">
+                                <Label htmlFor="task-edit-reminder">Reminder</Label>
+                                <Input id="task-edit-reminder" type="datetime-local" value={form.reminderAt} onChange={(e) => setForm((current) => ({ ...current, reminderAt: e.target.value }))} />
+                            </div>
+                        </div>
+                        <TaskRecurrenceEscalationFields
+                            value={{ recurrenceRule: form.recurrenceRule, escalateAfterMinutes: form.escalateAfterMinutes, escalateToUserId: form.escalateToUserId }}
+                            onChange={(next) => setForm((current) => ({ ...current, ...next }))}
+                            users={users}
                         />
-                    ) : null}
-                    <div className="space-y-2">
-                        <Label htmlFor="task-edit-comment">{editingTask ? "Add Comment" : "Initial Comment"}</Label>
-                        <Input id="task-edit-comment" value={form.comment} onChange={(e) => setForm((current) => ({ ...current, comment: e.target.value }))} />
-                    </div>
-                    {editingTask && (
-                        <TaskChecklistDependenciesPanel task={editingTask} siblingTasks={siblingTasksForEditingTask} onRefresh={fetchTasks} />
-                    )}
-                    {editingTask && (
-                        <div className="rounded-xl border p-3">
-                            <p className="text-sm font-extrabold">Team Queue</p>
-                            {editingTask.queueId ? (
-                                <div className="mt-2 flex flex-wrap items-center gap-2">
-                                    <Badge variant={editingTask.claimedBy ? "outline" : "secondary"} className="rounded-md text-[0.65rem]">
-                                        {teams.find((team) => team.id === editingTask.queueId)?.name || "Queue"}
-                                        {editingTask.claimedBy ? " - Claimed" : " - Unclaimed"}
-                                    </Badge>
-                                    {editingTask.claimedBy ? (
-                                        <Button size="sm" variant="outline" onClick={() => unclaimTask(editingTask)}>Unclaim</Button>
-                                    ) : (
-                                        <Button size="sm" variant="outline" onClick={() => claimTask(editingTask)}>Claim</Button>
-                                    )}
-                                </div>
-                            ) : (
-                                <div className="mt-2 flex flex-wrap items-center gap-2">
-                                    <p className="text-xs text-muted-foreground">Not in a queue yet.</p>
-                                    <Select onValueChange={(queueId) => sendTaskToQueue(editingTask, queueId)}>
-                                        <SelectTrigger aria-label="Send task to queue" className="w-48" size="sm"><SelectValue placeholder="Send to queue..." /></SelectTrigger>
-                                        <SelectContent>
-                                            {teams.map((team) => <SelectItem key={team.id} value={team.id}>{team.name}</SelectItem>)}
-                                        </SelectContent>
-                                    </Select>
-                                </div>
-                            )}
+                        <div className="grid gap-4 sm:grid-cols-2">
+                            <div className="space-y-1.5">
+                                <Label htmlFor="task-edit-lead">Lead</Label>
+                                <RecordPicker id="task-edit-lead" entity="lead" value={form.leadId || null} onChange={(id) => setForm((current) => ({ ...current, leadId: id ?? "", activityId: "" }))} placeholder="No lead" />
+                            </div>
+                            <div className="space-y-1.5">
+                                <Label htmlFor="task-edit-opportunity">Opportunity</Label>
+                                <RecordPicker id="task-edit-opportunity" entity="opportunity" value={form.opportunityId || null} onChange={(id) => { pickOpportunity(id); }} placeholder="No opportunity" />
+                            </div>
                         </div>
-                    )}
-                </div>
+                        <div className="space-y-1.5">
+                            <Label htmlFor="task-edit-activity">Related activity</Label>
+                            <Select
+                                value={form.activityId || "__none__"}
+                                disabled={!form.leadId && !form.opportunityId}
+                                onValueChange={(value) => setForm((current) => ({ ...current, activityId: value === "__none__" ? "" : value }))}
+                            >
+                                <SelectTrigger id="task-edit-activity" className="w-full"><SelectValue placeholder={form.leadId || form.opportunityId ? "No activity" : "Choose a lead or opportunity first"} /></SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="__none__">No activity</SelectItem>
+                                    {activityOptions.map((activity) => <SelectItem key={activity.id} value={activity.id}>{formatActivityLabel(activity)}</SelectItem>)}
+                                    {form.activityId && !activityOptions.some((activity) => activity.id === form.activityId) ? <SelectItem value={form.activityId}>{editingTask?.activity?.notes || editingTask?.activity?.outcome || "Linked activity"}</SelectItem> : null}
+                                </SelectContent>
+                            </Select>
+                        </div>
+                        {editingTask?.completedAt ? <p className="text-xs text-muted-foreground">Completed {formatWorkspaceDateTime(editingTask.completedAt)}</p> : null}
+                        {editingTask?.metadata?.comments?.length ? (
+                            <section aria-labelledby="task-comments-heading" className="space-y-1">
+                                <h3 id="task-comments-heading" className="text-sm font-semibold">Recent comments</h3>
+                                <ul className="divide-y rounded-lg border text-sm">
+                                    {editingTask.metadata.comments.slice(-3).map((comment, index) => (
+                                        <li key={`${comment.createdAt}-${index}`} className="px-3 py-2">
+                                            <p className="break-words">{comment.body}</p>
+                                            <p className="text-xs text-muted-foreground">{formatWorkspaceDateTime(comment.createdAt)}</p>
+                                        </li>
+                                    ))}
+                                </ul>
+                            </section>
+                        ) : null}
+                        <div className="space-y-1.5">
+                            <Label htmlFor="task-edit-comment">{editingTask ? "Add a comment" : "Comment"}</Label>
+                            <Input id="task-edit-comment" value={form.comment} onChange={(e) => setForm((current) => ({ ...current, comment: e.target.value }))} />
+                        </div>
+                        {editingTask && (editingTask.opportunityId || editingTask.leadId) ? (
+                            // Prefer the opportunity's recommendations when the task is linked to
+                            // both -- more specific than the parent lead's.
+                            <NextBestActionPanel
+                                recordType={editingTask.opportunityId ? "OPPORTUNITY" : "LEAD"}
+                                recordId={(editingTask.opportunityId || editingTask.leadId) as string}
+                                title="Recommended next actions"
+                            />
+                        ) : null}
+                        {editingTask && <TaskChecklistDependenciesPanel task={editingTask} siblingTasks={siblingTasksForEditingTask} onRefresh={refresh} />}
+                        {editingTask && (
+                            <section aria-labelledby="task-queue-heading" className="rounded-lg border p-3">
+                                <h3 id="task-queue-heading" className="text-sm font-semibold">Team queue</h3>
+                                {editingTask.queueId ? (
+                                    <div className="mt-2 flex flex-wrap items-center gap-2 text-sm">
+                                        <span>{teams.find((team) => team.id === editingTask.queueId)?.name || "Queue"} · {editingTask.claimedBy ? "claimed" : "unclaimed"}</span>
+                                        <Button size="sm" variant="outline" onClick={() => claimTask(editingTask, !editingTask.claimedBy)}>{editingTask.claimedBy ? "Release" : "Claim"}</Button>
+                                    </div>
+                                ) : (
+                                    <div className="mt-2 flex flex-wrap items-center gap-2">
+                                        <p className="text-sm text-muted-foreground">Not in a queue.</p>
+                                        <Select onValueChange={(queueId) => sendTaskToQueue(editingTask, queueId)}>
+                                            <SelectTrigger aria-label="Send task to queue" className="w-48" size="sm"><SelectValue placeholder="Send to a queue…" /></SelectTrigger>
+                                            <SelectContent>{teams.map((team) => <SelectItem key={team.id} value={team.id}>{team.name}</SelectItem>)}</SelectContent>
+                                        </Select>
+                                    </div>
+                                )}
+                            </section>
+                        )}
+                    </div>
                 </fieldset>
             </StandardDialog>
         </div>
@@ -1021,34 +966,22 @@ function TaskCalendar({
     const draggingTask = draggingTaskId ? tasks.find((task) => task.id === draggingTaskId) ?? null : null;
     return (
         <div className="@container/task-calendar min-w-0 space-y-3">
-            <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border bg-card p-3">
-                <div>
-                    <p className="text-sm font-extrabold">Calendar</p>
-                    <p className="text-xs text-muted-foreground">Overdue tasks stay visible while current due work is grouped by the selected period.</p>
-                </div>
-                <div className="flex max-w-full flex-wrap rounded-md border bg-background p-1">
-                    {(["day", "week", "month"] as const).map((item) => (
-                        <Button
-                            key={item}
-                            type="button"
-                            size="sm"
-                            variant={mode === item ? "secondary" : "ghost"}
-                            aria-pressed={mode === item}
-                            onClick={() => onModeChange(item)}
-                        >
-                            {item[0].toUpperCase() + item.slice(1)}
-                        </Button>
-                    ))}
-                </div>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+                <p className="text-sm text-muted-foreground">Overdue work stays in its own column. Drag a task to another column to reschedule it, or open it to change the date.</p>
+                <SegmentedControl
+                    label="Calendar range"
+                    value={mode}
+                    onChange={onModeChange}
+                    options={[{ value: "day", label: "Days" }, { value: "week", label: "Weeks" }, { value: "month", label: "Months" }]}
+                />
             </div>
-            <div className="grid min-w-0 grid-cols-1 gap-3 @min-[640px]/task-calendar:grid-cols-2 @min-[1100px]/task-calendar:grid-cols-4">
+            <div className="grid min-w-0 grid-cols-1 gap-3 @min-[640px]/task-calendar:grid-cols-2 @min-[1100px]/task-calendar:grid-cols-5">
                 {lanes.map((lane) => (
-                    <div
+                    <section
                         key={lane.key}
-                        className={cn("min-w-0 min-h-[220px] rounded-xl border bg-card p-3", lane.key === "overdue" && "border-destructive/35 bg-destructive/5")}
-                        onDragOver={(event) => {
-                            if (lane.startAt && draggingTask) event.preventDefault();
-                        }}
+                        aria-label={`${lane.label}, ${plural(lane.tasks.length, "task", "tasks")}`}
+                        className={cn("min-h-[220px] min-w-0 rounded-xl border bg-card p-3", lane.key === "overdue" && "border-status-danger-foreground/30")}
+                        onDragOver={(event) => { if (lane.startAt && draggingTask) event.preventDefault(); }}
                         onDrop={(event) => {
                             event.preventDefault();
                             if (!lane.startAt || !draggingTask) return;
@@ -1056,41 +989,32 @@ function TaskCalendar({
                             setDraggingTaskId(null);
                         }}
                     >
-                        <div className="mb-3 flex items-center justify-between gap-2">
-                            <div>
-                                <p className="text-sm font-extrabold">{lane.label}</p>
-                                <p className="text-xs text-muted-foreground">{lane.tasks.length} task{lane.tasks.length === 1 ? "" : "s"}</p>
-                            </div>
-                            {lane.key === "overdue" ? <Badge variant="destructive" className="rounded-md">Overdue</Badge> : null}
+                        <div className="mb-2 flex items-baseline justify-between gap-2">
+                            <h3 className={cn("text-sm font-semibold", lane.key === "overdue" && "text-destructive")}>{lane.label}</h3>
+                            <span className="text-xs tabular-nums text-muted-foreground">{lane.tasks.length}</span>
                         </div>
-                        <div className="space-y-2">
+                        <ul className="space-y-1.5">
                             {lane.tasks.length === 0 ? (
-                                <div className="rounded-lg border border-dashed p-3 text-xs text-muted-foreground">No tasks in this lane.</div>
+                                <li className="py-4 text-center text-xs text-muted-foreground">Nothing due</li>
                             ) : lane.tasks.map((task) => (
-                                <div
+                                <li
                                     key={task.id}
-                                    draggable={task.status !== "COMPLETED"}
+                                    draggable={!isClosedTask(task)}
                                     onDragStart={() => setDraggingTaskId(task.id)}
                                     onDragEnd={() => setDraggingTaskId(null)}
-                                    className="min-w-0 w-full break-words rounded-lg border bg-background p-3 text-left transition-colors hover:bg-surface-container-low"
+                                    className="flex min-w-0 items-start gap-1 rounded-lg border bg-background p-2"
                                 >
-                                    <button type="button" aria-label={`Edit ${task.title}`} onClick={() => onEdit(task)} className="block w-full min-w-0 rounded-md text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
-                                    <div className="flex min-w-0 flex-wrap items-start justify-between gap-2">
-                                        <p className={cn("min-w-0 max-w-full break-words text-sm font-bold", task.status === "COMPLETED" && "line-through text-muted-foreground")}>{task.title}</p>
-                                        <Badge variant={task.priority === "URGENT" || task.priority === "HIGH" ? "destructive" : "secondary"} className="rounded-md text-[0.65rem]">
-                                            {task.priority}
-                                        </Badge>
-                                    </div>
-                                    <p className="mt-1 text-xs text-muted-foreground">{task.owner?.name || task.owner?.email || "Unassigned"}</p>
-                                    {task.dueAt ? <p className="mt-1 text-xs text-muted-foreground">{formatWorkspaceDateTime(task.dueAt)}</p> : null}
+                                    <IconButton label={`Complete ${task.title}`} className="-ml-1 shrink-0 text-muted-foreground" onClick={() => onComplete(task)}><CheckCircle2 className="size-4" /></IconButton>
+                                    <button type="button" aria-label={`Edit ${task.title}`} onClick={() => onEdit(task)} className="block min-w-0 flex-1 rounded-sm text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                                        <span className="block break-words text-sm font-medium">{task.title}</span>
+                                        <span className="block text-xs text-muted-foreground">
+                                            {[task.dueAt ? formatWorkspaceDateTime(task.dueAt) : "No due date", statusDisplay("priority", task.priority).label].join(" · ")}
+                                        </span>
                                     </button>
-                                    {task.status !== "COMPLETED" ? (
-                                        <Button type="button" variant="outline" size="sm" className="mt-2" aria-label={`Complete ${task.title}`} onClick={() => onComplete(task)}>Complete</Button>
-                                    ) : null}
-                                </div>
+                                </li>
                             ))}
-                        </div>
-                    </div>
+                        </ul>
+                    </section>
                 ))}
             </div>
         </div>
@@ -1098,35 +1022,25 @@ function TaskCalendar({
 }
 
 function calendarLanes(tasks: Task[], mode: "day" | "week" | "month") {
-    const now = new Date();
-    const startToday = new Date(now);
-    startToday.setHours(0, 0, 0, 0);
+    // Lanes start at the workspace's midnight, not the browser's.
+    const startToday = workspaceDayStart();
     const activeTasks = tasks.filter((task) => task.status !== "CANCELLED");
     const overdue = activeTasks.filter((task) => task.dueAt && new Date(task.dueAt).getTime() < startToday.getTime() && task.status !== "COMPLETED");
     const upcoming = activeTasks.filter((task) => !overdue.some((item) => item.id === task.id));
-    const periods = mode === "day" ? 3 : mode === "week" ? 4 : 4;
-    const lanes = [{
-        key: "overdue",
-        label: "Overdue",
-        tasks: overdue,
-        startAt: null as string | null,
-    }];
+    const periods = mode === "day" ? 3 : 4;
+    const lanes = [{ key: "overdue", label: "Overdue", tasks: overdue, startAt: null as string | null }];
     for (let index = 0; index < periods; index += 1) {
-        const start = new Date(startToday);
-        if (mode === "day") start.setDate(start.getDate() + index);
-        if (mode === "week") start.setDate(start.getDate() + index * 7);
-        if (mode === "month") start.setMonth(start.getMonth() + index, 1);
-        const end = new Date(start);
-        if (mode === "day") end.setDate(end.getDate() + 1);
-        if (mode === "week") end.setDate(end.getDate() + 7);
-        if (mode === "month") end.setMonth(end.getMonth() + 1, 1);
+        const start = mode === "month" ? workspaceDayStart({ months: index }) : workspaceDayStart({ days: mode === "week" ? index * 7 : index });
+        const end = mode === "month" ? workspaceDayStart({ months: index + 1 }) : workspaceDayStart({ days: mode === "week" ? (index + 1) * 7 : index + 1 });
+        // Headings in the workspace's date style and time zone, not the browser's locale.
+        const label = mode === "day"
+            ? index === 0 ? "Today" : index === 1 ? "Tomorrow" : formatWorkspaceDateParts(start, { weekday: "short", day: "2-digit", month: "short" })
+            : mode === "week"
+                ? index === 0 ? "Next 7 days" : `${formatWorkspaceDateParts(start, { day: "2-digit", month: "short" })} – ${formatWorkspaceDateParts(new Date(end.getTime() - 1), { day: "2-digit", month: "short" })}`
+                : formatWorkspaceDateParts(start, { month: "long", year: "numeric" });
         lanes.push({
             key: `${mode}-${index}`,
-            label: mode === "day"
-                ? start.toLocaleDateString(undefined, { weekday: "short", day: "2-digit", month: "short" })
-                : mode === "week"
-                    ? `${start.toLocaleDateString(undefined, { day: "2-digit", month: "short" })} - ${new Date(end.getTime() - 1).toLocaleDateString(undefined, { day: "2-digit", month: "short" })}`
-                    : start.toLocaleDateString(undefined, { month: "long", year: "numeric" }),
+            label,
             tasks: upcoming.filter((task) => {
                 if (!task.dueAt) return index === periods - 1;
                 const due = new Date(task.dueAt).getTime();

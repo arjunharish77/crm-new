@@ -1,3 +1,5 @@
+export const dynamic = "force-dynamic";
+import { PublishedCatalogBoundary } from "@/components/published-catalog-boundary";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { JsonLd } from "@/components/json-ld";
@@ -8,34 +10,34 @@ const SITE_URL = process.env.NEXT_PUBLIC_UNNATIVIDYA_SITE_URL || "https://unnati
 
 export const metadata: Metadata = {
   title: "Online Degree EMI Calculator",
-  description: "Calculate the no-cost EMI for any UGC-entitled online MBA, BBA, BCA, MCA, BCom, MCom, BA, or MA program listed on Unnati Vidya.",
+  description: "Estimate monthly repayments, interest and overall payment for an online degree using your fee, down payment, repayment period and annual interest rate.",
   alternates: { canonical: "/tools/emi-calculator" },
 };
 
 const FAQS: Array<[string, string]> = [
   [
     "Is the EMI shown here exact, or just an estimate?",
-    "It's an estimate using the standard reducing-balance EMI formula (or a simple fee ÷ tenure split when you set the rate to 0%). Actual approval, processing fees, and available tenures depend on the lender and your admission cycle.",
+    "It's an estimate using the standard reducing-balance EMI formula (or loan amount ÷ repayment months when you set the rate to 0%). Actual approval, processing fees, and available tenures depend on the lender and your admission cycle.",
   ],
   [
     "What interest rate should I use?",
-    "Set it to 0% to model the no-cost EMI plans our listed universities publish on their own program pages — that's the default. Move the slider up to 16% to model a standard education loan instead, if that's what you're comparing against.",
+    "Enter the annual interest rate quoted by your lender. The default 0% is an interest-free scenario, not confirmation of an available offer. The calculator accepts rates from 0% to 50%.",
   ],
   [
     "What EMI tenures can I choose from?",
-    "6 to 48 months, in steps of 3. Longer tenures lower your monthly EMI but increase total interest paid whenever the rate is above 0%.",
+    "Enter a whole number from 1 to 120 months. Course duration and loan repayment period are different; confirm the available term with your lender.",
   ],
   [
-    "What does the down payment slider do?",
+    "How does the down payment affect the estimate?",
     "It reduces the loan amount the EMI is calculated on — principal is the total fee minus your down payment. A larger down payment means a smaller loan and a lower EMI at the same tenure and rate.",
   ],
   [
     "Will I be charged a processing fee?",
-    "Possibly — processing fees depend on the lender and your admission cycle, not on this calculator. Ask a counsellor to confirm the exact fee before you pay.",
+    "Possibly — processing fees depend on the lender and your admission cycle, not on this calculator. Confirm charges directly with the lender before committing. They are excluded unless you include them in the amount entered.",
   ],
   [
     "Does picking a program from the dropdown auto-fill the correct fee?",
-    "Yes — selecting any program from our catalog fills in its actual total fee and typical tenure automatically, so you don't need to know the exact figures to get a useful estimate.",
+    "Selecting a program fills its listed tuition without changing your repayment period. It is not a live university quote; confirm current tuition and any additional charges. Editing the fee switches back to manual entry.",
   ],
 ];
 
@@ -54,7 +56,7 @@ export default function EmiCalculatorPage() {
     mainEntity: FAQS.map(([question, answer]) => ({ "@type": "Question", name: question, acceptedAnswer: { "@type": "Answer", text: answer } })),
   };
 
-  return (
+  return <PublishedCatalogBoundary>{(
     <>
       <JsonLd data={[breadcrumbJsonLd, faqJsonLd]} />
       <div style={{ background: "#F7F8F9" }}>
@@ -65,8 +67,7 @@ export default function EmiCalculatorPage() {
             </div>
             <h1 style={{ color: "#363634", fontSize: 28, fontWeight: 700, margin: 0 }}>Online degree EMI calculator</h1>
             <div style={{ color: "#696868", fontSize: 14, marginTop: 6 }}>
-              Pick a real program from the catalog, or enter your own numbers. No-cost EMI means 0% interest — the rate
-              slider only matters if you&apos;re modelling a standard education loan instead.
+              Choose a listed program or enter your own fee. See monthly repayments, interest and the overall payment including your down payment.
             </div>
           </div>
         </div>
@@ -86,7 +87,7 @@ export default function EmiCalculatorPage() {
           </section>
         </div>
       </div>
-      <StickyMobileBar primary={{ label: "Get exact loan terms", href: "/lead?intent=emi-calculator", openLead: true }} />
+      <StickyMobileBar primary={{ label: "Apply now", href: "/lead?intent=emi-calculator", openLead: true }} />
     </>
-  );
+  )}</PublishedCatalogBoundary>;
 }

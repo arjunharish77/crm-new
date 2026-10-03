@@ -1,5 +1,5 @@
 import { randomUUID } from "crypto";
-import { execute, query, queryOne, queryAsSystem } from "@/lib/db/query";
+import { execute, query, queryOne, queryAsSystem, jsonbParam } from "@/lib/db/query";
 import { assertFeatureEnabled } from "@/lib/server/entitlements";
 import {
   MetricAggregation,
@@ -191,7 +191,7 @@ export async function createMetricForTenant(user: TenantUser, input: MetricInput
       validated.aggregation,
       validated.aggregateField?.object ?? null,
       validated.aggregateField?.field ?? null,
-      validated.filters,
+      jsonbParam(validated.filters), // a bare array would be sent as a Postgres array literal
       validated.groupBy?.object ?? null,
       validated.groupBy?.field ?? null,
       user.id,
@@ -241,7 +241,7 @@ export async function updateMetricDefinitionForTenant(user: TenantUser, id: stri
     patch.aggregation = validated.aggregation;
     patch.aggregateObject = validated.aggregateField?.object ?? null;
     patch.aggregateField = validated.aggregateField?.field ?? null;
-    patch.filters = validated.filters;
+    patch.filters = jsonbParam(validated.filters); // see the insert above
     patch.groupByObject = validated.groupBy?.object ?? null;
     patch.groupByField = validated.groupBy?.field ?? null;
     effectiveGroupBy = validated.groupBy;

@@ -1,6 +1,6 @@
 import { randomUUID } from "crypto";
 import { execute, query, queryOne, queryAsSystem } from "@/lib/db/query";
-import { isModuleEnabledForTenant } from "@/lib/server/module-entitlements";
+import { assertModuleEnabled, isModuleEnabledForTenant } from "@/lib/server/module-entitlements";
 import { createUserNotification } from "@/lib/server/notifications";
 
 type TenantUser = {
@@ -24,17 +24,22 @@ const LOW_SCORE_THRESHOLD = 2;
 // reuse instead.
 export async function getCaseSurveyForPublic(id: string) {
   const row = await queryOne<any>(
-    `select r.id, r."caseId", r.channel, r."sentAt", r."respondedAt", r.score, r.comment, c."caseNumber", c.subject
+    `select r.id, r."tenantId", r."caseId", r.channel, r."sentAt", r."respondedAt", r.score, r.comment, c."caseNumber", c.subject
      from "CaseSurveyResponse" r join "Case" c on c.id = r."caseId" and c."tenantId" = r."tenantId"
      where r.id = $1`,
     [id],
   );
-  return row ?? null;
+  if (!row) return null;
+  // A survey link for a tenant whose Service Desk is off is treated like an unknown link.
+  if (!(await isModuleEnabledForTenant(row.tenantId, "SERVICE_DESK"))) return null;
+  const { tenantId: _tenantId, ...survey } = row;
+  return survey;
 }
 
 export async function submitCaseSurveyResponse(id: string, input: { score: number; comment?: string | null }) {
   const existing = await queryOne<any>('select * from "CaseSurveyResponse" where id = $1', [id]);
   if (!existing) throw new Error("CASE_SURVEY_NOT_FOUND");
+  if (!(await isModuleEnabledForTenant(existing.tenantId, "SERVICE_DESK"))) throw new Error("CASE_SURVEY_NOT_FOUND");
   if (existing.respondedAt) throw new Error("CASE_SURVEY_ALREADY_SUBMITTED");
   if (!Number.isFinite(input.score) || input.score < 1 || input.score > 5) throw new Error("CASE_SURVEY_SCORE_INVALID");
 
@@ -130,6 +135,7 @@ export async function dispatchCaseSurveys(limit = 100, now = new Date()) {
 
 export async function listCaseSurveyResponsesForTenant(user: TenantUser, caseId?: string) {
   const tenantId = requireTenantId(user);
+  await assertModuleEnabled(tenantId, "SERVICE_DESK", { isPlatformAdmin: user.isPlatformAdmin });
   const clauses = ['"tenantId" = $1'];
   const values: unknown[] = [tenantId];
   if (caseId) {

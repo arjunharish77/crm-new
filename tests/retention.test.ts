@@ -54,9 +54,22 @@ describe("data retention policy CRUD", () => {
   });
 
   describe("updateDataRetentionPolicyForTenantId", () => {
-    it("rejects a non-positive retention value", async () => {
+    it("rejects a negative or fractional retention value", async () => {
       dbMocks.queryOne.mockResolvedValueOnce(policyRow()); // ensure-exists call
-      await expect(updateDataRetentionPolicyForTenantId("tenant-a", { leadRetentionDays: 0 })).rejects.toThrow("INVALID_LEADRETENTIONDAYS");
+      await expect(updateDataRetentionPolicyForTenantId("tenant-a", { leadRetentionDays: -1 })).rejects.toThrow("INVALID_LEADRETENTIONDAYS");
+      dbMocks.queryOne.mockResolvedValueOnce(policyRow());
+      await expect(updateDataRetentionPolicyForTenantId("tenant-a", { leadRetentionDays: 2.5 })).rejects.toThrow("INVALID_LEADRETENTIONDAYS");
+    });
+
+    // Decision 2026-10-01: 0 / empty / null switch a clean-up off (stored as NULL).
+    it("stores 0 as off", async () => {
+      dbMocks.queryOne
+        .mockResolvedValueOnce(policyRow()) // ensure-exists call
+        .mockResolvedValueOnce(policyRow({ leadRetentionDays: null }));
+      await updateDataRetentionPolicyForTenantId("tenant-a", { leadRetentionDays: 0 });
+      const [sql, params] = dbMocks.queryOne.mock.calls.at(-1)!;
+      expect(sql).toContain('"leadRetentionDays" = $2');
+      expect(params[1]).toBeNull();
     });
 
     it("updates only the provided fields", async () => {

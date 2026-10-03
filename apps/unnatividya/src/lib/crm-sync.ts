@@ -3,6 +3,8 @@ import { query } from "@/lib/db";
 
 export const crmSyncTokens = [
   "{{lead.id}}",
+  "{{lead.coursePreference}}",
+  "{{lead.preferencesComplete}}",
   "{{lead.name}}",
   "{{lead.email}}",
   "{{lead.phone}}",
@@ -29,6 +31,8 @@ export const crmSyncTokens = [
 
 type LeadContextRow = QueryResultRow & {
   id: string;
+  course_preference: string | null;
+  preferences_completed_at: string | null;
   name: string;
   email: string;
   phone: string;
@@ -125,7 +129,7 @@ export async function getLeadContext(leadId: string) {
   const result = await query<LeadContextRow>(
     `select l.id, l.name, l.email, l.phone, l.city, l.source_path, l.source_page_type,
             l.utm_source, l.utm_medium, l.utm_campaign, l.utm_term, l.utm_content,
-            l.email_otp_verified, l.phone_otp_verified,
+            l.email_otp_verified, l.phone_otp_verified, l.course_preference, l.preferences_completed_at,
             c.id as course_id, c.name as course_name, c.short_name as course_short_name,
             c.level as course_level, c.stream as course_stream, c.fee_inr as course_fee_inr,
             u.id as university_id, u.name as university_name, u.short_name as university_short_name
@@ -142,6 +146,8 @@ export async function getLeadContext(leadId: string) {
 function tokenValues(row: LeadContextRow) {
   return {
     "{{lead.id}}": row.id,
+    "{{lead.coursePreference}}": row.course_preference || "",
+    "{{lead.preferencesComplete}}": String(Boolean(row.preferences_completed_at)),
     "{{lead.name}}": row.name,
     "{{lead.email}}": row.email,
     "{{lead.phone}}": row.phone,
@@ -156,7 +162,7 @@ function tokenValues(row: LeadContextRow) {
     "{{lead.emailVerified}}": String(row.email_otp_verified),
     "{{lead.phoneVerified}}": String(row.phone_otp_verified),
     "{{course.id}}": row.course_id || "",
-    "{{course.name}}": row.course_name || "",
+    "{{course.name}}": row.course_name || row.course_preference || "",
     "{{course.shortName}}": row.course_short_name || "",
     "{{course.level}}": row.course_level || "",
     "{{course.stream}}": row.course_stream || "",

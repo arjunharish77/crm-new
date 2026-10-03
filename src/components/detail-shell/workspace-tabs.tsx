@@ -19,9 +19,11 @@ export function WorkspaceTabs<T extends string>({
   value: T;
   onChange: (value: T) => void;
 }) {
+  // One row of underline tabs (UI/UX plan §10.7): the accent marks only the current tab, and the
+  // row scrolls sideways on narrow screens instead of wrapping onto a second line.
   return (
-    <div className="border-b bg-surface-container-lowest px-2 py-2">
-      <div role="group" aria-label="Record workspace sections" className="flex min-w-0 max-w-full flex-wrap gap-1.5">
+    <div className="border-b bg-card px-2">
+      <div role="group" aria-label="Record workspace sections" className="-mb-px flex min-w-0 max-w-full gap-1 overflow-x-auto [scrollbar-width:none]">
         {tabs.map((tab) => (
           <button
             key={tab.value}
@@ -29,10 +31,10 @@ export function WorkspaceTabs<T extends string>({
             aria-pressed={value === tab.value}
             onClick={() => onChange(tab.value)}
             className={cn(
-              "min-h-[34px] min-w-0 max-w-full whitespace-normal break-words py-2 text-left rounded-lg px-3 text-[0.82rem] font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+              "h-10 shrink-0 whitespace-nowrap border-b-2 px-3 text-sm font-medium transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
               value === tab.value
-                ? "bg-primary font-extrabold text-primary-foreground"
-                : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+                ? "border-primary text-foreground"
+                : "border-transparent text-muted-foreground hover:text-foreground"
             )}
           >
             {tab.label}

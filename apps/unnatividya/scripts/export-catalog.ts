@@ -1,3 +1,4 @@
+import ts from "typescript";
 import fs from "fs";
 import path from "path";
 import { universities, courses, universityEnrichmentById, courseEnrichmentById } from "../src/data/catalog";
@@ -57,3 +58,14 @@ const output = {
 const outPath = path.join(__dirname, "catalog-export.json");
 fs.writeFileSync(outPath, JSON.stringify(output, null, 2));
 console.log(`export-catalog: wrote ${output.universities.length} universities and ${output.courses.length} courses to ${outPath}`);
+
+// Ship the same validator used by the app as plain CommonJS for pre-deploy readiness checks.
+// The runner image has production dependencies but no TypeScript source/runtime toolchain.
+const generatedPath = path.join(__dirname, "generated");
+fs.mkdirSync(generatedPath, { recursive: true });
+for (const name of ["catalog-snapshot", "catalog-reader"]) {
+  const source = fs.readFileSync(path.join(__dirname, "../src/lib", `${name}.ts`), "utf8");
+  const compiled = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: true } });
+  fs.writeFileSync(path.join(generatedPath, `${name}.js`), compiled.outputText);
+}
+console.log("export-catalog: generated the production catalog validator.");

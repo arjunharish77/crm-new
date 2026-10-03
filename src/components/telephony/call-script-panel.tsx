@@ -1,5 +1,6 @@
 "use client";
 
+import { useModuleEnabled } from "@/components/auth/feature-gate";
 import { useEffect, useState } from "react";
 import { FileText, ShieldAlert, HelpCircle, Sparkles } from "lucide-react";
 import { apiFetch } from "@/lib/api";
@@ -24,7 +25,7 @@ type CallScriptContext = { script: CallScript | null; nbaHints: NbaHint[] };
 // deliberately shows only the TOP next-best-action hint inline (not the full recommendation
 // list, which is already rendered in full by NextBestActionPanel elsewhere on this same page)
 // to avoid duplicating that UI.
-export function CallScriptPanel({ recordType, recordId }: { recordType: "LEAD" | "OPPORTUNITY"; recordId: string }) {
+function CallScriptPanelContent({ recordType, recordId }: { recordType: "LEAD" | "OPPORTUNITY"; recordId: string }) {
     const [context, setContext] = useState<CallScriptContext | null>(null);
     const [loading, setLoading] = useState(true);
 
@@ -88,4 +89,12 @@ export function CallScriptPanel({ recordType, recordId }: { recordType: "LEAD" |
             )}
         </Card>
     );
+}
+
+// Renders nothing while the tenant's Telephony module is disabled or suspended (the APIs behind
+// it refuse those requests too); hooks stay unconditional inside CallScriptPanelContent.
+export function CallScriptPanel(props: { recordType: "LEAD" | "OPPORTUNITY"; recordId: string }) {
+    const telephonyEnabled = useModuleEnabled("TELEPHONY");
+    if (!telephonyEnabled) return null;
+    return <CallScriptPanelContent {...props} />;
 }

@@ -1,6 +1,7 @@
+import { archiveItemForTenant } from "@/lib/server/archive-items";
+import { assertModuleEnabled, assertTenantModule, isModuleEnabledForTenant } from "@/lib/server/module-entitlements";
 import { randomUUID } from "crypto";
 import { createAuditLog, automationConditionMatches } from "@/lib/server/crm";
-import { assertModuleEnabled, isModuleEnabledForTenant } from "@/lib/server/module-entitlements";
 import { query, queryOne, execute, jsonbParam, queryAsSystem } from "@/lib/db/query";
 import { getLeadForTenant, updateLeadForTenant } from "@/lib/repositories/leads-postgres";
 import { getOpportunityForTenant, updateOpportunityForTenant } from "@/lib/repositories/opportunities-postgres";
@@ -92,12 +93,19 @@ const RECOMMENDATION_COLUMNS = `id, "tenantId", "strategyId", "ruleId", "recordT
 
 // --- Strategy CRUD ---
 
-export async function getNextBestActionStrategyForModule(user: TenantUser, targetModule: NbaRecordType) {
+// Unguarded reader for callers that already checked the module (e.g. the per-save hot path);
+// routes use getNextBestActionStrategyForModule, which checks first.
+export async function readNextBestActionStrategy(user: TenantUser, targetModule: NbaRecordType) {
   if (!user.tenantId) return null;
   return queryOne<any>(
     `select ${STRATEGY_COLUMNS} from "NextBestActionStrategy" where "tenantId" = $1 and "targetModule" = $2 limit 1`,
     [user.tenantId, targetModule],
   );
+}
+
+export async function getNextBestActionStrategyForModule(user: TenantUser, targetModule: NbaRecordType) {
+  await assertTenantModule(user, "NEXT_BEST_ACTION");
+  return readNextBestActionStrategy(user, targetModule);
 }
 
 export async function listNextBestActionStrategiesForTenant(user: TenantUser) {
@@ -114,7 +122,7 @@ export async function upsertNextBestActionStrategy(
 ) {
   if (!user.tenantId) throw new Error("TENANT_CONTEXT_REQUIRED");
   await assertModuleEnabled(user.tenantId, "NEXT_BEST_ACTION", { isPlatformAdmin: user.isPlatformAdmin });
-  const existing = await getNextBestActionStrategyForModule(user, targetModule);
+  const existing = await readNextBestActionStrategy(user, targetModule);
   const now = new Date().toISOString();
   const payload = {
     name: input.name,
@@ -162,8 +170,9 @@ export async function upsertNextBestActionStrategy(
 
 export async function listNextBestActionRulesForStrategy(user: TenantUser, strategyId: string) {
   if (!user.tenantId) return [];
+  await assertTenantModule(user, "NEXT_BEST_ACTION");
   return query<any>(
-    `select ${RULE_COLUMNS} from "NextBestActionRule" where "tenantId" = $1 and "strategyId" = $2 order by priority desc, "createdAt" asc`,
+    `select ${RULE_COLUMNS} from "NextBestActionRule" where "tenantId" = $1 and "strategyId" = $2 and "deletedAt" is null order by priority desc, "createdAt" asc`,
     [user.tenantId, strategyId],
   );
 }
@@ -226,7 +235,7 @@ export async function createNextBestActionRule(user: TenantUser, strategyId: str
 export async function updateNextBestActionRule(user: TenantUser, id: string, input: Partial<NextBestActionRuleInput>) {
   if (!user.tenantId) throw new Error("TENANT_CONTEXT_REQUIRED");
   await assertModuleEnabled(user.tenantId, "NEXT_BEST_ACTION", { isPlatformAdmin: user.isPlatformAdmin });
-  const existing = await queryOne<any>(`select ${RULE_COLUMNS} from "NextBestActionRule" where "tenantId" = $1 and id = $2 limit 1`, [
+  const existing = await queryOne<any>(`select ${RULE_COLUMNS} from "NextBestActionRule" where "tenantId" = $1 and id = $2 and "deletedAt" is null limit 1`, [
     user.tenantId,
     id,
   ]);
@@ -247,7 +256,7 @@ export async function updateNextBestActionRule(user: TenantUser, id: string, inp
   const columns = Object.keys(patch);
   const assignments = columns.map((column, index) => `"${column}" = $${index + 1}`).join(", ");
   const data = await queryOne<any>(
-    `update "NextBestActionRule" set ${assignments} where "tenantId" = $${columns.length + 1} and id = $${columns.length + 2} returning ${RULE_COLUMNS}`,
+    `update "NextBestActionRule" set ${assignments} where "tenantId" = $${columns.length + 1} and id = $${columns.length + 2} and "deletedAt" is null returning ${RULE_COLUMNS}`,
     [...columns.map((column) => patch[column]), user.tenantId, id],
   );
   if (!data) return null;
@@ -258,14 +267,15 @@ export async function updateNextBestActionRule(user: TenantUser, id: string, inp
 export async function deleteNextBestActionRule(user: TenantUser, id: string) {
   if (!user.tenantId) throw new Error("TENANT_CONTEXT_REQUIRED");
   await assertModuleEnabled(user.tenantId, "NEXT_BEST_ACTION", { isPlatformAdmin: user.isPlatformAdmin });
-  const existing = await queryOne<any>(`select ${RULE_COLUMNS} from "NextBestActionRule" where "tenantId" = $1 and id = $2 limit 1`, [
+  const existing = await queryOne<any>(`select ${RULE_COLUMNS} from "NextBestActionRule" where "tenantId" = $1 and id = $2 and "deletedAt" is null limit 1`, [
     user.tenantId,
     id,
   ]);
   if (!existing) return null;
-  await execute('delete from "NextBestActionRule" where "tenantId" = $1 and id = $2', [user.tenantId, id]);
-  await createAuditLog(user as any, "DELETE", "NBA_RULE", id, existing, null, null);
-  return existing;
+  // Delete archives the rule (decision 31): it stops recommending at once and can be restored for
+  // 30 days; recommendations it already made keep their link to it.
+  const archived = await archiveItemForTenant(user as any, "recommended-action-rule", id);
+  return { ...existing, purgeAfter: archived.purgeAfter };
 }
 
 // --- Deterministic scoring (the "no ml-service required" fallback path, built first
@@ -285,7 +295,7 @@ function scoreBandToNumber(band: string | undefined | null): number {
 async function getOwnerOpenRecordCount(tenantId: string, ownerId: string): Promise<number> {
   const [leadRow, oppRow] = await Promise.all([
     queryOne<{ count: string }>(
-      `select count(*) as count from "Lead" where "tenantId" = $1 and "ownerId" = $2 and coalesce(upper(status), '') not in ('LOST', 'CONVERTED', 'DISQUALIFIED')`,
+      `select count(*) as count from "Lead" where "tenantId" = $1 and "ownerId" = $2 and crm_lead_status_category("tenantId", status) = 'OPEN'`,
       [tenantId, ownerId],
     ),
     queryOne<{ count: string }>(
@@ -403,7 +413,7 @@ async function fetchRecord(user: TenantUser, recordType: NbaRecordType, recordId
 export async function generateRecommendationsForRecord(user: TenantUser, recordType: NbaRecordType, recordId: string) {
   if (!user.tenantId) return [];
   if (!user.isPlatformAdmin && !(await isModuleEnabledForTenant(user.tenantId, "NEXT_BEST_ACTION"))) return [];
-  const strategy = await getNextBestActionStrategyForModule(user, recordType);
+  const strategy = await readNextBestActionStrategy(user, recordType);
   if (!strategy || !strategy.isActive) return [];
 
   const record = await fetchRecord(user, recordType, recordId);
@@ -429,7 +439,7 @@ export async function generateRecommendationsForRecord(user: TenantUser, recordT
   }
 
   const rules = await query<any>(
-    `select ${RULE_COLUMNS} from "NextBestActionRule" where "tenantId" = $1 and "strategyId" = $2 and "isActive" = true`,
+    `select ${RULE_COLUMNS} from "NextBestActionRule" where "tenantId" = $1 and "strategyId" = $2 and "isActive" = true and "deletedAt" is null`,
     [user.tenantId, strategy.id],
   );
 
@@ -878,6 +888,7 @@ export async function completeLinkedRecommendation(user: TenantUser, recommendat
 
 export async function listPendingApprovalsForManager(user: TenantUser) {
   if (!user.tenantId) return [];
+  await assertTenantModule(user, "NEXT_BEST_ACTION");
   // Avoids a join against "User" (whose own id/tenantId/createdAt/updatedAt columns would
   // otherwise collide with RECOMMENDATION_COLUMNS' unqualified names) by resolving direct
   // reports as a subquery instead.
@@ -1022,7 +1033,7 @@ export async function processDueNextBestActionRefresh(limit = 50) {
     const table = strategy.targetModule === "LEAD" ? "Lead" : "Opportunity";
     const closedFilter =
       strategy.targetModule === "LEAD"
-        ? `coalesce(upper(r.status), '') not in ('LOST', 'CONVERTED', 'DISQUALIFIED')`
+        ? `crm_lead_status_category(r."tenantId", r.status) = 'OPEN'`
         : `not exists (select 1 from "StageDefinition" s where s.id = r."stageId" and s."isClosed" = true)`;
 
     const candidateRecords = await queryAsSystem<{ id: string }>(

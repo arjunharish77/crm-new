@@ -1,8 +1,10 @@
+import { assertTenantModule } from "@/lib/server/module-entitlements";
 import { randomUUID, createHmac } from "crypto";
 import { query, queryOne, execute, queryAsSystem, queryOneAsSystem, type Queryable } from "@/lib/db/query";
 import { createUserNotification } from "@/lib/server/notifications";
 import { checkRateLimitWithAlert } from "@/lib/server/rate-limit";
 import { assertSafeOutboundUrl } from "@/lib/server/outbound-request-guard";
+import { isModuleEnabledForTenant } from "@/lib/server/module-entitlements";
 
 type TenantUser = {
   id: string;
@@ -77,6 +79,10 @@ export async function enqueueWebhookEvent(
     client,
   );
   if (!subscriptions.length) return;
+  // Outbound webhooks belong to the Data Platform module. Checked only once there is something
+  // to deliver, and never thrown: this runs inside record writes (e.g. lead creation), which must
+  // not fail because an integration module is switched off.
+  if (!(await isModuleEnabledForTenant(tenantId, "DATA_PLATFORM"))) return;
   const now = new Date().toISOString();
   for (const subscription of subscriptions) {
     await execute(
@@ -101,7 +107,9 @@ async function deliverOne(row: {
     `select id, url, secret, "isActive", "rateLimitPerMinute" from "WebhookSubscription" where id = $1`,
     [row.subscriptionId],
   );
-  if (!subscription || !subscription.isActive) {
+  // A delivery queued before Data Platform was switched off is cancelled, not held: re-enabling
+  // the module must not replay a backlog of stale events to the tenant's endpoints.
+  if (!subscription || !subscription.isActive || !(await isModuleEnabledForTenant(row.tenantId, "DATA_PLATFORM"))) {
     await execute(`update "WebhookOutbox" set status = 'CANCELLED', "leaseExpiresAt" = null, "updatedAt" = $1 where id = $2`, [new Date().toISOString(), row.id]);
     return;
   }
@@ -231,6 +239,7 @@ export async function processWebhookOutbox(limit = 25) {
 
 export async function listWebhookDeliveriesForSubscription(user: TenantUser, subscriptionId: string, limit = 50) {
   if (!user.tenantId) return [];
+  await assertTenantModule(user, "DATA_PLATFORM");
   return query<any>(
     `select wo.id, wo."eventType", wo.status, wo."retryCount", wo."httpStatus", wo."responseBody", wo.error, wo."createdAt", wo."processedAt"
      from "WebhookOutbox" wo
@@ -249,6 +258,7 @@ export async function listWebhookDeliveriesForSubscription(user: TenantUser, sub
 // and mixing it into delivery-log stats would misrepresent real endpoint health.
 export async function sendTestWebhookDelivery(user: TenantUser, subscriptionId: string) {
   if (!user.tenantId) throw new Error("TENANT_REQUIRED");
+  await assertTenantModule(user, "DATA_PLATFORM");
   const subscription = await queryOne<{ id: string; url: string; secret: string | null; events: string[] }>(
     `select id, url, secret, events from "WebhookSubscription" where id = $1 and "tenantId" = $2`,
     [subscriptionId, user.tenantId],

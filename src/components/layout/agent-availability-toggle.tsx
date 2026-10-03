@@ -1,5 +1,6 @@
 "use client";
 
+import { useModuleEnabled } from "@/components/auth/feature-gate";
 import { useEffect, useState } from "react";
 import { Circle, Coffee, CircleOff } from "lucide-react";
 import { toast } from "sonner";
@@ -15,8 +16,8 @@ import { apiFetch } from "@/lib/api";
 type Status = "ONLINE" | "OFFLINE" | "BREAK";
 
 const STATUS_META: Record<Status, { label: string; icon: typeof Circle; className: string }> = {
-    ONLINE: { label: "Online", icon: Circle, className: "text-emerald-600" },
-    BREAK: { label: "On Break", icon: Coffee, className: "text-amber-600" },
+    ONLINE: { label: "Online", icon: Circle, className: "text-status-success-foreground" },
+    BREAK: { label: "On Break", icon: Coffee, className: "text-status-warning-foreground" },
     OFFLINE: { label: "Offline", icon: CircleOff, className: "text-muted-foreground" },
 };
 
@@ -24,7 +25,7 @@ const STATUS_META: Record<Status, { label: string; icon: typeof Circle; classNam
 // /dashboard/settings, which is gated to Tenant Admins only) so every rep can set their own
 // status regardless of admin permissions -- the supervisor override view lives separately
 // under Settings > Agent Availability.
-export function AgentAvailabilityToggle() {
+function AgentAvailabilityToggleContent() {
     const [status, setStatus] = useState<Status>("OFFLINE");
     const [saving, setSaving] = useState(false);
 
@@ -72,4 +73,12 @@ export function AgentAvailabilityToggle() {
             </DropdownMenuContent>
         </DropdownMenu>
     );
+}
+
+// Renders nothing while the tenant's Telephony module is disabled or suspended (the APIs behind
+// it refuse those requests too); hooks stay unconditional inside AgentAvailabilityToggleContent.
+export function AgentAvailabilityToggle() {
+    const telephonyEnabled = useModuleEnabled("TELEPHONY");
+    if (!telephonyEnabled) return null;
+    return <AgentAvailabilityToggleContent />;
 }

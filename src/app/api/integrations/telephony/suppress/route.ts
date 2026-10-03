@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { requireCurrentUser } from "@/lib/server/auth";
+import { requireCurrentUser, requireTenantAdmin } from "@/lib/server/auth";
 import { badRequest, forbidden, serverError, unauthorized } from "@/lib/server/http";
 import { listPhoneSuppressionsForTenant, suppressPhoneNumberForTenant } from "@/lib/server/communications";
 
@@ -22,7 +22,7 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    const user = await requireCurrentUser(request);
+    const user = await requireTenantAdmin(request);
     if (!hasTelephonyAdminAccess(user)) return forbidden("You don't have permission to manage the do-not-call list");
     const body = await request.json().catch(() => null);
     if (!body?.phoneNumber) return badRequest("phoneNumber is required");
@@ -30,6 +30,7 @@ export async function POST(request: Request) {
     return NextResponse.json(suppression);
   } catch (error) {
     if (error instanceof Error && error.message === "UNAUTHORIZED") return unauthorized();
+    if (error instanceof Error && error.message === "FORBIDDEN") return forbidden("Only admins can do this");
     if (error instanceof Error && error.message === "RECIPIENT_REQUIRED") return badRequest("phoneNumber is required");
     return serverError("Failed to add number to do-not-call list", error);
   }

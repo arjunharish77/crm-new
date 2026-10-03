@@ -1,5 +1,6 @@
 "use client";
 
+import { useModuleEnabled } from "@/components/auth/feature-gate";
 import { useEffect, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { apiFetch } from "@/lib/api";
@@ -14,7 +15,7 @@ interface ExternalPushBadgeProps {
 
 // Not gated by the "integrations" permission -- anyone who can view this record can see its
 // push status, same as any other metadata on the page (see plan's permission-scope decision).
-export function ExternalPushBadge({ leadId, opportunityId, refreshKey }: ExternalPushBadgeProps) {
+function ExternalPushBadgeContent({ leadId, opportunityId, refreshKey }: ExternalPushBadgeProps) {
     const [lastAttempt, setLastAttempt] = useState<any>(null);
 
     useEffect(() => {
@@ -34,4 +35,11 @@ export function ExternalPushBadge({ leadId, opportunityId, refreshKey }: Externa
             {lastAttempt.status === "SUCCESS" ? "Pushed" : "Push failed"} to {lastAttempt.integrationName || "external system"} · {formatWorkspaceDateTime(lastAttempt.createdAt)}
         </Badge>
     );
+}
+
+// Hidden while the tenant's Data Platform module is off (external pushes are refused server-side).
+export function ExternalPushBadge(props: ExternalPushBadgeProps) {
+    const dataPlatformEnabled = useModuleEnabled("DATA_PLATFORM");
+    if (!dataPlatformEnabled) return null;
+    return <ExternalPushBadgeContent {...props} />;
 }

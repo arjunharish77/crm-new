@@ -14,7 +14,7 @@ async function main() {
   try {
     const context = await browser.newContext({ storageState: process.env.CRM_AUDIT_AUTH_STATE, viewport: { width: 390, height: 720 } });
     const page = await context.newPage();
-    await page.goto(base + '/dashboard/settings/service-desk');
+    await page.goto(base + '/dashboard/settings/service/desk');
     const section = page.getByRole('combobox', { name: 'Service Desk section', exact: true });
     await section.waitFor();
     await page.getByRole('textbox', { name: 'New case type name', exact: true }).fill('Unsaved type draft');
@@ -41,7 +41,7 @@ async function main() {
       }
     }
     await page.setViewportSize({ width: 390, height: 667 });
-    await page.goto(base + '/dashboard/settings/permission-templates');
+    await page.goto(base + '/dashboard/settings/access/roles?tab=templates');
     await page.getByRole('button', { name: 'Create Template', exact: true }).click();
     const dialog = page.getByRole('dialog');
     await dialog.getByLabel('Template Name', { exact: true }).fill('Unsaved permissions draft');
@@ -63,7 +63,7 @@ async function main() {
     const failed = await context.newPage();
     let unavailable = true;
     await failed.route('**/api/settings/task-sla-policies', route => route.fulfill({ status: unavailable ? 503 : 200, contentType: 'application/json', body: JSON.stringify(unavailable ? { message: 'UI fixture: unavailable' } : []) }));
-    await failed.goto(base + '/dashboard/settings/task-sla-policies');
+    await failed.goto(base + '/dashboard/settings/automation/service-levels');
     const error = failed.getByRole('alert').filter({ hasText: 'Failed to load SLA policies.' });
     await error.waitFor();
     await failed.waitForTimeout(1500);

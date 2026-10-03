@@ -1,4 +1,5 @@
-import { courses, universities } from "@/data/catalog";
+import type { CatalogReader } from "@/lib/catalog-snapshot";
+
 import { eligibilityGuides, careerScopeGuides, ugcApprovalGuides } from "@/data/guide-content";
 import { allSpecializationPages } from "@/lib/specializations";
 
@@ -21,7 +22,8 @@ export function courseLabel(courseName: string) {
   return courseName.replace(/^Online\s+/i, "Online ");
 }
 
-export function generateProgrammaticSeoCandidates(): ProgrammaticSeoCandidate[] {
+export function generateProgrammaticSeoCandidates(catalog: CatalogReader): ProgrammaticSeoCandidate[] {
+  const { courses, universities } = catalog;
   const liveCoursePages = courses.map((course) => ({
     slug: `/courses/${course.slug}`,
     title: `${course.name} from ${universities.find((university) => university.id === course.universityId)?.name || "University"}`,
@@ -109,10 +111,10 @@ export function generateProgrammaticSeoCandidates(): ProgrammaticSeoCandidate[] 
     matching.forEach((left, leftIndex) => {
       matching.slice(leftIndex + 1).forEach((right) => {
         const [a, b] = [left, right].sort((x, y) => x.universityId.localeCompare(y.universityId));
-        const pairSlug = `${universitySlug(a.universityId)}-vs-${universitySlug(b.universityId)}`;
+        const pairSlug = `${universitySlug(catalog, a.universityId)}-vs-${universitySlug(catalog, b.universityId)}`;
         pairs.push({
           slug: `/compare/${key}/${pairSlug}`,
-          title: `${left.name}: ${universityShortName(left.universityId)} vs ${universityShortName(right.universityId)}`,
+          title: `${left.name}: ${universityShortName(catalog, left.universityId)} vs ${universityShortName(catalog, right.universityId)}`,
           intent: "COMPARISON",
           entity: `${left.id}:${right.id}`,
           routeType: "LIVE",
@@ -125,7 +127,7 @@ export function generateProgrammaticSeoCandidates(): ProgrammaticSeoCandidate[] 
     return pairs;
   });
 
-  const specializationCandidates = allSpecializationPages().map((page) => ({
+  const specializationCandidates = allSpecializationPages(catalog).map((page) => ({
     slug: `/specializations/${page.slug}`,
     title: `${page.courseLabel} in ${page.specialization}`,
     intent: "SPECIALIZATION" as const,
@@ -139,10 +141,12 @@ export function generateProgrammaticSeoCandidates(): ProgrammaticSeoCandidate[] 
   return [...liveCoursePages, ...liveUniversityPages, ...guideCandidates, ...comparisonCandidates, ...specializationCandidates];
 }
 
-function universityShortName(id: string) {
+function universityShortName(catalog: CatalogReader, id: string) {
+  const { universities } = catalog;
   return universities.find((university) => university.id === id)?.shortName || id.toUpperCase();
 }
 
-function universitySlug(id: string) {
+function universitySlug(catalog: CatalogReader, id: string) {
+  const { universities } = catalog;
   return universities.find((university) => university.id === id)?.slug || id;
 }

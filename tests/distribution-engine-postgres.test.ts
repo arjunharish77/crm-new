@@ -278,6 +278,9 @@ vi.mock("@/lib/db/transaction", () => ({
 
 vi.mock("@/lib/server/module-entitlements", () => ({
   isModuleEnabledForTenant: vi.fn(async () => state.moduleEnabled),
+  assertTenantModule: vi.fn(async (user: { isPlatformAdmin?: boolean }, moduleKey: string) => {
+    if (!state.moduleEnabled && !user.isPlatformAdmin) throw new Error(`MODULE_DISABLED:${moduleKey}`);
+  }),
 }));
 
 const runAutomationsForEventMock = vi.fn(async () => []);

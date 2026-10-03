@@ -1,3 +1,5 @@
+import { getTenantTodayRange } from "@/lib/server/date-format";
+import { assertTenantModule } from "@/lib/server/module-entitlements";
 import { query } from "@/lib/db/query";
 import { listCallDispositionsForTenant } from "@/lib/server/dispositions";
 import { listAgentAvailabilityForTenant } from "@/lib/server/agent-availability";
@@ -22,8 +24,8 @@ function hasCallCenterSupervisorAccess(user: TenantUser) {
 }
 
 async function listCalls(tenantId: string, agentId: string | null, kind: "LIVE" | "MISSED_TODAY", limit: number) {
-  const startOfToday = new Date();
-  startOfToday.setHours(0, 0, 0, 0);
+  // "Missed today" from the workspace's midnight, not the server's.
+  const startOfToday = new Date((await getTenantTodayRange(tenantId)).start);
   const fourHoursAgo = new Date(Date.now() - 4 * 60 * 60 * 1000);
 
   const conditions = [`tcl."tenantId" = $1`];
@@ -91,7 +93,8 @@ async function listMyOpenLeads(tenantId: string, ownerId: string, limit: number)
     `select id, name, phone, status, "updatedAt"
      from "Lead"
      where "tenantId" = $1 and "ownerId" = $2 and "deletedAt" is null
-       and coalesce(upper(status), '') not in ('LOST', 'CONVERTED', 'DISQUALIFIED')
+       -- Open-category statuses only (tenant-configurable, UI/UX plan decision 6).
+       and crm_lead_status_category("tenantId", status) = 'OPEN'
      order by "updatedAt" desc
      limit $3`,
     [tenantId, ownerId, limit],
@@ -117,6 +120,7 @@ async function listMyOpenOpportunities(tenantId: string, ownerId: string, limit:
 // "team" section -- tenant-wide live/missed calls, the existing agent availability roster, and
 // tenant-wide recent dispositions and queue health.
 export async function getCallCenterWorkspaceForTenant(user: TenantUser) {
+  await assertTenantModule(user, "TELEPHONY");
   const tenantId = requireTenantId(user);
   const isSupervisor = hasCallCenterSupervisorAccess(user);
 

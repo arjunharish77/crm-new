@@ -18,8 +18,7 @@ function BarLink({ action, variant }: { action: BarAction; variant: "primary" | 
 }
 
 // Full-width sticky bottom bar shown only on mobile (see .uv-mobile-action-bar in globals.css),
-// on the specific conversion pages that render one. Desktop keeps the generic floating pair in
-// sticky-ctas.tsx -- this replaces it on mobile for those pages only.
+// on the specific conversion pages that render one. Generic floating actions are desktop-only.
 export function StickyMobileBar({ primary, secondary }: { primary: BarAction; secondary?: BarAction }) {
   return (
     <div className="uv-mobile-action-bar" aria-label="Quick actions">

@@ -3,35 +3,23 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { ColumnDef } from "@tanstack/react-table";
-import { Eye, ExternalLink, Pencil } from "lucide-react";
+import { Phone } from "lucide-react";
 import { Lead } from "@/types/leads";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { Button } from "@/components/ui/button";
-import { Select, SelectContent, SelectItem, SelectTrigger } from "@/components/ui/select";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { PredictiveScoreBadge } from "@/components/scoring/predictive-score";
 import { NbaCountChip } from "@/components/next-best-action/nba-count-chip";
-import { formatWorkspaceDate } from "@/lib/date-format";
+import { LeadStatusSelect } from "@/components/leads/lead-status";
+import { formatWorkspaceDate, formatWorkspaceRelativeTime, isPastDate } from "@/lib/date-format";
+import { statusDisplay } from "@/lib/display/status";
 import { cn } from "@/lib/utils";
 
-// Same status -> color mapping the MUI version used, ported to Tailwind classes
-// keyed off the M3 tokens rather than fixed hex values.
-const STATUS_CLASSNAMES: Record<string, string> = {
-    NEW: "bg-primary/8 text-primary border-primary/20",
-    QUALIFIED: "bg-secondary/15 text-foreground border-secondary/30",
-    LOST: "bg-destructive/8 text-destructive border-destructive/20",
-    CONVERTED: "bg-tertiary/12 text-tertiary border-tertiary/25",
-};
-const DEFAULT_STATUS_CLASSNAME = "bg-muted text-muted-foreground border-border";
-const LEAD_STATUS_OPTIONS = Object.keys(STATUS_CLASSNAMES);
-
 export type LeadColumnActions = {
-    onQuickView: (leadId: string) => void;
-    onEdit: (lead: Lead) => void;
     // Inline status edit -- resolves once the PATCH settles (or throws), so the cell can
     // roll back optimistic UI on failure without the parent needing to know cell internals.
     onStatusChange: (lead: Lead, status: string) => Promise<void>;
 };
+
+// Columns hidden until a user turns them on (decisions 5 and 21). Saved choices are kept.
+export const LEAD_DEFAULT_HIDDEN = { email: false, createdAt: false, pendingNbaCount: false };
 
 function StatusCell({ lead, onStatusChange }: { lead: Lead; onStatusChange: LeadColumnActions["onStatusChange"] }) {
     const [status, setStatus] = useState(lead.status);
@@ -42,10 +30,11 @@ function StatusCell({ lead, onStatusChange }: { lead: Lead; onStatusChange: Lead
     useEffect(() => setStatus(lead.status), [lead.status]);
 
     return (
-        <Select
+        <LeadStatusSelect
             value={status}
             disabled={saving}
-            onValueChange={(next) => {
+            ariaLabel={`Status for ${lead.name}`}
+            onChange={(next) => {
                 const previous = status;
                 setStatus(next);
                 setSaving(true);
@@ -53,24 +42,62 @@ function StatusCell({ lead, onStatusChange }: { lead: Lead; onStatusChange: Lead
                     .catch(() => setStatus(previous))
                     .finally(() => setSaving(false));
             }}
-        >
-            <SelectTrigger
-                size="sm"
-                aria-label={`Status for ${lead.name}`}
-                onClick={(e) => e.stopPropagation()}
-                className={cn(
-                    "h-7 w-fit gap-1 rounded-full border px-2.5 text-xs font-bold uppercase tracking-wide [&_svg]:size-3",
-                    STATUS_CLASSNAMES[status] ?? DEFAULT_STATUS_CLASSNAME,
-                )}
+        />
+    );
+}
+
+const BAND_DOT: Record<string, string> = {
+    success: "bg-status-success-foreground",
+    warning: "bg-status-warning-foreground",
+    danger: "bg-status-danger-foreground",
+    info: "bg-status-info-foreground",
+    neutral: "bg-status-neutral-foreground",
+    accent: "bg-status-accent-foreground",
+};
+
+// One compact Score column (decision 21): the likelihood as a number with a small band dot; band,
+// likelihood and confidence in the tooltip.
+function ScoreCell({ lead }: { lead: Lead }) {
+    const score = lead.predictiveScore;
+    const value = score?.conversionProbability ?? null;
+    if (!score || value === null) return <span className="text-muted-foreground">—</span>;
+    const band = statusDisplay("scoreBand", score.scoreBand);
+    return (
+        <Tooltip>
+            <TooltipTrigger asChild>
+                <span className="inline-flex items-center gap-1.5 tabular-nums" tabIndex={0}>
+                    <span aria-hidden className={cn("size-2 rounded-full", BAND_DOT[band.tone])} />
+                    {Math.round(value)}
+                    <span className="sr-only">, {band.label}</span>
+                </span>
+            </TooltipTrigger>
+            <TooltipContent>
+                {band.label} · {Math.round(value)}% likely to convert · {Math.round(score.confidence ?? 0)}% confidence
+            </TooltipContent>
+        </Tooltip>
+    );
+}
+
+function NextTaskCell({ lead }: { lead: Lead }) {
+    const task = lead.nextTask;
+    if (!task) return <span className="text-muted-foreground">—</span>;
+    const due = task.dueAt ? new Date(task.dueAt) : null;
+    const overdue = isPastDate(task.dueAt);
+    return (
+        <div className="min-w-0 max-w-44">
+            <Link
+                href={`/dashboard/tasks?taskId=${task.id}`}
+                onClick={(event) => event.stopPropagation()}
+                className="block truncate hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
-                {status}
-            </SelectTrigger>
-            <SelectContent onClick={(e) => e.stopPropagation()}>
-                {LEAD_STATUS_OPTIONS.map((option) => (
-                    <SelectItem key={option} value={option}>{option}</SelectItem>
-                ))}
-            </SelectContent>
-        </Select>
+                {task.title}
+            </Link>
+            {due ? (
+                <span className={cn("text-xs", overdue ? "text-destructive" : "text-muted-foreground")}>
+                    {overdue ? "Overdue · " : ""}{formatWorkspaceDate(task.dueAt)}
+                </span>
+            ) : null}
+        </div>
     );
 }
 
@@ -78,116 +105,112 @@ export function buildLeadColumns(actions: LeadColumnActions): ColumnDef<Lead, an
     return [
         {
             accessorKey: "name",
-            header: "Lead Name",
-            size: 260,
+            id: "name",
+            header: "Name",
+            enableSorting: true,
+            size: 210,
             cell: ({ row }) => (
-                <div className="flex items-center gap-3">
-                    <Avatar className="size-8 text-sm font-bold">
-                        <AvatarFallback>{(row.original.name?.[0] ?? "L").toUpperCase()}</AvatarFallback>
-                    </Avatar>
+                <div className="min-w-0 max-w-52">
+                    {/* The first cell is a real link (§11.6 F): middle-click and keyboard work. */}
                     <Link
                         href={`/dashboard/leads/${row.original.id}`}
-                        className="font-bold text-primary hover:underline"
-                        onClick={(e) => e.stopPropagation()}
+                        onClick={(event) => event.stopPropagation()}
+                        className="block truncate font-medium text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                     >
-                        {row.original.name}
+                        {row.original.name || row.original.email || "Unnamed lead"}
                     </Link>
+                    {row.original.company ? <span className="block truncate text-xs text-muted-foreground">{row.original.company}</span> : null}
                 </div>
             ),
         },
         {
-            accessorKey: "email",
-            header: "Email",
-            size: 220,
-            cell: ({ row }) => <span className="text-muted-foreground">{row.original.email}</span>,
+            accessorKey: "phone",
+            id: "phone",
+            header: "Phone",
+            size: 150,
+            cell: ({ row }) => row.original.phone ? (
+                <a
+                    href={`tel:${row.original.phone.replace(/[^\d+]/g, "")}`}
+                    onClick={(event) => event.stopPropagation()}
+                    aria-label={`Call ${row.original.name}: ${row.original.phone}`}
+                    className="inline-flex items-center gap-1.5 tabular-nums hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                >
+                    <Phone className="size-3.5 text-muted-foreground" aria-hidden />
+                    {row.original.phone}
+                </a>
+            ) : <span className="text-muted-foreground">—</span>,
         },
         {
             accessorKey: "status",
+            id: "status",
             header: "Status",
-            size: 140,
+            enableSorting: true,
+            size: 130,
             cell: ({ row }) => <StatusCell lead={row.original} onStatusChange={actions.onStatusChange} />,
         },
         {
-            accessorKey: "source",
-            header: "Source",
-            size: 130,
-            cell: ({ row }) => <span className="text-xs font-medium text-muted-foreground">{row.original.source}</span>,
+            accessorKey: "ownerName",
+            id: "owner",
+            header: "Owner",
+            enableSorting: true,
+            size: 150,
+            cell: ({ row }) => row.original.ownerName
+                ? <span className="block max-w-32 truncate">{row.original.ownerName}</span>
+                : <span className="text-muted-foreground">Unassigned</span>,
+        },
+        {
+            accessorKey: "lastActivityAt",
+            id: "lastActivityAt",
+            header: "Last activity",
+            enableSorting: true,
+            size: 120,
+            cell: ({ row }) => row.original.lastActivityAt
+                ? <span className="text-muted-foreground" title={formatWorkspaceDate(row.original.lastActivityAt)}>{formatWorkspaceRelativeTime(row.original.lastActivityAt)}</span>
+                : <span className="text-muted-foreground">None yet</span>,
+        },
+        {
+            id: "nextTask",
+            header: "Next task",
+            size: 180,
+            cell: ({ row }) => <NextTaskCell lead={row.original} />,
         },
         {
             accessorKey: "predictiveScore",
-            header: "Predictive Score",
-            size: 190,
-            sortingFn: (rowA, rowB) => {
-                const a = rowA.original.predictiveScore?.conversionProbability ?? rowA.original.score ?? 0;
-                const b = rowB.original.predictiveScore?.conversionProbability ?? rowB.original.score ?? 0;
-                return a - b;
-            },
-            cell: ({ row }) => <PredictiveScoreBadge score={row.original.predictiveScore} />,
+            id: "score",
+            header: "Score",
+            enableSorting: true,
+            size: 80,
+            cell: ({ row }) => <ScoreCell lead={row.original} />,
         },
         {
-            accessorKey: "pendingNbaCount",
-            header: "Next Best Action",
+            accessorKey: "source",
+            id: "source",
+            header: "Source",
+            enableSorting: true,
             size: 130,
-            cell: ({ row }) => <NbaCountChip count={row.original.pendingNbaCount} />,
+            cell: ({ row }) => row.original.source ? <span className="text-muted-foreground">{row.original.source}</span> : <span className="text-muted-foreground">—</span>,
+        },
+        {
+            accessorKey: "email",
+            id: "email",
+            header: "Email",
+            size: 220,
+            cell: ({ row }) => row.original.email ? <span className="block max-w-56 truncate text-muted-foreground">{row.original.email}</span> : <span className="text-muted-foreground">—</span>,
         },
         {
             accessorKey: "createdAt",
+            id: "createdAt",
             header: "Created",
-            size: 140,
-            cell: ({ row }) => (
-                <span className="text-xs text-muted-foreground">{formatWorkspaceDate(row.original.createdAt)}</span>
-            ),
+            enableSorting: true,
+            size: 120,
+            cell: ({ row }) => <span className="text-muted-foreground">{formatWorkspaceDate(row.original.createdAt)}</span>,
         },
         {
-            id: "actions",
-            header: "",
-            size: 100,
-            cell: ({ row }) => (
-                <div className="flex items-center gap-0.5">
-                    <Tooltip>
-                        <TooltipTrigger asChild>
-                            <Button
-                                variant="ghost"
-                                size="icon-sm"
-                                aria-label="View preview"
-                                onClick={(e) => {
-                                    e.stopPropagation();
-                                    actions.onQuickView(row.original.id);
-                                }}
-                            >
-                                <Eye className="size-4" />
-                            </Button>
-                        </TooltipTrigger>
-                        <TooltipContent>View Preview</TooltipContent>
-                    </Tooltip>
-                    <Tooltip>
-                        <TooltipTrigger asChild>
-                            <Button variant="ghost" size="icon-sm" aria-label="Open detail" asChild onClick={(e) => e.stopPropagation()}>
-                                <Link href={`/dashboard/leads/${row.original.id}`}>
-                                    <ExternalLink className="size-4" />
-                                </Link>
-                            </Button>
-                        </TooltipTrigger>
-                        <TooltipContent>Open Detail</TooltipContent>
-                    </Tooltip>
-                    <Tooltip>
-                        <TooltipTrigger asChild>
-                            <Button
-                                variant="ghost"
-                                size="icon-sm"
-                                aria-label="Edit lead"
-                                onClick={(e) => {
-                                    e.stopPropagation();
-                                    actions.onEdit(row.original);
-                                }}
-                            >
-                                <Pencil className="size-4" />
-                            </Button>
-                        </TooltipTrigger>
-                        <TooltipContent>Edit</TooltipContent>
-                    </Tooltip>
-                </div>
-            ),
+            accessorKey: "pendingNbaCount",
+            id: "pendingNbaCount",
+            header: "Next best action",
+            size: 130,
+            cell: ({ row }) => <NbaCountChip count={row.original.pendingNbaCount} />,
         },
     ];
 }

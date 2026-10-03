@@ -29,28 +29,47 @@ export function RecordShareDialog({ open, onClose, recordType, recordId, recordL
     const [sharedTeamIds, setSharedTeamIds] = useState<string[]>([]);
     const [loading, setLoading] = useState(false);
     const [saving, setSaving] = useState(false);
+    // Saving replaces the record's whole share list, so it is only allowed once the current list
+    // has loaded. Before UI/UX plan B3, a failed load fell back to empty lists and Save then
+    // revoked every existing share.
+    const [shareLoadFailed, setShareLoadFailed] = useState(false);
+    const [optionsLoadFailed, setOptionsLoadFailed] = useState(false);
+    const [reload, setReload] = useState(0);
 
     useEffect(() => {
         if (!open) return;
+        let cancelled = false;
         setLoading(true);
-        Promise.all([
-            apiFetch<any[]>("/users").catch(() => []),
-            apiFetch<any[]>("/teams").catch(() => []),
-            apiFetch<any>(`/${recordType}/${recordId}/share`).catch(() => ({ sharedUserIds: [], sharedTeamIds: [] })),
+        setShareLoadFailed(false);
+        setOptionsLoadFailed(false);
+        Promise.allSettled([
+            apiFetch<any[]>("/users"),
+            apiFetch<any[]>("/teams"),
+            apiFetch<any>(`/${recordType}/${recordId}/share`),
         ])
             .then(([userData, teamData, share]) => {
-                setUsers(Array.isArray(userData) ? userData : []);
-                setTeams(Array.isArray(teamData) ? teamData : []);
-                setSharedUserIds(Array.isArray(share?.sharedUserIds) ? share.sharedUserIds : []);
-                setSharedTeamIds(Array.isArray(share?.sharedTeamIds) ? share.sharedTeamIds : []);
+                if (cancelled) return;
+                setUsers(userData.status === "fulfilled" && Array.isArray(userData.value) ? userData.value : []);
+                setTeams(teamData.status === "fulfilled" && Array.isArray(teamData.value) ? teamData.value : []);
+                setOptionsLoadFailed(userData.status === "rejected" || teamData.status === "rejected");
+                if (share.status === "fulfilled") {
+                    setSharedUserIds(Array.isArray(share.value?.sharedUserIds) ? share.value.sharedUserIds : []);
+                    setSharedTeamIds(Array.isArray(share.value?.sharedTeamIds) ? share.value.sharedTeamIds : []);
+                } else {
+                    setSharedUserIds([]);
+                    setSharedTeamIds([]);
+                    setShareLoadFailed(true);
+                }
             })
-            .finally(() => setLoading(false));
-    }, [open, recordType, recordId]);
+            .finally(() => { if (!cancelled) setLoading(false); });
+        return () => { cancelled = true; };
+    }, [open, recordType, recordId, reload]);
 
     const toggle = (values: string[], id: string, checked: boolean) =>
         checked ? [...new Set([...values, id])] : values.filter((value) => value !== id);
 
     const save = async () => {
+        if (loading || shareLoadFailed) return;
         setSaving(true);
         try {
             await apiFetch(`/${recordType}/${recordId}/share`, {
@@ -77,7 +96,7 @@ export function RecordShareDialog({ open, onClose, recordType, recordId, recordL
             actions={
                 <>
                     <Button variant="outline" onClick={onClose}>Cancel</Button>
-                    <Button disabled={loading || saving} onClick={save}>{saving ? "Saving..." : "Save"}</Button>
+                    <Button disabled={loading || saving || shareLoadFailed} onClick={save}>{saving ? "Saving..." : "Save"}</Button>
                 </>
             }
         >
@@ -85,11 +104,22 @@ export function RecordShareDialog({ open, onClose, recordType, recordId, recordL
                 <p className="text-xs text-muted-foreground">
                     Grant specific users or teams access to this record, on top of the normal ownership and role-based access rules.
                 </p>
+                {shareLoadFailed && (
+                    <div role="alert" className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">
+                        <span>Current sharing couldn&apos;t be loaded, so changes can&apos;t be saved.</span>
+                        <Button size="sm" variant="outline" onClick={() => setReload((value) => value + 1)}>Retry</Button>
+                    </div>
+                )}
+                {!shareLoadFailed && optionsLoadFailed && (
+                    <p role="status" className="text-xs text-status-warning-foreground">
+                        Some users or teams couldn&apos;t be loaded. Existing shares are kept when you save.
+                    </p>
+                )}
                 <div className="space-y-1.5">
                     <Label>Users</Label>
                     <DropdownMenu>
                         <DropdownMenuTrigger asChild>
-                            <Button variant="outline" className="w-full justify-between" disabled={loading}>
+                            <Button variant="outline" className="w-full justify-between" disabled={loading || shareLoadFailed}>
                                 {sharedUserIds.length === 0 ? "Select users" : `${sharedUserIds.length} selected`}
                             </Button>
                         </DropdownMenuTrigger>
@@ -112,7 +142,7 @@ export function RecordShareDialog({ open, onClose, recordType, recordId, recordL
                     <Label>Teams</Label>
                     <DropdownMenu>
                         <DropdownMenuTrigger asChild>
-                            <Button variant="outline" className="w-full justify-between" disabled={loading}>
+                            <Button variant="outline" className="w-full justify-between" disabled={loading || shareLoadFailed}>
                                 {sharedTeamIds.length === 0 ? "Select teams" : `${sharedTeamIds.length} selected`}
                             </Button>
                         </DropdownMenuTrigger>

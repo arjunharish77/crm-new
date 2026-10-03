@@ -1,45 +1,34 @@
+export const dynamic = "force-dynamic";
+import { PublishedCatalogBoundary } from "@/components/published-catalog-boundary";
+import { getPublishedCatalog } from "@/lib/catalog-snapshot-server";
 import type { Metadata } from "next";
 import { JsonLd } from "@/components/json-ld";
 import { RecommenderQuiz } from "@/components/recommender-quiz";
-import { courses } from "@/data/catalog";
 
 export const metadata: Metadata = {
-  title: "AI Course Recommender",
+  title: "Find Your Online Course",
   description: "Answer a few questions and shortlist online degree programs that fit your goal and budget.",
   alternates: { canonical: "/recommender" },
 };
 
 const FAQS: Array<[string, string]> = [
-  [
-    "How does the recommender decide which programs to shortlist?",
-    "It scores every program in our catalog against your 5 answers — degree level, stream of interest, budget, goal, and work status — adding points for a matching level or stream and for fitting your stated budget, then ranks the top 3 by that score, with rating and university placement rate as a small tie-breaker.",
-  ],
-  [
-    "Is this an actual AI model, or a fixed set of rules?",
-    "It's a rules-based matching engine tuned on your 5 answers, not a general AI model generating open-ended advice — we call it \"AI recommender\" because it personalizes results automatically, but the underlying logic is transparent scoring, not a black box.",
-  ],
-  [
-    "Can I ask the recommender follow-up questions?",
-    "Yes — after you see your shortlist, you can type questions like \"what's the cheapest option\" or \"which has better placements\", and it replies using the same catalog data behind your shortlist. For anything more nuanced, tap \"Enquire\" and a human counsellor will call you.",
-  ],
-  [
-    "Does using the recommender cost anything or share my data with universities?",
-    "No. The quiz runs entirely in your browser and doesn't share anything with universities — your answers are only submitted anywhere if you separately request a callback or enquire about a specific program.",
-  ],
-  [
-    "What if none of the recommended programs feel right?",
-    "Retake the quiz with different answers, ask the chat a follow-up question, or skip the recommender entirely and browse the full course catalog with filters at /courses.",
-  ],
+  ["How are courses matched?", "The tool filters listed programs by your chosen degree level, subject and maximum tuition budget. It shows up to three matches ordered by listed tuition, with a link to all matching courses. It does not rank course quality."],
+  ["Does this tool use AI?", "The current tool uses fixed filters, not a live AI model. It does not generate advice or verify eligibility, class schedules or admission availability."],
+  ["Do I need to sign up?", "No. Matching is free and does not require contact details. Apply now opens a separate enquiry form. Usage analytics follow the site's privacy policy."],
+  ["What if there are no matches?", "Edit your degree level, subject or budget, or browse the full catalog. The tool does not silently recommend courses outside your selected filters."],
+  ["Are these current university fee quotes?", "Results use listed catalog tuition. Confirm current fees, applicant category, additional charges and eligibility on the course and official university pages before applying."],
 ];
 
-export default function RecommenderPage() {
+export default async function RecommenderPage() {
+  const catalog = await getPublishedCatalog();
+  const { courses } = catalog;
   const faqJsonLd = {
     "@context": "https://schema.org",
     "@type": "FAQPage",
     mainEntity: FAQS.map(([question, answer]) => ({ "@type": "Question", name: question, acceptedAnswer: { "@type": "Answer", text: answer } })),
   };
 
-  return (
+  return <PublishedCatalogBoundary>{(
     <>
       <JsonLd data={faqJsonLd} />
       <RecommenderQuiz courses={courses} />
@@ -57,5 +46,5 @@ export default function RecommenderPage() {
         </section>
       </div>
     </>
-  );
+  )}</PublishedCatalogBoundary>;
 }

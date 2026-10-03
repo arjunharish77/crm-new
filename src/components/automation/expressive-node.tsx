@@ -21,6 +21,7 @@ import {
 } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
+import { nodeColor } from './node-colors';
 
 const ICONS: Record<string, any> = {
     trigger: Zap,
@@ -47,30 +48,6 @@ const ICONS: Record<string, any> = {
     branch: GitBranch,
 };
 
-const COLORS: Record<string, string> = {
-    trigger: '#2196f3',      // Blue
-    condition: '#ff9800',    // Orange
-    update_field: '#4caf50', // Green
-    create_activity: '#9c27b0', // Purple
-    send_email: '#ff5722',   // Deep Orange
-    webhook: '#e91e63',      // Pink
-    delay: '#607d8b',        // Blue Grey
-    wait: '#607d8b',
-    if_else: '#ff9800',
-    update_lead: '#4caf50',
-    update_opportunity: '#4caf50',
-    add_activity: '#9c27b0',
-    distribute_lead: '#0288d1',
-    distribute_opportunity: '#0288d1',
-    assign_owner: '#5c6bc0',
-    change_stage: '#43a047',
-    notify_user: '#ff7043',
-    remove_tag: '#00897b',
-    increment_score: '#7cb342',
-    clear_field: '#78909c',
-    stop: '#d32f2f',
-    branch: '#78909c',
-};
 
 function fieldText(value: unknown) {
     return String(value || "")
@@ -119,13 +96,13 @@ function summarizeNode(data: Record<string, any>) {
 
 export const ExpressiveNode = memo(({ data, selected }: NodeProps) => {
     const Icon = ICONS[data.type] || Zap;
-    const color = COLORS[data.type] || 'var(--primary)';
+    const color = nodeColor(data.type);
     const summary = summarizeNode(data);
 
     return (
         <div
             className={cn(
-                "group relative flex min-w-[180px] items-center gap-3 rounded-[24px] border-2 bg-card p-3 transition-all",
+                "group relative flex min-w-[180px] items-center gap-3 rounded-3xl border-2 bg-card p-3 transition-all",
                 selected ? "border-primary shadow-lg" : "border-border shadow-sm hover:border-primary/50 hover:shadow-md"
             )}
         >
@@ -141,14 +118,14 @@ export const ExpressiveNode = memo(({ data, selected }: NodeProps) => {
             />
 
             <div
-                className="flex size-8 shrink-0 items-center justify-center rounded-full text-white"
-                style={{ backgroundColor: color, boxShadow: `0 4px 12px ${color}4d` }}
+                className="flex size-8 shrink-0 items-center justify-center rounded-full text-card"
+                style={{ backgroundColor: color, boxShadow: `0 4px 12px color-mix(in srgb, ${color} 30%, transparent)` }}
             >
                 <Icon className="size-5" />
             </div>
 
             <div className="flex flex-col">
-                <span className="mb-0.5 text-[0.65rem] font-bold uppercase tracking-wide text-muted-foreground">
+                <span className="mb-0.5 text-xs font-bold uppercase tracking-wide text-muted-foreground">
                     {data.type !== 'trigger' ? String(data.type).replace(/_/g, ' ') : 'Trigger'}
                 </span>
                 <span className="text-sm font-semibold leading-tight">{data.label}</span>

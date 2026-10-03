@@ -1,8 +1,11 @@
+import { archiveItemForTenant } from "@/lib/server/archive-items";
+import { assertModuleEnabled, assertTenantModule } from "@/lib/server/module-entitlements";
+import { assertFeatureEnabled } from "@/lib/server/entitlements";
 import { randomUUID } from "crypto";
+import { seedDefaultStages } from "@/lib/repositories/stages-postgres";
 import { execute, query, queryOne, jsonbParam, queryAsSystem, executeAsSystem, type Queryable } from "@/lib/db/query";
 import { withTransaction } from "@/lib/db/transaction";
 import * as pgAdminModules from "@/lib/repositories/admin-modules-postgres";
-import { assertModuleEnabled } from "@/lib/server/module-entitlements";
 
 type TenantUser = {
   id: string;
@@ -246,11 +249,15 @@ async function loadAssignmentRuleConfigs(tenantId: string, ruleIds: string[], cl
 }
 
 export async function listAssignmentRulesForTenant(user: TenantUser) {
+  await assertTenantModule(user, "DISTRIBUTION");
   const tenantId = requireTenantId(user);
   const rows = await query<any>(
-    `select id, name, description, "entityType", priority, "isActive", strategy, "targetGroupId", "territoryField", "ruleSetId", "isDefault", "createdAt", "updatedAt"
+    // An archived rule set's rules show as ungrouped until it's restored.
+    `select id, name, description, "entityType", priority, "isActive", strategy, "targetGroupId", "territoryField",
+            case when exists (select 1 from "DistributionRuleSet" s where s.id = "AssignmentRule"."ruleSetId" and s."deletedAt" is null) then "ruleSetId" end as "ruleSetId",
+            "isDefault", "createdAt", "updatedAt"
      from "AssignmentRule"
-     where "tenantId" = $1
+     where "tenantId" = $1 and "deletedAt" is null
      order by priority desc`,
     [tenantId],
   );
@@ -340,7 +347,7 @@ async function writeAssignmentRuleChildRows(tenantId: string, ruleId: string, co
 async function loadAssignmentRuleForTenant(tenantId: string, ruleId: string, client: Queryable) {
   const rule = await queryOne<any>(
     `select id, name, description, "entityType", priority, "isActive", strategy, "targetGroupId", "territoryField", "ruleSetId", "isDefault", "createdAt", "updatedAt"
-     from "AssignmentRule" where "tenantId" = $1 and id = $2`,
+     from "AssignmentRule" where "tenantId" = $1 and id = $2 and "deletedAt" is null`,
     [tenantId, ruleId],
     client,
   );
@@ -428,7 +435,9 @@ export async function updateAssignmentRuleForTenant(user: TenantUser, id: string
   }
 
   return withTransaction(user, async (client) => {
-    await updateReturning<any>("AssignmentRule", payload, 'where "tenantId" = $1 and id = $2', [tenantId, id], "id");
+    // An archived rule can't be edited; restore it first.
+    const updated = await updateReturning<any>("AssignmentRule", payload, 'where "tenantId" = $1 and id = $2 and "deletedAt" is null', [tenantId, id], "id");
+    if (!updated) throw new Error("ASSIGNMENTRULE_NOT_FOUND");
 
     if ("config" in input) {
       // isDefault may not be part of THIS patch (e.g. only config changed) -- fall back to the
@@ -447,8 +456,9 @@ export async function updateAssignmentRuleForTenant(user: TenantUser, id: string
 export async function deleteAssignmentRuleForTenant(user: TenantUser, id: string) {
   const tenantId = requireTenantId(user);
   await assertModuleEnabled(tenantId, "DISTRIBUTION", { isPlatformAdmin: user.isPlatformAdmin });
-  // DistributionCondition/Target/Quota/Availability all cascade-delete via their ruleId FK.
-  await execute('delete from "AssignmentRule" where "tenantId" = $1 and id = $2', [tenantId, id]);
+  // Delete archives the rule (decision 31): it stops assigning at once and can be restored for 30
+  // days; its conditions, targets, quota and availability are kept with it.
+  return archiveItemForTenant(user, "assignment-rule", id);
 }
 
 // Drag/drop reordering: the dragged-into order becomes the new priority order top-to-bottom
@@ -466,6 +476,7 @@ export async function reorderAssignmentRulesForTenant(user: TenantUser, orderedI
 // grouping rules for display in the builder; AssignmentRule.ruleSetId is nullable (ungrouped is
 // the default) and ON DELETE SET NULL, so deleting a folder never destroys the rules in it.
 export async function listDistributionRuleSetsForTenant(user: TenantUser, entityType?: string) {
+  await assertTenantModule(user, "DISTRIBUTION");
   const tenantId = requireTenantId(user);
   const clauses = ['"tenantId" = $1'];
   const params: unknown[] = [tenantId];
@@ -474,7 +485,7 @@ export async function listDistributionRuleSetsForTenant(user: TenantUser, entity
     clauses.push(`"entityType" = $${params.length}`);
   }
   return query<any>(
-    `select id, "entityType", name, description, "order", "isActive", "createdAt", "updatedAt" from "DistributionRuleSet" where ${clauses.join(" and ")} order by "order" asc, name asc`,
+    `select id, "entityType", name, description, "order", "isActive", "createdAt", "updatedAt" from "DistributionRuleSet" where ${clauses.join(" and ")} and "deletedAt" is null order by "order" asc, name asc`,
     params,
   );
 }
@@ -511,7 +522,7 @@ export async function updateDistributionRuleSetForTenant(user: TenantUser, id: s
   return updateReturning<any>(
     "DistributionRuleSet",
     payload,
-    'where "tenantId" = $1 and id = $2',
+    'where "tenantId" = $1 and id = $2 and "deletedAt" is null',
     [tenantId, id],
     'id, "entityType", name, description, "order", "isActive", "createdAt", "updatedAt"',
   );
@@ -520,13 +531,15 @@ export async function updateDistributionRuleSetForTenant(user: TenantUser, id: s
 export async function deleteDistributionRuleSetForTenant(user: TenantUser, id: string) {
   const tenantId = requireTenantId(user);
   await assertModuleEnabled(tenantId, "DISTRIBUTION", { isPlatformAdmin: user.isPlatformAdmin });
-  await execute('delete from "DistributionRuleSet" where "tenantId" = $1 and id = $2', [tenantId, id]);
+  // Delete archives the folder (decision 31); its rules keep working and show as ungrouped until
+  // it's restored.
+  return archiveItemForTenant(user, "assignment-rule-set", id);
 }
 
 export async function listLeadScoringRulesForTenant(user: TenantUser) {
   const tenantId = requireTenantId(user);
   return query<any>(
-    'select id, name, description, "fieldKey", operator, value, "scoreChange", "isActive", "order", "createdAt", "updatedAt" from "LeadScoringRule" where "tenantId" = $1 order by "order" asc',
+    'select id, name, description, "fieldKey", operator, value, "scoreChange", "isActive", "order", "createdAt", "updatedAt" from "LeadScoringRule" where "tenantId" = $1 and "deletedAt" is null order by "order" asc',
     [tenantId],
   );
 }
@@ -563,7 +576,7 @@ export async function updateLeadScoringRuleForTenant(user: TenantUser, id: strin
   return updateReturning<any>(
     "LeadScoringRule",
     payload,
-    'where "tenantId" = $1 and id = $2',
+    'where "tenantId" = $1 and id = $2 and "deletedAt" is null',
     [tenantId, id],
     'id, name, description, "fieldKey", operator, value, "scoreChange", "isActive", "order", "createdAt", "updatedAt"',
   );
@@ -571,7 +584,8 @@ export async function updateLeadScoringRuleForTenant(user: TenantUser, id: strin
 
 export async function deleteLeadScoringRuleForTenant(user: TenantUser, id: string) {
   const tenantId = requireTenantId(user);
-  await execute('delete from "LeadScoringRule" where "tenantId" = $1 and id = $2', [tenantId, id]);
+  // Delete archives the rule (decision 31): it stops scoring at once; restore within 30 days.
+  return archiveItemForTenant(user, "lead-scoring-rule", id);
 }
 
 // WP07 (F04): BACKGROUND_JOB, disposition B -- its one caller is the worker's own
@@ -660,7 +674,8 @@ export async function createCustomFieldForTenant(user: TenantUser, input: Record
     isUnique: false,
     isImmutable: false,
     defaultValue: null,
-    options: Array.isArray(input.options) ? input.options : null,
+    // jsonbParam: a bare array would be sent as a Postgres array literal.
+    options: Array.isArray(input.options) ? jsonbParam(input.options) : null,
     entityType: input.entityType ? String(input.entityType) : null,
     entityTypeId: input.entityTypeId ? String(input.entityTypeId) : null,
     order: Number(input.order ?? 0),
@@ -678,7 +693,7 @@ export async function updateCustomFieldForTenant(user: TenantUser, id: string, i
   if ("key" in input) payload.key = String(input.key ?? "");
   if ("type" in input || "fieldType" in input) payload.type = normalizeFieldType(String(input.type ?? input.fieldType ?? "TEXT"));
   if ("required" in input || "isRequired" in input) payload.isRequired = input.required === true || input.isRequired === true;
-  if ("options" in input) payload.options = Array.isArray(input.options) ? input.options : null;
+  if ("options" in input) payload.options = Array.isArray(input.options) ? jsonbParam(input.options) : null;
   if ("entityType" in input) payload.entityType = input.entityType ? String(input.entityType) : null;
   if ("entityTypeId" in input) payload.entityTypeId = input.entityTypeId ? String(input.entityTypeId) : null;
   if ("order" in input) payload.order = Number(input.order ?? 0);
@@ -736,6 +751,7 @@ export async function listOpportunityTypeConfigsForTenant(user: TenantUser) {
 }
 
 export async function createOpportunityTypeConfigForTenant(user: TenantUser, input: Record<string, unknown>) {
+  await assertFeatureEnabled(user.tenantId, "opportunityEnabled", { isPlatformAdmin: user.isPlatformAdmin });
   const tenantId = requireTenantId(user);
   const objectId = await getObjectDefinitionId(tenantId, "OPPORTUNITY");
   const now = new Date().toISOString();
@@ -747,7 +763,7 @@ export async function createOpportunityTypeConfigForTenant(user: TenantUser, inp
   const programId = input.programId ? String(input.programId) : null;
   if (programId) await assertProgramBelongsToTenant(tenantId, programId);
 
-  return insertReturning<any>("OpportunityType", {
+  const created = await insertReturning<any>("OpportunityType", {
     id: randomUUID(),
     tenantId,
     objectId,
@@ -761,9 +777,14 @@ export async function createOpportunityTypeConfigForTenant(user: TenantUser, inp
     createdAt: now,
     updatedAt: now,
   }, 'id, name, description, icon, color, "order", "isActive", "programId", "createdAt", "updatedAt"');
+  // A new type starts with an open, a Won and a Lost stage, so opportunities can be created in it
+  // straight away; the stage editor changes them (decision 34).
+  await seedDefaultStages(tenantId, created.id);
+  return created;
 }
 
 export async function updateOpportunityTypeConfigForTenant(user: TenantUser, id: string, input: Record<string, unknown>) {
+  await assertFeatureEnabled(user.tenantId, "opportunityEnabled", { isPlatformAdmin: user.isPlatformAdmin });
   const tenantId = requireTenantId(user);
   const payload: Record<string, unknown> = { updatedAt: new Date().toISOString() };
   for (const key of ["name", "description", "icon", "color"]) {
@@ -787,11 +808,13 @@ export async function updateOpportunityTypeConfigForTenant(user: TenantUser, id:
 }
 
 export async function deleteOpportunityTypeConfigForTenant(user: TenantUser, id: string) {
+  await assertFeatureEnabled(user.tenantId, "opportunityEnabled", { isPlatformAdmin: user.isPlatformAdmin });
   const tenantId = requireTenantId(user);
   await execute('delete from "OpportunityType" where "tenantId" = $1 and id = $2', [tenantId, id]);
 }
 
 export async function reorderOpportunityTypesForTenant(user: TenantUser, ids: string[]) {
+  await assertFeatureEnabled(user.tenantId, "opportunityEnabled", { isPlatformAdmin: user.isPlatformAdmin });
   const tenantId = requireTenantId(user);
   const now = new Date().toISOString();
   await Promise.all(ids.map((id, index) => (

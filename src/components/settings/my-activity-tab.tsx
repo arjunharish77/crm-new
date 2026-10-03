@@ -71,7 +71,7 @@ export function MyActivityTab() {
 
   return (
     <div className="space-y-4">
-      <section className="rounded-[14px] border bg-card p-4">
+      <section className="rounded-xl border bg-card p-4">
         <p className="mb-3 text-xs font-bold uppercase tracking-wide text-muted-foreground/60">
           Today&apos;s activity ({logs.length})
         </p>
@@ -84,18 +84,18 @@ export function MyActivityTab() {
         </div>
       </section>
 
-      <section className="rounded-[14px] border bg-card p-4">
+      <section className="rounded-xl border bg-card p-4">
         <p className="mb-3 text-xs font-bold uppercase tracking-wide text-muted-foreground/60">Timeline</p>
         <div className="flex flex-col divide-y">
           {logs.map((log) => (
             <div key={log.id} className="flex flex-wrap items-center justify-between gap-2 py-2 text-sm">
               <div className="flex flex-wrap items-center gap-2">
-                <Badge variant="outline" className="rounded-md text-[0.65rem] font-semibold uppercase">
+                <Badge variant="outline" className="rounded-md text-xs font-semibold uppercase">
                   {log.action}
                 </Badge>
                 <span className="font-medium">{humanizeEntityType(log.entityType)}</span>
                 {log.metadata?.impersonatedBy ? (
-                  <Badge variant="secondary" className="rounded-md text-[0.6rem]">
+                  <Badge variant="secondary" className="rounded-md text-xs">
                     Performed by an admin impersonating you
                   </Badge>
                 ) : null}

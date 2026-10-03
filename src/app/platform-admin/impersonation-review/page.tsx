@@ -99,7 +99,7 @@ export default function ImpersonationReviewPage() {
                                             {session.impersonatedByName ?? "Unknown admin"} impersonated {session.userName} ({session.userEmail})
                                         </p>
                                         {session.reviewedAt && (
-                                            <Badge variant="outline" className="border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400">
+                                            <Badge variant="outline" className="border-status-success bg-status-success text-status-success-foreground">
                                                 <CheckCircle2 className="size-3" />
                                                 Reviewed
                                             </Badge>

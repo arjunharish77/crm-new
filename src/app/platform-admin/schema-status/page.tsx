@@ -36,8 +36,8 @@ interface MigrationStatusReport {
 }
 
 const STATUS_CLASSNAMES: Record<string, string> = {
-    APPLIED: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400',
-    PENDING: 'border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-400',
+    APPLIED: 'border-status-success bg-status-success text-status-success-foreground',
+    PENDING: 'border-status-warning bg-status-warning text-status-warning-foreground',
     FAILED: 'border-destructive/30 bg-destructive/10 text-destructive',
 };
 
@@ -86,13 +86,13 @@ export default function SchemaStatusPage() {
                     )}
                     {report.totals.pending > 0 && (
                         <Alert>
-                            <AlertTriangle className="text-amber-600" />
+                            <AlertTriangle className="text-status-warning-foreground" />
                             <AlertDescription>{report.totals.pending} migration(s) have not been applied to this database.</AlertDescription>
                         </Alert>
                     )}
                     {report.schemaMdStale && (
                         <Alert>
-                            <AlertTriangle className="text-amber-600" />
+                            <AlertTriangle className="text-status-warning-foreground" />
                             <AlertDescription>
                                 SCHEMA.md looks stale -- {report.newestMigrationFile} was added after SCHEMA.md was last regenerated. Re-export it (see 01_SCHEMA_EXPORT_INSTRUCTIONS.md).
                             </AlertDescription>
@@ -100,14 +100,14 @@ export default function SchemaStatusPage() {
                     )}
                     {report.totals.failed === 0 && report.totals.pending === 0 && !report.schemaMdStale && report.schemaMigrationTableExists && (
                         <Alert variant="info">
-                            <CheckCircle2 className="text-emerald-600" />
+                            <CheckCircle2 className="text-status-success-foreground" />
                             <AlertDescription>All migrations applied and SCHEMA.md is up to date.</AlertDescription>
                         </Alert>
                     )}
 
                     <div className="grid gap-4 @min-[550px]/schema:grid-cols-3">
                         <Card><CardContent className="pt-6"><div className="text-2xl font-bold">{report.totals.applied}</div><div className="text-xs text-muted-foreground">Applied</div></CardContent></Card>
-                        <Card><CardContent className="pt-6"><div className="text-2xl font-bold text-amber-600">{report.totals.pending}</div><div className="text-xs text-muted-foreground">Pending</div></CardContent></Card>
+                        <Card><CardContent className="pt-6"><div className="text-2xl font-bold text-status-warning-foreground">{report.totals.pending}</div><div className="text-xs text-muted-foreground">Pending</div></CardContent></Card>
                         <Card><CardContent className="pt-6"><div className="text-2xl font-bold text-destructive">{report.totals.failed}</div><div className="text-xs text-muted-foreground">Failed</div></CardContent></Card>
                     </div>
 

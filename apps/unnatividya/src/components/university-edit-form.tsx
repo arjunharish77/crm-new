@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { canEditCatalog, type CatalogRole } from "@/lib/catalog-permissions";
 
 type UniversityFormValue = {
   id: string;
@@ -13,12 +14,14 @@ type UniversityFormValue = {
   data: Record<string, unknown>;
 };
 
-export function UniversityEditForm({ university, mode = "edit" }: { university: UniversityFormValue; mode?: "create" | "edit" }) {
+export function UniversityEditForm({ university, role, mode = "edit" }: { role: CatalogRole; university: UniversityFormValue; mode?: "create" | "edit" }) {
+  const editable = canEditCatalog(role, mode === "create" ? undefined : university);
   const [dataText, setDataText] = useState(JSON.stringify(university.data || {}, null, 2));
   const [status, setStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const [message, setMessage] = useState("");
 
   async function save(formData: FormData) {
+    if (!editable) return;
     setStatus("saving");
     setMessage("");
 
@@ -31,25 +34,32 @@ export function UniversityEditForm({ university, mode = "edit" }: { university: 
       return;
     }
 
-    const response = await fetch(mode === "create" ? "/api/admin/catalog/universities" : `/api/admin/catalog/universities/${university.id}`, {
-      method: mode === "create" ? "POST" : "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        slug: String(formData.get("slug") || ""),
-        id: String(formData.get("id") || university.id),
-        name: String(formData.get("name") || ""),
-        shortName: String(formData.get("shortName") || ""),
-        city: String(formData.get("city") || ""),
-        status: String(formData.get("status") || "DRAFT"),
-        isPublished: formData.get("isPublished") === "on",
-        data,
-      }),
-    });
+    let response: Response;
+    try {
+      response = await fetch(mode === "create" ? "/api/admin/catalog/universities" : `/api/admin/catalog/universities/${university.id}`, {
+        method: mode === "create" ? "POST" : "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          slug: String(formData.get("slug") || ""),
+          id: String(formData.get("id") || university.id),
+          name: String(formData.get("name") || ""),
+          shortName: String(formData.get("shortName") || ""),
+          city: String(formData.get("city") || ""),
+          status: String(formData.get("status") || "DRAFT"),
+          isPublished: formData.get("status") === "PUBLISHED",
+          data,
+        }),
+      });
 
-    if (!response.ok) {
-      const error = (await response.json().catch(() => null)) as { error?: string } | null;
+    } catch {
       setStatus("error");
-      setMessage(error?.error || "Could not save university.");
+      setMessage("Connection failed. Please try saving again.");
+      return;
+    }
+    if (!response.ok) {
+      const error = (await response.json().catch(() => null)) as { error?: string; issues?: Array<{field:string;message:string}> } | null;
+      setStatus("error");
+      setMessage([error?.error || "Could not save university.", ...(error?.issues || []).slice(0, 5).map(issue => `${issue.field}: ${issue.message}`)].join(" "));
       return;
     }
 
@@ -58,10 +68,13 @@ export function UniversityEditForm({ university, mode = "edit" }: { university: 
   }
 
   return (
-    <form action={save} className="admin-form-grid">
+    <form action={save}>
+      {!editable ? <p role="status">Read-only: viewers cannot edit; published and archived records require an administrator. Use Propose or review revisions to suggest changes separately.</p> : role === "EDITOR" ? <p>Save a draft or mark it for review. An administrator must publish it.</p> : null}
+      <fieldset className="admin-form-grid admin-catalog-fields" disabled={!editable || status === "saving"}>
+      <legend className="sr-only">Catalog details</legend>
       <div style={{ gridColumn: "1 / -1", background: "#FFF4E5", border: "1px solid #F0C36D", borderRadius: 6, padding: "10px 14px", fontSize: 13, color: "#7A5B12", marginBottom: 8 }}>
-        This data is sourced from <code>src/data/catalog.ts</code> and will be overwritten the next time that file is
-        deployed and synced. To make a permanent change, edit the file directly rather than saving here.
+        Published records appear on the website. Saving changes to a published record updates public pages on the next request.
+        Use the revision review workflow to compare changes before applying them. Drafts stay private.
       </div>
       {mode === "create" ? (
         <div className="field">
@@ -90,14 +103,11 @@ export function UniversityEditForm({ university, mode = "edit" }: { university: 
         <select id="status" name="status" defaultValue={university.status}>
           <option value="DRAFT">Draft</option>
           <option value="NEEDS_REVIEW">Needs review</option>
-          <option value="PUBLISHED">Published</option>
-          <option value="ARCHIVED">Archived</option>
+          {(role === "ADMIN" || !editable) ? <option value="PUBLISHED">Published</option> : null}
+          {(role === "ADMIN" || !editable) ? <option value="ARCHIVED">Archived</option> : null}
         </select>
       </div>
-      <label className="admin-check">
-        <input name="isPublished" type="checkbox" defaultChecked={university.isPublished} />
-        Visible on public website
-      </label>
+
       <div className="field admin-span-2">
         <label htmlFor="data">Structured data JSON</label>
         <textarea id="data" rows={14} value={dataText} onChange={(event) => setDataText(event.target.value)} />
@@ -105,7 +115,8 @@ export function UniversityEditForm({ university, mode = "edit" }: { university: 
       <button className="btn primary" type="submit" disabled={status === "saving"}>
         {status === "saving" ? "Saving..." : "Save university"}
       </button>
-      {message ? <p className={status === "error" ? "admin-error" : "admin-success"}>{message}</p> : null}
+      </fieldset>
+      {message ? <p role="status" className={status === "error" ? "admin-error" : "admin-success"}>{message}</p> : null}
     </form>
   );
 }

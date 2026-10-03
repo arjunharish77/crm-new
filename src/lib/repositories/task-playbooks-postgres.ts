@@ -245,3 +245,40 @@ export async function listTaskPlaybookApplicationsForRecord(
     values,
   );
 }
+
+// Where a playbook has been used (UI/UX plan deferred item): how often, how recently, by hand or
+// by automation, and the latest applications with their record and how many of the tasks they
+// created are done. For the playbook's settings page (admins).
+export async function getTaskPlaybookUsageForTenant(user: TenantUser, playbookId: string) {
+  if (!user.tenantId) throw new Error("TENANT_CONTEXT_REQUIRED");
+  const playbook = await queryOne<{ id: string; name: string }>(
+    `select id, name from "TaskPlaybook" where "tenantId" = $1 and id = $2`,
+    [user.tenantId, playbookId],
+  );
+  if (!playbook) throw new Error("PLAYBOOK_NOT_FOUND");
+  const summary = await queryOne<{ total: number; last30: number; manual: number; automatic: number; lastAppliedAt: string | null }>(
+    `select count(*)::int as total,
+            count(*) filter (where "createdAt" >= now() - interval '30 days')::int as last30,
+            count(*) filter (where source = 'MANUAL')::int as manual,
+            count(*) filter (where source <> 'MANUAL')::int as automatic,
+            max("createdAt") as "lastAppliedAt"
+     from "TaskPlaybookApplication" where "tenantId" = $1 and "playbookId" = $2`,
+    [user.tenantId, playbookId],
+  );
+  const recent = await query<any>(
+    `select app.id, app."createdAt" as "appliedAt", app.source, app."leadId", app."opportunityId",
+            l.name as "leadName", o.title as "opportunityTitle", coalesce(u.name, u.email) as "appliedByName",
+            jsonb_array_length(app."taskIds")::int as "taskCount",
+            (select count(*)::int from "Task" t
+              where t."tenantId" = app."tenantId" and t.id in (select jsonb_array_elements_text(app."taskIds")) and t.status = 'COMPLETED') as "completedCount"
+     from "TaskPlaybookApplication" app
+     left join "Lead" l on l.id = app."leadId" and l."tenantId" = app."tenantId"
+     left join "Opportunity" o on o.id = app."opportunityId" and o."tenantId" = app."tenantId"
+     left join "User" u on u.id = app."appliedBy"
+     where app."tenantId" = $1 and app."playbookId" = $2
+     order by app."createdAt" desc
+     limit 20`,
+    [user.tenantId, playbookId],
+  );
+  return { playbook, ...(summary ?? { total: 0, last30: 0, manual: 0, automatic: 0, lastAppliedAt: null }), recent };
+}

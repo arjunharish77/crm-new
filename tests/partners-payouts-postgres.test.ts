@@ -37,7 +37,6 @@ describe("direct Postgres partners, payouts, and invoices", () => {
 
   it("rolls multiple partner logins into one organization payout", async () => {
     queryOneMock
-      .mockResolvedValueOnce(null) // TenantFeature entitlement check (defaults to enabled)
       .mockResolvedValueOnce({
         id: "settings-1",
         approvalMode: "MANUAL",
@@ -88,7 +87,8 @@ describe("direct Postgres partners, payouts, and invoices", () => {
   });
 
   it("returns local invoice PDF bytes in Postgres mode", async () => {
-    queryOneMock.mockResolvedValueOnce({
+    queryOneMock
+      .mockResolvedValueOnce({
       id: "invoice-1",
       partnerId: "partner-primary",
       pdfStoragePath: "partner-invoices/tenant-1/partner-primary/invoice-1.pdf",

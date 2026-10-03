@@ -36,6 +36,8 @@ export interface Opportunity {
     stageHistory?: OpportunityStageHistory[];
     predictiveScore?: PredictiveRecordScore | null;
     pendingNbaCount?: number;
+    // List and board rows: the owner's display name.
+    ownerName?: string | null;
 }
 
 /**

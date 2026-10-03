@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { StandardDialog } from "@/components/common/standard-dialog";
 import { OpportunityForm } from "./opportunity-form";
 import { ContextualFormsPanel } from "@/components/forms/contextual-forms-panel";
+import { Slot } from "@radix-ui/react-slot";
 
 interface CreateOpportunityDialogProps {
     onSuccess: () => void;
@@ -29,18 +30,20 @@ export function CreateOpportunityDialog({ onSuccess, defaultLeadId, trigger, ope
     return (
         <>
             {trigger ? (
-                <div onClick={handleOpen}>{trigger}</div>
+                // Slot, not a wrapping <div onClick>: the trigger keeps its own button semantics and
+                // keyboard behaviour (UI/UX plan gap check D6).
+                <Slot onClick={handleOpen}>{trigger}</Slot>
             ) : (
-                <Button className="bg-secondary text-secondary-foreground hover:bg-secondary/80" onClick={handleOpen}>
+                <Button onClick={handleOpen}>
                     <Plus className="size-4" />
-                    Add Opportunity
+                    Create opportunity
                 </Button>
             )}
 
             <StandardDialog
                 open={open}
                 onClose={handleClose}
-                title="Add Opportunity"
+                title="Create opportunity"
                 subtitle="Create a new deal with an opportunity type and stage."
                 icon={<Plus className="size-4" />}
             >

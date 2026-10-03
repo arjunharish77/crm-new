@@ -3,7 +3,7 @@ import { requireCurrentUser } from "@/lib/server/auth";
 import { badRequest, forbidden, serverError, unauthorized } from "@/lib/server/http";
 import { reassignRecordOwner } from "@/lib/server/distribution-engine";
 
-// Governed single-record reassignment -- requires a reason, writes a real decision log
+// Governed single-record reassignment -- takes an optional reason, writes a real decision log
 // (AssignmentLog + AuditLog), and notifies the previous owner. Any authenticated internal
 // user can call this (matches the permissiveness of the quick action it replaces); it is
 // intentionally not gated by the DISTRIBUTION module, since manual assignment must keep
@@ -13,12 +13,15 @@ export async function POST(request: Request) {
     const user = await requireCurrentUser(request);
     if (!user.tenantId) return forbidden("Tenant context required");
     const body = await request.json().catch(() => null);
-    if (!body?.entityType || !body?.entityId || !body?.newOwnerId || !body?.reason) {
-      return badRequest("entityType, entityId, newOwnerId, and reason are required");
+    if (!body?.entityType || !body?.entityId || !body?.newOwnerId) {
+      return badRequest("entityType, entityId and newOwnerId are required");
     }
+    // UI/UX plan decision 17: the reason is optional when changing one record (it stays
+    // required for bulk). The log still always gets one.
+    const reason = typeof body.reason === "string" && body.reason.trim() ? body.reason.trim() : "No reason given";
     const outcome = await reassignRecordOwner(user, body.entityType, body.entityId, {
       newOwnerId: String(body.newOwnerId),
-      reason: String(body.reason),
+      reason,
     });
     if (!outcome) return NextResponse.json(null, { status: 404 });
     // A tenant with reassignmentApprovalRequired turned on gets a pending request instead of

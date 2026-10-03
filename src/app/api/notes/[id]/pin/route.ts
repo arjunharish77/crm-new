@@ -16,6 +16,9 @@ export async function POST(
     if (error instanceof Error && error.message === "UNAUTHORIZED") {
       return unauthorized();
     }
+    if (error instanceof Error && error.message === "NOTE_NOT_FOUND") {
+      return NextResponse.json({ message: "Note not found" }, { status: 404 });
+    }
 
     return serverError("Failed to toggle note pin", error);
   }

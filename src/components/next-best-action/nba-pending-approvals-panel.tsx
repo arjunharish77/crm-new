@@ -63,7 +63,7 @@ export function NbaPendingApprovalsPanel() {
             <div className="mb-3 flex items-center gap-2">
                 <ShieldCheck className="size-4 text-primary" />
                 <span className="text-sm font-bold">Pending Your Approval</span>
-                <Badge variant="secondary" className="rounded-md text-[0.65rem]">{approvals.length}</Badge>
+                <Badge variant="secondary" className="rounded-md text-xs">{approvals.length}</Badge>
             </div>
             <div className="space-y-2">
                 {approvals.map((approval) => (

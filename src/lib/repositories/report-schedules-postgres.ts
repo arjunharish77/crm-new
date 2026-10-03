@@ -421,7 +421,12 @@ async function createDelivery(user: TenantUser, schedule: any, now: Date) {
     );
   }
   const delivery = await insertDelivery(schedule, { subject, body: {}, status: "PENDING" }, now);
-  const viewUrl = `${getAppBaseUrl()}/dashboard/reports?report=${encodeURIComponent(schedule.reportKey)}`;
+  // Custom reports open through the same ?reportId= deep link the app already uses; built-in
+  // reports through ?report=<key>, which opens and runs that report (UI/UX plan B11).
+  const reportKey = String(schedule.reportKey ?? "");
+  const viewUrl = reportKey.startsWith("custom:")
+    ? `${getAppBaseUrl()}/dashboard/reports/custom/${encodeURIComponent(reportKey.slice("custom:".length))}`
+    : `${getAppBaseUrl()}/dashboard/reports/standard/${encodeURIComponent(reportKey)}`;
   const body = `Your scheduled report "${schedule.reportKey}" is ready to view: ${viewUrl}`;
   const failedRecipients = await queueDeliveryEmails(schedule, subject, body);
   await execute(`update "ReportEmailDelivery" set body = $1 where id = $2`, [{ viewUrl, failedRecipients }, delivery.id]);

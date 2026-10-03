@@ -1,0 +1,38 @@
+{
+  "/robots.txt": {
+    "status": 200,
+    "text": "User-Agent: *\nAllow: /\nDisallow: /admin\nDisallow: /api\nDisallow: /lead\n\nSitemap: https://unnatividya.com/sitemap-index.xml\nSitemap: https://unnatividya.com/sitemap.xml\n"
+  },
+  "/sitemap-index.xml": {
+    "status": 200,
+    "text": "https://unnatividya.com/sitemaps/static.xml2026-09-28T12:01:08.465Zhttps://unnatividya.com/sitemaps/courses.xml2026-09-28T12:01:08.465Zhttps://unnatividya.com/sitemaps/universities.xml2026-09-28T12:01:08.465Zhttps://unnatividya.com/sitemaps/blog.xml2026-09-28T12:01:08.465Zhttps://unnatividya.com/sitemaps/guides.xml2026-09-28T12:01:08.465Zhttps://unnatividya.com/sitemaps/eligibility-guides.xml2026-09-28T12:01:08.465Zhttps://unnatividya.com/sitemaps/career-guides.xml2026-09-28T12:01:08.465Zhttps://unnatividya.com/sitemaps/ugc-guides.xml2026-09-28T12:01:08.465Zhttps://unnatividya.com/sitemaps/comparisons.xml2026-09-28T12:01:08.465Zhttps://unnatividya.com/sitemaps/specializations.xml2026-09-28T1"
+  },
+  "/sitemaps/courses.xml": {
+    "status": 200,
+    "text": "https://unnatividya.com/courses/online-mba-manipal-university-jaipur2026-09-28T12:01:08.737Zweekly0.85https://unnatividya.com/courses/online-mba-sikkim-manipal-university2026-09-28T12:01:08.737Zweekly0.85https://unnatividya.com/courses/online-mba-amity-online2026-09-28T12:01:08.737Zweekly0.85https://unnatividya.com/courses/online-bba-manipal-university-jaipur2026-09-28T12:01:08.737Zweekly0.85https://unnatividya.com/courses/online-bba-amity-online2026-09-28T12:01:08.737Zweekly0.85https://unnatividya.com/courses/online-bca-manipal-university-jaipur2026-09-28T12:01:08.737Zweekly0.85https://unnatividya.com/courses/online-bca-amity-online2026-09-28T12:01:08.737Zweekly0.85https://unnatividya.com/c"
+  },
+  "/online-degree-guides/online-mba-fees": {
+    "status": 404,
+    "text": "(self.__next_f=self.__next_f||[]).push([0])self.__next_f.push([1,\"1:\\\"$Sreact.fragment\\\"\\n2:I[3812,[\\\"5587\\\",\\\"static/chunks/5587-7e0eab60f0a5ef99.js\\\",\\\"5604\\\",\\\"static/chunks/5604-edeb864eb067e598.js\\\",\\\"9889\\\",\\\"static/chunks/9889-04cb0aad31fbfed5.js\\\",\\\"3377\\\",\\\"static/chunks/3377-35a5718b60641d2c.js\\\",\\\"7177\\\",\\\"static/chunks/app/layout-de6b2b8be58afb5a.js\\\"],\\\"Analytics\\\"]\\n3:I[2170,[\\\"5587\\\",\\\"static/chunks/5587-7e0eab60f0a5ef99.js\\\",\\\"5604\\\",\\\"static/chunks/5604-edeb864eb067e598.js\\\",\\\"9889\\\",\\\"static/chunks/9889-04cb0aad31fbfed5.js\\\",\\\"3377\\\",\\\"static/chunks/3377-35a5718b60641d2c.js\\\",\\\"7177\\\",\\\"static/chunks/app/layout-de6b2b8be58afb5a.js\\\"],\\\"SiteHeader\\\"]\\n4:I[9630,[],\\\"\\\"]\\n5:I["
+  },
+  "/definitely-missing-uv-audit-page": {
+    "status": 404,
+    "text": "(self.__next_f=self.__next_f||[]).push([0])self.__next_f.push([1,\"1:\\\"$Sreact.fragment\\\"\\n2:I[3812,[\\\"5587\\\",\\\"static/chunks/5587-7e0eab60f0a5ef99.js\\\",\\\"5604\\\",\\\"static/chunks/5604-edeb864eb067e598.js\\\",\\\"9889\\\",\\\"static/chunks/9889-04cb0aad31fbfed5.js\\\",\\\"3377\\\",\\\"static/chunks/3377-35a5718b60641d2c.js\\\",\\\"7177\\\",\\\"static/chunks/app/layout-de6b2b8be58afb5a.js\\\"],\\\"Analytics\\\"]\\n3:I[2170,[\\\"5587\\\",\\\"static/chunks/5587-7e0eab60f0a5ef99.js\\\",\\\"5604\\\",\\\"static/chunks/5604-edeb864eb067e598.js\\\",\\\"9889\\\",\\\"static/chunks/9889-04cb0aad31fbfed5.js\\\",\\\"3377\\\",\\\"static/chunks/3377-35a5718b60641d2c.js\\\",\\\"7177\\\",\\\"static/chunks/app/layout-de6b2b8be58afb5a.js\\\"],\\\"SiteHeader\\\"]\\n4:I[9630,[],\\\"\\\"]\\n5:I["
+  },
+  "guideLinks": [
+    "/online-degree-guides/mba-fees",
+    "/online-degree-guides/b-com-fees",
+    "/online-degree-guides/b-com-honours-fees",
+    "/online-degree-guides/ba-fees",
+    "/online-degree-guides/ba-jmc-fees"
+  ],
+  "quiz": {
+    "cards": 3,
+    "overflow": false
+  },
+  "modalFirstTab": {
+    "inside": false,
+    "label": "<a aria-label=\"Unnati Vidya home\" href=\"/\"><img alt=\"Unnati Vidya\" width=\"174\" height=\"32\" decoding=\"async\" data-nimg=\"1\" style=\"color:transparent;height:24px;width:auto;display:block\" src=\"/brand/unn"
+  },
+  "filterUrl": "https://unnatividya.com/courses"
+}

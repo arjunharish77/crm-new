@@ -16,6 +16,7 @@ import { AlertTriangle, CalendarDays, CheckCircle2, Clock, Edit3, Plus, Trash2 }
 import { toast } from "sonner";
 import { TaskChecklistDependenciesPanel } from "@/components/tasks/task-checklist-dependencies-panel";
 import { TaskRecurrenceEscalationFields, type RecurrenceRule } from "@/components/tasks/task-recurrence-escalation-fields";
+import { useConfirm } from "@/components/common/dialogs-provider";
 
 type Task = {
     id: string;
@@ -49,14 +50,14 @@ function taskSlaBadge(task: Task) {
     const breached = task.slaStatus === "BREACHED" || (isOpen && !!task.slaTarget && new Date(task.slaTarget).getTime() < Date.now());
     if (breached) {
         return (
-            <Badge variant="destructive" className="rounded-md text-[0.65rem] font-semibold">
+            <Badge variant="destructive" className="rounded-md text-xs font-semibold">
                 <AlertTriangle className="size-3" />
                 SLA Breached
             </Badge>
         );
     }
     if (task.slaStatus === "MET") {
-        return <Badge variant="outline" className="rounded-md text-[0.65rem] font-semibold">SLA Met</Badge>;
+        return <Badge variant="outline" className="rounded-md text-xs font-semibold">SLA Met</Badge>;
     }
     return null;
 }
@@ -107,6 +108,7 @@ function fromLocalInputValue(value: string) {
 }
 
 export function RelatedTasksPanel({ leadId, opportunityId, activityId, currentUserId, title = "Tasks" }: RelatedTasksPanelProps) {
+    const confirmAction = useConfirm();
     const [tasks, setTasks] = useState<Task[]>([]);
     const [users, setUsers] = useState<UserOption[]>([]);
     const [loading, setLoading] = useState(true);
@@ -220,7 +222,7 @@ export function RelatedTasksPanel({ leadId, opportunityId, activityId, currentUs
     };
 
     const deleteTask = async (task: Task) => {
-        if (!confirm(`Delete task "${task.title}"?`)) return;
+        if (!(await confirmAction({ title: "Delete task?", description: `"${task.title}" will be deleted.`, confirmLabel: "Delete task", destructive: true }))) return;
         try {
             await apiFetch(`/tasks/${task.id}`, { method: "DELETE" });
             toast.success("Task deleted");
@@ -238,7 +240,7 @@ export function RelatedTasksPanel({ leadId, opportunityId, activityId, currentUs
                 <div className="flex items-center gap-2">
                     <CheckCircle2 className="size-5 text-primary" />
                     <h3 className="text-base font-bold">{title}</h3>
-                    <Badge variant="secondary" className="rounded-md text-[0.7rem]">{openTasks} open</Badge>
+                    <Badge variant="secondary" className="rounded-md text-xs">{openTasks} open</Badge>
                 </div>
                 <Button size="sm" onClick={openCreate}>
                     <Plus className="size-4" />
@@ -258,16 +260,16 @@ export function RelatedTasksPanel({ leadId, opportunityId, activityId, currentUs
                                 <div className="min-w-0">
                                     <div className="flex flex-wrap items-center gap-2">
                                         <p className={cn("text-sm font-bold", task.status === "COMPLETED" && "text-muted-foreground line-through")}>{task.title}</p>
-                                        <Badge variant="outline" className="rounded-md text-[0.65rem] font-semibold">{task.status.replace("_", " ")}</Badge>
-                                        <Badge variant={task.priority === "HIGH" || task.priority === "URGENT" ? "destructive" : "secondary"} className="rounded-md text-[0.65rem] font-semibold">{task.priority}</Badge>
+                                        <Badge variant="outline" className="rounded-md text-xs font-semibold">{task.status.replace("_", " ")}</Badge>
+                                        <Badge variant={task.priority === "HIGH" || task.priority === "URGENT" ? "destructive" : "secondary"} className="rounded-md text-xs font-semibold">{task.priority}</Badge>
                                         {task.isBlocked && (
-                                            <Badge variant="destructive" className="rounded-md text-[0.65rem] font-semibold">
+                                            <Badge variant="destructive" className="rounded-md text-xs font-semibold">
                                                 <AlertTriangle className="size-3" />
                                                 Blocked
                                             </Badge>
                                         )}
                                         {task.checklist?.length ? (
-                                            <Badge variant="outline" className="rounded-md text-[0.65rem]">
+                                            <Badge variant="outline" className="rounded-md text-xs">
                                                 {task.checklist.filter((item) => item.isDone).length}/{task.checklist.length}
                                             </Badge>
                                         ) : null}

@@ -1,5 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+// Report logic under test; the Reports (advancedReporting) gate is covered by the module-gate audit.
+vi.mock("@/lib/server/entitlements", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/server/entitlements")>()),
+  assertFeatureEnabled: vi.fn(async () => undefined),
+  isFeatureEnabledForTenant: vi.fn(async () => true),
+}));
+
+
 const queryMock = vi.fn();
 const queryOneMock = vi.fn();
 const executeMock = vi.fn();

@@ -8,18 +8,18 @@ import {
     useSensors,
     MouseSensor,
     TouchSensor,
+    KeyboardSensor,
     DragStartEvent,
     DragEndEvent,
     defaultDropAnimationSideEffects,
     DropAnimation,
     useDroppable,
 } from "@dnd-kit/core";
-import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
+import { SortableContext, sortableKeyboardCoordinates, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { createPortal } from "react-dom";
 import { Opportunity, OpportunityType, StageDefinition } from "@/types/opportunities";
 import { KanbanCard } from "./kanban-card";
-import { Badge } from "@/components/ui/badge";
-import { formatCurrency } from "@/lib/utils";
+import { formatMoneyCompact } from "@/lib/display/format";
 
 interface KanbanBoardProps {
     /** The OpportunityType whose stages define the kanban columns */
@@ -28,6 +28,8 @@ interface KanbanBoardProps {
     onDragEnd: (opportunityId: string, newStageId: string) => void;
     onEdit?: (opportunity: Opportunity) => void;
 }
+
+const NO_STAGE_COLUMN = "__no_stage__";
 
 export function KanbanBoard({ opportunityType, opportunities, onDragEnd, onEdit }: KanbanBoardProps) {
     const [activeId, setActiveId] = useState<string | null>(null);
@@ -38,15 +40,25 @@ export function KanbanBoard({ opportunityType, opportunities, onDragEnd, onEdit 
         }),
         useSensor(TouchSensor, {
             activationConstraint: { delay: 250, tolerance: 5 },
-        })
+        }),
+        // Keyboard (UI/UX plan Phase 2): focus a card, Space to pick it up, arrow keys to move,
+        // Space to drop, Escape to cancel. dnd-kit announces each step to screen readers.
+        useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
     );
 
+    // An opportunity whose stage isn't one of this type's stages (none set, or a stage that no
+    // longer exists) gets its own column instead of vanishing from the board. Drag it into a real
+    // stage to fix it.
     const columns = useMemo(() => {
         if (!opportunityType?.stages) return [];
-        return opportunityType.stages.map((stage: StageDefinition) => ({
+        const stageIds = new Set(opportunityType.stages.map((stage: StageDefinition) => stage.id));
+        const columns = opportunityType.stages.map((stage: StageDefinition) => ({
             ...stage,
             items: opportunities.filter((opp) => opp.stageId === stage.id),
         }));
+        const unplaced = opportunities.filter((opp) => !opp.stageId || !stageIds.has(opp.stageId));
+        if (unplaced.length) columns.push({ ...({} as StageDefinition), id: NO_STAGE_COLUMN, name: "No stage", label: "No matching stage", color: "var(--muted-foreground)", items: unplaced });
+        return columns;
     }, [opportunityType, opportunities]);
 
     const activeOpportunity = useMemo(
@@ -68,7 +80,8 @@ export function KanbanBoard({ opportunityType, opportunities, onDragEnd, onEdit 
                 onDragEnd(active.id as string, overStageId);
             } else {
                 const overOpportunity = opportunities.find(o => o.id === over.id);
-                if (overOpportunity && overOpportunity.stageId) {
+                const realStage = (opportunityType?.stages || []).some((s: StageDefinition) => s.id === overOpportunity?.stageId);
+                if (overOpportunity && overOpportunity.stageId && realStage) {
                     onDragEnd(active.id as string, overOpportunity.stageId);
                 }
             }
@@ -118,19 +131,17 @@ function KanbanColumn({ stage, items, onEdit }: { stage: StageDefinition; items:
     return (
         <div
             ref={setNodeRef}
-            className="flex max-h-full w-[292px] min-w-[292px] flex-col overflow-hidden rounded-xl border border-border bg-surface-container-low"
+            className="flex max-h-full w-[292px] min-w-[292px] flex-col overflow-hidden rounded-xl border border-border bg-muted/60"
         >
-            <div className="border-b border-border bg-background px-3 py-2.5">
+            <div className="border-b border-border px-3 py-2.5">
                 <div className="mb-1 flex items-center justify-between">
                     <div className="flex items-center gap-2">
                         <span className="size-2 rounded-full" style={{ backgroundColor: stage.color || "var(--primary)" }} />
-                        <span className="text-sm font-bold">{stage.label || stage.name}</span>
+                        <span className="text-sm font-semibold">{stage.label || stage.name}</span>
                     </div>
-                    <Badge variant="secondary" className="h-5 rounded-md text-[0.7rem] font-bold">
-                        {items.length}
-                    </Badge>
+                    <span className="text-xs tabular-nums text-muted-foreground">{items.length.toLocaleString()}</span>
                 </div>
-                <p className="text-xs font-semibold text-primary">{formatCurrency(totalValue, undefined, { notation: "compact", maximumFractionDigits: 1 })}</p>
+                <p className="text-xs tabular-nums text-muted-foreground">{formatMoneyCompact(totalValue)}</p>
             </div>
 
             <div className="flex-1 overflow-y-auto p-2.5">

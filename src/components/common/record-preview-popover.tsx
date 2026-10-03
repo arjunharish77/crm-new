@@ -76,7 +76,7 @@ function RecordPreviewContent({
         ) : entityType === "lead" ? (
           <div className="space-y-1.5">
             <p className="font-bold leading-tight">{data.name}</p>
-            <Badge variant="outline" className="text-[0.65rem] font-semibold uppercase">{data.status}</Badge>
+            <Badge variant="outline" className="text-xs font-semibold uppercase">{data.status}</Badge>
             <p className="text-xs text-muted-foreground">{data.email || "No email"}</p>
             <p className="text-xs text-muted-foreground">{data.company || "No company"}</p>
             <p className="text-xs text-muted-foreground">Score: {data.score ?? 0}</p>
@@ -90,7 +90,7 @@ function RecordPreviewContent({
         ) : (
           <div className="space-y-1.5">
             <p className="font-bold leading-tight">{data.title}</p>
-            {data.stage?.label || data.stage?.name ? <Badge variant="outline" className="text-[0.65rem] font-semibold uppercase">{data.stage.label || data.stage.name}</Badge> : null}
+            {data.stage?.label || data.stage?.name ? <Badge variant="outline" className="text-xs font-semibold uppercase">{data.stage.label || data.stage.name}</Badge> : null}
             <p className="text-xs text-muted-foreground">{formatCurrency(data.amount ?? 0)}</p>
             <Button asChild size="sm" variant="outline" className="mt-2 w-full">
               <Link href={`${PAGE_PATHS.opportunity}/${data.id}`}>

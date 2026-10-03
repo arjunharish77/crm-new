@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { requireCurrentUser } from "@/lib/server/auth";
+import { requireCurrentUser, requireTenantAdmin } from "@/lib/server/auth";
 import { badRequest, forbidden, serverError, unauthorized } from "@/lib/server/http";
 import { createExportSensitiveFieldRuleForTenant, listExportSensitiveFieldRulesForTenant } from "@/lib/server/exports";
 
@@ -21,7 +21,7 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    const user = await requireCurrentUser(request);
+    const user = await requireTenantAdmin(request);
     if (!hasExportGovernanceAccess(user)) return forbidden("You don't have permission to manage export governance rules");
     const body = await request.json().catch(() => null);
     if (!body?.moduleName || !body?.fieldKey) return badRequest("moduleName and fieldKey are required");
@@ -29,6 +29,7 @@ export async function POST(request: Request) {
     return NextResponse.json(rule);
   } catch (error) {
     if (error instanceof Error && error.message === "UNAUTHORIZED") return unauthorized();
+    if (error instanceof Error && error.message === "FORBIDDEN") return forbidden("Only admins can do this");
     if (error instanceof Error && error.message === "DUPLICATE_SENSITIVE_FIELD_RULE") return badRequest("This field is already flagged for this module");
     return serverError("Failed to create sensitive field rule", error);
   }

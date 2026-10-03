@@ -1,0 +1,461 @@
+"use client";
+
+import { PageHeader } from "@/components/layout/page-header";
+
+import { useCallback, useEffect, useState } from "react";
+import { apiFetch } from "@/lib/api";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { StandardDialog } from "@/components/common/standard-dialog";
+import { ConditionBuilder, type ConditionFieldOption, type CrmCondition } from "@/components/common/condition-builder";
+import { TableSkeleton } from "@/components/common/skeletons";
+import { EmptyState } from "@/components/common/empty-state";
+import { useModuleEnabled } from "@/components/auth/feature-gate";
+import { Plus, Pencil, Trash2 } from "lucide-react";
+import { toast } from "sonner";
+import { useConfirm } from "@/components/common/dialogs-provider";
+import { useArchiveActions } from "@/hooks/use-archive-actions";
+import { ArchivedItemsSection } from "@/components/common/archived-items-section";
+
+type Module = "LEAD" | "OPPORTUNITY";
+
+type Strategy = {
+    id: string;
+    targetModule: Module;
+    name: string;
+    isActive: boolean;
+    maxVisibleRecommendationsPerUser: number;
+    cooldownHours: number;
+    dailyActionCapPerUser: number;
+    suppressionConditions: { conditions: CrmCondition[]; conditionLogic: "AND" | "OR" };
+};
+
+type Rule = {
+    id: string;
+    name: string;
+    actionType: string;
+    eligibilityConditions: { conditions: CrmCondition[]; conditionLogic: "AND" | "OR" };
+    actionConfig: Record<string, unknown>;
+    basePriority: number;
+    businessValue: number;
+    priority: number;
+    isActive: boolean;
+    requiresApproval: boolean;
+};
+
+const ACTION_TYPES = [
+    { value: "CREATE_TASK", label: "Create Task" },
+    { value: "CALL_LEAD", label: "Call Lead" },
+    { value: "SEND_EMAIL", label: "Send Email (creates a reminder task)" },
+    { value: "SEND_WHATSAPP", label: "Send WhatsApp (creates a reminder task)" },
+    { value: "SEND_SMS", label: "Send SMS (creates a reminder task)" },
+    { value: "ASSIGN_OWNER", label: "Reassign Owner" },
+    { value: "ADD_TO_LIST", label: "Add to List (Lead only)" },
+    { value: "UPDATE_FIELD", label: "Update Field" },
+    { value: "SCHEDULE_ACTIVITY", label: "Schedule Activity" },
+    { value: "ESCALATE_TO_MANAGER", label: "Escalate to Manager" },
+    { value: "DO_NOTHING", label: "Do Nothing" },
+];
+
+const CONDITION_FIELDS: Record<Module, ConditionFieldOption[]> = {
+    LEAD: [
+        { key: "status", label: "Lead Status", type: "select", options: ["NEW", "CONTACTED", "QUALIFIED", "LOST"] },
+        { key: "source", label: "Lead Source", type: "text" },
+        { key: "predictiveScore.scoreBand", label: "Score Band", type: "select", options: ["HOT", "WARM", "COLD", "RISK"] },
+        { key: "predictiveScore.conversionProbability", label: "Conversion Probability", type: "number" },
+        { key: "predictiveScore.stallRisk", label: "Stall Risk", type: "number" },
+        { key: "ownerId", label: "Owner User Id", type: "text" },
+    ],
+    OPPORTUNITY: [
+        { key: "stageId", label: "Stage Id", type: "text" },
+        { key: "amount", label: "Amount", type: "number" },
+        { key: "priority", label: "Priority", type: "select", options: ["LOW", "MEDIUM", "HIGH", "URGENT"] },
+        { key: "predictiveScore.scoreBand", label: "Score Band", type: "select", options: ["HOT", "WARM", "COLD", "RISK"] },
+        { key: "predictiveScore.winProbability", label: "Win Probability", type: "number" },
+        { key: "predictiveScore.stallRisk", label: "Stall Risk", type: "number" },
+        { key: "ownerId", label: "Owner User Id", type: "text" },
+    ],
+};
+
+type ConditionGroup = { conditions: CrmCondition[]; conditionLogic: "AND" | "OR" };
+
+const DEFAULT_CONDITION_GROUP: ConditionGroup = { conditions: [], conditionLogic: "AND" };
+
+const EMPTY_RULE_FORM: {
+    name: string;
+    actionType: string;
+    eligibilityConditions: ConditionGroup;
+    actionConfig: Record<string, unknown>;
+    basePriority: number;
+    businessValue: number;
+    priority: number;
+    isActive: boolean;
+    requiresApproval: boolean;
+} = {
+    name: "",
+    actionType: "CREATE_TASK",
+    eligibilityConditions: DEFAULT_CONDITION_GROUP,
+    actionConfig: {},
+    basePriority: 50,
+    businessValue: 0,
+    priority: 0,
+    isActive: true,
+    requiresApproval: false,
+};
+
+function ModulePanel({ module }: { module: Module }) {
+    const confirm = useConfirm();
+    const [archiveToken, setArchiveToken] = useState(0);
+    const { archive } = useArchiveActions({ basePath: "/next-best-action/rules", archiveKind: "recommended-action-rule", noun: "rule", onChange: () => { fetchAll(); setArchiveToken((token) => token + 1); } });
+    const [strategy, setStrategy] = useState<Strategy | null>(null);
+    const [rules, setRules] = useState<Rule[]>([]);
+    const [loadError, setLoadError] = useState(false);
+    const [loading, setLoading] = useState(true);
+    const [savingStrategy, setSavingStrategy] = useState(false);
+    const [ruleDialogOpen, setRuleDialogOpen] = useState(false);
+    const [editingRuleId, setEditingRuleId] = useState<string | null>(null);
+    const [form, setForm] = useState(EMPTY_RULE_FORM);
+
+    const fetchAll = useCallback(async () => {
+        setLoading(true);
+        setLoadError(false);
+        try {
+            const [strategyData, rulesData] = await Promise.all([
+                apiFetch<Strategy | null>(`/next-best-action/strategies/${module}`),
+                apiFetch<Rule[]>(`/next-best-action/strategies/${module}/rules`),
+            ]);
+            setStrategy(strategyData ?? null);
+            setRules(Array.isArray(rulesData) ? rulesData : []);
+        } catch {
+            setLoadError(true);
+        } finally {
+            setLoading(false);
+        }
+    }, [module]);
+
+    useEffect(() => {
+        fetchAll();
+    }, [fetchAll]);
+
+    const strategyOrDefault: Omit<Strategy, "id" | "targetModule"> = strategy ?? {
+        name: `${module === "LEAD" ? "Lead" : "Opportunity"} Next-Best-Action Strategy`,
+        isActive: true,
+        maxVisibleRecommendationsPerUser: 5,
+        cooldownHours: 24,
+        dailyActionCapPerUser: 20,
+        suppressionConditions: DEFAULT_CONDITION_GROUP,
+    };
+
+    const saveStrategy = async (patch: Partial<Omit<Strategy, "id" | "targetModule">>) => {
+        setSavingStrategy(true);
+        try {
+            const updated = await apiFetch<Strategy>(`/next-best-action/strategies/${module}`, {
+                method: "PUT",
+                body: JSON.stringify({ ...strategyOrDefault, ...patch }),
+            });
+            setStrategy(updated);
+            toast.success("Strategy saved");
+        } catch (error: any) {
+            toast.error(error.message || "Failed to save strategy");
+        } finally {
+            setSavingStrategy(false);
+        }
+    };
+
+    const openCreateRule = () => {
+        setEditingRuleId(null);
+        setForm(EMPTY_RULE_FORM);
+        setRuleDialogOpen(true);
+    };
+
+    const openEditRule = (rule: Rule) => {
+        setEditingRuleId(rule.id);
+        setForm({
+            name: rule.name,
+            actionType: rule.actionType,
+            eligibilityConditions: rule.eligibilityConditions ?? DEFAULT_CONDITION_GROUP,
+            actionConfig: rule.actionConfig ?? {},
+            basePriority: rule.basePriority,
+            businessValue: rule.businessValue,
+            priority: rule.priority,
+            isActive: rule.isActive,
+            requiresApproval: Boolean(rule.requiresApproval),
+        });
+        setRuleDialogOpen(true);
+    };
+
+    const saveRule = async () => {
+        if (!form.name.trim()) {
+            toast.error("Rule name is required");
+            return;
+        }
+        try {
+            if (editingRuleId) {
+                await apiFetch(`/next-best-action/rules/${editingRuleId}`, { method: "PATCH", body: JSON.stringify(form) });
+            } else {
+                await apiFetch(`/next-best-action/strategies/${module}/rules`, { method: "POST", body: JSON.stringify(form) });
+            }
+            toast.success("Rule saved");
+            setRuleDialogOpen(false);
+            fetchAll();
+        } catch (error: any) {
+            toast.error(error.message || "Failed to save rule");
+        }
+    };
+
+    // Delete archives the rule (decision 31): Undo in the toast, restore from Archived for 30 days.
+    const deleteRule = async (id: string) => {
+        const rule = rules.find((item) => item.id === id);
+        if (rule) await archive({ id, name: rule.name });
+    };
+
+    if (loading) return <TableSkeleton rows={4} columns={2} />;
+    if (loadError) return <div role="alert" className="rounded-lg border p-4 text-sm">Unable to load recommendation settings. <Button variant="outline" size="sm" onClick={fetchAll}>Retry</Button></div>;
+
+    return (
+        <div className="space-y-4">
+            <div className="rounded-xl border bg-card p-4">
+                <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                        <h2 className="text-sm font-bold">Strategy Settings</h2>
+                        <p className="mt-0.5 text-xs text-muted-foreground">
+                            Guardrails applied across every rule for this module -- suppression, cooldown, caps.
+                        </p>
+                    </div>
+                    <label className="flex items-center gap-2 text-sm font-medium">
+                        <Switch
+                            checked={strategyOrDefault.isActive}
+                            disabled={savingStrategy}
+                            onCheckedChange={(checked) => saveStrategy({ isActive: checked })}
+                        />
+                        Active
+                    </label>
+                </div>
+                <div className="grid min-w-0 gap-3 2xl:grid-cols-3">
+                    <div className="space-y-1.5">
+                        <Label htmlFor={`nba-max-visible-recommendations-user-${module}`}>Max visible recommendations / user</Label>
+                        <Input id={`nba-max-visible-recommendations-user-${module}`}
+                            type="number"
+                            defaultValue={strategyOrDefault.maxVisibleRecommendationsPerUser}
+                            onBlur={(e) => saveStrategy({ maxVisibleRecommendationsPerUser: Number(e.target.value) || 5 })}
+                        />
+                    </div>
+                    <div className="space-y-1.5">
+                        <Label htmlFor={`nba-cooldown-hours-${module}`}>Cooldown (hours)</Label>
+                        <Input id={`nba-cooldown-hours-${module}`}
+                            type="number"
+                            defaultValue={strategyOrDefault.cooldownHours}
+                            onBlur={(e) => saveStrategy({ cooldownHours: Number(e.target.value) || 0 })}
+                        />
+                    </div>
+                    <div className="space-y-1.5">
+                        <Label htmlFor={`nba-daily-action-cap-user-${module}`}>Daily action cap / user</Label>
+                        <Input id={`nba-daily-action-cap-user-${module}`}
+                            type="number"
+                            defaultValue={strategyOrDefault.dailyActionCapPerUser}
+                            onBlur={(e) => saveStrategy({ dailyActionCapPerUser: Number(e.target.value) || 1 })}
+                        />
+                    </div>
+                </div>
+                <div className="mt-4">
+                    <ConditionBuilder
+                        title="Suppression Conditions"
+                        description="Records matching these conditions never get a recommendation (compliance/consent/do-not-contact)."
+                        fields={CONDITION_FIELDS[module]}
+                        conditions={strategyOrDefault.suppressionConditions?.conditions ?? []}
+                        logic={strategyOrDefault.suppressionConditions?.conditionLogic ?? "AND"}
+                        onLogicChange={(conditionLogic) =>
+                            saveStrategy({ suppressionConditions: { conditions: strategyOrDefault.suppressionConditions?.conditions ?? [], conditionLogic } })
+                        }
+                        onChange={(conditions) =>
+                            saveStrategy({ suppressionConditions: { conditions, conditionLogic: strategyOrDefault.suppressionConditions?.conditionLogic ?? "AND" } })
+                        }
+                    />
+                </div>
+            </div>
+
+            <div className="rounded-xl border bg-card p-4">
+                <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+                    <h2 className="text-sm font-bold">Rules</h2>
+                    <Button size="sm" onClick={openCreateRule}>
+                        <Plus className="size-4" />
+                        Add Rule
+                    </Button>
+                </div>
+                {rules.length === 0 ? (
+                    <EmptyState title="No rules yet" description="Add a rule to start generating recommendations for this module." />
+                ) : (
+                    <div className="space-y-2">
+                        {rules.map((rule) => (
+                            <div key={rule.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-surface-container-low p-3">
+                                <div>
+                                    <div className="flex min-w-0 flex-wrap items-center gap-2">
+                                        <span className="min-w-0 break-all text-sm font-semibold">{rule.name}</span>
+                                        <Badge variant="outline" className="rounded-md text-xs">{rule.actionType}</Badge>
+                                        {!rule.isActive && <Badge variant="outline" className="rounded-md text-xs text-muted-foreground">Inactive</Badge>}
+                                        {rule.requiresApproval && <Badge variant="secondary" className="rounded-md text-xs">Needs manager approval</Badge>}
+                                    </div>
+                                    <p className="mt-0.5 text-xs text-muted-foreground">
+                                        Base priority {rule.basePriority} · Business value {rule.businessValue}
+                                    </p>
+                                </div>
+                                <div className="flex items-center gap-1">
+                                    <Button size="icon-sm" variant="ghost" aria-label={`Edit ${rule.name}`} onClick={() => openEditRule(rule)}>
+                                        <Pencil className="size-4" />
+                                    </Button>
+                                    <Button size="icon-sm" variant="ghost" className="text-destructive" aria-label={`Delete ${rule.name}`} onClick={() => deleteRule(rule.id)}>
+                                        <Trash2 className="size-4" />
+                                    </Button>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                )}
+            </div>
+
+            <StandardDialog
+                open={ruleDialogOpen}
+                onClose={() => setRuleDialogOpen(false)}
+                title={editingRuleId ? "Edit Rule" : "Add Rule"}
+                maxWidth="sm"
+                actions={
+                    <>
+                        <Button variant="ghost" onClick={() => setRuleDialogOpen(false)}>Cancel</Button>
+                        <Button onClick={saveRule}>Save Rule</Button>
+                    </>
+                }
+            >
+                <div className="space-y-4">
+                    <div className="space-y-1.5">
+                        <Label htmlFor={`nba-rule-name-${module}`}>Rule Name</Label>
+                        <Input id={`nba-rule-name-${module}`} value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} />
+                    </div>
+                    <div className="space-y-1.5">
+                        <Label htmlFor={`nba-action-type-${module}`}>Action Type</Label>
+                        <Select value={form.actionType} onValueChange={(value) => setForm((f) => ({ ...f, actionType: value }))}>
+                            <SelectTrigger id={`nba-action-type-${module}`} className="w-full"><SelectValue /></SelectTrigger>
+                            <SelectContent>
+                                {ACTION_TYPES.map((option) => (
+                                    <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                    </div>
+                    <ConditionBuilder
+                        title="Eligibility Conditions"
+                        description="A record must match these to be considered for this rule."
+                        fields={CONDITION_FIELDS[module]}
+                        conditions={form.eligibilityConditions.conditions}
+                        logic={form.eligibilityConditions.conditionLogic}
+                        onLogicChange={(conditionLogic) => setForm((f) => ({ ...f, eligibilityConditions: { ...f.eligibilityConditions, conditionLogic } }))}
+                        onChange={(conditions) => setForm((f) => ({ ...f, eligibilityConditions: { ...f.eligibilityConditions, conditions } }))}
+                    />
+                    <div className="grid min-w-0 gap-3 2xl:grid-cols-3">
+                        <div className="space-y-1.5">
+                            <Label htmlFor={`nba-base-priority-${module}`}>Base Priority (0-100)</Label>
+                            <Input id={`nba-base-priority-${module}`} type="number" value={form.basePriority} onChange={(e) => setForm((f) => ({ ...f, basePriority: Number(e.target.value) || 0 }))} />
+                        </div>
+                        <div className="space-y-1.5">
+                            <Label htmlFor={`nba-business-value-${module}`}>Business Value</Label>
+                            <Input id={`nba-business-value-${module}`} type="number" value={form.businessValue} onChange={(e) => setForm((f) => ({ ...f, businessValue: Number(e.target.value) || 0 }))} />
+                        </div>
+                        <div className="space-y-1.5">
+                            <Label htmlFor={`nba-tie-break-priority-${module}`}>Tie-break Priority</Label>
+                            <Input id={`nba-tie-break-priority-${module}`} type="number" value={form.priority} onChange={(e) => setForm((f) => ({ ...f, priority: Number(e.target.value) || 0 }))} />
+                        </div>
+                    </div>
+                    {(form.actionType === "CREATE_TASK" || form.actionType === "SCHEDULE_ACTIVITY") && (
+                        <div className="space-y-1.5">
+                            <Label>{form.actionType === "CREATE_TASK" ? "Task Title (optional)" : "Notes (optional)"}</Label>
+                            <Input
+                                value={(form.actionConfig.taskTitle as string) || (form.actionConfig.notes as string) || ""}
+                                onChange={(e) =>
+                                    setForm((f) => ({
+                                        ...f,
+                                        actionConfig: { ...f.actionConfig, [form.actionType === "CREATE_TASK" ? "taskTitle" : "notes"]: e.target.value },
+                                    }))
+                                }
+                            />
+                        </div>
+                    )}
+                    {form.actionType === "UPDATE_FIELD" && (
+                        <div className="grid gap-3 sm:grid-cols-2">
+                            <div className="space-y-1.5">
+                                <Label htmlFor={`nba-field-key-${module}`}>Field Key</Label>
+                                <Input id={`nba-field-key-${module}`}
+                                    value={(form.actionConfig.fieldKey as string) || ""}
+                                    onChange={(e) => setForm((f) => ({ ...f, actionConfig: { ...f.actionConfig, fieldKey: e.target.value } }))}
+                                />
+                            </div>
+                            <div className="space-y-1.5">
+                                <Label htmlFor={`nba-field-value-${module}`}>Field Value</Label>
+                                <Input id={`nba-field-value-${module}`}
+                                    value={(form.actionConfig.fieldValue as string) || ""}
+                                    onChange={(e) => setForm((f) => ({ ...f, actionConfig: { ...f.actionConfig, fieldValue: e.target.value } }))}
+                                />
+                            </div>
+                        </div>
+                    )}
+                    {form.actionType === "ADD_TO_LIST" && (
+                        <div className="space-y-1.5">
+                            <Label htmlFor={`nba-list-id-${module}`}>List Id</Label>
+                            <Input id={`nba-list-id-${module}`}
+                                value={(form.actionConfig.listId as string) || ""}
+                                onChange={(e) => setForm((f) => ({ ...f, actionConfig: { ...f.actionConfig, listId: e.target.value } }))}
+                            />
+                        </div>
+                    )}
+                    <label className="flex items-center gap-2 text-sm font-medium">
+                        <Switch checked={form.isActive} onCheckedChange={(checked) => setForm((f) => ({ ...f, isActive: checked }))} />
+                        Active
+                    </label>
+                    <div className="rounded-lg border p-3">
+                        <label className="flex items-center gap-2 text-sm font-medium">
+                            <Switch
+                                checked={form.requiresApproval}
+                                onCheckedChange={(checked) => setForm((f) => ({ ...f, requiresApproval: checked }))}
+                            />
+                            Requires manager approval
+                        </label>
+                        <p className="mt-1 text-xs text-muted-foreground">
+                            Recommendations from this rule go to the record owner&apos;s manager first, instead of straight to the owner. The owner only sees it once approved.
+                        </p>
+                    </div>
+                </div>
+            </StandardDialog>
+            <ArchivedItemsSection kind="recommended-action-rule" basePath="/next-best-action/rules" noun="rule" title="Archived rules" refreshToken={archiveToken} onChange={() => fetchAll()} />
+        </div>
+    );
+}
+
+export default function NextBestActionAdminPage() {
+    const moduleEnabled = useModuleEnabled("NEXT_BEST_ACTION");
+
+    if (!moduleEnabled) {
+        return (
+            <div className="min-w-0">
+                <EmptyState title="Next-Best-Action isn't enabled" description="Ask a platform admin to enable this module for your tenant." />
+            </div>
+        );
+    }
+
+    return (
+        <div className="min-w-0">
+            <PageHeader title="Recommended actions" description="Configure recommendations for leads and opportunities, including priorities, cooldowns and workload limits." />
+
+            <Tabs defaultValue="LEAD" className="mt-4 space-y-4">
+                <TabsList>
+                    <TabsTrigger value="LEAD">Leads</TabsTrigger>
+                    <TabsTrigger value="OPPORTUNITY">Opportunities</TabsTrigger>
+                </TabsList>
+                <TabsContent value="LEAD"><ModulePanel module="LEAD" /></TabsContent>
+                <TabsContent value="OPPORTUNITY"><ModulePanel module="OPPORTUNITY" /></TabsContent>
+            </Tabs>
+        </div>
+    );
+}

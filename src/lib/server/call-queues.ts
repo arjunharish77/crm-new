@@ -1,9 +1,12 @@
+import { assertTenantModule } from "@/lib/server/module-entitlements";
 import { query, queryOne, execute } from "@/lib/db/query";
 import { createAuditLog } from "@/lib/server/crm";
 
 type TenantUser = {
   id: string;
   tenantId: string | null;
+  isTenantAdmin?: boolean;
+  isPlatformAdmin?: boolean;
   role?: { permissions?: any } | string | null;
 };
 
@@ -24,16 +27,35 @@ async function getTeamForTenant(tenantId: string, teamId: string) {
 // Same recordAccess-based supervisor check as Task's queue system (tasks-postgres.ts) --
 // there's no separate "telephony queues" permission module, so this reuses the existing
 // recordAccess levels (TEAM/ALL) plus "is this team's own lead" rather than inventing a new
-// permission axis, matching the established precedent exactly.
+// permission axis. Call-center supervisors (admins, who are the ones shown the queue backlog in
+// the call center) count too, so the Release button they see actually works.
 function isQueueSupervisor(user: TenantUser, team: { leadId?: string | null } | null) {
   const permissions = typeof user.role === "object" && user.role ? (user.role as any).permissions : null;
+  if (user.isTenantAdmin || user.isPlatformAdmin || permissions?.modules?.admin === "full") return true;
   if (permissions?.recordAccess === "ALL" || permissions?.recordAccess === "TEAM") return true;
   return !!team?.leadId && team.leadId === user.id;
 }
 
-async function isQueueMember(user: TenantUser, teamId: string) {
-  const row = await queryOne<any>('select "teamId" from "User" where id::text = $1', [user.id]);
-  return row?.teamId != null && String(row.teamId) === String(teamId);
+// A member is anyone on the team's member list (Settings › Teams) or whose primary team it is.
+async function queueTeamIdsForMember(user: TenantUser, tenantId: string) {
+  const rows = await query<{ teamId: string }>(
+    `select "teamId"::text as "teamId" from "User" where id::text = $1 and "tenantId"::text = $2 and "teamId" is not null
+     union
+     select "teamId"::text from "TeamMember" where "userId"::text = $1 and "tenantId"::text = $2
+     union
+     select id::text from "Team" where "leadId"::text = $1 and "tenantId"::text = $2`,
+    [user.id, tenantId],
+  );
+  return new Set(rows.map((row) => String(row.teamId)));
+}
+
+async function isQueueMember(user: TenantUser, tenantId: string, teamId: string) {
+  return (await queueTeamIdsForMember(user, tenantId)).has(String(teamId));
+}
+
+// Supervisors (by recordAccess or admin) see every queue; everyone else only their own teams'.
+function seesEveryQueue(user: TenantUser) {
+  return isQueueSupervisor(user, null);
 }
 
 // Routing entry point -- called from recordTelephonyCallEvent for a newly-created call that
@@ -71,6 +93,7 @@ export async function removeCallFromQueue(tenantId: string, callLogId: string) {
 // -- no "slaBreaches" field here, since (unlike Task) TelephonyCallLog has no per-row SLA
 // target concept to breach; that's a real, stated difference, not an oversight.
 export async function getCallQueueHealthForTenant(user: TenantUser) {
+  await assertTenantModule(user, "TELEPHONY");
   const tenantId = requireTenantId(user);
   const rows = await query<any>(
     `select tcl."queueId", t.name as "teamName", tcl."queuedAt", tcl."claimedBy"
@@ -80,10 +103,12 @@ export async function getCallQueueHealthForTenant(user: TenantUser) {
     [tenantId],
   );
 
+  const visibleTeamIds = seesEveryQueue(user) ? null : await queueTeamIdsForMember(user, tenantId);
   const byQueue = new Map<string, { teamId: string; teamName: string; ages: number[]; unclaimed: number }>();
   const now = Date.now();
   for (const row of rows) {
     const key = String(row.queueId);
+    if (visibleTeamIds && !visibleTeamIds.has(key)) continue;
     const bucket = byQueue.get(key) ?? { teamId: key, teamName: row.teamName, ages: [] as number[], unclaimed: 0 };
     const ageMinutes = (now - new Date(row.queuedAt).getTime()) / 60000;
     bucket.ages.push(ageMinutes);
@@ -108,14 +133,18 @@ export async function getCallQueueHealthForTenant(user: TenantUser) {
 // FIFO-by-queuedAt (the pre-existing Task queue's own ordering has no priority factor at all;
 // this is a deliberate improvement for calls, not a blind copy of that precedent).
 export async function listQueuedCallsForTeam(user: TenantUser, teamId: string) {
+  await assertTenantModule(user, "TELEPHONY");
   const tenantId = requireTenantId(user);
+  const team = await getTeamForTenant(tenantId, teamId);
+  if (!team) throw new Error("TEAM_NOT_FOUND");
+  if (!isQueueSupervisor(user, team) && !(await isQueueMember(user, tenantId, teamId))) throw new Error("FORBIDDEN");
   const rows = await query<any>(
     `select tcl.id, tcl."queueType", tcl.priority, tcl."queuedAt", tcl."claimedBy", tcl."claimedAt",
             tcl."fromNumber", tcl."toNumber", tcl."leadId", tcl."opportunityId",
             l.name as "leadName", o.title as "opportunityTitle"
      from "TelephonyCallLog" tcl
-     left join "Lead" l on l.id = tcl."leadId"
-     left join "Opportunity" o on o.id = tcl."opportunityId"
+     left join "Lead" l on l.id = tcl."leadId"::text and l."tenantId" = tcl."tenantId"
+     left join "Opportunity" o on o.id = tcl."opportunityId"::text and o."tenantId" = tcl."tenantId"
      where tcl."tenantId" = $1 and tcl."queueId"::text = $2
      order by (tcl."claimedBy" is null) desc, tcl."queuedAt" asc
      limit 200`,
@@ -135,11 +164,12 @@ export async function listQueuedCallsForTeam(user: TenantUser, teamId: string) {
 // simultaneously could both "succeed"). Here the `"claimedBy" is null` guard is part of the
 // UPDATE's WHERE clause itself, so only one caller can ever win a given call.
 export async function claimQueuedCall(user: TenantUser, callLogId: string) {
+  await assertTenantModule(user, "TELEPHONY");
   const tenantId = requireTenantId(user);
   const call = await queryOne<any>(`select "queueId" from "TelephonyCallLog" where id = $1 and "tenantId" = $2`, [callLogId, tenantId]);
   if (!call?.queueId) throw new Error("CALL_NOT_QUEUED");
   const team = await getTeamForTenant(tenantId, call.queueId);
-  const allowed = isQueueSupervisor(user, team) || (await isQueueMember(user, call.queueId));
+  const allowed = isQueueSupervisor(user, team) || (await isQueueMember(user, tenantId, call.queueId));
   if (!allowed) throw new Error("FORBIDDEN");
 
   const now = new Date().toISOString();
@@ -156,6 +186,7 @@ export async function claimQueuedCall(user: TenantUser, callLogId: string) {
 }
 
 export async function releaseQueuedCall(user: TenantUser, callLogId: string) {
+  await assertTenantModule(user, "TELEPHONY");
   const tenantId = requireTenantId(user);
   const call = await queryOne<any>(`select "queueId", "claimedBy" from "TelephonyCallLog" where id = $1 and "tenantId" = $2`, [callLogId, tenantId]);
   if (!call?.queueId) throw new Error("CALL_NOT_QUEUED");
@@ -167,5 +198,6 @@ export async function releaseQueuedCall(user: TenantUser, callLogId: string) {
     `update "TelephonyCallLog" set "claimedBy" = null, "claimedAt" = null where id = $1 and "tenantId" = $2 returning *`,
     [callLogId, tenantId],
   );
+  await createAuditLog(user, "RELEASE", "TELEPHONY_CALL_QUEUE", callLogId, call, released, null).catch(() => undefined);
   return released;
 }

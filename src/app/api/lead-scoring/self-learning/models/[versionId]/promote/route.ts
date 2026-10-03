@@ -1,11 +1,11 @@
 import { NextResponse } from "next/server";
-import { requireCurrentUser } from "@/lib/server/auth";
+import { requireCurrentUser, requireTenantAdmin } from "@/lib/server/auth";
 import { badRequest, forbidden, serverError, unauthorized } from "@/lib/server/http";
 import { promoteScoringModelVersion } from "@/lib/server/self-learning-scoring";
 
 export async function POST(request: Request, { params }: { params: Promise<{ versionId: string }> }) {
   try {
-    const user = await requireCurrentUser(request);
+    const user = await requireTenantAdmin(request);
     if (!user.tenantId) return forbidden("Tenant context required");
     const { versionId } = await params;
     if (!versionId) return badRequest("versionId is required");
@@ -17,6 +17,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ ver
     return NextResponse.json(result);
   } catch (error) {
     if (error instanceof Error && error.message === "UNAUTHORIZED") return unauthorized();
+    if (error instanceof Error && error.message === "FORBIDDEN") return forbidden("Only admins can do this");
     if (error instanceof Error && error.message.startsWith("MODULE_DISABLED")) return forbidden("Predictive Scoring module is disabled for this tenant");
     if (error instanceof Error && error.message === "SCORING_MODEL_VERSION_NOT_FOUND") return badRequest("Model version not found");
     if (error instanceof Error && error.message === "SCORING_MODEL_NOT_FOUND") return badRequest("Model not found");

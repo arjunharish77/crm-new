@@ -1,3 +1,5 @@
+export const dynamic = "force-dynamic";
+import { PublishedCatalogBoundary } from "@/components/published-catalog-boundary";
 import type { Metadata } from "next";
 import { LegalPageLayout } from "@/components/legal-page-layout";
 
@@ -46,20 +48,20 @@ const sections = [
 ];
 
 export default function PrivacyPage() {
-  return (
-    <LegalPageLayout crumb="Privacy policy" title="Privacy Policy" lastUpdated="12 August 2026">
+  return <PublishedCatalogBoundary>{(
+    <LegalPageLayout crumb="Privacy policy" title="Privacy Policy" lastUpdated="12 August 2026" sections={sections.map((section, index) => ({ id: `policy-section-${index + 1}`, title: section.title }))}>
       <p style={{ fontSize: 15, lineHeight: 1.7, margin: 0 }}>
         This policy explains how Unnati Vidya collects, uses, stores, and protects information
         submitted through this website.
       </p>
-      {sections.map((section) => (
-        <section key={section.title}>
-          <h2 style={{ fontSize: 20, fontWeight: 700, color: "#363634", margin: "28px 0 8px" }}>{section.title}</h2>
+      {sections.map((section, index) => (
+        <section key={section.title} aria-labelledby={`policy-section-${index + 1}`}>
+          <h2 id={`policy-section-${index + 1}`} tabIndex={-1} style={{ fontSize: 20, fontWeight: 700, color: "#363634", margin: "28px 0 8px" }}>{section.title}</h2>
           <ul style={{ margin: 0, paddingLeft: 20, fontSize: 15, lineHeight: 1.7 }}>
             {section.items.map((item) => <li key={item}>{item}</li>)}
           </ul>
         </section>
       ))}
     </LegalPageLayout>
-  );
+  )}</PublishedCatalogBoundary>;
 }

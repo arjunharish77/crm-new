@@ -12,7 +12,7 @@ const connectionString =
 
 function renderTemplate(value, tokens) {
   if (typeof value === "string") {
-    return Object.entries(tokens).reduce((output, [token, replacement]) => output.split(token).join(String(replacement || "")), value);
+    return Object.entries(tokens).reduce((output, [token, replacement]) => output.split(token).join(String(replacement ?? "")), value);
   }
   if (Array.isArray(value)) return value.map((item) => renderTemplate(item, tokens));
   if (value && typeof value === "object") {
@@ -35,7 +35,7 @@ async function getLeadContext(client, leadId) {
   const result = await client.query(
     `select l.id, l.name, l.email, l.phone, l.city, l.source_path, l.source_page_type,
             l.utm_source, l.utm_medium, l.utm_campaign, l.utm_term, l.utm_content,
-            l.email_otp_verified, l.phone_otp_verified, l.consent_accepted,
+            l.email_otp_verified, l.phone_otp_verified, l.consent_accepted, l.course_preference, l.preferences_completed_at,
             c.id as course_id, c.name as course_name, c.short_name as course_short_name,
             c.level as course_level, c.stream as course_stream, c.fee_inr as course_fee_inr,
             u.id as university_id, u.name as university_name, u.short_name as university_short_name
@@ -52,6 +52,8 @@ async function getLeadContext(client, leadId) {
 function tokenValues(row) {
   return {
     "{{lead.id}}": row.id,
+    "{{lead.coursePreference}}": row.course_preference,
+    "{{lead.preferencesComplete}}": Boolean(row.preferences_completed_at),
     "{{lead.name}}": row.name,
     "{{lead.email}}": row.email,
     "{{lead.phone}}": row.phone,
@@ -66,7 +68,7 @@ function tokenValues(row) {
     "{{lead.emailVerified}}": row.email_otp_verified,
     "{{lead.phoneVerified}}": row.phone_otp_verified,
     "{{course.id}}": row.course_id,
-    "{{course.name}}": row.course_name,
+    "{{course.name}}": row.course_name || row.course_preference,
     "{{course.shortName}}": row.course_short_name,
     "{{course.level}}": row.course_level,
     "{{course.stream}}": row.course_stream,

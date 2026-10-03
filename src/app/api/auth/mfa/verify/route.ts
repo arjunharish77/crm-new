@@ -6,7 +6,7 @@ import { verifyMfaLoginCode, createTrustedDevice } from "@/lib/server/mfa";
 import { badRequest, tooManyRequests, unauthorized } from "@/lib/server/http";
 import { checkRateLimit, clientIpFromRequest } from "@/lib/server/rate-limit";
 import { getEffectiveSecurityPolicy } from "@/lib/server/security-policy";
-import { isPasswordExpired } from "@/lib/server/password-policy";
+import { isPasswordExpired, passwordRuleForForms } from "@/lib/server/password-policy";
 
 const TRUSTED_DEVICE_COOKIE = "mfa_trusted_device";
 
@@ -51,7 +51,7 @@ export async function POST(request: Request) {
   const policy = await getEffectiveSecurityPolicy(user.tenantId);
   if (isPasswordExpired(user.passwordChangedAt, policy)) {
     const passwordChangeToken = await signPasswordChangeToken(user.id);
-    return NextResponse.json({ passwordExpired: true, passwordChangeToken });
+    return NextResponse.json({ passwordExpired: true, passwordChangeToken, passwordRule: passwordRuleForForms(policy) });
   }
 
   const ip = clientIpFromRequest(request);

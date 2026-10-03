@@ -2,7 +2,7 @@ import { tenantProvisioningSchema } from "@/lib/tenant-provisioning";
 import { NextResponse } from "next/server";
 import { createTenantWithAdmin, listTenants } from "@/lib/server/admin";
 import { requirePlatformAdmin } from "@/lib/server/auth";
-import { badRequest, conflict, forbidden, serverError, unauthorized } from "@/lib/server/http";
+import { badRequest, conflict, forbidden, moduleDependencyConflict, serverError, unauthorized } from "@/lib/server/http";
 import { getEffectiveSecurityPolicy } from "@/lib/server/security-policy";
 import { validatePasswordStrength } from "@/lib/server/password-policy";
 
@@ -40,6 +40,7 @@ export async function POST(request: Request) {
     if (error instanceof Error && error.message === "FORBIDDEN") return forbidden();
     if (error instanceof Error && error.message === "UNKNOWN_MODULE_SELECTION") return badRequest("The module catalog changed. Reload before creating the tenant.");
     if (error instanceof Error && error.message === "CORE_MODULE_CANNOT_BE_DISABLED") return badRequest("Core modules must remain enabled");
+    if (error instanceof Error && error.message.startsWith("MODULE_DEPENDENCY: ")) return moduleDependencyConflict(error.message.slice("MODULE_DEPENDENCY: ".length), 400);
     if (error instanceof Error && error.message === "MODULE_CATALOG_UNAVAILABLE") return badRequest("The module catalog is unavailable. Apply database migrations before provisioning tenants.");
     if (error && typeof error === "object" && "code" in error && error.code === "23505") return conflict("A tenant or admin account already uses these details. Check the admin email before retrying.");
     return serverError("Failed to create tenant", error);

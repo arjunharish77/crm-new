@@ -1,18 +1,26 @@
 @import "tailwindcss";
+/* Radix enter/exit motion (the animate-in / fade / zoom classes in components/ui). Shortened to
+   near zero under prefers-reduced-motion below. UI/UX plan §3.4. */
+@import "tw-animate-css";
 
 /* ============================================================
-   M3 COLOR TOKENS — single source of truth (see src/theme.ts
-   for the MUI-side values these were ported from byte-for-byte;
-   src/theme.ts should be considered deprecated in favor of these
-   once the MUI migration in later steps is complete).
+   COLOR TOKENS — the single source of truth for colour.
+   ============================================================
+   UI/UX plan decision 19 (§10.3): neutral surfaces in every palette, light and dark. Page,
+   cards, borders and text are the same grey scale for all four palettes; only --primary (and
+   its family) and the --selected tint carry the palette's hue. Green is the accent, not the
+   background.
    ============================================================ */
 :root {
+  /* The Unnatify logo (components/brand/brand-logo.tsx). Brand colours, the same in every palette. */
+  --brand-mark: #1b6c31;
+  --brand-ink: #1a1c19;
   --app-header-offset: 56px;
   --page-gutter: 16px;
   --section-gap: 24px;
-  --background: #f7fbf2;
-  --foreground: #181d18;
-  --surface: #f7fbf2;
+  --background: #F6F7F9;
+  --foreground: #101828;
+  --surface: #F6F7F9;
 
   --primary: #1b6c31;
   --primary-foreground: #FFFFFF;
@@ -34,11 +42,13 @@
   --error-container: #F9DEDC;
   --on-error-container: #410E0B;
 
-  --muted: #dee5d9;
-  --muted-foreground: #424940;
+  --muted: #F2F4F7;
+  --muted-foreground: #475467;
 
-  --border: color-mix(in srgb, var(--foreground) 18%, var(--background));
-  --input: #c1c9be;
+  --border: #E4E7EC;
+  /* Buttons and other bordered controls whose text already identifies them. */
+  --border-strong: #D0D5DD;
+  --input: #7F8A9C;
 
   --shadow-color: #000000;
   --scrim: #000000;
@@ -47,29 +57,60 @@
   --inverse-foreground: #eff2e9;
   --inverse-primary: #88d891;
 
-  --surface-container-highest: #e0e4de;
-  --surface-container-high: #e6e9e3;
-  --surface-container: #ebefea;
-  --surface-container-low: #f1f4f0;
+  --surface-container-highest: #EAECF0;
+  --surface-container-high: #F2F4F7;
+  --surface-container: #F9FAFB;
+  --surface-container-low: #FFFFFF;
   --surface-container-lowest: #FFFFFF;
-  --surface-dim: #d7dbd4;
-  --surface-bright: #f7fbf2;
+  --surface-dim: #E4E7EC;
+  --surface-bright: #FFFFFF;
 
   /* Roles shadcn primitives expect that M3 doesn't define — mapped to the
      closest equivalent already in this palette, not new colors. */
-  --card: var(--surface-container-low);
+  --card: #FFFFFF;
   --card-foreground: var(--foreground);
-  --popover: var(--surface-container);
+  --popover: #FFFFFF;
   --popover-foreground: var(--foreground);
   --ring: var(--primary);
-  --accent: color-mix(in srgb, var(--primary) 8%, transparent);
+  --accent: #F2F4F7;
   --accent-foreground: var(--foreground);
+  --subtle-foreground: #667085;
+  --selected: #EEF6EF;
+  --sidebar: #FFFFFF;
+  --sidebar-border: #E4E7EC;
+
+  /* Status tones (UI/UX plan §3.2): fill / text pairs, same in every palette. Status colour
+     always comes with a text label; primary green is never used for status. */
+  --status-success: #d7f0dc;
+  --status-success-foreground: #1e6b2f;
+  --status-warning: #ffe3b8;
+  --status-warning-foreground: #7a4a00;
+  --status-danger: #f9dedc;
+  --status-danger-foreground: #8c1d18;
+  --status-info: #d6ecfa;
+  --status-info-foreground: #0b5a85;
+  --status-neutral: #F2F4F7;
+  --status-neutral-foreground: #344054;
+  --status-accent: #ece3fb;
+  --status-accent-foreground: #5b3d94;
+
+  /* Chart series (theme-aware). Each series also needs a label, never colour alone. */
+  --chart-1: var(--primary);
+  --chart-2: var(--tertiary);
+  --chart-3: var(--status-info-foreground);
+  --chart-4: var(--status-warning-foreground);
+  --chart-5: var(--status-accent-foreground);
+  --chart-6: var(--status-success-foreground);
+  --chart-7: var(--status-danger-foreground);
+  --chart-8: var(--status-neutral-foreground);
 }
 
 .dark {
-  --background: #101410;
-  --foreground: #e0e4de;
-  --surface: #101410;
+  --brand-mark: #7fdc8f;
+  --brand-ink: #e2e3dd;
+  --background: #0C111D;
+  --foreground: #F5F5F6;
+  --surface: #0C111D;
 
   --primary: #88d891;
   --primary-foreground: #003915;
@@ -91,11 +132,13 @@
   --error-container: #8C1D18;
   --on-error-container: #F9DEDC;
 
-  --muted: #424940;
-  --muted-foreground: #c1c9be;
+  --muted: #1F242F;
+  --muted-foreground: #94969C;
 
-  --border: color-mix(in srgb, var(--foreground) 18%, var(--background));
-  --input: #424940;
+  --border: #1F242F;
+  /* Buttons and other bordered controls whose text already identifies them. */
+  --border-strong: #333741;
+  --input: #6C707A;
 
   --shadow-color: #000000;
   --scrim: #000000;
@@ -104,21 +147,38 @@
   --inverse-foreground: #2d322c;
   --inverse-primary: #1b6c31;
 
-  --surface-container-highest: #313631;
-  --surface-container-high: #272b26;
-  --surface-container: #1d201d;
-  --surface-container-low: #181d18;
-  --surface-container-lowest: #0d100d;
-  --surface-dim: #101410;
-  --surface-bright: #363a35;
+  --surface-container-highest: #333741;
+  --surface-container-high: #1F242F;
+  --surface-container: #1A1F2A;
+  --surface-container-low: #161B26;
+  --surface-container-lowest: #0C111D;
+  --surface-dim: #0C111D;
+  --surface-bright: #333741;
 
-  --card: var(--surface-container-low);
+  --card: #161B26;
   --card-foreground: var(--foreground);
-  --popover: var(--surface-container);
+  --popover: #161B26;
   --popover-foreground: var(--foreground);
   --ring: var(--primary);
-  --accent: color-mix(in srgb, var(--primary) 8%, transparent);
+  --accent: #1F242F;
   --accent-foreground: var(--foreground);
+  --subtle-foreground: #85888E;
+  --selected: #13261A;
+  --sidebar: #0C111D;
+  --sidebar-border: #1F242F;
+
+  --status-success: #163b1f;
+  --status-success-foreground: #9be3a3;
+  --status-warning: #3d2a00;
+  --status-warning-foreground: #ffc46b;
+  --status-danger: #5c1612;
+  --status-danger-foreground: #ffb4ab;
+  --status-info: #0f3149;
+  --status-info-foreground: #9ccfff;
+  --status-neutral: #1F242F;
+  --status-neutral-foreground: #CECFD2;
+  --status-accent: #33264f;
+  --status-accent-foreground: #d3bcff;
 }
 
 /* ============================================================
@@ -130,9 +190,9 @@
    matching M3 convention that error is theme-independent.
    ============================================================ */
 html[data-color-theme="ocean"] {
-  --background: #f4f8fb;
-  --foreground: #14181c;
-  --surface: #f4f8fb;
+  --background: #F6F7F9;
+  --foreground: #101828;
+  --surface: #F6F7F9;
 
   --primary: #0967a3;
   --primary-foreground: #FFFFFF;
@@ -149,29 +209,36 @@ html[data-color-theme="ocean"] {
   --tertiary-container: #e7ddff;
   --on-tertiary-container: #24173d;
 
-  --muted: #dde6ec;
-  --muted-foreground: #40484d;
+  --muted: #F2F4F7;
+  --muted-foreground: #475467;
 
-  --border: color-mix(in srgb, var(--foreground) 18%, var(--background));
-  --input: #bcc7cf;
+  --border: #E4E7EC;
+  --input: #7F8A9C;
 
   --inverse-surface: #282e33;
   --inverse-foreground: #e9eef2;
   --inverse-primary: #9ecfff;
 
-  --surface-container-highest: #dde3e8;
-  --surface-container-high: #e3e8ec;
-  --surface-container: #e9edf0;
-  --surface-container-low: #eff3f5;
+  --surface-container-highest: #EAECF0;
+  --surface-container-high: #F2F4F7;
+  --surface-container: #F9FAFB;
+  --surface-container-low: #FFFFFF;
   --surface-container-lowest: #FFFFFF;
-  --surface-dim: #d5dadd;
-  --surface-bright: #f4f8fb;
+  --surface-dim: #E4E7EC;
+  --surface-bright: #FFFFFF;
+  --subtle-foreground: #667085;
+  --card: #FFFFFF;
+  --popover: #FFFFFF;
+  --accent: #F2F4F7;
+  --selected: #EAF3F8;
+  --sidebar: #FFFFFF;
+  --sidebar-border: #E4E7EC;
 }
 
 html.dark[data-color-theme="ocean"] {
-  --background: #0e1215;
-  --foreground: #dde3e8;
-  --surface: #0e1215;
+  --background: #0C111D;
+  --foreground: #F5F5F6;
+  --surface: #0C111D;
 
   --primary: #9ecfff;
   --primary-foreground: #00304d;
@@ -188,29 +255,36 @@ html.dark[data-color-theme="ocean"] {
   --tertiary-container: #52426f;
   --on-tertiary-container: #e7ddff;
 
-  --muted: #40484d;
-  --muted-foreground: #bcc7cf;
+  --muted: #1F242F;
+  --muted-foreground: #94969C;
 
-  --border: color-mix(in srgb, var(--foreground) 18%, var(--background));
-  --input: #40484d;
+  --border: #1F242F;
+  --input: #6C707A;
 
   --inverse-surface: #dde3e8;
   --inverse-foreground: #282e33;
   --inverse-primary: #0967a3;
 
-  --surface-container-highest: #313940;
-  --surface-container-high: #262d33;
-  --surface-container: #1b2126;
-  --surface-container-low: #161c20;
-  --surface-container-lowest: #0a0d10;
-  --surface-dim: #0e1215;
-  --surface-bright: #343b41;
+  --surface-container-highest: #333741;
+  --surface-container-high: #1F242F;
+  --surface-container: #1A1F2A;
+  --surface-container-low: #161B26;
+  --surface-container-lowest: #0C111D;
+  --surface-dim: #0C111D;
+  --surface-bright: #333741;
+  --subtle-foreground: #85888E;
+  --card: #161B26;
+  --popover: #161B26;
+  --accent: #1F242F;
+  --selected: #10222D;
+  --sidebar: #0C111D;
+  --sidebar-border: #1F242F;
 }
 
 html[data-color-theme="sunset"] {
-  --background: #fff8f2;
-  --foreground: #211a12;
-  --surface: #fff8f2;
+  --background: #F6F7F9;
+  --foreground: #101828;
+  --surface: #F6F7F9;
 
   --primary: #7a4a00;
   --primary-foreground: #FFFFFF;
@@ -227,29 +301,36 @@ html[data-color-theme="sunset"] {
   --tertiary-container: #e0e6b8;
   --on-tertiary-container: #1a1d05;
 
-  --muted: #ece0d3;
-  --muted-foreground: #4d4438;
+  --muted: #F2F4F7;
+  --muted-foreground: #475467;
 
-  --border: color-mix(in srgb, var(--foreground) 18%, var(--background));
-  --input: #d5c7b8;
+  --border: #E4E7EC;
+  --input: #7F8A9C;
 
   --inverse-surface: #362f27;
   --inverse-foreground: #f7efe4;
   --inverse-primary: #ffb95c;
 
-  --surface-container-highest: #e6dccf;
-  --surface-container-high: #ece1d5;
-  --surface-container: #f1e8dc;
-  --surface-container-low: #f7efe4;
+  --surface-container-highest: #EAECF0;
+  --surface-container-high: #F2F4F7;
+  --surface-container: #F9FAFB;
+  --surface-container-low: #FFFFFF;
   --surface-container-lowest: #FFFFFF;
-  --surface-dim: #ded4c8;
-  --surface-bright: #fff8f2;
+  --surface-dim: #E4E7EC;
+  --surface-bright: #FFFFFF;
+  --subtle-foreground: #667085;
+  --card: #FFFFFF;
+  --popover: #FFFFFF;
+  --accent: #F2F4F7;
+  --selected: #FBF1E8;
+  --sidebar: #FFFFFF;
+  --sidebar-border: #E4E7EC;
 }
 
 html.dark[data-color-theme="sunset"] {
-  --background: #17130d;
-  --foreground: #ece1d5;
-  --surface: #17130d;
+  --background: #0C111D;
+  --foreground: #F5F5F6;
+  --surface: #0C111D;
 
   --primary: #ffb95c;
   --primary-foreground: #452b00;
@@ -266,29 +347,36 @@ html.dark[data-color-theme="sunset"] {
   --tertiary-container: #444a24;
   --on-tertiary-container: #e0e6b8;
 
-  --muted: #4d4438;
-  --muted-foreground: #d5c7b8;
+  --muted: #1F242F;
+  --muted-foreground: #94969C;
 
-  --border: color-mix(in srgb, var(--foreground) 18%, var(--background));
-  --input: #4d4438;
+  --border: #1F242F;
+  --input: #6C707A;
 
   --inverse-surface: #ece1d5;
   --inverse-foreground: #362f27;
   --inverse-primary: #7a4a00;
 
-  --surface-container-highest: #40372c;
-  --surface-container-high: #332c22;
-  --surface-container: #251f17;
-  --surface-container-low: #201a13;
-  --surface-container-lowest: #0d0a06;
-  --surface-dim: #17130d;
-  --surface-bright: #453b30;
+  --surface-container-highest: #333741;
+  --surface-container-high: #1F242F;
+  --surface-container: #1A1F2A;
+  --surface-container-low: #161B26;
+  --surface-container-lowest: #0C111D;
+  --surface-dim: #0C111D;
+  --surface-bright: #333741;
+  --subtle-foreground: #85888E;
+  --card: #161B26;
+  --popover: #161B26;
+  --accent: #1F242F;
+  --selected: #2A1D10;
+  --sidebar: #0C111D;
+  --sidebar-border: #1F242F;
 }
 
 html[data-color-theme="grape"] {
-  --background: #fbf8fd;
-  --foreground: #1c1a1f;
-  --surface: #fbf8fd;
+  --background: #F6F7F9;
+  --foreground: #101828;
+  --surface: #F6F7F9;
 
   --primary: #6b4ba3;
   --primary-foreground: #FFFFFF;
@@ -305,29 +393,36 @@ html[data-color-theme="grape"] {
   --tertiary-container: #ffd9e3;
   --on-tertiary-container: #31101c;
 
-  --muted: #e6e0ea;
-  --muted-foreground: #48454b;
+  --muted: #F2F4F7;
+  --muted-foreground: #475467;
 
-  --border: color-mix(in srgb, var(--foreground) 18%, var(--background));
-  --input: #c9c4cd;
+  --border: #E4E7EC;
+  --input: #7F8A9C;
 
   --inverse-surface: #312f36;
   --inverse-foreground: #f3edf7;
   --inverse-primary: #d3bcff;
 
-  --surface-container-highest: #e2dce6;
-  --surface-container-high: #e8e1ec;
-  --surface-container: #ede7f1;
-  --surface-container-low: #f3edf7;
+  --surface-container-highest: #EAECF0;
+  --surface-container-high: #F2F4F7;
+  --surface-container: #F9FAFB;
+  --surface-container-low: #FFFFFF;
   --surface-container-lowest: #FFFFFF;
-  --surface-dim: #dbd6df;
-  --surface-bright: #fbf8fd;
+  --surface-dim: #E4E7EC;
+  --surface-bright: #FFFFFF;
+  --subtle-foreground: #667085;
+  --card: #FFFFFF;
+  --popover: #FFFFFF;
+  --accent: #F2F4F7;
+  --selected: #F3EEFA;
+  --sidebar: #FFFFFF;
+  --sidebar-border: #E4E7EC;
 }
 
 html.dark[data-color-theme="grape"] {
-  --background: #131218;
-  --foreground: #e2dce6;
-  --surface: #131218;
+  --background: #0C111D;
+  --foreground: #F5F5F6;
+  --surface: #0C111D;
 
   --primary: #d3bcff;
   --primary-foreground: #391e6c;
@@ -344,23 +439,30 @@ html.dark[data-color-theme="grape"] {
   --tertiary-container: #633b48;
   --on-tertiary-container: #ffd9e3;
 
-  --muted: #48454b;
-  --muted-foreground: #c9c4cd;
+  --muted: #1F242F;
+  --muted-foreground: #94969C;
 
-  --border: color-mix(in srgb, var(--foreground) 18%, var(--background));
-  --input: #48454b;
+  --border: #1F242F;
+  --input: #6C707A;
 
   --inverse-surface: #e2dce6;
   --inverse-foreground: #312f36;
   --inverse-primary: #6b4ba3;
 
-  --surface-container-highest: #383540;
-  --surface-container-high: #2c2933;
-  --surface-container: #211f27;
-  --surface-container-low: #1c1a21;
-  --surface-container-lowest: #0d0c11;
-  --surface-dim: #131218;
-  --surface-bright: #3a3741;
+  --surface-container-highest: #333741;
+  --surface-container-high: #1F242F;
+  --surface-container: #1A1F2A;
+  --surface-container-low: #161B26;
+  --surface-container-lowest: #0C111D;
+  --surface-dim: #0C111D;
+  --surface-bright: #333741;
+  --subtle-foreground: #85888E;
+  --card: #161B26;
+  --popover: #161B26;
+  --accent: #1F242F;
+  --selected: #1F1830;
+  --sidebar: #0C111D;
+  --sidebar-border: #1F242F;
 }
 
 /* Exposes every variable above as a Tailwind color utility
@@ -392,9 +494,34 @@ html.dark[data-color-theme="grape"] {
 
   --color-muted: var(--muted);
   --color-muted-foreground: var(--muted-foreground);
+  --color-subtle-foreground: var(--subtle-foreground);
+  --color-status-success: var(--status-success);
+  --color-status-success-foreground: var(--status-success-foreground);
+  --color-status-warning: var(--status-warning);
+  --color-status-warning-foreground: var(--status-warning-foreground);
+  --color-status-danger: var(--status-danger);
+  --color-status-danger-foreground: var(--status-danger-foreground);
+  --color-status-info: var(--status-info);
+  --color-status-info-foreground: var(--status-info-foreground);
+  --color-status-neutral: var(--status-neutral);
+  --color-status-neutral-foreground: var(--status-neutral-foreground);
+  --color-status-accent: var(--status-accent);
+  --color-status-accent-foreground: var(--status-accent-foreground);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --color-chart-6: var(--chart-6);
+  --color-chart-7: var(--chart-7);
+  --color-chart-8: var(--chart-8);
+  --color-selected: var(--selected);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-border: var(--sidebar-border);
 
   --color-border: var(--border);
   --color-input: var(--input);
+  --color-border-strong: var(--border-strong);
 
   --color-shadow-color: var(--shadow-color);
   --color-scrim: var(--scrim);
@@ -418,6 +545,10 @@ html.dark[data-color-theme="grape"] {
   --color-ring: var(--ring);
   --color-accent: var(--accent);
   --color-accent-foreground: var(--accent-foreground);
+
+  /* Elevation (UI/UX plan §10.3): cards have none; menus and popovers, then dialogs. */
+  --shadow-menu: 0 4px 12px rgba(16, 24, 40, 0.08);
+  --shadow-dialog: 0 12px 32px rgba(16, 24, 40, 0.16);
 }
 
 @layer base {
@@ -431,7 +562,7 @@ body {
   color: var(--foreground);
   /* Scrollbar styling for Webkit */
   scrollbar-width: thin;
-  scrollbar-color: #727970 transparent;
+  scrollbar-color: #98A2B3 transparent;
 }
 
 /* Custom Scrollbar */
@@ -445,7 +576,7 @@ body {
 }
 
 ::-webkit-scrollbar-thumb {
-  background-color: #727970;
+  background-color: #98A2B3;
   border-radius: 4px;
 }
 
@@ -484,4 +615,22 @@ body {
   .builder-workspace-body[data-layout="form"] .builder-panel { display: flex; }
   .builder-workspace-body[data-layout="form"] .builder-library { flex: 0 0 224px; }
   .builder-workspace-body[data-layout="form"] .builder-inspector { flex: 0 0 288px; }
+}
+
+/* Toast host on narrow screens. sonner 2.0.7 anchors the mobile toaster at both left and right
+   offsets AND sets width: 100%, so its right edge sits one offset past the viewport (and each
+   toast compensates with calc(100% - 2 * offset)). Let the container fit between its anchors and
+   the toasts fill it; allow long words to wrap at large text sizes. Doubled attribute selectors
+   out-rank the library's own rules without !important. */
+@media (max-width: 600px) {
+  [data-sonner-toaster][data-sonner-toaster] {
+    width: auto;
+    max-width: none;
+  }
+  [data-sonner-toaster][data-sonner-toaster] [data-sonner-toast] {
+    width: 100%;
+  }
+}
+[data-sonner-toast] {
+  overflow-wrap: anywhere;
 }

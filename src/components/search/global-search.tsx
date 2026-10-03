@@ -14,10 +14,6 @@ import {
     Download,
     Workflow,
     Settings,
-    Users,
-    Shield,
-    SlidersHorizontal,
-    KeyRound,
     History,
     Star,
     Megaphone,
@@ -32,7 +28,20 @@ import { formatCurrency } from "@/lib/utils";
 import { getFavoriteRecords, getRecentRecords, type FavoriteRecord, type RecentRecord, type RecordType } from "@/lib/recent-records";
 import { contextualRecordDefaults } from "@/lib/contextual-defaults";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
+import { useVisibleSettingsPages } from "@/hooks/use-settings-pages";
+import { settingsGroupTitle } from "@/lib/settings-pages";
+import { ACCOUNT_PAGES } from "@/components/account/account-nav";
+
+// Extra words that find a My account page ("password" finds Sign-in & security).
+const ACCOUNT_KEYWORDS: Record<string, string[]> = {
+    "/dashboard/account": ["name", "profile"],
+    "/dashboard/account/preferences": ["theme", "dark mode", "appearance", "density", "time zone", "currency", "landing page", "pinned"],
+    "/dashboard/account/notifications": ["mute", "alerts"],
+    "/dashboard/account/security": ["password", "two-factor", "2fa", "mfa", "sessions", "sign out", "devices"],
+    "/dashboard/account/activity": ["audit", "history"],
+};
 import { isAbortError, useAbortableRequest } from "@/hooks/use-abortable-request";
+import { useModuleAccess } from "@/hooks/use-module-access";
 
 interface SearchResult {
     id: string;
@@ -41,7 +50,11 @@ interface SearchResult {
     title?: string; // Opportunity, Task
     notes?: string; // Activity
     company?: string;
+    email?: string | null;
+    phone?: string | null;
     amount?: number;
+    leadId?: string | null;
+    opportunityId?: string | null;
 }
 
 // "Global command palette" (gap checklist: "Add global command palette with permission-scoped
@@ -69,10 +82,9 @@ export function visibleCommandIds(input: {
     if (input.hasCreateActivity && input.canAccessModule("activities")) ids.push("create-activity");
     ids.push("nav-views", "nav-reports", "nav-exports");
     if (input.automationEnabled) ids.push("nav-automations");
-    ids.push("settings-home");
-    if (input.isAdmin) {
-        ids.push("settings-users", "settings-roles", "settings-security", "settings-integrations", "settings-api-keys");
-    }
+    // My account is for everyone; Settings and its pages only for admins (decision 8).
+    ids.push("account-pages");
+    if (input.isAdmin) ids.push("settings-home", "settings-pages");
     return ids;
 }
 
@@ -108,6 +120,7 @@ export function GlobalSearch({
     const [query, setQuery] = useState("");
     const nextSearchSignal = useAbortableRequest();
     const [loading, setLoading] = useState(false);
+    const [searchError, setSearchError] = useState(false);
     const [recent, setRecent] = useState<RecentRecord[]>([]);
     const [favorites, setFavorites] = useState<FavoriteRecord[]>([]);
     const [results, setResults] = useState<{
@@ -130,11 +143,13 @@ export function GlobalSearch({
     useEffect(() => {
         if (!debouncedQuery || debouncedQuery.length < 2) {
             setResults(EMPTY_RESULTS);
+            setSearchError(false);
             return;
         }
 
         const signal = nextSearchSignal();
         setLoading(true);
+        setSearchError(false);
         apiFetch(`/search?q=${encodeURIComponent(debouncedQuery)}`, { signal })
             .then(setResults)
             .catch((error) => {
@@ -143,21 +158,26 @@ export function GlobalSearch({
                 // not touch state at all.
                 if (isAbortError(error)) return;
                 console.error(error);
+                setResults(EMPTY_RESULTS);
+                setSearchError(true);
             })
             .finally(() => {
                 if (!signal.aborted) setLoading(false);
             });
     }, [debouncedQuery, nextSearchSignal]);
 
-    const handleSelect = (id: string, type: string) => {
+    // Every result opens the item itself (UI/UX plan §11.6 M): an activity opens the record it
+    // is logged on, a task opens in the tasks page's editor, a partner opens its profile.
+    const handleSelect = (result: SearchResult) => {
         onOpenChange(false);
+        const { id, type } = result;
         if (type === 'lead') router.push(`/dashboard/leads/${id}`);
         if (type === 'opportunity') router.push(`/dashboard/opportunities/${id}`);
-        // Activities, Tasks, and Partners have no per-record detail page in this app today --
-        // route to the list rather than a dead link.
-        if (type === 'activity') router.push(`/dashboard/activities`);
-        if (type === 'task') router.push(`/dashboard/tasks`);
-        if (type === 'partner') router.push(`/dashboard/admin/partners`);
+        if (type === 'activity') {
+            router.push(result.opportunityId ? `/dashboard/opportunities/${result.opportunityId}` : result.leadId ? `/dashboard/leads/${result.leadId}` : `/dashboard/activities`);
+        }
+        if (type === 'task') router.push(`/dashboard/tasks?taskId=${id}`);
+        if (type === 'partner') router.push(`/dashboard/settings/access/partners/${id}`);
     };
 
     // "Permission-scoped": client-side hiding only (real enforcement is always server-side, on
@@ -165,10 +185,11 @@ export function GlobalSearch({
     // this app's client code (useFeature/useModuleEnabled), and this codebase's consistent
     // "missing -> enabled" default, so an unrecognized/absent permission shape shows the
     // command rather than silently hiding something the user actually has access to.
-    const rolePermissions = (user as any)?.role?.permissions;
-    const modules = rolePermissions?.modules ?? {};
-    const canAccessModule = useCallback((key: string) => modules[key] !== "none" && modules[key] !== false, [modules]);
+    // The rule the server enforces (lib/module-access.ts): "create" commands need "write".
+    const can = useModuleAccess();
+    const canAccessModule = useCallback((key: string) => can(key, "write"), [can]);
     const isAdmin = !!user?.isTenantAdmin || !!user?.isPlatformAdmin;
+    const settingsPages = useVisibleSettingsPages();
 
     const commands = useMemo<CommandDef[]>(() => {
         const list: CommandDef[] = [];
@@ -183,48 +204,61 @@ export function GlobalSearch({
         }));
 
         if (onCreateLead && visible.has("create-lead")) {
-            list.push({ id: "create-lead", label: "Create Lead", keywords: ["new"], icon: UserPlus, group: "Quick Create", perform: () => { onOpenChange(false); onCreateLead(); } });
+            list.push({ id: "create-lead", label: "Create lead", keywords: ["new"], icon: UserPlus, group: "Create", perform: () => { onOpenChange(false); onCreateLead(); } });
         }
         if (onCreateOpportunity && visible.has("create-opportunity")) {
-            list.push({ id: "create-opportunity", label: "Create Opportunity", keywords: ["new", "deal"], icon: Target, group: "Quick Create", perform: () => { onOpenChange(false); onCreateOpportunity(); } });
+            list.push({ id: "create-opportunity", label: "Create opportunity", keywords: ["new", "deal"], icon: Target, group: "Create", perform: () => { onOpenChange(false); onCreateOpportunity(); } });
         }
         if (visible.has("create-task")) {
             const taskParams = new URLSearchParams({ create: "1" });
             if (contextDefaults.leadId) taskParams.set("leadId", contextDefaults.leadId);
             if (contextDefaults.opportunityId) taskParams.set("opportunityId", contextDefaults.opportunityId);
-            list.push({ id: "create-task", label: "Create Task", keywords: ["new"], icon: ListChecks, group: "Quick Create", perform: () => go(`/dashboard/tasks?${taskParams.toString()}`) });
+            list.push({ id: "create-task", label: "Create task", keywords: ["new"], icon: ListChecks, group: "Create", perform: () => go(`/dashboard/tasks?${taskParams.toString()}`) });
         }
         if (onCreateActivity && visible.has("create-activity")) {
-            list.push({ id: "create-activity", label: "Log Activity", keywords: ["new", "call", "note"], icon: ActivityIcon, group: "Quick Create", perform: () => { onOpenChange(false); onCreateActivity(); } });
+            list.push({ id: "create-activity", label: "Log activity", keywords: ["new", "call", "note"], icon: ActivityIcon, group: "Create", perform: () => { onOpenChange(false); onCreateActivity(); } });
         }
 
-        list.push({ id: "nav-views", label: "Open Views", icon: LayoutGrid, group: "Navigate", perform: () => go("/dashboard/views") });
-        list.push({ id: "nav-reports", label: "Run Reports", icon: BarChart3, group: "Navigate", perform: () => go("/dashboard/reports") });
-        list.push({ id: "nav-exports", label: "Queue Exports", keywords: ["csv", "download"], icon: Download, group: "Navigate", perform: () => go("/dashboard/exports") });
+        list.push({ id: "nav-views", label: "Views", icon: LayoutGrid, group: "Navigate", perform: () => go("/dashboard/views") });
+        list.push({ id: "nav-reports", label: "Reports", icon: BarChart3, group: "Navigate", perform: () => go("/dashboard/reports") });
+        list.push({ id: "nav-exports", label: "Exports", keywords: ["csv", "download"], icon: Download, group: "Navigate", perform: () => go("/dashboard/exports") });
         if (visible.has("nav-automations")) {
-            list.push({ id: "nav-automations", label: "Launch Automations", keywords: ["workflow"], icon: Workflow, group: "Navigate", perform: () => go("/dashboard/automations-v2") });
+            list.push({ id: "nav-automations", label: "Automations", keywords: ["workflow"], icon: Workflow, group: "Navigate", perform: () => go("/dashboard/automations-v2") });
         }
 
-        list.push({ id: "settings-home", label: "Settings", icon: Settings, group: "Settings", perform: () => go("/dashboard/settings") });
-        if (visible.has("settings-users")) {
-            list.push({ id: "settings-users", label: "Users", icon: Users, group: "Settings", perform: () => go("/dashboard/settings/users") });
-            list.push({ id: "settings-roles", label: "Roles", icon: Shield, group: "Settings", perform: () => go("/dashboard/settings/roles") });
-            list.push({ id: "settings-security", label: "Security", keywords: ["mfa", "password", "sso"], icon: Shield, group: "Settings", perform: () => go("/dashboard/admin/security") });
-            list.push({ id: "settings-integrations", label: "Integrations", icon: SlidersHorizontal, group: "Settings", perform: () => go("/dashboard/settings/integrations") });
-            list.push({ id: "settings-api-keys", label: "API Keys", icon: KeyRound, group: "Settings", perform: () => go("/dashboard/settings/api-keys") });
+        if (visible.has("account-pages")) {
+            for (const page of ACCOUNT_PAGES) {
+                list.push({ id: `account:${page.href}`, label: page.title, keywords: ["my account", ...(ACCOUNT_KEYWORDS[page.href] ?? [])], icon: page.icon, group: "My account", perform: () => go(page.href) });
+            }
+        }
+        if (visible.has("settings-home")) {
+            list.push({ id: "settings-home", label: "Settings", icon: Settings, group: "Settings", perform: () => go("/dashboard/settings") });
+        }
+        if (visible.has("settings-pages")) {
+            for (const page of settingsPages) {
+                list.push({ id: `settings:${page.href}`, label: page.title, keywords: [settingsGroupTitle(page.group), ...(page.keywords ?? [])], icon: page.icon, group: "Settings", perform: () => go(page.href) });
+            }
         }
 
         return list;
-    }, [onCreateLead, onCreateOpportunity, onCreateActivity, automationEnabled, isAdmin, canAccessModule, router, onOpenChange, contextDefaults.leadId, contextDefaults.opportunityId]);
+    }, [onCreateLead, onCreateOpportunity, onCreateActivity, automationEnabled, isAdmin, canAccessModule, router, onOpenChange, contextDefaults.leadId, contextDefaults.opportunityId, settingsPages]);
 
+    // cmdk's own filter is off (shouldFilter={false} below): it kept a row's first keywords, so a
+    // record found by phone after an email search was hidden. Records are already filtered by
+    // the server; commands, recents and favourites are matched here.
+    const needle = query.trim().toLowerCase();
+    const matches = (text: string) => !needle || text.toLowerCase().includes(needle);
+    const visibleFavorites = favorites.filter((record) => matches(record.label));
+    const visibleRecent = recent.filter((record) => matches(record.label));
     const commandGroups = useMemo(() => {
+        const term = query.trim().toLowerCase();
         const groups = new Map<string, CommandDef[]>();
-        for (const command of commands) {
+        for (const command of commands.filter((item) => !term || `${item.label} ${(item.keywords ?? []).join(" ")}`.toLowerCase().includes(term))) {
             if (!groups.has(command.group)) groups.set(command.group, []);
             groups.get(command.group)!.push(command);
         }
         return groups;
-    }, [commands]);
+    }, [commands, query]);
 
     const recordTypeIcon = (type: RecordType): LucideIcon => {
         if (type === "lead") return UserPlus;
@@ -239,7 +273,7 @@ export function GlobalSearch({
         if (record.type === "opportunity") return `/dashboard/opportunities/${record.id}`;
         if (record.type === "task") return `/dashboard/tasks?taskId=${record.id}`;
         if (record.type === "view") return `/dashboard/views?viewId=${record.id}`;
-        if (record.type === "report") return `/dashboard/reports?reportId=${record.id}`;
+        if (record.type === "report") return `/dashboard/reports/custom/${record.id}`;
         return `/dashboard/marketing?campaignId=${record.id}`; // campaign
     };
 
@@ -255,23 +289,28 @@ export function GlobalSearch({
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
             <DialogContent className="p-0 overflow-hidden max-w-2xl bg-popover text-popover-foreground">
-                <Command className="[&_[cmdk-item]]:px-4 [&_[cmdk-item]]:py-3 [&_[cmdk-item]]:cursor-pointer [&_[cmdk-item][aria-selected='true']]:bg-accent [&_[cmdk-item][aria-selected='true']]:text-accent-foreground">
+                <Command shouldFilter={false} className="[&_[cmdk-item]]:px-4 [&_[cmdk-item]]:py-3 [&_[cmdk-item]]:cursor-pointer [&_[cmdk-item][aria-selected='true']]:bg-muted">
                     <div className="flex items-center border-b px-3">
                         <Search className="mr-2 h-4 w-4 shrink-0 opacity-50" />
                         <Command.Input
                             className="flex h-12 w-full rounded-md bg-transparent py-3 text-sm outline-none placeholder:text-muted-foreground disabled:cursor-not-allowed disabled:opacity-50"
-                            placeholder="Type a command or search..."
+                            placeholder="Search leads, opportunities, tasks… or type a command"
                             value={query}
                             onValueChange={setQuery}
                         />
                         {loading && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground mr-2" />}
                     </div>
                     <Command.List className="max-h-[400px] overflow-y-auto overflow-x-hidden">
-                        <Command.Empty className="px-4 py-6 text-center text-sm text-muted-foreground">No results found.</Command.Empty>
+                        {searchError ? (
+                            <div role="alert" className="px-4 py-3 text-sm text-destructive">Search isn&apos;t working right now. Try again in a moment.</div>
+                        ) : loading && !hasAnyResults && query.trim().length >= 2 ? (
+                            <div role="status" className="flex items-center gap-2 px-4 py-3 text-sm text-muted-foreground"><Loader2 className="size-4 animate-spin" />Searching…</div>
+                        ) : null}
+                        <Command.Empty className="px-4 py-6 text-center text-sm text-muted-foreground">{loading ? "Searching…" : "No matches."}</Command.Empty>
 
-                        {favorites.length > 0 && !hasAnyResults && (
+                        {visibleFavorites.length > 0 && !hasAnyResults && (
                             <Command.Group heading="Favorites" className="px-2 py-1.5 text-xs font-medium text-muted-foreground">
-                                {favorites.map((record) => {
+                                {visibleFavorites.map((record) => {
                                     const Icon = recordTypeIcon(record.type);
                                     return (
                                         <Command.Item
@@ -290,9 +329,9 @@ export function GlobalSearch({
                             </Command.Group>
                         )}
 
-                        {recent.length > 0 && !hasAnyResults && (
+                        {visibleRecent.length > 0 && !hasAnyResults && (
                             <Command.Group heading="Recent" className="px-2 py-1.5 text-xs font-medium text-muted-foreground">
-                                {recent.map((record) => {
+                                {visibleRecent.map((record) => {
                                     const Icon = recordTypeIcon(record.type);
                                     return (
                                         <Command.Item
@@ -308,6 +347,69 @@ export function GlobalSearch({
                                         </Command.Item>
                                     );
                                 })}
+                            </Command.Group>
+                        )}
+
+                        {/* Records first while searching (UI/UX plan §11.6 M). */}
+                        {results.leads.length > 0 && (
+                            <Command.Group heading="Leads" className="px-2 py-1.5 text-xs font-medium text-muted-foreground">
+                                {results.leads.map((lead) => (
+                                    <Command.Item key={lead.id} value={`lead ${lead.id}`} onSelect={() => handleSelect(lead)}>
+                                        <div className="flex min-w-0 flex-col">
+                                            <span className="truncate font-medium text-foreground">{lead.name}</span>
+                                            <span className="truncate text-xs text-muted-foreground">{[lead.company, lead.email, lead.phone].filter(Boolean).join(" · ") || "Lead"}</span>
+                                        </div>
+                                    </Command.Item>
+                                ))}
+                            </Command.Group>
+                        )}
+
+                        {results.opportunities.length > 0 && (
+                            <Command.Group heading="Opportunities" className="px-2 py-1.5 text-xs font-medium text-muted-foreground">
+                                {results.opportunities.map((opp) => (
+                                    <Command.Item key={opp.id} value={`opportunity ${opp.id}`} onSelect={() => handleSelect(opp)}>
+                                        <div className="flex min-w-0 flex-col">
+                                            <span className="truncate font-medium text-foreground">{opp.title}</span>
+                                            <span className="text-xs tabular-nums text-muted-foreground">{opp.amount ? formatCurrency(opp.amount) : "Opportunity"}</span>
+                                        </div>
+                                    </Command.Item>
+                                ))}
+                            </Command.Group>
+                        )}
+
+                        {results.tasks.length > 0 && (
+                            <Command.Group heading="Tasks" className="px-2 py-1.5 text-xs font-medium text-muted-foreground">
+                                {results.tasks.map((task) => (
+                                    <Command.Item key={task.id} value={`task ${task.id}`} onSelect={() => handleSelect(task)}>
+                                        <span className="truncate font-medium text-foreground">{task.title}</span>
+                                    </Command.Item>
+                                ))}
+                            </Command.Group>
+                        )}
+
+                        {results.activities.length > 0 && (
+                            <Command.Group heading="Activities" className="px-2 py-1.5 text-xs font-medium text-muted-foreground">
+                                {results.activities.map((act) => (
+                                    <Command.Item key={act.id} value={`activity ${act.id}`} onSelect={() => handleSelect(act)}>
+                                        <div className="flex min-w-0 flex-col">
+                                            <span className="max-w-[440px] truncate font-medium text-foreground">{act.notes || "Activity"}</span>
+                                            <span className="text-xs text-muted-foreground">{act.opportunityId ? "Opens the opportunity" : act.leadId ? "Opens the lead" : "Activity"}</span>
+                                        </div>
+                                    </Command.Item>
+                                ))}
+                            </Command.Group>
+                        )}
+
+                        {results.partners.length > 0 && (
+                            <Command.Group heading="Partners" className="px-2 py-1.5 text-xs font-medium text-muted-foreground">
+                                {results.partners.map((partner) => (
+                                    <Command.Item key={partner.id} value={`partner ${partner.id}`} onSelect={() => handleSelect(partner)}>
+                                        <div className="flex min-w-0 flex-col">
+                                            <span className="truncate font-medium text-foreground">{partner.name}</span>
+                                            {partner.company && partner.company !== partner.name ? <span className="truncate text-xs text-muted-foreground">{partner.company}</span> : null}
+                                        </div>
+                                    </Command.Item>
+                                ))}
                             </Command.Group>
                         )}
 
@@ -332,94 +434,6 @@ export function GlobalSearch({
                             </Command.Group>
                         ))}
 
-                        {results.leads.length > 0 && (
-                            <Command.Group heading="Leads" className="px-2 py-1.5 text-xs font-medium text-muted-foreground">
-                                {results.leads.map((lead) => (
-                                    <Command.Item
-                                        key={lead.id}
-                                        value={lead.name}
-                                        onSelect={() => handleSelect(lead.id, 'lead')}
-                                    >
-                                        <div className="flex flex-col">
-                                            <span className="font-medium">{lead.name}</span>
-                                            <span className="text-xs text-muted-foreground">{lead.company}</span>
-                                        </div>
-                                    </Command.Item>
-                                ))}
-                            </Command.Group>
-                        )}
-
-                        {results.opportunities.length > 0 && (
-                            <Command.Group heading="Opportunities" className="px-2 py-1.5 text-xs font-medium text-muted-foreground">
-                                {results.opportunities.map((opp) => (
-                                    <Command.Item
-                                        key={opp.id}
-                                        value={opp.title}
-                                        onSelect={() => handleSelect(opp.id, 'opportunity')}
-                                    >
-                                        <div className="flex flex-col">
-                                            <span className="font-medium">{opp.title}</span>
-                                            <span className="text-xs text-muted-foreground">
-                                                {opp.amount ? formatCurrency(opp.amount) : ''}
-                                            </span>
-                                        </div>
-                                    </Command.Item>
-                                ))}
-                            </Command.Group>
-                        )}
-
-                        {results.activities.length > 0 && (
-                            <Command.Group heading="Activities" className="px-2 py-1.5 text-xs font-medium text-muted-foreground">
-                                {results.activities.map((act) => (
-                                    <Command.Item
-                                        key={act.id}
-                                        value={act.notes}
-                                        onSelect={() => handleSelect(act.id, 'activity')}
-                                    >
-                                        <div className="flex flex-col">
-                                            <span className="font-medium truncate max-w-[400px]">
-                                                {act.notes?.substring(0, 50)}
-                                            </span>
-                                            <span className="text-xs text-muted-foreground">Activity</span>
-                                        </div>
-                                    </Command.Item>
-                                ))}
-                            </Command.Group>
-                        )}
-
-                        {results.tasks.length > 0 && (
-                            <Command.Group heading="Tasks" className="px-2 py-1.5 text-xs font-medium text-muted-foreground">
-                                {results.tasks.map((task) => (
-                                    <Command.Item
-                                        key={task.id}
-                                        value={task.title}
-                                        onSelect={() => handleSelect(task.id, 'task')}
-                                    >
-                                        <div className="flex flex-col">
-                                            <span className="font-medium">{task.title}</span>
-                                            <span className="text-xs text-muted-foreground">Task</span>
-                                        </div>
-                                    </Command.Item>
-                                ))}
-                            </Command.Group>
-                        )}
-
-                        {results.partners.length > 0 && (
-                            <Command.Group heading="Partners" className="px-2 py-1.5 text-xs font-medium text-muted-foreground">
-                                {results.partners.map((partner) => (
-                                    <Command.Item
-                                        key={partner.id}
-                                        value={partner.name}
-                                        onSelect={() => handleSelect(partner.id, 'partner')}
-                                    >
-                                        <div className="flex flex-col">
-                                            <span className="font-medium">{partner.name}</span>
-                                            <span className="text-xs text-muted-foreground">{partner.company}</span>
-                                        </div>
-                                    </Command.Item>
-                                ))}
-                            </Command.Group>
-                        )}
                     </Command.List>
                 </Command>
             </DialogContent>

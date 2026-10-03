@@ -20,6 +20,9 @@ export async function GET(request: Request) {
     if (error instanceof Error && error.message === "UNAUTHORIZED") {
       return unauthorized();
     }
+    if (error instanceof Error && error.message === "RECORD_NOT_FOUND") {
+      return NextResponse.json({ message: "Record not found" }, { status: 404 });
+    }
 
     return serverError("Failed to fetch notes", error);
   }
@@ -39,6 +42,9 @@ export async function POST(request: Request) {
   } catch (error) {
     if (error instanceof Error && error.message === "UNAUTHORIZED") {
       return unauthorized();
+    }
+    if (error instanceof Error && error.message === "RECORD_NOT_FOUND") {
+      return NextResponse.json({ message: "Record not found" }, { status: 404 });
     }
 
     return serverError("Failed to create note", error);

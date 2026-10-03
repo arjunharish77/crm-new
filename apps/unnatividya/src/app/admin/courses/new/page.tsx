@@ -1,6 +1,7 @@
+import { getAdminSession } from "@/lib/admin-auth";
 import type { Metadata } from "next";
 import Link from "next/link";
-import { CourseEditForm } from "@/components/course-edit-form";
+import { CatalogCreateForm } from "@/components/catalog-create-form";
 import { query } from "@/lib/db";
 
 export const metadata: Metadata = {
@@ -16,11 +17,12 @@ type UniversityOption = {
 };
 
 export default async function NewCoursePage() {
+  const session = await getAdminSession();
   const universities = await query<UniversityOption>(
     `select id, name
      from university
      order by name`,
-  ).catch(() => ({ rows: [] as UniversityOption[] }));
+  );
 
   return (
     <section className="admin-shell">
@@ -34,33 +36,7 @@ export default async function NewCoursePage() {
           <Link className="btn ghost" href="/admin/courses">Back to courses</Link>
         </div>
         <section className="card admin-detail-card">
-          <CourseEditForm
-            mode="create"
-            universities={universities.rows}
-            course={{
-              id: "",
-              slug: "",
-              universityId: universities.rows[0]?.id || "",
-              name: "",
-              shortName: "",
-              level: "UG",
-              programType: "DEGREE",
-              ugcApproved: true,
-              stream: "",
-              feeInr: null,
-              duration: "",
-              status: "DRAFT",
-              isPublished: false,
-              data: {
-                specializations: [],
-                eligibility: "",
-                curriculum: [],
-                careerRoles: [],
-                faqs: [],
-                sourceUrls: [],
-              },
-            }}
-          />
+          <CatalogCreateForm entityType="course" role={session?.role || "VIEWER"} universities={universities.rows} />
         </section>
       </div>
     </section>

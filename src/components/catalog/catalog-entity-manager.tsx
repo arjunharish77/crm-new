@@ -22,6 +22,7 @@ import { StandardDialog } from "@/components/common/standard-dialog";
 import { EmptyState } from "@/components/common/empty-state";
 import { cn } from "@/lib/utils";
 import type { CatalogEntityKey } from "@/lib/repositories/catalog-postgres";
+import { useConfirm } from "@/components/common/dialogs-provider";
 
 export type CatalogFieldType = "text" | "textarea" | "number" | "boolean" | "date" | "select";
 
@@ -64,6 +65,7 @@ export function CatalogEntityManager({
   onSelectItem,
   selectedId,
 }: CatalogEntityManagerProps) {
+  const confirmAction = useConfirm();
   const [items, setItems] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -144,7 +146,7 @@ export function CatalogEntityManager({
   };
 
   const handleDelete = async (item: any) => {
-    if (!confirm(`Delete "${item.name}"? This cannot be undone.`)) return;
+    if (!(await confirmAction({ title: `Delete ${singular(title).toLowerCase()}?`, description: `"${item.name}" will be deleted. This can't be undone.`, confirmLabel: "Delete", destructive: true }))) return;
     try {
       await apiFetch(`/catalog/${entityKey}/${item.id}`, { method: "DELETE" });
       toast.success(`${singular(title)} deleted`);

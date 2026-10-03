@@ -1,196 +1,119 @@
 "use client";
 
-import { useEffect, useState, useCallback, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { ColumnDef } from "@tanstack/react-table";
+import { Ban, Building2, CheckCircle2 } from "lucide-react";
+import { toast } from "sonner";
 import { PageHeader } from "@/components/layout/page-header";
 import { ErrorState } from "@/components/common/error-state";
-import { apiFetch } from "@/lib/api";
-import { Card } from "@/components/ui/card";
-import { ColumnDef } from "@tanstack/react-table";
-import { Ban, CheckCircle2, Building2 } from "lucide-react";
+import { StatusBadge } from "@/components/common/status-badge";
+import { ListToolbar } from "@/components/common/list-toolbar";
+import { useAskText } from "@/components/common/dialogs-provider";
+import { IconButton } from "@/components/ui/icon-button";
 import { DataTable } from "@/components/ui/data-table";
-import { Badge } from "@/components/ui/badge";
-import { Button as IconButton } from "@/components/ui/button";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { formatWorkspaceRelativeTime } from "@/lib/date-format";
-import { toast } from "sonner";
+import { apiFetch } from "@/lib/api";
+import { formatWorkspaceDate } from "@/lib/date-format";
+import { formatCount } from "@/lib/display/format";
 import { CreateTenantDialog } from "./create-tenant-dialog";
-import { BulkActionsToolbar } from "@/components/bulk-actions/bulk-toolbar";
 
+type Tenant = { id: string; name: string; status: string; plan?: string | null; environment?: string | null; createdAt: string; _count?: { users?: number } };
+
+const STATUS_TONE: Record<string, "success" | "danger" | "warning" | "neutral"> = { ACTIVE: "success", SUSPENDED: "danger", TRIAL: "warning" };
+
+// Platform admin › Tenants (UI/UX plan §11.5): each row opens the tenant's page, and Suspend says
+// what it does and goes through approval when that's switched on. The selection bar had no
+// actions, so the list no longer offers selection.
 export default function TenantsPage() {
-    const [tenants, setTenants] = useState<any[]>([]);
+    const router = useRouter();
+    const askText = useAskText();
+    const [tenants, setTenants] = useState<Tenant[]>([]);
     const [loadError, setLoadError] = useState(false);
     const [loading, setLoading] = useState(true);
-    const [selectedRows, setSelectedRows] = useState<string[]>([]);
-    const [isAllSelected, setIsAllSelected] = useState(false);
-    const [totalItems, setTotalItems] = useState(0);
+    const [search, setSearch] = useState("");
 
     const fetchTenants = useCallback(() => {
-        setLoading(true); setLoadError(false);
-        apiFetch('/platform-admin/tenants')
-            .then((data) => {
-                const safeData = Array.isArray(data) ? data : [];
-                setTenants(safeData);
-                setTotalItems(safeData.length);
-            })
+        setLoading(true);
+        setLoadError(false);
+        apiFetch<Tenant[]>("/platform-admin/tenants")
+            .then((data) => setTenants(Array.isArray(data) ? data : []))
             .catch(() => setLoadError(true))
             .finally(() => setLoading(false));
     }, []);
+    useEffect(() => { fetchTenants(); }, [fetchTenants]);
 
-    useEffect(() => {
-        fetchTenants();
-    }, [fetchTenants]);
-
-    const handleSuspend = async (tenantId: string, currentStatus: string) => {
-        const isSuspended = currentStatus === 'SUSPENDED';
-        const action = isSuspended ? 'unsuspend' : 'suspend';
-
-        if (!confirm(`Are you sure you want to ${action} this tenant?`)) return;
-
+    const toggleSuspend = useCallback(async (tenant: Tenant) => {
+        const suspending = tenant.status !== "SUSPENDED";
+        // A suspension needs a reason; both are recorded in the workspace's audit log (Section 8 #12).
+        const reason = await askText(suspending
+            ? { title: `Suspend ${tenant.name}?`, description: "Everyone in this workspace is signed out straight away and can't sign in until it is unsuspended. Their data is kept.", label: "Reason (kept in the workspace's audit log)", required: true, confirmLabel: "Suspend workspace", destructive: true }
+            : { title: `Unsuspend ${tenant.name}?`, description: "Its users can sign in again.", label: "Note (optional, kept in the workspace's audit log)", confirmLabel: "Unsuspend" });
+        if (reason === null) return;
         try {
-            await apiFetch(`/platform-admin/tenants/${tenantId}/${action}`, {
-                method: 'POST',
-                body: isSuspended ? undefined : JSON.stringify({ reason: 'Admin Action' })
-            });
-            toast.success(`Tenant ${action}ed`);
+            const result = await apiFetch<{ pendingApproval?: boolean }>(`/platform-admin/tenants/${tenant.id}/${suspending ? "suspend" : "unsuspend"}`, { method: "POST", body: JSON.stringify({ reason }) });
+            if (result?.pendingApproval) {
+                toast.success("Sent for approval: another platform admin has to approve it first");
+                return;
+            }
+            toast.success(suspending ? `${tenant.name} suspended` : `${tenant.name} unsuspended`);
             fetchTenants();
-        } catch (error) {
-            toast.error(`Failed to ${action} tenant`);
+        } catch (error: any) {
+            toast.error(error?.message || "The workspace's status couldn't be changed");
         }
-    };
+    }, [askText, fetchTenants]);
 
-    const handleSelectAllFiltered = () => {
-        setSelectedRows(tenants.map((tenant) => tenant.id));
-        setIsAllSelected(true);
-        toast.success(`All ${totalItems} tenants selected`);
-    };
-
-    const clearSelection = () => {
-        setSelectedRows([]);
-        setIsAllSelected(false);
-    };
-
-    const columns = useMemo<ColumnDef<any, any>[]>(() => [
+    const columns = useMemo<ColumnDef<Tenant, any>[]>(() => [
         {
-            accessorKey: 'name',
-            header: 'Name',
-            size: 240,
+            accessorKey: "name", header: "Workspace", size: 260,
             cell: ({ row }) => (
-                <div>
-                    <div className="text-sm font-semibold text-foreground">{row.original.name}</div>
-                    <div className="text-xs text-muted-foreground">{row.original.plan ?? "Tenant"}</div>
+                <div className="min-w-0">
+                    <Link href={`/platform-admin/tenants/${row.original.id}`} onClick={(event) => event.stopPropagation()} className="block truncate font-medium hover:underline">{row.original.name}</Link>
+                    <span className="block truncate font-mono text-xs text-muted-foreground">{row.original.id}</span>
                 </div>
             ),
         },
-        {
-            accessorKey: 'status',
-            header: 'Status',
-            size: 120,
-            cell: ({ row }) => {
-                const isSuspended = row.original.status === 'SUSPENDED';
-                return (
-                    <Badge
-                        variant="outline"
-                        className={
-                            isSuspended
-                                ? "border-destructive/20 bg-destructive/10 font-semibold text-destructive"
-                                : "border-primary/20 bg-primary/10 font-semibold text-primary"
-                        }
-                    >
-                        {row.original.status}
-                    </Badge>
-                );
-            },
-        },
-        {
-            accessorKey: 'plan',
-            header: 'Plan',
-            size: 120,
-            cell: ({ row }) => (
-                <Badge variant="outline" className="border-primary/20 bg-primary/10 font-semibold text-primary">
-                    {row.original.plan}
-                </Badge>
-            ),
-        },
-        {
-            id: 'users',
-            header: 'Users',
-            size: 100,
-            cell: ({ row }) => (
-                <span className="text-sm text-muted-foreground">{row.original._count?.users || 0} users</span>
-            )
-        },
-        {
-            accessorKey: 'createdAt',
-            header: 'Created',
-            size: 150,
-            cell: ({ row }) => (
-                <span className="text-xs text-muted-foreground">
-                    {formatWorkspaceRelativeTime(row.original.createdAt)}
-                </span>
-            ),
-        },
-        {
-            id: 'actions',
-            header: '',
-            size: 100,
-            cell: ({ row }) => (
-                <div className="flex gap-1">
-                    <Tooltip>
-                        <TooltipTrigger asChild>
-                            <IconButton
-                                variant="ghost"
-                                size="icon-sm"
-                                aria-label={row.original.status === "SUSPENDED" ? "Unsuspend tenant" : "Suspend tenant"}
-                                className={row.original.status === 'SUSPENDED' ? "text-primary hover:bg-primary/10" : "text-tertiary hover:bg-tertiary/10"}
-                                onClick={(event) => {
-                                    event.stopPropagation();
-                                    handleSuspend(row.original.id, row.original.status);
-                                }}
-                            >
-                                {row.original.status === 'SUSPENDED' ? <CheckCircle2 className="size-4" /> : <Ban className="size-4" />}
-                            </IconButton>
-                        </TooltipTrigger>
-                        <TooltipContent>{row.original.status === 'SUSPENDED' ? "Unsuspend" : "Suspend"}</TooltipContent>
-                    </Tooltip>
-                </div>
-            ),
-        },
-    ], [handleSuspend]);
+        { accessorKey: "status", header: "Status", size: 120, cell: ({ row }) => <StatusBadge tone={STATUS_TONE[row.original.status] ?? "neutral"} label={row.original.status === "SUSPENDED" ? "Suspended" : row.original.status === "ACTIVE" ? "Active" : row.original.status} /> },
+        { accessorKey: "environment", header: "Environment", size: 130, cell: ({ row }) => <span className="text-muted-foreground">{row.original.environment ? row.original.environment.charAt(0) + row.original.environment.slice(1).toLowerCase() : "—"}</span> },
+        { id: "users", header: () => <span className="block text-right">Users</span>, size: 90, cell: ({ row }) => <span className="block text-right tabular-nums">{formatCount(row.original._count?.users ?? 0)}</span> },
+        { accessorKey: "createdAt", header: "Created", size: 120, cell: ({ row }) => <span className="text-muted-foreground">{formatWorkspaceDate(row.original.createdAt)}</span> },
+    ], []);
+
+    const visible = tenants.filter((tenant) => !search.trim() || `${tenant.name} ${tenant.id}`.toLowerCase().includes(search.trim().toLowerCase()));
 
     return (
         <div className="min-w-0">
-            <PageHeader title="Tenants" description="Manage workspaces and subscriptions." actions={<CreateTenantDialog onSuccess={fetchTenants} />} />
-            {loadError ? <ErrorState description="Tenants could not be loaded." onRetry={fetchTenants} /> :
-            <Card className="h-[min(600px,75dvh)] min-h-80 min-w-0 w-full overflow-hidden">
+            <PageHeader title="Tenants" meta={loading ? undefined : <span className="tabular-nums">{formatCount(tenants.length)} workspaces</span>} primaryAction={<CreateTenantDialog onSuccess={fetchTenants} />} />
+            {loadError ? <ErrorState description="The workspaces couldn't be loaded." onRetry={fetchTenants} /> : (
                 <DataTable
                     storageKey="platform-admin-tenants-table"
-                    data={tenants || []}
+                    data={visible}
                     columns={columns}
                     loading={loading}
-                    getRowId={(row) => row?.id}
-                    enableRowSelection
-                    rowSelectionIds={selectedRows}
-                    onRowSelectionIdsChange={(ids) => {
-                        setSelectedRows(ids);
-                        if (isAllSelected) setIsAllSelected(false);
-                    }}
-                    totalItems={totalItems}
-                    isAllSelected={isAllSelected}
-                    onSelectAllFiltered={handleSelectAllFiltered}
-                    onClearSelection={clearSelection}
-                    emptyState={{
-                        icon: <Building2 className="size-10 text-muted-foreground opacity-50" />,
-                        title: "No tenants found",
-                        description: "Create a tenant to start managing workspaces.",
-                    }}
+                    getRowId={(row) => row.id}
+                    onRowClick={(row) => router.push(`/platform-admin/tenants/${row.id}`)}
+                    clientSort
+                    toolbarActions={<ListToolbar search={{ value: search, onChange: setSearch, placeholder: "Search by name or id", label: "Search workspaces", inputId: "tenants-search" }} />}
+                    rowActions={(tenant) => (
+                        <IconButton
+                            label={tenant.status === "SUSPENDED" ? `Unsuspend ${tenant.name}` : `Suspend ${tenant.name}`}
+                            onClick={(event) => { event.stopPropagation(); toggleSuspend(tenant); }}
+                            className={tenant.status === "SUSPENDED" ? "text-muted-foreground" : "text-muted-foreground hover:text-destructive"}
+                        >
+                            {tenant.status === "SUSPENDED" ? <CheckCircle2 className="size-4" /> : <Ban className="size-4" />}
+                        </IconButton>
+                    )}
+                    mobileCard={(tenant) => (
+                        <div className="space-y-1">
+                            <div className="flex items-center justify-between gap-2"><span className="truncate font-medium">{tenant.name}</span><StatusBadge tone={STATUS_TONE[tenant.status] ?? "neutral"} label={tenant.status === "SUSPENDED" ? "Suspended" : "Active"} /></div>
+                            <div className="text-xs text-muted-foreground">{formatCount(tenant._count?.users ?? 0)} users · created {formatWorkspaceDate(tenant.createdAt)}</div>
+                        </div>
+                    )}
+                    emptyState={search.trim()
+                        ? { title: "No workspaces match", description: "Try another name or id.", kind: "no-match" }
+                        : { icon: <Building2 />, title: "No workspaces yet", description: "Create a workspace to get started.", action: <CreateTenantDialog onSuccess={fetchTenants} /> }}
                 />
-            </Card>}
-
-            <BulkActionsToolbar
-                selectedCount={isAllSelected ? totalItems : selectedRows.length}
-                onClearSelection={clearSelection}
-                module="tenants"
-            />
+            )}
         </div>
     );
 }

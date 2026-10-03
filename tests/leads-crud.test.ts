@@ -58,6 +58,6 @@ describe("Lead CRUD server wrapper", () => {
       name: "Acme Corp",
       status: "QUALIFIED",
     });
-    expect(leadRepoMocks.listLeadsForTenant).toHaveBeenCalledWith(tenantAUser, 1, 10, null);
+    expect(leadRepoMocks.listLeadsForTenant).toHaveBeenCalledWith(tenantAUser, 1, 10, null, {});
   });
 });

@@ -1,3 +1,4 @@
+import { assertTenantModule } from "@/lib/server/module-entitlements";
 import { randomUUID } from "crypto";
 import { query, queryOne, execute } from "@/lib/db/query";
 import { createAuditLog } from "@/lib/server/crm";
@@ -33,6 +34,7 @@ function sanitizeRequiredFields(value: unknown): string[] {
 // ---- Disposition groups ----
 
 export async function listDispositionGroupsForTenant(user: TenantUser) {
+  await assertTenantModule(user, "TELEPHONY");
   const tenantId = requireTenantId(user);
   const [groups, outcomes] = await Promise.all([
     query<any>(
@@ -55,6 +57,7 @@ export async function listDispositionGroupsForTenant(user: TenantUser) {
 }
 
 export async function createDispositionGroupForTenant(user: TenantUser, input: Record<string, unknown>) {
+  await assertTenantModule(user, "TELEPHONY");
   const tenantId = requireTenantId(user);
   const name = String(input.name ?? "").trim();
   if (!name) throw new Error("NAME_REQUIRED");
@@ -75,6 +78,7 @@ export async function createDispositionGroupForTenant(user: TenantUser, input: R
 }
 
 export async function updateDispositionGroupForTenant(user: TenantUser, id: string, input: Record<string, unknown>) {
+  await assertTenantModule(user, "TELEPHONY");
   const tenantId = requireTenantId(user);
   const sets: string[] = [];
   const values: unknown[] = [];
@@ -107,12 +111,14 @@ export async function updateDispositionGroupForTenant(user: TenantUser, id: stri
 }
 
 export async function deleteDispositionGroupForTenant(user: TenantUser, id: string) {
+  await assertTenantModule(user, "TELEPHONY");
   const tenantId = requireTenantId(user);
   await execute(`delete from "DispositionGroup" where "tenantId" = $1 and id = $2`, [tenantId, id]);
   await createAuditLog(user, "DELETE", "DISPOSITION_GROUP", id, null, null, null).catch(() => undefined);
 }
 
 export async function reorderDispositionGroupsForTenant(user: TenantUser, ids: string[]) {
+  await assertTenantModule(user, "TELEPHONY");
   const tenantId = requireTenantId(user);
   const now = new Date().toISOString();
   await Promise.all(
@@ -130,6 +136,7 @@ export async function reorderDispositionGroupsForTenant(user: TenantUser, ids: s
 // ---- Disposition outcomes ----
 
 export async function createDispositionOutcomeForTenant(user: TenantUser, groupId: string, input: Record<string, unknown>) {
+  await assertTenantModule(user, "TELEPHONY");
   const tenantId = requireTenantId(user);
   const name = String(input.name ?? "").trim();
   if (!name) throw new Error("NAME_REQUIRED");
@@ -170,6 +177,7 @@ export async function createDispositionOutcomeForTenant(user: TenantUser, groupI
 }
 
 export async function updateDispositionOutcomeForTenant(user: TenantUser, id: string, input: Record<string, unknown>) {
+  await assertTenantModule(user, "TELEPHONY");
   const tenantId = requireTenantId(user);
   const sets: string[] = [];
   const values: unknown[] = [];
@@ -206,12 +214,14 @@ export async function updateDispositionOutcomeForTenant(user: TenantUser, id: st
 }
 
 export async function deleteDispositionOutcomeForTenant(user: TenantUser, id: string) {
+  await assertTenantModule(user, "TELEPHONY");
   const tenantId = requireTenantId(user);
   await execute(`delete from "DispositionOutcome" where "tenantId" = $1 and id = $2`, [tenantId, id]);
   await createAuditLog(user, "DELETE", "DISPOSITION_OUTCOME", id, null, null, null).catch(() => undefined);
 }
 
 export async function reorderDispositionOutcomesForTenant(user: TenantUser, groupId: string, ids: string[]) {
+  await assertTenantModule(user, "TELEPHONY");
   const tenantId = requireTenantId(user);
   const now = new Date().toISOString();
   await Promise.all(
@@ -244,6 +254,7 @@ export async function listCallDispositionsForTenant(
   user: TenantUser,
   filter: { leadId?: string | null; opportunityId?: string | null; callLogId?: string | null; createdBy?: string | null } = {},
 ) {
+  await assertTenantModule(user, "TELEPHONY");
   const tenantId = requireTenantId(user);
   const conditions = [`cd."tenantId" = $1`];
   const values: unknown[] = [tenantId];
@@ -280,6 +291,7 @@ export async function listCallDispositionsForTenant(
 // the checklist audit's own recommendation and gives callback tasks the SLA/reminder/
 // notification machinery Task already has for free.
 export async function logCallDispositionForTenant(user: TenantUser, input: LogCallDispositionInput) {
+  await assertTenantModule(user, "TELEPHONY");
   const tenantId = requireTenantId(user);
   if (!input.dispositionOutcomeId) throw new Error("DISPOSITION_OUTCOME_REQUIRED");
 

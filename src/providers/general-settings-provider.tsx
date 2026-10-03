@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { useAuth } from "@/providers/auth-provider";
 import { apiFetch } from "@/lib/api";
 import { saveDisplaySettings } from "@/lib/date-format";
@@ -8,13 +8,6 @@ import { savePersonalizationCache } from "@/lib/personalization-cache";
 
 export function GeneralSettingsProvider({ children }: { children: React.ReactNode }) {
     const { isAuthenticated, isLoading } = useAuth();
-    const [version, setVersion] = useState(0);
-
-    useEffect(() => {
-        const handleChange = () => setVersion((version) => version + 1);
-        window.addEventListener("unnatify:display-settings", handleChange as EventListener);
-        return () => window.removeEventListener("unnatify:display-settings", handleChange as EventListener);
-    }, []);
 
     useEffect(() => {
         let mounted = true;
@@ -42,5 +35,7 @@ export function GeneralSettingsProvider({ children }: { children: React.ReactNod
         };
     }, [isAuthenticated, isLoading]);
 
-    return <div key={`${isAuthenticated}-${version}`}>{children}</div>;
+    // Keyed only on sign-in state, so signing out or in starts from a clean tree. A display
+    // settings change no longer remounts the app (UI/UX plan B4); see hooks/use-display-settings.
+    return <div key={String(isAuthenticated)}>{children}</div>;
 }

@@ -1,7 +1,7 @@
 "use client";
 
 import { BuilderWorkspace } from "@/components/layout/builder-workspace";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
     DndContext,
     DragOverlay,
@@ -37,7 +37,14 @@ import {
     SlidersHorizontal as TuneIcon,
     X as CloseIcon,
     Columns2 as WidthIcon,
+    History,
+    Rocket,
 } from "lucide-react";
+import { useConfirm } from "@/components/common/dialogs-provider";
+import { StandardDialog } from "@/components/common/standard-dialog";
+import { ErrorState } from "@/components/common/error-state";
+import { Badge } from "@/components/ui/badge";
+import { formatWorkspaceDateTime } from "@/lib/date-format";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -102,6 +109,69 @@ interface FormField {
 
 interface EditorProps {
     initialForm: any;
+    onSaved?: (form: any) => void;
+}
+
+// Builder state for a form record. Also used to rebase on a newer saved version (see rebase
+// effect below), so it must stay a pure function of the record.
+function settingsFromForm(form: any) {
+    return {
+        isActive: form.isActive,
+        successMessage: form.config?.successMessage || "Thank you for your submission!",
+        redirectUrl: form.config?.redirectUrl || "",
+        notificationEmails: form.config?.notificationEmails || "",
+        submitButtonText: form.config?.submitButtonText || "Submit",
+        spamProtection: form.config?.spamProtection !== false, // Default true
+        rateLimit: form.config?.rateLimit || 10,
+        duplicateAction: form.config?.duplicateAction || "CREATE",
+        progressiveProfiling: form.config?.progressiveProfiling || false,
+        theme: form.config?.theme || "default",
+        customCss: form.config?.customCss || "",
+        layoutColumns: form.config?.layoutColumns || 2,
+        useMultiStep: form.config?.useMultiStep || false,
+        tabsPlacement: form.config?.tabsPlacement || "TOP",
+        showSectionNames: form.config?.showSectionNames !== false,
+        tabs: form.config?.tabs?.length ? form.config.tabs : [{ id: "tab_1", label: "Tab 1", order: 0 }],
+        sections: form.config?.sections?.length ? form.config.sections : [{ id: "section_1", tabId: form.config?.tabs?.[0]?.id || "tab_1", label: "Section 1", order: 0 }],
+        placements: form.config?.placements || [],
+        placementRules: form.config?.placementRules || [],
+        visibilityMode: form.config?.visibilityMode || "ALL",
+        visibleUserIds: form.config?.visibleUserIds || [],
+        visibleTeamIds: form.config?.visibleTeamIds || [],
+        visibleSalesGroupIds: form.config?.visibleSalesGroupIds || [],
+    };
+}
+
+const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
+
+// Save model (decision 29): the editor works on the draft when there is one, and the public form
+// only changes on Publish. These settings aren't drafted -- they apply at once, as before: on/off
+// and where and to whom the form appears inside the CRM.
+const LIVE_SETTING_KEYS = ["isActive", "placements", "placementRules", "visibilityMode", "visibleUserIds", "visibleTeamIds", "visibleSalesGroupIds"];
+function editorStateFromForm(form: any): { fields: FormField[]; settings: ReturnType<typeof settingsFromForm> } {
+    const draft = form?.draft;
+    const merged = draft ? { ...form, config: { ...(form.config ?? {}), ...(draft.config ?? {}) } } : form;
+    return { fields: ((draft ? draft.fields : form?.config?.fields) || []) as FormField[], settings: settingsFromForm(merged) };
+}
+const formSaveKey = (form: any) => `${form?.updatedAt ?? ""}|${form?.draftUpdatedAt ?? ""}|${form?.publishedVersion ?? ""}`;
+
+// What Publish changes, compared with the published form.
+function summarizeFormChanges(published: any, fields: FormField[], settings: Record<string, unknown>): string[] {
+    const publishedFields: FormField[] = published?.config?.fields || [];
+    if (!published?.publishedVersion) return [`First version: ${fields.length} field${fields.length === 1 ? "" : "s"}`];
+    const before = new Map(publishedFields.map((field) => [field.id, field]));
+    const after = new Map(fields.map((field) => [field.id, field]));
+    const added = fields.filter((field) => !before.has(field.id)).map((field) => field.label);
+    const removed = publishedFields.filter((field) => !after.has(field.id)).map((field) => field.label);
+    const changed = fields.filter((field) => before.has(field.id) && !same(field, before.get(field.id))).map((field) => field.label);
+    const items: string[] = [];
+    if (added.length) items.push(`Added ${added.length === 1 ? "a field" : `${added.length} fields`}: ${added.join(", ")}`);
+    if (removed.length) items.push(`Removed ${removed.length === 1 ? "a field" : `${removed.length} fields`}: ${removed.join(", ")}`);
+    if (changed.length) items.push(`Changed ${changed.length === 1 ? "a field" : `${changed.length} fields`}: ${changed.join(", ")}`);
+    const publishedSettings = settingsFromForm(published) as Record<string, unknown>;
+    const settingNames = Object.keys(settings).filter((key) => !LIVE_SETTING_KEYS.includes(key) && !same(settings[key], publishedSettings[key]));
+    if (settingNames.length) items.push(`Settings changed: ${settingNames.map((key) => key.replace(/([A-Z])/g, " $1").toLowerCase()).join(", ")}`);
+    return items.length ? items : ["No changes from the published form"];
 }
 
 const FIELD_TYPES = [
@@ -187,10 +257,11 @@ function moduleLabel(module: SourceModule) {
     return module.charAt(0).toUpperCase() + module.slice(1);
 }
 
-export function FormEditor({ initialForm }: EditorProps) {
+export function FormEditor({ initialForm, onSaved }: EditorProps) {
+    const confirm = useConfirm();
     const opportunityEnabled = useFeature("opportunityEnabled");
     const [activePanel, setActivePanel] = useState("canvas");
-    const [fields, setFields] = useState<FormField[]>(initialForm.config?.fields || []);
+    const [fields, setFields] = useState<FormField[]>(() => editorStateFromForm(initialForm).fields);
     const [selectedFieldId, setSelectedFieldId] = useState<string | null>(null);
     const [activeDragItem, setActiveDragItem] = useState<any>(null);
     const [embedDialogOpen, setEmbedDialogOpen] = useState(false);
@@ -209,31 +280,11 @@ export function FormEditor({ initialForm }: EditorProps) {
     const [saving, setSaving] = useState(false);
 
     // Form Settings State
-    const [settings, setSettings] = useState({
-        isActive: initialForm.isActive,
-        successMessage: initialForm.config?.successMessage || "Thank you for your submission!",
-        redirectUrl: initialForm.config?.redirectUrl || "",
-        notificationEmails: initialForm.config?.notificationEmails || "",
-        submitButtonText: initialForm.config?.submitButtonText || "Submit",
-        spamProtection: initialForm.config?.spamProtection !== false, // Default true
-        rateLimit: initialForm.config?.rateLimit || 10,
-        duplicateAction: initialForm.config?.duplicateAction || "CREATE",
-        progressiveProfiling: initialForm.config?.progressiveProfiling || false,
-        theme: initialForm.config?.theme || "default",
-        customCss: initialForm.config?.customCss || "",
-        layoutColumns: initialForm.config?.layoutColumns || 2,
-        useMultiStep: initialForm.config?.useMultiStep || false,
-        tabsPlacement: initialForm.config?.tabsPlacement || "TOP",
-        showSectionNames: initialForm.config?.showSectionNames !== false,
-        tabs: initialForm.config?.tabs?.length ? initialForm.config.tabs : [{ id: "tab_1", label: "Tab 1", order: 0 }],
-        sections: initialForm.config?.sections?.length ? initialForm.config.sections : [{ id: "section_1", tabId: initialForm.config?.tabs?.[0]?.id || "tab_1", label: "Section 1", order: 0 }],
-        placements: initialForm.config?.placements || [],
-        placementRules: initialForm.config?.placementRules || [],
-        visibilityMode: initialForm.config?.visibilityMode || "ALL",
-        visibleUserIds: initialForm.config?.visibleUserIds || [],
-        visibleTeamIds: initialForm.config?.visibleTeamIds || [],
-        visibleSalesGroupIds: initialForm.config?.visibleSalesGroupIds || [],
-    });
+    const [settings, setSettings] = useState(() => editorStateFromForm(initialForm).settings);
+    // What the server has for this form, as of the last load or save. Saving sends only what
+    // differs from it, and a newer saved version (for example from the CRM placement tab) is
+    // taken in for every part you haven't changed here (UI/UX plan B5).
+    const baseline = useRef({ ...editorStateFromForm(initialForm), key: formSaveKey(initialForm) });
 
     useEffect(() => {
         Promise.all([
@@ -244,8 +295,7 @@ export function FormEditor({ initialForm }: EditorProps) {
             apiFetch("/custom-fields?objectType=LEAD").catch(() => []),
             apiFetch("/custom-fields?objectType=OPPORTUNITY").catch(() => []),
             apiFetch("/custom-fields?objectType=ACTIVITY").catch(() => []),
-            apiFetch("/custom-fields?objectType=TASK").catch(() => []),
-        ]).then(([oppTypes, actTypes, userList, groupList, leadFields, oppFields, actFields, taskFields]) => {
+        ]).then(([oppTypes, actTypes, userList, groupList, leadFields, oppFields, actFields]) => {
             const opportunities = Array.isArray(oppTypes) ? oppTypes : [];
             const activities = Array.isArray(actTypes) ? actTypes : [];
             setOpportunityTypes(opportunities);
@@ -256,7 +306,8 @@ export function FormEditor({ initialForm }: EditorProps) {
                 lead: Array.isArray(leadFields) ? leadFields : [],
                 opportunity: Array.isArray(oppFields) ? oppFields : [],
                 activity: Array.isArray(actFields) ? actFields : [],
-                task: Array.isArray(taskFields) ? taskFields : [],
+                // Tasks have no custom fields; the library offers their standard fields only.
+                task: [],
             });
             setSelectedOpportunityTypeId((current) => current || opportunities[0]?.id || "");
             setSelectedActivityTypeId((current) => current || activities[0]?.id || "");
@@ -426,26 +477,163 @@ export function FormEditor({ initialForm }: EditorProps) {
         }
     };
 
-    const handleSave = async () => {
+    // Take in a newer saved version of the form for everything not changed locally.
+    useEffect(() => {
+        const base = baseline.current;
+        if (!initialForm?.updatedAt || formSaveKey(initialForm) === base.key) return;
+        const { fields: nextFields, settings: nextSettings } = editorStateFromForm(initialForm);
+        setFields((current) => (same(current, base.fields) ? nextFields : current));
+        setSettings((current) => {
+            const merged: any = { ...current };
+            for (const key of Object.keys(nextSettings) as Array<keyof typeof nextSettings>) {
+                if (same(current[key], (base.settings as any)[key])) merged[key] = nextSettings[key];
+            }
+            return merged;
+        });
+        baseline.current = { fields: nextFields, settings: nextSettings, key: formSaveKey(initialForm) };
+    }, [initialForm]);
+
+    // Saves what changed: on/off, placement and visibility settings straight to the form; fields
+    // and content settings to the draft (the public form doesn't change until Publish).
+    const [saveState, setSaveState] = useState<"idle" | "pending" | "saving" | "saved" | "error">("idle");
+    const handleSave = async ({ quiet = false }: { quiet?: boolean } = {}): Promise<boolean> => {
+        if (saving) return false;
+        const base = baseline.current;
+        const changedSettings = Object.fromEntries(
+            Object.entries(settings).filter(([key, value]) => !same(value, (base.settings as any)[key])),
+        );
+        const liveChanges = Object.fromEntries(Object.entries(changedSettings).filter(([key]) => LIVE_SETTING_KEYS.includes(key)));
+        const contentChanged = !same(fields, base.fields) || Object.keys(changedSettings).some((key) => !LIVE_SETTING_KEYS.includes(key));
+        if (!Object.keys(liveChanges).length && !contentChanged) {
+            if (!quiet) toast.success("No changes to save");
+            setSaveState("saved");
+            return true;
+        }
         setSaving(true);
+        setSaveState("saving");
+        const savingFields = fields;
+        const savingSettings = settings;
         try {
-            const payload = {
-                config: {
-                    fields,
-                    ...settings,
-                },
-                isActive: settings.isActive
-            };
-            await apiFetch(`/forms/${initialForm.id}`, {
-                method: 'PATCH',
-                body: JSON.stringify(payload)
-            });
-            toast.success("Form saved");
-        } catch (error) {
-            toast.error("Failed to save");
-            console.error(error);
+            let saved: any = null;
+            if (Object.keys(liveChanges).length) {
+                const payload: Record<string, unknown> = { config: liveChanges, expectedUpdatedAt: initialForm.updatedAt ?? null };
+                if ("isActive" in liveChanges) payload.isActive = settings.isActive;
+                saved = await apiFetch<any>(`/forms/${initialForm.id}`, { method: "PATCH", body: JSON.stringify(payload) });
+            }
+            if (contentChanged) {
+                const content = Object.fromEntries(Object.entries(savingSettings).filter(([key]) => !LIVE_SETTING_KEYS.includes(key)));
+                saved = await apiFetch<any>(`/forms/${initialForm.id}`, { method: "PATCH", body: JSON.stringify({ draft: { fields: savingFields, config: content } }) });
+            }
+            // What was just saved is now the baseline, so the rebase effect keeps local values.
+            baseline.current = { fields: savingFields, settings: savingSettings, key: formSaveKey(saved) };
+            setSaveState("saved");
+            if (!quiet) toast.success(contentChanged ? "Draft saved" : "Saved");
+            onSaved?.(saved);
+            return true;
+        } catch (error: any) {
+            setSaveState("error");
+            toast.error(error?.message || "Your changes couldn't be saved");
+            return false;
         } finally {
             setSaving(false);
+        }
+    };
+
+    // Autosave 2s after the last change.
+    const saveRef = useRef(handleSave);
+    useEffect(() => { saveRef.current = handleSave; });
+    useEffect(() => {
+        const base = baseline.current;
+        if (same(fields, base.fields) && same(settings, base.settings)) return;
+        setSaveState("pending");
+        const timer = window.setTimeout(() => { saveRef.current({ quiet: true }); }, 2000);
+        return () => window.clearTimeout(timer);
+    }, [fields, settings]);
+    useEffect(() => {
+        const onKey = (event: KeyboardEvent) => {
+            if ((event.metaKey || event.ctrlKey) && !event.shiftKey && !event.altKey && event.key.toLowerCase() === "s") {
+                event.preventDefault();
+                saveRef.current();
+            }
+        };
+        window.addEventListener("keydown", onKey);
+        return () => window.removeEventListener("keydown", onKey);
+    }, []);
+    useEffect(() => {
+        if (saveState !== "pending" && saveState !== "saving") return;
+        const warn = (event: BeforeUnloadEvent) => { event.preventDefault(); event.returnValue = ""; };
+        window.addEventListener("beforeunload", warn);
+        return () => window.removeEventListener("beforeunload", warn);
+    }, [saveState]);
+
+    const publishedVersion = Number(initialForm.publishedVersion ?? 0);
+    const hasDraft = !!initialForm.draft;
+    const resetTo = (form: any) => {
+        const next = editorStateFromForm(form);
+        baseline.current = { ...next, key: formSaveKey(form) };
+        setFields(next.fields);
+        setSettings(next.settings);
+        setSaveState("saved");
+        onSaved?.(form);
+    };
+
+    const [publishOpen, setPublishOpen] = useState(false);
+    const [publishNotes, setPublishNotes] = useState("");
+    const [publishing, setPublishing] = useState(false);
+    const openPublish = async () => {
+        if (!fields.length) {
+            toast.error("Add at least one field before publishing");
+            return;
+        }
+        if (!(await handleSave({ quiet: true }))) return;
+        setPublishNotes("");
+        setPublishOpen(true);
+    };
+    const publish = async () => {
+        setPublishing(true);
+        try {
+            const result = await apiFetch<any>(`/forms/${initialForm.id}/publish`, { method: "POST", body: JSON.stringify({ notes: publishNotes }) });
+            resetTo(result);
+            setPublishOpen(false);
+            toast.success(`Published version ${result.publishedVersion}`, { description: result.isActive ? "The public form shows it now." : "Turn the form on to accept responses." });
+        } catch (error: any) {
+            toast.error(error?.message || "The form couldn't be published");
+        } finally {
+            setPublishing(false);
+        }
+    };
+    const discardDraft = async () => {
+        const ok = await confirm({ title: "Discard unpublished changes?", description: `The editor goes back to version ${publishedVersion}, which is what the public form shows.`, confirmLabel: "Discard changes", destructive: true });
+        if (!ok) return;
+        try {
+            resetTo(await apiFetch<any>(`/forms/${initialForm.id}/draft`, { method: "DELETE" }));
+            toast.success("Changes discarded");
+        } catch (error: any) {
+            toast.error(error?.message || "The changes couldn't be discarded");
+        }
+    };
+    const [versionsOpen, setVersionsOpen] = useState(false);
+    const [versions, setVersions] = useState<any[] | null>(null);
+    const [versionsError, setVersionsError] = useState(false);
+    const openVersions = async () => {
+        setVersionsOpen(true);
+        setVersions(null);
+        setVersionsError(false);
+        try {
+            const data = await apiFetch<any[]>(`/forms/${initialForm.id}/versions`);
+            setVersions(Array.isArray(data) ? data : []);
+        } catch {
+            setVersionsError(true);
+        }
+    };
+    const restoreVersion = async (version: number) => {
+        if (hasDraft && !(await confirm({ title: `Restore version ${version} as the draft?`, description: "It replaces your unpublished changes. The public form doesn't change until you publish.", confirmLabel: "Restore as draft", destructive: true }))) return;
+        try {
+            resetTo(await apiFetch<any>(`/forms/${initialForm.id}/versions/${version}/restore`, { method: "POST" }));
+            setVersionsOpen(false);
+            toast.success(`Version ${version} is now the draft`, { description: "Publish it to make it public." });
+        } catch (error: any) {
+            toast.error(error?.message || "The version couldn't be restored");
         }
     };
 
@@ -588,7 +776,22 @@ export function FormEditor({ initialForm }: EditorProps) {
 
     return (
         <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd} collisionDetection={closestCenter}>
-            <BuilderWorkspace activePanel={activePanel} onPanelChange={setActivePanel} panels={[{ id: "library", label: "Fields" }, { id: "canvas", label: "Canvas" }, { id: "inspector", label: "Properties" }]} actions={<Button size="sm" onClick={handleSave} disabled={saving}><SaveIcon className="size-4" />{saving ? "Saving…" : "Save Form"}</Button>}>
+            <BuilderWorkspace activePanel={activePanel} onPanelChange={setActivePanel} panels={[{ id: "library", label: "Fields" }, { id: "canvas", label: "Canvas" }, { id: "inspector", label: "Properties" }]} actions={
+                <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-xs text-muted-foreground" aria-live="polite">
+                        {saveState === "saving" ? "Saving…"
+                            : saveState === "pending" ? "Unsaved changes"
+                            : saveState === "error" ? "Couldn't save · ⌘S to retry"
+                            : publishedVersion === 0 ? "Draft · not published yet"
+                            : hasDraft ? `Draft saved · version ${publishedVersion} is public`
+                            : `Version ${publishedVersion} is public`}
+                    </span>
+                    {publishedVersion > 0 ? <Button size="sm" variant="ghost" onClick={openVersions}><History className="size-4" />Versions</Button> : null}
+                    {hasDraft && publishedVersion > 0 ? <Button size="sm" variant="ghost" onClick={discardDraft}>Discard changes</Button> : null}
+                    <Button size="sm" variant="outline" onClick={() => handleSave()} isLoading={saving} title="Save the draft (⌘S)"><SaveIcon className="size-4" />Save draft</Button>
+                    <Button size="sm" onClick={openPublish} isLoading={publishing} disabled={publishedVersion > 0 && !hasDraft && saveState !== "pending"}><Rocket className="size-4" />Publish</Button>
+                </div>
+            }>
                 {/* Left Sidebar: Tools */}
                 <div className="builder-panel builder-library border-r bg-background" data-active={activePanel === "library"}>
                     <div className="border-b p-3.5">
@@ -1082,6 +1285,7 @@ export function FormEditor({ initialForm }: EditorProps) {
                                                     <Button
                                                         variant="ghost"
                                                         size="icon-sm"
+                                                        aria-label={`Remove tab ${tab.label}`}
                                                         onClick={() => removeTab(tab.id)}
                                                         disabled={settings.tabs.length <= 1}
                                                     >
@@ -1113,6 +1317,7 @@ export function FormEditor({ initialForm }: EditorProps) {
                                                     <Button
                                                         variant="ghost"
                                                         size="icon-sm"
+                                                        aria-label={`Remove section ${section.label}`}
                                                         onClick={() => removeSection(section.id)}
                                                         disabled={settings.sections.filter((item: any) => item.tabId === section.tabId).length <= 1}
                                                     >
@@ -1196,12 +1401,13 @@ export function FormEditor({ initialForm }: EditorProps) {
 
                                 <Separator />
 
-                                <label className="flex items-center gap-2 text-sm font-medium">
+                                <label className="flex items-center gap-2 text-sm font-medium" title={publishedVersion === 0 ? "Publish the form before turning it on" : undefined}>
                                     <Switch
                                         checked={settings.isActive}
+                                        disabled={publishedVersion === 0}
                                         onCheckedChange={checked => setSettings({ ...settings, isActive: checked })}
                                     />
-                                    Form Active
+                                    Accepting responses
                                 </label>
                             </div>
                         )}
@@ -1217,6 +1423,59 @@ export function FormEditor({ initialForm }: EditorProps) {
                     </div>
                 ) : null}
             </DragOverlay>
+
+            <StandardDialog
+                open={publishOpen}
+                onClose={() => setPublishOpen(false)}
+                title={`Publish version ${publishedVersion + 1}?`}
+                subtitle={settings.isActive ? "The public form changes straight away." : "It becomes what the public form shows once the form is on."}
+                maxWidth="sm"
+                actions={
+                    <>
+                        <Button variant="ghost" onClick={() => setPublishOpen(false)}>Cancel</Button>
+                        <Button onClick={publish} isLoading={publishing}><Rocket className="size-4" />Publish</Button>
+                    </>
+                }
+            >
+                <div className="space-y-4">
+                    <div>
+                        <p className="mb-1.5 text-sm font-medium">What changes</p>
+                        <ul className="list-disc space-y-1 pl-5 text-sm">
+                            {summarizeFormChanges(initialForm, fields, settings as Record<string, unknown>).map((item) => <li key={item}>{item}</li>)}
+                        </ul>
+                    </div>
+                    <div className="space-y-1.5">
+                        <Label htmlFor="form-publish-notes">Notes (optional)</Label>
+                        <Textarea id="form-publish-notes" rows={2} value={publishNotes} onChange={(e) => setPublishNotes(e.target.value)} placeholder="What changed and why, for the version history" />
+                    </div>
+                </div>
+            </StandardDialog>
+
+            <StandardDialog open={versionsOpen} onClose={() => setVersionsOpen(false)} title="Versions" subtitle="Each publish is kept. Restore one as the draft, then publish it to make it public again." maxWidth="sm">
+                {versionsError ? (
+                    <ErrorState variant="inline" description="Versions couldn't be loaded." onRetry={openVersions} />
+                ) : !versions ? (
+                    <p role="status" className="text-sm text-muted-foreground">Loading versions…</p>
+                ) : (
+                    <ul className="divide-y rounded-lg border">
+                        {versions.map((version) => (
+                            <li key={version.version} className="flex flex-wrap items-center justify-between gap-3 p-3">
+                                <div className="min-w-0 flex-1 basis-56">
+                                    <p className="flex flex-wrap items-center gap-2 text-sm font-medium">
+                                        Version {version.version}
+                                        {version.version === publishedVersion ? <Badge tone="success">Public</Badge> : null}
+                                    </p>
+                                    <p className="text-xs text-muted-foreground">
+                                        {formatWorkspaceDateTime(version.publishedAt)}{version.publishedByName ? ` · ${version.publishedByName}` : ""} · {version.fieldCount} field{version.fieldCount === 1 ? "" : "s"}
+                                    </p>
+                                    {version.notes ? <p className="mt-0.5 break-words text-xs">{version.notes}</p> : null}
+                                </div>
+                                {version.version !== publishedVersion ? <Button size="sm" variant="outline" onClick={() => restoreVersion(version.version)}>Restore as draft</Button> : null}
+                            </li>
+                        ))}
+                    </ul>
+                )}
+            </StandardDialog>
 
             <EmbedCodeDialog
                 open={embedDialogOpen}
@@ -1241,7 +1500,7 @@ function DraggableTool({ type, label, icon: Icon, onAdd }: any) {
             {...listeners}
             {...attributes}
             onClick={onAdd}
-            className="mb-2 flex w-full cursor-grab items-center gap-2.5 rounded-[10px] border px-2.5 py-2 text-left transition-colors hover:border-primary hover:bg-primary/[0.04] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            className="mb-2 flex w-full cursor-grab items-center gap-2.5 rounded-xl border px-2.5 py-2 text-left transition-colors hover:border-primary hover:bg-primary/[0.04] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
             <Icon className="size-4 shrink-0 text-muted-foreground" />
             <span className="text-sm font-medium">{label}</span>
@@ -1331,6 +1590,7 @@ function DroppableCanvas({
                                         variant="ghost"
                                         size="icon-xs"
                                         className="size-[18px]"
+                                        aria-label={`Remove tab ${tab.label}`}
                                         onClick={(event) => {
                                             event.stopPropagation();
                                             onRemoveTab?.(tab.id);
@@ -1347,13 +1607,14 @@ function DroppableCanvas({
                                 <div key={section.id} className="relative mb-[18px]">
                                     {showSectionNames && (
                                         <div className="mb-[6px] flex items-center justify-between">
-                                            <p className="text-sm font-extrabold text-primary">
+                                            <p className="text-sm font-semibold text-primary">
                                                 {section.label}
                                             </p>
                                             <Button
                                                 variant="ghost"
                                                 size="icon-xs"
-                                                className="size-[22px]"
+                                                className="size-6"
+                                                aria-label={`Remove section ${section.label}`}
                                                 onClick={() => onRemoveSection?.(section.id)}
                                             >
                                                 <CloseIcon className="size-[15px]" />
@@ -1454,21 +1715,28 @@ function SortableField({ field, columns, isSelected, onSelect, onRemove, onToggl
                 onSelect();
             }}
             className={cn(
-                "group relative cursor-pointer rounded-[10px] border p-3 transition-all",
+                "group relative cursor-pointer rounded-xl border p-3 transition-all",
                 columns === 2 && field.width === 2 && "col-span-full",
                 isSelected
                     ? "border-primary bg-primary/5"
                     : "border-transparent hover:-translate-y-px hover:border-border hover:bg-accent/60 hover:shadow-sm"
             )}
         >
-            <div className="mb-2 flex items-center justify-between gap-2 pr-10">
-                <p className="text-sm font-semibold">
-                    {field.label} {field.required && <span className="text-destructive">*</span>}
-                </p>
+            <div className="mb-2 flex items-center justify-between gap-2 pr-14">
+                {/* A real button, so a field can be chosen from the keyboard (UI/UX plan §5.13). */}
+                <button
+                    type="button"
+                    aria-pressed={isSelected}
+                    onClick={(event) => { event.stopPropagation(); onSelect(); }}
+                    className="rounded-sm text-left text-sm font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                >
+                    {field.label} {field.required && <span className="text-destructive" aria-label="required">*</span>}
+                </button>
                 <div
                     {...attributes}
                     {...listeners}
-                    className="flex cursor-grab text-muted-foreground/60 hover:text-muted-foreground"
+                    aria-label={`Drag to reorder ${field.label}`}
+                    className="flex cursor-grab rounded-sm text-muted-foreground/60 hover:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 >
                     <DragIndicatorIcon className="size-4" />
                 </div>
@@ -1477,14 +1745,16 @@ function SortableField({ field, columns, isSelected, onSelect, onRemove, onToggl
             <div
                 className={cn(
                     "absolute top-1.5 right-1.5 flex gap-0.5 transition-opacity",
-                    isSelected ? "opacity-100" : "opacity-0 group-hover:opacity-100"
+                    isSelected ? "opacity-100" : "opacity-0 group-hover:opacity-100 group-focus-within:opacity-100"
                 )}
             >
                 {columns === 2 && (
                     <Button
                         variant="outline"
                         size="icon-xs"
-                        className="size-[22px] bg-card"
+                        className="size-6 bg-card"
+                        aria-label={field.width === 2 ? `Make ${field.label} half width` : `Make ${field.label} full width`}
+                        title={field.width === 2 ? "Half width" : "Full width"}
                         onClick={(event) => {
                             event.preventDefault();
                             event.stopPropagation();
@@ -1497,7 +1767,9 @@ function SortableField({ field, columns, isSelected, onSelect, onRemove, onToggl
                 <Button
                     variant="outline"
                     size="icon-xs"
-                    className="size-[22px] bg-card"
+                    className="size-6 bg-card"
+                    aria-label={`Remove ${field.label}`}
+                    title="Remove field"
                     onClick={(event) => {
                         event.preventDefault();
                         event.stopPropagation();

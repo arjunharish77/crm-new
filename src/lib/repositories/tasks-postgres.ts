@@ -6,10 +6,16 @@ import { createUserNotification } from "@/lib/server/notifications";
 import { getActiveTaskSlaPolicyForPriority } from "@/lib/repositories/task-sla-policies-postgres";
 import { enqueueWebhookEvent } from "@/lib/server/webhook-outbox";
 import { enqueueAppEvent } from "@/lib/server/marketplace-events";
+import { applyTaskScopeClause } from "@/lib/server/record-scope";
+import { getTenantTodayRange } from "@/lib/server/date-format";
+import { assertFilterGroupsSupported, buildGroupedFilterClause, normalizeFilterGroups, type FilterColumnEntry } from "@/lib/query-filters";
+import { substituteUserTokens } from "@/lib/server/user-token-filters";
 
 type TenantUser = {
   id: string;
   tenantId: string | null;
+  teamId?: string | null;
+  recordScopeActorId?: string | null;
   role?: { permissions?: any } | string | null;
 };
 
@@ -53,7 +59,51 @@ type TaskFilters = {
   opportunityId?: string | null;
   activityId?: string | null;
   due?: "overdue" | "today" | "upcoming" | "completed" | null;
+  // Open or in progress (the Tasks page's default "My open tasks" view).
+  open?: boolean;
+  // Title or description contains.
+  q?: string | null;
+  // Column sort for the Tasks list (whitelisted in TASK_SORTS); default is soonest due first.
+  sort?: { id: string; desc: boolean } | null;
+  // Smart Views (Section 8 #4): grouped conditions on TASK_FILTER_COLUMNS ("@me"/"@myteam"
+  // allowed), and strict = refuse a condition that can't be applied instead of skipping it.
+  groups?: unknown;
+  strict?: boolean;
 };
+
+const TASK_FILTER_COLUMNS = new Map<string, FilterColumnEntry>([
+  ["title", { column: "title", kind: "text" }],
+  ["status", { column: "status", kind: "select" }],
+  ["priority", { column: "priority", kind: "select" }],
+  ["ownerId", { column: "ownerId", kind: "user" }],
+  ["leadId", { column: "leadId", kind: "text" }],
+  ["opportunityId", { column: "opportunityId", kind: "text" }],
+  ["dueAt", { column: "dueAt", kind: "date" }],
+  ["createdAt", { column: "createdAt", kind: "date" }],
+]);
+
+// Resolves "@me"/"@myteam" in the filter groups (a lookup, so done before the synchronous
+// buildWhere) and, for strict callers, refuses a condition the task columns can't apply.
+async function resolveTaskFilterGroups(user: TenantUser, filters: TaskFilters): Promise<TaskFilters> {
+  if (filters.groups == null) return filters;
+  const groups = await substituteUserTokens(normalizeFilterGroups(filters.groups) as any[], user);
+  if (filters.strict) assertFilterGroupsSupported(groups, TASK_FILTER_COLUMNS);
+  return { ...filters, groups };
+}
+
+const TASK_SORTS: Record<string, string> = {
+  title: "lower(title)",
+  dueAt: '"dueAt"',
+  priority: "case upper(priority) when 'URGENT' then 4 when 'HIGH' then 3 when 'MEDIUM' then 2 when 'LOW' then 1 else 0 end",
+  status: "status",
+  owner: '(select lower(coalesce(u.name, u.email)) from "User" u where u.id = "Task"."ownerId")',
+  createdAt: '"createdAt"',
+};
+function taskOrderBy(sort?: TaskFilters["sort"]) {
+  const expression = sort?.id ? TASK_SORTS[sort.id] : undefined;
+  const fallback = '"dueAt" asc nulls last, "createdAt" desc, id asc';
+  return expression ? `${expression} ${sort!.desc ? "desc" : "asc"} nulls last, ${fallback}` : fallback;
+}
 
 export type BulkTaskInput = {
   ids?: string[];
@@ -86,12 +136,8 @@ async function isQueueMember(user: TenantUser, teamId: string) {
   return row?.teamId != null && String(row.teamId) === String(teamId);
 }
 
-function isOwnerScoped(user: TenantUser) {
-  const permissions = user.role && typeof user.role === "object" ? user.role.permissions : null;
-  return !!permissions?.isPartnerRole || permissions?.recordAccess === "OWN";
-}
-
-function buildWhere(user: TenantUser, filters: TaskFilters = {}) {
+// `today`: the workspace's today (getTenantTodayRange), needed for the "due today" filter.
+function buildWhere(user: TenantUser, filters: TaskFilters = {}, today?: { start: string; end: string }) {
   const clauses: string[] = [];
   const values: unknown[] = [];
   if (!user.tenantId) clauses.push("false");
@@ -99,10 +145,8 @@ function buildWhere(user: TenantUser, filters: TaskFilters = {}) {
     values.push(user.tenantId);
     clauses.push(`"tenantId" = $${values.length}`);
   }
-  if (isOwnerScoped(user)) {
-    values.push(user.id);
-    clauses.push(`"ownerId" = $${values.length}`);
-  }
+  // Own / Team / All record access, shared with the task export (record-scope.ts).
+  applyTaskScopeClause(clauses, values, user, user.tenantId ? 1 : null);
   for (const [key, column] of [
     ["status", "status"],
     ["priority", "priority"],
@@ -118,16 +162,21 @@ function buildWhere(user: TenantUser, filters: TaskFilters = {}) {
     }
   }
 
+  if (filters.groups) buildGroupedFilterClause(clauses, values, normalizeFilterGroups(filters.groups), TASK_FILTER_COLUMNS);
+  if (filters.open) clauses.push("status in ('OPEN', 'IN_PROGRESS')");
+  const search = filters.q?.trim();
+  if (search) {
+    values.push(`%${search.replace(/[\\%_]/g, (match) => `\\${match}`)}%`);
+    clauses.push(`(title ilike $${values.length} or coalesce(description, '') ilike $${values.length})`);
+  }
+
   const now = new Date();
   if (filters.due === "overdue") {
     values.push(now.toISOString());
     clauses.push(`"dueAt" < $${values.length} and status not in ('COMPLETED', 'CANCELLED')`);
   } else if (filters.due === "today") {
-    const start = new Date(now);
-    start.setHours(0, 0, 0, 0);
-    const end = new Date(start);
-    end.setDate(end.getDate() + 1);
-    values.push(start.toISOString(), end.toISOString());
+    if (!today) throw new Error("TASK_TODAY_RANGE_REQUIRED");
+    values.push(today.start, today.end);
     clauses.push(`"dueAt" >= $${values.length - 1} and "dueAt" < $${values.length}`);
   } else if (filters.due === "upcoming") {
     values.push(now.toISOString());
@@ -227,12 +276,32 @@ async function rawTask(user: TenantUser, id: string) {
 
 export async function listTasksForTenant(user: TenantUser, filters: TaskFilters = {}) {
   if (!user.tenantId) return [];
-  const where = buildWhere(user, filters);
+  filters = await resolveTaskFilterGroups(user, filters);
+  const where = buildWhere(user, filters, filters.due === "today" ? await getTenantTodayRange(user.tenantId) : undefined);
   const tasks = await query<any>(
     `select ${TASK_COLUMNS} from "Task" ${where.sql} order by "dueAt" asc nulls last, "createdAt" desc limit 500`,
     where.values,
   );
   return hydrate(user, tasks);
+}
+
+// One page plus the total (UI/UX plan Phase 2): the list above stops at 500 rows, which the
+// Tasks page used to show as if it were everything.
+export async function listTasksPageForTenant(user: TenantUser, filters: TaskFilters = {}, page = 1, limit = 25) {
+  const safeLimit = Math.min(Math.max(Math.trunc(limit) || 25, 1), 200);
+  const safePage = Math.max(Math.trunc(page) || 1, 1);
+  if (!user.tenantId) return { data: [], meta: { total: 0, page: safePage, limit: safeLimit, last_page: 1 } };
+  filters = await resolveTaskFilterGroups(user, filters);
+  const where = buildWhere(user, filters, filters.due === "today" ? await getTenantTodayRange(user.tenantId) : undefined);
+  const [countRows, rows] = await Promise.all([
+    query<{ total: number }>(`select count(*)::int as total from "Task" ${where.sql}`, where.values),
+    query<any>(
+      `select ${TASK_COLUMNS} from "Task" ${where.sql} order by ${taskOrderBy(filters.sort)} limit ${safeLimit} offset ${(safePage - 1) * safeLimit}`,
+      where.values,
+    ),
+  ]);
+  const total = Number(countRows?.[0]?.total ?? 0);
+  return { data: await hydrate(user, rows ?? []), meta: { total, page: safePage, limit: safeLimit, last_page: Math.max(1, Math.ceil(total / safeLimit)) } };
 }
 
 export async function getTaskForTenant(user: TenantUser, id: string) {
@@ -568,7 +637,7 @@ export async function bulkUpdateTasksForTenant(user: TenantUser, input: BulkTask
 
 // Queue tasks are visible to any member of the queue's team regardless of recordAccess --
 // browsing a shared team queue is a distinct, permitted action, not the same as "my own
-// records" (isOwnerScoped's normal restriction, which stays untouched for every other read).
+// records" (the record-access scope in buildWhere, which stays untouched for every other read).
 async function rawQueueTask(user: TenantUser, taskId: string) {
   if (!user.tenantId) return null;
   return queryOne<any>(
@@ -804,6 +873,8 @@ export async function replaceTaskChecklistForTenant(user: TenantUser, taskId: st
 
 export async function toggleTaskChecklistItemForTenant(user: TenantUser, taskId: string, itemId: string, isDone: boolean) {
   if (!user.tenantId) throw new Error("TENANT_CONTEXT_REQUIRED");
+  // Only on a task this user can see (it used to accept any task id in the tenant).
+  if (!(await rawTask(user, taskId))) throw new Error("TASK_NOT_FOUND");
   const now = new Date().toISOString();
   const updated = await queryOne<any>(
     `update "TaskChecklistItem"
@@ -827,6 +898,10 @@ export async function setTaskDependenciesForTenant(user: TenantUser, taskId: str
 
   const uniqueIds = [...new Set(blockedByTaskIds.filter((id) => id && id !== taskId))];
   if (uniqueIds.length) {
+    // A blocking task must be one this user can see too, since its title is shown on this task.
+    const where = buildWhere(user);
+    const visible = await query<{ id: string }>(`select id from "Task" ${where.sql} and id = any($${where.values.length + 1}::text[])`, where.values.concat([uniqueIds]));
+    if ((visible ?? []).length !== uniqueIds.length) throw new Error("TASK_NOT_FOUND");
     const reverse = await query<{ taskId: string }>(
       'select "taskId" from "TaskDependency" where "tenantId" = $1 and "taskId" = any($2::text[]) and "blockedByTaskId" = $3',
       [user.tenantId, uniqueIds, taskId],

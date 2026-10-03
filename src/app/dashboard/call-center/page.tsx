@@ -1,15 +1,19 @@
 "use client";
+import { ModuleGate } from "@/components/common/module-gate";
 
 import { PageHeader } from "@/components/layout/page-header";
 import { ErrorState } from "@/components/common/error-state";
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { PhoneCall, PhoneMissed, CalendarClock, Users, RefreshCw, Circle, Coffee, CircleOff, ListOrdered } from "lucide-react";
+import { PhoneCall, PhoneMissed, PhoneOutgoing, CalendarClock, Users, RefreshCw, Circle, Coffee, CircleOff, ListOrdered } from "lucide-react";
 import { toast } from "sonner";
 import { apiFetch } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { formatWorkspaceDateTime } from "@/lib/date-format";
+import { formatCount } from "@/lib/display/format";
+import { humanizeEnum } from "@/lib/display/status";
+import { useConfirm } from "@/components/common/dialogs-provider";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -81,8 +85,8 @@ type QueuedCallRow = {
 };
 
 const STATUS_META = {
-    ONLINE: { label: "Online", icon: Circle, className: "text-emerald-600" },
-    BREAK: { label: "On Break", icon: Coffee, className: "text-amber-600" },
+    ONLINE: { label: "Online", icon: Circle, className: "text-status-success-foreground" },
+    BREAK: { label: "On Break", icon: Coffee, className: "text-status-warning-foreground" },
     OFFLINE: { label: "Offline", icon: CircleOff, className: "text-muted-foreground" },
 } as const;
 
@@ -280,13 +284,37 @@ function AgentAvailabilityCard({ agents }: { agents: AgentAvailabilityRow[] }) {
     );
 }
 
-function QueueBacklogCard({ queues, onClaimed }: { queues: QueueHealthRow[]; onClaimed: () => void }) {
+// Queue wait times come back in whole minutes from the queue health read.
+function formatWait(minutes: number) {
+    if (minutes < 1) return "under 1 min";
+    if (minutes < 60) return `${minutes} min`;
+    if (minutes < 1440) return `${Math.floor(minutes / 60)} h ${minutes % 60} min`;
+    return `${Math.floor(minutes / 1440)} d ${Math.floor((minutes % 1440) / 60)} h`;
+}
+
+// Queue health (the same rows GET /call-queues/health returns, embedded in the workspace read)
+// plus each team's queued calls. A claimed call stays listed until its outcome is logged, so a
+// supervisor can release it back to the queue if the agent can't take it after all.
+function QueueBacklogCard({ queues, agents, onChanged }: { queues: QueueHealthRow[]; agents: AgentAvailabilityRow[]; onChanged: () => void }) {
+    const confirm = useConfirm();
     const [expandedTeamId, setExpandedTeamId] = useState<string | null>(null);
     const [queuedCalls, setQueuedCalls] = useState<QueuedCallRow[]>([]);
     const [loadingCalls, setLoadingCalls] = useState(false);
     const [queueError, setQueueError] = useState<string | null>(null);
     const queueRequest = useRef(0);
-    const [claimingId, setClaimingId] = useState<string | null>(null);
+    const [busyId, setBusyId] = useState<string | null>(null);
+
+    const agentName = (userId: string | null) => agents.find((agent) => agent.userId === userId)?.name ?? null;
+    const totals = queues.reduce(
+        (sum, queue) => ({
+            waiting: sum.waiting + queue.totalQueued,
+            unclaimed: sum.unclaimed + queue.unclaimed,
+            oldest: Math.max(sum.oldest, queue.oldestAgeMinutes),
+            ageTotal: sum.ageTotal + queue.avgAgeMinutes * queue.totalQueued,
+        }),
+        { waiting: 0, unclaimed: 0, oldest: 0, ageTotal: 0 },
+    );
+    const averageWait = totals.waiting ? Math.round(totals.ageTotal / totals.waiting) : 0;
 
     const toggleTeam = async (teamId: string, retry = false) => {
         const request = ++queueRequest.current;
@@ -307,16 +335,41 @@ function QueueBacklogCard({ queues, onClaimed }: { queues: QueueHealthRow[]; onC
         }
     };
 
+    const updateCall = (callId: string, patch: Partial<QueuedCallRow>) => {
+        setQueuedCalls((current) => current.map((call) => (call.id === callId ? { ...call, ...patch } : call)));
+    };
+
     const claim = async (callId: string) => {
-        setClaimingId(callId);
+        setBusyId(callId);
         try {
-            await apiFetch(`/call-queues/${callId}/claim`, { method: "POST" });
-            setQueuedCalls((current) => current.filter((call) => call.id !== callId));
-            onClaimed();
+            const claimed = await apiFetch<{ claimedBy: string | null }>(`/call-queues/${callId}/claim`, { method: "POST" });
+            updateCall(callId, { claimedBy: claimed?.claimedBy ?? null });
+            onChanged();
         } catch (error: any) {
             toast.error(error?.message || "Failed to claim call");
         } finally {
-            setClaimingId(null);
+            setBusyId(null);
+        }
+    };
+
+    const release = async (call: QueuedCallRow, queueName: string) => {
+        const claimer = agentName(call.claimedBy);
+        const ok = await confirm({
+            title: claimer ? `Release ${claimer}'s call back to the queue?` : "Release this call back to the queue?",
+            description: `It goes back to ${queueName} as unclaimed, so anyone on the team can claim it.`,
+            confirmLabel: "Release call",
+        });
+        if (!ok) return;
+        setBusyId(call.id);
+        try {
+            await apiFetch(`/call-queues/${call.id}/release`, { method: "POST" });
+            updateCall(call.id, { claimedBy: null });
+            toast.success("Call released to the queue");
+            onChanged();
+        } catch (error: any) {
+            toast.error(error?.message || "Failed to release call");
+        } finally {
+            setBusyId(null);
         }
     };
 
@@ -324,12 +377,35 @@ function QueueBacklogCard({ queues, onClaimed }: { queues: QueueHealthRow[]; onC
         <Card className="overflow-hidden py-0">
             <div className="flex items-center gap-2 border-b p-3">
                 <ListOrdered className="size-4 text-primary" />
-                <h3 className="font-bold">Queue Backlog</h3>
+                <h3 className="font-semibold">Queue backlog</h3>
                 <Badge variant="outline">{queues.length}</Badge>
             </div>
+            {queues.length > 0 ? (
+                <dl className="grid grid-cols-2 gap-3 border-b p-3 sm:grid-cols-4">
+                    <div>
+                        <dt className="text-xs text-muted-foreground">Waiting</dt>
+                        <dd className="text-lg font-semibold">{formatCount(totals.waiting)}</dd>
+                    </div>
+                    <div>
+                        <dt className="text-xs text-muted-foreground">Unclaimed</dt>
+                        <dd className={cn("text-lg font-semibold", totals.unclaimed > 0 && "text-destructive")}>{formatCount(totals.unclaimed)}</dd>
+                    </div>
+                    <div>
+                        <dt className="text-xs text-muted-foreground">Average wait</dt>
+                        <dd className="text-lg font-semibold">{formatWait(averageWait)}</dd>
+                    </div>
+                    <div>
+                        <dt className="text-xs text-muted-foreground">Longest wait</dt>
+                        <dd className="text-lg font-semibold">{formatWait(totals.oldest)}</dd>
+                    </div>
+                </dl>
+            ) : null}
             <div className="divide-y">
                 {queues.length === 0 ? (
-                    <p className="p-3 text-sm text-muted-foreground">No queued calls. Configure a default call queue team in Telephony settings.</p>
+                    <p className="p-3 text-sm text-muted-foreground">
+                        No queued calls. Calls queue for the team chosen in{" "}
+                        <Link className="font-medium text-primary underline-offset-4 hover:underline" href="/dashboard/settings/integrations?section=phone-system">Settings › Integrations › Phone system</Link>.
+                    </p>
                 ) : (
                     queues.map((queue) => (
                         <div key={queue.teamId}>
@@ -341,8 +417,10 @@ function QueueBacklogCard({ queues, onClaimed }: { queues: QueueHealthRow[]; onC
                             >
                                 <span className="text-sm font-medium">{queue.teamName}</span>
                                 <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-                                    <Badge variant={queue.unclaimed > 0 ? "destructive" : "outline"}>{queue.unclaimed} unclaimed</Badge>
-                                    <span>oldest {queue.oldestAgeMinutes}m</span>
+                                    <span>{formatCount(queue.totalQueued)} waiting</span>
+                                    <Badge tone={queue.unclaimed > 0 ? "danger" : "neutral"}>{formatCount(queue.unclaimed)} unclaimed</Badge>
+                                    <span>average {formatWait(queue.avgAgeMinutes)}</span>
+                                    <span>longest {formatWait(queue.oldestAgeMinutes)}</span>
                                 </div>
                             </button>
                             {expandedTeamId === queue.teamId && (
@@ -361,13 +439,18 @@ function QueueBacklogCard({ queues, onClaimed }: { queues: QueueHealthRow[]; onC
                                                         {call.leadName || call.opportunityTitle || call.fromNumber || call.toNumber || "Unknown"}
                                                     </p>
                                                     <p className="text-xs text-muted-foreground">
-                                                        {call.queueType} · {call.priority} · queued {formatWorkspaceDateTime(call.queuedAt)}
+                                                        {humanizeEnum(call.queueType)} · {humanizeEnum(call.priority)} · queued {formatWorkspaceDateTime(call.queuedAt)}
                                                     </p>
                                                 </div>
                                                 {call.claimedBy ? (
-                                                    <Badge variant="outline">Claimed</Badge>
+                                                    <div className="flex flex-wrap items-center gap-2">
+                                                        <Badge tone="info">{agentName(call.claimedBy) ? `Claimed by ${agentName(call.claimedBy)}` : "Claimed"}</Badge>
+                                                        <Button size="sm" variant="outline" isLoading={busyId === call.id} disabled={busyId === call.id} onClick={() => release(call, queue.teamName)}>
+                                                            Release
+                                                        </Button>
+                                                    </div>
                                                 ) : (
-                                                    <Button size="sm" disabled={claimingId === call.id} onClick={() => claim(call.id)}>
+                                                    <Button size="sm" isLoading={busyId === call.id} disabled={busyId === call.id} onClick={() => claim(call.id)}>
                                                         Claim
                                                     </Button>
                                                 )}
@@ -384,7 +467,55 @@ function QueueBacklogCard({ queues, onClaimed }: { queues: QueueHealthRow[]; onC
     );
 }
 
-export default function CallCenterWorkspacePage() {
+type MyCampaign = { id: string; name: string; description: string | null; module: string; assignedTeamName: string | null; dueNow: number };
+
+// Campaigns this person can take calls from (UI/UX plan §5.14): they were reachable only from
+// admin Settings before. Reloads with the rest of the page.
+function MyCampaignsCard({ refreshToken }: { refreshToken: number }) {
+    const [campaigns, setCampaigns] = useState<MyCampaign[] | null>(null);
+    const [failed, setFailed] = useState(false);
+    useEffect(() => {
+        apiFetch<MyCampaign[]>("/call-campaigns?mine=1")
+            .then((data) => { setCampaigns(Array.isArray(data) ? data : []); setFailed(false); })
+            .catch(() => setFailed(true));
+    }, [refreshToken]);
+
+    return (
+        <Card className="overflow-hidden py-0 lg:col-span-2">
+            <div className="flex items-center gap-2 border-b p-3">
+                <PhoneOutgoing className="size-4 text-primary" aria-hidden />
+                <h3 className="font-semibold">My campaigns</h3>
+                {campaigns ? <Badge variant="outline">{campaigns.length}</Badge> : null}
+            </div>
+            {failed && !campaigns ? (
+                <ErrorState variant="inline" description="Your campaigns couldn't be loaded." className="m-3" />
+            ) : !campaigns ? (
+                <p className="p-3 text-sm text-muted-foreground">Loading your campaigns…</p>
+            ) : campaigns.length === 0 ? (
+                <p className="p-3 text-sm text-muted-foreground">No active calling campaigns for you right now.</p>
+            ) : (
+                <ul className="divide-y">
+                    {campaigns.map((campaign) => (
+                        <li key={campaign.id} className="flex flex-wrap items-center justify-between gap-3 p-3">
+                            <div className="min-w-0 flex-1 basis-56">
+                                <p className="font-medium">{campaign.name}</p>
+                                <p className="text-xs text-muted-foreground">
+                                    {campaign.dueNow === 0 ? "No calls due now" : `${campaign.dueNow} call${campaign.dueNow === 1 ? "" : "s"} due now`}
+                                    {campaign.assignedTeamName ? ` · ${campaign.assignedTeamName}` : ""}
+                                </p>
+                            </div>
+                            <Button size="sm" variant={campaign.dueNow ? "default" : "outline"} asChild>
+                                <Link href={`/dashboard/call-center/campaigns/${campaign.id}`}>Start calling</Link>
+                            </Button>
+                        </li>
+                    ))}
+                </ul>
+            )}
+        </Card>
+    );
+}
+
+function CallCenterWorkspacePageContent() {
     const [fetchError, setFetchError] = useState<string | null>(null);
     const [workspace, setWorkspace] = useState<Workspace | null>(null);
     const [loading, setLoading] = useState(true);
@@ -395,10 +526,12 @@ export default function CallCenterWorkspacePage() {
     // cue that anything just happened; `refreshing` drives the same spin-icon treatment the
     // manual "Refresh" button already had, for both manual and automatic ticks.
     const [refreshing, setRefreshing] = useState(false);
+    const [refreshToken, setRefreshToken] = useState(0);
 
     const load = useCallback(() => {
         setNow(Date.now());
         setRefreshing(true);
+        setRefreshToken((token) => token + 1);
         apiFetch<Workspace>("/call-center/workspace")
             .then(data => { setWorkspace(data); setFetchError(null); })
             .catch(() => setFetchError("Could not refresh the call center workspace. Any displayed data is from the last successful refresh."))
@@ -415,14 +548,14 @@ export default function CallCenterWorkspacePage() {
     }, [load]);
 
     if (loading) {
-        return <p className="text-sm text-muted-foreground">Loading call center workspace...</p>;
+        return <p className="text-sm text-muted-foreground">Loading the call center…</p>;
     }
 
-    if (!workspace || now === null) return <ErrorState title="Call Center unavailable" description={fetchError || "Workspace data is unavailable."} onRetry={load} />;
+    if (!workspace || now === null) return <ErrorState title="Call center unavailable" description={fetchError || "Workspace data is unavailable."} onRetry={load} />;
 
     return (
         <div className="min-w-0 space-y-6 [overflow-wrap:anywhere]">
-            <PageHeader title="Call Center" description="Calls, callbacks and assigned records. Refreshes every 20 seconds." actions={
+            <PageHeader title="Call center" description="Calls, callbacks and assigned records. Refreshes every 20 seconds." actions={
                 <Button variant="outline" size="sm" onClick={load} disabled={refreshing}>
                     <RefreshCw className={cn("size-4", refreshing && "animate-spin")} />Refresh
                 </Button>
@@ -430,27 +563,28 @@ export default function CallCenterWorkspacePage() {
             {fetchError && <div role="alert" className="flex flex-wrap items-center gap-2 rounded-lg border border-destructive/30 p-3 text-sm"><p className="min-w-0 flex-1 basis-60">{fetchError}</p><Button variant="outline" size="sm" onClick={load} disabled={refreshing}>Try again</Button></div>}
 
             <div>
-                <h2 className="mb-2 text-base font-bold">My Workspace</h2>
+                <h2 className="mb-2 text-base font-semibold">My work</h2>
                 <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
-                    <CallListCard title="Live Calls" icon={PhoneCall} calls={workspace.myLiveCalls} emptyText="No calls in progress." />
-                    <CallListCard title="Missed Calls Today" icon={PhoneMissed} calls={workspace.myMissedCallsToday} emptyText="No missed calls today." />
-                    <CallbacksCard title="Callbacks Due" callbacks={workspace.myCallbacksDue} onLog={setLogOutcomeFor} now={now} />
-                    <DispositionsCard title="Recent Dispositions" dispositions={workspace.myRecentDispositions} />
-                    <OpenRecordsCard title="My Open Leads" records={workspace.myOpenLeads} hrefBase="/dashboard/leads" />
-                    <OpenRecordsCard title="My Open Opportunities" records={workspace.myOpenOpportunities} hrefBase="/dashboard/opportunities" />
+                    <MyCampaignsCard refreshToken={refreshToken} />
+                    <CallListCard title="Live calls" icon={PhoneCall} calls={workspace.myLiveCalls} emptyText="No calls in progress." />
+                    <CallListCard title="Missed calls today" icon={PhoneMissed} calls={workspace.myMissedCallsToday} emptyText="No missed calls today." />
+                    <CallbacksCard title="Callbacks due" callbacks={workspace.myCallbacksDue} onLog={setLogOutcomeFor} now={now} />
+                    <DispositionsCard title="Recent outcomes" dispositions={workspace.myRecentDispositions} />
+                    <OpenRecordsCard title="My open leads" records={workspace.myOpenLeads} hrefBase="/dashboard/leads" />
+                    <OpenRecordsCard title="My open opportunities" records={workspace.myOpenOpportunities} hrefBase="/dashboard/opportunities" />
                 </div>
             </div>
 
             {workspace.team && (
                 <div>
-                    <h2 className="mb-2 text-base font-bold">Team Overview</h2>
+                    <h2 className="mb-2 text-base font-semibold">Team</h2>
                     <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
-                        <CallListCard title="Team Live Calls" icon={PhoneCall} calls={workspace.team.liveCalls} emptyText="No calls in progress." />
-                        <CallListCard title="Team Missed Calls Today" icon={PhoneMissed} calls={workspace.team.missedCallsToday} emptyText="No missed calls today." />
-                        <CallbacksCard title="Team Callbacks Due" callbacks={workspace.team.callbacksDue} onLog={setLogOutcomeFor} now={now} />
+                        <CallListCard title="Team live calls" icon={PhoneCall} calls={workspace.team.liveCalls} emptyText="No calls in progress." />
+                        <CallListCard title="Team missed calls today" icon={PhoneMissed} calls={workspace.team.missedCallsToday} emptyText="No missed calls today." />
+                        <CallbacksCard title="Team callbacks due" callbacks={workspace.team.callbacksDue} onLog={setLogOutcomeFor} now={now} />
                         <AgentAvailabilityCard agents={workspace.team.agentAvailability} />
-                        <QueueBacklogCard queues={workspace.team.queueHealth} onClaimed={load} />
-                        <DispositionsCard title="Team Recent Dispositions" dispositions={workspace.team.recentDispositions} />
+                        <QueueBacklogCard queues={workspace.team.queueHealth} agents={workspace.team.agentAvailability} onChanged={load} />
+                        <DispositionsCard title="Team recent outcomes" dispositions={workspace.team.recentDispositions} />
                     </div>
                 </div>
             )}
@@ -464,4 +598,8 @@ export default function CallCenterWorkspacePage() {
             />
         </div>
     );
+}
+
+export default function CallCenterWorkspacePage() {
+    return <ModuleGate moduleKey="TELEPHONY" name="Telephony"><CallCenterWorkspacePageContent /></ModuleGate>;
 }

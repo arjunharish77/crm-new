@@ -1,3 +1,5 @@
+import type { CatalogReader } from "@/lib/catalog-snapshot";
+import { getPublishedCatalog } from "@/lib/catalog-snapshot-server";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getAdminSession } from "@/lib/admin-auth";
@@ -19,22 +21,23 @@ const schema = z.object({
   urls: z.array(z.string().url()).max(10000).optional(),
 });
 
-function defaultUrls() {
+function defaultUrls(catalog: CatalogReader) {
   return [
     ...staticSitemapUrls(),
-    ...courseSitemapUrls(),
-    ...universitySitemapUrls(),
+    ...courseSitemapUrls(catalog),
+    ...universitySitemapUrls(catalog),
     ...blogSitemapUrls(),
-    ...feeGuideSitemapUrls(),
+    ...feeGuideSitemapUrls(catalog),
     ...eligibilityGuideSitemapUrls(),
     ...careerScopeGuideSitemapUrls(),
     ...ugcApprovalGuideSitemapUrls(),
-    ...comparisonSitemapUrls(),
-    ...specializationSitemapUrls(),
+    ...comparisonSitemapUrls(catalog),
+    ...specializationSitemapUrls(catalog),
   ].map((entry) => entry.loc);
 }
 
 export async function POST(request: Request) {
+  const catalog = await getPublishedCatalog();
   // F26 fix (WP16): DB-backed session check -- see getAdminSession in src/lib/admin-auth.ts for
   // why proxy.ts's cookie-only check on /api/admin/* isn't sufficient by itself.
   const session = await getAdminSession();
@@ -54,7 +57,7 @@ export async function POST(request: Request) {
   }
 
   const host = new URL(siteUrl()).hostname;
-  const urlList = parsed.data.urls?.length ? parsed.data.urls : defaultUrls();
+  const urlList = parsed.data.urls?.length ? parsed.data.urls : defaultUrls(catalog);
   const response = await fetch("https://api.indexnow.org/indexnow", {
     method: "POST",
     headers: { "Content-Type": "application/json; charset=utf-8" },

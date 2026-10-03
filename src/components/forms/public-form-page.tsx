@@ -1,19 +1,28 @@
 "use client";
 
+import { useEffect } from "react";
 import { usePublicResource } from "@/hooks/use-public-resource";
+import { publicFormPath } from "@/lib/forms/public-url";
 import { PublicFormRenderer } from "@/components/forms/public-form-renderer";
 import { Card } from "@/components/ui/card";
 import { ErrorState } from "@/components/common/error-state";
 
 export function PublicFormPageContent({ identifier }: { identifier: string }) {
     const { data: form, loading, error, notFound, retry } = usePublicResource<any>(`/api/public/forms/${encodeURIComponent(identifier)}`);
+    // One public address per form (UI/UX plan §5.13): opened as /public-form/{id}, the address
+    // bar shows /f/{slug} instead, so that's the link people copy and share.
+    useEffect(() => {
+        if (form?.slug && window.location.pathname !== publicFormPath(form.slug)) {
+            window.history.replaceState(window.history.state, "", publicFormPath(form.slug) + window.location.search);
+        }
+    }, [form?.slug]);
     return (
         <main className="flex min-h-dvh min-w-0 items-center justify-center bg-background px-4 py-8 sm:px-6">
             <Card className="@container/public-form w-full min-w-0 max-w-xl break-words p-4 sm:p-8">
-                {loading ? <p role="status" className="text-center text-sm text-muted-foreground">Loading form...</p>
+                {loading ? <p role="status" className="text-center text-sm text-muted-foreground">Loading the form…</p>
                     : notFound ? <div className="text-center"><h1 className="text-xl font-semibold">Form unavailable</h1><p className="mt-2 text-muted-foreground">This form link is no longer available.</p></div>
                     : error || !form ? <ErrorState description="The form could not be loaded." onRetry={retry} />
-                    : !form.isActive ? <div className="text-center"><h1 className="text-xl font-semibold">Form Closed</h1><p className="mt-2 text-muted-foreground">This form is currently inactive.</p></div>
+                    : !form.isActive ? <div className="text-center"><h1 className="text-xl font-semibold">Form closed</h1><p className="mt-2 text-muted-foreground">This form is currently inactive.</p></div>
                     : <>
                         <header className="mb-6 min-w-0 text-center">
                             <h1 className="text-2xl font-semibold tracking-tight">{form.name}</h1>

@@ -70,3 +70,6 @@ deploy/vps/scripts/__pycache__/
 # Security audit bundles: detailed vulnerability write-ups, kept local only (not published).
 /crm-audit-bundle/
 /crm-audit-bundle-new/
+
+# Generated public-catalog readiness validator (built with the seed export).
+/apps/unnatividya/scripts/generated/

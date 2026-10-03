@@ -1,3 +1,4 @@
+import { assertTenantModule } from "@/lib/server/module-entitlements";
 import { randomUUID } from "crypto";
 import { createAuditLog } from "@/lib/server/crm";
 import {
@@ -82,7 +83,9 @@ export function computeTaxSplit(
 // --- I/O functions ---
 
 export async function getPartnerInvoiceTemplate(user: TenantUser, partnerId: string) {
+  await assertFeatureEnabled(user.tenantId, "payoutsEnabled", { isPlatformAdmin: user.isPlatformAdmin });
   if (!user.tenantId) return null;
+  await assertTenantModule(user, "PARTNERS");
   return queryOne<any>(
     `select id, "tenantId", "partnerId", "logoUrl", "footerNotes", "signatoryName", "isActive", "createdAt", "updatedAt"
      from "PartnerInvoiceTemplate"
@@ -97,7 +100,9 @@ export async function upsertPartnerInvoiceTemplate(
   partnerId: string,
   input: { logoUrl?: string | null; footerNotes?: string | null; signatoryName?: string | null }
 ) {
+  await assertFeatureEnabled(user.tenantId, "payoutsEnabled", { isPlatformAdmin: user.isPlatformAdmin });
   if (!user.tenantId) throw new Error("TENANT_CONTEXT_REQUIRED");
+  await assertTenantModule(user, "PARTNERS");
   const existing = await getPartnerInvoiceTemplate(user, partnerId);
   const now = new Date().toISOString();
   if (existing) {
@@ -388,6 +393,7 @@ export async function listPartnerInvoiceHistoryForPayout(user: TenantUser, payou
 
 export async function getPartnerInvoicePdfSignedUrl(user: TenantUser, invoiceId: string) {
   if (!user.tenantId) return null;
+  await assertFeatureEnabled(user.tenantId, "payoutsEnabled", { isPlatformAdmin: user.isPlatformAdmin });
   const invoice = await queryOne<any>(
     `select id, "tenantId", "partnerId", "invoiceNumber", "pdfStoragePath"
      from "PartnerInvoice"
@@ -421,6 +427,7 @@ export async function getPartnerInvoicePdfSignedUrl(user: TenantUser, invoiceId:
 // unlike the existing route where an active session already proved that once per request.
 export async function mintPartnerInvoiceDownloadToken(user: TenantUser, invoiceId: string, expiresInSeconds = 3600) {
   if (!user.tenantId) throw new Error("TENANT_REQUIRED");
+  await assertFeatureEnabled(user.tenantId, "payoutsEnabled", { isPlatformAdmin: user.isPlatformAdmin });
   const invoice = await queryOne<{ id: string; partnerId: string }>(
     `select id, "partnerId" from "PartnerInvoice" where "tenantId" = $1 and id = $2 limit 1`,
     [user.tenantId, invoiceId],
@@ -459,6 +466,7 @@ export async function getPartnerInvoiceDownloadByToken(invoiceId: string, token:
 
 export async function listPartnerInvoicesForPartner(user: TenantUser, partnerId: string) {
   if (!user.tenantId) return [];
+  await assertFeatureEnabled(user.tenantId, "payoutsEnabled", { isPlatformAdmin: user.isPlatformAdmin });
   const visiblePartnerUserIds = await getPayoutVisiblePartnerUserIds(user);
   if (!visiblePartnerUserIds.includes(partnerId)) return [];
   return query<any>(
@@ -474,6 +482,7 @@ export async function listPartnerInvoicesForPartner(user: TenantUser, partnerId:
 // building — no new dependency needed for a format this simple.
 export async function generateCycleFinanceCsv(user: TenantUser, cycleId: string) {
   if (!user.tenantId) throw new Error("TENANT_CONTEXT_REQUIRED");
+  await assertFeatureEnabled(user.tenantId, "payoutsEnabled", { isPlatformAdmin: user.isPlatformAdmin });
   const payouts = await query<any>(
     `select id, "partnerId", "totalCommissionAmount", status, "paymentReference"
      from "Payout"

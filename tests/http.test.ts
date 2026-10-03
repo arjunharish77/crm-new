@@ -42,4 +42,11 @@ describe("serverError", () => {
     const response = serverError("Failed to fetch leads");
     expect(response.status).toBe(500);
   });
+
+  it("maps FEATURE_DISABLED:<flag> (legacy flag + module check) to a named 403, not a 500", async () => {
+    const { serverError } = await import("@/lib/server/http");
+    const response = serverError("fallback", new Error("FEATURE_DISABLED:payoutsEnabled"));
+    expect(response.status).toBe(403);
+    expect(await response.json()).toEqual({ code: "MODULE_DISABLED", module: "PAYOUTS", message: "Payouts is not enabled for this workspace" });
+  });
 });

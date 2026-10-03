@@ -1,0 +1,83 @@
+{
+  "checkedAt": "2026-10-03",
+  "scope": "Targeted follow-up of two unresolved eligibility cases and one prepared fee correction; not a full catalog re-verification.",
+  "method": "Official page retrieval plus read-only Chromium rendering for Amity. MUJ prospectus fee table visually inspected from downloaded PDF page 4. No forms submitted. Observations are paraphrased; original documents are not redistributed.",
+  "publicationStatus": "not_applied",
+  "programs": [
+    {
+      "courseId": "ba-amity",
+      "sourceUrl": "https://amityonline.com/bachelor-of-arts-online",
+      "renderedHttpStatus": 200,
+      "renderedBodySha256": "8899a87f169263470e2f34a74f67e7e3b4ee2d6932d48f7708c687ef4d71c4fb",
+      "domesticEligibilitySummary": "School completion through class 12; English proficiency, with three years of English-medium education stated for non-English-medium applicants.",
+      "foreignEligibilityStatus": "No foreign-applicant section visible in this rendering; absence does not establish ineligibility or waive requirements.",
+      "feeObservation": {
+        "currency": "INR",
+        "displayedBaseTotal": 115000,
+        "displayedSemester": 19200,
+        "reconciliation": "Six displayed semester amounts total 115200, not 115000. Confirm exact payment schedule; do not silently reconcile."
+      },
+      "decision": "Retain full eligibility correction hold pending foreign/NRI requirements."
+    },
+    {
+      "courseId": "majmc-amity",
+      "sourceUrl": "https://amityonline.com/master-of-arts-journalism-and-mass-communication-online",
+      "renderedHttpStatus": 200,
+      "renderedBodySha256": "af53228bcb27c5517eab32afbcac88f63fff5fb14c3068af5dc30392b029c5d7",
+      "domesticFeeObservation": {
+        "currency": "INR",
+        "baseTotal": 190000,
+        "semester": 47500,
+        "semesters": 4,
+        "status": "reconfirmed_as_displayed_not_published"
+      },
+      "otherResponseObservation": {
+        "currency": "USD",
+        "baseTotal": 3500,
+        "displayedSemester": 880,
+        "category": "Not conclusively established from currency alone",
+        "reconciliation": "Four displayed instalments total 3520. Confirm category and exact schedule; not a publishable NRI quote."
+      },
+      "eligibilityObservation": "Domestic panel retains 40% threshold and a below-threshold admission test. Foreign panel lists school certificates, recognized graduation and AIU equivalence.",
+      "decision": "Keep prepared INR correction at 190000; require category, intake and additional-charge confirmation before publication."
+    },
+    {
+      "courseId": "msc-mathematics-muj",
+      "sourceUrls": [
+        "https://www.onlinemanipal.com/online-msc-mathematics-muj",
+        "https://www.onlinemanipal.com/wp-content/uploads/2025/05/MUJ-MSc-Mathematics.pdf",
+        "https://muj.onlinemanipal.com/wp-content/uploads/sites/2/2026/08/M.Sc-Mathematics-PPR.pdf"
+      ],
+      "prospectusSha256": "27d831293f150ac4178dc4c9542cde28d5eb82f4fd5fd4a068440fbb9bea242d",
+      "prospectusLabel": "2026-27",
+      "feeTablePdfPage": 4,
+      "feeCategories": [
+        {
+          "category": "Indian nationals",
+          "currency": "INR",
+          "semester": 20000,
+          "total": 80000
+        },
+        {
+          "category": "Non-resident Indians",
+          "currency": "USD",
+          "semester": 290,
+          "total": 1160
+        },
+        {
+          "category": "Other nationals",
+          "currency": "USD",
+          "semester": 335,
+          "total": 1340
+        }
+      ],
+      "feeNotes": [
+        "Prospectus lists an additional INR 500 non-refundable application charge for Indian, Nepalese, Bhutanese, Bangladeshi and Sri Lankan students.",
+        "The four named neighbouring-country applicant groups must pay in INR. Confirm their applicable tuition rather than converting a USD category.",
+        "Current intake, exceptions and all additional costs still require review."
+      ],
+      "eligibilityConflict": "Program page and prospectus retain compulsory-mathematics wording; PPR PDF page 46 (printed 45) specifies a BSc/equivalent route with 50% aggregate, or 45% for reserved categories, without the same prerequisite wording. No source establishes that the omitted condition is waived.",
+      "decision": "Retain eligibility hold; separate NRI and other-nationality fee evidence is ready for editorial review."
+    }
+  ]
+}

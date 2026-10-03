@@ -1,9 +1,9 @@
-import { randomUUID, createHmac } from "crypto";
+import { randomUUID } from "crypto";
 import { query, queryOne, execute, queryAsSystem } from "@/lib/db/query";
-import { assertModuleEnabled } from "@/lib/server/module-entitlements";
+import { assertModuleEnabled, isModuleEnabledForTenant } from "@/lib/server/module-entitlements";
 import { getLeadForTenant, getOpportunityForTenant, updateLeadForTenant, updateOpportunityForTenant, listLeadsForTenant, listOpportunitiesForTenant } from "@/lib/server/crm";
 import { createUserNotification } from "@/lib/server/notifications";
-import { decryptSecretAtRestOrNull } from "@/lib/server/secret-encryption";
+import { APP_SIGNING_COLUMNS, appSignatureHeaders, type AppSigningRow } from "@/lib/server/app-signing";
 import { assertSafeOutboundUrl } from "@/lib/server/outbound-request-guard";
 
 type TenantUser = { id: string; tenantId: string | null };
@@ -22,10 +22,6 @@ const MAPPABLE_FIELDS: Record<SyncModule, string[]> = {
 async function assertMarketplaceEnabled(user: TenantUser) {
   if (!user.tenantId) throw new Error("TENANT_CONTEXT_REQUIRED");
   await assertModuleEnabled(user.tenantId, "MARKETPLACE", {});
-}
-
-function signPayload(secret: string, timestamp: string, rawBody: string) {
-  return createHmac("sha256", secret).update(`${timestamp}.${rawBody}`).digest("hex");
 }
 
 async function requireOwnInstall(user: TenantUser, installId: string) {
@@ -140,7 +136,7 @@ async function fetchModuleRecordsForSync(user: TenantUser, moduleKey: SyncModule
   return rows.filter((row) => new Date(row.updatedAt).getTime() > new Date(since).getTime());
 }
 
-async function sendSyncBatch(webhookUrl: string, signingSecret: string | null, moduleKey: SyncModule, records: unknown[]) {
+async function sendSyncBatch(webhookUrl: string, signingRow: AppSigningRow, moduleKey: SyncModule, records: unknown[]) {
   const timestamp = Math.floor(Date.now() / 1000).toString();
   const rawBody = JSON.stringify({ type: "sync", module: moduleKey, records });
   const controller = new AbortController();
@@ -151,7 +147,7 @@ async function sendSyncBatch(webhookUrl: string, signingSecret: string | null, m
     // data to wherever the destination actually resolves.
     await assertSafeOutboundUrl(webhookUrl);
     const headers: Record<string, string> = { "content-type": "application/json", "x-app-timestamp": timestamp, "x-app-event": "sync" };
-    if (signingSecret) headers["x-app-signature"] = signPayload(signingSecret, timestamp, rawBody);
+    Object.assign(headers, appSignatureHeaders(signingRow, timestamp, rawBody));
     const response = await fetch(webhookUrl, { method: "POST", headers, body: rawBody, signal: controller.signal, redirect: "manual" });
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
   } finally {
@@ -183,9 +179,10 @@ export async function runSyncForInstall(installId: string) {
 
   const install = await queryOne<{ tenantId: string; appId: string }>(`select "tenantId", "appId" from "TenantAppInstall" where id = $1 and status = 'INSTALLED'`, [installId]);
   if (!install) return { skipped: true };
+  // Skipped (not failed/retried) while the tenant's Marketplace module is off: no CRM data leaves.
+  if (!(await isModuleEnabledForTenant(install.tenantId, "MARKETPLACE"))) return { skipped: true };
   const app = await queryOne<{ webhookUrl: string | null; name: string }>(`select "webhookUrl", name from "MarketplaceApp" where id = $1 and "isActive" = true`, [install.appId]);
-  const secretRowEncrypted = await queryOne<{ signingSecret: string }>(`select "signingSecret" from "TenantAppSecret" where "tenantId" = $1 and "appId" = $2`, [install.tenantId, install.appId]);
-  const secretRow = secretRowEncrypted ? { signingSecret: decryptSecretAtRestOrNull(secretRowEncrypted.signingSecret) } : null;
+  const signingRow = await queryOne<NonNullable<AppSigningRow>>(`select ${APP_SIGNING_COLUMNS} from "TenantAppSecret" where "tenantId" = $1 and "appId" = $2`, [install.tenantId, install.appId]);
   const user = { id: install.appId, tenantId: install.tenantId };
   const now = new Date().toISOString();
 
@@ -202,7 +199,7 @@ export async function runSyncForInstall(installId: string) {
       const records = await fetchModuleRecordsForSync(user, moduleKey, config.lastSyncedAt);
       if (!records.length) continue;
       const mapped = records.map((record) => applyFieldMapping(record, mappings, "toApp"));
-      await sendSyncBatch(app.webhookUrl, secretRow?.signingSecret ?? null, moduleKey, mapped);
+      await sendSyncBatch(app.webhookUrl, signingRow, moduleKey, mapped);
       totalSynced += records.length;
     }
   } catch (error) {

@@ -13,6 +13,7 @@ export async function GET(request: Request) {
       queueId: searchParams.get("queueId"),
       ownerId: searchParams.get("ownerId"),
       typeId: searchParams.get("typeId"),
+      q: searchParams.get("q"),
       page: searchParams.get("page") ? Number(searchParams.get("page")) : undefined,
       limit: searchParams.get("limit") ? Number(searchParams.get("limit")) : undefined,
     });

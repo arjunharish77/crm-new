@@ -5,6 +5,7 @@ import { getEffectiveSecurityPolicy } from "@/lib/server/security-policy";
 import { createAuditLog } from "@/lib/server/crm";
 import { createUserNotification } from "@/lib/server/notifications";
 import { revokeAllSessionsForUser } from "@/lib/server/sessions";
+import { appBaseUrl, emailLogoHtml, isSystemEmailConfigured, sendSystemEmail } from "@/lib/server/system-email";
 
 const RESET_TOKEN_HOURS = 1;
 
@@ -31,6 +32,42 @@ export function validatePasswordStrength(password: string, policy: PasswordPolic
   if (policy.requireNumbers && !/[0-9]/.test(password)) errors.push("Must include a number");
   if (policy.requireSpecialChars && !/[^A-Za-z0-9]/.test(password)) errors.push("Must include a special character");
   return errors;
+}
+
+// The policy as plain requirements, for the password forms (UI/UX plan Phase 3, "one password
+// rule"): every place that sets a password shows the same rule the server enforces.
+export function describePasswordPolicy(policy: PasswordPolicy): string[] {
+  const rules = [`At least ${policy.minPasswordLength} characters`];
+  if (policy.requireUppercase) rules.push("An uppercase letter");
+  if (policy.requireLowercase) rules.push("A lowercase letter");
+  if (policy.requireNumbers) rules.push("A number");
+  if (policy.requireSpecialChars) rules.push("A symbol, such as ! or #");
+  if (policy.preventPasswordReuse > 0) rules.push(`Not one of your last ${policy.preventPasswordReuse} passwords`);
+  return rules;
+}
+
+// The rule as the password forms need it: the plain requirements plus the flags they check as
+// you type. Contains nothing about the user or workspace beyond the rule itself, so it can be
+// shown before sign-in (expired password, reset link).
+export function passwordRuleForForms(policy: PasswordPolicy) {
+  return {
+    rules: describePasswordPolicy(policy),
+    minPasswordLength: policy.minPasswordLength,
+    requireUppercase: policy.requireUppercase,
+    requireLowercase: policy.requireLowercase,
+    requireNumbers: policy.requireNumbers,
+    requireSpecialChars: policy.requireSpecialChars,
+  };
+}
+
+// The rule for a reset link's workspace, or null when the link isn't valid any more.
+export async function passwordRuleForResetToken(rawToken: string) {
+  const row = await queryOneAsSystem<{ tenantId: string | null }>(
+    `select "tenantId" from "PasswordResetToken" where "tokenHash" = $1 and "usedAt" is null and "expiresAt" > now()`,
+    [hashToken(rawToken)],
+  );
+  if (!row) return null;
+  return passwordRuleForForms(await getEffectiveSecurityPolicy(row.tenantId));
 }
 
 async function assertPasswordMeetsPolicy(tenantId: string | null, password: string) {
@@ -120,6 +157,46 @@ export async function adminGeneratePasswordResetToken(adminUser: TenantUser, tar
   );
   await createAuditLog(adminUser as any, "PASSWORD_RESET_TOKEN_ISSUED", "USER", targetUserId, null, null, { issuedBy: adminUser.id }).catch(() => undefined);
   return { token: rawToken, expiresAt, expiresInSeconds: RESET_TOKEN_HOURS * 60 * 60 };
+}
+
+// Self-service reset (decision 16): "Forgot password?" emails a one-hour, single-use link through
+// the platform's SMTP account (lib/server/system-email). The caller always gets the same answer
+// and doesn't wait for this to finish, so neither the reply nor its timing says whether an
+// account exists. Only active users in workspaces that aren't suspended get an email; a new link
+// replaces any earlier unused one.
+export async function requestPasswordResetByEmail(emailInput: string) {
+  const email = emailInput.trim().toLowerCase();
+  if (!email || !isSystemEmailConfigured()) return;
+  const user = await queryOneAsSystem<{ id: string; tenantId: string | null; name: string | null; status: string; tenantStatus: string | null }>(
+    `select u.id, u."tenantId", u.name, u.status, t.status as "tenantStatus"
+     from "User" u left join "Tenant" t on t.id = u."tenantId"
+     where lower(u.email) = $1 limit 1`,
+    [email],
+  );
+  if (!user || user.status !== "ACTIVE" || user.tenantStatus === "SUSPENDED") return;
+
+  const rawToken = randomBytes(32).toString("hex");
+  const now = new Date();
+  const expiresAt = new Date(now.getTime() + RESET_TOKEN_HOURS * 60 * 60 * 1000).toISOString();
+  await executeAsSystem(`update "PasswordResetToken" set "expiresAt" = $1 where "userId" = $2 and "usedAt" is null and "expiresAt" > $1`, [now.toISOString(), user.id]);
+  await executeAsSystem(
+    `insert into "PasswordResetToken" (id, "userId", "tenantId", "tokenHash", "expiresAt", "createdBy", "createdAt")
+     values ($1, $2, $3, $4, $5, $2, $6)`,
+    [randomUUID(), user.id, user.tenantId, hashToken(rawToken), expiresAt, now.toISOString()],
+  );
+  const link = `${appBaseUrl()}/reset-password?token=${rawToken}`;
+  const greeting = user.name ? `Hi ${user.name.split(" ")[0]},` : "Hi,";
+  await sendSystemEmail({
+    to: email,
+    subject: "Reset your password",
+    text: `${greeting}\n\nSomeone asked to reset the password for your account. To choose a new password, open this link within the next hour:\n\n${link}\n\nThe link works once. If you didn't ask for this, you can ignore this email; your password hasn't changed.\n`,
+    html: `${emailLogoHtml()}<p>${escapeHtml(greeting)}</p><p>Someone asked to reset the password for your account. To choose a new password, open this link within the next hour:</p><p><a href="${escapeHtml(link)}">Reset your password</a></p><p>The link works once. If you didn't ask for this, you can ignore this email; your password hasn't changed.</p>`,
+  });
+  await createAuditLog({ id: user.id, tenantId: user.tenantId } as any, "PASSWORD_RESET_REQUESTED", "USER", user.id, null, null, null).catch(() => undefined);
+}
+
+function escapeHtml(value: string) {
+  return value.replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[char] as string);
 }
 
 // WP07 (F04): PRE_AUTH, disposition B -- the token is opaque; which tenant it belongs to is

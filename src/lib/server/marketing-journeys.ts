@@ -1,6 +1,6 @@
+import { assertModuleEnabled, assertTenantModule } from "@/lib/server/module-entitlements";
 import { randomUUID } from "crypto";
 import { createAuditLog } from "@/lib/server/crm";
-import { assertModuleEnabled } from "@/lib/server/module-entitlements";
 import { query, queryOne, execute, queryAsSystem } from "@/lib/db/query";
 import {
   createAutomationForTenant,
@@ -10,9 +10,11 @@ import {
   executeAutomationWorkflow,
   loadAutomationTestRecord,
 } from "@/lib/repositories/automations-postgres";
-import { getLeadListForTenant } from "@/lib/repositories/lead-lists-postgres";
-import { listLeadsForTenant } from "@/lib/repositories/leads-postgres";
-import { listOpportunitiesForTenantByType } from "@/lib/repositories/opportunities-postgres";
+import { leadAudienceForList } from "@/lib/repositories/lead-lists-postgres";
+import { countLeadAudienceForTenant, listLeadAudiencePageForTenant, type LeadAudienceQuery } from "@/lib/repositories/leads-postgres";
+import { toServerQuery } from "@/components/views/smart-view-server-query";
+import { countOpportunityAudienceForTenant, listOpportunityAudienceIdsForTenant } from "@/lib/repositories/opportunities-postgres";
+import { getCurrentUserById } from "@/lib/repositories/auth-admin-postgres";
 import { isSuppressed, isOptedOut } from "@/lib/server/communications";
 import { createUserNotification } from "@/lib/server/notifications";
 
@@ -43,7 +45,8 @@ export type JourneyInput = {
 };
 
 const JOURNEY_COLUMNS = `id, "tenantId", "automationId", name, description, "targetModule", status, "audienceType",
-  "audienceConfig", "continuousEnrollment", "scheduledAt", priority, "currentVersion", "createdBy", "createdAt", "updatedAt"`;
+  "audienceConfig", "continuousEnrollment", "scheduledAt", priority, "currentVersion", "createdBy", "createdAt", "updatedAt",
+  "enrollmentPending"`;
 
 // Only forward transitions are ever allowed automatically -- PAUSED can return to ACTIVE
 // (a deliberate exception, since pausing is meant to be reversible), but nothing skips
@@ -59,11 +62,13 @@ const ALLOWED_STATUS_TRANSITIONS: Record<JourneyStatus, JourneyStatus[]> = {
 
 export async function listJourneysForTenant(user: TenantUser) {
   if (!user.tenantId) return [];
+  await assertTenantModule(user, "JOURNEY_ORCHESTRATION");
   return query<any>(`select ${JOURNEY_COLUMNS} from "MarketingJourney" where "tenantId" = $1 order by "createdAt" desc`, [user.tenantId]);
 }
 
 export async function getJourneyForTenant(user: TenantUser, id: string) {
   if (!user.tenantId) return null;
+  await assertTenantModule(user, "JOURNEY_ORCHESTRATION");
   return queryOne<any>(`select ${JOURNEY_COLUMNS} from "MarketingJourney" where "tenantId" = $1 and id = $2 limit 1`, [user.tenantId, id]);
 }
 
@@ -188,6 +193,7 @@ export async function publishJourneyVersion(user: TenantUser, id: string, publis
 
 export async function listJourneyVersions(user: TenantUser, journeyId: string) {
   if (!user.tenantId) return [];
+  await assertTenantModule(user, "JOURNEY_ORCHESTRATION");
   return query<any>(
     `select id, version, "publishNotes", "publishedBy", "publishedAt" from "MarketingJourneyVersion"
      where "tenantId" = $1 and "journeyId" = $2 order by version desc`,
@@ -230,24 +236,64 @@ export async function resolveJourneyAudienceRecordIds(
   targetModule: JourneyModule,
   audienceType: JourneyAudienceType,
   audienceConfig: Record<string, any>,
-  limit = 5000
+  limit = 100
 ): Promise<{ total: number; recordIds: string[] }> {
-  if (!user.tenantId) return { total: 0, recordIds: [] };
+  // The audience size and the first `limit` record ids (simulation). Enrolment reads all of it in
+  // batches (journeyAudienceBatch).
+  const audience = await journeyAudience(user, targetModule, audienceType, audienceConfig);
+  const [total, batch] = await Promise.all([countJourneyAudience(user, audience), journeyAudienceBatch(user, audience, null, limit)]);
+  return { total, recordIds: batch.ids };
+}
+
+// Every record id in a journey-style audience, `batchSize` at a time, in id order (call campaigns
+// use this to add their audience; §8 #24: they took the first 500/1,000/5,000).
+export async function forEachJourneyAudienceBatch(
+  user: TenantUser,
+  targetModule: JourneyModule,
+  audienceType: JourneyAudienceType,
+  audienceConfig: Record<string, any>,
+  onBatch: (ids: string[]) => Promise<void>,
+  batchSize = 500,
+) {
+  const audience = await journeyAudience(user, targetModule, audienceType, audienceConfig);
+  let afterId: string | null = null;
+  while (true) {
+    const batch = await journeyAudienceBatch(user, audience, afterId, batchSize);
+    if (batch.ids.length) await onBatch(batch.ids);
+    if (!batch.lastId) return;
+    afterId = batch.lastId;
+  }
+}
+
+type JourneyAudience =
+  | { kind: "ids"; ids: string[] }
+  | { kind: "leads"; query: LeadAudienceQuery }
+  | { kind: "opportunities"; filters: any[] | null }
+  | { kind: "none" };
+
+// Who a journey enrols. A lead list or saved view is read in batches in id order, all of it (§8
+// #24: enrolment used to take the first 500 of a lead list and the first 1,000 of a view).
+async function journeyAudience(
+  user: TenantUser,
+  targetModule: JourneyModule,
+  audienceType: JourneyAudienceType,
+  audienceConfig: Record<string, any>,
+): Promise<JourneyAudience> {
+  if (!user.tenantId) return { kind: "none" };
 
   if (audienceType === "MANUAL") {
-    const ids = Array.isArray(audienceConfig.recordIds) ? audienceConfig.recordIds.map(String) : [];
-    return { total: ids.length, recordIds: ids.slice(0, limit) };
+    const ids = Array.isArray(audienceConfig.recordIds) ? [...new Set<string>(audienceConfig.recordIds.map(String))].sort() : [];
+    return { kind: "ids", ids };
   }
 
   if (audienceType === "LEAD_LIST" && audienceConfig.leadListId && targetModule === "LEAD") {
-    const list = await getLeadListForTenant(user, String(audienceConfig.leadListId));
-    const leads = Array.isArray(list?.leads) ? list.leads : [];
-    return { total: Number(list?.count ?? leads.length), recordIds: leads.map((lead: any) => lead.id).slice(0, limit) };
+    const listQuery = await leadAudienceForList(user, String(audienceConfig.leadListId));
+    return listQuery ? { kind: "leads", query: listQuery } : { kind: "none" };
   }
 
   if (audienceType === "SAVED_VIEW" && audienceConfig.savedViewId) {
     const view = await queryOne<any>(
-      `select config from "CustomReport" where "tenantId" = $1 and id = $2 and "chartType" = 'SAVED_VIEW' limit 1`,
+      `select config from "CustomReport" where "tenantId" = $1 and id = $2 and "chartType" = 'SAVED_VIEW' and "deletedAt" is null limit 1`,
       [user.tenantId, String(audienceConfig.savedViewId)],
     );
     const tabs = Array.isArray(view?.config?.tabs) ? view.config.tabs : [];
@@ -258,21 +304,52 @@ export async function resolveJourneyAudienceRecordIds(
     // (whose filters would then either no-op or, worse, still parse as valid conditions
     // against the wrong table) -- that footgun would mass-enroll (and mass-email, via
     // enrollAudienceIntoJourney) the entire tenant's population for the target module.
-    if (!tab) return { total: 0, recordIds: [] };
-    const filters = tab.filters ? [{ logic: tab.filters.logic ?? "AND", conditions: tab.filters.conditions ?? [] }] : null;
-
-    if (targetModule === "OPPORTUNITY") {
-      const result = await listOpportunitiesForTenantByType(user, limit, null, filters as any);
-      return { total: result.meta.total, recordIds: result.data.map((row: any) => row.id) };
-    }
-    const result = await listLeadsForTenant(user, 1, limit, filters as any);
-    return { total: result.meta.total, recordIds: result.data.map((row: any) => row.id) };
+    if (!tab) return { kind: "none" };
+    // The view's filters exactly as the Smart View applies them (owner and team segments
+    // included), and strict: a condition the server can't apply stops the enrolment instead of
+    // being skipped, which would enrol -- and message -- more people than the view shows.
+    const translated = toServerQuery(wantModule, tab.filters);
+    if (!translated.ok) throw Object.assign(new Error("AUDIENCE_FILTER_UNSUPPORTED"), { field: translated.field });
+    const filters = translated.group ? [translated.group] : null;
+    if (targetModule === "OPPORTUNITY") return { kind: "opportunities", filters };
+    return { kind: "leads", query: { filters: filters as any, strictFilters: true } };
   }
 
-  return { total: 0, recordIds: [] };
+  return { kind: "none" };
+}
+
+async function countJourneyAudience(user: TenantUser, audience: JourneyAudience) {
+  if (audience.kind === "ids") return audience.ids.length;
+  if (audience.kind === "leads") return countLeadAudienceForTenant(user, audience.query);
+  if (audience.kind === "opportunities") return countOpportunityAudienceForTenant(user, audience.filters as any);
+  return 0;
+}
+
+// The next `limit` record ids after `afterId`, in id order; `lastId` is null when this is the end.
+async function journeyAudienceBatch(user: TenantUser, audience: JourneyAudience, afterId: string | null, limit: number) {
+  let ids: string[] = [];
+  if (audience.kind === "ids") ids = audience.ids.filter((id) => afterId === null || id > afterId).slice(0, limit);
+  else if (audience.kind === "leads") ids = (await listLeadAudiencePageForTenant(user, audience.query, afterId, limit)).map((row: any) => String(row.id));
+  else if (audience.kind === "opportunities") ids = await listOpportunityAudienceIdsForTenant(user, audience.filters as any, afterId, limit);
+  return { ids, lastId: ids.length === limit ? ids[ids.length - 1] : null };
 }
 
 // --- Enrollment ---
+
+// Leaving a journey (exit, conversion, unsubscribe, or being outranked by another journey) stops
+// it for that record: the journey automation's scheduled steps still waiting for the record are
+// cancelled, so no further journey messages go out. Without this, an exited record kept
+// receiving the journey's queued messages. `journeyIds` null means every journey.
+export async function cancelPendingJourneyStepsForRecord(tenantId: string, journeyIds: string[] | null, recordType: string, recordId: string) {
+  return execute(
+    `update "AutomationQueue" q set status = 'CANCELLED', "updatedAt" = now()
+     from "MarketingJourney" j
+     where q."tenantId" = $1 and j."tenantId" = $1 and q.status = 'PENDING'
+       and q."automationId" = j."automationId" and q."entityType" = $2 and q."entityId" = $3
+       and ($4::text[] is null or j.id = any($4::text[]))`,
+    [tenantId, recordType, recordId, journeyIds],
+  );
+}
 
 // Collision handling (item 10): a record actively enrolled in journey A cannot also be
 // actively enrolled in journey B for the same target module unless B outranks every journey
@@ -288,7 +365,7 @@ async function resolveJourneyEnrollmentCollision(
   recordId: string
 ): Promise<boolean> {
   const rivals = await query<any>(
-    `select e.id, j.priority
+    `select e.id, e."journeyId", j.priority
      from "MarketingJourneyEnrollment" e
      join "MarketingJourney" j on j.id = e."journeyId"
      where e."tenantId" = $1 and e."recordType" = $2 and e."recordId" = $3
@@ -303,61 +380,96 @@ async function resolveJourneyEnrollmentCollision(
       `update "MarketingJourneyEnrollment" set status = 'EXITED', "exitedAt" = $1, "exitReason" = 'JOURNEY_PRIORITY_COLLISION' where id = $2`,
       [new Date().toISOString(), rival.id],
     );
+    await cancelPendingJourneyStepsForRecord(user.tenantId!, [rival.journeyId], targetModule, recordId);
   }
   return true;
 }
 
-export async function enrollAudienceIntoJourney(user: TenantUser, journeyId: string) {
+// Enrols the whole audience, a batch at a time (§8 #24). Records already enrolled are skipped in
+// bulk, so a repeat run only works on new ones. A run that reaches `timeBudgetMs` stops and is
+// marked pending; the worker finishes it as the same person (processDueJourneyEnrollmentRefresh).
+const ENROLL_BATCH = 200;
+
+export async function enrollAudienceIntoJourney(user: TenantUser, journeyId: string, options: { timeBudgetMs?: number } = {}) {
   if (!user.tenantId) throw new Error("TENANT_CONTEXT_REQUIRED");
   await assertModuleEnabled(user.tenantId, "JOURNEY_ORCHESTRATION", { isPlatformAdmin: user.isPlatformAdmin });
   const journey = await getJourneyForTenant(user, journeyId);
   if (!journey) throw new Error("MARKETING_JOURNEY_NOT_FOUND");
   if (journey.status !== "ACTIVE") throw new Error("MARKETING_JOURNEY_NOT_ACTIVE");
 
-  const { recordIds } = await resolveJourneyAudienceRecordIds(user, journey.targetModule, journey.audienceType, journey.audienceConfig);
-  if (!recordIds.length) return { enrolled: 0, skipped: 0 };
-
-  // The INSERT's own ON CONFLICT DO NOTHING is the real, atomic dedup gate -- not a
-  // pre-check SELECT into an in-memory Set, which two concurrent callers (the
-  // continuous-enrollment worker and a manual "Enroll Audience Now" click) could both
-  // read before either write commits, both then calling enrollRecordsInAutomation (which
-  // has no idempotency of its own and runs real side effects like sending email) for the
-  // same overlapping records. Only records this specific call actually wins the insert
-  // race for are passed to enrollRecordsInAutomation.
-  const now = new Date().toISOString();
-  const newIds: string[] = [];
+  const timeBudgetMs = options.timeBudgetMs ?? 20_000;
+  const startedAt = Date.now();
+  const audience = await journeyAudience(user, journey.targetModule, journey.audienceType, journey.audienceConfig);
   const journeyPriority = Number(journey.priority ?? 0);
-  for (const recordId of recordIds) {
-    const canEnroll = await resolveJourneyEnrollmentCollision(user, journeyId, journeyPriority, journey.targetModule, recordId);
-    if (!canEnroll) continue;
-    const inserted = await queryOne<{ id: string }>(
-      `insert into "MarketingJourneyEnrollment" (id, "tenantId", "journeyId", "recordType", "recordId", status, "enrolledAt")
-       values ($1, $2, $3, $4, $5, 'ACTIVE', $6)
-       on conflict ("journeyId", "recordType", "recordId") do nothing
-       returning id`,
-      [randomUUID(), user.tenantId, journeyId, journey.targetModule, recordId, now],
-    );
-    if (inserted) newIds.push(recordId);
+  let enrolled = 0;
+  let skipped = 0;
+  let afterId: string | null = null;
+  let complete = false;
+  while (true) {
+    const batch = await journeyAudienceBatch(user, audience, afterId, ENROLL_BATCH);
+    if (batch.ids.length) {
+      const existing = new Set((await query<{ recordId: string }>(
+        `select "recordId" from "MarketingJourneyEnrollment" where "tenantId" = $1 and "journeyId" = $2 and "recordType" = $3 and "recordId" = any($4::text[])`,
+        [user.tenantId, journeyId, journey.targetModule, batch.ids],
+      )).map((row) => row.recordId));
+      skipped += existing.size;
+
+      // The INSERT's own ON CONFLICT DO NOTHING is the real, atomic dedup gate -- the bulk
+      // check above only saves work. Two concurrent callers (the continuous-enrollment worker
+      // and a manual "Enroll Audience Now" click) could both pass it before either write
+      // commits, then both call enrollRecordsInAutomation (which has no idempotency of its own
+      // and runs real side effects like sending email) for the same records. Only records this
+      // call actually wins the insert race for are passed on.
+      const now = new Date().toISOString();
+      const newIds: string[] = [];
+      for (const recordId of batch.ids) {
+        if (existing.has(recordId)) continue;
+        const canEnroll = await resolveJourneyEnrollmentCollision(user, journeyId, journeyPriority, journey.targetModule, recordId);
+        if (!canEnroll) { skipped += 1; continue; }
+        const inserted = await queryOne<{ id: string }>(
+          `insert into "MarketingJourneyEnrollment" (id, "tenantId", "journeyId", "recordType", "recordId", status, "enrolledAt")
+           values ($1, $2, $3, $4, $5, 'ACTIVE', $6)
+           on conflict ("journeyId", "recordType", "recordId") do nothing
+           returning id`,
+          [randomUUID(), user.tenantId, journeyId, journey.targetModule, recordId, now],
+        );
+        if (inserted) newIds.push(recordId);
+        else skipped += 1;
+      }
+      if (newIds.length) {
+        // At most ENROLL_BATCH (200) here; enrollRecordsInAutomation takes up to 500 at a time.
+        await enrollRecordsInAutomation(user, journey.automationId, journey.targetModule, newIds);
+        for (const recordId of newIds) {
+          await recordAttributionTouch(user, {
+            recordType: journey.targetModule,
+            recordId,
+            channel: "JOURNEY_ENROLLMENT",
+            journeyId,
+            touchType: "TOUCH",
+          });
+        }
+        enrolled += newIds.length;
+      }
+    }
+    if (!batch.lastId) {
+      complete = true;
+      break;
+    }
+    afterId = batch.lastId;
+    if (Date.now() - startedAt > timeBudgetMs) break;
   }
-  if (!newIds.length) return { enrolled: 0, skipped: recordIds.length };
 
-  await enrollRecordsInAutomation(user, journey.automationId, journey.targetModule, newIds);
-
-  for (const recordId of newIds) {
-    await recordAttributionTouch(user, {
-      recordType: journey.targetModule,
-      recordId,
-      channel: "JOURNEY_ENROLLMENT",
-      journeyId,
-      touchType: "TOUCH",
-    });
-  }
-
-  return { enrolled: newIds.length, skipped: recordIds.length - newIds.length };
+  // Not finished: the worker carries on as this person. Finished: nothing pending.
+  await execute(
+    `update "MarketingJourney" set "enrollmentPending" = $3 where "tenantId" = $1 and id = $2`,
+    [user.tenantId, journeyId, complete ? null : { by: user.id, since: new Date().toISOString() }],
+  );
+  return { enrolled, skipped, complete };
 }
 
 export async function listEnrollmentsForJourney(user: TenantUser, journeyId: string) {
   if (!user.tenantId) return [];
+  await assertTenantModule(user, "JOURNEY_ORCHESTRATION");
   return query<any>(
     `select id, "recordType", "recordId", status, "enrolledAt", "exitedAt", "exitReason"
      from "MarketingJourneyEnrollment" where "tenantId" = $1 and "journeyId" = $2 order by "enrolledAt" desc`,
@@ -374,13 +486,15 @@ export async function markEnrollmentStatus(
   if (!user.tenantId) throw new Error("TENANT_CONTEXT_REQUIRED");
   await assertModuleEnabled(user.tenantId, "JOURNEY_ORCHESTRATION", { isPlatformAdmin: user.isPlatformAdmin });
   const now = new Date().toISOString();
-  return queryOne<any>(
+  const enrollment = await queryOne<any>(
     `update "MarketingJourneyEnrollment"
      set status = $1, "exitedAt" = $2, "exitReason" = $3
      where "tenantId" = $4 and id = $5
-     returning id, "recordType", "recordId", status, "enrolledAt", "exitedAt", "exitReason"`,
+     returning id, "journeyId", "recordType", "recordId", status, "enrolledAt", "exitedAt", "exitReason"`,
     [status, now, exitReason ?? null, user.tenantId, enrollmentId],
   );
+  if (enrollment) await cancelPendingJourneyStepsForRecord(user.tenantId, [enrollment.journeyId], enrollment.recordType, enrollment.recordId);
+  return enrollment;
 }
 
 // --- Attribution ---
@@ -937,6 +1051,7 @@ export async function getJourneyHealthForTenant(user: TenantUser, journeyId: str
 
 export async function listJourneyHealthForTenant(user: TenantUser) {
   if (!user.tenantId) return [];
+  await assertTenantModule(user, "JOURNEY_ORCHESTRATION");
   const journeys = await query<{ id: string }>(`select id from "MarketingJourney" where "tenantId" = $1 and status = 'ACTIVE'`, [user.tenantId]);
   const results = [];
   for (const row of journeys) {
@@ -994,14 +1109,18 @@ export async function alertDegradedJourneys(limit = 100) {
 
 // WP07 (F04): BACKGROUND_JOB, disposition B -- worker-invoked recurring job, discovers active
 // continuous-enrollment journeys across every tenant at once.
+// Continuous journeys refresh their enrolment; an "Enroll audience now" that ran out of time
+// (enrollmentPending) is finished as the person who started it.
 export async function processDueJourneyEnrollmentRefresh() {
   const journeys = await queryAsSystem<any>(
-    `select ${JOURNEY_COLUMNS} from "MarketingJourney" where status = 'ACTIVE' and "continuousEnrollment" = true`,
+    `select ${JOURNEY_COLUMNS} from "MarketingJourney" where status = 'ACTIVE' and ("continuousEnrollment" = true or "enrollmentPending" is not null)`,
     [],
   );
   let processed = 0;
   for (const journey of journeys) {
-    await enrollAudienceIntoJourney({ id: "journey-worker", tenantId: journey.tenantId }, journey.id).catch(() => undefined);
+    const pendingBy = journey.enrollmentPending?.by ? await getCurrentUserById(String(journey.enrollmentPending.by)) : null;
+    const actor = pendingBy && pendingBy.tenantId === journey.tenantId ? (pendingBy as TenantUser) : { id: "journey-worker", tenantId: journey.tenantId };
+    await enrollAudienceIntoJourney(actor, journey.id, { timeBudgetMs: 45_000 }).catch(() => undefined);
     processed += 1;
   }
   return { processed };

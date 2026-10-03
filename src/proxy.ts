@@ -27,9 +27,34 @@ function isExempt(pathname: string) {
 
 const MUTATING_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
 
+// Pages that need a signed-in user. Without the session cookie, the request goes to /login with
+// ?from= so the user comes back here after signing in (UI/UX plan B16). This used to live in a
+// second proxy.ts at the project root, which Next.js never ran (with a src/ directory only
+// src/proxy.ts runs), so the redirect and the return link were both silently off. The cookie's
+// validity is still checked by each API route; an expired cookie reaches the page, whose first
+// API call gets 401 and goes to /login with ?from= (lib/api.ts).
+const SIGNED_IN_PREFIXES = ["/dashboard", "/platform-admin"];
+
+function pageRedirect(request: NextRequest) {
+  const { pathname, search } = request.nextUrl;
+  if (pathname === "/register" || pathname.startsWith("/register/")) {
+    return NextResponse.redirect(new URL("/login", request.url));
+  }
+  const needsSignIn = SIGNED_IN_PREFIXES.some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`));
+  if (needsSignIn && !request.cookies.get("token")?.value) {
+    const loginUrl = new URL("/login", request.url);
+    loginUrl.searchParams.set("from", `${pathname}${search}`);
+    return NextResponse.redirect(loginUrl);
+  }
+  return null;
+}
+
 export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
-  if (!pathname.startsWith("/api/") || !MUTATING_METHODS.has(request.method) || isExempt(pathname)) {
+  if (!pathname.startsWith("/api/")) {
+    return pageRedirect(request) ?? NextResponse.next();
+  }
+  if (!MUTATING_METHODS.has(request.method) || isExempt(pathname)) {
     return NextResponse.next();
   }
 
@@ -45,5 +70,10 @@ export function proxy(request: NextRequest) {
 }
 
 export const config = {
-  matcher: "/api/:path*",
+  matcher: [
+    "/api/:path*",
+    "/dashboard/:path*",
+    "/platform-admin/:path*",
+    "/register/:path*",
+  ],
 };

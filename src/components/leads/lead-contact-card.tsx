@@ -18,6 +18,7 @@ import { toast } from 'sonner';
 import { fadeInUp } from '@/lib/motion';
 import { apiFetch } from '@/lib/api';
 import { cn } from '@/lib/utils';
+import { useModuleEnabled } from '@/components/auth/feature-gate';
 
 interface LeadContactCardProps {
     lead: {
@@ -43,6 +44,7 @@ function getStatusClassName(status: string): string {
 }
 
 export function LeadContactCard({ lead, onCreateActivity, onCreateOpportunity }: LeadContactCardProps) {
+    const telephonyEnabled = useModuleEnabled('TELEPHONY');
     const copyToClipboard = async (text: string, label: string) => {
         try {
             await navigator.clipboard.writeText(text);
@@ -61,7 +63,7 @@ export function LeadContactCard({ lead, onCreateActivity, onCreateOpportunity }:
                 <div className="border-b border-border/50 p-3">
                     <div className="flex items-start justify-between">
                         <div>
-                            <h3 className="mb-0.5 text-lg font-extrabold tracking-tight">
+                            <h3 className="mb-0.5 text-lg font-semibold tracking-tight">
                                 {lead.name}
                             </h3>
                             {lead.company && (
@@ -73,7 +75,7 @@ export function LeadContactCard({ lead, onCreateActivity, onCreateOpportunity }:
                         </div>
                         <Badge
                             variant="outline"
-                            className={cn("h-5 text-[0.625rem] font-extrabold uppercase tracking-wide", statusClassName)}
+                            className={cn("h-5 text-xs font-semibold uppercase tracking-wide", statusClassName)}
                         >
                             {lead.status}
                         </Badge>
@@ -86,7 +88,7 @@ export function LeadContactCard({ lead, onCreateActivity, onCreateOpportunity }:
                         {lead.email && (
                             <div className="group flex items-center justify-between">
                                 <div className="flex min-w-0 flex-1 items-center gap-3">
-                                    <div className="flex rounded-[7px] bg-surface-container-high p-[5px] text-muted-foreground">
+                                    <div className="flex rounded-md bg-surface-container-high p-[5px] text-muted-foreground">
                                         <Mail className="size-[15px]" />
                                     </div>
                                     <a
@@ -115,26 +117,30 @@ export function LeadContactCard({ lead, onCreateActivity, onCreateOpportunity }:
                         {lead.phone && (
                             <div className="group flex items-center justify-between">
                                 <div className="flex min-w-0 flex-1 items-center gap-3">
-                                    <div className="flex rounded-[7px] bg-surface-container-high p-[5px] text-muted-foreground">
+                                    <div className="flex rounded-md bg-surface-container-high p-[5px] text-muted-foreground">
                                         <Phone className="size-[15px]" />
                                     </div>
-                                    <button
-                                        type="button"
-                                        onClick={async () => {
-                                            try {
-                                                await apiFetch("/integrations/telephony/click-to-call", {
-                                                    method: "POST",
-                                                    body: JSON.stringify({ phoneNumber: lead.phone, leadId: lead.id, execute: true }),
-                                                });
-                                                toast.success("Call request sent");
-                                            } catch (error: any) {
-                                                toast.error(error.message || "Failed to start click-to-call");
-                                            }
-                                        }}
-                                        className="truncate rounded-sm border-0 bg-transparent p-0 text-sm font-bold text-foreground hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                                    >
-                                        {lead.phone}
-                                    </button>
+                                    {telephonyEnabled ? (
+                                        <button
+                                            type="button"
+                                            onClick={async () => {
+                                                try {
+                                                    await apiFetch("/integrations/telephony/click-to-call", {
+                                                        method: "POST",
+                                                        body: JSON.stringify({ phoneNumber: lead.phone, leadId: lead.id, execute: true }),
+                                                    });
+                                                    toast.success("Call request sent");
+                                                } catch (error: any) {
+                                                    toast.error(error.message || "Failed to start click-to-call");
+                                                }
+                                            }}
+                                            className="truncate rounded-sm border-0 bg-transparent p-0 text-sm font-bold text-foreground hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                                        >
+                                            {lead.phone}
+                                        </button>
+                                    ) : (
+                                        <span className="truncate text-sm font-bold text-foreground">{lead.phone}</span>
+                                    )}
                                 </div>
                                 <Tooltip>
                                     <TooltipTrigger asChild>
@@ -159,11 +165,11 @@ export function LeadContactCard({ lead, onCreateActivity, onCreateOpportunity }:
                 {/* Actions */}
                 <div className="p-[10px]">
                     <div className="flex flex-col gap-[5px]">
-                        <Button onClick={onCreateActivity} className="w-full rounded-[10px] font-bold normal-case shadow-none hover:shadow-none">
+                        <Button onClick={onCreateActivity} className="w-full rounded-xl font-bold normal-case shadow-none hover:shadow-none">
                             <History className="size-4" />
                             Log Activity
                         </Button>
-                        <Button onClick={onCreateOpportunity} variant="outline" className="w-full rounded-[10px] font-bold normal-case">
+                        <Button onClick={onCreateOpportunity} variant="outline" className="w-full rounded-xl font-bold normal-case">
                             <Plus className="size-4" />
                             Create Opportunity
                         </Button>

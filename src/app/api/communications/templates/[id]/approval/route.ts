@@ -19,6 +19,10 @@ export async function POST(
   } catch (error) {
     if (error instanceof Error && error.message === "UNAUTHORIZED") return unauthorized();
     if (error instanceof Error && error.message === "FORBIDDEN") return forbidden();
+    if (error instanceof Error && error.message === "TEMPLATE_SELF_APPROVAL") return forbidden("You can't approve a template you wrote. Ask another admin to review it.");
+    if (error instanceof Error && error.message === "TEMPLATE_APPROVAL_INVALID_TRANSITION") {
+      return NextResponse.json({ message: "That status change isn't allowed: request approval from Draft or Rejected, then approve or reject" }, { status: 409 });
+    }
     if (error instanceof Error && error.message === "COMMUNICATION_TEMPLATE_NOT_FOUND") {
       return NextResponse.json({ message: "Template not found" }, { status: 404 });
     }

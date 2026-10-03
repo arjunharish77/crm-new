@@ -1,3 +1,6 @@
+export const dynamic = "force-dynamic";
+import { PublishedCatalogBoundary } from "@/components/published-catalog-boundary";
+import { getPublishedCatalog } from "@/lib/catalog-snapshot-server";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { JsonLd } from "@/components/json-ld";
@@ -8,12 +11,13 @@ const SITE_URL = process.env.NEXT_PUBLIC_UNNATIVIDYA_SITE_URL || "https://unnati
 
 export const metadata: Metadata = {
   title: "Online Degree Specializations",
-  description: "Compare online MBA, BBA, BCA, MCA, and other degree specializations across UGC-entitled universities — fees, EMI, and duration for each.",
+  description: "Explore listed online degree specializations by subject, degree and university, with links to course details and tuition.",
   alternates: { canonical: "/specializations" },
 };
 
-export default function SpecializationsIndexPage() {
-  const pages = allSpecializationPages().map((page) => ({ ...page, stream: page.courses[0].stream }));
+export default async function SpecializationsIndexPage() {
+  const catalog = await getPublishedCatalog();
+  const pages = allSpecializationPages(catalog).map((page) => ({ ...page, stream: page.courses[0].stream }));
 
   const breadcrumbJsonLd = {
     "@context": "https://schema.org",
@@ -34,7 +38,7 @@ export default function SpecializationsIndexPage() {
     })),
   };
 
-  return (
+  return <PublishedCatalogBoundary>{(
     <>
       <JsonLd data={[breadcrumbJsonLd, itemListJsonLd]} />
       <div style={{ background: "#F7F8F9" }}>
@@ -45,20 +49,18 @@ export default function SpecializationsIndexPage() {
             </div>
             <h1 style={{ color: "#363634", fontSize: 28, fontWeight: 700, margin: 0 }}>Online degree specializations</h1>
             <div style={{ color: "#696868", fontSize: 14, marginTop: 6 }}>
-              {pages.length} real specialization tracks across our catalog, sourced from each university&apos;s own program pages
+              {pages.length} listed specializations to explore by subject, degree and university
             </div>
           </div>
         </div>
 
         <div className="container" style={{ paddingTop: 28, paddingBottom: 56 }}>
           <p style={{ margin: "0 0 24px", color: "#555", fontSize: 15, lineHeight: 1.65, maxWidth: 760 }}>
-            Every specialization below is a real elective track a university actually publishes on its own program page —
-            compared across universities where more than one offers it, or shown on its own where only one does. Fee, EMI,
-            and duration reflect the base degree program; the specialization is an elective track within it.
+            Explore the specializations listed in our catalog. Fees and duration refer to the base degree; confirm current elective availability, selection timing and any additional fees with the university.
           </p>
           <SpecializationExplorer pages={pages} />
         </div>
       </div>
     </>
-  );
+  )}</PublishedCatalogBoundary>;
 }

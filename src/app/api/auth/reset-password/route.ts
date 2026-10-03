@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { resetPasswordWithToken, PasswordPolicyError } from "@/lib/server/password-policy";
+import { resetPasswordWithToken, PasswordPolicyError, passwordRuleForResetToken } from "@/lib/server/password-policy";
 import { badRequest, serverError, unauthorized } from "@/lib/server/http";
 import { checkRateLimit, clientIpFromRequest } from "@/lib/server/rate-limit";
 
@@ -25,5 +25,21 @@ export async function POST(request: Request) {
     if (error instanceof Error && error.message === "INVALID_OR_EXPIRED_TOKEN") return unauthorized("This reset link is invalid or has expired");
     if (error instanceof PasswordPolicyError) return badRequest(error.errors.join(", "));
     return serverError("Failed to reset password", error);
+  }
+}
+
+// The reset page asks whether its link still works, and for the workspace's password rule to
+// show and check as you type. Says nothing else about the account.
+export async function GET(request: Request) {
+  const ip = clientIpFromRequest(request);
+  const throttle = await checkRateLimit({ key: `password-reset-check:ip:${ip}`, limit: 30, windowSeconds: 15 * 60 });
+  if (!throttle.allowed) return badRequest("Too many attempts. Please try again later.");
+  const token = new URL(request.url).searchParams.get("token");
+  if (!token) return badRequest("token is required");
+  try {
+    const rule = await passwordRuleForResetToken(token);
+    return NextResponse.json(rule ? { valid: true, passwordRule: rule } : { valid: false });
+  } catch (error) {
+    return serverError("Failed to check the reset link", error);
   }
 }

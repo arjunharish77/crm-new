@@ -43,12 +43,13 @@ describe("direct Postgres opportunities repository", () => {
   });
 
   it("lists opportunities with tenant/type scope and whitelisted filters", async () => {
-    queryMock
-      .mockResolvedValueOnce([{ id: "opp-1", leadId: "lead-1", opportunityTypeId: "type-1", stageId: "stage-1", title: "MBA App" }])
-      .mockResolvedValueOnce([{ id: "type-1", name: "University 1" }])
-      .mockResolvedValueOnce([{ id: "stage-1", opportunityTypeId: "type-1", name: "Application", order: 1 }])
-      .mockResolvedValueOnce([])
-      .mockResolvedValueOnce([]);
+    // Answered by query text, not call order: decorating runs several lookups in parallel.
+    queryMock.mockImplementation(async (sql: string) => {
+      if (sql.includes('from "Opportunity"') && sql.includes("offset")) return [{ id: "opp-1", leadId: "lead-1", opportunityTypeId: "type-1", stageId: "stage-1", title: "MBA App" }];
+      if (sql.includes('"StageDefinition"')) return [{ id: "stage-1", opportunityTypeId: "type-1", name: "Application", order: 1 }];
+      if (sql.includes('"OpportunityType"')) return [{ id: "type-1", name: "University 1" }];
+      return [];
+    });
 
     const { listOpportunitiesForTenantByType } = await import("@/lib/repositories/opportunities-postgres");
     const result = await listOpportunitiesForTenantByType(
@@ -119,7 +120,7 @@ describe("direct Postgres opportunities repository", () => {
   describe("entitlement gating", () => {
     it("rejects creating an opportunity when the Opportunities module is disabled for the tenant", async () => {
       queryOneMock.mockImplementation(async (sql: string) => {
-        if (String(sql).includes('from "TenantFeature"')) return { opportunityEnabled: false };
+        if (String(sql).includes('from "TenantModuleEntitlement"')) return { status: "DISABLED" };
         return null;
       });
 
@@ -131,7 +132,7 @@ describe("direct Postgres opportunities repository", () => {
 
     it("rejects updating an opportunity when the Opportunities module is disabled for the tenant", async () => {
       queryOneMock.mockImplementation(async (sql: string) => {
-        if (String(sql).includes('from "TenantFeature"')) return { opportunityEnabled: false };
+        if (String(sql).includes('from "TenantModuleEntitlement"')) return { status: "DISABLED" };
         return null;
       });
 
@@ -143,7 +144,7 @@ describe("direct Postgres opportunities repository", () => {
 
     it("rejects deleting an opportunity when the Opportunities module is disabled for the tenant", async () => {
       queryOneMock.mockImplementation(async (sql: string) => {
-        if (String(sql).includes('from "TenantFeature"')) return { opportunityEnabled: false };
+        if (String(sql).includes('from "TenantModuleEntitlement"')) return { status: "DISABLED" };
         return null;
       });
 
@@ -155,7 +156,7 @@ describe("direct Postgres opportunities repository", () => {
 
     it("allows a platform admin to bypass the Opportunities gate", async () => {
       queryOneMock.mockImplementation(async (sql: string) => {
-        if (String(sql).includes('from "TenantFeature"')) return { opportunityEnabled: false };
+        if (String(sql).includes('from "TenantModuleEntitlement"')) return { status: "DISABLED" };
         return null;
       });
       executeMock.mockResolvedValue(1);

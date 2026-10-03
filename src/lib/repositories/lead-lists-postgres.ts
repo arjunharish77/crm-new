@@ -146,17 +146,109 @@ export async function getLeadListForTenant(user: TenantUser, id: string) {
     [String(id), ...memberValues.slice(1)],
   );
   const leadIds = members.map((member) => member.leadId);
-  if (leadIds.length === 0) return { ...list, leads: [], count: 0 };
+  if (leadIds.length === 0) return { ...list, leads: [], count: 0, hiddenCount: 0 };
 
-  const leadValues: unknown[] = [leadIds];
-  const leads = await query<any>(
-    `select ${LEAD_COLUMNS}
-     from "Lead"
-     where id::text = any($1::text[]) and ${tenantClause(user, leadValues)}`,
-    [leadIds.map(String), ...leadValues.slice(1)],
-  );
+  // Only leads this user may see (record scope); the rest are counted, not shown.
+  const visible = await pgLeads.filterVisibleLeadIds(user, leadIds);
+  const visibleIds = leadIds.filter((leadId) => visible.has(String(leadId)));
+  const leadValues: unknown[] = [visibleIds];
+  const leads = visibleIds.length
+    ? await query<any>(
+        `select ${LEAD_COLUMNS}
+         from "Lead"
+         where id::text = any($1::text[]) and ${tenantClause(user, leadValues)}`,
+        [visibleIds.map(String), ...leadValues.slice(1)],
+      )
+    : [];
   const leadsById = new Map(leads.map((lead) => [lead.id, { ...lead, assignedUserId: lead.ownerId ?? null }]));
-  return { ...list, leads: leadIds.map((leadId) => leadsById.get(leadId)).filter(Boolean), count: leadIds.length };
+  return { ...list, leads: visibleIds.map((leadId) => leadsById.get(leadId)).filter(Boolean), count: leadIds.length, hiddenCount: leadIds.length - visibleIds.length };
+}
+
+// One page of a list's leads for the list page (Section 8 #4: a static list loaded every member,
+// and a smart list its first 500, then searched and paged in the browser). Search and paging run
+// on the server with the same record access as the leads list. For a static list, `count` is all
+// its members and `hiddenCount` those this person can't see; `total` is what matches the search.
+export async function getLeadListPageForTenant(
+  user: TenantUser,
+  id: string,
+  options: { page?: number; limit?: number; search?: string | null } = {},
+) {
+  const values: unknown[] = [id];
+  const list = await queryOne<any>(
+    `select ${LEAD_LIST_COLUMNS}
+     from "LeadList"
+     where id::text = $1 and ${tenantClause(user, values)}
+     limit 1`,
+    [String(id), ...values.slice(1)],
+  );
+  if (!list) return null;
+  const page = Math.max(1, Math.floor(Number(options.page) || 1));
+  const limit = Math.min(100, Math.max(1, Math.floor(Number(options.limit) || 25)));
+  const search = typeof options.search === "string" ? options.search.trim() : "";
+
+  if (list.type === "SMART") {
+    const filters = normalizeLeadListFilters(list.filters);
+    const [result, all] = await Promise.all([
+      pgLeads.listLeadsForTenant(user, page, limit, filters, { search }),
+      search ? pgLeads.listLeadsForTenant(user, 1, 1, filters) : null,
+    ]);
+    return { ...list, leads: result.data, total: result.meta.total, count: all ? all.meta.total : result.meta.total, hiddenCount: 0, page, limit };
+  }
+
+  // Static: the visible members (the leads list's own where clause, limited to this list's
+  // members), newest addition first.
+  const memberValues: unknown[] = [String(id)];
+  const memberTenant = tenantClause(user, memberValues);
+  const totalMembers = await queryOne<{ count: number }>(
+    `select count(*)::int as count from "LeadListMember" where "listId"::text = $1 and ${memberTenant}`,
+    memberValues,
+  );
+  const inList = (where: { sql: string; values: unknown[] }) => {
+    const listParam = where.values.length + 1;
+    const tenantValues: unknown[] = [];
+    const tenantSql = user.tenantId ? `m."tenantId"::text = $${listParam + 1}` : `m."tenantId" is null`;
+    if (user.tenantId) tenantValues.push(String(user.tenantId));
+    const member = `from "LeadListMember" m where m."listId"::text = $${listParam} and ${tenantSql} and m."leadId" = "Lead".id`;
+    return {
+      sql: `${where.sql ? `${where.sql} and` : "where"} exists (select 1 ${member})`,
+      order: `(select max(m."createdAt") ${member}) desc, "Lead".id`,
+      values: [...where.values, String(id), ...tenantValues],
+    };
+  };
+  const visibleWhere = inList(pgLeads.buildLeadWhere(user, null));
+  const matchWhere = inList(pgLeads.applyLeadSearch(pgLeads.buildLeadWhere(user, null), search));
+  const [visible, matching, rows] = await Promise.all([
+    queryOne<{ count: number }>(`select count(*)::int as count from "Lead" ${visibleWhere.sql}`, visibleWhere.values),
+    queryOne<{ count: number }>(`select count(*)::int as count from "Lead" ${matchWhere.sql}`, matchWhere.values),
+    query<any>(
+      `select ${LEAD_COLUMNS} from "Lead" ${matchWhere.sql} order by ${matchWhere.order}
+       limit $${matchWhere.values.length + 1} offset $${matchWhere.values.length + 2}`,
+      [...matchWhere.values, limit, (page - 1) * limit],
+    ),
+  ]);
+  const count = totalMembers?.count ?? 0;
+  return {
+    ...list,
+    leads: rows.map((lead) => ({ ...lead, assignedUserId: lead.ownerId ?? null })),
+    total: matching?.count ?? 0,
+    count,
+    hiddenCount: Math.max(0, count - (visible?.count ?? 0)),
+    page,
+    limit,
+  };
+}
+
+// A list as a campaign or journey audience: a smart list's filters, or a static list's members
+// (§8 #24; the audience used to be getLeadListForTenant's first 500 leads). Null when the list is
+// gone.
+export async function leadAudienceForList(user: TenantUser, id: string): Promise<pgLeads.LeadAudienceQuery | null> {
+  const values: unknown[] = [id];
+  const list = await queryOne<any>(
+    `select id, type, filters from "LeadList" where id::text = $1 and ${tenantClause(user, values)} limit 1`,
+    [String(id), ...values.slice(1)],
+  );
+  if (!list) return null;
+  return list.type === "SMART" ? { filters: normalizeLeadListFilters(list.filters) as any } : { staticListId: String(list.id) };
 }
 
 async function insertLeadListMembers(user: TenantUser, listId: string, leadIds: string[], now = new Date().toISOString()) {
@@ -176,12 +268,17 @@ async function insertLeadListMembers(user: TenantUser, listId: string, leadIds: 
 }
 
 export async function addLeadsToLeadListForTenant(user: TenantUser, id: string, leadIds: string[]) {
-  const list = await getLeadListForTenant(user, id);
+  // The first page only (it used to load every member twice just to check the list's type).
+  const list = await getLeadListPageForTenant(user, id);
   if (!list) throw new Error("LEAD_LIST_NOT_FOUND");
   if (list.type !== "STATIC") throw new Error("SMART_LIST_MEMBERSHIP_IS_FILTER_BASED");
 
   const uniqueLeadIds = [...new Set(leadIds)];
   if (uniqueLeadIds.length === 0) return { ...list, addedLeadIds: [] };
+  // Only leads this user may see can be added (they used to be taken on trust, even from
+  // another workspace).
+  const visible = await pgLeads.filterVisibleLeadIds(user, uniqueLeadIds);
+  if (uniqueLeadIds.some((leadId) => !visible.has(String(leadId)))) throw new Error("LEADS_NOT_VISIBLE");
 
   const existingValues: unknown[] = [id, uniqueLeadIds];
   const existingMembers = await query<{ leadId: string }>(
@@ -194,7 +291,7 @@ export async function addLeadsToLeadListForTenant(user: TenantUser, id: string, 
   const newLeadIds = uniqueLeadIds.filter((leadId) => !existingLeadIds.has(leadId));
   await insertLeadListMembers(user, id, newLeadIds);
 
-  const updated = await getLeadListForTenant(user, id);
+  const updated = await getLeadListPageForTenant(user, id);
   return { ...updated, addedLeadIds: newLeadIds };
 }
 

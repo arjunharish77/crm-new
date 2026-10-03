@@ -13,9 +13,8 @@ import {
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
-import { Keyboard, LogOut, Menu, Plus, Search, Settings } from 'lucide-react';
+import { Keyboard, LogOut, Menu, Plus, Search, Settings, UserRound } from 'lucide-react';
 import { useAuth } from '@/providers/auth-provider';
-import { useFeature } from '@/components/auth/feature-gate';
 import { NotificationBell } from './notification-bell';
 import { AgentAvailabilityToggle } from './agent-availability-toggle';
 import { GlobalSearch } from '@/components/search/global-search';
@@ -24,12 +23,15 @@ import { CreateOpportunityDialog } from '@/app/dashboard/opportunities/create-op
 import { CreateActivityDialog } from '@/app/dashboard/activities/create-activity-dialog';
 import { contextualRecordDefaults } from '@/lib/contextual-defaults';
 import { useRegisterShortcut, useKeyboardShortcutsHelp } from '@/lib/keyboard-shortcuts';
+import { emitRecordsChanged } from '@/lib/records-events';
+import { useModuleAccess } from '@/hooks/use-module-access';
+import Link from "next/link";
+import { BrandMark } from "@/components/brand/brand-logo";
 
 export function Header({ onToggleNavigation, navigationOpen }: { onToggleNavigation: () => void; navigationOpen: boolean }) {
     const { user, logout } = useAuth();
     const router = useRouter();
     const pathname = usePathname();
-    const automationEnabled = useFeature('automationEnabled');
     const { openHelp } = useKeyboardShortcutsHelp();
 
     // Dialog Control States
@@ -41,12 +43,9 @@ export function Header({ onToggleNavigation, navigationOpen }: { onToggleNavigat
 
     const contextDefaults = contextualRecordDefaults(pathname);
 
-    // Same client-side permission gate the command palette already established (real
-    // enforcement stays server-side on the actual create endpoints) -- an unrecognized/absent
-    // module key defaults to visible, matching this app's "missing -> enabled" convention.
-    const rolePermissions = (user as any)?.role?.permissions;
-    const modules = rolePermissions?.modules ?? {};
-    const canAccessModule = (key: string) => modules[key] !== 'none' && modules[key] !== false;
+    // Create needs "write" on the module -- the rule the server enforces (lib/module-access.ts).
+    const can = useModuleAccess();
+    const canAccessModule = (key: string) => can(key, 'write');
 
     const contextQuery = (extra: Record<string, string | undefined> = {}) => {
         const params = new URLSearchParams({ create: '1' });
@@ -75,15 +74,23 @@ export function Header({ onToggleNavigation, navigationOpen }: { onToggleNavigat
         handler: () => setCreateMenuOpen(true),
     });
 
-    const initials = user?.email?.substring(0, 2).toUpperCase() || 'U';
+    // The person's name, not an email prefix (UI/UX plan §11.6 M).
+    const displayName = user?.name?.trim() || user?.email?.split('@')[0] || 'Account';
+    const initials = (user?.name?.trim()
+        ? user.name.trim().split(/\s+/).slice(0, 2).map((part: string) => part.charAt(0)).join('')
+        : user?.email?.substring(0, 2) || 'U').toUpperCase();
 
     return (
-        <header className="border-b bg-background text-foreground">
+        <header className="border-b bg-card text-foreground">
             <div className="flex min-h-14 min-w-0 flex-wrap items-center justify-between gap-2 px-3 py-2 md:px-6">
                 <div className="flex min-w-0 flex-1 items-center gap-2">
                     <Button id="mobile-navigation-trigger" variant="ghost" size="icon" className="shrink-0 md:hidden" aria-label="Open navigation" aria-expanded={navigationOpen} onClick={onToggleNavigation}>
                         <Menu className="size-5" />
                     </Button>
+                    {/* The menu holds the full logo; on phones, where it's closed, the mark stands in. */}
+                    <Link href="/dashboard" aria-label="Unnatify home" className="shrink-0 rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring md:hidden">
+                        <BrandMark className="size-7" />
+                    </Link>
 
                     {/* Global Search */}
                     <div className="flex min-w-0 flex-1 md:mr-4">
@@ -91,7 +98,7 @@ export function Header({ onToggleNavigation, navigationOpen }: { onToggleNavigat
                             type="button"
                             aria-label="Search or run a command"
                             onClick={() => setSearchOpen(true)}
-                            className="flex h-10 min-w-0 w-full max-w-[600px] items-center rounded-lg border border-transparent bg-muted px-4 py-2 text-left transition-colors hover:bg-accent/70 focus-visible:border-primary focus-visible:bg-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/20"
+                            className="flex h-10 min-w-0 w-full max-w-[600px] items-center rounded-lg border border-transparent bg-muted px-4 py-2 text-left transition-colors hover:bg-surface-container-highest focus-visible:border-primary focus-visible:bg-card focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/20"
                         >
                             <Search className="size-5 shrink-0 text-muted-foreground sm:mr-2" />
                             <span className="hidden min-w-0 flex-1 truncate text-sm text-muted-foreground sm:block">
@@ -114,50 +121,33 @@ export function Header({ onToggleNavigation, navigationOpen }: { onToggleNavigat
                             </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
+                            {/* Record creates only (UI/UX plan §11.6 M); lists, reports, campaigns and
+                                automations are created from their own pages. */}
                             {canAccessModule('leads') && (
-                                <DropdownMenuItem onSelect={() => setCreateLeadOpen(true)}>New Lead</DropdownMenuItem>
+                                <DropdownMenuItem onSelect={() => setCreateLeadOpen(true)}>Lead</DropdownMenuItem>
                             )}
-                            {canAccessModule('opportunities') && (
-                                <DropdownMenuItem onSelect={() => setCreateOpportunityOpen(true)}>New Opportunity</DropdownMenuItem>
+                            {canAccessModule('opportunities') && user?.features?.opportunityEnabled !== false && (
+                                <DropdownMenuItem onSelect={() => setCreateOpportunityOpen(true)}>Opportunity</DropdownMenuItem>
                             )}
                             {canAccessModule('tasks') && (
-                                <DropdownMenuItem onSelect={() => router.push(`/dashboard/tasks${contextQuery(contextDefaults)}`)}>New Task</DropdownMenuItem>
+                                <DropdownMenuItem onSelect={() => router.push(`/dashboard/tasks${contextQuery(contextDefaults)}`)}>Task</DropdownMenuItem>
                             )}
                             {canAccessModule('activities') && (
-                                <DropdownMenuItem onSelect={() => setCreateActivityOpen(true)}>Log Activity</DropdownMenuItem>
-                            )}
-                            <DropdownMenuSeparator />
-                            <DropdownMenuItem onSelect={() => router.push(`/dashboard/lists${contextQuery()}`)}>New List</DropdownMenuItem>
-                            <DropdownMenuItem onSelect={() => router.push(`/dashboard/reports${contextQuery()}`)}>New Report</DropdownMenuItem>
-                            <DropdownMenuItem onSelect={() => router.push(`/dashboard${contextQuery()}`)}>New Dashboard Widget</DropdownMenuItem>
-                            <DropdownMenuItem onSelect={() => router.push('/dashboard/marketing')}>New Campaign</DropdownMenuItem>
-                            {automationEnabled && (
-                                <DropdownMenuItem onSelect={() => router.push('/dashboard/automations-v2/new')}>New Automation</DropdownMenuItem>
+                                <DropdownMenuItem onSelect={() => setCreateActivityOpen(true)}>Activity</DropdownMenuItem>
                             )}
                         </DropdownMenuContent>
                     </DropdownMenu>
 
                     <AgentAvailabilityToggle />
 
-                    <Tooltip>
-                        <TooltipTrigger asChild>
-                            <Button variant="ghost" size="icon" className="hidden lg:inline-flex" onClick={openHelp} aria-label="Keyboard shortcuts">
-                                <Keyboard className="size-4" />
-                            </Button>
-                        </TooltipTrigger>
-                        <TooltipContent>Keyboard shortcuts (Shift+?)</TooltipContent>
-                    </Tooltip>
-
                     <NotificationBell />
 
                     <div className="mx-1 hidden h-8 w-px bg-border md:block" />
 
                     <div className="ml-1 flex items-center gap-3">
-                        <div className="hidden max-w-36 truncate text-right xl:block">
-                            <div className="text-sm font-semibold">
-                                {user?.email?.split('@')[0]}
-                            </div>
-
+                        <div className="hidden max-w-44 text-right xl:block">
+                            <div className="truncate text-sm font-medium">{displayName}</div>
+                            {user?.tenantName ? <div className="truncate text-xs text-muted-foreground">{user.tenantName}</div> : null}
                         </div>
 
                         <DropdownMenu>
@@ -177,14 +167,26 @@ export function Header({ onToggleNavigation, navigationOpen }: { onToggleNavigat
                             </Tooltip>
                             <DropdownMenuContent align="end" className="min-w-[220px]">
                                 <DropdownMenuLabel>
-                                    <div className="truncate text-sm font-semibold">{user?.email}</div>
-                                    <div className="truncate text-xs font-normal text-muted-foreground">Tenant: {user?.tenantId}</div>
+                                    <div className="truncate text-sm font-medium">{displayName}</div>
+                                    <div className="truncate text-xs font-normal text-muted-foreground">{user?.email}</div>
+                                    {user?.tenantName ? <div className="truncate text-xs font-normal text-muted-foreground">{user.tenantName}</div> : null}
                                 </DropdownMenuLabel>
                                 <DropdownMenuSeparator />
-                                <DropdownMenuItem onSelect={() => router.push('/dashboard/settings')}>
-                                    <Settings className="size-4" />
-                                    Settings
+                                <DropdownMenuItem onSelect={openHelp}>
+                                    <Keyboard className="size-4" />
+                                    Keyboard shortcuts
+                                    <span className="ml-auto text-xs text-muted-foreground">Shift ?</span>
                                 </DropdownMenuItem>
+                                <DropdownMenuItem onSelect={() => router.push('/dashboard/account')}>
+                                    <UserRound className="size-4" />
+                                    My account
+                                </DropdownMenuItem>
+                                {user?.isTenantAdmin || user?.isPlatformAdmin ? (
+                                    <DropdownMenuItem onSelect={() => router.push('/dashboard/settings')}>
+                                        <Settings className="size-4" />
+                                        Settings
+                                    </DropdownMenuItem>
+                                ) : null}
                                 <DropdownMenuItem onSelect={logout}>
                                     <LogOut className="size-4" />
                                     Log out
@@ -205,19 +207,19 @@ export function Header({ onToggleNavigation, navigationOpen }: { onToggleNavigat
                 <CreateLeadDialog
                     open={createLeadOpen}
                     onOpenChange={setCreateLeadOpen}
-                    onSuccess={() => window.location.reload()}
+                    onSuccess={() => emitRecordsChanged('lead')}
                     trigger={<span hidden />}
                 />
                 <CreateOpportunityDialog
                     open={createOpportunityOpen}
                     onOpenChange={setCreateOpportunityOpen}
-                    onSuccess={() => window.location.reload()}
+                    onSuccess={() => emitRecordsChanged('opportunity')}
                     trigger={<span hidden />}
                 />
                 <CreateActivityDialog
                     open={createActivityOpen}
                     onOpenChange={setCreateActivityOpen}
-                    onSuccess={() => window.location.reload()}
+                    onSuccess={() => emitRecordsChanged('activity')}
                     trigger={<span hidden />}
                     defaultLeadId={contextDefaults.leadId}
                     defaultOpportunityId={contextDefaults.opportunityId}

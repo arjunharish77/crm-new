@@ -6,7 +6,6 @@ import { StickyCtas } from "@/components/sticky-ctas";
 import { HideOnAdmin } from "@/components/hide-on-admin";
 import { Analytics } from "@/components/analytics";
 import { JsonLd } from "@/components/json-ld";
-import { LeadWizardModal } from "@/components/lead-wizard-modal";
 import { searchVerification, siteUrl } from "@/lib/seo-config";
 
 const host = siteUrl();
@@ -78,15 +77,15 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en-IN">
       <body>
+        <a href="#main-content" className="skip-content-link">Skip to main content</a>
         <Analytics />
         <JsonLd data={[organizationJsonLd, websiteJsonLd]} />
         <SiteHeader />
-        <main>{children}</main>
+        <main id="main-content" tabIndex={-1}>{children}</main>
         <HideOnAdmin>
           <SiteFooter />
           <StickyCtas />
         </HideOnAdmin>
-        <LeadWizardModal />
       </body>
     </html>
   );

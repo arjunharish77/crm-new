@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { query, queryOne, execute, type Queryable } from '@/lib/db/query';
 import { withTransaction } from '@/lib/db/transaction';
 import { assertModuleEnabled } from '@/lib/server/module-entitlements';
+import { assertStorageAvailable } from '@/lib/server/usage-limits';
 import { applyRecordScopeClause, recordAccessLevel } from '@/lib/server/record-scope';
 import { canUseApplications, type ApplicationActor } from '@/lib/application-access';
 import { applicationRuleSchema, defaultApplicationRule, formatApplicationNumber } from '@/lib/application-numbering';
@@ -202,6 +203,7 @@ export async function transitionApplication(user: ApplicationActor, applicationI
 }
 
 export async function uploadApplicationDocument(user:ApplicationActor, applicationId:string, raw:unknown, data:Buffer) {
+    if(user.tenantId) await assertStorageAvailable(user.tenantId,data.length); // storage limit: refuse before writing
     await assertApplicationAccess(user,'read'); await assertApplicationAccess(user,'update');
     const { applicationUploadSchema, applicationDocumentMime } = await import('@/lib/application-document-input');
     const input=applicationUploadSchema.parse(raw);

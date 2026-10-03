@@ -127,6 +127,13 @@ const operationalEntries = makeRegistry({
     isTenantScoped: false,
     description: "Refreshes due marketing-journey enrollments across all tenants.",
   },
+  "marketing.continueCampaignLaunches": {
+    name: "marketing.continueCampaignLaunches",
+    queueClass: "operational",
+    isRecurring: true,
+    isTenantScoped: false,
+    description: "Continues campaign launches that didn't finish in their request, as the person who launched (§8 #24).",
+  },
   "journeys.alertDegraded": {
     name: "journeys.alertDegraded",
     queueClass: "operational",
@@ -169,12 +176,33 @@ const operationalEntries = makeRegistry({
     isTenantScoped: false,
     description: "Enforces data-retention policies across all tenants.",
   },
+  "archive.purge": {
+    name: "archive.purge",
+    queueClass: "operational",
+    isRecurring: true,
+    isTenantScoped: false,
+    description: "Permanently deletes automations, forms, Smart Views, reports, rules and templates archived more than 30 days ago, across all tenants (rules that payouts or points refer to stay archived).",
+  },
   "communications.processSuppressionExpiry": {
     name: "communications.processSuppressionExpiry",
     queueClass: "operational",
     isRecurring: true,
     isTenantScoped: false,
     description: "Expires due communication suppressions across all tenants.",
+  },
+  "modules.processTrials": {
+    name: "modules.processTrials",
+    queueClass: "operational",
+    isRecurring: true,
+    isTenantScoped: false,
+    description: "Sends 7-day module-trial warnings and suspends modules whose trial ended (with dependents), pausing their live work.",
+  },
+  "modules.processHealth": {
+    name: "modules.processHealth",
+    queueClass: "operational",
+    isRecurring: true,
+    isTenantScoped: false,
+    description: "Refreshes module health snapshots (setup, failing connectors, backed-up work, stale data) for active tenants checked longest ago, and sends the once-a-day admin notice for failing connectors or backed-up work.",
   },
   "cases.processSlaEscalations": {
     name: "cases.processSlaEscalations",

@@ -50,6 +50,9 @@ export async function POST(request: Request) {
     const lead = await createLeadForTenant(await buildApiKeyWriteActor(apiKey,tenantId), parsed.data, idempotencyKey);
     return NextResponse.json(lead, { status: 201 });
   } catch (error) {
+    if (error instanceof Error && error.message === "LEAD_STATUS_UNKNOWN") {
+      return badRequest("Unknown lead status. Use one of the workspace's lead statuses (key or label).");
+    }
     if (error instanceof ApiKeyAuthenticationError) return apiKeyAuthErrorResponse(error.reason);
     if (error instanceof SyntaxError) return badRequest("Request body must be valid JSON");
     if (error instanceof Error && error.message === "IDEMPOTENCY_KEY_CONFLICT") {

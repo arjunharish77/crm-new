@@ -5,10 +5,11 @@ import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { Opportunity } from "@/types/opportunities";
 import { Pencil } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
-import { formatCurrency, cn } from "@/lib/utils";
+import { cn } from "@/lib/utils";
+import { formatMoney } from "@/lib/display/format";
+import { statusDisplay } from "@/lib/display/status";
 import Link from "next/link";
-import { formatWorkspaceDate } from "@/lib/date-format";
+import { formatWorkspaceDate, isPastDate } from "@/lib/date-format";
 
 interface KanbanCardProps {
     opportunity: Opportunity;
@@ -38,101 +39,54 @@ export function KanbanCard({ opportunity, isDragging: isOverlay, onEdit }: Kanba
         opacity: isDragging ? 0.4 : 1,
     };
 
-    const getPriorityColor = (priority: string) => {
-        switch (priority) {
-            case 'HIGH': return "var(--destructive)";
-            case 'MEDIUM': return "var(--tertiary)";
-            default: return "var(--muted-foreground)";
-        }
-    };
+    const closeOverdue = isPastDate(opportunity.expectedCloseDate) && !opportunity.stage?.isClosed;
+    const priority = opportunity.priority ? statusDisplay("priority", opportunity.priority) : null;
 
+    // Board card (UI/UX plan §11.4): title, lead, value, close date, owner. The whole card is the
+    // drag handle; with the keyboard, focus it and press Space to pick it up.
     return (
         <div
             ref={setNodeRef}
             style={style}
             {...attributes}
             {...listeners}
-            className="cursor-grab touch-none active:cursor-grabbing"
+            aria-label={`${opportunity.title}. Press Space to move it to another stage.`}
+            className="cursor-grab touch-none rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring active:cursor-grabbing"
         >
-            <div
-                className={cn(
-                    "group relative rounded-xl border border-border bg-background p-3 transition-all hover:border-primary hover:shadow-sm",
-                    isOverlay && "shadow-md"
-                )}
-            >
-                <div className="flex flex-col gap-2">
-                    <div className="flex items-start justify-between gap-2">
-                        <Link
-                            href={`/dashboard/opportunities/${opportunity.id}`}
-                            onClick={(e) => e.stopPropagation()}
+            <div className={cn("group relative rounded-lg border bg-card p-3 transition-colors hover:border-border-strong", isOverlay && "shadow-menu")}>
+                <div className="flex items-start justify-between gap-2">
+                    <Link
+                        href={`/dashboard/opportunities/${opportunity.id}`}
+                        onClick={(e) => e.stopPropagation()}
+                        onPointerDown={(e) => e.stopPropagation()}
+                        className="min-w-0 text-sm font-medium leading-snug text-foreground hover:underline"
+                    >
+                        {opportunity.title}
+                    </Link>
+                    {onEdit && (
+                        <button
+                            type="button"
+                            aria-label={`Edit ${opportunity.title}`}
+                            onClick={(e) => { e.stopPropagation(); e.preventDefault(); onEdit(opportunity); }}
                             onPointerDown={(e) => e.stopPropagation()}
-                            className="text-sm font-bold leading-snug text-foreground hover:text-primary hover:underline"
+                            className="flex size-6 shrink-0 items-center justify-center rounded-md text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 hover:bg-muted focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                         >
-                            {opportunity.title}
-                        </Link>
-
-                        <div className="flex shrink-0 items-center gap-1">
-                            {onEdit && (
-                                <button
-                                    type="button"
-                                    onClick={(e) => {
-                                        e.stopPropagation();
-                                        e.preventDefault();
-                                        onEdit(opportunity);
-                                    }}
-                                    onPointerDown={(e) => e.stopPropagation()}
-                                    className="flex size-6 items-center justify-center rounded-md text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 hover:bg-primary/10 hover:text-primary focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                                >
-                                    <Pencil className="size-3.5" />
-                                </button>
-                            )}
-
-                            {opportunity.priority && (
-                                <span
-                                    className="size-1.5 shrink-0 rounded-full"
-                                    style={{ backgroundColor: getPriorityColor(opportunity.priority) }}
-                                />
-                            )}
-                        </div>
-                    </div>
-
-                    <div className="flex items-center justify-between">
-                        <span className="text-sm font-extrabold text-primary">
-                            {formatCurrency(opportunity.amount || 0)}
+                            <Pencil className="size-3.5" />
+                        </button>
+                    )}
+                </div>
+                {opportunity.lead?.name ? <p className="truncate text-xs text-muted-foreground">{opportunity.lead.name}</p> : null}
+                <div className="mt-2 flex items-center justify-between gap-2 text-sm">
+                    <span className="tabular-nums">{formatMoney(opportunity.amount || 0)}</span>
+                    {opportunity.expectedCloseDate ? (
+                        <span className={cn("text-xs", closeOverdue ? "text-destructive" : "text-muted-foreground")}>
+                            {closeOverdue ? "Overdue · " : ""}{formatWorkspaceDate(opportunity.expectedCloseDate)}
                         </span>
-                        {opportunity.expectedCloseDate && (
-                            <span className="text-xs font-medium text-muted-foreground">
-                                {formatWorkspaceDate(opportunity.expectedCloseDate)}
-                            </span>
-                        )}
-                    </div>
-
-                    <div className="flex flex-wrap items-center gap-1">
-                        {opportunity.opportunityType && (
-                            <Badge
-                                variant="outline"
-                                className="h-5 border-transparent text-[0.65rem] font-bold"
-                                style={{
-                                    backgroundColor: opportunity.opportunityType.color
-                                        ? `${opportunity.opportunityType.color}1a`
-                                        : "var(--primary-container)",
-                                    color: opportunity.opportunityType.color || "var(--primary)",
-                                }}
-                            >
-                                {opportunity.opportunityType.name}
-                            </Badge>
-                        )}
-                        {opportunity.tags?.slice(0, 2).map(tag => (
-                            <Badge key={tag} variant="outline" className="h-5 text-[0.65rem] font-medium text-muted-foreground">
-                                {tag}
-                            </Badge>
-                        ))}
-                        {opportunity.tags && opportunity.tags.length > 2 && (
-                            <span className="text-[0.65rem] text-muted-foreground">
-                                +{opportunity.tags.length - 2}
-                            </span>
-                        )}
-                    </div>
+                    ) : null}
+                </div>
+                <div className="mt-1 flex items-center justify-between gap-2 text-xs text-muted-foreground">
+                    <span className="truncate">{opportunity.ownerName ?? "Unassigned"}</span>
+                    {priority && opportunity.priority !== "LOW" ? <span className={cn(priority.tone === "danger" && "text-destructive")}>{priority.label}</span> : null}
                 </div>
             </div>
         </div>

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getAdminSession } from "@/lib/admin-auth";
-import { query } from "@/lib/db";
+import { withCatalogWrite } from "@/lib/catalog-write";
 
 const schema = z.object({
   action: z.enum(["MARK_REVIEWED", "APPLY_TO_CATALOG", "SKIP"]),
@@ -38,6 +38,9 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     return NextResponse.json({ error: "CMS admin login required" }, { status: 401 });
   }
 
+  if (session.role !== "ADMIN" && session.role !== "EDITOR") {
+    return NextResponse.json({ error: "Your role has read-only source access." }, { status: 403 });
+  }
   const { id } = await params;
   const body = await request.json().catch(() => null);
   const parsed = schema.safeParse(body);
@@ -45,6 +48,10 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     return NextResponse.json({ error: "Invalid source import action" }, { status: 400 });
   }
 
+  if (parsed.data.action === "APPLY_TO_CATALOG" && session.role !== "ADMIN") {
+    return NextResponse.json({ error: "Only administrators can apply source data to catalog records." }, { status: 403 });
+  }
+  return withCatalogWrite(async (query) => {
   const itemResult = await query<ImportItem>(
     `select id, entity_type, entity_key, source_url, raw_data, review_status
      from source_import_item
@@ -59,13 +66,13 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 
   if (parsed.data.action === "SKIP") {
     await query("update source_import_item set review_status = 'SKIPPED' where id = $1", [id]);
-    await audit("SOURCE_IMPORT_ITEM_SKIPPED", item);
+    await audit(query, "SOURCE_IMPORT_ITEM_SKIPPED", item);
     return NextResponse.json({ message: "Import item skipped." });
   }
 
   if (parsed.data.action === "MARK_REVIEWED") {
     await query("update source_import_item set review_status = 'REVIEWED' where id = $1", [id]);
-    await audit("SOURCE_IMPORT_ITEM_REVIEWED", item);
+    await audit(query, "SOURCE_IMPORT_ITEM_REVIEWED", item);
     return NextResponse.json({ message: "Import item marked reviewed." });
   }
 
@@ -104,11 +111,12 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   }
 
   await query("update source_import_item set review_status = 'APPLIED' where id = $1", [id]);
-  await audit("SOURCE_IMPORT_ITEM_APPLIED", item, payload);
+  await audit(query, "SOURCE_IMPORT_ITEM_APPLIED", item, payload);
   return NextResponse.json({ message: "Parsed source facts applied to catalog sourceReview." });
+  });
 }
 
-async function audit(action: string, item: ImportItem, metadata: Record<string, unknown> = {}) {
+async function audit(query: typeof import("@/lib/db").query, action: string, item: ImportItem, metadata: Record<string, unknown> = {}) {
   await query(
     `insert into cms_audit_log (action, entity_type, entity_id, metadata)
      values ($1, 'source_import_item', $2, $3)`,

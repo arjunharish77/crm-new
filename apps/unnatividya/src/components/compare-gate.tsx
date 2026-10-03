@@ -8,52 +8,34 @@ export function CompareGate({ children, selectedCount }: { children: ReactNode; 
   const [unlocked, setUnlocked] = useState(false);
 
   useEffect(() => {
-    function checkUnlock() {
+    let active = true;
+    async function checkUnlock() {
       try {
-        setUnlocked(window.localStorage.getItem("uv_lead_unlocked") === "1");
-      } catch {
-        setUnlocked(false);
-      }
+        const response = await fetch("/api/compare-access", { cache: "no-store" });
+        const result = response.ok ? await response.json() : { unlocked: false };
+        if (active) setUnlocked(result.unlocked === true);
+      } catch { if (active) setUnlocked(false); }
     }
     checkUnlock();
     window.addEventListener("uv-lead-unlocked", checkUnlock);
     window.addEventListener("storage", checkUnlock);
+    window.addEventListener("focus", checkUnlock);
     return () => {
+      active = false;
       window.removeEventListener("uv-lead-unlocked", checkUnlock);
       window.removeEventListener("storage", checkUnlock);
+      window.removeEventListener("focus", checkUnlock);
     };
   }, []);
 
-  if (!selectedCount) {
-    return (
-      <div className="compare-empty">
-        Select at least one program above to start comparing.
-      </div>
-    );
-  }
+  if (selectedCount < 2) return <p className="compare-empty">Select at least two programs above to start comparing.</p>;
 
-  return (
-    <div style={{ position: "relative" }}>
-      <div style={{ filter: unlocked ? "none" : "blur(5px)" }}>{children}</div>
-      {!unlocked ? (
-        <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(247,248,249,0.55)" }}>
-          <div style={{ background: "#fff", border: "1px solid #CFDAE6", borderRadius: 8, padding: 28, boxShadow: "var(--uv-shadow-lg)", textAlign: "center", maxWidth: 380 }}>
-            <div style={{ width: 46, height: 46, borderRadius: "50%", background: "#F4F3FC", fontSize: 20, lineHeight: "46px", margin: "0 auto 12px" }}>🔒</div>
-            <div style={{ fontSize: 17, fontWeight: 700, color: "#363634" }}>Unlock the full comparison</div>
-            <div style={{ fontSize: 13, color: "#696868", margin: "8px 0 16px", lineHeight: 1.5 }}>
-              Verify your number once and every comparison on UnnatiVidya unlocks — plus a counsellor&rsquo;s honest read on which one actually fits.
-            </div>
-            <Link href="/lead?intent=compare-unlock" data-open-lead className="btn primary" style={{ width: "100%", height: 48, fontSize: 15 }}>
-              Unlock with OTP
-            </Link>
-            <div style={{ fontSize: 12, color: "#707070", marginTop: 10 }}>Free · takes 30 seconds · no spam</div>
-          </div>
-        </div>
-      ) : (
-        <div style={{ marginTop: 14, fontSize: 13, color: "#2E7D32", background: "rgba(46,125,50,0.10)", borderRadius: 4, padding: "10px 14px", display: "inline-block" }}>
-          Compare access unlocked · a counsellor will call you to walk you through this table
-        </div>
-      )}
-    </div>
-  );
+  if (unlocked) return <>{children}<p className="comparison-access-note">Comparison access unlocked.</p></>;
+
+  return <div className="comparison-access-card">
+    <h3>Unlock the full comparison</h3>
+    <p>Submit your contact details and course preferences, then verify your email to unlock the comparison.</p>
+    <Link href="/lead?intent=compare-unlock" data-open-lead className="btn primary">Apply now</Link>
+    <p className="comparison-access-note">Email verification required. Your selection stays on this page.</p>
+  </div>;
 }

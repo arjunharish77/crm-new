@@ -52,7 +52,7 @@ export function OnboardingChecklistBanner() {
     <Card className="mb-4 gap-3 rounded-xl border-primary/20 bg-primary/[0.03] p-3">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h2 className="text-base font-extrabold">Get your workspace ready</h2>
+          <h2 className="text-base font-semibold">Get your workspace ready</h2>
           <p className="text-xs text-muted-foreground">
             {readiness.completedCount} of {readiness.totalCount} steps complete
           </p>

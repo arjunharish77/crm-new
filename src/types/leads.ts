@@ -16,6 +16,11 @@ export interface Lead {
     assignedUserId?: string | null;
     predictiveScore?: PredictiveRecordScore | null;
     pendingNbaCount?: number;
+    ownerId?: string | null;
+    // List rows only (GET /api/leads): owner name, last activity and the next open task.
+    ownerName?: string | null;
+    lastActivityAt?: string | null;
+    nextTask?: { id: string; title: string; dueAt: string | null } | null;
 }
 
 export interface PredictiveRecordScore {

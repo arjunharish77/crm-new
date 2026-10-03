@@ -5,6 +5,15 @@ vi.mock("@/lib/db/query", () => dbMocks);
 
 import { getInboundCallerContextForTenant } from "@/lib/server/inbound-caller-context";
 
+// Telephony business logic under test; the TELEPHONY module gate itself is covered by
+// tests/telephony-module-gate.test.ts.
+vi.mock("@/lib/server/module-entitlements", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/server/module-entitlements")>()),
+  assertTenantModule: vi.fn(async () => undefined),
+  assertModuleEnabled: vi.fn(async () => undefined),
+}));
+
+
 const user = { id: "user-1", tenantId: "tenant-a" };
 
 function sqlOf(call: any[]) {

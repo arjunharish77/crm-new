@@ -177,7 +177,7 @@ function ColorInput({ label, variable, value, onChange }: { label: string, varia
                     onChange={(e) => onChange(e.target.value)}
                     className="absolute h-0 w-0 overflow-hidden opacity-0"
                 />
-                <Button asChild variant="outline" size="sm" className="min-w-20 px-2 text-[11px] font-normal normal-case">
+                <Button asChild variant="outline" size="sm" className="min-w-20 px-2 text-xs font-normal normal-case">
                     <label htmlFor={inputId} className="cursor-pointer">{value}</label>
                 </Button>
             </div>

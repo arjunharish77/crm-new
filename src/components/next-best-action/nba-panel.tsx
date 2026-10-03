@@ -99,7 +99,7 @@ export function NextBestActionPanel({ recordType, recordId, title = "Recommended
                     <div key={rec.id} className="rounded-lg border bg-surface-container-low p-2.5">
                         <div className="flex items-start justify-between gap-2">
                             <p className="text-sm font-semibold">{ACTION_LABELS[rec.actionType] ?? rec.actionType}</p>
-                            <Badge variant="outline" className="shrink-0 rounded-md text-[0.65rem] font-semibold">
+                            <Badge variant="outline" className="shrink-0 rounded-md text-xs font-semibold">
                                 {Math.round(rec.score)}
                             </Badge>
                         </div>

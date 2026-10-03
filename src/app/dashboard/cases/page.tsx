@@ -7,6 +7,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ColumnDef } from "@tanstack/react-table";
 import { LifeBuoy, Plus } from "lucide-react";
+import { SlaBadge } from "@/components/cases/sla-badge";
 import { toast } from "sonner";
 import { apiFetch } from "@/lib/api";
 import { Badge } from "@/components/ui/badge";
@@ -18,19 +19,22 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { DataTable } from "@/components/ui/data-table";
 import { EmptyState } from "@/components/common/empty-state";
+import { ErrorState } from "@/components/common/error-state";
+import { ListToolbar } from "@/components/common/list-toolbar";
+import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { StandardDialog } from "@/components/common/standard-dialog";
 import { formatWorkspaceDateTime } from "@/lib/date-format";
 import { useModuleEnabled } from "@/components/auth/feature-gate";
-import { cn } from "@/lib/utils";
 
 const ALL = "__all__";
 
-const PRIORITY_COLOR: Record<string, string> = {
-    Low: "bg-muted text-muted-foreground border-border",
-    Medium: "bg-primary/8 text-primary border-primary/20",
-    High: "bg-tertiary/12 text-tertiary border-tertiary/25",
-    Urgent: "bg-destructive/8 text-destructive border-destructive/20",
+const PRIORITY_TONE: Record<string, "neutral" | "info" | "warning" | "danger"> = {
+    Low: "neutral",
+    Medium: "info",
+    High: "warning",
+    Urgent: "danger",
 };
+
 
 export default function CasesPage() {
     const router = useRouter();
@@ -51,12 +55,17 @@ export default function CasesPage() {
     const [statusFilter, setStatusFilter] = useState(ALL);
     const [priorityFilter, setPriorityFilter] = useState(ALL);
     const [queueFilter, setQueueFilter] = useState(ALL);
+    const [search, setSearch] = useState("");
+    const debouncedSearch = useDebouncedValue(search.trim(), 300);
+    const [configError, setConfigError] = useState(false);
+    const [subjectError, setSubjectError] = useState<string | null>(null);
 
     const [createOpen, setCreateOpen] = useState(false);
     const [createSubmitting, setCreateSubmitting] = useState(false);
     const [form, setForm] = useState({ subject: "", description: "", typeId: "", priorityId: "", queueId: "", requesterName: "", requesterEmail: "" });
 
     const fetchConfig = useCallback(async () => {
+        setConfigError(false);
         try {
             const [statusesData, prioritiesData, queuesData, typesData, usersData] = await Promise.all([
                 apiFetch<any[]>("/case-statuses"),
@@ -71,7 +80,8 @@ export default function CasesPage() {
             setTypes(Array.isArray(typesData) ? typesData : []);
             setUsers(Array.isArray(usersData) ? usersData : []);
         } catch {
-            // Config is only needed for filters/create -- a failure here shouldn't block the list itself.
+            // The list still loads; the filters and the create form say what's missing (UI/UX plan §5.15).
+            setConfigError(true);
         }
     }, []);
 
@@ -85,16 +95,16 @@ export default function CasesPage() {
             if (statusFilter !== ALL) params.set("statusId", statusFilter);
             if (priorityFilter !== ALL) params.set("priorityId", priorityFilter);
             if (queueFilter !== ALL) params.set("queueId", queueFilter);
+            if (debouncedSearch) params.set("q", debouncedSearch);
             const response = await apiFetch<{ data: any[]; meta: { total: number } }>(`/cases?${params.toString()}`);
             setData(Array.isArray(response?.data) ? response.data : []);
             setTotalItems(response?.meta?.total ?? 0);
-        } catch (error: any) {
-            toast.error(error?.message || "Failed to fetch cases");
-            setFetchError("Failed to load cases.");
+        } catch {
+            setFetchError("The cases couldn't be loaded.");
         } finally {
             setLoading(false);
         }
-    }, [paginationModel, statusFilter, priorityFilter, queueFilter]);
+    }, [paginationModel, statusFilter, priorityFilter, queueFilter, debouncedSearch]);
 
     useEffect(() => {
         fetchConfig();
@@ -116,7 +126,7 @@ export default function CasesPage() {
             header: "Case",
             size: 260,
             cell: ({ row }) => (
-                <Link href={`/dashboard/cases/${row.original.id}`} className="font-bold text-primary hover:underline" onClick={(e) => e.stopPropagation()}>
+                <Link href={`/dashboard/cases/${row.original.id}`} className="font-medium hover:underline" onClick={(e) => e.stopPropagation()}>
                     #{row.original.caseNumber} · {row.original.subject}
                 </Link>
             ),
@@ -125,7 +135,7 @@ export default function CasesPage() {
             accessorKey: "statusId",
             header: "Status",
             size: 130,
-            cell: ({ row }) => <Badge variant="outline" className="font-bold uppercase tracking-wide">{statusById.get(row.original.statusId)?.name ?? "—"}</Badge>,
+            cell: ({ row }) => <Badge tone="neutral">{statusById.get(row.original.statusId)?.name ?? "—"}</Badge>,
         },
         {
             accessorKey: "priorityId",
@@ -133,7 +143,7 @@ export default function CasesPage() {
             size: 120,
             cell: ({ row }) => {
                 const name = priorityById.get(row.original.priorityId)?.name ?? "—";
-                return <Badge variant="outline" className={cn("font-bold uppercase tracking-wide", PRIORITY_COLOR[name] ?? "")}>{name}</Badge>;
+                return <Badge tone={PRIORITY_TONE[name] ?? "neutral"}>{name}</Badge>;
             },
         },
         {
@@ -150,20 +160,16 @@ export default function CasesPage() {
         },
         {
             accessorKey: "resolutionDueAt",
-            header: "SLA Due",
-            size: 170,
-            cell: ({ row }) => {
-                const due = row.original.resolutionDueAt;
-                if (!due) return <span className="text-xs text-muted-foreground">—</span>;
-                const isBreached = !row.original.resolvedAt && new Date(due).getTime() < Date.now();
-                return <span className={cn("text-xs", isBreached ? "font-bold text-destructive" : "text-muted-foreground")}>{formatWorkspaceDateTime(due)}</span>;
-            },
+            header: "Resolve by",
+            size: 200,
+            cell: ({ row }) => <SlaBadge due={row.original.resolutionDueAt} resolvedAt={row.original.resolvedAt} />,
         },
     ], [statusById, priorityById, queueById, userById]);
 
     const handleCreate = async () => {
         if (!form.subject.trim()) {
-            toast.error("Subject is required");
+            setSubjectError("Enter a subject.");
+            document.getElementById("case-subject")?.focus();
             return;
         }
         setCreateSubmitting(true);
@@ -186,7 +192,7 @@ export default function CasesPage() {
             fetchData();
             router.push(`/dashboard/cases/${created.id}`);
         } catch (error: any) {
-            toast.error(error?.message || "Failed to create case");
+            toast.error(error?.message || "The case couldn't be created");
         } finally {
             setCreateSubmitting(false);
         }
@@ -197,8 +203,8 @@ export default function CasesPage() {
             <div className="min-w-0">
                 <EmptyState
                     icon={<LifeBuoy className="size-10 text-muted-foreground opacity-50" />}
-                    title="Service Desk is not enabled"
-                    description="Ask a platform admin to enable the Service Desk module for this tenant."
+                    title="Service desk isn't turned on"
+                    description="Ask an admin to turn on the Service desk module."
                 />
             </div>
         );
@@ -207,9 +213,14 @@ export default function CasesPage() {
     return (
         <div className="min-w-0">
             <PageHeader title="Cases" description="Track and resolve support cases." actions={
-                <Button onClick={() => setCreateOpen(true)}><Plus className="size-4" />Create Case</Button>
+                <Button onClick={() => { setSubjectError(null); setCreateOpen(true); }}><Plus className="size-4" />New case</Button>
             } />
-            <div className="mb-4 flex flex-wrap gap-2" role="group" aria-label="Case filters">
+            {configError ? <ErrorState variant="inline" description="Statuses, priorities and queues couldn't be loaded, so filtering and new cases are limited." onRetry={fetchConfig} className="mb-3" /> : null}
+            <div className="mb-4 flex flex-wrap items-center gap-2" role="group" aria-label="Case filters">
+                    <ListToolbar
+                        className="min-w-0 flex-1 basis-64"
+                        search={{ value: search, onChange: (value) => { setSearch(value); setPaginationModel((current) => ({ ...current, page: 0 })); }, placeholder: "Search subject, requester or #number", label: "Search cases", inputId: "cases-search" }}
+                    />
                     <Select value={statusFilter} onValueChange={(value) => { setStatusFilter(value); setPaginationModel(current => ({ ...current, page: 0 })); }}>
                         <SelectTrigger aria-label="Status filter" className="w-full sm:w-40"><SelectValue placeholder="Status" /></SelectTrigger>
                         <SelectContent>
@@ -247,11 +258,16 @@ export default function CasesPage() {
                     pageIndex={paginationModel.page}
                     pageSize={paginationModel.pageSize}
                     onPaginationChange={({ pageIndex, pageSize }) => setPaginationModel({ page: pageIndex, pageSize })}
-                    emptyState={{
-                        icon: <LifeBuoy className="size-10 text-muted-foreground opacity-50" />,
-                        title: "No cases found",
+                    emptyState={debouncedSearch || statusFilter !== ALL || priorityFilter !== ALL || queueFilter !== ALL ? {
+                        kind: "no-match",
+                        title: "No cases match",
+                        description: "Try another search or filter.",
+                        action: <Button variant="outline" onClick={() => { setSearch(""); setStatusFilter(ALL); setPriorityFilter(ALL); setQueueFilter(ALL); }}>Clear search and filters</Button>,
+                    } : {
+                        icon: <LifeBuoy />,
+                        title: "No cases yet",
                         description: "Create a case to start tracking a support request.",
-                        action: <Button onClick={() => setCreateOpen(true)}><Plus className="size-4" />Create Case</Button>,
+                        action: <Button onClick={() => { setSubjectError(null); setCreateOpen(true); }}><Plus className="size-4" />New case</Button>,
                     }}
                 />
             </Card>
@@ -259,22 +275,28 @@ export default function CasesPage() {
             <StandardDialog
                 open={createOpen}
                 onClose={() => setCreateOpen(false)}
-                title="Create Case"
+                title="New case"
                 icon={<LifeBuoy className="size-5" />}
                 maxWidth="sm"
                 actions={
                     <>
                         <Button variant="ghost" onClick={() => setCreateOpen(false)}>Cancel</Button>
-                        <Button onClick={handleCreate} disabled={createSubmitting || !form.subject.trim()}>
-                            {createSubmitting ? "Creating..." : "Create Case"}
-                        </Button>
+                        <Button onClick={handleCreate} isLoading={createSubmitting}>Create case</Button>
                     </>
                 }
             >
                 <div className="space-y-3">
                     <div className="space-y-1.5">
                         <Label htmlFor="case-subject">Subject</Label>
-                        <Input id="case-subject" value={form.subject} onChange={(e) => setForm({ ...form, subject: e.target.value })} placeholder="Brief summary of the issue" />
+                        <Input
+                            id="case-subject"
+                            value={form.subject}
+                            aria-invalid={!!subjectError}
+                            aria-describedby={subjectError ? "case-subject-error" : undefined}
+                            onChange={(e) => { setForm({ ...form, subject: e.target.value }); if (subjectError) setSubjectError(null); }}
+                            placeholder="Brief summary of the issue"
+                        />
+                        {subjectError ? <p id="case-subject-error" className="text-xs text-destructive">{subjectError}</p> : null}
                     </div>
                     <div className="space-y-1.5">
                         <Label htmlFor="case-description">Description</Label>
@@ -282,18 +304,18 @@ export default function CasesPage() {
                     </div>
                     <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                         <div className="space-y-1.5">
-                            <Label>Type</Label>
+                            <Label htmlFor="case-type">Type</Label>
                             <Select value={form.typeId} onValueChange={(value) => setForm({ ...form, typeId: value })}>
-                                <SelectTrigger className="w-full"><SelectValue placeholder="Default" /></SelectTrigger>
+                                <SelectTrigger id="case-type" className="w-full"><SelectValue placeholder="Default" /></SelectTrigger>
                                 <SelectContent>
                                     {types.map((t) => <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>)}
                                 </SelectContent>
                             </Select>
                         </div>
                         <div className="space-y-1.5">
-                            <Label>Priority</Label>
+                            <Label htmlFor="case-priority">Priority</Label>
                             <Select value={form.priorityId} onValueChange={(value) => setForm({ ...form, priorityId: value })}>
-                                <SelectTrigger className="w-full"><SelectValue placeholder="Default" /></SelectTrigger>
+                                <SelectTrigger id="case-priority" className="w-full"><SelectValue placeholder="Default" /></SelectTrigger>
                                 <SelectContent>
                                     {priorities.map((p) => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
                                 </SelectContent>
@@ -301,9 +323,9 @@ export default function CasesPage() {
                         </div>
                     </div>
                     <div className="space-y-1.5">
-                        <Label>Queue</Label>
+                        <Label htmlFor="case-queue">Queue</Label>
                         <Select value={form.queueId} onValueChange={(value) => setForm({ ...form, queueId: value })}>
-                            <SelectTrigger className="w-full"><SelectValue placeholder="No queue (unassigned)" /></SelectTrigger>
+                            <SelectTrigger id="case-queue" className="w-full"><SelectValue placeholder="No queue (unassigned)" /></SelectTrigger>
                             <SelectContent>
                                 {queues.map((q) => <SelectItem key={q.id} value={q.id}>{q.name}</SelectItem>)}
                             </SelectContent>

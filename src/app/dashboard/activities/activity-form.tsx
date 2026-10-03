@@ -15,10 +15,9 @@ import { Input } from '@/components/ui/input';
 import { DynamicFormRenderer } from '@/components/common/DynamicFormRenderer';
 import { useObjectMetadata } from '@/hooks/use-object-metadata';
 import { apiFetch } from '@/lib/api';
-import { PaginatedResponse } from '@/types/common';
-import { Lead } from '@/types/leads';
+import { RecordPicker } from '@/components/common/record-picker';
+import { useAuth } from '@/providers/auth-provider';
 import { ActivityType } from '@/types/activities';
-import { Opportunity } from '@/types/opportunities';
 
 interface ActivityFormProps {
     initialData?: any;
@@ -27,6 +26,7 @@ interface ActivityFormProps {
 }
 
 const NONE_VALUE = '__none__';
+const LINK_REQUIRED_MESSAGE = 'Choose the lead or opportunity this activity is for';
 
 function toDatetimeLocalValue(value?: string | null) {
     if (!value) return '';
@@ -37,9 +37,12 @@ function toDatetimeLocalValue(value?: string | null) {
 }
 
 export function ActivityForm({ initialData, onSuccess, onCancel }: ActivityFormProps) {
+    const { user } = useAuth();
+    // Mirrors the server rule (activities-postgres assertActivityLinksAllowed): users who only see
+    // their own or their team's records must tie an activity to a lead or opportunity they can see.
+    const rolePermissions = user?.role && typeof user.role === 'object' ? (user.role as any).permissions : null;
+    const linkRequired = !!rolePermissions?.isPartnerRole || rolePermissions?.recordAccess === 'OWN' || rolePermissions?.recordAccess === 'TEAM';
     const { metadata: coreMetadata, loading: coreLoading } = useObjectMetadata('activity');
-    const [leads, setLeads] = useState<Lead[]>([]);
-    const [opportunities, setOpportunities] = useState<Opportunity[]>([]);
     const [activityTypes, setActivityTypes] = useState<ActivityType[]>([]);
     const [typeSpecificFields, setTypeSpecificFields] = useState<any[]>([]);
     const [selectedTypeId, setSelectedTypeId] = useState<string>(initialData?.typeId || '');
@@ -64,39 +67,13 @@ export function ActivityForm({ initialData, onSuccess, onCancel }: ActivityFormP
         async function loadBootstrapData() {
             setBootstrapError(null);
 
-            const [leadsResult, opportunitiesResult, typesResult] = await Promise.allSettled([
-                apiFetch<PaginatedResponse<Lead> | Lead[]>("/leads?limit=100"),
-                apiFetch<PaginatedResponse<Opportunity> | Opportunity[]>("/opportunities?limit=100"),
+            // Leads and opportunities are searched in the pickers (RecordPicker), instead of
+            // preloading the first 100 of each, which hid every record after that.
+            const [typesResult] = await Promise.allSettled([
                 apiFetch<ActivityType[]>("/activity-types"),
             ]);
 
             if (cancelled) return;
-
-            if (leadsResult.status === 'fulfilled') {
-                const leadsResponse = leadsResult.value;
-                const leadsData =
-                    'data' in leadsResponse && Array.isArray(leadsResponse.data)
-                        ? leadsResponse.data
-                        : Array.isArray(leadsResponse)
-                            ? leadsResponse
-                            : [];
-                setLeads(leadsData);
-            } else {
-                setLeads([]);
-            }
-
-            if (opportunitiesResult.status === 'fulfilled') {
-                const opportunitiesResponse = opportunitiesResult.value;
-                const opportunitiesData =
-                    'data' in opportunitiesResponse && Array.isArray(opportunitiesResponse.data)
-                        ? opportunitiesResponse.data
-                        : Array.isArray(opportunitiesResponse)
-                            ? opportunitiesResponse
-                            : [];
-                setOpportunities(opportunitiesData);
-            } else {
-                setOpportunities([]);
-            }
 
             if (typesResult.status === 'fulfilled') {
                 setActivityTypes(Array.isArray(typesResult.value) ? typesResult.value : []);
@@ -150,6 +127,13 @@ export function ActivityForm({ initialData, onSuccess, onCancel }: ActivityFormP
 
     const selectedType = activityTypes.find(t => t.id === selectedTypeId);
 
+    // The link error is set on leadId; hide it as soon as either link is chosen.
+    const isLinkMissing = (errors: any, watch: any) =>
+        errors?.leadId?.type === 'validate' && !watch('leadId') && !watch('opportunityId');
+
+    const validateLinks = (values: any) =>
+        linkRequired && !values.leadId && !values.opportunityId ? { leadId: LINK_REQUIRED_MESSAGE } : null;
+
     const fieldOverrides = {
         typeId: ({ control, errors }: any) => (
             <Controller
@@ -157,7 +141,7 @@ export function ActivityForm({ initialData, onSuccess, onCancel }: ActivityFormP
                 control={control}
                 render={({ field: hookField }) => (
                     <div className="space-y-1.5">
-                        <Label>Activity Type *</Label>
+                        <Label htmlFor="activity-type">Activity Type *</Label>
                         <Select
                             value={hookField.value || undefined}
                             onValueChange={(value) => {
@@ -165,7 +149,7 @@ export function ActivityForm({ initialData, onSuccess, onCancel }: ActivityFormP
                                 setSelectedTypeId(value);
                             }}
                         >
-                            <SelectTrigger className="w-full" aria-invalid={!!errors.typeId}>
+                            <SelectTrigger id="activity-type" className="w-full" aria-invalid={!!errors.typeId}>
                                 <SelectValue placeholder="Select activity type" />
                             </SelectTrigger>
                             <SelectContent>
@@ -201,12 +185,12 @@ export function ActivityForm({ initialData, onSuccess, onCancel }: ActivityFormP
                 control={control}
                 render={({ field: hookField }) => (
                     <div className="space-y-1.5">
-                        <Label>Outcome</Label>
+                        <Label htmlFor="activity-outcome">Outcome</Label>
                         <Select
                             value={hookField.value || NONE_VALUE}
                             onValueChange={(value) => hookField.onChange(value === NONE_VALUE ? '' : value)}
                         >
-                            <SelectTrigger className="w-full">
+                            <SelectTrigger id="activity-outcome" className="w-full">
                                 <SelectValue placeholder="Select outcome" />
                             </SelectTrigger>
                             <SelectContent>
@@ -242,56 +226,47 @@ export function ActivityForm({ initialData, onSuccess, onCancel }: ActivityFormP
                 )}
             />
         ),
-        leadId: ({ control }: any) => (
+        leadId: ({ control, errors, watch }: any) => (
             <Controller
                 name="leadId"
                 control={control}
                 render={({ field: hookField }) => (
                     <div className="space-y-1.5">
-                        <Label>Related Lead</Label>
-                        <Select
-                            value={hookField.value || NONE_VALUE}
-                            onValueChange={(value) => hookField.onChange(value === NONE_VALUE ? '' : value)}
-                        >
-                            <SelectTrigger className="w-full">
-                                <SelectValue placeholder="Select lead" />
-                            </SelectTrigger>
-                            <SelectContent>
-                                <SelectItem value={NONE_VALUE}>None</SelectItem>
-                                {leads.map((l) => (
-                                    <SelectItem key={l.id} value={l.id}>
-                                        {l.name || l.email || l.company || "Lead"}
-                                    </SelectItem>
-                                ))}
-                            </SelectContent>
-                        </Select>
+                        <Label htmlFor="activity-lead">Related Lead</Label>
+                        <RecordPicker
+                            id="activity-lead"
+                            entity="lead"
+                            value={hookField.value || null}
+                            onChange={(id) => hookField.onChange(id ?? '')}
+                            placeholder="Search leads"
+                            invalid={isLinkMissing(errors, watch)}
+                            describedBy={isLinkMissing(errors, watch) ? 'activity-link-error' : undefined}
+                        />
+                        {isLinkMissing(errors, watch) ? (
+                            <p id="activity-link-error" className="text-xs text-destructive">{errors.leadId.message}</p>
+                        ) : linkRequired ? (
+                            <p className="text-xs text-muted-foreground">Choose a lead, an opportunity, or both</p>
+                        ) : null}
                     </div>
                 )}
             />
         ),
-        opportunityId: ({ control }: any) => (
+        opportunityId: ({ control, errors, watch }: any) => (
             <Controller
                 name="opportunityId"
                 control={control}
                 render={({ field: hookField }) => (
                     <div className="space-y-1.5">
-                        <Label>Related Opportunity</Label>
-                        <Select
-                            value={hookField.value || NONE_VALUE}
-                            onValueChange={(value) => hookField.onChange(value === NONE_VALUE ? '' : value)}
-                        >
-                            <SelectTrigger className="w-full">
-                                <SelectValue placeholder="Select opportunity" />
-                            </SelectTrigger>
-                            <SelectContent>
-                                <SelectItem value={NONE_VALUE}>None</SelectItem>
-                                {opportunities.map((opportunity) => (
-                                    <SelectItem key={opportunity.id} value={opportunity.id}>
-                                        {opportunity.title || opportunity.lead?.name || "Opportunity"}
-                                    </SelectItem>
-                                ))}
-                            </SelectContent>
-                        </Select>
+                        <Label htmlFor="activity-opportunity">Related Opportunity</Label>
+                        <RecordPicker
+                            id="activity-opportunity"
+                            entity="opportunity"
+                            value={hookField.value || null}
+                            onChange={(id) => hookField.onChange(id ?? '')}
+                            placeholder="Search opportunities"
+                            invalid={isLinkMissing(errors, watch)}
+                            describedBy={isLinkMissing(errors, watch) ? 'activity-link-error' : undefined}
+                        />
                     </div>
                 )}
             />
@@ -305,7 +280,7 @@ export function ActivityForm({ initialData, onSuccess, onCancel }: ActivityFormP
     return (
         <div>
             {bootstrapError && (
-                <div className="mb-4 flex items-center gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-800 dark:text-amber-300">
+                <div className="mb-4 flex items-center gap-2 rounded-lg border border-status-warning bg-status-warning px-3 py-2 text-sm text-status-warning-foreground">
                     <Info className="size-4 shrink-0" />
                     {bootstrapError}
                 </div>
@@ -314,6 +289,7 @@ export function ActivityForm({ initialData, onSuccess, onCancel }: ActivityFormP
                 metadata={mergedMetadata}
                 initialData={initialData}
                 fieldOverrides={fieldOverrides as any}
+                validate={validateLinks}
                 onSuccess={onSuccess}
                 onCancel={onCancel}
             />

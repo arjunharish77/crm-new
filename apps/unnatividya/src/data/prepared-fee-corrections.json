@@ -1,0 +1,16 @@
+[
+  {
+    "courseId": "majmc-amity",
+    "expectedFee": 130000,
+    "fee": 190000,
+    "semesterFee": 47500,
+    "sourceUrl": "https://amityonline.com/master-of-arts-journalism-and-mass-communication-online",
+    "checkedAt": "2026-10-03",
+    "notes": [
+      "Rechecked the official rendered INR fee panel on 3 October 2026: base tuition ₹1,90,000 and four semester payments of ₹47,500. Confirm applicant category, current intake and additional charges before applying.",
+      "Replaces existing payment plans and the total-fee highlight. Removes the unsupported 2% discount, numeric EMI quote, EMI highlight and legacy scholarship rows; financing terms remain to be confirmed.",
+      "Promotional discounts are excluded. A separate USD response displays $3,500 total and $880 per semester, which do not reconcile over four semesters. Currency alone does not identify an NRI category; do not publish these as confirmed international/NRI terms.",
+      "Review any fee figures in custom descriptions or FAQs before submission. Loading edits an unsaved proposal only."
+    ]
+  }
+]

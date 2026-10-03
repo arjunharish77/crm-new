@@ -1,4 +1,4 @@
-"""Check six opaque foreground/background token pairs in all eight theme modes.
+"""Check opaque foreground/background token pairs in all eight theme modes.
 This checks token definitions, not complete rendered-page accessibility.
 Run from the crm application directory with Python 3.
 """
@@ -28,13 +28,22 @@ for palette in ['forest', 'ocean', 'sunset', 'grape']:
         def resolve(key):
             value = values[key].strip()
             return resolve(value[4:-1]) if value.startswith('var(') else value
-        for fg, bg in [('foreground', 'background'), ('muted-foreground', 'background'),
-                       ('card-foreground', 'card'), ('primary-foreground', 'primary'),
-                       ('secondary-foreground', 'secondary'), ('destructive-foreground', 'destructive')]:
+        # (foreground, background, minimum). Text needs 4.5:1; control borders (--input) need
+        # 3:1 against the surfaces they sit on (WCAG 1.4.11). UI/UX plan §10.3 pairs included.
+        pairs = [('foreground', 'background', 4.5), ('muted-foreground', 'background', 4.5),
+                 ('card-foreground', 'card', 4.5), ('primary-foreground', 'primary', 4.5),
+                 ('secondary-foreground', 'secondary', 4.5), ('destructive-foreground', 'destructive', 4.5),
+                 ('muted-foreground', 'card', 4.5), ('subtle-foreground', 'card', 4.5),
+                 ('foreground', 'muted', 4.5), ('foreground', 'selected', 4.5),
+                 ('primary', 'card', 4.5), ('primary', 'background', 4.5),
+                 ('destructive', 'card', 4.5), ('input', 'card', 3), ('input', 'background', 3)]
+        pairs += [('status-' + tone + '-foreground', 'status-' + tone, 4.5)
+                  for tone in ['success', 'warning', 'danger', 'info', 'neutral', 'accent']]
+        for fg, bg, minimum in pairs:
             low, high = sorted([luminance(resolve('--' + fg)), luminance(resolve('--' + bg))])
             ratio = (high + .05) / (low + .05)
             results.append(dict(palette=palette, mode=mode, foreground=fg, background=bg,
-                                ratio=round(ratio, 2), status='passed' if ratio >= 4.5 else 'failed'))
+                                ratio=round(ratio, 2), status='passed' if ratio >= minimum else 'failed'))
 out = Path('ui-audit-2026-09/phase-h-theme-reflow')
 out.mkdir(parents=True, exist_ok=True)
 (out / 'token-contrast.json').write_text(json.dumps(results, indent=2))

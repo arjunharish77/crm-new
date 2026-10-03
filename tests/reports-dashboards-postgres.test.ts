@@ -70,7 +70,6 @@ describe("direct Postgres reports and dashboards", () => {
     it("creates a TEAM-shared widget with the given sharedWithTeamId, and clears it for PRIVATE/TENANT visibility", async () => {
       queryOneMock.mockReset();
       queryOneMock
-        .mockResolvedValueOnce(null) // assertFeatureEnabled's TenantFeature lookup -- missing row = enabled
         .mockResolvedValueOnce({
           id: "widget-1",
           title: "Team View",
@@ -96,7 +95,7 @@ describe("direct Postgres reports and dashboards", () => {
       expect(widget.visibility).toBe("TEAM");
       expect(widget.sharedWithTeamId).toBe("team-1");
       expect(widget.isOwner).toBe(true);
-      const insertParams = queryOneMock.mock.calls[1][1];
+      const insertParams = queryOneMock.mock.calls[0][1];
       expect(insertParams).toContain("TEAM");
       expect(insertParams).toContain("team-1");
     });
@@ -427,10 +426,10 @@ describe("direct Postgres reports and dashboards", () => {
 
   describe("entitlement gating", () => {
     it("rejects creating a custom report when Advanced Reporting is disabled for the tenant", async () => {
-      queryOneMock.mockImplementation(async (sql: string) => {
-        if (String(sql).includes('from "TenantFeature"')) return { advancedReporting: false };
-        return null;
-      });
+      // The module alone decides (decision 15); module-entitlements is mocked in this file.
+      const entitlements = await import("@/lib/server/module-entitlements");
+      vi.mocked(entitlements.isModuleEnabledForTenant).mockResolvedValueOnce(false);
+      queryOneMock.mockResolvedValue(null);
 
       const { createCustomReportForTenant } = await import("@/lib/repositories/reports-dashboards-postgres");
       await expect(
@@ -439,10 +438,10 @@ describe("direct Postgres reports and dashboards", () => {
     });
 
     it("rejects creating a dashboard widget when Advanced Reporting is disabled for the tenant", async () => {
-      queryOneMock.mockImplementation(async (sql: string) => {
-        if (String(sql).includes('from "TenantFeature"')) return { advancedReporting: false };
-        return null;
-      });
+      // The module alone decides (decision 15); module-entitlements is mocked in this file.
+      const entitlements = await import("@/lib/server/module-entitlements");
+      vi.mocked(entitlements.isModuleEnabledForTenant).mockResolvedValueOnce(false);
+      queryOneMock.mockResolvedValue(null);
 
       const { createDashboardWidgetForTenant } = await import("@/lib/repositories/reports-dashboards-postgres");
       await expect(
@@ -451,10 +450,10 @@ describe("direct Postgres reports and dashboards", () => {
     });
 
     it("rejects executing a structured report query when Advanced Reporting is disabled for the tenant", async () => {
-      queryOneMock.mockImplementation(async (sql: string) => {
-        if (String(sql).includes('from "TenantFeature"')) return { advancedReporting: false };
-        return null;
-      });
+      // The module alone decides (decision 15); module-entitlements is mocked in this file.
+      const entitlements = await import("@/lib/server/module-entitlements");
+      vi.mocked(entitlements.isModuleEnabledForTenant).mockResolvedValueOnce(false);
+      queryOneMock.mockResolvedValue(null);
 
       const { executeReportQueryForTenant } = await import("@/lib/server/reporting-query");
       await expect(
@@ -468,7 +467,7 @@ describe("direct Postgres reports and dashboards", () => {
     it("allows a platform admin to bypass the Advanced Reporting gate", async () => {
       queryOneMock.mockImplementation(async (sql: string) => {
         const text = String(sql);
-        if (text.includes('from "TenantFeature"')) return { advancedReporting: false };
+        if (text.includes('from "TenantModuleEntitlement"')) return { status: "DISABLED" };
         if (text.includes('insert into "CustomReport"')) return { id: "report-1", name: "Report" };
         return null;
       });

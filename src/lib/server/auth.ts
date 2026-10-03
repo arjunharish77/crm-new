@@ -4,6 +4,8 @@ import * as pgAuth from "@/lib/repositories/auth-admin-postgres";
 import { assertGeneralRateLimit } from "@/lib/server/rate-limit";
 import { validateSession, touchSessionIfStale } from "@/lib/server/sessions";
 import { enterTenantContext } from "@/lib/db/tenant-context";
+import { canUseModule, moduleRequirementForRequest } from "@/lib/module-access";
+import { ModuleAccessError } from "@/lib/server/module-access-error";
 
 type JwtPayload = {
   sub: string;
@@ -197,8 +199,24 @@ export async function requireCurrentUser(request?: Request) {
   // calibrate without false positives. requireCurrentUser is what nearly every API route
   // actually calls to gate a real action.
   await assertGeneralRateLimit(user);
+  if (request) assertModuleAccessForRequest(user, request);
 
   return user;
+}
+
+// Role module permissions (lib/module-access.ts): "none" blocks a module's API, "read" allows
+// reads only, "write" create and edit, "full" also delete. Admins are never limited.
+function assertModuleAccessForRequest(user: Awaited<ReturnType<typeof getCurrentUser>> & object, request: Request) {
+  if (user.isTenantAdmin || user.isPlatformAdmin) return;
+  let pathname: string;
+  try {
+    pathname = new URL(request.url).pathname;
+  } catch {
+    return;
+  }
+  const requirement = moduleRequirementForRequest(request.method, pathname);
+  if (!requirement) return;
+  if (!canUseModule(user as any, requirement.module.key, requirement.need)) throw new ModuleAccessError(requirement.module.label, requirement.need);
 }
 
 export async function requirePlatformAdmin(request?: Request) {

@@ -2,11 +2,13 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useState, useRef } from "react";
+import { useSearchParams } from "next/navigation";
 import { SlidersHorizontal } from "lucide-react";
 import { trackEvent } from "@/components/analytics";
 import { SaveButton } from "@/components/save-button";
-import { formatFee, type Course, type University } from "@/data/catalog";
+import { formatFee } from "@/lib/catalog-format";
+import { type Course, type University } from "@/data/catalog";
 import { universityMedia } from "@/data/media";
 
 type CourseItem = Course & { university: University };
@@ -28,31 +30,36 @@ function levelStyle(level: CourseItem["level"]) {
   };
 }
 
-const FEE_SLIDER_MIN = 75000;
-const FEE_SLIDER_MAX = 275000;
-const FEE_SLIDER_STEP = 5000;
-
-export function CourseExplorer({
-  courses: initialCourses,
-  initialQuery = "",
-  initialStream,
-  initialUniversity,
-}: {
-  courses: CourseItem[];
-  initialQuery?: string;
-  initialStream?: string;
-  initialUniversity?: string;
-}) {
-  const feeCeiling = FEE_SLIDER_MAX;
-  const [query, setQuery] = useState(initialQuery);
-  const [levels, setLevels] = useState<string[]>([]);
-  const [streams, setStreams] = useState<string[]>(initialStream ? [initialStream] : []);
-  const [universities, setUniversities] = useState<string[]>(initialUniversity ? [initialUniversity] : []);
-  const [maxFee, setMaxFee] = useState(feeCeiling);
-  const [sort, setSort] = useState<SortKey>("popular");
+export function CourseExplorer({ courses: initialCourses }: { courses: CourseItem[] }) {
+  const params = useSearchParams();
+  const feeCeiling = Math.max(1000, Math.ceil(Math.max(0, ...initialCourses.map(course=>course.fee))/1000)*1000);
+  const streamOptions = [...new Set(initialCourses.map(course=>course.stream))].sort();
+  const universityOptions = [...new Map(initialCourses.map(course=>[course.universityId, course.university])).values()].sort((a,b)=>a.name.localeCompare(b.name));
+  const readList = (key: string, allowed: string[]) => [...new Set(params.getAll(key).flatMap(value=>value.split(",")).filter(value=>allowed.includes(value)))];
+  const query = (params.get("q") || "").slice(0,200);
+  const levels = readList("level",["UG","PG"]);
+  const streams = readList("stream",streamOptions);
+  // Keep existing short-name links working while writing stable university IDs.
+  const universities = [...new Set(params.getAll("university").flatMap(value=>value.split(",")).map(value=>universityOptions.find(university=>university.id===value || university.shortName===value)?.id).filter((value): value is University["id"]=>Boolean(value)))];
+  const feeParam = Number(params.get("maxFee"));
+  const maxFee = params.has("maxFee") && Number.isFinite(feeParam) && feeParam>=0 ? Math.min(Math.floor(feeParam),feeCeiling) : feeCeiling;
+  const sort: SortKey = ["feeAsc","feeDesc","rating"].includes(params.get("sort") || "") ? params.get("sort") as SortKey : "popular";
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
-
-  const activeFilterCount = levels.length + streams.length + universities.length + (maxFee < feeCeiling ? 1 : 0);
+  const filterToggle = useRef<HTMLButtonElement>(null);
+  function updateFilters(changes: Record<string,string | string[] | null>, replace = false) {
+    const next = new URLSearchParams(window.location.search);
+    for (const [key,value] of Object.entries(changes)) {
+      next.delete(key);
+      if (Array.isArray(value)) value.forEach(item=>next.append(key,item));
+      else if (value !== null && value !== "") next.set(key,value);
+    }
+    const url = `${window.location.pathname}${next.size ? `?${next}` : ""}${window.location.hash}`;
+    if (url !== window.location.pathname+window.location.search+window.location.hash) window.history[replace ? "replaceState" : "pushState"](null,"",url);
+  }
+  const setLevels = (values: string[])=>updateFilters({level:values});
+  const setStreams = (values: string[])=>updateFilters({stream:values});
+  const setUniversities = (values: string[])=>updateFilters({university:values});
+  const activeFilterCount = levels.length + streams.length + universities.length + (maxFee < feeCeiling ? 1 : 0) + (query.trim() ? 1 : 0);
 
   function countMatches(overrides: { levels?: string[]; streams?: string[]; universities?: string[]; maxFee?: number } = {}) {
     const activeLevels = overrides.levels ?? levels;
@@ -66,22 +73,21 @@ export function CourseExplorer({
         (!text || search.includes(text)) &&
         (!activeLevels.length || activeLevels.includes(course.level)) &&
         (!activeStreams.length || activeStreams.includes(course.stream)) &&
-        (!activeUniversities.length || activeUniversities.includes(course.university.shortName)) &&
+        (!activeUniversities.length || activeUniversities.includes(course.universityId)) &&
         course.fee <= activeMaxFee
       );
     }).length;
   }
 
-  const filtered = useMemo(() => {
-    const text = query.trim().toLowerCase();
-    return initialCourses
+  const text = query.trim().toLowerCase();
+  const filtered = initialCourses
       .filter((course) => {
         const search = [course.name, course.shortName, course.stream, course.university.name, course.university.shortName, ...course.specializations].join(" ").toLowerCase();
         return (
           (!text || search.includes(text)) &&
           (!levels.length || levels.includes(course.level)) &&
           (!streams.length || streams.includes(course.stream)) &&
-          (!universities.length || universities.includes(course.university.shortName)) &&
+          (!universities.length || universities.includes(course.universityId)) &&
           course.fee <= maxFee
         );
       })
@@ -91,27 +97,24 @@ export function CourseExplorer({
         if (sort === "rating") return b.rating - a.rating;
         return b.reviews - a.reviews;
       });
-  }, [initialCourses, levels, maxFee, query, sort, streams, universities]);
 
   function clearFilters() {
-    setQuery("");
-    setLevels([]);
-    setStreams([]);
-    setUniversities([]);
-    setMaxFee(feeCeiling);
-    setSort("popular");
+    updateFilters({q:null,level:null,stream:null,university:null,maxFee:null,sort:null});
   }
+  const chips = [
+    ...levels.map(value=>({label:value==="UG"?"Undergraduate":"Postgraduate",remove:()=>setLevels(levels.filter(item=>item!==value))})),
+    ...streams.map(value=>({label:value,remove:()=>setStreams(streams.filter(item=>item!==value))})),
+    ...universities.map(value=>({label:universityOptions.find(item=>item.id===value)?.shortName || value,remove:()=>setUniversities(universities.filter(item=>item!==value))})),
+    ...(maxFee<feeCeiling?[{label:`Up to ${formatFee(maxFee)}`,remove:()=>updateFilters({maxFee:null})}]:[]),
+    ...(query.trim()?[{label:`Search: ${query}`,remove:()=>updateFilters({q:null})}]:[]),
+  ];
 
   return (
     <>
-      <div
-        className={mobileFiltersOpen ? "uv-filter-backdrop uv-open" : "uv-filter-backdrop"}
-        onClick={() => setMobileFiltersOpen(false)}
-        aria-hidden="true"
-      />
       <button
         type="button"
         className="uv-filter-toggle"
+        ref={filterToggle}
         aria-expanded={mobileFiltersOpen}
         aria-controls="uv-course-filters"
         onClick={() => setMobileFiltersOpen((open) => !open)}
@@ -122,6 +125,8 @@ export function CourseExplorer({
       <div className="uv-courses-layout" style={{ display: "grid", gridTemplateColumns: "250px 1fr", gap: 24, alignItems: "start" }}>
       <aside
         id="uv-course-filters"
+        aria-label="Course filters"
+        onKeyDown={event=>{if(event.key==="Escape" && mobileFiltersOpen){setMobileFiltersOpen(false);filterToggle.current?.focus();}}}
         className={mobileFiltersOpen ? "uv-course-filter-panel uv-open" : "uv-course-filter-panel"}
         style={{ background: "#fff", border: "1px solid #CFDAE6", borderRadius: 8, padding: 20, position: "sticky", top: 88 }}
       >
@@ -133,8 +138,8 @@ export function CourseExplorer({
         </div>
         {[
           ["Degree level", [["UG", "Undergraduate (UG)"], ["PG", "Postgraduate (PG)"]], levels, setLevels],
-          ["Stream", [["Management", "Management"], ["IT & Computers", "IT & Computers"], ["Commerce", "Commerce"], ["Arts & Humanities", "Arts & Humanities"]], streams, setStreams],
-          ["University", [["MUJ", "MUJ"], ["SMU", "SMU"], ["Amity", "Amity"]], universities, setUniversities],
+          ["Stream", streamOptions.map(value=>[value,value]), streams, setStreams],
+          ["University", universityOptions.map(university=>[university.id,university.shortName]), universities, setUniversities],
         ].map(([heading, values, selected, setter]) => (
           <div key={heading as string}>
             <div style={{ fontSize: 13, fontWeight: 700, color: "#363634", marginBottom: 8 }}>{heading as string}</div>
@@ -169,20 +174,21 @@ export function CourseExplorer({
             </div>
           </div>
         ))}
-        <div style={{ fontSize: 13, fontWeight: 700, color: "#363634", marginBottom: 8 }}>Total fee under</div>
+        <label htmlFor="course-max-fee" style={{ fontSize: 13, fontWeight: 700, color: "#363634", marginBottom: 8 }}>Maximum total tuition</label>
         <input
           type="range"
-          min={FEE_SLIDER_MIN}
-          max={FEE_SLIDER_MAX}
-          step={FEE_SLIDER_STEP}
+          id="course-max-fee"
+          min={0}
+          max={feeCeiling}
+          step={1000}
           value={maxFee}
-          onChange={(event) => setMaxFee(Number(event.target.value))}
+          onChange={(event) => updateFilters({maxFee:Number(event.target.value)>=feeCeiling?null:event.target.value},true)}
           onMouseUp={() => trackEvent("course_filter_applied", { filter_type: "Total fee under", value: maxFee, result_count: countMatches() })}
           onTouchEnd={() => trackEvent("course_filter_applied", { filter_type: "Total fee under", value: maxFee, result_count: countMatches() })}
           style={{ width: "100%", accentColor: "#544CC8" }}
         />
         <div style={{ fontSize: 13, color: "#696868", marginTop: 4 }}>Up to {formatFee(maxFee)}</div>
-        <button type="button" className="uv-filter-apply" onClick={() => setMobileFiltersOpen(false)}>
+        <button type="button" className="uv-filter-apply" onClick={() => {setMobileFiltersOpen(false);filterToggle.current?.focus();}}>
           Show {filtered.length} results
         </button>
       </aside>
@@ -191,21 +197,25 @@ export function CourseExplorer({
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8, gap: 12, flexWrap: "wrap" }}>
           <input
             value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            onBlur={() => query.trim() && trackEvent("course_search", { query: query.trim(), result_count: filtered.length })}
+            aria-label="Search courses"
+            maxLength={200}
+            onChange={(event) => updateFilters({q:event.target.value},true)}
+            onBlur={() => query.trim() && trackEvent("course_search", { result_count: filtered.length })}
             placeholder="Search courses, universities or streams…"
-            style={{ height: 40, width: 280, padding: "0 14px", border: "1px solid #CFDAE6", borderRadius: 4, fontSize: 14, color: "#555", outlineColor: "#544CC8", background: "#fff" }}
+            style={{ height: 40, width: 280, maxWidth: "100%", padding: "0 14px", border: "1px solid #CFDAE6", borderRadius: 4, fontSize: 14, color: "#555", outlineColor: "#544CC8", background: "#fff" }}
           />
-          <select value={sort} onChange={(event) => setSort(event.target.value as SortKey)} style={{ height: 40, padding: "0 12px", border: "1px solid #CFDAE6", borderRadius: 4, fontSize: 13, color: "#555", background: "#fff" }}>
+          <select aria-label="Sort courses" value={sort} onChange={(event) => updateFilters({sort:event.target.value==="popular"?null:event.target.value})} style={{ height: 40, padding: "0 12px", border: "1px solid #CFDAE6", borderRadius: 4, fontSize: 13, color: "#555", background: "#fff" }}>
             <option value="popular">Sort: most reviewed</option>
             <option value="feeAsc">Fee: low to high</option>
             <option value="feeDesc">Fee: high to low</option>
             <option value="rating">Highest rated</option>
           </select>
         </div>
-        <div style={{ fontSize: 13, color: "#696868", marginBottom: 16 }}>
-          {filtered.length} of {initialCourses.length} UGC-entitled programs · fees verified for the July 2026 cycle
-        </div>
+        <p role="status" aria-live="polite" style={{ fontSize: 13, color: "#555", marginBottom: 8 }}>
+          {filtered.length} of {initialCourses.length} programs
+        </p>
+        <p style={{fontSize:13,color:"#555",marginBottom:16}}>Tuition shown. Check each program for current fees and eligibility.</p>
+        {chips.length ? <div className="uv-filter-chips" aria-label="Active filters">{chips.map(chip=><button type="button" key={chip.label} onClick={chip.remove} aria-label={`Remove ${chip.label} filter`}>{chip.label}<span aria-hidden="true"> ×</span></button>)}</div> : null}
 
         <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
           {filtered.map((item) => (
@@ -240,7 +250,7 @@ export function CourseExplorer({
                   <span><span style={{ color: "#FDB515" }}>★</span> <b style={{ color: "#363634" }}>{item.rating}</b> ({item.reviews.toLocaleString("en-IN")} reviews)</span>
                   <span>{item.duration}</span>
                   <span><b style={{ color: "#363634" }}>{formatFee(item.fee)}</b> total</span>
-                  <span>EMI from {item.emi}</span>
+                  <span>Financing: {item.emi}</span>
                 </div>
                 <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 10 }}>
                   {item.specializations.slice(0, 4).map((spec) => (
@@ -260,7 +270,7 @@ export function CourseExplorer({
                   View details
                 </Link>
                 <Link href={`/lead?course=${item.id}&intent=enquire`} data-open-lead style={{ textAlign: "center", height: 38, lineHeight: "38px", background: "#fff", border: "1.5px solid #555", borderRadius: 4, fontSize: 13, fontWeight: 700, color: "#555" }}>
-                  Enquire now
+                  Apply now
                 </Link>
                 <Link
                   href={`/compare?add=${item.id}`}
@@ -275,8 +285,10 @@ export function CourseExplorer({
           ))}
         </div>
         {!filtered.length ? (
-          <div style={{ display: "block", background: "#fff", border: "1px dashed #CFDAE6", borderRadius: 8, padding: 40, textAlign: "center", color: "#707070", fontSize: 14, marginTop: 14 }}>
-            No courses match these filters. Try clearing a filter or two.
+          <div className="illustrated-empty-state">
+            <Image className="state-illustration" src="/states/no-course-matches.webp" alt="" width={800} height={600} sizes="(max-width: 400px) 60vw, 240px" />
+            <p>No courses match this selection. Remove a filter above or start again.</p>
+            <button type="button" className="btn ghost" onClick={clearFilters}>Reset search and filters</button>
           </div>
         ) : null}
       </div>

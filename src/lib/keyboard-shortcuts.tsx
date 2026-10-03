@@ -5,6 +5,7 @@ import { Keyboard } from 'lucide-react';
 import { StandardDialog } from '@/components/common/standard-dialog';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
+import { storageGet, storageSet } from "@/lib/storage";
 
 // Gap checklist Module 10's "keyboard shortcut system" -- a real, extensible registry rather
 // than a fixed switch statement, so any page/dialog can contribute its own contextual shortcut
@@ -106,7 +107,7 @@ export function KeyboardShortcutsProvider({ children }: { children: React.ReactN
     // simplest, unambiguous reading of WCAG 2.1.4's "able to turn off character key shortcuts."
     React.useEffect(() => {
         try {
-            const saved = window.localStorage.getItem(STORAGE_KEY);
+            const saved = storageGet(STORAGE_KEY);
             if (saved !== null) setEnabledState(saved !== 'false');
         } catch {
             // Private browsing / storage disabled -- shortcuts just stay enabled by default.
@@ -116,7 +117,7 @@ export function KeyboardShortcutsProvider({ children }: { children: React.ReactN
     const setEnabled = React.useCallback((next: boolean) => {
         setEnabledState(next);
         try {
-            window.localStorage.setItem(STORAGE_KEY, String(next));
+            storageSet(STORAGE_KEY, String(next));
         } catch {
             // Ignore -- the in-memory state still takes effect for this session.
         }

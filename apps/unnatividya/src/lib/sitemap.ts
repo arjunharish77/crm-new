@@ -1,4 +1,7 @@
-import { courses, universities } from "@/data/catalog";
+import { catalogLastModified } from "@/lib/catalog-snapshot";
+
+import type { CatalogReader } from "@/lib/catalog-snapshot";
+
 import { blogPosts } from "@/data/blog";
 import { feeGuides } from "@/lib/fee-guides";
 import { allComparisonPairs } from "@/lib/comparisons";
@@ -18,6 +21,7 @@ export const staticSitemapRoutes = [
   "/tools/emi-calculator",
   "/how-we-verify",
   "/about",
+  "/authors/content-team",
   "/privacy",
   "/terms",
   "/refund-policy",
@@ -46,9 +50,8 @@ export function sitemapXml(
 
 export function sitemapIndexXml(paths: string[]) {
   const host = siteUrl();
-  const now = new Date().toISOString();
   const body = paths
-    .map((path) => `<sitemap><loc>${escapeXml(`${host}${path}`)}</loc><lastmod>${now}</lastmod></sitemap>`)
+    .map((path) => `<sitemap><loc>${escapeXml(`${host}${path}`)}</loc></sitemap>`)
     .join("");
 
   return `<?xml version="1.0" encoding="UTF-8"?><sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">${body}</sitemapindex>`;
@@ -56,32 +59,31 @@ export function sitemapIndexXml(paths: string[]) {
 
 export function staticSitemapUrls() {
   const host = siteUrl();
-  const now = new Date().toISOString();
   return staticSitemapRoutes.map((route) => ({
     loc: `${host}${route}`,
-    lastmod: now,
+    lastmod: undefined,
     changefreq: "weekly" as const,
     priority: route === "" ? 1 : 0.7,
   }));
 }
 
-export function courseSitemapUrls() {
+export function courseSitemapUrls(catalog: CatalogReader) {
+  const { courses } = catalog;
   const host = siteUrl();
-  const now = new Date().toISOString();
   return courses.map((course) => ({
     loc: `${host}/courses/${course.slug}`,
-    lastmod: now,
+    lastmod: catalogLastModified(catalog, [course.id]),
     changefreq: "weekly" as const,
     priority: 0.85,
   }));
 }
 
-export function universitySitemapUrls() {
+export function universitySitemapUrls(catalog: CatalogReader) {
+  const { universities } = catalog;
   const host = siteUrl();
-  const now = new Date().toISOString();
   return universities.map((university) => ({
     loc: `${host}/universities/${university.slug}`,
-    lastmod: now,
+    lastmod: catalogLastModified(catalog, coursesForUniversity(catalog, university.id), [university.id]),
     changefreq: "weekly" as const,
     priority: 0.8,
   }));
@@ -97,12 +99,11 @@ export function blogSitemapUrls() {
   }));
 }
 
-export function feeGuideSitemapUrls() {
+export function feeGuideSitemapUrls(catalog: CatalogReader) {
   const host = siteUrl();
-  const now = new Date().toISOString();
-  return feeGuides().map((guide) => ({
+  return feeGuides(catalog).map((guide) => ({
     loc: `${host}/online-degree-guides/${guide.slug}`,
-    lastmod: now,
+    lastmod: catalogLastModified(catalog, guide.courses.map(course=>course.id)),
     changefreq: "monthly" as const,
     priority: 0.75,
   }));
@@ -110,10 +111,9 @@ export function feeGuideSitemapUrls() {
 
 export function eligibilityGuideSitemapUrls() {
   const host = siteUrl();
-  const now = new Date().toISOString();
   return allEligibilityGuides().map((guide) => ({
     loc: `${host}/online-degree-guides/${guide.slug}`,
-    lastmod: now,
+    lastmod: undefined,
     changefreq: "monthly" as const,
     priority: 0.75,
   }));
@@ -121,10 +121,9 @@ export function eligibilityGuideSitemapUrls() {
 
 export function careerScopeGuideSitemapUrls() {
   const host = siteUrl();
-  const now = new Date().toISOString();
   return allCareerScopeGuides().map((guide) => ({
     loc: `${host}/online-degree-guides/${guide.slug}`,
-    lastmod: now,
+    lastmod: undefined,
     changefreq: "monthly" as const,
     priority: 0.7,
   }));
@@ -132,32 +131,29 @@ export function careerScopeGuideSitemapUrls() {
 
 export function ugcApprovalGuideSitemapUrls() {
   const host = siteUrl();
-  const now = new Date().toISOString();
   return allUgcApprovalGuides().map((guide) => ({
     loc: `${host}/online-degree-guides/${guide.slug}`,
-    lastmod: now,
+    lastmod: undefined,
     changefreq: "monthly" as const,
     priority: 0.7,
   }));
 }
 
-export function comparisonSitemapUrls() {
+export function comparisonSitemapUrls(catalog: CatalogReader) {
   const host = siteUrl();
-  const now = new Date().toISOString();
-  return allComparisonPairs().map((pair) => ({
+  return allComparisonPairs(catalog).map((pair) => ({
     loc: `${host}/compare/${pair.key}/${pair.slug}`,
-    lastmod: now,
+    lastmod: catalogLastModified(catalog, [pair.left.id,pair.right.id]),
     changefreq: "monthly" as const,
     priority: 0.7,
   }));
 }
 
-export function specializationSitemapUrls() {
+export function specializationSitemapUrls(catalog: CatalogReader) {
   const host = siteUrl();
-  const now = new Date().toISOString();
-  return allSpecializationPages().map((page) => ({
+  return allSpecializationPages(catalog).map((page) => ({
     loc: `${host}/specializations/${page.slug}`,
-    lastmod: now,
+    lastmod: catalogLastModified(catalog, page.courses.map(course=>course.id)),
     changefreq: "monthly" as const,
     priority: 0.6,
   }));
@@ -167,7 +163,7 @@ export function xmlResponse(xml: string) {
   return new Response(xml, {
     headers: {
       "Content-Type": "application/xml; charset=utf-8",
-      "Cache-Control": "public, s-maxage=3600, stale-while-revalidate=86400",
+      "Cache-Control": "no-store",
     },
   });
 }
@@ -180,3 +176,5 @@ function escapeXml(value: string) {
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&apos;");
 }
+
+function coursesForUniversity(catalog:CatalogReader,id:string) { return catalog.courses.filter(course=>course.universityId===id).map(course=>course.id); }

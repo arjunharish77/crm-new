@@ -1,5 +1,6 @@
 import { queryOne } from "@/lib/db/query";
 import { DEFAULT_SERVER_TIME_ZONE } from "@/lib/timezone";
+import { resolveRelativeDateRange } from "@/lib/query-filters";
 
 export { DEFAULT_SERVER_TIME_ZONE };
 
@@ -132,4 +133,10 @@ export function formatExportDateValue(value: unknown, timeZone = DEFAULT_SERVER_
   if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return formatTenantDate(value, timeZone);
   if (/^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}/.test(value)) return formatTenantDateTime(value, timeZone);
   return value;
+}
+
+// Today in the workspace's time zone, as [start, end) ISO instants -- not the server's midnight
+// (the server usually runs in UTC, so "today" used to start at 5:30 am in India).
+export async function getTenantTodayRange(tenantId: string | null | undefined, now: Date = new Date()) {
+  return resolveRelativeDateRange("@today", await getTenantTimeZone(tenantId), now)!;
 }

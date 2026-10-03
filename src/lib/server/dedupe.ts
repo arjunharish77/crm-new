@@ -1,3 +1,4 @@
+import { assertTenantModule } from "@/lib/server/module-entitlements";
 import * as pgDedupe from "@/lib/repositories/dedupe-postgres";
 
 type TenantUser = {
@@ -10,33 +11,41 @@ type TenantUser = {
 type EntityType = "LEAD" | "OPPORTUNITY" | "CASE";
 
 export async function listDedupeMatchRulesForTenant(user: TenantUser) {
+  await assertTenantModule(user, "DATA_PLATFORM");
   return pgDedupe.listDedupeMatchRulesForTenant(user);
 }
 
 export async function updateDedupeMatchRuleForTenant(user: TenantUser, id: string, input: { isActive?: boolean; threshold?: number | null }) {
+  await assertTenantModule(user, "DATA_PLATFORM");
   return pgDedupe.updateDedupeMatchRuleForTenant(user, id, input);
 }
 
 export async function runDedupeScanForTenant(user: TenantUser, entityType: EntityType, limit?: number) {
+  await assertTenantModule(user, "DATA_PLATFORM");
   return pgDedupe.runDedupeScanForTenant(user, entityType, limit);
 }
 
 export async function listDedupeMatchesForTenant(user: TenantUser, entityType: EntityType, status?: "PENDING" | "MERGED" | "DISMISSED") {
+  await assertTenantModule(user, "DATA_PLATFORM");
   return pgDedupe.listDedupeMatchesForTenant(user, entityType, status);
 }
 
 export async function dismissDedupeMatchForTenant(user: TenantUser, matchId: string) {
+  await assertTenantModule(user, "DATA_PLATFORM");
   return pgDedupe.dismissDedupeMatchForTenant(user, matchId);
 }
 
 export async function mergeRecordsForTenant(user: TenantUser, input: { matchId: string; survivorId: string; fieldChoices?: Record<string, unknown> }) {
+  await assertTenantModule(user, "DATA_PLATFORM");
   return pgDedupe.mergeRecordsForTenant(user, input);
 }
 
 export async function unmergeForTenant(user: TenantUser, mergeAuditId: string) {
+  await assertTenantModule(user, "DATA_PLATFORM");
   return pgDedupe.unmergeForTenant(user, mergeAuditId);
 }
 
 export async function listMergeAuditsForTenant(user: TenantUser, entityType: EntityType) {
+  await assertTenantModule(user, "DATA_PLATFORM");
   return pgDedupe.listMergeAuditsForTenant(user, entityType);
 }

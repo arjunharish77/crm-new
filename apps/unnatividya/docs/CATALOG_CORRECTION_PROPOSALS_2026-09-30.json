@@ -1,0 +1,37 @@
+{
+  "note": "Available as a prepared, unsaved correction in the MAJMC CMS revision form. Loading does not submit, apply or publish a revision.",
+  "proposals": [
+    {
+      "courseId": "majmc-amity",
+      "status": "editorial_review_required",
+      "sourceUrl": "https://amityonline.com/master-of-arts-journalism-and-mass-communication-online",
+      "checkedAt": "2026-09-30",
+      "suggestedFieldChanges": {
+        "fee_inr": {
+          "from": 130000,
+          "to": 190000
+        }
+      },
+      "requiredCoupledReview": [
+        "Update or remove stale feePlans, fee highlights and EMI figures together",
+        "Inspect current revision baseline and refresh if changed",
+        "Confirm INR applicability and current intake before administrator application",
+        "Keep promotion-specific totals separate from base tuition"
+      ],
+      "publicationStatus": "available_in_CMS_not_saved_or_applied",
+      "coordinatedChanges": {
+        "feePlans": [
+          [
+            "Semester-wise",
+            "₹1,90,000",
+            "₹47,500 per semester"
+          ]
+        ],
+        "emi": "Confirm current financing options",
+        "highlights": "Replace total-fee highlight; remove EMI/financing highlights; preserve unrelated highlights.",
+        "scholarships": []
+      },
+      "baselineGuard": "Loader requires the proposed fee to remain INR 130000; a changed fee requires manual review."
+    }
+  ]
+}

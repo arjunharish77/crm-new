@@ -1,3 +1,6 @@
+export const dynamic = "force-dynamic";
+import { PublishedCatalogBoundary } from "@/components/published-catalog-boundary";
+import { getPublishedCatalog } from "@/lib/catalog-snapshot-server";
 import type { CSSProperties } from "react";
 import Image from "next/image";
 import Link from "next/link";
@@ -5,7 +8,7 @@ import { ApprovalBadge } from "@/components/approval-badge";
 import { JsonLd } from "@/components/json-ld";
 import { SaveButton } from "@/components/save-button";
 import { StickyMobileBar } from "@/components/sticky-mobile-bar";
-import { courses, courseWithUniversity, formatFee, universities } from "@/data/catalog";
+import { formatFee } from "@/lib/catalog-format";
 import { learningMedia, universityMedia } from "@/data/media";
 
 const homeFaqs: Array<[string, string]> = [
@@ -15,6 +18,13 @@ const homeFaqs: Array<[string, string]> = [
   ["How do you verify fees and approvals?", "We check every fee, approval and admission date against the university's own published pages each admission cycle, and flag anything we can't independently confirm — see our full verification process."],
   ["Will my certificate say \"online\"?", "No. A UGC-entitled online degree carries the same certificate as the on-campus program — there is no \"online\" marking that affects how employers or government bodies treat it."],
 ];
+
+const streamIllustrations: Record<string, string> = {
+  Management: "management",
+  "IT & Computers": "it-computer-applications",
+  Commerce: "commerce-finance",
+  "Arts & Humanities": "arts-humanities",
+};
 
 const STREAMS = ["Management", "IT & Computers", "Commerce", "Arts & Humanities"] as const;
 
@@ -61,7 +71,9 @@ const secondaryButton: CSSProperties = {
 
 const universityDisplayName = (id: string, name: string) => id === "amity" ? "Amity University Online" : name;
 
-export default function HomePage() {
+export default async function HomePage() {
+  const catalog = await getPublishedCatalog();
+  const { courses, courseWithUniversity, universities } = catalog;
   // Deliberately spread across all 3 universities (includes an SMU pick), matching the design's
   // curated set rather than the catalog's default sort order.
   const popularCourseIds = ["mba-muj", "bca-muj", "mca-muj", "mba-smu", "bcom-muj", "msc-data-science-amity"];
@@ -94,7 +106,7 @@ export default function HomePage() {
     mainEntity: homeFaqs.map(([question, answer]) => ({ "@type": "Question", name: question, acceptedAnswer: { "@type": "Answer", text: answer } })),
   };
 
-  return (
+  return <PublishedCatalogBoundary>{(
     <>
       <JsonLd data={faqJsonLd} />
       <section style={{ background: "linear-gradient(180deg,#F4F3FC 0%,#fff 100%)", borderBottom: "1px solid #F5F5F5" }}>
@@ -102,27 +114,27 @@ export default function HomePage() {
           className="uv-home-hero-grid"
           style={{
             ...pageWidth,
-            paddingTop: 56,
-            paddingBottom: 48,
+            paddingTop: 40,
+            paddingBottom: 36,
             display: "grid",
             gridTemplateColumns: "1.05fr 0.95fr",
-            gap: 56,
+            gap: 40,
             alignItems: "start",
           }}
         >
           <div>
             <div style={{ display: "inline-flex", alignItems: "center", gap: 8, background: "#fff", border: "1px solid #CFDAE6", borderRadius: 999, padding: "6px 14px", fontSize: 12, fontWeight: 600, color: "#696868" }}>
               <span style={{ width: 7, height: 7, borderRadius: "50%", background: "#2E7D32", display: "inline-block", flexShrink: 0 }} aria-hidden="true" />
-              Only UGC-entitled degrees · re-verified every admission cycle
+              Explore undergraduate and postgraduate degrees
             </div>
-            <h1 style={{ fontSize: 43, lineHeight: 1.1, fontWeight: 700, color: "#363634", margin: "18px 0 14px", textWrap: "pretty" }}>
-              Every online degree worth your money, in one comparison.
+            <h1 className="uv-home-title" style={{ fontSize: 43, lineHeight: 1.1, fontWeight: 700, color: "#363634", margin: "18px 0 14px", textWrap: "pretty" }}>
+              Find an online degree that fits you.
             </h1>
-            <p style={{ fontSize: 17, lineHeight: 1.55, color: "#696868", margin: "0 0 26px", maxWidth: 520 }}>
-              Compare fees, curriculum, placements and reviews across Manipal, Sikkim Manipal, Amity and more — then talk to an unbiased counsellor, free.
+            <p style={{ fontSize: 16, lineHeight: 1.55, color: "#555", margin: "0 0 20px", maxWidth: 520 }}>
+              Explore Manipal University Jaipur, Sikkim Manipal University and Amity Online. Compare tuition, entry requirements and study options.
             </p>
-            <form action="/courses" method="get" style={{ display: "flex", gap: 0, maxWidth: 520, border: "1.5px solid #CFDAE6", borderRadius: 6, overflow: "hidden", background: "#fff" }}>
-              <input name="q" aria-label="Search courses" placeholder="Search a course, e.g. Online MBA" style={{ flex: 1, height: 52, border: "none", padding: "0 18px", fontSize: 15, color: "#555", outline: "none", minWidth: 0 }} />
+            <form className="uv-home-search" role="search" aria-label="Find a course" action="/courses" method="get" style={{ display: "flex", gap: 0, maxWidth: 520, border: "1.5px solid #CFDAE6", borderRadius: 6, overflow: "hidden", background: "#fff" }}>
+              <input name="q" maxLength={200} aria-label="Search courses" placeholder="Search a course, e.g. Online MBA" style={{ flex: 1, height: 52, border: "none", padding: "0 18px", fontSize: 15, color: "#555", outline: "none", minWidth: 0 }} />
               <button
                 type="submit"
                 data-track-event="course_search"
@@ -133,45 +145,34 @@ export default function HomePage() {
               </button>
             </form>
             <div style={{ display: "flex", gap: 8, marginTop: 14, flexWrap: "wrap", alignItems: "center" }}>
-              <span style={{ fontSize: 13, color: "#707070" }}>Popular:</span>
+              <span style={{ fontSize: 13, color: "#707070" }}>Browse:</span>
               {[
-                ["Online MBA", "/courses/online-mba-manipal-university-jaipur"],
-                ["Online BCA", "/courses/online-bca-manipal-university-jaipur"],
-                ["Online MCA", "/courses/online-mca-manipal-university-jaipur"],
-                ["Online B.Com", "/courses/online-bcom-manipal-university-jaipur"],
+                ["Online MBA", "/courses?q=MBA"],
+                ["Online BCA", "/courses?q=BCA"],
+                ["Online MCA", "/courses?q=MCA"],
+                ["Online B.Com", "/courses?q=BCom"],
               ].map(([label, href]) => (
                 <Link href={href} key={label} style={{ fontSize: 13, fontWeight: 600, color: "#555", border: "1px solid #D8D7D6", borderRadius: 999, padding: "5px 12px" }}>
                   {label}
                 </Link>
               ))}
             </div>
-            <div style={{ display: "flex", gap: 36, marginTop: 36, flexWrap: "wrap" }}>
-              {[
-                [String(courses.length), "degree programs"],
-                ["3", "verified universities"],
-                ["1.75L+", "learners guided"],
-              ].map(([value, label]) => (
-                <div key={label}>
-                  <div style={{ fontSize: 26, fontWeight: 700, color: "#363634" }}>{value}</div>
-                  <div style={{ fontSize: 13, color: "#707070" }}>{label}</div>
-                </div>
-              ))}
-            </div>
+            <p className="uv-home-catalog-summary"><Link href="/courses">{courses.length} programs</Link><span aria-hidden="true"> · </span><Link href="/universities">{universities.length} universities</Link></p>
           </div>
 
-          <div style={{ position: "relative" }}>
-            <div style={{ height: 420, borderRadius: 8, overflow: "hidden", position: "relative" }}>
+          <div className="uv-home-visual" style={{ position: "relative" }}>
+            <div className="uv-home-image" style={{ height: 360, borderRadius: 8, overflow: "hidden", position: "relative" }}>
               <Image src={learningMedia.src} alt={learningMedia.alt} fill sizes="(max-width: 900px) calc(100vw - 48px), 480px" style={{ objectFit: "cover" }} priority />
             </div>
             {cheapestMba ? (
-              <div style={{ position: "absolute", left: -16, bottom: 74, background: "#fff", borderRadius: 8, boxShadow: "0 8px 24px rgba(0,0,0,0.16)", padding: "12px 16px", maxWidth: 230 }}>
+              <div className="uv-home-visual-fact" style={{ position: "absolute", left: -16, bottom: 74, background: "#fff", borderRadius: 8, boxShadow: "0 8px 24px rgba(0,0,0,0.16)", padding: "12px 16px", maxWidth: 230 }}>
                 <div style={{ fontSize: 11, color: "#707070", fontWeight: 600 }}>Lowest MBA in our catalog</div>
                 <div style={{ fontSize: 18, fontWeight: 700, color: "#363634", marginTop: 2 }}>{formatFee(cheapestMba.fee)}</div>
                 <div style={{ fontSize: 12, color: "#696868", marginTop: 2 }}>{cheapestMba.university.shortName} · EMI {cheapestMba.emi}</div>
               </div>
             ) : null}
             {topAvgPackageUniversity ? (
-              <div style={{ position: "absolute", right: -16, top: 24, background: "#fff", borderRadius: 8, boxShadow: "0 8px 24px rgba(0,0,0,0.16)", padding: "12px 16px", maxWidth: 200 }}>
+              <div className="uv-home-visual-fact" style={{ position: "absolute", right: -16, top: 24, background: "#fff", borderRadius: 8, boxShadow: "0 8px 24px rgba(0,0,0,0.16)", padding: "12px 16px", maxWidth: 200 }}>
                 <div style={{ fontSize: 11, color: "#707070", fontWeight: 600 }}>Average package</div>
                 <div style={{ fontSize: 18, fontWeight: 700, color: "#363634", marginTop: 2 }}>{topAvgPackageUniversity.avgPackage}</div>
                 <div style={{ fontSize: 12, color: "#696868", marginTop: 2 }}>{topAvgPackageUniversity.shortName} online learners</div>
@@ -197,11 +198,11 @@ export default function HomePage() {
         <div>
           <div style={{ display: "inline-flex", alignItems: "center", gap: 6, background: "rgba(84,76,200,0.10)", color: "#544CC8", borderRadius: 999, padding: "5px 12px", fontSize: 12, fontWeight: 700 }}>
             <span style={{ width: 6, height: 6, borderRadius: "50%", background: "linear-gradient(135deg,#4F46E5,#7C3AED)", display: "inline-block" }} aria-hidden="true" />
-            UnnatiAI
+            Course matching
           </div>
-          <h2 style={{ ...sectionTitle, margin: "14px 0 10px" }}>Answer five questions. Get a shortlist you can defend.</h2>
+          <h2 style={{ ...sectionTitle, margin: "14px 0 10px" }}>Start with your goals and budget.</h2>
           <p style={{ fontSize: 15, color: "#696868", lineHeight: 1.6, margin: "0 0 20px", maxWidth: 460 }}>
-            The recommender scores all {courses.length} programs against your goal, budget, schedule and eligibility — then explains why each one made the cut.
+            Explore an initial shortlist based on your preferences. Check the course’s entry requirements and confirm eligibility with the university before applying.
           </p>
           <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
             <Link href="/recommender" style={{ height: 46, display: "inline-flex", alignItems: "center", padding: "0 24px", background: "linear-gradient(135deg,#4F46E5 0%,#7C3AED 100%)", color: "#fff", borderRadius: 4, fontSize: 15, fontWeight: 700 }}>
@@ -213,10 +214,10 @@ export default function HomePage() {
         </div>
         <div style={{ background: "#fff", border: "1px solid #CFDAE6", borderRadius: 8, padding: 24, boxShadow: "0 1px 3px rgba(0,0,0,0.06)" }}>
           <div style={{ height: 160, borderRadius: 6, overflow: "hidden", position: "relative" }}>
-            <Image src="/hero/recommender-preview.webp" alt="AI recommender preview" fill sizes="(max-width: 900px) calc(100vw - 98px), 480px" style={{ objectFit: "cover" }} />
+            <Image src="/hero/recommender-preview.webp" alt="Course matching preview" fill sizes="(max-width: 900px) calc(100vw - 98px), 480px" style={{ objectFit: "cover" }} />
           </div>
           <div style={{ fontSize: 13, color: "#696868", marginTop: 14, lineHeight: 1.5 }}>
-            &ldquo;Ranked by fit with your goal, budget, eligibility and schedule — not by who pays us more.&rdquo;
+            Preference-based suggestions are a starting point, not an admission decision.
           </div>
         </div>
       </section>
@@ -228,7 +229,7 @@ export default function HomePage() {
             <Link href="/courses" style={{ fontSize: 14, fontWeight: 600 }}>Browse all {courses.length} →</Link>
           </div>
           <p style={{ fontSize: 14, color: "#707070", margin: "0 0 24px" }}>
-            Real fees from the current admission cycle. No inflated &ldquo;starting from&rdquo; numbers.
+            Compare listed tuition and duration, then open a course for its requirements and current fee details.
           </p>
           <div className="uv-home-three-grid" style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 20 }}>
             {popular.map((course) => (
@@ -263,7 +264,7 @@ export default function HomePage() {
                   >
                     View course
                   </Link>
-                  <Link href={`/lead?course=${course.id}&intent=enquire`} data-open-lead style={{ ...secondaryButton, flex: 1 }}>Enquire</Link>
+                  <Link href={`/lead?course=${course.id}&intent=enquire`} data-open-lead style={{ ...secondaryButton, flex: 1 }}>Apply now</Link>
                 </div>
               </article>
             ))}
@@ -283,6 +284,7 @@ export default function HomePage() {
               className="stream-card"
               key={entry.stream}
             >
+              <Image className="stream-illustration" src={`/streams/${streamIllustrations[entry.stream]}.webp`} alt="" width={1200} height={800} sizes="(max-width: 640px) 90vw, (max-width: 900px) 45vw, 260px" />
               <strong>{entry.stream}</strong>
               <small>{entry.count} degree{entry.count === 1 ? "" : "s"} · {entry.examples}</small>
               {entry.fromFee ? <small>from {entry.fromFee}</small> : null}
@@ -441,7 +443,7 @@ export default function HomePage() {
           ))}
         </div>
       </section>
-      <StickyMobileBar primary={{ label: "Get AI shortlist", href: "/recommender" }} secondary={{ label: "WhatsApp", href: "https://wa.me/917303088694", external: true }} />
+      <StickyMobileBar primary={{ label: "Apply now", href: "/lead?intent=enquire", openLead: true }} secondary={{ label: "Browse courses", href: "/courses" }} />
     </>
-  );
+  )}</PublishedCatalogBoundary>;
 }

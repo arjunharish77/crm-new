@@ -40,6 +40,6 @@ describe("Tenant isolation wrapper boundary", () => {
 
     const list = await listLeadsForTenant(tenantAUser, 1, 50);
     expect(list.data).toEqual([{ id: "lead-a1", tenantId: "tenant-a" }]);
-    expect(leadRepoMocks.listLeadsForTenant).toHaveBeenCalledWith(tenantAUser, 1, 50, null);
+    expect(leadRepoMocks.listLeadsForTenant).toHaveBeenCalledWith(tenantAUser, 1, 50, null, {});
   });
 });

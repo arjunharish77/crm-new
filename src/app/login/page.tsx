@@ -1,12 +1,15 @@
 "use client";
 
-import { useState } from "react";
+import Link from "next/link";
+import { PasswordRuleList, passwordMeetsRule, type PasswordRule } from "@/components/account/password-rule";
+import { useEffect, useState } from "react";
 import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { useAuth } from "@/providers/auth-provider";
 import { apiFetch } from "@/lib/api";
 import { useRouter } from "next/navigation";
+import { safeReturnPath } from "@/lib/safe-return-path";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -16,10 +19,12 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Mail, Lock, Eye, EyeOff, LogIn, Loader2, ShieldCheck, KeyRound } from "lucide-react";
 import { motion } from "framer-motion";
 import { fadeInUp } from "@/lib/motion";
+import { BrandLogo } from "@/components/brand/brand-logo";
 
 const formSchema = z.object({
-    email: z.string().email("Invalid email address"),
-    password: z.string().min(6, "Password must be at least 6 characters"),
+    email: z.string().email("Enter your email address, like name@company.com"),
+    // Only required here: the workspace's rule applies when a password is set, not when signing in.
+    password: z.string().min(1, "Enter your password"),
 });
 
 export default function LoginPage() {
@@ -28,12 +33,23 @@ export default function LoginPage() {
     const [submitError, setSubmitError] = useState("");
     const [loading, setLoading] = useState(false);
     const [showPassword, setShowPassword] = useState(false);
+    const [resetAvailable, setResetAvailable] = useState(false);
+    useEffect(() => {
+        fetch("/api/auth/forgot-password").then((response) => response.json()).then((data) => setResetAvailable(!!data?.available)).catch(() => setResetAvailable(false));
+    }, []);
 
     // "Default landing page" (gap checklist Module 10's user workspace personalization item) --
     // redirects to the user's own saved preference (if any) instead of always /dashboard.
     // Falls back to /dashboard on any failure (e.g. a fresh account with no preference set yet).
     async function redirectAfterLogin() {
         await login();
+        // A link from an email or notification (?from=, added by the proxy and the sign-in
+        // redirects) wins over the saved landing page (UI/UX plan B16).
+        const returnTo = safeReturnPath(new URLSearchParams(window.location.search).get("from"), window.location.origin);
+        if (returnTo) {
+            router.push(returnTo);
+            return;
+        }
         try {
             const personalization = await apiFetch("/settings/personalization");
             router.push(personalization?.defaultLandingPage || "/dashboard");
@@ -56,6 +72,8 @@ export default function LoginPage() {
     const [newPassword, setNewPassword] = useState("");
     const [confirmNewPassword, setConfirmNewPassword] = useState("");
     const [changingPassword, setChangingPassword] = useState(false);
+    // The workspace's password rule, sent with the expiry response.
+    const [passwordRule, setPasswordRule] = useState<PasswordRule | null>(null);
 
     const { control, handleSubmit, formState: { errors } } = useForm<z.infer<typeof formSchema>>({
         resolver: zodResolver(formSchema),
@@ -82,6 +100,7 @@ export default function LoginPage() {
 
             if (res.passwordExpired) {
                 setPasswordChangeToken(res.passwordChangeToken);
+                setPasswordRule(res.passwordRule ?? null);
                 return;
             }
 
@@ -109,6 +128,7 @@ export default function LoginPage() {
             if (res.passwordExpired) {
                 setMfaToken(null);
                 setPasswordChangeToken(res.passwordChangeToken);
+                setPasswordRule(res.passwordRule ?? null);
                 return;
             }
 
@@ -123,10 +143,14 @@ export default function LoginPage() {
 
     async function onChangeExpiredPassword(event: React.FormEvent) {
         event.preventDefault();
-        if (changingPassword || newPassword.length < 6) return;
+        if (changingPassword) return;
         setSubmitError("");
+        if (!passwordMeetsRule(passwordRule, newPassword)) {
+            setSubmitError("The new password doesn't meet the rule below it.");
+            return;
+        }
         if (newPassword !== confirmNewPassword) {
-            setSubmitError("New passwords do not match");
+            setSubmitError("The new passwords don't match.");
             return;
         }
         setChangingPassword(true);
@@ -152,12 +176,13 @@ export default function LoginPage() {
                 animate="animate"
                 className="w-full max-w-[440px]"
             >
-                <Card className="overflow-hidden rounded-[28px] shadow-[0_4px_20px_rgba(0,0,0,0.05)]">
+                <BrandLogo className="mx-auto mb-6 h-9" />
+                <Card className="overflow-hidden rounded-3xl shadow-[0_4px_20px_rgba(0,0,0,0.05)]">
                     <div className="px-5 pt-6 pb-4 text-center sm:px-8">
                         <div className="mx-auto mb-6 flex size-12 items-center justify-center rounded-xl bg-primary text-primary-foreground">
                             {passwordChangeToken ? <KeyRound className="size-5" /> : mfaToken ? <ShieldCheck className="size-5" /> : <LogIn className="size-5" />}
                         </div>
-                        <h1 className="mb-1 text-2xl font-extrabold tracking-[-0.5px]">
+                        <h1 className="mb-1 text-2xl font-semibold tracking-[-0.5px]">
                             {passwordChangeToken ? "Update your password" : mfaToken ? "Two-factor authentication" : "Welcome back"}
                         </h1>
                         <p className="text-sm text-muted-foreground">
@@ -174,18 +199,20 @@ export default function LoginPage() {
                         <CardContent className="p-5 sm:p-8">
                             <form onSubmit={onChangeExpiredPassword} className="space-y-6">
                                 <div className="space-y-2">
-                                    <Label htmlFor="expired-password">New Password</Label>
+                                    <Label htmlFor="expired-password">New password</Label>
                                     <Input
                                         type="password"
                                         id="expired-password" autoComplete="new-password" required
                                         value={newPassword}
                                         onChange={(event) => setNewPassword(event.target.value)}
                                         disabled={changingPassword}
+                                        aria-describedby="expired-password-rule"
                                         autoFocus
                                     />
+                                    <PasswordRuleList id="expired-password-rule" rule={passwordRule} password={newPassword} />
                                 </div>
                                 <div className="space-y-2">
-                                    <Label htmlFor="expired-confirm">Confirm New Password</Label>
+                                    <Label htmlFor="expired-confirm">Confirm new password</Label>
                                     <Input
                                         type="password"
                                         id="expired-confirm" autoComplete="new-password" required
@@ -194,8 +221,8 @@ export default function LoginPage() {
                                         disabled={changingPassword}
                                     />
                                 </div>
-                                <Button type="submit" disabled={changingPassword || newPassword.length < 6} className="min-h-14 h-auto w-full whitespace-normal py-3 rounded-2xl text-base font-bold">
-                                    {changingPassword ? <><Loader2 className="size-5 animate-spin" /> Updating…</> : "Update Password & Sign In"}
+                                <Button type="submit" disabled={changingPassword || !newPassword || !confirmNewPassword} className="min-h-14 h-auto w-full whitespace-normal py-3 rounded-2xl text-base font-bold">
+                                    {changingPassword ? <><Loader2 className="size-5 animate-spin" /> Updating…</> : "Update password and sign in"}
                                 </Button>
                             </form>
                         </CardContent>
@@ -205,7 +232,8 @@ export default function LoginPage() {
                                 <div className="space-y-2">
                                     <Label htmlFor="mfa-code">Authentication code</Label>
                                     <Input
-                                        id="mfa-code" autoComplete="one-time-code"
+                                        id="mfa-code" autoComplete="one-time-code" autoCapitalize="off" autoCorrect="off" spellCheck={false}
+                                        aria-describedby="mfa-code-help"
                                         value={mfaCode}
                                         onChange={(event) => setMfaCode(event.target.value.replace(/\s/g, "").slice(0, 12))}
                                         placeholder="000000"
@@ -213,7 +241,7 @@ export default function LoginPage() {
                                         disabled={verifying}
                                         className="text-center text-lg tracking-widest"
                                     />
-                                    <p className="text-xs text-muted-foreground">You can also use one of your backup codes.</p>
+                                    <p id="mfa-code-help" className="text-sm text-muted-foreground">The 6-digit code from your authenticator app, or one of your backup codes.</p>
                                 </div>
 
                                 <label className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -269,7 +297,11 @@ export default function LoginPage() {
                                 control={control}
                                 render={({ field }) => (
                                     <div className="space-y-2">
-                                        <Label htmlFor="login-password">Password</Label>
+                                        <div className="flex items-baseline justify-between gap-2">
+                                            <Label htmlFor="login-password">Password</Label>
+                                            {/* Shown only when the deployment can send the email (decision 16). */}
+                                            {resetAvailable ? <Link href="/forgot-password" className="text-sm text-primary hover:underline">Forgot password?</Link> : null}
+                                        </div>
                                         <div className="relative">
                                             <Lock className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
                                             <Input
@@ -291,7 +323,7 @@ export default function LoginPage() {
                                             </button>
                                         </div>
                                         {errors.password ? (
-                                            <p className="text-xs text-destructive">{errors.password.message}</p>
+                                            <p className="text-sm text-destructive">{errors.password.message}</p>
                                         ) : null}
                                     </div>
                                 )}

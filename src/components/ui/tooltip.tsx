@@ -5,14 +5,18 @@ import * as TooltipPrimitive from "@radix-ui/react-tooltip"
 
 import { cn } from "@/lib/utils"
 
+// One app-level provider (UI/UX plan §11.6 M), mounted in the root layout: tooltips open after
+// 400ms, and moving between triggers within 300ms skips the delay.
 function TooltipProvider({
-  delayDuration = 0,
+  delayDuration = 400,
+  skipDelayDuration = 300,
   ...props
 }: React.ComponentProps<typeof TooltipPrimitive.Provider>) {
   return (
     <TooltipPrimitive.Provider
       data-slot="tooltip-provider"
       delayDuration={delayDuration}
+      skipDelayDuration={skipDelayDuration}
       {...props}
     />
   )
@@ -21,11 +25,7 @@ function TooltipProvider({
 function Tooltip({
   ...props
 }: React.ComponentProps<typeof TooltipPrimitive.Root>) {
-  return (
-    <TooltipProvider>
-      <TooltipPrimitive.Root data-slot="tooltip" {...props} />
-    </TooltipProvider>
-  )
+  return <TooltipPrimitive.Root data-slot="tooltip" {...props} />
 }
 
 function TooltipTrigger({
@@ -52,7 +52,7 @@ function TooltipContent({
         {...props}
       >
         {children}
-        <TooltipPrimitive.Arrow className="bg-inverse-surface z-50 size-2.5 translate-y-[calc(-50%_-_2px)] rotate-45 rounded-[2px]" />
+        <TooltipPrimitive.Arrow className="bg-inverse-surface z-50 size-2.5 translate-y-[calc(-50%_-_2px)] rotate-45 rounded-xs" />
       </TooltipPrimitive.Content>
     </TooltipPrimitive.Portal>
   )

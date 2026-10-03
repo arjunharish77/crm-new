@@ -1,3 +1,4 @@
+import { getPublishedCatalog } from "@/lib/catalog-snapshot-server";
 import type { Metadata } from "next";
 import { generateProgrammaticSeoCandidates } from "@/lib/programmatic-seo";
 
@@ -6,8 +7,9 @@ export const metadata: Metadata = {
   robots: { index: false, follow: false, nocache: true },
 };
 
-export default function ProgrammaticSeoPage() {
-  const candidates = generateProgrammaticSeoCandidates();
+export default async function ProgrammaticSeoPage() {
+  const catalog = await getPublishedCatalog();
+  const candidates = generateProgrammaticSeoCandidates(catalog);
   const live = candidates.filter((candidate) => candidate.routeType === "LIVE");
   const future = candidates.filter((candidate) => candidate.routeType === "CANDIDATE");
   const intents = [...new Set(candidates.map((candidate) => candidate.intent))];

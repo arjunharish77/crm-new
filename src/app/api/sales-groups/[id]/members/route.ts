@@ -1,11 +1,11 @@
 import { NextResponse } from "next/server";
-import { requireCurrentUser } from "@/lib/server/auth";
+import { requireCurrentUser, requireTenantAdmin } from "@/lib/server/auth";
 import { badRequest, forbidden, serverError, unauthorized } from "@/lib/server/http";
 import { addSalesGroupMemberForTenant } from "@/lib/server/admin-modules";
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
-    const user = await requireCurrentUser(request);
+    const user = await requireTenantAdmin(request);
     if (!user.tenantId) return forbidden("Tenant context required");
     const { id } = await params;
     const body = await request.json().catch(() => null);
@@ -14,6 +14,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     return NextResponse.json(member);
   } catch (error) {
     if (error instanceof Error && error.message === "UNAUTHORIZED") return unauthorized();
+    if (error instanceof Error && error.message === "FORBIDDEN") return forbidden("Only admins can do this");
     return serverError("Failed to add sales group member", error);
   }
 }

@@ -1,5 +1,6 @@
 'use client';
 
+import { useAskText, useConfirm } from "@/components/common/dialogs-provider";
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { CheckCircle2, RotateCw, ShieldOff, XCircle } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -80,8 +81,8 @@ interface TenantSummary {
 }
 
 const HEALTH_STATUS_CLASSNAMES: Record<string, string> = {
-    OK: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400',
-    DEGRADED: 'border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-400',
+    OK: 'border-status-success bg-status-success text-status-success-foreground',
+    DEGRADED: 'border-status-warning bg-status-warning text-status-warning-foreground',
     ERROR: 'border-destructive/30 bg-destructive/10 text-destructive',
     UNKNOWN: 'border-muted bg-muted text-muted-foreground',
 };
@@ -89,11 +90,13 @@ const HEALTH_STATUS_CLASSNAMES: Record<string, string> = {
 const TRUST_LEVELS = ['UNVERIFIED', 'VERIFIED', 'TRUSTED'] as const;
 const TRUST_LEVEL_CLASSNAMES: Record<string, string> = {
     UNVERIFIED: 'border-muted bg-muted text-muted-foreground',
-    VERIFIED: 'border-blue-500/30 bg-blue-500/10 text-blue-700 dark:text-blue-400',
-    TRUSTED: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400',
+    VERIFIED: 'border-status-info bg-status-info text-status-info-foreground',
+    TRUSTED: 'border-status-success bg-status-success text-status-success-foreground',
 };
 
 export default function PlatformMarketplacePage() {
+    const confirm = useConfirm();
+    const askText = useAskText();
     const [apps, setApps] = useState<PlatformAdminApp[]>([]);
     const [healthOverview, setHealthOverview] = useState<Record<string, number> | null>(null);
     const [pendingVersions, setPendingVersions] = useState<PendingVersion[]>([]);
@@ -153,18 +156,25 @@ export default function PlatformMarketplacePage() {
     };
 
     const blockTenant = async (app: PlatformAdminApp) => {
-        const tenantName = window.prompt(`Block which tenant from installing "${app.name}"? Enter the exact tenant name.`) ?? '';
-        if (!tenantName.trim()) return;
-        const tenant = tenants.find((t) => t.name.toLowerCase() === tenantName.trim().toLowerCase());
-        if (!tenant) {
-            toast.error(`No tenant found named "${tenantName}"`);
-            return;
-        }
-        if (tenant.id === app.ownerTenantId) {
-            toast.error("Can't block an app's own owning tenant");
-            return;
-        }
-        const reason = window.prompt('Reason (shown in the audit trail)?');
+        const findTenant = (name: string) => tenants.find((t) => t.name.toLowerCase() === name.trim().toLowerCase());
+        const tenantName = await askText({
+            title: `Block a workspace from “${app.name}”`,
+            description: "It can't install the app, and an existing install stops working.",
+            label: "Workspace name",
+            confirmLabel: "Continue",
+            singleLine: true,
+            required: true,
+            validate: (value) => {
+                const match = findTenant(value);
+                if (!match) return "No workspace has that name";
+                if (match.id === app.ownerTenantId) return "This is the workspace that owns the app";
+                return null;
+            },
+        });
+        if (tenantName === null) return;
+        const tenant = findTenant(tenantName);
+        if (!tenant) return;
+        const reason = await askText({ title: `Block ${tenant.name}?`, label: "Reason (optional, kept in the audit trail)", confirmLabel: "Block workspace", destructive: true });
         if (reason === null) return;
         setBusyId(`block:${app.id}`);
         try {
@@ -194,9 +204,8 @@ export default function PlatformMarketplacePage() {
     const reviewVersion = async (version: PendingVersion, action: 'approve' | 'reject') => {
         let reason: string | null = null;
         if (action === 'reject') {
-            reason = window.prompt(`Reason for rejecting "${version.appName}" v${version.version}?`);
+            reason = await askText({ title: `Reject ${version.appName} v${version.version}?`, description: "The developer sees the reason.", label: "Reason (optional)", confirmLabel: "Reject version", destructive: true });
             if (reason === null) return;
-            if (!reason && !window.confirm('Reject without a reason?')) return;
         }
         setReviewingId(version.id);
         try {
@@ -223,6 +232,17 @@ export default function PlatformMarketplacePage() {
     // capabilities", built per explicit user decision: any write-scope permission an install
     // requested (at initial approval or a later upgrade) needs this separate sign-off.
     const reviewPlatformPermissionChange = async (change: PendingPlatformPermissionChange, action: 'approve' | 'reject') => {
+        // The reject endpoint takes no reason (only tenantId), so this is a plain confirm.
+        if (action === 'reject') {
+            const tenantName = tenants.find((t) => t.id === change.tenantId)?.name ?? 'this workspace';
+            const ok = await confirm({
+                title: `Reject write access for “${change.appName}”?`,
+                description: `The request from ${tenantName} is cleared and the app keeps only the access it already has.`,
+                confirmLabel: 'Reject request',
+                destructive: true,
+            });
+            if (!ok) return;
+        }
         setPermissionReviewingId(change.id);
         try {
             await apiFetch(`/platform-admin/marketplace/installs/${change.id}/${action}-platform-permissions`, {
@@ -239,9 +259,8 @@ export default function PlatformMarketplacePage() {
     };
 
     const unpublishApp = async (app: PlatformAdminApp) => {
-        const reason = window.prompt(`Reason for unpublishing "${app.name}" (existing installs are unaffected)?`);
+        const reason = await askText({ title: `Unpublish “${app.name}”?`, description: "It leaves the catalog. Workspaces that already installed it keep it.", label: "Reason (optional, kept in the audit trail)", confirmLabel: "Unpublish", destructive: true });
         if (reason === null) return;
-        if (!reason && !window.confirm('Unpublish without a reason?')) return;
         setBusyId(`unpublish:${app.id}`);
         try {
             await apiFetch(`/platform-admin/marketplace/apps/${app.id}/unpublish`, { method: 'POST', body: JSON.stringify({ reason: reason || null }) });
@@ -255,9 +274,8 @@ export default function PlatformMarketplacePage() {
     };
 
     const suspendApp = async (app: PlatformAdminApp) => {
-        const reason = window.prompt(`Reason for suspending "${app.name}" (shown in the audit trail)?`);
+        const reason = await askText({ title: `Suspend “${app.name}”?`, description: "It stops working in every workspace that installed it until it is reinstated.", label: "Reason (optional, kept in the audit trail)", confirmLabel: "Suspend app", destructive: true });
         if (reason === null) return;
-        if (!reason && !window.confirm('Suspend without a reason?')) return;
         setBusyId(app.id);
         try {
             await apiFetch(`/platform-admin/marketplace/apps/${app.id}/suspend`, {
@@ -275,7 +293,7 @@ export default function PlatformMarketplacePage() {
 
     const rotateSecret = async (app: PlatformAdminApp) => {
         if (!app.tenantId) return;
-        if (!window.confirm(`Force-rotate "${app.tenantName}"'s credential for "${app.name}"? That tenant will need to update their integration.`)) return;
+        if (!(await confirm({ title: `Rotate ${app.tenantName}'s credential for “${app.name}”?`, description: "The current credential stops working straight away, so that workspace has to update its integration.", confirmLabel: "Rotate credential", destructive: true }))) return;
         setBusyId(`${app.id}:${app.tenantId}`);
         try {
             await apiFetch(`/platform-admin/marketplace/apps/${app.id}/rotate-secret`, { method: 'POST', body: JSON.stringify({ tenantId: app.tenantId }) });
@@ -432,7 +450,7 @@ export default function PlatformMarketplacePage() {
                         <div className="mt-4 space-y-2 border-t pt-4">
                             <p className="text-xs font-medium text-muted-foreground">Suspected provider-wide outages</p>
                             {suspectedOutages.map((outage) => (
-                                <div key={outage.hostname} className="flex min-w-0 flex-wrap items-center justify-between gap-2 break-all rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm">
+                                <div key={outage.hostname} className="flex min-w-0 flex-wrap items-center justify-between gap-2 break-all rounded-md border border-status-warning bg-status-warning px-3 py-2 text-sm">
                                     <span className="font-medium">{outage.hostname}</span>
                                     <span className="text-xs text-muted-foreground">{outage.affectedAppCount} apps currently failing (cross-tenant)</span>
                                 </div>

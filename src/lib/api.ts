@@ -1,3 +1,4 @@
+import { loginPathFromHere } from './safe-return-path';
 import { toast } from "sonner";
 
 import { getUserFriendlyError } from './error-utils';
@@ -86,7 +87,7 @@ export async function apiFetch<T = any>(endpoint: string, options: RequestInit =
             if (response.status === 401 && typeof window !== 'undefined') {
                 // Avoid redirect loop if already on login
                 if (!window.location.pathname.includes('/login')) {
-                    window.location.href = '/login?expired=true';
+                    window.location.href = loginPathFromHere({ expired: 'true' });
                 }
             }
 
@@ -122,7 +123,7 @@ export async function apiFetch<T = any>(endpoint: string, options: RequestInit =
 
             // Create error with user-friendly message
             const error: any = new Error(
-                errorData.code === "DUPLICATE_RULE_BLOCK" ? errorMessage : getUserFriendlyError({
+                ["DUPLICATE_RULE_BLOCK", "MODULE_DEPENDENCY", "MODULE_DISABLED", "USAGE_LIMIT_REACHED"].includes(errorData.code) ? errorMessage : getUserFriendlyError({
                     message: errorMessage,
                     status: response.status,
                     statusText: response.statusText,

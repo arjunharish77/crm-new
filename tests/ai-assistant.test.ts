@@ -128,6 +128,9 @@ vi.mock("@/lib/server/module-entitlements", () => ({
   assertModuleEnabled: vi.fn(async (tenantId: string, moduleKey: string) => {
     if (!state.moduleEnabled) throw new Error(`MODULE_DISABLED:${moduleKey}`);
   }),
+  assertTenantModule: vi.fn(async (user: { isPlatformAdmin?: boolean }, moduleKey: string) => {
+    if (!state.moduleEnabled && !user.isPlatformAdmin) throw new Error(`MODULE_DISABLED:${moduleKey}`);
+  }),
 }));
 
 const queueCommunicationForTenantMock = vi.fn(async () => ({ id: "outbox-1", status: "QUEUED" }));

@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { CheckCircle2, Download, Files, ListChecks } from "lucide-react";
 import { toast } from "sonner";
 import { apiFetch } from "@/lib/api";
@@ -64,6 +65,7 @@ export function QueueExportButton({
   variant = "outline",
   disabled = false,
 }: QueueExportButtonProps) {
+  const router = useRouter();
   const [loading, setLoading] = React.useState(false);
   const [open, setOpen] = React.useState(false);
   // XLSX/PDF (gap checklist Module 17, item 19) only render for inbuilt-report exports -- see
@@ -139,7 +141,7 @@ export function QueueExportButton({
         action: {
           label: "Open",
           onClick: () => {
-            window.location.href = "/dashboard/exports";
+            router.push("/dashboard/exports");
           },
         },
       });
@@ -251,7 +253,11 @@ export function QueueExportButton({
             placeholder="Template name"
           />
         )}
-        <div className="mt-3 flex justify-end gap-2">
+        <div className="mt-3 flex items-center justify-end gap-2">
+          {/* Exports left the main navigation (UI/UX plan decision 27); past exports are here. */}
+          <Link href="/dashboard/exports" className="mr-auto rounded-sm text-sm text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+            Your exports
+          </Link>
           <Button type="button" variant="ghost" size="sm" onClick={() => setOpen(false)}>
             Cancel
           </Button>

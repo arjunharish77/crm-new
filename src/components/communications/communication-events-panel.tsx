@@ -20,7 +20,7 @@ function iconForChannel(channel: string) {
 }
 
 function statusClass(eventType: string) {
-    if (["SENT", "DELIVERED", "OPENED", "CLICKED", "REPLIED"].includes(eventType)) return "border-emerald-500/20 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300";
+    if (["SENT", "DELIVERED", "OPENED", "CLICKED", "REPLIED"].includes(eventType)) return "border-status-success bg-status-success text-status-success-foreground";
     if (["BOUNCED", "FAILED", "UNSUBSCRIBED"].includes(eventType)) return "border-destructive/20 bg-destructive/10 text-destructive";
     return "";
 }
@@ -56,7 +56,7 @@ export function CommunicationEventsPanel({ entityType, entityId }: Props) {
         <div className="space-y-3">
             <div className="flex flex-wrap items-center justify-between gap-2">
                 <div>
-                    <h3 className="text-sm font-extrabold">Communication Timeline</h3>
+                    <h3 className="text-sm font-semibold">Communication Timeline</h3>
                     <p className="text-xs text-muted-foreground">Marketing and automation messages linked to this record.</p>
                 </div>
                 <Button variant="outline" size="sm" onClick={() => setAttempt(value => value + 1)} disabled={loading}>
@@ -77,7 +77,7 @@ export function CommunicationEventsPanel({ entityType, entityId }: Props) {
                                     <Icon className="size-4" />
                                 </span>
                                 <div className="min-w-0 break-words">
-                                    <div className="font-extrabold">{event.subject || event.eventType.replaceAll("_", " ")}</div>
+                                    <div className="font-semibold">{event.subject || event.eventType.replaceAll("_", " ")}</div>
                                     <div className="text-xs text-muted-foreground">{event.channel} · {event.recipient ?? "Provider event"}</div>
                                 </div>
                             </div>

@@ -17,6 +17,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
 import { apiFetch } from '@/lib/api';
 import { toast } from 'sonner';
+import { useArchiveActions } from '@/hooks/use-archive-actions';
 import { cn } from '@/lib/utils';
 
 interface SavedFilter {
@@ -101,19 +102,18 @@ export function SavedFiltersMenu({ module, activeFilter, onApply, onClear }: Sav
         }
     };
 
+    // A saved filter is a Smart View: deleting it archives it (decision 31), with Undo in the toast;
+    // it can also be restored from Smart Views › Recently deleted for 30 days.
+    const { archive } = useArchiveActions({ basePath: '/saved-views', archiveKind: 'saved-view', noun: 'saved filter', onChange: () => { fetchViews(); } });
     const handleDelete = async (viewId: string, e: React.MouseEvent) => {
         e.stopPropagation();
-        try {
-            await apiFetch(`/saved-views/${viewId}`, { method: 'DELETE' });
-            setViews(prev => prev.filter(v => v.id !== viewId));
-            if (activeViewId === viewId) {
-                setActiveViewId(null);
-                onClear?.();
-            }
-            toast.success('Filter deleted');
-        } catch {
-            toast.error('Failed to delete filter');
+        const view = views.find(v => v.id === viewId);
+        if (!view) return;
+        if (activeViewId === viewId) {
+            setActiveViewId(null);
+            onClear?.();
         }
+        await archive({ id: viewId, name: view.name });
     };
 
     const handleClear = () => {

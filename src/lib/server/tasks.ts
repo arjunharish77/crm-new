@@ -36,10 +36,16 @@ type TaskFilters = {
   opportunityId?: string | null;
   activityId?: string | null;
   due?: "overdue" | "today" | "upcoming" | "completed" | null;
+  open?: boolean;
+  q?: string | null;
 };
 
 export async function listTasksForTenant(user: TenantUser, filters: TaskFilters = {}) {
   return pgTasks.listTasksForTenant(user, filters);
+}
+
+export async function listTasksPageForTenant(user: TenantUser, filters: TaskFilters = {}, page = 1, limit = 25) {
+  return pgTasks.listTasksPageForTenant(user, filters, page, limit);
 }
 
 export async function getTaskForTenant(user: TenantUser, id: string) {

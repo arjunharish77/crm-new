@@ -1,6 +1,7 @@
 "use client";
 
 import { formatDistanceToNow } from "date-fns";
+import { storageGet, storageSet } from "@/lib/storage";
 
 type GeneralDisplaySettings = {
     timezone: string;
@@ -24,11 +25,9 @@ export function saveDisplaySettings(settings: Partial<GeneralDisplaySettings>) {
     if (typeof window === "undefined") return;
     const current = getDisplaySettings();
     const next = { ...current, ...settings, dateFormat: WORKSPACE_DATE_FORMAT };
-    // Skip the write + event dispatch when nothing actually changed. Listeners (e.g.
-    // GeneralSettingsProvider) remount the app tree on this event, and several callers
-    // re-fetch and re-save these settings on every mount — without this guard, a
-    // no-op save still fires the event, which remounts those same callers, which save
-    // again, forever. See: exports page infinite-remount bug (ERR_INSUFFICIENT_RESOURCES).
+    // Skip the write + event dispatch when nothing actually changed, so listeners don't
+    // re-render for a no-op save. (GeneralSettingsProvider used to remount the whole app on this
+    // event, which made a no-op save loop forever on the exports page; it no longer remounts.)
     if (
         current.timezone === next.timezone &&
         current.dateFormat === next.dateFormat &&
@@ -37,8 +36,43 @@ export function saveDisplaySettings(settings: Partial<GeneralDisplaySettings>) {
     ) {
         return;
     }
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+    storageSet(STORAGE_KEY, JSON.stringify(next));
     window.dispatchEvent(new CustomEvent("unnatify:display-settings", { detail: next }));
+}
+
+// Display settings as a subscribable store (UI/UX plan B4). Changing them used to remount the
+// whole app so every formatter re-ran, which also threw away open dialogs, typed text and scroll
+// position. Now nothing remounts: the formatters below read the current settings each time
+// they run, so anything rendered after a change uses it, and components that must update the
+// moment settings change can call useDisplaySettings() (hooks/use-display-settings) to re-render.
+let snapshotRaw: string | null = null;
+let snapshot: GeneralDisplaySettings = DEFAULT_SETTINGS;
+
+function readSnapshot(): GeneralDisplaySettings {
+    let raw: string | null = null;
+    try {
+        raw = storageGet(STORAGE_KEY);
+    } catch {
+        raw = null;
+    }
+    if (raw !== snapshotRaw || snapshot === DEFAULT_SETTINGS) {
+        snapshotRaw = raw;
+        snapshot = getDisplaySettings();
+    }
+    return snapshot;
+}
+
+export function subscribeDisplaySettings(onChange: () => void) {
+    window.addEventListener("unnatify:display-settings", onChange);
+    return () => window.removeEventListener("unnatify:display-settings", onChange);
+}
+
+export function getDisplaySettingsSnapshot(): GeneralDisplaySettings {
+    return typeof window === "undefined" ? DEFAULT_SETTINGS : readSnapshot();
+}
+
+export function getDefaultDisplaySettings(): GeneralDisplaySettings {
+    return DEFAULT_SETTINGS;
 }
 
 function normalizeTimeZone(value: unknown) {
@@ -54,7 +88,7 @@ function normalizeTimeZone(value: unknown) {
 export function getDisplaySettings(): GeneralDisplaySettings {
     if (typeof window === "undefined") return DEFAULT_SETTINGS;
     try {
-        const parsed = JSON.parse(window.localStorage.getItem(STORAGE_KEY) || "{}");
+        const parsed = JSON.parse(storageGet(STORAGE_KEY) || "{}");
         return {
             timezone: normalizeTimeZone(parsed.timezone),
             dateFormat: WORKSPACE_DATE_FORMAT,
@@ -128,6 +162,22 @@ function zonedInputToIso(year: number, month: number, day: number, hour = 0, min
     const secondOffset = timezoneOffsetMs(new Date(corrected), timeZone);
     if (secondOffset !== firstOffset) corrected = utcGuess - secondOffset;
     return new Date(corrected).toISOString();
+}
+
+// Midnight in the workspace's time zone: today plus `days`, or the first of the month `months`
+// from now. Day and month boundaries ("Today", "Last 7 days", calendar lanes) use this rather than
+// the browser's midnight.
+export function workspaceDayStart(offset: { days?: number; months?: number } = {}) {
+    const parts = Object.fromEntries(
+        new Intl.DateTimeFormat("en-CA", { timeZone: getDisplaySettings().timezone, year: "numeric", month: "2-digit", day: "2-digit" })
+            .formatToParts(new Date())
+            .map((part) => [part.type, part.value]),
+    );
+    const year = Number(parts.year);
+    const month = Number(parts.month);
+    const day = Number(parts.day);
+    if (offset.months !== undefined) return new Date(zonedInputToIso(year, month + offset.months, 1));
+    return new Date(zonedInputToIso(year, month, day + (offset.days ?? 0)));
 }
 
 export function workspaceDateInputToIso(value: string | null | undefined) {
@@ -209,4 +259,24 @@ export function formatWorkspaceTime(value: string | number | Date | null | undef
 export function formatWorkspaceRelativeTime(value: string | number | Date | null | undefined) {
     const date = parseWorkspaceDate(value);
     return date ? formatDistanceToNow(date, { addSuffix: true }) : "-";
+}
+
+// True when the value is a valid date in the past (for "Overdue" labels).
+export function isPastDate(value: string | number | Date | null | undefined) {
+    const date = parseWorkspaceDate(value);
+    return !!date && date.getTime() < Date.now();
+}
+
+// True when the value falls on today's date in the workspace time zone.
+export function isWorkspaceToday(value: string | number | Date | null | undefined) {
+    const date = parseWorkspaceDate(value);
+    return !!date && formatWorkspaceDate(date) === formatWorkspaceDate(new Date());
+}
+
+// Other date shapes (calendar headings such as "Mon, 05 Oct" or "October 2026") in the
+// workspace time zone, instead of the browser's locale and zone.
+export function formatWorkspaceDateParts(value: string | number | Date | null | undefined, options: Intl.DateTimeFormatOptions) {
+    const date = parseWorkspaceDate(value);
+    if (!date) return "-";
+    return new Intl.DateTimeFormat("en-IN", { ...options, timeZone: getDisplaySettings().timezone }).format(date);
 }

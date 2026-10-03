@@ -6,13 +6,16 @@ import { formatTenantDate, getTenantTimeZone } from "@/lib/server/date-format";
 import { enqueueWebhookEvent } from "@/lib/server/webhook-outbox";
 import { enqueueAppEvent } from "@/lib/server/marketplace-events";
 import { invalidateReportRollupsForTenant } from "@/lib/server/report-rollups";
-import { applyFilterCondition, buildGroupedFilterClause, type FilterValueKind } from "@/lib/query-filters";
+import { applyFilterCondition, assertFilterGroupsSupported, buildGroupedFilterClause, normalizeFilterGroups, type FilterValueKind } from "@/lib/query-filters";
 import { substituteUserTokens } from "@/lib/server/user-token-filters";
 import { maskFieldsForUser, sanitizeWritePayload } from "@/lib/server/field-permissions";
+import { applyRecordScopeClause, recordAccessLevel } from "@/lib/server/record-scope";
 
 type TenantUser = {
   id: string;
   tenantId: string | null;
+  teamId?: string | null;
+  recordScopeActorId?: string | null;
   role?: { permissions?: any } | string | null;
   permissionTemplates?: any[] | null;
 };
@@ -85,11 +88,55 @@ function tenantWhere(user: TenantUser, values: unknown[]) {
   return '"tenantId" is null';
 }
 
-function buildWhere(user: TenantUser, filters: ActivityFilterInput[] | null) {
+// Record access for activities (decision confirmed 2026-10-02: "linked records only").
+// Activities have no owner of their own: a user whose role is OWN or TEAM sees an activity only
+// when its linked lead or opportunity is one they can see (owned, team, or shared with them --
+// the same rule as leads/opportunities, record-scope.ts). Unlinked activities are visible only
+// to ALL-access roles. Before this, no scope was applied at all and every OWN/TEAM user saw
+// every activity in the tenant. `activityRef` qualifies the Activity table in the caller's query.
+export function applyActivityScopeClause(clauses: string[], values: unknown[], user: TenantUser, tenantIdParam: number | null, activityRef = '"Activity"') {
+  if (recordAccessLevel(user) === "ALL") return;
+  const leadScope: string[] = [];
+  applyRecordScopeClause(leadScope, values, user, "LEAD", tenantIdParam, "scope_l");
+  const opportunityScope: string[] = [];
+  applyRecordScopeClause(opportunityScope, values, user, "OPPORTUNITY", tenantIdParam, "scope_o");
+  const tenantOf = (alias: string) => (tenantIdParam ? `${alias}."tenantId" = $${tenantIdParam}` : `${alias}."tenantId" is null`);
+  clauses.push(
+    `((${activityRef}."leadId" is not null and exists (select 1 from "Lead" scope_l where scope_l.id = ${activityRef}."leadId" and ${tenantOf("scope_l")} and ${leadScope.join(" and ")}))` +
+      ` or (${activityRef}."opportunityId" is not null and exists (select 1 from "Opportunity" scope_o where scope_o.id = ${activityRef}."opportunityId" and ${tenantOf("scope_o")} and ${opportunityScope.join(" and ")})))`,
+  );
+}
+
+function buildWhere(user: TenantUser, filters: ActivityFilterInput[] | ActivityFilterInput | null) {
   const values: unknown[] = [];
   const clauses = [tenantWhere(user, values)];
-  buildGroupedFilterClause(clauses, values, filters, ACTIVITY_FILTER_COLUMNS);
+  applyActivityScopeClause(clauses, values, user, user.tenantId ? values.length : null);
+  buildGroupedFilterClause(clauses, values, filters as ActivityFilterInput[] | null, ACTIVITY_FILTER_COLUMNS);
   return { sql: `where ${clauses.join(" and ")}`, values };
+}
+
+// OWN/TEAM users must link an activity to a lead or opportunity they can see; otherwise it would
+// disappear from their own view as soon as it was saved (decision 2026-10-02). ALL-access roles
+// are unchanged and may still log unlinked activities.
+async function assertActivityLinksAllowed(user: TenantUser, leadId: unknown, opportunityId: unknown) {
+  if (recordAccessLevel(user) === "ALL") return;
+  if (!leadId && !opportunityId) throw new Error("ACTIVITY_LINK_REQUIRED");
+  for (const [table, recordType, id] of [["Lead", "LEAD", leadId], ["Opportunity", "OPPORTUNITY", opportunityId]] as const) {
+    if (!id) continue;
+    const values: unknown[] = [id];
+    const clauses = ['id = $1'];
+    let tenantIdParam: number | null = null;
+    if (user.tenantId) {
+      values.push(user.tenantId);
+      tenantIdParam = values.length;
+      clauses.push(`"tenantId" = $${tenantIdParam}`);
+    } else {
+      clauses.push('"tenantId" is null');
+    }
+    applyRecordScopeClause(clauses, values, user, recordType, tenantIdParam);
+    const visible = await queryOne<{ id: string }>(`select id from "${table}" where ${clauses.join(" and ")} limit 1`, values);
+    if (!visible) throw new Error("ACTIVITY_RECORD_NOT_ACCESSIBLE");
+  }
 }
 
 async function getObjectId(user: TenantUser) {
@@ -195,18 +242,65 @@ async function hydrateActivities(user: TenantUser, activities: any[]) {
   }));
 }
 
-export async function listActivitiesForTenant(user: TenantUser, limit: number, filters: ActivityFilterInput[] | null, page = 1) {
+// "Select all N matching" (UI/UX plan B8): the ids of every record the list would show for these
+// filters, under the same record access, so a bulk action changes exactly what the count said.
+// At most `cap` ids; `truncated` says more match, and callers refuse rather than act on part.
+// Whether this user can open the activity (the same access rule as the lists): used by notes
+// and record history for an activity.
+export async function isActivityVisibleForTenant(user: TenantUser, id: string) {
+  const where = buildWhere(user, null);
+  const row = await queryOne<{ id: string }>(`select id from "Activity" ${where.sql} and id = $${where.values.length + 1} limit 1`, where.values.concat([id]));
+  return !!row;
+}
+
+export async function listActivityIdsForTenant(user: TenantUser, filters: ActivityFilterInput[] | ActivityFilterInput | null, cap = 5000) {
+  const resolvedFilters = await substituteUserTokens(normalizeFilterGroups(filters) as ActivityFilterInput[], user);
+  const where = buildWhere(user, resolvedFilters);
+  const rows = await query<{ id: string }>(
+    `select id from "Activity" ${where.sql} order by "createdAt" desc limit $${where.values.length + 1}`,
+    where.values.concat([cap + 1]),
+  );
+  return { ids: rows.slice(0, cap).map((row) => row.id), truncated: rows.length > cap, cap };
+}
+
+// strictFilters: refuse a filter that can't be applied instead of skipping it (Smart Views).
+export type ActivityListOptions = { search?: string | null; sort?: { id: string; desc: boolean } | null; strictFilters?: boolean };
+
+// Whitelisted sort columns only; anything else is newest first.
+const ACTIVITY_SORTS: Record<string, string> = {
+  createdAt: '"createdAt"',
+  dueAt: '"dueAt"',
+  completedAt: '"completedAt"',
+  outcome: "lower(outcome)",
+  slaStatus: '"slaStatus"',
+  type: '(select lower(t.name) from "ActivityType" t where t.id = "Activity"."typeId")',
+};
+
+// Notes, or the linked lead's name.
+function applyActivitySearch(where: { sql: string; values: unknown[] }, search?: string | null) {
+  const term = typeof search === "string" ? search.trim() : "";
+  if (!term) return where;
+  const values = [...where.values, `%${term}%`];
+  const param = `$${values.length}`;
+  const clause = `(notes ilike ${param} or exists (select 1 from "Lead" l where l.id = "Activity"."leadId" and l.name ilike ${param}))`;
+  return { sql: where.sql ? `${where.sql} and ${clause}` : `where ${clause}`, values };
+}
+
+export async function listActivitiesForTenant(user: TenantUser, limit: number, filters: ActivityFilterInput[] | ActivityFilterInput | null, page = 1, options: ActivityListOptions = {}) {
   const currentLimit = Math.min(500, Math.max(1, Number.isFinite(limit) ? limit : 100));
   const currentPage = Math.max(1, Number.isFinite(page) ? page : 1);
   const offset = (currentPage - 1) * currentLimit;
   // "Current user/team tokens" -- see the matching comment in leads-postgres.ts's own
   // listLeadsForTenant.
-  const resolvedFilters = await substituteUserTokens(filters, user);
-  const where = buildWhere(user, resolvedFilters);
+  const resolvedFilters = await substituteUserTokens(normalizeFilterGroups(filters) as ActivityFilterInput[], user);
+  if (options.strictFilters) assertFilterGroupsSupported(resolvedFilters, ACTIVITY_FILTER_COLUMNS);
+  const where = applyActivitySearch(buildWhere(user, resolvedFilters), options.search);
+  const sortExpression = options.sort?.id ? ACTIVITY_SORTS[options.sort.id] : undefined;
+  const orderBy = sortExpression ? `${sortExpression} ${options.sort!.desc ? "desc" : "asc"} nulls last, "createdAt" desc` : '"createdAt" desc';
   const [countRow, activities] = await Promise.all([
     queryOne<{ count: number }>(`select count(*)::int as count from "Activity" ${where.sql}`, where.values),
     query<any>(
-      `select ${ACTIVITY_COLUMNS} from "Activity" ${where.sql} order by "createdAt" desc limit $${where.values.length + 1} offset $${where.values.length + 2}`,
+      `select ${ACTIVITY_COLUMNS} from "Activity" ${where.sql} order by ${orderBy} limit $${where.values.length + 1} offset $${where.values.length + 2}`,
       where.values.concat([currentLimit, offset]),
     ),
   ]);
@@ -227,6 +321,7 @@ async function createAuditLog(user: TenantUser, action: string, entityId: string
 }
 
 export async function createActivityForTenant(user: TenantUser, payload: Record<string, unknown>) {
+  await assertActivityLinksAllowed(user, payload.leadId, payload.opportunityId);
   const objectId = await getObjectId(user);
   const now = new Date().toISOString();
   const activity = await queryOne<any>(
@@ -287,9 +382,11 @@ function diff(before: Record<string, any>, after: Record<string, any>) {
 
 export async function updateActivityForTenant(user: TenantUser, id: string, payload: Record<string, unknown>) {
   const values: unknown[] = [];
+  // Same record access as the list: an activity outside the user's scope is "not found".
+  const lookup = buildWhere(user, null);
   const existing = await queryOne<any>(
-    `select ${ACTIVITY_COLUMNS} from "Activity" where id = $1 and ${user.tenantId ? '"tenantId" = $2' : '"tenantId" is null'} limit 1`,
-    user.tenantId ? [id, user.tenantId] : [id],
+    `select ${ACTIVITY_COLUMNS} from "Activity" ${lookup.sql} and id = $${lookup.values.length + 1} limit 1`,
+    [...lookup.values, id],
   );
   if (!existing) throw new Error("ACTIVITY_NOT_FOUND");
 
@@ -300,6 +397,9 @@ export async function updateActivityForTenant(user: TenantUser, id: string, payl
   const patch: Record<string, unknown> = { updatedAt: new Date().toISOString() };
   for (const key of ["typeId", "leadId", "opportunityId", "outcome", "notes", "dueAt", "completedAt", "slaStatus", "slaTarget"]) {
     if (sanitized[key] !== undefined) patch[key] = sanitized[key] || null;
+  }
+  if ("leadId" in patch || "opportunityId" in patch) {
+    await assertActivityLinksAllowed(user, "leadId" in patch ? patch.leadId : existing.leadId, "opportunityId" in patch ? patch.opportunityId : existing.opportunityId);
   }
   const columns = Object.keys(patch);
   const assignments = columns.map((column) => {
@@ -335,10 +435,8 @@ export async function updateActivityForTenant(user: TenantUser, id: string, payl
 
 export async function getActivityStatsForTenant(user: TenantUser) {
   const timeZone = await getTenantTimeZone(user.tenantId);
-  const activities = await query<any>(
-    `select id, "typeId", "createdAt" from "Activity" where ${user.tenantId ? '"tenantId" = $1' : '"tenantId" is null'} order by "createdAt" desc limit 1000`,
-    user.tenantId ? [user.tenantId] : [],
-  );
+  const scoped = buildWhere(user, null);
+  const activities = await query<any>(`select id, "typeId", "createdAt" from "Activity" ${scoped.sql} order by "createdAt" desc limit 1000`, scoped.values);
   const types = await listActivityTypesForTenant(user);
   const typeMap = new Map(types.map((type: any) => [type.id, type.name]));
   const byTypeMap = new Map<string, number>();

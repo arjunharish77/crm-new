@@ -28,21 +28,25 @@ describe("JOB_REGISTRY", () => {
     );
   });
 
-  it("classifies the sixteen operational-automation jobs", () => {
+  it("classifies the twenty operational-automation jobs", () => {
     expect(jobNamesForClass("operational").sort()).toEqual(
       [
         "applications.documentReminders",
         "automation.processDue",
         "tasks.processOverdue",
         "journeys.processEnrollmentRefresh",
+        "marketing.continueCampaignLaunches",
         "journeys.alertDegraded",
         "dataQuality.processScheduledScan",
         "marketplace.processAppDeliveries",
         "marketplace.processAppSyncs",
         "telephony.expireRecordings",
         "retention.enforce",
+        "archive.purge",
         "communications.processSuppressionExpiry",
         "cases.processSlaEscalations",
+        "modules.processTrials",
+        "modules.processHealth",
         "cases.dispatchSurveys",
         "cases.refreshAnalyticsSnapshots",
         "cases.alertStaleUnassigned",
@@ -91,10 +95,10 @@ describe("JOB_REGISTRY", () => {
     expect(queueNames.size).toBe(4);
   });
 
-  it("totals 32 distinct job names across all four classes (28 recurring + 4 dynamic)", () => {
-    expect(Object.keys(JOB_REGISTRY)).toHaveLength(32);
+  it("totals 36 distinct job names across all four classes (32 recurring + 4 dynamic)", () => {
+    expect(Object.keys(JOB_REGISTRY)).toHaveLength(36);
     const recurringCount = Object.values(JOB_REGISTRY).filter((entry) => entry.isRecurring).length;
-    expect(recurringCount).toBe(28);
+    expect(recurringCount).toBe(32);
   });
 });
 

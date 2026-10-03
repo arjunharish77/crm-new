@@ -3,7 +3,7 @@ import type { TransactionClient } from "@/lib/db/transaction";
 import { randomUUID } from "crypto";
 import { execute, query, queryOne } from "@/lib/db/query";
 import { withTransaction } from "@/lib/db/transaction";
-import { listLeadsForTenant, buildLeadWhere } from "@/lib/repositories/leads-postgres";
+import { buildLeadWhere } from "@/lib/repositories/leads-postgres";
 import { runAutomationsForEvent } from "@/lib/repositories/automations-postgres";
 import { distributeRecord } from "@/lib/server/distribution-engine";
 import { refreshNextBestActionsForRecord } from "@/lib/server/next-best-action";
@@ -12,7 +12,7 @@ import { assertFeatureEnabled } from "@/lib/server/entitlements";
 import { enqueueWebhookEvent } from "@/lib/server/webhook-outbox";
 import { enqueueAppEvent } from "@/lib/server/marketplace-events";
 import { invalidateReportRollupsForTenant } from "@/lib/server/report-rollups";
-import { buildGroupedFilterClause, type FilterColumnEntry } from "@/lib/query-filters";
+import { assertFilterGroupsSupported, buildGroupedFilterClause, normalizeFilterGroups, type FilterColumnEntry } from "@/lib/query-filters";
 import { substituteUserTokens } from "@/lib/server/user-token-filters";
 import { maskFieldsForUser, sanitizeWritePayload } from "@/lib/server/field-permissions";
 import { applyRecordScopeClause } from "@/lib/server/record-scope";
@@ -57,6 +57,8 @@ const OPPORTUNITY_FILTER_COLUMNS = new Map<string, FilterColumnEntry>([
   ["leadId", { column: "leadId", kind: "text" }],
   ["opportunityTypeId", { column: "opportunityTypeId", kind: "select" }],
   ["stageId", { column: "stageId", kind: "select" }],
+  // Open / Won / Lost from the stage's flags (UI/UX plan Phase 2 quick views).
+  ["stageCategory", { column: "stageCategory", kind: "select", expression: `coalesce((select case when s."isClosed" and s."isWon" then 'WON' when s."isClosed" then 'LOST' else 'OPEN' end from "StageDefinition" s where s.id = "Opportunity"."stageId"), 'OPEN')` }],
   ["title", { column: "title", kind: "text" }],
   ["amount", { column: "amount", kind: "number" }],
   ["expectedCloseDate", { column: "expectedCloseDate", kind: "date" }],
@@ -102,7 +104,7 @@ function buildWhere(user: TenantUser, filters: FilterInput[] | null, opportunity
     clauses.push(`"opportunityTypeId" = $${values.length}`);
   }
 
-  buildGroupedFilterClause(clauses, values, Array.isArray(filters) ? filters : [], OPPORTUNITY_FILTER_COLUMNS, undefined, user.tenantId);
+  buildGroupedFilterClause(clauses, values, filters, OPPORTUNITY_FILTER_COLUMNS, undefined, user.tenantId);
 
   return { sql: clauses.length ? `where ${clauses.join(" and ")}` : "", values };
 }
@@ -170,37 +172,104 @@ export async function listOpportunityTypesForTenant(user: TenantUser) {
     user.tenantId ? [user.tenantId] : [],
   );
   const stages = await query<any>(
-    `select id, "tenantId", "opportunityTypeId", name, "order", probability, color, "isClosed", "isWon"
+    `select id, "tenantId", "opportunityTypeId", name, "order", probability, color, "isClosed", "isWon", "archivedAt"
      from "StageDefinition"
      where ${user.tenantId ? '"tenantId" = $1' : '"tenantId" is null'}
      order by "order" asc`,
     user.tenantId ? [user.tenantId] : [],
   );
+  // `stages` are the ones you can choose; removed stages (decision 34) are kept apart so old
+  // history and audit entries still show their names.
   return types.map((type) => ({
     ...type,
-    stages: stages.filter((stage) => stage.opportunityTypeId === type.id).map((stage) => ({ ...stage, label: stage.name })),
+    stages: stages.filter((stage) => stage.opportunityTypeId === type.id && !stage.archivedAt).map((stage) => ({ ...stage, label: stage.name })),
+    archivedStages: stages.filter((stage) => stage.opportunityTypeId === type.id && stage.archivedAt).map((stage) => ({ ...stage, label: stage.name })),
   }));
 }
 
+// Only the leads these opportunities point to, under the same lead access rules (it used to load
+// the tenant's first 500 leads, so an opportunity whose lead wasn't among them showed no lead).
+async function getLinkedLeads(user: TenantUser, leadIds: string[]) {
+  if (!leadIds.length) return [];
+  const where = buildLeadWhere(user, null);
+  const values = where.values.concat([leadIds]);
+  return query<any>(`select id, name, email, phone, company, status, "ownerId" from "Lead" ${where.sql} and id = any($${values.length}::text[])`, values);
+}
+
+async function getOwnerNames(ownerIds: string[]) {
+  if (!ownerIds.length) return new Map<string, string>();
+  const rows = await query<{ id: string; name: string | null; email: string }>('select id, name, email from "User" where id = any($1::text[])', [ownerIds]);
+  return new Map((rows ?? []).map((row) => [row.id, row.name || row.email]));
+}
+
 async function decorateOpportunities(user: TenantUser, opportunities: any[]) {
-  const [types, leads, scoreMap, nbaCountMap] = await Promise.all([
+  const leadIds = [...new Set(opportunities.map((opportunity) => opportunity.leadId).filter(Boolean))] as string[];
+  const ownerIds = [...new Set(opportunities.map((opportunity) => opportunity.ownerId).filter(Boolean))] as string[];
+  const [types, leads, scoreMap, nbaCountMap, owners] = await Promise.all([
     listOpportunityTypesForTenant(user),
-    listLeadsForTenant(user, 1, 500),
+    getLinkedLeads(user, leadIds),
     getPredictiveScoreMap(user.tenantId, opportunities.map((opportunity) => opportunity.id)),
     getPendingNbaCountMap(user.tenantId, opportunities.map((opportunity) => opportunity.id)),
+    getOwnerNames(ownerIds),
   ]);
-  const stageMap = new Map(types.flatMap((type: any) => (type.stages ?? []).map((stage: any) => [stage.id, stage])));
+  const stageMap = new Map(types.flatMap((type: any) => [...(type.stages ?? []), ...(type.archivedStages ?? [])].map((stage: any) => [stage.id, stage])));
   const typeMap = new Map(types.map((type: any) => [type.id, type]));
-  const leadMap = new Map(leads.data.map((lead: any) => [lead.id, lead]));
+  const leadMap = new Map((leads ?? []).map((lead: any) => [lead.id, lead]));
   return opportunities.map((opportunity) => ({
     ...opportunity,
     tags: opportunity.tags ?? [],
     lead: leadMap.get(opportunity.leadId) ?? null,
+    ownerName: opportunity.ownerId ? owners.get(opportunity.ownerId) ?? null : null,
     opportunityType: typeMap.get(opportunity.opportunityTypeId),
     stage: stageMap.get(opportunity.stageId),
     predictiveScore: scoreMap.get(opportunity.id) ?? null,
     pendingNbaCount: nbaCountMap.get(opportunity.id) ?? 0,
   }));
+}
+
+// "Select all N matching" (UI/UX plan B8): the ids of every record the list would show for these
+// filters, under the same record access, so a bulk action changes exactly what the count said.
+// At most `cap` ids; `truncated` says more match, and callers refuse rather than act on part.
+export async function listOpportunityIdsForTenant(user: TenantUser, filters: FilterInput[] | FilterInput | null, opportunityTypeId: string | null, cap = 5000, search?: string | null) {
+  const resolvedFilters = await substituteUserTokens(normalizeFilterGroups(filters) as FilterInput[], user);
+  const where = applyOpportunitySearch(buildWhere(user, resolvedFilters, opportunityTypeId), search);
+  const rows = await query<{ id: string }>(
+    `select id from "Opportunity" ${where.sql} order by "createdAt" desc limit $${where.values.length + 1}`,
+    where.values.concat([cap + 1]),
+  );
+  return { ids: rows.slice(0, cap).map((row) => row.id), truncated: rows.length > cap, cap };
+}
+
+// strictFilters: refuse a filter that can't be applied instead of skipping it (Smart Views).
+export type OpportunityListOptions = { search?: string | null; sort?: { id: string; desc: boolean } | null; strictFilters?: boolean };
+
+// Title or the lead's name, email, phone digits or company.
+function applyOpportunitySearch(where: { sql: string; values: unknown[] }, search?: string | null) {
+  const term = typeof search === "string" ? search.trim() : "";
+  if (!term) return where;
+  const values = [...where.values, `%${term}%`];
+  const n = values.length;
+  const phone = term.replace(/\D/g, "").length >= 4
+    ? ` or regexp_replace(coalesce(l.phone, ''), '\\D', '', 'g') like '%' || regexp_replace($${n}, '\\D', '', 'g') || '%'`
+    : "";
+  const clause = `(title ilike $${n} or exists (select 1 from "Lead" l where l.id = "Opportunity"."leadId" and (l.name ilike $${n} or l.email ilike $${n} or l.company ilike $${n}${phone})))`;
+  return { sql: where.sql ? `${where.sql} and ${clause}` : `where ${clause}`, values };
+}
+
+const OPPORTUNITY_SORTS: Record<string, string> = {
+  title: "lower(title)",
+  amount: "amount",
+  stage: '(select s."order" from "StageDefinition" s where s.id = "Opportunity"."stageId")',
+  priority: "case upper(priority) when 'HIGH' then 3 when 'MEDIUM' then 2 when 'LOW' then 1 else 0 end",
+  expectedCloseDate: '"expectedCloseDate"',
+  owner: '(select lower(coalesce(u.name, u.email)) from "User" u where u.id = "Opportunity"."ownerId")',
+  createdAt: '"createdAt"',
+  updatedAt: '"updatedAt"',
+};
+function opportunityOrderBy(sort?: OpportunityListOptions["sort"]) {
+  const expression = sort?.id ? OPPORTUNITY_SORTS[sort.id] : undefined;
+  if (!expression) return '"createdAt" desc';
+  return `${expression} ${sort!.desc ? "desc" : "asc"} nulls last, "createdAt" desc`;
 }
 
 export async function listOpportunitiesForTenantByType(
@@ -209,6 +278,7 @@ export async function listOpportunitiesForTenantByType(
   opportunityTypeId: string | null,
   filters: FilterInput[] | null = null,
   page = 1,
+  options: OpportunityListOptions = {},
 ) {
   // WP09 (F11): raised from 500 to 1000 -- inbuilt-reports.ts calls listOpportunitiesForTenant
   // with limit=1000 in several reports, expecting up to that many rows for in-memory aggregation;
@@ -222,12 +292,13 @@ export async function listOpportunitiesForTenantByType(
 
   // "Current user/team tokens" -- see the matching comment in leads-postgres.ts's own
   // listLeadsForTenant for why this resolves "@myteam" here rather than making buildWhere async.
-  const resolvedFilters = await substituteUserTokens(Array.isArray(filters) ? filters : [], user);
-  const where = buildWhere(user, resolvedFilters, opportunityTypeId);
+  const resolvedFilters = await substituteUserTokens(normalizeFilterGroups(filters) as FilterInput[], user);
+  if (options.strictFilters) assertFilterGroupsSupported(resolvedFilters, OPPORTUNITY_FILTER_COLUMNS);
+  const where = applyOpportunitySearch(buildWhere(user, resolvedFilters, opportunityTypeId), options.search);
   const [countRow, opportunities] = await Promise.all([
     queryOne<{ count: number }>(`select count(*)::int as count from "Opportunity" ${where.sql}`, where.values),
     query<any>(
-      `select ${OPPORTUNITY_COLUMNS} from "Opportunity" ${where.sql} order by "createdAt" desc limit $${where.values.length + 1} offset $${where.values.length + 2}`,
+      `select ${OPPORTUNITY_COLUMNS} from "Opportunity" ${where.sql} order by ${opportunityOrderBy(options.sort)} limit $${where.values.length + 1} offset $${where.values.length + 2}`,
       where.values.concat([currentLimit, offset]),
     ),
   ]);
@@ -555,9 +626,11 @@ export async function updateOpportunityForTenant(user: TenantUser, id: string, p
     );
     updated = result.rows[0] ?? null;
     if (updated?.stageId && existing.stageId !== updated.stageId) {
+      // The reason given when moving to Won or Lost (UI/UX plan §11.4) is kept on the stage history.
+      const note = typeof payload.stageChangeNote === "string" && payload.stageChangeNote.trim() ? payload.stageChangeNote.trim().slice(0, 1000) : null;
       await tx.query(
-        'insert into "OpportunityStageHistory" (id, "tenantId", "opportunityId", "fromStageId", "toStageId", "changedById", notes) values ($1, $2, $3, $4, $5, $6, null)',
-        [randomUUID(), user.tenantId, updated.id, existing.stageId, updated.stageId, user.id],
+        'insert into "OpportunityStageHistory" (id, "tenantId", "opportunityId", "fromStageId", "toStageId", "changedById", notes) values ($1, $2, $3, $4, $5, $6, $7)',
+        [randomUUID(), user.tenantId, updated.id, existing.stageId, updated.stageId, user.id, note],
       );
     }
   });
@@ -594,8 +667,77 @@ export async function deleteOpportunityForTenant(user: TenantUser, id: string) {
   await assertFeatureEnabled(user.tenantId, "opportunityEnabled", { isPlatformAdmin: user.isPlatformAdmin });
   const where = buildWhere(user, null);
   const values = where.values.concat([id]);
-  await execute(`delete from "Opportunity" ${where.sql} and id = $${values.length}`, values);
+  const deleted = await execute(`delete from "Opportunity" ${where.sql} and id = $${values.length}`, values);
+  // Nothing deleted (gone already, or not visible to this person) used to report success, so a
+  // bulk delete counted it as done.
+  if (!deleted) throw new Error("OPPORTUNITY_NOT_FOUND");
   await invalidateReportRollupsForTenant(user.tenantId).catch(() => undefined);
+}
+
+// Journey audiences on opportunities (§8 #24): every matching opportunity id, in id order, a batch
+// at a time (keyset), with the same record access and filters as the list. See
+// listLeadAudiencePageForTenant.
+async function opportunityAudienceWhere(user: TenantUser, filters: FilterInput[] | null, strictFilters: boolean) {
+  const resolvedFilters = await substituteUserTokens(normalizeFilterGroups(filters) as FilterInput[], user);
+  if (strictFilters) assertFilterGroupsSupported(resolvedFilters, OPPORTUNITY_FILTER_COLUMNS);
+  return buildWhere(user, resolvedFilters);
+}
+
+export async function countOpportunityAudienceForTenant(user: TenantUser, filters: FilterInput[] | null, strictFilters = true) {
+  const where = await opportunityAudienceWhere(user, filters, strictFilters);
+  const row = await queryOne<{ count: number }>(`select count(*)::int as count from "Opportunity" ${where.sql}`, where.values);
+  return row?.count ?? 0;
+}
+
+export async function listOpportunityAudienceIdsForTenant(user: TenantUser, filters: FilterInput[] | null, afterId: string | null, limit: number, strictFilters = true) {
+  const where = await opportunityAudienceWhere(user, filters, strictFilters);
+  const values = [...where.values];
+  let sql = where.sql;
+  if (afterId) {
+    values.push(String(afterId));
+    sql = `${sql ? `${sql} and` : "where"} id > $${values.length}`;
+  }
+  values.push(Math.min(1000, Math.max(1, Math.trunc(limit) || 200)));
+  const rows = await query<{ id: string }>(`select id from "Opportunity" ${sql} order by id limit $${values.length}`, values);
+  return rows.map((row) => String(row.id));
+}
+
+export const BULK_DELETE_OPPORTUNITIES_MAX = 1000;
+
+// Deletes many opportunities in one request (Section 8 #5: the list sent one DELETE per record).
+// The same record access as a single delete applies. Ids that are gone or not visible to this
+// person come back as "Not found". One statement deletes the lot; if a record is still linked to
+// something that blocks its delete (tasks, notes, commission entries), that statement fails as a
+// whole, so each record is then tried on its own and the blocked ones are reported.
+export async function deleteOpportunitiesForTenant(user: TenantUser, ids: string[]) {
+  await assertFeatureEnabled(user.tenantId, "opportunityEnabled", { isPlatformAdmin: user.isPlatformAdmin });
+  const unique = [...new Set(ids.filter((id) => typeof id === "string" && id))];
+  if (unique.length > BULK_DELETE_OPPORTUNITIES_MAX) throw new Error("BULK_LIMIT_EXCEEDED");
+  const where = buildWhere(user, null);
+  const deletedIds = new Set<string>();
+  const failed: Array<{ id: string; reason: string }> = [];
+  if (unique.length) {
+    try {
+      const values = where.values.concat([unique]);
+      const rows = await query<{ id: string }>(`delete from "Opportunity" ${where.sql} and id = any($${values.length}::text[]) returning id`, values);
+      for (const row of rows) deletedIds.add(row.id);
+    } catch (error) {
+      if ((error as { code?: string })?.code !== "23503") throw error;
+      for (const id of unique) {
+        try {
+          const values = where.values.concat([id]);
+          if (await execute(`delete from "Opportunity" ${where.sql} and id = $${values.length}`, values)) deletedIds.add(id);
+        } catch (rowError) {
+          if ((rowError as { code?: string })?.code !== "23503") throw rowError;
+          failed.push({ id, reason: "Still linked to tasks, notes or commission entries" });
+        }
+      }
+    }
+  }
+  const blocked = new Set(failed.map((failure) => failure.id));
+  for (const id of unique) if (!deletedIds.has(id) && !blocked.has(id)) failed.push({ id, reason: "Not found" });
+  if (deletedIds.size) await invalidateReportRollupsForTenant(user.tenantId).catch(() => undefined);
+  return { deleted: deletedIds.size, failed };
 }
 
 export async function getOpportunityHistoryForTenant(user: TenantUser, opportunityId: string) {
@@ -610,7 +752,7 @@ export async function getOpportunityHistoryForTenant(user: TenantUser, opportuni
     listOpportunityTypesForTenant(user),
     query<any>(`select id, name, email from "User" where ${user.tenantId ? '"tenantId" = $1' : '"tenantId" is null'}`, user.tenantId ? [user.tenantId] : []),
   ]);
-  const stageMap = new Map(types.flatMap((type: any) => (type.stages ?? []).map((stage: any) => [stage.id, { name: stage.name, label: stage.label ?? stage.name }])));
+  const stageMap = new Map(types.flatMap((type: any) => [...(type.stages ?? []), ...(type.archivedStages ?? [])].map((stage: any) => [stage.id, { name: stage.name, label: stage.label ?? stage.name }])));
   const userMap = new Map(users.map((record) => [record.id, record]));
   return history.map((item) => ({
     ...item,

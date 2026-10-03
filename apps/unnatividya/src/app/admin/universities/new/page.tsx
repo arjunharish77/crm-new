@@ -1,13 +1,15 @@
+import { getAdminSession } from "@/lib/admin-auth";
 import type { Metadata } from "next";
 import Link from "next/link";
-import { UniversityEditForm } from "@/components/university-edit-form";
+import { CatalogCreateForm } from "@/components/catalog-create-form";
 
 export const metadata: Metadata = {
   title: "New University",
   robots: { index: false, follow: false, nocache: true },
 };
 
-export default function NewUniversityPage() {
+export default async function NewUniversityPage() {
+  const session = await getAdminSession();
   return (
     <section className="admin-shell">
       <div className="container">
@@ -20,19 +22,7 @@ export default function NewUniversityPage() {
           <Link className="btn ghost" href="/admin/universities">Back to universities</Link>
         </div>
         <section className="card admin-detail-card">
-          <UniversityEditForm
-            mode="create"
-            university={{
-              id: "",
-              slug: "",
-              name: "",
-              shortName: "",
-              city: "",
-              status: "DRAFT",
-              isPublished: false,
-              data: { approvals: [], sourceUrls: [] },
-            }}
-          />
+          <CatalogCreateForm entityType="university" role={session?.role || "VIEWER"} />
         </section>
       </div>
     </section>

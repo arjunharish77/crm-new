@@ -155,7 +155,9 @@ describe("direct Postgres leads repository", () => {
       ]);
       expect(queryMock.mock.calls[0][0]).toContain('"tenantId" = $1');
       expect(queryMock.mock.calls[0][0]).toContain('"mergedIntoId" is null');
-      expect(queryMock.mock.calls[0][0]).toContain("group by status");
+      // Grouped by the normalised status key (tenant-configurable statuses, UI/UX plan decision 6).
+      expect(queryMock.mock.calls[0][0]).toContain("crm_lead_status_key(status) as status");
+      expect(queryMock.mock.calls[0][0]).toContain("group by 1");
       expect(queryMock.mock.calls[0][1]).toEqual(["tenant-1"]);
     });
 

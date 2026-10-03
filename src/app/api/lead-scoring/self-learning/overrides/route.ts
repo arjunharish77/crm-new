@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { requireCurrentUser } from "@/lib/server/auth";
+import { requireCurrentUser, requireTenantAdmin } from "@/lib/server/auth";
 import { badRequest, forbidden, serverError, unauthorized } from "@/lib/server/http";
 import { applyManualScoreOverride, clearManualScoreOverride } from "@/lib/server/self-learning-scoring";
 
@@ -9,7 +9,7 @@ function recordType(value: unknown) {
 
 export async function POST(request: Request) {
   try {
-    const user = await requireCurrentUser(request);
+    const user = await requireTenantAdmin(request);
     if (!user.tenantId) return forbidden("Tenant context required");
     const body = await request.json().catch(() => null);
     const type = recordType(body?.recordType);
@@ -29,6 +29,7 @@ export async function POST(request: Request) {
     return NextResponse.json(result);
   } catch (error) {
     if (error instanceof Error && error.message === "UNAUTHORIZED") return unauthorized();
+    if (error instanceof Error && error.message === "FORBIDDEN") return forbidden("Only admins can do this");
     if (error instanceof Error && error.message.startsWith("MODULE_DISABLED")) return forbidden("Predictive Scoring module is disabled for this tenant");
     return serverError("Failed to apply score override", error);
   }
@@ -36,7 +37,7 @@ export async function POST(request: Request) {
 
 export async function DELETE(request: Request) {
   try {
-    const user = await requireCurrentUser(request);
+    const user = await requireTenantAdmin(request);
     if (!user.tenantId) return forbidden("Tenant context required");
     const { searchParams } = new URL(request.url);
     const type = recordType(searchParams.get("recordType"));
@@ -49,6 +50,7 @@ export async function DELETE(request: Request) {
     }));
   } catch (error) {
     if (error instanceof Error && error.message === "UNAUTHORIZED") return unauthorized();
+    if (error instanceof Error && error.message === "FORBIDDEN") return forbidden("Only admins can do this");
     if (error instanceof Error && error.message.startsWith("MODULE_DISABLED")) return forbidden("Predictive Scoring module is disabled for this tenant");
     return serverError("Failed to clear score override", error);
   }

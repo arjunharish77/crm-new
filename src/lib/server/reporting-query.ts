@@ -493,20 +493,24 @@ async function applySavedViewSource(user: TenantUser, definition: ReportQueryDef
   if (!definition.savedViewId || !user.tenantId) return definition;
   const row = await query<any>(
     `select config from "CustomReport"
-     where id = $1 and "tenantId" = $2 and "chartType" = 'SAVED_VIEW'
+     where id = $1 and "tenantId" = $2 and "chartType" = 'SAVED_VIEW' and "deletedAt" is null
      limit 1`,
     [definition.savedViewId, user.tenantId],
   );
+  // A view that's gone or archived used to drop the source and report on every record.
+  if (!row[0]) throw new Error("REPORT_SOURCE_VIEW_NOT_FOUND");
   const config = row[0]?.config ?? null;
   const tabs = Array.isArray(config?.tabs) ? config.tabs : [];
   const rootModule = definition.root === "lead" ? "LEADS" : definition.root === "opportunity" ? "OPPORTUNITIES" : "ACTIVITIES";
   const tab = tabs.find((item: any) => String(item.module).toUpperCase() === rootModule) ?? tabs[0];
-  const conditions = Array.isArray(tab?.filters?.conditions) ? tab.filters.conditions : [];
+  const conditions = (Array.isArray(tab?.filters?.conditions) ? tab.filters.conditions : []).filter((condition: any) => condition?.field);
+  // Report filters are all ANDed; a view matching ANY of several conditions can't be reproduced.
+  if (tab?.filters?.logic === "OR" && conditions.length > 1) throw Object.assign(new Error("REPORT_SOURCE_VIEW_UNSUPPORTED"), { field: "OR" });
   const convertedFilters = conditions.flatMap((condition: any) => {
     const field = String(condition.field ?? "");
-    if (!FIELD_CATALOG[definition.root].has(field)) return [];
     const operator = normalizeViewOperator(condition.operator);
-    if (!operator) return [];
+    // A view condition the report can't apply used to be skipped, widening the report.
+    if (!FIELD_CATALOG[definition.root].has(field) || !operator) throw Object.assign(new Error("REPORT_SOURCE_VIEW_UNSUPPORTED"), { field });
     return [{
       object: definition.root,
       field,

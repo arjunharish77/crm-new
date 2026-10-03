@@ -1,184 +1,83 @@
+export const dynamic = "force-dynamic";
+import { PublishedCatalogBoundary } from "@/components/published-catalog-boundary";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { JsonLd } from "@/components/json-ld";
-
-const SITE_URL = process.env.NEXT_PUBLIC_UNNATIVIDYA_SITE_URL || "https://unnatividya.com";
+import { LegalPageLayout } from "@/components/legal-page-layout";
+import { siteUrl } from "@/lib/seo-config";
 
 export const metadata: Metadata = {
   title: "How We Verify Our Data",
-  description: "Unnati Vidya's editorial standards — how we source, verify, and flag online-degree fee, eligibility, career, and UGC-approval facts before publishing them.",
+  description: "Understand Unnati Vidya’s source checks, ongoing catalog review, editorial approval process and how to report a correction.",
   alternates: { canonical: "/how-we-verify" },
 };
-
-const PRINCIPLES: Array<{ title: string; copy: string }> = [
-  {
-    title: "We prefer primary sources over marketing pages",
-    copy:
-      "Wherever possible, we verify facts against a primary, independent source rather than a university's own marketing page — for example, UGC-DEB entitlement status is checked directly against the official UGC-DEB \"Entitled Online\" list (deb.ugc.ac.in), not just a university's own \"UGC approved\" claim.",
-  },
-  {
-    title: "We say explicitly when something is only a claim, not a verified fact",
-    copy:
-      "Career-outcome and salary figures are the clearest example: most placement percentages and salary ranges we found during research exist only on a university's own marketing page, or on a third-party aggregator site that isn't independently corroborated. Our career-scope guides say so directly — attributing each figure to its actual source — instead of presenting it as our own verified number.",
-  },
-  {
-    title: "Every guide shows a 'last reviewed' date",
-    copy:
-      "Fees, eligibility rules, and approval status change by admission cycle. Every guide page states when it was last checked, so you know how current the information is before you rely on it.",
-  },
-  {
-    title: "We flag inconsistencies instead of smoothing them over",
-    copy:
-      "When a university's own published pages disagree with each other — for example, differing minimum-percentage figures for the same program on different pages — we say so explicitly rather than picking one number and presenting it as settled.",
-  },
-  {
-    title: "We don't publish thin or duplicated pages to inflate page count",
-    copy:
-      "Every comparison, eligibility, career-scope, and UGC-approval page on this site exists because we found a genuine, source-verified difference worth explaining — not because we swapped a variable in a template. Where two universities' programs don't differ in any meaningful way, we don't build a page pretending otherwise.",
-  },
-  {
-    title: "How our star ratings work",
-    copy:
-      "The star ratings and review counts shown on course and university cards reflect learner feedback collected through our own counselling process, not an independent third-party audit. We show them because they're a real, if informal, signal — not because they've been externally verified. Treat them the same way you'd treat any other unaudited review count, and rely on the checks above (fees, eligibility, approvals, placement sourcing) for anything that needs to be exact.",
-  },
+const sections = [
+  { id: "verification-status", title: "Where the review stands" },
+  { id: "verification-checks", title: "What we check" },
+  { id: "interpreting-claims", title: "Dates, ratings and outcomes" },
+  { id: "report-correction", title: "Report a correction" },
+  { id: "verification-faq", title: "Common questions" },
 ];
-
-const FAQS: Array<[string, string]> = [
-  [
-    "How does Unnati Vidya verify UGC-DEB entitlement status?",
-    "We check it directly against the official UGC-DEB \"Entitled Online\" list at deb.ugc.ac.in, not just a university's own \"UGC approved\" marketing claim. A university's own page is a starting point, not the final word.",
-  ],
-  [
-    "Are the career-outcome and salary figures on this site independently verified?",
-    "Not always, and we say so explicitly when they aren't. Most placement percentages and salary ranges we found during research exist only on a university's own marketing page or a third-party aggregator, without independent corroboration — our career-scope guides attribute each figure to its actual source rather than presenting it as our own verified number.",
-  ],
-  [
-    "How do I know if a guide's information is still current?",
-    "Every guide page states a \"last reviewed\" date, since fees, eligibility rules, and approval status change by admission cycle. Check that date before relying on a figure, and confirm anything time-sensitive with a counsellor.",
-  ],
-  [
-    "What happens when a university's own pages contradict each other?",
-    "We flag the inconsistency instead of quietly picking one number — for example, if two of a university's own pages show differing minimum-percentage eligibility figures for the same program, our guide says so directly rather than presenting one as settled fact.",
-  ],
-  [
-    "Why doesn't Unnati Vidya have a comparison page for every possible pair of programs?",
-    "Because we only publish a comparison, eligibility, career-scope, or UGC-approval page where we found a genuine, source-verified difference worth explaining. Swapping a variable into a template to inflate page count isn't something we do.",
-  ],
+const checks = [
+  { title: "Fees and fee categories", copy: "Use official university program and fee pages. Identify the currency, total or instalment amount, additional charges and the applicable domestic, international or NRI category. Record uncertainty when the source does not make a charge clear." },
+  { title: "Eligibility and curriculum", copy: "Check the program’s admission requirements and published curriculum. Keep conflicting requirements visible for review rather than combining them into a single unsupported rule." },
+  { title: "Recognition and intake", copy: "Look for evidence for the specific program, mode and academic session. A general university badge or evidence from an earlier session is not enough for us to mark a current program claim verified." },
+  { title: "Review before publication", copy: "Prepare proposed corrections for administrator review. A source check or saved draft does not by itself change the published catalog. Reviewers must assess the evidence before applying a correction." },
+];
+const faqs = [
+  ["Has every catalog detail been verified?", "No. Field-level review across the listed universities is ongoing. Prepared corrections and source checks do not mean that all current fees, recognition, intake or other details have been confirmed or published."],
+  ["Does an updated date mean all the information is current?", "No. A publication or update date describes that page. It is not proof that every fee, eligibility rule or recognition claim was checked for the latest admission cycle. Read the source notes and confirm time-sensitive details with the university."],
+  ["Are ratings and placement figures independently verified?", "They should not be treated as independently verified. Existing ratings, reviews, salary and placement figures remain visible while their source and methodology review is pending. They do not guarantee an individual learner’s outcome."],
+  ["How are conflicting university details handled?", "Conflicting source details need review. A prepared correction should explain the conflict rather than present an unresolved requirement as settled. Confirm the applicable requirement directly with the university before applying."],
+  ["How can I report a possible error?", "Email admin@unnatividya.com with the page link, the detail you believe is incorrect and a relevant official source if available. Please do not include personal application documents. A report requires review before a correction is published."],
 ];
 
 export default function HowWeVerifyPage() {
-  const breadcrumbJsonLd = {
-    "@context": "https://schema.org",
-    "@type": "BreadcrumbList",
-    itemListElement: [
-      { "@type": "ListItem", position: 1, name: "Home", item: SITE_URL },
-      { "@type": "ListItem", position: 2, name: "How We Verify Our Data", item: `${SITE_URL}/how-we-verify` },
-    ],
-  };
-  const faqJsonLd = {
-    "@context": "https://schema.org",
-    "@type": "FAQPage",
-    mainEntity: FAQS.map(([question, answer]) => ({ "@type": "Question", name: question, acceptedAnswer: { "@type": "Answer", text: answer } })),
-  };
-
-  return (
-    <>
-      <JsonLd data={[breadcrumbJsonLd, faqJsonLd]} />
-      <div style={{ background: "#F7F8F9" }}>
-        <div style={{ background: "#263238" }}>
-          <div className="container" style={{ paddingTop: 36, paddingBottom: 32 }}>
-            <div className="breadcrumb" style={{ marginBottom: 8, color: "#B8C4CA" }}>
-              <Link href="/" style={{ color: "#B8C4CA" }}>Home</Link> &gt; How We Verify Our Data
-            </div>
-            <h1 style={{ color: "#fff", fontSize: 30, fontWeight: 700, margin: 0 }}>How we verify every number on this site</h1>
-            <div style={{ color: "#B8C4CA", fontSize: 15, marginTop: 8, maxWidth: 600 }}>
-              Fees, approvals and placement claims are copied from official sources, dated, and re-checked each admission cycle — not written from memory.
-            </div>
+  const host = siteUrl();
+  return <PublishedCatalogBoundary>
+    <JsonLd data={[
+      { "@context": "https://schema.org", "@type": "BreadcrumbList", itemListElement: [
+        { "@type": "ListItem", position: 1, name: "Home", item: host },
+        { "@type": "ListItem", position: 2, name: "How We Verify Our Data", item: `${host}/how-we-verify` },
+      ] },
+      { "@context": "https://schema.org", "@type": "FAQPage", mainEntity: faqs.map(([question, answer]) => ({ "@type": "Question", name: question, acceptedAnswer: { "@type": "Answer", text: answer } })) },
+    ]} />
+    <LegalPageLayout crumb="How we verify" title="How we verify our data" lastUpdated="3 October 2026" sections={sections}>
+      <div className="information-reading">
+        <p>Use Unnati Vidya to explore your options, then check the source information before deciding. This page explains our review process and its current limits.</p>
+        <section aria-labelledby="verification-status">
+          <h2 id="verification-status" tabIndex={-1}>Where the review stands</h2>
+          <div className="verification-status-note">
+            <p><strong>Catalog verification is ongoing.</strong> Review work covers Manipal University Jaipur, Sikkim Manipal University and Amity Online.</p>
+            <p>Source checks and proposed corrections have been prepared, but field-level verification and publication review are not complete. Current recognition, intake dates, additional charges and international/NRI fee details still need confirmation where evidence is incomplete.</p>
           </div>
-        </div>
-
-        <div className="container" style={{ paddingTop: 28, paddingBottom: 56, maxWidth: 760 }}>
-          <p style={{ margin: "0 0 28px", color: "#555", fontSize: 15, lineHeight: 1.65 }}>
-            We compare UGC-entitled online degrees from Manipal University Jaipur, Sikkim Manipal University, and Amity
-            University Online. Because a wrong fee, eligibility rule, or approval claim can cost you real money and time,
-            we hold ourselves to a specific, checkable process rather than just promising to &quot;do our best.&quot;
-          </p>
-
-          <h2 style={{ marginBottom: 4 }}>The four checks</h2>
-          <div className="grid two" style={{ marginBottom: 32 }}>
-            {[
-              ["UGC-DEB entitlement", "Checked directly against the official UGC-DEB \"Entitled Online\" list. Entitlement is per program and per academic year, so last year's approval is not evidence."],
-              ["Fee from the university's own page", "The total fee, EMI figure and scholarship categories we show are copied from the university's own current program page, not a marketing brochure or a third-party aggregator."],
-              ["Eligibility and specialisation audit", "Minimum-percentage eligibility rules and the real elective list for each program are checked against the university's own admission page, not assumed from a generic template."],
-              ["Placement claims kept honest", "Placement rates, average packages and hiring-partner counts are attributed to their actual source and never presented as independently audited unless they are."],
-            ].map(([title, copy]) => (
-              <div style={{ border: "1px solid #CFDAE6", borderRadius: 8, padding: 18 }} key={title}>
-                <div style={{ fontSize: 15, fontWeight: 700, color: "#363634" }}>{title}</div>
-                <div style={{ fontSize: 14, color: "#555", lineHeight: 1.55, marginTop: 6 }}>{copy}</div>
-              </div>
-            ))}
+          <p>Do not interpret a listing, badge or last-updated date as confirmation that every detail is verified.</p>
+        </section>
+        <section aria-labelledby="verification-checks">
+          <h2 id="verification-checks" tabIndex={-1}>What we check</h2>
+          <p>These are the standards for reviewing a claim, not a declaration that every check has passed for every program.</p>
+          <div className="verification-checks">
+            {checks.map(check => <section key={check.title}><h3>{check.title}</h3><p>{check.copy}</p></section>)}
           </div>
-
-          <h2 style={{ marginBottom: 4 }}>What we will not publish</h2>
-          <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 32 }}>
-            {[
-              "Salary figures with no stated source, presented as if they were independently verified.",
-              "“Starting from” fees that quietly exclude exam or convocation charges.",
-              "Programs from institutions absent from the UGC-DEB list, at any commission.",
-              "Rankings we cannot trace to a published methodology.",
-            ].map((item) => (
-              <div key={item} style={{ display: "flex", alignItems: "flex-start", gap: 10, fontSize: 14, color: "#555", lineHeight: 1.55 }}>
-                <span style={{ color: "#B00020", fontWeight: 700, flexShrink: 0 }}>✕</span>
-                {item}
-              </div>
-            ))}
-          </div>
-
-          <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
-            {PRINCIPLES.map((principle) => (
-              <section className="detail-section" key={principle.title}>
-                <h2>{principle.title}</h2>
-                <p style={{ margin: 0, color: "#555", fontSize: 15, lineHeight: 1.65 }}>{principle.copy}</p>
-              </section>
-            ))}
-          </div>
-
-          <section className="detail-section" style={{ marginTop: 8 }}>
-            <h2>See it in practice</h2>
-            <p style={{ margin: "0 0 12px", color: "#555", fontSize: 15, lineHeight: 1.65 }}>
-              Our eligibility, career-scope, and UGC-approval guides are the clearest examples of this process — each one
-              names its sources, flags what&apos;s unverified, and states when it was last checked.
-            </p>
-            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-              <Link href="/online-degree-guides/mba-eligibility" style={{ color: "#544CC8", fontWeight: 600, fontSize: 14 }}>Online MBA eligibility →</Link>
-              <Link href="/online-degree-guides/mba-career-scope" style={{ color: "#544CC8", fontWeight: 600, fontSize: 14 }}>Online MBA career scope →</Link>
-              <Link href="/online-degree-guides/mba-ugc-approval" style={{ color: "#544CC8", fontWeight: 600, fontSize: 14 }}>Is Online MBA UGC approved? →</Link>
-            </div>
-          </section>
-
-          <section className="detail-section" style={{ marginTop: 8 }}>
-            <h2>Frequently asked questions</h2>
-            <div className="faq-list">
-              {FAQS.map(([question, answer]) => (
-                <details className="faq-item" name="verify-faq" key={question}>
-                  <summary>{question}</summary>
-                  <p>{answer}</p>
-                </details>
-              ))}
-            </div>
-          </section>
-
-          <div style={{ background: "#F4F3FC", border: "1px solid #CFDAE6", borderRadius: 8, padding: 22, marginTop: 28 }}>
-            <div style={{ fontSize: 16, fontWeight: 700, color: "#363634" }}>Found something wrong?</div>
-            <div style={{ fontSize: 14, color: "#555", lineHeight: 1.6, margin: "8px 0 14px" }}>
-              If a fee has changed or an entitlement has lapsed, tell us and we will correct it within one working day — and credit the correction on the page.
-            </div>
-            <Link href="/lead?intent=data-correction" data-open-lead className="btn primary" style={{ height: 42, padding: "0 20px", display: "inline-flex", alignItems: "center", fontSize: 14 }}>
-              Report a correction
-            </Link>
-          </div>
-        </div>
+        </section>
+        <section aria-labelledby="interpreting-claims">
+          <h2 id="interpreting-claims" tabIndex={-1}>Dates, ratings and outcomes</h2>
+          <p>Read each page’s source notes and check which program, fee category and admission cycle they cover. A page update can be a wording or layout change; it does not automatically mean every statement was reverified.</p>
+          <p>Existing ratings, reviews, salary and placement figures remain visible while source and methodology checks are pending. Treat them as unverified claims, not independently audited results or a promise of your own outcome.</p>
+          <p>Use our <Link href="/online-degree-guides">degree guides</Link> to prepare questions, and confirm requirements and charges with the university before submitting documents or paying.</p>
+        </section>
+        <section aria-labelledby="report-correction">
+          <h2 id="report-correction" tabIndex={-1}>Report a correction</h2>
+          <p>Email <a href="mailto:admin@unnatividya.com">admin@unnatividya.com</a> with:</p>
+          <ul><li>The Unnati Vidya page link.</li><li>The detail you believe is incorrect.</li><li>A relevant official source, if available.</li></ul>
+          <p>Please leave out personal application documents. Reports require review before publication; we do not promise a correction before the evidence has been assessed.</p>
+          <p>Learn about the <Link href="/authors/content-team">Content Team, Unnati Vidya</Link> shared editorial byline.</p>
+        </section>
+        <section aria-labelledby="verification-faq">
+          <h2 id="verification-faq" tabIndex={-1}>Common questions</h2>
+          <div className="faq-list">{faqs.map(([question, answer]) => <details className="faq-item" name="verify-faq" key={question}><summary>{question}</summary><p>{answer}</p></details>)}</div>
+        </section>
       </div>
-    </>
-  );
+    </LegalPageLayout>
+  </PublishedCatalogBoundary>;
 }

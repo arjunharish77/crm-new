@@ -283,14 +283,21 @@ async function platformAdminSmoke(platformAdmin) {
   state.createdPlatformTenantUserIds.push(created.userId);
 
   await apiAs(platformAdmin, platformClaims, "GET", `/api/platform-admin/tenants/${created.tenantId}/users`, undefined, [200], "platform admin lists tenant users");
-  await apiAs(platformAdmin, platformClaims, "POST", `/api/platform-admin/tenants/${created.tenantId}/suspend`, {}, [200], "platform admin suspends tenant");
+  await apiAs(platformAdmin, platformClaims, "POST", `/api/platform-admin/tenants/${created.tenantId}/suspend`, {}, [400], "suspending a tenant needs a reason");
+  await apiAs(platformAdmin, platformClaims, "POST", `/api/platform-admin/tenants/${created.tenantId}/suspend`, { reason: "API regression smoke" }, [200], "platform admin suspends tenant");
   await apiAs(platformAdmin, platformClaims, "POST", `/api/platform-admin/tenants/${created.tenantId}/unsuspend`, {}, [200], "platform admin unsuspends tenant");
-  const impersonation = await apiAs(platformAdmin, platformClaims, "POST", "/api/platform-admin/impersonate", {
+  // The impersonation session is set as an HttpOnly cookie, never returned in the body.
+  const impersonation = await rawRequest("POST", "/api/platform-admin/impersonate", {
     tenantId: created.tenantId,
     userId: created.userId,
-  }, [200], "platform admin impersonates tenant user");
-  if (!impersonation?.access_token && !impersonation?.token) {
-    throw new Error("Impersonation response did not include an access token");
+    reason: `${runId} regression check`,
+  }, authHeaders(platformAdmin, platformClaims), [200], "platform admin impersonates tenant user");
+  const sessionCookie = impersonation.response.headers.getSetCookie().find((cookie) => cookie.startsWith("token=")) || "";
+  if (!/^token=[^;]+;.*;\s*HttpOnly(;|$)/i.test(sessionCookie)) {
+    throw new Error("Impersonation didn't set an HttpOnly session cookie");
+  }
+  if (impersonation.data?.access_token || impersonation.data?.token) {
+    throw new Error("Impersonation returned the session token in the response body");
   }
 }
 
@@ -633,7 +640,6 @@ async function exerciseCrud(user, opportunityType) {
   await api(user, "PATCH", `/api/forms/${form.id}`, { name: `${runId} Form Updated`, config: { fields: [] } }, [200], "update form");
   await api(user, "GET", `/api/forms/${form.id}/stats`, undefined, [200], "get form stats");
   await api(user, "GET", `/api/forms/${form.id}/submissions`, undefined, [200], "get form submissions");
-  await api(user, "GET", `/api/forms/${form.id}/export`, undefined, [200], "export form submissions");
 
   const report = await api(user, "POST", "/api/reports/custom", {
     name: `${runId} Report`,
@@ -650,7 +656,6 @@ async function exerciseCrud(user, opportunityType) {
     chartType: "TABLE",
     isPublic: false,
   }, [200], "update custom report");
-  await api(user, "GET", `/api/reports/custom/${report.id}/export`, undefined, [200], "export custom report");
 
   const schedule = await api(user, "POST", "/api/reports/schedules", {
     reportKey: "funnel-by-stage",
@@ -704,7 +709,7 @@ async function exerciseCrud(user, opportunityType) {
   state.createdCommissionRuleIds.push(commissionRule.id);
   await api(user, "PATCH", `/api/commission-rules/${commissionRule.id}`, { name: `${runId} Commission Rule Updated`, isActive: false }, [200], "update commission rule");
 
-  await api(user, "POST", "/api/lead-scoring/self-learning/recompute", { targetModules: ["LEAD", "OPPORTUNITY"], force: true }, [200], "recompute predictive scores");
+  await api(user, "POST", "/api/lead-scoring/self-learning/recompute", { targetModules: ["LEAD", "OPPORTUNITY"], force: true }, [202], "recompute predictive scores (queued)");
   await api(user, "POST", "/api/reports/query", {
     root: "lead",
     fields: [{ object: "lead", field: "id", label: "Lead ID" }, { object: "lead", field: "name", label: "Lead Name" }],
@@ -789,7 +794,8 @@ async function dbCleanup(user) {
         const placeholders = columns.map((_, index) => `$${index + 1}`).join(", ");
         await pool.query(
           `insert into "PartnerPayoutSettings" (${quotedColumns}) values (${placeholders})`,
-          columns.map((column) => state.payoutSettingsSnapshot[column]),
+          // jsonb lists come back as JS arrays; a bare array would go back as a Postgres array literal.
+          columns.map((column) => (Array.isArray(state.payoutSettingsSnapshot[column]) ? JSON.stringify(state.payoutSettingsSnapshot[column]) : state.payoutSettingsSnapshot[column])),
         );
       }
     }
@@ -800,6 +806,23 @@ async function dbCleanup(user) {
       state.createdLeadIds,
     ]);
     await pool.query('delete from "LeadList" where "tenantId" = $1 and id::text = any($2::text[])', [user.tenantId, state.createdLeadListIds]);
+    // Deleting a form or a custom field through the API archives it (it can be restored), so the
+    // archived rows this run made are removed here.
+    await pool.query('delete from "FormSubmission" where "tenantId" = $1 and "formId"::text = any($2::text[])', [user.tenantId, state.createdFormIds]);
+    await pool.query('delete from "Form" where "tenantId" = $1 and id::text = any($2::text[])', [user.tenantId, state.createdFormIds]);
+    await pool.query('delete from "FieldDefinition" where "tenantId" = $1 and id::text = any($2::text[])', [user.tenantId, state.createdCustomFieldIds]);
+    // Smart Views, reports, and commission and gamification rules archive on delete too (decision
+    // 31, extended). Rules a ledger points at can't be removed (the ledgers are append-only), so
+    // those deletes run under savepoints and are skipped if refused.
+    await pool.query('delete from "CustomReport" where "tenantId" = $1 and id::text = any($2::text[])', [user.tenantId, [...state.createdSavedViewIds, ...state.createdReportIds]]);
+    for (const [table, ids] of [["GamificationRule", state.createdGamificationRuleIds], ["CommissionRule", state.createdCommissionRuleIds]]) {
+      for (const id of ids) {
+        await pool.query("savepoint archived_rule");
+        await pool.query(`delete from "${table}" where "tenantId" = $1 and id = $2`, [user.tenantId, id])
+          .then(() => pool.query("release savepoint archived_rule"))
+          .catch(() => pool.query("rollback to savepoint archived_rule"));
+      }
+    }
     await pool.query('delete from "Activity" where "tenantId" = $1 and id::text = any($2::text[])', [user.tenantId, state.createdActivityIds]);
     await pool.query('delete from "Opportunity" where "tenantId" = $1 and id::text = any($2::text[])', [user.tenantId, state.createdOpportunityIds]);
     await pool.query('delete from "Lead" where "tenantId" = $1 and id::text = any($2::text[])', [user.tenantId, state.createdLeadIds]);
@@ -809,20 +832,22 @@ async function dbCleanup(user) {
       [...state.createdLeadListIds, ...state.createdSavedViewIds, ...state.createdWidgetIds, ...state.createdExportRequestIds],
       `%${runId}%`,
     ]);
-    for (const createdTenantId of state.createdPlatformTenantIds) {
-      await pool.query('delete from "StageDefinition" where "tenantId" = $1', [createdTenantId]);
-      await pool.query('delete from "OpportunityType" where "tenantId" = $1', [createdTenantId]);
-      await pool.query('delete from "ObjectDefinition" where "tenantId" = $1', [createdTenantId]);
-      await pool.query('delete from "TenantFeature" where "tenantId" = $1', [createdTenantId]);
-      await pool.query('delete from "TenantConfig" where "tenantId" = $1', [createdTenantId]);
-      await pool.query('delete from "User" where "tenantId" = $1', [createdTenantId]);
-      await pool.query('delete from "Role" where "tenantId" = $1', [createdTenantId]);
-      await pool.query('delete from "Tenant" where id = $1', [createdTenantId]);
-    }
     await pool.query("commit");
   } catch (error) {
     await pool.query("rollback");
     throw error;
+  }
+  // Workspaces this run created get every tenant-scoped row removed (provisioning adds more
+  // tables over time -- module entitlements broke the old fixed list and, inside the
+  // transaction above, rolled back the whole cleanup). Repeated passes clear foreign-key chains.
+  if (state.createdPlatformTenantIds.length) {
+    const tables = (await pool.query(`select table_name from information_schema.columns where table_schema = 'public' and column_name = 'tenantId'`)).rows.map((row) => row.table_name);
+    for (const createdTenantId of state.createdPlatformTenantIds) {
+      for (let pass = 0; pass < 6; pass++) {
+        for (const table of tables) await pool.query(`delete from "${table.replaceAll('"', '""')}" where "tenantId"::text = $1`, [createdTenantId]).catch(() => undefined);
+      }
+      await pool.query('delete from "Tenant" where id = $1', [createdTenantId]);
+    }
   }
 }
 

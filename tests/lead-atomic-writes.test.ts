@@ -37,6 +37,13 @@ vi.mock("@/lib/server/marketplace-events", () => marketplaceMocks);
 const rollupMocks = vi.hoisted(() => ({ invalidateReportRollupsForTenant: vi.fn() }));
 vi.mock("@/lib/server/report-rollups", () => rollupMocks);
 
+// Status resolution (tenant-configurable lead statuses, migration 0124) has its own real-database
+// smoke (scripts/lead-statuses-smoke.ts); here it is stubbed so these tests stay about the
+// atomic core's own query order.
+vi.mock("@/lib/repositories/lead-statuses-postgres", () => ({
+  resolveLeadStatusForWrite: vi.fn(async (_tenantId: string, requested?: string, current?: string) => requested ?? current ?? "NEW"),
+}));
+
 const user = { id: "user-1", tenantId: "tenant-a" };
 
 function resetAllMocks() {

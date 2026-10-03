@@ -1,6 +1,6 @@
+import { assertModuleEnabled, assertTenantModule } from "@/lib/server/module-entitlements";
 import { randomUUID } from "crypto";
 import { execute, query, queryOne } from "@/lib/db/query";
-import { assertModuleEnabled } from "@/lib/server/module-entitlements";
 import { createAuditLog } from "@/lib/server/crm";
 import { getPartnerProfileForUser, updatePartnerProfileForTenant } from "@/lib/server/partners";
 
@@ -102,6 +102,7 @@ export async function rejectPartnerChangeRequest(user: TenantUser, id: string, c
 
 export async function listMyPartnerChangeRequests(user: TenantUser) {
   if (!user.tenantId) throw new Error("TENANT_CONTEXT_REQUIRED");
+  await assertTenantModule(user, "PARTNERS");
   const profile = await getPartnerProfileForUser(user);
   if (!profile) return [];
   return query<any>(

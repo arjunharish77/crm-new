@@ -1,3 +1,4 @@
+import { assertTenantModule } from "@/lib/server/module-entitlements";
 import * as pgMarketplace from "@/lib/repositories/marketplace-postgres";
 
 type TenantUser = { id: string; tenantId: string | null; isPlatformAdmin?: boolean };
@@ -149,6 +150,10 @@ export async function rotateAppSecret(user: TenantUser, appId: string) {
   return pgMarketplace.rotateAppSecret(user, appId);
 }
 
+export async function rotateAppSigningSecret(user: TenantUser, appId: string) {
+  return pgMarketplace.rotateAppSigningSecret(user, appId);
+}
+
 export async function listAppSecretsMaskedForTenant(user: TenantUser) {
   return pgMarketplace.listAppSecretsMaskedForTenant(user);
 }
@@ -260,5 +265,6 @@ export async function listAvailableAppReportsForInstall(user: TenantUser) {
 }
 
 export async function getAppReportData(user: TenantUser, appId: string, reportKey: string, opts?: { forceRefresh?: boolean }) {
+  await assertTenantModule(user, "MARKETPLACE");
   return pgMarketplace.getAppReportData(user, appId, reportKey, opts);
 }

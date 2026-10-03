@@ -1,5 +1,19 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+// Business logic under test; module/feature gates are covered by the module-gate tests.
+vi.mock("@/lib/server/entitlements", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/server/entitlements")>()),
+  assertFeatureEnabled: vi.fn(async () => undefined),
+  isFeatureEnabledForTenant: vi.fn(async () => true),
+}));
+vi.mock("@/lib/server/module-entitlements", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/server/module-entitlements")>()),
+  assertTenantModule: vi.fn(async () => undefined),
+  assertModuleEnabled: vi.fn(async () => undefined),
+  isModuleEnabledForTenant: vi.fn(async () => true),
+}));
+
+
 const pgQueryMock = vi.fn();
 const pgQueryOneMock = vi.fn();
 

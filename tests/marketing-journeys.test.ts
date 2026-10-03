@@ -225,17 +225,26 @@ vi.mock("@/lib/server/communications", () => ({
   isOptedOut: vi.fn(async () => false),
 }));
 
+// Audiences are read in id order a batch at a time (§8 #24): a static list as its members, a
+// view's leads/opportunities as the filtered rows.
+const afterAndLimit = (ids: string[], afterId: string | null, limit: number) => ids.filter((id) => !afterId || id > afterId).sort().slice(0, limit);
 vi.mock("@/lib/repositories/lead-lists-postgres", () => ({
-  getLeadListForTenant: vi.fn(async () => state.leadList),
+  leadAudienceForList: vi.fn(async () => (state.leadList ? { staticListId: state.leadList.id } : null)),
 }));
 
 vi.mock("@/lib/repositories/leads-postgres", () => ({
-  listLeadsForTenant: vi.fn(async () => state.leadsResult),
+  countLeadAudienceForTenant: vi.fn(async (_user: any, query: any) => (query.staticListId ? state.leadList.leads.length : state.leadsResult.meta.total)),
+  listLeadAudiencePageForTenant: vi.fn(async (_user: any, query: any, afterId: string | null, limit: number) =>
+    afterAndLimit((query.staticListId ? state.leadList.leads : state.leadsResult.data).map((lead: any) => lead.id), afterId, limit).map((id) => ({ id }))),
 }));
 
 vi.mock("@/lib/repositories/opportunities-postgres", () => ({
-  listOpportunitiesForTenantByType: vi.fn(async () => state.opportunitiesResult),
+  countOpportunityAudienceForTenant: vi.fn(async () => state.opportunitiesResult.meta.total),
+  listOpportunityAudienceIdsForTenant: vi.fn(async (_user: any, _filters: any, afterId: string | null, limit: number) =>
+    afterAndLimit(state.opportunitiesResult.data.map((row: any) => row.id), afterId, limit)),
 }));
+
+vi.mock("@/lib/repositories/auth-admin-postgres", () => ({ getCurrentUserById: vi.fn(async () => null) }));
 
 const TENANT_USER = { id: "admin-1", tenantId: "tenant-1" };
 
@@ -317,7 +326,7 @@ describe("Marketing journey engine", () => {
     expect(result).toEqual({ total: 0, recordIds: [] });
   });
 
-  it("resolves LEAD_LIST audience via getLeadListForTenant", async () => {
+  it("resolves a LEAD_LIST audience to the list's members", async () => {
     const { resolveJourneyAudienceRecordIds } = await import("@/lib/server/marketing-journeys");
     const result = await resolveJourneyAudienceRecordIds(TENANT_USER, "LEAD", "LEAD_LIST", { leadListId: "list-1" });
     expect(result).toEqual({ total: 2, recordIds: ["lead-1", "lead-2"] });
@@ -341,12 +350,12 @@ describe("Marketing journey engine", () => {
     await transitionJourneyStatus(TENANT_USER, journey.id, "ACTIVE");
 
     const first = await enrollAudienceIntoJourney(TENANT_USER, journey.id);
-    expect(first).toEqual({ enrolled: 2, skipped: 0 });
+    expect(first).toEqual({ enrolled: 2, skipped: 0, complete: true });
     expect(enrollRecordsInAutomation).toHaveBeenCalledWith(TENANT_USER, "auto-1", "LEAD", ["lead-1", "lead-2"]);
     expect(state.touches.filter((t) => t.channel === "JOURNEY_ENROLLMENT")).toHaveLength(2);
 
     const second = await enrollAudienceIntoJourney(TENANT_USER, journey.id);
-    expect(second).toEqual({ enrolled: 0, skipped: 2 });
+    expect(second).toEqual({ enrolled: 0, skipped: 2, complete: true });
   });
 
   it("lets a higher-priority journey win an enrollment collision, exiting the lower-priority enrollment, and blocks the reverse", async () => {
@@ -365,17 +374,17 @@ describe("Marketing journey engine", () => {
     }
 
     const firstEnroll = await enrollAudienceIntoJourney(TENANT_USER, journeyA.id);
-    expect(firstEnroll).toEqual({ enrolled: 2, skipped: 0 });
+    expect(firstEnroll).toEqual({ enrolled: 2, skipped: 0, complete: true });
 
     const secondEnroll = await enrollAudienceIntoJourney(TENANT_USER, journeyB.id);
-    expect(secondEnroll).toEqual({ enrolled: 2, skipped: 0 });
+    expect(secondEnroll).toEqual({ enrolled: 2, skipped: 0, complete: true });
     const journeyAEnrollments = await listEnrollmentsForJourney(TENANT_USER, journeyA.id);
     expect(journeyAEnrollments.every((e: any) => e.status === "EXITED" && e.exitReason === "JOURNEY_PRIORITY_COLLISION")).toBe(true);
 
     // journeyA can no longer win the same records back -- it's outranked by journeyB, which
     // now holds the only ACTIVE enrollment for them.
     const thirdEnroll = await enrollAudienceIntoJourney(TENANT_USER, journeyA.id);
-    expect(thirdEnroll).toEqual({ enrolled: 0, skipped: 2 });
+    expect(thirdEnroll).toEqual({ enrolled: 0, skipped: 2, complete: true });
   });
 
   it("rejects enrolling audience into a journey that isn't ACTIVE", async () => {

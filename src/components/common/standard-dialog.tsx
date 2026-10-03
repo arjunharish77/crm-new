@@ -12,7 +12,8 @@ import {
 import { EditorDismissContext } from "@/hooks/use-editor-dismiss-guard";
 import { cn } from "@/lib/utils";
 
-type DialogMaxWidth = "xs" | "sm" | "md" | "lg" | "xl";
+// No "xl" (1536px): anything that big becomes its own page (UI/UX plan §11.6 C).
+type DialogMaxWidth = "xs" | "sm" | "md" | "lg";
 
 interface StandardDialogProps {
     open: boolean;
@@ -26,14 +27,12 @@ interface StandardDialogProps {
     fullWidth?: boolean;
 }
 
-// Matches the MUI Dialog `maxWidth` breakpoint pixel values exactly, so existing
-// callers keep the same dialog width they had before this migration.
+// Dialog widths: xs 444px, sm 600px, md 900px, lg 1200px, never wider than the window.
 const MAX_WIDTH_CLASS: Record<DialogMaxWidth, string> = {
     xs: "sm:max-w-[min(444px,calc(100dvw-2rem))]",
     sm: "sm:max-w-[min(600px,calc(100dvw-2rem))]",
     md: "sm:max-w-[min(900px,calc(100dvw-2rem))]",
     lg: "sm:max-w-[min(1200px,calc(100dvw-2rem))]",
-    xl: "sm:max-w-[min(1536px,calc(100dvw-2rem))]",
 };
 
 export function StandardDialog({
@@ -71,17 +70,17 @@ export function StandardDialog({
                         openerRef.current.focus();
                     }
                 }}
-                className={cn(MAX_WIDTH_CLASS[maxWidth], fullWidth ? "w-[calc(100dvw-2rem)]" : "w-fit", "min-w-0 grid-cols-[minmax(0,1fr)] max-h-[calc(100dvh-2rem)] grid-rows-[auto_minmax(0,1fr)_auto] p-0 gap-0 overflow-hidden rounded-[14px]")}
+                className={cn(MAX_WIDTH_CLASS[maxWidth], fullWidth ? "w-[calc(100dvw-2rem)]" : "w-fit", "min-w-0 grid-cols-[minmax(0,1fr)] max-h-[calc(100dvh-2rem)] grid-rows-[auto_minmax(0,1fr)_auto] p-0 gap-0 overflow-hidden rounded-xl")}
             >
                 <div className="flex min-w-0 items-center justify-between gap-3 p-[18px] pb-2.5">
                     <div className="flex items-center gap-3 min-w-0">
                         {icon && (
-                            <div className="flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-[10px] bg-primary/8 text-primary">
+                            <div className="flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-xl bg-primary/8 text-primary">
                                 {icon}
                             </div>
                         )}
                         <div className="min-w-0">
-                            <DialogTitle className="min-w-0 break-words text-[18px] font-extrabold leading-tight">
+                            <DialogTitle className="min-w-0 break-words text-lg font-semibold leading-tight">
                                 {title}
                             </DialogTitle>
                             {subtitle && (
@@ -93,7 +92,7 @@ export function StandardDialog({
                         type="button"
                         onClick={requestClose}
                         aria-label="Close"
-                        className="shrink-0 rounded-[10px] p-1.5 text-muted-foreground transition-colors hover:bg-foreground/8 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                        className="shrink-0 rounded-xl p-1.5 text-muted-foreground transition-colors hover:bg-foreground/8 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                     >
                         <CloseIcon className="size-4" />
                     </button>

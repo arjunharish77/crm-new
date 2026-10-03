@@ -1,4 +1,5 @@
 import * as pgReportSchedules from "@/lib/repositories/report-schedules-postgres";
+import { assertFeatureEnabled } from "@/lib/server/entitlements";
 
 type TenantUser = {
   id: string;
@@ -20,6 +21,7 @@ type ScheduleInput = {
 };
 
 export async function listReportSchedulesForTenant(user: TenantUser) {
+  await assertFeatureEnabled(user.tenantId, "advancedReporting", { isPlatformAdmin: user.isPlatformAdmin });
   return pgReportSchedules.listReportSchedulesForTenant(user);
 }
 

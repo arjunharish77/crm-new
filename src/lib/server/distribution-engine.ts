@@ -1,7 +1,7 @@
+import { assertTenantModule, isModuleEnabledForTenant } from "@/lib/server/module-entitlements";
 import { randomUUID } from "crypto";
 import { execute, query, queryOne, jsonbParam, type Queryable } from "@/lib/db/query";
 import { withTransaction, type TransactionClient } from "@/lib/db/transaction";
-import { isModuleEnabledForTenant } from "@/lib/server/module-entitlements";
 import { runAutomationsForEvent } from "@/lib/repositories/automations-postgres";
 import { createUserNotification } from "@/lib/server/notifications";
 import { zonedWallClockParts } from "@/lib/server/date-format";
@@ -680,7 +680,7 @@ async function resolveDistribution(
     rules = await query<RuleRow>(
       `select id, name, "entityType", priority, "isActive", strategy, "targetGroupId", "isDefault", "roundRobinCursor", "territoryField"
        from "AssignmentRule"
-       where "tenantId" = $1 and "entityType" = $2 and "isActive" = true
+       where "tenantId" = $1 and "entityType" = $2 and "isActive" = true and "deletedAt" is null
        order by priority desc`,
       [tenantId, entityType],
       client,
@@ -826,6 +826,7 @@ export async function simulateDistribution(
   record: Record<string, unknown>,
   draftRule?: DraftRuleInput,
 ): Promise<{ result: DistributionResult; trace: DistributionTrace[]; simulationId: string | null }> {
+  await assertTenantModule(user, "DISTRIBUTION");
   const tenantId = tenantIdFor(user);
   const entityType = normalizeEntityType(entityTypeInput);
   const draftOverride = draftRule ? toDraftRuleAndBundle(draftRule) : undefined;
@@ -842,6 +843,7 @@ export async function simulateDistribution(
 }
 
 export async function listDistributionSimulationsForTenant(user: TenantUser, entityTypeInput?: string, limit = 20) {
+  await assertTenantModule(user, "DISTRIBUTION");
   const tenantId = tenantIdFor(user);
   const clauses = ['"tenantId" = $1'];
   const params: unknown[] = [tenantId];
@@ -1054,7 +1056,7 @@ export async function previewReassignmentImpact(
   const quotas = await query<{ maxAssignmentsPerUser: number | null }>(
     `select q."maxAssignmentsPerUser" from "DistributionQuota" q
      join "AssignmentRule" r on r.id = q."ruleId"
-     where r."tenantId" = $1 and r."entityType" = $2 and r."isActive" = true and q."maxAssignmentsPerUser" is not null`,
+     where r."tenantId" = $1 and r."entityType" = $2 and r."isActive" = true and r."deletedAt" is null and q."maxAssignmentsPerUser" is not null`,
     [tenantId, entityType],
   );
   const tightestCap = quotas.reduce<number | null>((min, row) => {

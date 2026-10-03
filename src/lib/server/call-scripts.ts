@@ -1,3 +1,4 @@
+import { assertTenantModule } from "@/lib/server/module-entitlements";
 import { randomUUID } from "crypto";
 import { query, queryOne, execute, jsonbParam } from "@/lib/db/query";
 import { createAuditLog, automationConditionMatches } from "@/lib/server/crm";
@@ -26,11 +27,13 @@ function hasCallScriptAdminAccess(user: TenantUser) {
 const SCRIPT_COLUMNS = `id, name, "matchConditions", content, "objectionHandling", "complianceLines", "isActive", "order", version, "createdAt", "updatedAt"`;
 
 export async function listCallScriptsForTenant(user: TenantUser) {
+  await assertTenantModule(user, "TELEPHONY");
   const tenantId = requireTenantId(user);
   return query<any>(`select ${SCRIPT_COLUMNS} from "CallScript" where "tenantId" = $1 order by "order" asc, "createdAt" asc`, [tenantId]);
 }
 
 export async function createCallScriptForTenant(user: TenantUser, input: Record<string, unknown>) {
+  await assertTenantModule(user, "TELEPHONY");
   const tenantId = requireTenantId(user);
   if (!hasCallScriptAdminAccess(user)) throw new Error("FORBIDDEN");
   const name = String(input.name ?? "").trim();
@@ -59,6 +62,7 @@ export async function createCallScriptForTenant(user: TenantUser, input: Record<
 }
 
 export async function updateCallScriptForTenant(user: TenantUser, id: string, input: Record<string, unknown>) {
+  await assertTenantModule(user, "TELEPHONY");
   const tenantId = requireTenantId(user);
   if (!hasCallScriptAdminAccess(user)) throw new Error("FORBIDDEN");
 
@@ -113,6 +117,7 @@ export async function updateCallScriptForTenant(user: TenantUser, id: string, in
 }
 
 export async function deleteCallScriptForTenant(user: TenantUser, id: string) {
+  await assertTenantModule(user, "TELEPHONY");
   const tenantId = requireTenantId(user);
   if (!hasCallScriptAdminAccess(user)) throw new Error("FORBIDDEN");
   await execute(`delete from "CallScript" where "tenantId" = $1 and id = $2`, [tenantId, id]);
@@ -120,6 +125,7 @@ export async function deleteCallScriptForTenant(user: TenantUser, id: string) {
 }
 
 export async function listCallScriptVersionsForTenant(user: TenantUser, scriptId: string) {
+  await assertTenantModule(user, "TELEPHONY");
   const tenantId = requireTenantId(user);
   if (!hasCallScriptAdminAccess(user)) throw new Error("FORBIDDEN");
   return query<any>(
@@ -140,6 +146,7 @@ function countMatchedConditions(matchConditions: any): number {
 // script with zero conditions acts as a catch-all fallback, matching everything but always
 // losing to any script with at least one real matching condition.
 export async function getBestCallScriptForRecord(user: TenantUser, recordType: "LEAD" | "OPPORTUNITY", recordId: string) {
+  await assertTenantModule(user, "TELEPHONY");
   const tenantId = requireTenantId(user);
   const record = recordType === "LEAD" ? await getLeadForTenant(user, recordId) : await getOpportunityForTenant(user, recordId);
   if (!record) throw new Error("RECORD_NOT_FOUND");

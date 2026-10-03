@@ -1,5 +1,5 @@
 import { randomUUID } from "crypto";
-import { execute, query, queryOne } from "@/lib/db/query";
+import { execute, query, queryOne, jsonbParam } from "@/lib/db/query";
 import { assertFeatureEnabled } from "@/lib/server/entitlements";
 import { assertMetricPermission, getMetricForTenant, getMetricValueForTenant } from "@/lib/server/metrics";
 
@@ -125,7 +125,7 @@ export async function createCalculatedMetricForTenant(user: TenantUser, input: C
       user.tenantId,
       input.name.trim(),
       input.description ?? null,
-      steps,
+      jsonbParam(steps), // a bare array would be sent as a Postgres array literal
       user.id,
       visibility,
       visibility === "TEAM" ? input.sharedWithTeamId ?? null : null,
@@ -146,7 +146,7 @@ export async function updateCalculatedMetricForTenant(user: TenantUser, id: stri
     patch.name = input.name.trim();
   }
   if (input.description !== undefined) patch.description = input.description;
-  if (input.steps !== undefined) patch.steps = await validateSteps(user, input.steps);
+  if (input.steps !== undefined) patch.steps = jsonbParam(await validateSteps(user, input.steps)); // see the insert above
   if (input.visibility !== undefined) {
     patch.visibility = input.visibility;
     patch.sharedWithTeamId = input.visibility === "TEAM" ? input.sharedWithTeamId ?? null : null;

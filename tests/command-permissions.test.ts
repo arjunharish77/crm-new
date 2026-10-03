@@ -12,9 +12,9 @@ const BASE = {
 
 // Gap checklist Module 10's tests bullet -- "command permissions" (the global command palette).
 describe("visibleCommandIds", () => {
-  it("always includes the always-on navigate and settings-home commands", () => {
+  it("always includes the always-on navigate and My account commands", () => {
     const ids = visibleCommandIds(BASE);
-    expect(ids).toEqual(expect.arrayContaining(["nav-views", "nav-reports", "nav-exports", "settings-home"]));
+    expect(ids).toEqual(expect.arrayContaining(["nav-views", "nav-reports", "nav-exports", "account-pages"]));
   });
 
   it("hides create-lead when the caller has no onCreateLead handler, even with module access", () => {
@@ -60,22 +60,20 @@ describe("visibleCommandIds", () => {
     expect(visibleCommandIds({ ...BASE, automationEnabled: true })).toContain("nav-automations");
   });
 
-  it("hides every admin-only settings command for a non-admin", () => {
+  it("hides Settings and its pages from a non-admin, who gets My account instead", () => {
     const ids = visibleCommandIds({ ...BASE, isAdmin: false });
-    expect(ids).not.toEqual(
-      expect.arrayContaining(["settings-users", "settings-roles", "settings-security", "settings-integrations", "settings-api-keys"]),
-    );
+    expect(ids).not.toContain("settings-home");
+    expect(ids).not.toContain("settings-pages");
+    expect(ids).toContain("account-pages");
   });
 
-  it("shows every admin-only settings command for an admin", () => {
+  it("shows Settings and its pages to an admin", () => {
     const ids = visibleCommandIds({ ...BASE, isAdmin: true });
-    expect(ids).toEqual(
-      expect.arrayContaining(["settings-users", "settings-roles", "settings-security", "settings-integrations", "settings-api-keys"]),
-    );
+    expect(ids).toEqual(expect.arrayContaining(["settings-home", "settings-pages", "account-pages"]));
   });
 
-  it("never shows admin-only commands to a non-admin regardless of module access", () => {
+  it("never shows Settings commands to a non-admin regardless of module access", () => {
     const ids = visibleCommandIds({ ...BASE, isAdmin: false, canAccessModule: () => true });
-    expect(ids).not.toContain("settings-users");
+    expect(ids).not.toContain("settings-pages");
   });
 });

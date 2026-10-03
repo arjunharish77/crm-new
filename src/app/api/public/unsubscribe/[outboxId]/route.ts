@@ -1,7 +1,7 @@
 import { randomUUID } from "crypto";
 import { NextResponse } from "next/server";
 import { queryOne, execute } from "@/lib/db/query";
-import { setPreferenceForRecord } from "@/lib/server/marketing-journeys";
+import { cancelPendingJourneyStepsForRecord, setPreferenceForRecord } from "@/lib/server/marketing-journeys";
 import { badRequest, serverError } from "@/lib/server/http";
 
 async function loadOutboxContext(outboxId: string) {
@@ -43,22 +43,25 @@ export async function POST(
     const scope: "CHANNEL" | "ALL" = body?.scope === "ALL" ? "ALL" : "CHANNEL";
 
     const now = new Date().toISOString();
-    if (scope === "ALL") {
-      for (const channel of ["EMAIL", "WHATSAPP", "SMS"]) {
-        await execute(
-          `insert into "CommunicationConsent" (id, "tenantId", "entityType", "entityId", channel, status, source, "capturedAt", "updatedAt")
-           values ($1, $2, $3, $4, $5, 'OPTED_OUT', 'UNSUBSCRIBE_LINK', $6, $6)
-           on conflict ("tenantId", "entityType", "entityId", channel) do update set status = 'OPTED_OUT', "updatedAt" = $6`,
-          [randomUUID(), outbox.tenantId, outbox.entityType, outbox.entityId, channel, now],
-        );
-      }
-    } else {
+    // Each opt-out also goes into the append-only consent history (it used to be missing, so link
+    // opt-outs never appeared in a record's consent history), with no user: the recipient did it.
+    const optOut = async (channel: string) => {
       await execute(
         `insert into "CommunicationConsent" (id, "tenantId", "entityType", "entityId", channel, status, source, "capturedAt", "updatedAt")
          values ($1, $2, $3, $4, $5, 'OPTED_OUT', 'UNSUBSCRIBE_LINK', $6, $6)
-         on conflict ("tenantId", "entityType", "entityId", channel) do update set status = 'OPTED_OUT', "updatedAt" = $6`,
-        [randomUUID(), outbox.tenantId, outbox.entityType, outbox.entityId, outbox.channel, now],
+         on conflict ("tenantId", "entityType", "entityId", channel) do update set status = 'OPTED_OUT', source = 'UNSUBSCRIBE_LINK', "updatedAt" = $6`,
+        [randomUUID(), outbox.tenantId, outbox.entityType, outbox.entityId, channel, now],
       );
+      await execute(
+        `insert into "CommunicationConsentHistory" (id, "tenantId", "entityType", "entityId", channel, status, "lawfulBasis", source, "changedBy", "createdAt")
+         values ($1, $2, $3, $4, $5, 'OPTED_OUT', null, 'UNSUBSCRIBE_LINK', null, $6)`,
+        [randomUUID(), outbox.tenantId, outbox.entityType, outbox.entityId, channel, now],
+      );
+    };
+    if (scope === "ALL") {
+      for (const channel of ["EMAIL", "WHATSAPP", "SMS"]) await optOut(channel);
+    } else {
+      await optOut(outbox.channel);
     }
 
     if (outbox.entityType === "LEAD" || outbox.entityType === "OPPORTUNITY") {
@@ -69,6 +72,8 @@ export async function POST(
          where "tenantId" = $2 and "recordType" = $3 and "recordId" = $4 and status = 'ACTIVE'`,
         [now, outbox.tenantId, outbox.entityType, outbox.entityId],
       );
+      // Unsubscribing stops every journey's scheduled steps for this record.
+      await cancelPendingJourneyStepsForRecord(outbox.tenantId, null, outbox.entityType, outbox.entityId);
     }
 
     return NextResponse.json({ success: true, scope });

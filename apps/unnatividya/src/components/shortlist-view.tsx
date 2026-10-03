@@ -1,98 +1,64 @@
 "use client";
-
+import { useRef, useState } from "react";
+import { useCatalog } from "@/components/catalog-provider";
 import Image from "next/image";
 import Link from "next/link";
 import { useShortlist } from "@/lib/use-shortlist";
-import { courseWithUniversity, formatFee, type Course } from "@/data/catalog";
+import { formatFee } from "@/lib/catalog-format";
+import { type Course } from "@/data/catalog";
 import { universityMedia } from "@/data/media";
 
 export function ShortlistView({ courses }: { courses: Course[] }) {
-  const { ids, toggle } = useShortlist();
-  const saved = courses.filter((course) => ids.includes(course.id)).map(courseWithUniversity);
+  const { courseWithUniversity } = useCatalog();
+  const { ids, ready, setSaved } = useShortlist();
+  const [selection, setSelection] = useState<string[]>([]);
+  const [removed, setRemoved] = useState<Course | null>(null);
+  const heading = useRef<HTMLHeadingElement>(null);
+  const saved = courses.filter(course => ids.includes(course.id)).map(courseWithUniversity);
+  const selected = selection.filter(id => saved.some(course => course.id === id));
+  const fees = saved.map(course => course.fee).filter(fee => Number.isFinite(fee) && fee > 0);
 
-  if (!saved.length) {
-    return (
-      <>
-        <div style={{ fontSize: 14, color: "#696868", marginBottom: 24 }}>
-          Saved on this device — tap the heart on any course to add or remove it.
-        </div>
-        <div style={{ background: "#fff", border: "1px dashed #CFDAE6", borderRadius: 8, padding: 40, textAlign: "center" }}>
-          <div style={{ fontSize: 16, fontWeight: 700, color: "#363634" }}>Nothing saved yet</div>
-          <div style={{ fontSize: 14, color: "#696868", marginTop: 8, marginBottom: 20 }}>
-            Tap the heart on any course to keep it here while you decide.
-          </div>
-          <Link href="/courses" className="btn primary" style={{ display: "inline-flex", height: 44, alignItems: "center", padding: "0 22px" }}>
-            Browse courses
-          </Link>
-        </div>
-      </>
-    );
+  function remove(course: Course) {
+    setSaved(course.id, false);
+    setSelection(current => current.filter(id => id !== course.id));
+    setRemoved(course);
+    heading.current?.focus();
   }
+  function undo() {
+    if (!removed) return;
+    setSaved(removed.id, true);
+    setRemoved(null);
+    heading.current?.focus();
+  }
+  if (!ready) return <p role="status">Loading your saved courses…</p>;
 
-  const fees = saved.map((course) => course.fee);
-  const minFee = Math.min(...fees);
-  const maxFee = Math.max(...fees);
-  const cheapest = saved.find((course) => course.fee === minFee)!;
-  const highestRated = [...saved].sort((a, b) => b.rating - a.rating)[0];
-  const bestPlacement = [...saved].sort((a, b) => b.university.placement - a.university.placement)[0];
-
-  return (
-    <>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", gap: 16, flexWrap: "wrap", marginBottom: 24 }}>
-        <div style={{ fontSize: 14, color: "#696868" }}>
-          {saved.length} program{saved.length === 1 ? "" : "s"} saved · fees from {formatFee(minFee)} to {formatFee(maxFee)}
+  return <section className="shortlist-workspace" aria-labelledby="shortlist-summary">
+    <h2 id="shortlist-summary" ref={heading} tabIndex={-1}>{saved.length ? `${saved.length} saved program${saved.length === 1 ? "" : "s"}` : "Your saved programs"}</h2>
+    <p className="shortlist-help">Saved in this browser. Use the heart on a course to save it for later.</p>
+    {removed && <div className="shortlist-undo"><p role="status">Removed {removed.name} — {courseWithUniversity(removed).university.shortName}.</p><button type="button" className="btn secondary" onClick={undo}>Undo removal</button></div>}
+    {!saved.length ? <div className="illustrated-empty-state">
+      <Image className="state-illustration" src="/states/shortlist-empty.webp" alt="" width={800} height={600} sizes="(max-width: 400px) 60vw, 240px" />
+      <h3 className="empty-state-title">Nothing saved yet</h3>
+      <p>Save courses while you explore, then return here to compare your options.</p>
+      <Link href="/courses" className="btn primary">Browse courses</Link>
+    </div> : <>
+      <div className="shortlist-toolbar">
+        <div><p id="shortlist-compare-help">Choose two or three saved programs to compare.</p><p role="status">{selected.length} of 3 selected{fees.length ? ` · Listed tuition ${formatFee(Math.min(...fees))}–${formatFee(Math.max(...fees))}` : ""}</p></div>
+        <div className="shortlist-toolbar-actions">
+          {selected.length >= 2 ? <Link href={`/compare?add=${selected.join(",")}`} className="btn primary">Compare selected ({selected.length})</Link> : <button className="btn primary" disabled aria-describedby="shortlist-compare-help">Compare selected</button>}
+          <Link href="/courses" className="btn secondary">Browse more courses</Link>
         </div>
-        <div style={{ display: "flex", gap: 10 }}>
-          <Link href={`/compare?add=${saved.map((course) => course.id).join(",")}`} className="btn primary" style={{ height: 40, fontSize: 13 }}>
-            Compare all
-          </Link>
-          <Link href="/lead?intent=my-shortlist" data-open-lead className="btn secondary" style={{ height: 40, fontSize: 13 }}>
-            Get all brochures
-          </Link>
-        </div>
       </div>
-
-      <div className="grid four" style={{ marginBottom: 24 }}>
-        {[
-          ["Cheapest saved", `${formatFee(cheapest.fee)}`, `${cheapest.university.shortName}`],
-          ["Fee spread", `${formatFee(minFee)} – ${formatFee(maxFee)}`, null],
-          ["Highest rated", `${highestRated.rating} ★`, `${highestRated.university.shortName}`],
-          ["Best placement rate", `${bestPlacement.university.placement}%`, `${bestPlacement.university.shortName}`],
-        ].map(([label, value, sub]) => (
-          <div key={label} style={{ border: "1px solid #CFDAE6", borderRadius: 8, padding: 14 }}>
-            <div style={{ fontSize: 12, color: "#707070" }}>{label}</div>
-            <div style={{ fontSize: 16, fontWeight: 700, color: "#363634", marginTop: 2 }}>{value}{sub ? <span style={{ fontSize: 12, fontWeight: 400, color: "#707070" }}> {sub}</span> : null}</div>
-          </div>
-        ))}
+      <div className="shortlist-cards">
+        {saved.map(course => <article className="shortlist-card" key={course.id} aria-labelledby={`saved-${course.id}`}>
+          <div className="shortlist-card-top"><Image src={universityMedia[course.universityId].logo} alt="" width={32} height={32} /><button type="button" className="btn ghost" aria-label={`Remove ${course.name} — ${course.university.shortName}`} onClick={() => remove(course)}>Remove</button></div>
+          <div><h3 id={`saved-${course.id}`}>{course.name}</h3><p>{course.university.name}</p></div>
+          <dl className="shortlist-course-facts"><div><dt>Listed total tuition</dt><dd>{formatFee(course.fee)}</dd></div><div><dt>Duration</dt><dd>{course.duration}</dd></div><div><dt>EMI from</dt><dd>{course.emi}</dd></div></dl>
+          <details className="shortlist-additional"><summary>Ratings and placement figures</summary><p>Rating {course.rating} / 5 · University placement rate {course.university.placement}%</p></details>
+          <label className="shortlist-select"><input type="checkbox" checked={selected.includes(course.id)} disabled={!selected.includes(course.id) && selected.length >= 3} onChange={() => setSelection(selected.includes(course.id) ? selected.filter(id => id !== course.id) : [...selected, course.id])} aria-label={`Compare ${course.name} — ${course.university.shortName}`} />Select for comparison</label>
+          <div className="shortlist-card-actions"><Link href={`/courses/${course.slug}`} className="btn secondary">View course</Link><Link href={`/lead?course=${course.id}&intent=enquire`} data-open-lead className="btn primary">Apply now</Link></div>
+        </article>)}
       </div>
-
-      <div className="grid three">
-        {saved.map((course) => (
-          <article className="card" style={{ padding: 18, display: "flex", flexDirection: "column", gap: 10 }} key={course.id}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <span style={{ position: "relative", width: 32, height: 32 }}>
-                <Image src={universityMedia[course.universityId].logo} alt="" fill sizes="32px" style={{ objectFit: "contain" }} />
-              </span>
-              <button type="button" onClick={() => toggle(course.id)} style={{ border: "none", background: "none", color: "#544CC8", fontSize: 12, fontWeight: 700, cursor: "pointer", padding: 0 }}>
-                Remove
-              </button>
-            </div>
-            <div>
-              <div style={{ fontSize: 16, fontWeight: 700, color: "#363634" }}>{course.name}</div>
-              <div style={{ fontSize: 13, color: "#707070", marginTop: 2 }}>{course.university.name}</div>
-            </div>
-            <div style={{ display: "flex", gap: 16, fontSize: 13, color: "#555", flexWrap: "wrap" }}>
-              <span>{course.duration}</span>
-              <span><b style={{ color: "#363634" }}>{formatFee(course.fee)}</b> total</span>
-              <span>EMI {course.emi}</span>
-            </div>
-            <div style={{ display: "flex", gap: 10, marginTop: "auto" }}>
-              <Link href={`/courses/${course.slug}`} className="btn primary" style={{ flex: 1, height: 38, fontSize: 13 }}>View</Link>
-              <Link href={`/lead?course=${course.id}&intent=enquire`} data-open-lead className="btn secondary" style={{ flex: 1, height: 38, fontSize: 13 }}>Enquire</Link>
-            </div>
-          </article>
-        ))}
-      </div>
-    </>
-  );
+    </>}
+  </section>;
 }

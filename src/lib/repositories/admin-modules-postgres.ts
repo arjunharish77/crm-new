@@ -1,5 +1,5 @@
 import { randomUUID } from "crypto";
-import { execute, query, queryOne } from "@/lib/db/query";
+import { execute, query, queryOne, jsonbParam } from "@/lib/db/query";
 import { withTransaction } from "@/lib/db/transaction";
 
 type TenantUser = {
@@ -159,6 +159,16 @@ export async function deleteTeamForTenant(user: TenantUser, id: string) {
 
 export async function addTeamMemberForTenant(user: TenantUser, teamId: string, memberInput: { userId: string; role?: string }) {
   const tenantId = requireTenantId(user);
+  // Both the team and the person must belong to this workspace (foreign keys alone don't check
+  // that), and someone already on the team is a clear error rather than a unique-index failure.
+  const [team, member, existing] = await Promise.all([
+    queryOne<{ id: string }>('select id from "Team" where "tenantId"::text = $1 and id::text = $2', [tenantId, teamId]),
+    queryOne<{ id: string }>('select id from "User" where "tenantId"::text = $1 and id::text = $2', [tenantId, memberInput.userId]),
+    queryOne<{ id: string }>('select id from "TeamMember" where "tenantId"::text = $1 and "teamId"::text = $2 and "userId"::text = $3', [tenantId, teamId, memberInput.userId]),
+  ]);
+  if (!team) throw new Error("TEAM_NOT_FOUND");
+  if (!member) throw new Error("USER_NOT_FOUND");
+  if (existing) throw new Error("ALREADY_TEAM_MEMBER");
   const now = new Date().toISOString();
   return insertReturning<any>("TeamMember", {
     id: randomUUID(),
@@ -195,6 +205,13 @@ export async function listSalesGroupsForTenant(user: TenantUser) {
   });
 }
 
+// The routing lists (territories, skills, ...) are jsonb; a bare array would be sent as a Postgres
+// array literal, so they go through jsonbParam.
+const SALES_GROUP_LIST_COLUMNS = new Set(["territories", "zipCodes", "states", "countries", "skills", "languages", "productLines"]);
+function jsonbListOrNull(value: unknown) {
+  return value === undefined || value === null ? null : jsonbParam(value);
+}
+
 export async function createSalesGroupForTenant(user: TenantUser, input: Record<string, unknown>) {
   const tenantId = requireTenantId(user);
   const now = new Date().toISOString();
@@ -205,13 +222,13 @@ export async function createSalesGroupForTenant(user: TenantUser, input: Record<
     description: input.description ? String(input.description) : null,
     managerId: input.managerId ? String(input.managerId) : null,
     permissionTemplateId: asUuidOrNull(input.permissionTemplateId),
-    territories: input.territories ?? null,
-    zipCodes: input.zipCodes ?? null,
-    states: input.states ?? null,
-    countries: input.countries ?? null,
-    skills: input.skills ?? null,
-    languages: input.languages ?? null,
-    productLines: input.productLines ?? null,
+    territories: jsonbListOrNull(input.territories),
+    zipCodes: jsonbListOrNull(input.zipCodes),
+    states: jsonbListOrNull(input.states),
+    countries: jsonbListOrNull(input.countries),
+    skills: jsonbListOrNull(input.skills),
+    languages: jsonbListOrNull(input.languages),
+    productLines: jsonbListOrNull(input.productLines),
     maxLeadsPerMember: Number(input.maxLeadsPerMember ?? 50),
     workingHours: input.workingHours ?? null,
     timezone: input.timezone ? String(input.timezone) : "UTC",
@@ -240,7 +257,7 @@ export async function updateSalesGroupForTenant(user: TenantUser, id: string, in
     "timezone",
     "isActive",
   ]) {
-    if (key in input) payload[key] = key === "permissionTemplateId" ? asUuidOrNull(input[key]) : input[key];
+    if (key in input) payload[key] = key === "permissionTemplateId" ? asUuidOrNull(input[key]) : SALES_GROUP_LIST_COLUMNS.has(key) ? jsonbListOrNull(input[key]) : input[key];
   }
   if ("maxLeadsPerMember" in input) payload.maxLeadsPerMember = Number(input.maxLeadsPerMember ?? 50);
   return updateReturning<any>("SalesGroup", payload, 'where "tenantId" = $1 and id = $2', [tenantId, id], 'id, name, description, "managerId", "permissionTemplateId", "isActive", "createdAt", "updatedAt"');

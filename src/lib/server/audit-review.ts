@@ -1,7 +1,13 @@
 import { randomUUID } from "crypto";
 import { query, queryOne, execute } from "@/lib/db/query";
 
-type TenantUser = { id: string; tenantId: string | null };
+type TenantUser = { id: string; tenantId: string | null; isTenantAdmin?: boolean; isPlatformAdmin?: boolean };
+
+// Reviewing the audit log (status, comments, legal hold) is an admin task; the routes check
+// this too.
+function assertAuditAdmin(user: TenantUser) {
+  if (!user.isTenantAdmin && !user.isPlatformAdmin) throw new Error("FORBIDDEN");
+}
 
 export type AuditReviewStatus = "UNREVIEWED" | "IN_REVIEW" | "RESOLVED";
 
@@ -10,6 +16,7 @@ export async function updateAuditLogReview(
   auditLogId: string,
   patch: { reviewStatus?: AuditReviewStatus; reviewerId?: string | null; reviewNote?: string | null },
 ) {
+  assertAuditAdmin(user);
   const existing = await queryOne<{ id: string }>(
     `select id from "AuditLog" where id = $1 and "tenantId" = $2`,
     [auditLogId, user.tenantId],
@@ -48,6 +55,7 @@ export async function updateAuditLogReview(
 }
 
 export async function setAuditLogLegalHold(user: TenantUser, auditLogId: string, legalHold: boolean) {
+  assertAuditAdmin(user);
   const updated = await queryOne<{ id: string }>(
     `update "AuditLog" set "legalHold" = $1 where id = $2 and "tenantId" = $3 returning id`,
     [legalHold, auditLogId, user.tenantId],
@@ -57,6 +65,7 @@ export async function setAuditLogLegalHold(user: TenantUser, auditLogId: string,
 }
 
 export async function addAuditLogComment(user: TenantUser, auditLogId: string, body: string) {
+  assertAuditAdmin(user);
   const log = await queryOne<{ id: string }>(`select id from "AuditLog" where id = $1 and "tenantId" = $2`, [auditLogId, user.tenantId]);
   if (!log) throw new Error("AUDIT_LOG_NOT_FOUND");
   const trimmed = body.trim();
@@ -71,6 +80,7 @@ export async function addAuditLogComment(user: TenantUser, auditLogId: string, b
 }
 
 export async function listAuditLogComments(user: TenantUser, auditLogId: string) {
+  assertAuditAdmin(user);
   return query<{ id: string; body: string; createdAt: string; authorId: string | null; authorName: string | null; authorEmail: string | null }>(
     `select c.id, c.body, c."createdAt", c."authorId", u.name as "authorName", u.email as "authorEmail"
      from "AuditLogComment" c

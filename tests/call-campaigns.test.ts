@@ -2,7 +2,16 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const dbMocks = vi.hoisted(() => ({ query: vi.fn(), queryOne: vi.fn(), execute: vi.fn() }));
 const crmMocks = vi.hoisted(() => ({ createAuditLog: vi.fn().mockResolvedValue(undefined) }));
-const journeyMocks = vi.hoisted(() => ({ resolveJourneyAudienceRecordIds: vi.fn().mockResolvedValue({ total: 0, recordIds: [] }) }));
+// The audience arrives in batches (forEachJourneyAudienceBatch); `audienceBatches` sets them.
+const journeyMocks = vi.hoisted(() => {
+  const state = { audienceBatches: [] as string[][] };
+  return {
+    state,
+    forEachJourneyAudienceBatch: vi.fn(async (_user: unknown, _module: unknown, _type: unknown, _config: unknown, onBatch: (ids: string[]) => Promise<void>) => {
+      for (const batch of state.audienceBatches) await onBatch(batch);
+    }),
+  };
+});
 const leadsRepoMocks = vi.hoisted(() => ({ getLeadForTenant: vi.fn() }));
 const opportunitiesRepoMocks = vi.hoisted(() => ({ getOpportunityForTenant: vi.fn() }));
 const telephonyWebhookMocks = vi.hoisted(() => ({ checkTelephonyComplianceForCall: vi.fn().mockResolvedValue({ allowed: true }) }));
@@ -27,6 +36,15 @@ import {
   recordCallCampaignAttemptOutcome,
 } from "@/lib/server/call-campaigns";
 
+// Telephony business logic under test; the TELEPHONY module gate itself is covered by
+// tests/telephony-module-gate.test.ts.
+vi.mock("@/lib/server/module-entitlements", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/server/module-entitlements")>()),
+  assertTenantModule: vi.fn(async () => undefined),
+  assertModuleEnabled: vi.fn(async () => undefined),
+}));
+
+
 const admin = { id: "admin-1", tenantId: "tenant-a", isTenantAdmin: true };
 const rep = { id: "rep-1", tenantId: "tenant-a" };
 
@@ -36,7 +54,7 @@ describe("call campaigns", () => {
     dbMocks.queryOne.mockReset();
     dbMocks.execute.mockReset().mockResolvedValue(1);
     crmMocks.createAuditLog.mockReset().mockResolvedValue(undefined);
-    journeyMocks.resolveJourneyAudienceRecordIds.mockReset().mockResolvedValue({ total: 0, recordIds: [] });
+    journeyMocks.state.audienceBatches = [];
     leadsRepoMocks.getLeadForTenant.mockReset();
     opportunitiesRepoMocks.getOpportunityForTenant.mockReset();
     telephonyWebhookMocks.checkTelephonyComplianceForCall.mockReset().mockResolvedValue({ allowed: true });
@@ -139,17 +157,20 @@ describe("call campaigns", () => {
 
     it("resolves the audience and inserts members, counting only new inserts", async () => {
       dbMocks.queryOne.mockResolvedValueOnce({ id: "camp-1", module: "LEAD", audienceType: "MANUAL", audienceConfig: {} });
-      journeyMocks.resolveJourneyAudienceRecordIds.mockResolvedValueOnce({ total: 3, recordIds: ["lead-1", "lead-2", "lead-3"] });
-      dbMocks.execute.mockReset().mockResolvedValueOnce(1).mockResolvedValueOnce(0).mockResolvedValueOnce(1); // lead-2 already a member
+      // Two batches; one insert per batch, which reports how many were new (one already a member).
+      journeyMocks.state.audienceBatches = [["lead-1", "lead-2"], ["lead-3"]];
+      dbMocks.execute.mockReset().mockResolvedValueOnce(1).mockResolvedValueOnce(1);
 
       const result = await addAudienceToCallCampaign(admin, "camp-1");
 
       expect(result).toEqual({ requested: 3, added: 2 });
+      expect(dbMocks.execute).toHaveBeenCalledTimes(2);
+      expect(dbMocks.execute.mock.calls[0][1]).toContainEqual(["lead-1", "lead-2"]);
     });
 
     it("inserts into the opportunityId column for an OPPORTUNITY-module campaign", async () => {
       dbMocks.queryOne.mockResolvedValueOnce({ id: "camp-1", module: "OPPORTUNITY", audienceType: "MANUAL", audienceConfig: {} });
-      journeyMocks.resolveJourneyAudienceRecordIds.mockResolvedValueOnce({ total: 1, recordIds: ["opp-1"] });
+      journeyMocks.state.audienceBatches = [["opp-1"]];
 
       await addAudienceToCallCampaign(admin, "camp-1");
 

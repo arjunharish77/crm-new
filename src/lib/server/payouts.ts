@@ -1,3 +1,5 @@
+import { isModuleEnabledForTenant } from "@/lib/server/module-entitlements";
+import { assertFeatureEnabled, isFeatureEnabledForTenant } from "@/lib/server/entitlements";
 import { randomUUID } from "crypto";
 import { createAuditLog } from "@/lib/server/crm";
 import { writeCommissionLedgerEntry } from "@/lib/server/commission";
@@ -10,7 +12,6 @@ import {
 import { query, queryOne, jsonbParam } from "@/lib/db/query";
 import { withTransaction } from "@/lib/db/transaction";
 import { formatTenantDate, getTenantTimeZone } from "@/lib/server/date-format";
-import { assertFeatureEnabled } from "@/lib/server/entitlements";
 import { assertNotImpersonating } from "@/lib/server/sessions";
 
 type TenantUser = {
@@ -46,6 +47,7 @@ export type PartnerPayoutSettingsInput = {
 
 export async function getPartnerPayoutSettingsForTenant(user: TenantUser) {
   if (!user.tenantId) return null;
+  await assertFeatureEnabled(user.tenantId, "payoutsEnabled", { isPlatformAdmin: user.isPlatformAdmin });
 
   return queryOne<any>(
     `select id, "tenantId", "cycleFrequency", "customIntervalDays", "cycleAnchorDay", "defaultHsnSacCode",
@@ -61,6 +63,7 @@ export async function getPartnerPayoutSettingsForTenant(user: TenantUser) {
 }
 
 export async function upsertPartnerPayoutSettingsForTenant(user: TenantUser, input: PartnerPayoutSettingsInput) {
+  await assertFeatureEnabled(user.tenantId, "payoutsEnabled", { isPlatformAdmin: user.isPlatformAdmin });
   if (!user.tenantId) {
     throw new Error("TENANT_CONTEXT_REQUIRED");
   }
@@ -216,6 +219,7 @@ export function computeNextCycleWindow(
 
 export async function listPayoutCyclesForTenant(user: TenantUser) {
   if (!user.tenantId) return [];
+  await assertFeatureEnabled(user.tenantId, "payoutsEnabled", { isPlatformAdmin: user.isPlatformAdmin });
 
   return query<any>(
     `select id, "tenantId", "cycleLabel", "startDate", "endDate", status, "generatedAt", "createdAt", "createdBy"
@@ -369,18 +373,11 @@ export async function computePayoutsForCycle(user: TenantUser, cycleId: string) 
   return results;
 }
 
-export async function listPayoutsForCycle(user: TenantUser, cycleId: string) {
-  if (!user.tenantId) return [];
+const PAYOUT_LIST_COLUMNS = `p.id, p."tenantId", p."payoutCycleId", p."partnerId", p."partnerOrganizationId", p."totalCommissionAmount", p.status,
+            p."invoiceId", p."approvedAt", p."approvedBy", p."paidAt", p."paidBy", p."paymentReference", p."isHeld",
+            p."holdReason", p."heldAt", p."heldBy", p."releasedAt", p."releasedBy", p."createdAt", p."updatedAt"`;
 
-  const payouts = await query<any>(
-    `select id, "tenantId", "payoutCycleId", "partnerId", "partnerOrganizationId", "totalCommissionAmount", status,
-            "invoiceId", "approvedAt", "approvedBy", "paidAt", "paidBy", "paymentReference", "isHeld",
-            "holdReason", "heldAt", "heldBy", "releasedAt", "releasedBy", "createdAt", "updatedAt"
-     from "Payout"
-     where "tenantId" = $1 and "payoutCycleId" = $2
-     order by "totalCommissionAmount" desc`,
-    [user.tenantId, cycleId],
-  );
+async function withPartnerDetails(user: TenantUser, payouts: any[]) {
   if (!payouts.length) return [];
   const partnerIds = payouts.map((p: any) => p.partnerId);
   const [users, profiles] = await Promise.all([
@@ -402,8 +399,86 @@ export async function listPayoutsForCycle(user: TenantUser, cycleId: string) {
   }));
 }
 
+export async function listPayoutsForCycle(user: TenantUser, cycleId: string) {
+  if (!user.tenantId) return [];
+  await assertFeatureEnabled(user.tenantId, "payoutsEnabled", { isPlatformAdmin: user.isPlatformAdmin });
+
+  const payouts = await query<any>(
+    `select ${PAYOUT_LIST_COLUMNS}
+     from "Payout" p
+     where p."tenantId" = $1 and p."payoutCycleId" = $2
+     order by p."totalCommissionAmount" desc`,
+    [user.tenantId, cycleId],
+  );
+  return withPartnerDetails(user, payouts);
+}
+
+// The Payouts workspace queues (decision 32), across every cycle: drafts waiting for approval,
+// payouts on hold, and approved or invoiced payouts waiting to be paid. Oldest cycle first.
+export const PAYOUT_QUEUES = ["to-approve", "on-hold", "to-pay"] as const;
+export type PayoutQueue = (typeof PAYOUT_QUEUES)[number];
+const PAYOUT_QUEUE_WHERE: Record<PayoutQueue, string> = {
+  "to-approve": `p.status = 'DRAFT' and not p."isHeld"`,
+  "on-hold": `p."isHeld" and p.status <> 'PAID'`,
+  "to-pay": `p.status in ('APPROVED', 'INVOICED') and not p."isHeld"`,
+};
+
+export async function listPayoutQueueForTenant(user: TenantUser, queue: PayoutQueue) {
+  if (!user.tenantId) return [];
+  await assertFeatureEnabled(user.tenantId, "payoutsEnabled", { isPlatformAdmin: user.isPlatformAdmin });
+
+  const payouts = await query<any>(
+    `select ${PAYOUT_LIST_COLUMNS}, c."cycleLabel", c."endDate" as "cycleEndDate"
+     from "Payout" p
+     join "PayoutCycle" c on c.id = p."payoutCycleId" and c."tenantId" = p."tenantId"
+     where p."tenantId" = $1 and ${PAYOUT_QUEUE_WHERE[queue]}
+     order by c."endDate" asc, p."totalCommissionAmount" desc`,
+    [user.tenantId],
+  );
+  return withPartnerDetails(user, payouts);
+}
+
+// Every payout across every cycle, one page at a time with the total (Smart Views; Section 8 #4:
+// a Payouts tab used to read only the newest cycle and show it as if it were everything).
+// Newest cycle first.
+export async function listPayoutsPageForTenant(user: TenantUser, page = 1, limit = 100) {
+  const safeLimit = Math.min(Math.max(Math.trunc(limit) || 100, 1), 500);
+  const safePage = Math.max(Math.trunc(page) || 1, 1);
+  if (!user.tenantId) return { data: [], meta: { total: 0, page: safePage, limit: safeLimit, last_page: 1 } };
+  await assertFeatureEnabled(user.tenantId, "payoutsEnabled", { isPlatformAdmin: user.isPlatformAdmin });
+  const [countRow, payouts] = await Promise.all([
+    queryOne<{ total: number }>(`select count(*)::int as total from "Payout" p where p."tenantId" = $1`, [user.tenantId]),
+    query<any>(
+      `select ${PAYOUT_LIST_COLUMNS}, c."cycleLabel", c."endDate" as "cycleEndDate"
+       from "Payout" p
+       join "PayoutCycle" c on c.id = p."payoutCycleId" and c."tenantId" = p."tenantId"
+       where p."tenantId" = $1
+       order by c."endDate" desc, p."totalCommissionAmount" desc, p.id
+       limit $2 offset $3`,
+      [user.tenantId, safeLimit, (safePage - 1) * safeLimit],
+    ),
+  ]);
+  const total = Number(countRow?.total ?? 0);
+  return { data: await withPartnerDetails(user, payouts), meta: { total, page: safePage, limit: safeLimit, last_page: Math.max(1, Math.ceil(total / safeLimit)) } };
+}
+
+export async function countPayoutQueuesForTenant(user: TenantUser) {
+  if (!user.tenantId) return { "to-approve": 0, "on-hold": 0, "to-pay": 0 };
+  await assertFeatureEnabled(user.tenantId, "payoutsEnabled", { isPlatformAdmin: user.isPlatformAdmin });
+  const row = await queryOne<any>(
+    `select count(*) filter (where ${PAYOUT_QUEUE_WHERE["to-approve"]})::int as "toApprove",
+            count(*) filter (where ${PAYOUT_QUEUE_WHERE["on-hold"]})::int as "onHold",
+            count(*) filter (where ${PAYOUT_QUEUE_WHERE["to-pay"]})::int as "toPay"
+     from "Payout" p
+     where p."tenantId" = $1`,
+    [user.tenantId],
+  );
+  return { "to-approve": row?.toApprove ?? 0, "on-hold": row?.onHold ?? 0, "to-pay": row?.toPay ?? 0 };
+}
+
 export async function listPayoutsForPartner(user: TenantUser, partnerId: string) {
   if (!user.tenantId) return [];
+  await assertFeatureEnabled(user.tenantId, "payoutsEnabled", { isPlatformAdmin: user.isPlatformAdmin });
 
   const settings = await getPartnerPayoutSettingsForTenant(user);
   const visiblePartnerUserIds = await getPayoutVisiblePartnerUserIds(user, settings);
@@ -443,6 +518,11 @@ export async function listPayoutsForPartnerAsAdmin(user: TenantUser, partnerId: 
 }
 
 export async function canCurrentUserAccessPayoutModule(user: TenantUser) {
+  // A yes/no answer for navigation and page guards: a disabled Payouts module means "no", not an error.
+  // Partner payouts need both modules; checked explicitly because a tenant configured before the
+  // Payouts -> Partners dependency rule existed could have Payouts on with Partners off.
+  if (!user.isPlatformAdmin && !(await isFeatureEnabledForTenant(user.tenantId, "payoutsEnabled"))) return false;
+  if (!user.isPlatformAdmin && !(await isModuleEnabledForTenant(user.tenantId, "PARTNERS"))) return false;
   const settings = await getPartnerPayoutSettingsForTenant(user);
   return canAccessPayoutModule(user, settings);
 }

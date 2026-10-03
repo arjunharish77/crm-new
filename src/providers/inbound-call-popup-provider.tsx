@@ -3,11 +3,10 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
-import { PhoneIncoming, UserPlus, Activity as ActivityIcon, ListTodo, UserCheck, History } from "lucide-react";
+import { PhoneIncoming, UserPlus, Activity as ActivityIcon, ListTodo, UserCheck, History, X } from "lucide-react";
 import { useNotifications } from "./notification-provider";
 import { apiFetch } from "@/lib/api";
 import { useAuth } from "./auth-provider";
-import { StandardDialog } from "@/components/common/standard-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -71,7 +70,8 @@ export function InboundCallPopupProvider({ children }: { children: React.ReactNo
         try {
             await apiFetch(`/leads/${lead.id}`, {
                 method: "PATCH",
-                body: JSON.stringify({ name: lead.name, email: lead.email, phone: lead.phone, company: lead.company, status: lead.status, ownerId: user.id }),
+                // Only the owner: the call popup's copy of the lead can be older than the record.
+                body: JSON.stringify({ ownerId: user.id }),
             });
             toast.success(`${lead.name} assigned to you`);
         } catch (error: any) {
@@ -103,20 +103,28 @@ export function InboundCallPopupProvider({ children }: { children: React.ReactNo
             {children}
 
             {active && (
-                <StandardDialog
-                    open
-                    onClose={dismiss}
-                    title="Incoming Call"
-                    subtitle={active.context.phoneNumber}
-                    icon={<PhoneIncoming className="size-5" />}
-                    maxWidth="sm"
-                    actions={
-                        <Button variant="outline" onClick={dismiss}>
-                            Dismiss
-                        </Button>
-                    }
+                // A docked, non-modal panel (UI/UX plan §11.6 M): the rep can keep working on the
+                // page, and the quick-create dialogs below open on their own instead of stacking
+                // on top of another dialog.
+                <aside
+                    role="complementary"
+                    aria-label={`Incoming call from ${active.context.phoneNumber}`}
+                    className="fixed bottom-4 right-4 z-40 flex max-h-[calc(100dvh-6rem)] w-[min(400px,calc(100vw-32px))] flex-col overflow-hidden rounded-xl border bg-card shadow-dialog"
                 >
-                    <div className="space-y-4 p-[18px] pt-1">
+                    <span className="sr-only" role="status">Incoming call from {active.context.phoneNumber}</span>
+                    <div className="flex items-center gap-3 border-b px-4 py-3">
+                        <div className="flex size-9 shrink-0 items-center justify-center rounded-full bg-status-info text-status-info-foreground">
+                            <PhoneIncoming className="size-4" aria-hidden />
+                        </div>
+                        <div className="min-w-0 flex-1">
+                            <p className="text-sm font-semibold">Incoming call</p>
+                            <p className="truncate text-sm tabular-nums text-muted-foreground">{active.context.phoneNumber}</p>
+                        </div>
+                        <Button variant="ghost" size="icon-sm" aria-label="Dismiss incoming call" onClick={dismiss}>
+                            <X className="size-4" />
+                        </Button>
+                    </div>
+                    <div className="min-h-0 space-y-4 overflow-y-auto p-4">
                         {active.context.leadMatches.length === 0 ? (
                             <div className="space-y-2">
                                 <p className="text-sm text-muted-foreground">No matching Lead found for this number.</p>
@@ -232,7 +240,7 @@ export function InboundCallPopupProvider({ children }: { children: React.ReactNo
                             </Button>
                         </div>
                     </div>
-                </StandardDialog>
+                </aside>
             )}
 
             {quickAddActivityLeadId && (

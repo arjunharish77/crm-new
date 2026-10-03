@@ -4,6 +4,7 @@
 import { useAuth } from "@/providers/auth-provider";
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
+import { loginPathFromHere } from "@/lib/safe-return-path";
 
 interface RoleGuardProps {
     children: React.ReactNode;
@@ -19,7 +20,11 @@ function roleName(userRole: unknown) {
     return "";
 }
 
-function roleMatches(userRole: unknown, requiredRole: string, isPlatformAdmin?: boolean) {
+// "Tenant Admin" uses the server's own definition (`isTenantAdmin`: All-records access or full
+// admin module access), so the Settings guard and the admin APIs agree on who is an admin. It
+// used to match on the role's *name* ("…admin…"), which let a "Sales admin" with Team access
+// into Settings where every save failed, and kept an All-access "Manager" out.
+function roleMatches(userRole: unknown, requiredRole: string, isPlatformAdmin?: boolean, isTenantAdmin?: boolean) {
     if (isPlatformAdmin) return true;
     // A PARTNER-flagged role never satisfies any requiredRole check here, regardless
     // of what an admin happens to name it — partner exclusion from admin/settings
@@ -27,14 +32,9 @@ function roleMatches(userRole: unknown, requiredRole: string, isPlatformAdmin?: 
     if (userRole && typeof userRole === "object" && (userRole as any).permissions?.isPartnerRole) {
         return false;
     }
-    const current = roleName(userRole).toLowerCase();
     const required = requiredRole.toLowerCase();
-    const permissions = userRole && typeof userRole === "object" ? (userRole as any).permissions : null;
-    if (current === required) return true;
-
-    const adminAliases = new Set(["tenant admin", "admin", "administrator", "demo admin", "demo crm administrator"]);
-    if (required === "tenant admin" && (adminAliases.has(current) || current.includes("admin") || permissions?.modules?.admin === "full")) return true;
-    return false;
+    if (required === "tenant admin") return !!isTenantAdmin;
+    return roleName(userRole).toLowerCase() === required;
 }
 
 export function RoleGuard({ children, requiredRole, fallbackRoute = "/dashboard" }: RoleGuardProps) {
@@ -44,11 +44,11 @@ export function RoleGuard({ children, requiredRole, fallbackRoute = "/dashboard"
     useEffect(() => {
         if (!isLoading) {
             if (!isAuthenticated) {
-                router.push("/login");
+                router.push(loginPathFromHere());
                 return;
             }
 
-            if (!roleMatches(user?.role, requiredRole, user?.isPlatformAdmin)) {
+            if (!roleMatches(user?.role, requiredRole, user?.isPlatformAdmin, (user as any)?.isTenantAdmin)) {
                 // If user doesn't have the role, redirect
                 router.push(fallbackRoute);
             }
@@ -59,7 +59,7 @@ export function RoleGuard({ children, requiredRole, fallbackRoute = "/dashboard"
         return <div className="flex items-center justify-center p-8">Loading authorization...</div>;
     }
 
-    if (!user || !roleMatches(user.role, requiredRole, user.isPlatformAdmin)) {
+    if (!user || !roleMatches(user.role, requiredRole, user.isPlatformAdmin, (user as any).isTenantAdmin)) {
         return null; // Don't render children while redirecting
     }
 

@@ -1,4 +1,7 @@
-import { courseWithUniversity, courses, formatFee } from "@/data/catalog";
+import type { courseWithUniversity } from "@/data/catalog";
+
+import type { CatalogReader } from "@/lib/catalog-snapshot";
+import { formatFee } from "@/lib/catalog-format";
 import { courseKey, courseLabel } from "@/lib/programmatic-seo";
 
 export type FeeGuideCourse = ReturnType<typeof courseWithUniversity>;
@@ -14,7 +17,8 @@ export type FeeGuide = {
   feeSpread: number;
 };
 
-export function feeGuides(): FeeGuide[] {
+export function feeGuides(catalog: CatalogReader): FeeGuide[] {
+  const { courseWithUniversity, courses } = catalog;
   const byKey = new Map<string, typeof courses>();
   for (const course of courses) {
     const key = courseKey(course.name);
@@ -42,8 +46,8 @@ export function feeGuides(): FeeGuide[] {
     .sort((a, b) => a.label.localeCompare(b.label));
 }
 
-export function getFeeGuideBySlug(slug: string) {
-  return feeGuides().find((guide) => guide.slug === slug) || null;
+export function getFeeGuideBySlug(catalog: CatalogReader, slug: string) {
+  return feeGuides(catalog).find((guide) => guide.slug === slug) || null;
 }
 
 export function feeGuideSlugForCourseName(courseName: string) {

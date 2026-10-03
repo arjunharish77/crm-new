@@ -2,61 +2,41 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import type { BlogPost } from "@/data/blog";
 
-const categories = ["All", "Validity", "Fees & EMI", "Careers", "Admissions"] as const;
-
 export function BlogExplorer({ posts }: { posts: BlogPost[] }) {
-  const [category, setCategory] = useState<(typeof categories)[number]>("All");
-
-  const filtered = useMemo(
-    () => (category === "All" ? posts : posts.filter((post) => post.category === category)),
-    [category, posts],
-  );
-
-  return (
-    <>
-      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 24 }}>
-        {categories.map((item) => (
-          <button
-            style={{
-              border: `1.5px solid ${category === item ? "#544CC8" : "#CFDAE6"}`,
-              background: category === item ? "rgba(84,76,200,0.08)" : "#fff",
-              color: category === item ? "#544CC8" : "#555",
-              borderRadius: 999,
-              padding: "8px 16px",
-              fontSize: 13,
-              fontWeight: 600,
-              cursor: "pointer",
-            }}
-            type="button"
-            onClick={() => setCategory(item)}
-            key={item}
-          >
-            {item}
-          </button>
-        ))}
+  const params = useSearchParams();
+  const categories = [...new Set(posts.map(post => post.category))].sort();
+  const category = categories.find(value => value === params.get("category")) || "";
+  const query = (params.get("q") || "").slice(0,200);
+  const sort = params.get("sort") === "title" ? "title" : "newest";
+  const text = query.trim().toLowerCase();
+  const filtered = posts.filter(post => (!category || post.category === category) && (!text || `${post.title} ${post.excerpt} ${post.category}`.toLowerCase().includes(text)))
+    .sort((a,b) => sort === "title" ? a.title.localeCompare(b.title) : b.publishedDate.localeCompare(a.publishedDate) || a.title.localeCompare(b.title));
+  function update(key: string, value: string, replace = false) {
+    const url = new URL(window.location.href);
+    if(value) url.searchParams.set(key,value); else url.searchParams.delete(key);
+    if(replace) window.history.replaceState(null,"",url); else window.history.pushState(null,"",url);
+  }
+  function reset() {
+    const url = new URL(window.location.href);
+    ["q","category","sort"].forEach(key => url.searchParams.delete(key));
+    window.history.pushState(null,"",url);
+  }
+  return <section className="article-explorer" aria-label="Find articles">
+    <div className="article-discovery-controls">
+      <div><label htmlFor="article-search">Search articles</label><input type="search" id="article-search" value={query} maxLength={200} onChange={event => update("q",event.target.value,true)} placeholder="Topic, course or keyword" /></div>
+      <div><label htmlFor="article-sort">Sort articles</label><select id="article-sort" value={sort} onChange={event => update("sort",event.target.value === "newest" ? "" : event.target.value)}><option value="newest">Newest first</option><option value="title">Title A–Z</option></select></div>
+    </div>
+    <div className="article-categories" role="group" aria-label="Article categories">{["",...categories].map(value => <button type="button" className="btn secondary" key={value} aria-pressed={value === category} onClick={() => update("category",value)}>{value || "All topics"}</button>)}</div>
+    <div className="article-results-toolbar"><p role="status">{filtered.length} of {posts.length} articles</p>{(query || category || sort !== "newest") && <button type="button" className="btn secondary" onClick={reset}>Reset search and filters</button>}</div>
+    {filtered.length ? <div className="article-discovery-grid">{filtered.map(post => <article className="article-discovery-card" key={post.slug}>
+      <div className="article-discovery-cover"><Image src={post.cover} alt="" fill sizes="(max-width:640px) 90vw, (max-width:1000px) 45vw, 360px" style={{objectFit:"cover"}} /></div>
+      <div className="article-discovery-content"><p className="article-card-meta">{post.category} · {post.read}</p><h2><Link href={`/blog/${post.slug}`}>{post.title}</Link></h2><p>{post.excerpt}</p>
+        <p className="article-card-byline">Content Team, Unnati Vidya<br /><time dateTime={post.publishedDate}>{new Date(`${post.publishedDate}T00:00:00Z`).toLocaleDateString("en-IN",{day:"numeric",month:"short",year:"numeric",timeZone:"UTC"})}</time></p>
+        <Link className="article-read-link" href={`/blog/${post.slug}`} aria-label={`Read article: ${post.title}`}>Read article →</Link>
       </div>
-
-      <div className="uv-home-three-grid" style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 20 }}>
-        {filtered.map((post) => (
-          <article style={{ background: "#fff", border: "1px solid #CFDAE6", borderRadius: 8, overflow: "hidden", display: "flex", flexDirection: "column" }} key={post.slug}>
-            <div style={{ height: 150, overflow: "hidden", position: "relative" }}>
-              <Image src={post.cover} alt="Article cover" fill sizes="(max-width: 900px) 100vw, 33vw" style={{ objectFit: "cover" }} />
-            </div>
-            <div style={{ padding: 18, display: "flex", flexDirection: "column", gap: 8, flex: 1 }}>
-              <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                <span style={{ fontSize: 11, fontWeight: 700, color: "#0F5BB8", background: "rgba(79,168,255,0.12)", borderRadius: 999, whiteSpace: "nowrap", padding: "3px 9px" }}>{post.category}</span>
-                <span style={{ fontSize: 12, color: "#707070" }}>{post.read}</span>
-              </div>
-              <div style={{ fontSize: 16, fontWeight: 700, color: "#363634", lineHeight: 1.35 }}>{post.title}</div>
-              <div style={{ fontSize: 13, color: "#696868", lineHeight: 1.55 }}>{post.excerpt}</div>
-              <Link href={`/blog/${post.slug}`} style={{ marginTop: "auto", fontSize: 13, fontWeight: 700, color: "#544CC8" }}>Read article →</Link>
-            </div>
-          </article>
-        ))}
-      </div>
-    </>
-  );
+    </article>)}</div> : <div className="illustrated-empty-state"><h2>No articles match</h2><p>Try a broader keyword or reset your search and topic filters.</p><Link href="/online-degree-guides" className="btn secondary">Browse degree guides</Link></div>}
+  </section>;
 }

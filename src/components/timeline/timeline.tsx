@@ -4,19 +4,20 @@ import { useState } from "react";
 import { Activity } from "@/types/activities";
 import * as LucideIcons from "lucide-react";
 import { ChevronDown, FileText } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
 import { formatWorkspaceDate, formatWorkspaceDateTime, formatWorkspaceRelativeTime, formatWorkspaceTime, parseWorkspaceDate } from "@/lib/date-format";
 import { cn } from "@/lib/utils";
+import { statusDisplay } from "@/lib/display/status";
+
+export type TimelineNote = { id: string; content: string; createdAt: string; author?: { name?: string | null; email?: string | null } | null };
 
 interface TimelineProps {
     activities: Activity[];
-}
-
-// Mirrors the color-mix approach used for CSS tokens in globals.css — lets
-// per-activity-type accent colors (arbitrary hex values from the DB) get
-// alpha-blended without needing MUI's `alpha()` helper.
-function withAlpha(color: string, percent: number) {
-    return `color-mix(in srgb, ${color} ${percent}%, transparent)`;
+    // Notes on the same record, shown in the same feed (UI/UX plan §10.5: notes move into Activity).
+    notes?: TimelineNote[];
+    // The record this feed belongs to: its own "Lead: …" / "Opportunity: …" line is left out and
+    // shown only for items that belong to a different record.
+    context?: { leadId?: string | null; opportunityId?: string | null };
+    emptyMessage?: string;
 }
 
 function getDayLabel(date: Date) {
@@ -95,7 +96,14 @@ function activityChangedFields(event: any) {
         .map((field) => ({ field, before: before[field], after: after[field] }));
 }
 
-export function Timeline({ activities }: TimelineProps) {
+type FeedItem =
+    | { kind: "activity"; id: string; at: Date; activity: Activity }
+    | { kind: "note"; id: string; at: Date; note: TimelineNote };
+
+// Compact activity feed (UI/UX plan C12): divided rows grouped by day, outcome and SLA as text,
+// details on demand. Admin-chosen type colours appear only as the icon colour, never as text
+// or fills.
+export function Timeline({ activities, notes = [], context, emptyMessage = "Calls, messages, notes and other activity will appear here." }: TimelineProps) {
     const [expandedActivityIds, setExpandedActivityIds] = useState<string[]>([]);
 
     const toggleExpanded = (activityId: string) => {
@@ -106,244 +114,135 @@ export function Timeline({ activities }: TimelineProps) {
         );
     };
 
-    if (activities.length === 0) {
+    const items: FeedItem[] = [
+        ...activities.map((activity) => ({ kind: "activity" as const, id: activity.id, at: parseWorkspaceDate(activity.createdAt) ?? new Date(activity.createdAt), activity })),
+        ...notes.map((note) => ({ kind: "note" as const, id: `note-${note.id}`, at: parseWorkspaceDate(note.createdAt) ?? new Date(note.createdAt), note })),
+    ].sort((a, b) => b.at.getTime() - a.at.getTime());
+
+    if (items.length === 0) {
         return (
-            <div className="rounded-2xl border border-dashed bg-surface-container-lowest py-12 text-center text-muted-foreground">
-                <FileText size={40} className="mx-auto mb-3 opacity-[0.18]" />
-                <p className="text-base font-bold">
-                    No activity yet
-                </p>
-                <p className="text-sm">Activity history will appear here.</p>
+            <div className="py-10 text-center">
+                <FileText size={20} className="mx-auto mb-2 text-muted-foreground" aria-hidden />
+                <p className="text-sm font-medium">No activity yet</p>
+                <p className="text-sm text-muted-foreground">{emptyMessage}</p>
             </div>
         );
     }
 
-    const grouped = activities.reduce<Record<string, Activity[]>>((acc, activity) => {
-        const key = getDayLabel(parseWorkspaceDate(activity.createdAt) ?? new Date(activity.createdAt));
-        acc[key] = acc[key] || [];
-        acc[key].push(activity);
-        return acc;
-    }, {});
+    const groups: Array<{ label: string; items: FeedItem[] }> = [];
+    for (const item of items) {
+        const label = getDayLabel(item.at);
+        const last = groups[groups.length - 1];
+        if (last && last.label === label) last.items.push(item);
+        else groups.push({ label, items: [item] });
+    }
 
     return (
-        <div className="flex flex-col gap-6">
-            {Object.entries(grouped).map(([label, items]) => (
-                <div key={label}>
-                    <span className="mb-3 inline-flex rounded-full bg-primary/8 px-2.5 py-1 text-xs font-extrabold uppercase tracking-[0.04em] text-primary">
-                        {label}
-                    </span>
-
-                    <div className="flex flex-col gap-2.5">
-                        {items.map((activity) => {
+        <div className="flex flex-col gap-4">
+            {groups.map((group) => (
+                <section key={group.label} aria-label={group.label}>
+                    <h4 className="mb-1 text-xs font-medium text-muted-foreground">{group.label}</h4>
+                    <ul className="divide-y rounded-lg border">
+                        {group.items.map((item) => item.kind === "note" ? (
+                            <li key={item.id} className="flex gap-3 px-3 py-2.5">
+                                <span aria-hidden className="mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground">
+                                    <LucideIcons.StickyNote size={13} />
+                                </span>
+                                <div className="min-w-0 flex-1">
+                                    <div className="flex flex-wrap items-baseline justify-between gap-x-3">
+                                        <span className="text-sm font-medium">Note</span>
+                                        <span className="text-xs tabular-nums text-muted-foreground" title={formatWorkspaceDateTime(item.at)}>{formatWorkspaceTime(item.at)}</span>
+                                    </div>
+                                    <p className="whitespace-pre-wrap break-words text-sm">{item.note.content}</p>
+                                    {item.note.author ? <p className="text-xs text-muted-foreground">{item.note.author.name || item.note.author.email}</p> : null}
+                                </div>
+                            </li>
+                        ) : (() => {
+                            const activity = item.activity;
                             const type = activity.type;
-                            const IconComponent = type?.icon
-                                ? (LucideIcons as any)[type.icon]
-                                : LucideIcons.FileText;
+                            const IconComponent = type?.icon ? (LucideIcons as any)[type.icon] : LucideIcons.FileText;
                             const Icon = IconComponent || LucideIcons.FileText;
-                            const accent = type?.color || "var(--primary)";
-                            const activityDate = parseWorkspaceDate(activity.createdAt) ?? new Date(activity.createdAt);
                             const isExpanded = expandedActivityIds.includes(activity.id);
                             const customFieldEntries = Object.entries(activity.customFields ?? {}).filter(
                                 ([, value]) => value !== null && value !== undefined && value !== ""
                             );
-                            const activityFields = [
-                                { label: "Type", value: activity.type?.name ?? "Activity" },
-                                { label: "Outcome", value: activity.outcome },
-                                { label: "Notes", value: activity.notes },
-                                { label: "Due At", value: activity.dueAt ? formatWorkspaceDateTime(activity.dueAt) : null },
-                                { label: "Completed At", value: activity.completedAt ? formatWorkspaceDateTime(activity.completedAt) : null },
-                                { label: "SLA Status", value: activity.slaStatus },
-                                { label: "SLA Target", value: activity.slaTarget ? formatWorkspaceDateTime(activity.slaTarget) : null },
-                                { label: "Lead", value: activity.lead?.name },
-                                { label: "Opportunity", value: activity.opportunity?.title },
-                                { label: "Logged By", value: activity.user ? activity.user.name || activity.user.email : null },
-                                { label: "Created", value: formatWorkspaceDateTime(activityDate) },
-                                { label: "Updated", value: formatWorkspaceDateTime(activity.updatedAt) },
-                                { label: "Recurring", value: activity.isRecurring ? "Yes" : "No" },
-                                { label: "Recurrence Rule", value: activity.recurrenceRule },
-                            ].filter((field) => field.value !== null && field.value !== undefined && field.value !== "");
+                            const otherLead = activity.lead && activity.leadId !== context?.leadId ? activity.lead : null;
+                            const otherOpportunity = activity.opportunity && activity.opportunityId !== context?.opportunityId ? activity.opportunity : null;
+                            const outcome = activity.outcome ? statusDisplay("outcome", activity.outcome).label : null;
+                            const sla = activity.slaStatus && activity.slaStatus !== "PENDING" ? statusDisplay("sla", activity.slaStatus) : null;
                             const expandedFields = [
-                                ...activityFields,
-                                ...customFieldEntries.map(([key, value]) => ({
-                                    label: key,
-                                    value,
-                                })),
-                            ];
+                                { label: "Due", value: activity.dueAt ? formatWorkspaceDateTime(activity.dueAt) : null },
+                                { label: "Completed", value: activity.completedAt ? formatWorkspaceDateTime(activity.completedAt) : null },
+                                { label: "SLA target", value: activity.slaTarget ? formatWorkspaceDateTime(activity.slaTarget) : null },
+                                { label: "Logged", value: formatWorkspaceDateTime(item.at) },
+                                { label: "Updated", value: formatWorkspaceDateTime(activity.updatedAt) },
+                                { label: "Repeats", value: activity.isRecurring ? activity.recurrenceRule || "Yes" : null },
+                                ...customFieldEntries.map(([key, value]) => ({ label: key, value: formatActivityValue(value) })),
+                            ].filter((field) => field.value !== null && field.value !== undefined && field.value !== "");
                             const auditEvents = (activity.auditEvents ?? []).filter((event) => event.action === "UPDATE" && activityChangedFields(event).length > 0);
-
                             return (
-                                <div
-                                    key={activity.id}
-                                    role="button"
-                                    tabIndex={0}
-                                    onClick={() => toggleExpanded(activity.id)}
-                                    onKeyDown={(event) => {
-                                        if (event.key === "Enter" || event.key === " ") {
-                                            event.preventDefault();
-                                            toggleExpanded(activity.id);
-                                        }
-                                    }}
-                                    className="min-w-0 break-words cursor-pointer rounded-2xl border bg-card p-3 transition-[border-color,box-shadow,background-color] duration-150 hover:shadow-[0_10px_28px_var(--tw-shadow-color)]"
-                                    style={{
-                                        borderColor: withAlpha(accent, 18),
-                                        "--tw-shadow-color": withAlpha(accent, 8),
-                                    } as React.CSSProperties}
-                                >
-                                    <div className="flex items-start gap-3">
-                                        <div className="w-16 shrink-0 pt-0.5 text-center">
-                                            <div
-                                                className="mx-auto mb-1 flex size-8 items-center justify-center rounded-full border"
-                                                style={{
-                                                    backgroundColor: withAlpha(accent, 10),
-                                                    color: accent,
-                                                    borderColor: withAlpha(accent, 18),
-                                                }}
-                                            >
-                                                <Icon size={14} />
-                                            </div>
-                                            <span className="block text-xs font-bold">
-                                                {formatWorkspaceTime(activityDate)}
-                                            </span>
-                                        </div>
-
+                                <li key={item.id} className="px-3 py-2.5">
+                                    <div className="flex gap-3">
+                                        <span aria-hidden className="mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-full bg-muted" style={{ color: type?.color || undefined }}>
+                                            <Icon size={13} />
+                                        </span>
                                         <div className="min-w-0 flex-1">
-                                            <div className="mb-1.5 flex flex-col justify-between gap-1 sm:flex-row sm:items-center">
-                                                <div className="flex flex-wrap items-center gap-1.5">
-                                                    <span className="text-sm font-extrabold">
-                                                        {activity.type?.name || "Activity"}
-                                                    </span>
-                                                    {activity.outcome && (
-                                                        <Badge variant="secondary" className="h-5 rounded-[6px] text-[0.65rem] font-bold">
-                                                            {activity.outcome}
-                                                        </Badge>
-                                                    )}
-                                                    {activity.slaStatus && activity.slaStatus !== "PENDING" && (
-                                                        <Badge
-                                                            variant="outline"
-                                                            className={cn(
-                                                                "h-5 rounded-[6px] text-[0.65rem] font-bold",
-                                                                activity.slaStatus === "MET"
-                                                                    ? "border-emerald-500/40 text-emerald-600"
-                                                                    : "border-destructive/40 text-destructive"
-                                                            )}
-                                                        >
-                                                            {activity.slaStatus}
-                                                        </Badge>
-                                                    )}
-                                                </div>
-
-                                                <div className="flex items-center gap-2">
-                                                    <span className="min-w-0 max-w-full break-words text-xs text-muted-foreground">
-                                                        {formatWorkspaceRelativeTime(activity.createdAt)}
-                                                    </span>
-                                                    <div
-                                                        className={cn(
-                                                            "inline-flex size-6 items-center justify-center rounded-[6px] transition-transform duration-150",
-                                                            isExpanded && "rotate-180"
-                                                        )}
-                                                        style={{ backgroundColor: withAlpha(accent, 8), color: accent }}
+                                            <div className="flex flex-wrap items-baseline justify-between gap-x-3">
+                                                <span className="text-sm">
+                                                    <span className="font-medium">{type?.name || "Activity"}</span>
+                                                    {outcome ? <span className="text-muted-foreground"> · {outcome}</span> : null}
+                                                    {sla ? <span className={cn(sla.tone === "danger" ? "text-destructive" : "text-muted-foreground")}> · SLA {sla.label.toLowerCase()}</span> : null}
+                                                </span>
+                                                <span className="text-xs tabular-nums text-muted-foreground" title={formatWorkspaceDateTime(item.at)}>{formatWorkspaceTime(item.at)}</span>
+                                            </div>
+                                            {activity.notes ? <p className="whitespace-pre-wrap break-words text-sm">{activity.notes}</p> : null}
+                                            <div className="flex flex-wrap items-center gap-x-3 text-xs text-muted-foreground">
+                                                {activity.user ? <span>{activity.user.name || activity.user.email}</span> : null}
+                                                {otherLead ? <span>Lead: {otherLead.name}</span> : null}
+                                                {otherOpportunity ? <span>Opportunity: {otherOpportunity.title}</span> : null}
+                                                {expandedFields.length > 0 || auditEvents.length > 0 ? (
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => toggleExpanded(activity.id)}
+                                                        aria-expanded={isExpanded}
+                                                        className="inline-flex items-center gap-0.5 rounded-sm text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                                                     >
-                                                        <ChevronDown size={14} />
-                                                    </div>
-                                                </div>
+                                                        {isExpanded ? "Hide details" : "Details"}
+                                                        <ChevronDown size={12} className={cn("transition-transform", isExpanded && "rotate-180")} />
+                                                    </button>
+                                                ) : null}
                                             </div>
-
-                                            {activity.notes ? (
-                                                <p className="mb-1.5 whitespace-pre-wrap text-sm leading-[1.45] text-foreground">
-                                                    {activity.notes}
-                                                </p>
-                                            ) : (
-                                                <p className="mb-1.5 text-sm text-muted-foreground">
-                                                    No notes were added for this activity.
-                                                </p>
-                                            )}
-
-                                            <div className="flex flex-wrap gap-3">
-                                                {activity.lead && (
-                                                    <span className="min-w-0 max-w-full break-words text-xs text-muted-foreground">
-                                                        Lead: <strong>{activity.lead.name}</strong>
-                                                    </span>
-                                                )}
-                                                {activity.opportunity && (
-                                                    <span className="min-w-0 max-w-full break-words text-xs text-muted-foreground">
-                                                        Opportunity: <strong>{activity.opportunity.title}</strong>
-                                                    </span>
-                                                )}
-                                                {activity.user && (
-                                                    <span className="min-w-0 max-w-full break-words text-xs text-muted-foreground">
-                                                        by {activity.user.name || activity.user.email}
-                                                    </span>
-                                                )}
-                                                {auditEvents.length > 0 && (
-                                                    <span className="min-w-0 max-w-full break-words text-xs text-muted-foreground">
-                                                        {auditEvents.length} modification{auditEvents.length === 1 ? "" : "s"} tracked
-                                                    </span>
-                                                )}
-                                            </div>
-
-                                            {/* Pure-CSS collapse (grid-template-rows trick) instead of MUI's Collapse */}
-                                            <div
-                                                className={cn(
-                                                    "grid transition-[grid-template-rows] duration-200 ease-in-out",
-                                                    isExpanded ? "grid-rows-[1fr]" : "grid-rows-[0fr]"
-                                                )}
-                                            >
-                                                <div className="overflow-hidden">
-                                                    <div className="my-3 border-t" />
-                                                    {auditEvents.length > 0 && (
-                                                        <div className="mb-3 flex flex-col gap-2">
-                                                            {auditEvents.map((event) => {
-                                                                const changes = activityChangedFields(event);
-                                                                const actor = event.user?.name || event.user?.email || "Unknown User";
-                                                                return (
-                                                                    <div key={event.id} className="rounded-lg border border-sky-500/20 bg-sky-500/[0.06] p-2.5">
-                                                                        <span className="mb-1.5 block text-xs font-extrabold text-sky-600">
-                                                                            Activity modified by {actor} / {formatWorkspaceRelativeTime(event.createdAt)}
-                                                                        </span>
-                                                                        <div className="flex flex-col gap-1">
-                                                                            {changes.map((change) => (
-                                                                                <span key={`${event.id}-${change.field}`} className="min-w-0 max-w-full break-words text-xs text-muted-foreground">
-                                                                                    <strong>{activityFieldLabel(change.field)}</strong>: {formatAuditActivityValue(change.before, change.field, event)} -&gt; {formatAuditActivityValue(change.after, change.field, event)}
-                                                                                </span>
-                                                                            ))}
-                                                                        </div>
-                                                                    </div>
-                                                                );
-                                                            })}
-                                                        </div>
-                                                    )}
-                                                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                                                        {expandedFields.length > 0 ? (
-                                                            expandedFields.map((field) => (
-                                                                <div
-                                                                    key={`${activity.id}-${field.label}`}
-                                                                    className="rounded-lg border bg-surface-container-lowest px-2.5 py-2"
-                                                                >
-                                                                    <span className="mb-0.5 block text-xs font-bold uppercase tracking-[0.02em] text-muted-foreground">
-                                                                        {field.label}
-                                                                    </span>
-                                                                    <span className="block whitespace-pre-wrap break-words text-sm font-semibold text-foreground">
-                                                                        {formatActivityValue(field.value)}
-                                                                    </span>
+                                            {isExpanded ? (
+                                                <div className="mt-2 space-y-2 border-t pt-2">
+                                                    {expandedFields.length ? (
+                                                        <dl className="grid gap-x-6 gap-y-1 text-sm sm:grid-cols-2">
+                                                            {expandedFields.map((field) => (
+                                                                <div key={field.label} className="flex gap-2">
+                                                                    <dt className="shrink-0 text-muted-foreground">{field.label}</dt>
+                                                                    <dd className="min-w-0 break-words">{String(field.value)}</dd>
                                                                 </div>
-                                                            ))
-                                                        ) : (
-                                                            <div className="col-span-full rounded-lg border border-dashed px-2.5 py-2">
-                                                                <span className="text-sm text-muted-foreground">
-                                                                    No additional fields were stored for this activity.
-                                                                </span>
-                                                            </div>
-                                                        )}
-                                                    </div>
+                                                            ))}
+                                                        </dl>
+                                                    ) : null}
+                                                    {auditEvents.map((event) => (
+                                                        <div key={event.id} className="text-xs text-muted-foreground">
+                                                            <span className="font-medium text-foreground">Changed by {event.user?.name || event.user?.email || "someone"}</span> · {formatWorkspaceRelativeTime(event.createdAt)}
+                                                            <ul className="mt-0.5 space-y-0.5">
+                                                                {activityChangedFields(event).map((change) => (
+                                                                    <li key={`${event.id}-${change.field}`}>{activityFieldLabel(change.field)}: {formatAuditActivityValue(change.before, change.field, event)} → {formatAuditActivityValue(change.after, change.field, event)}</li>
+                                                                ))}
+                                                            </ul>
+                                                        </div>
+                                                    ))}
                                                 </div>
-                                            </div>
+                                            ) : null}
                                         </div>
                                     </div>
-                                </div>
+                                </li>
                             );
-                        })}
-                    </div>
-                </div>
+                        })())}
+                    </ul>
+                </section>
             ))}
         </div>
     );

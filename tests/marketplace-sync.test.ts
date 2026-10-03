@@ -8,7 +8,7 @@ const dbMocks = vi.hoisted(() => {
   const execute = vi.fn();
   return { query, queryOne, execute, queryAsSystem: query, queryOneAsSystem: queryOne, executeAsSystem: execute };
 });
-const moduleMocks = vi.hoisted(() => ({ assertModuleEnabled: vi.fn().mockResolvedValue(undefined) }));
+const moduleMocks = vi.hoisted(() => ({ assertModuleEnabled: vi.fn().mockResolvedValue(undefined), isModuleEnabledForTenant: vi.fn().mockResolvedValue(true) }));
 const crmMocks = vi.hoisted(() => ({
   getLeadForTenant: vi.fn(),
   getOpportunityForTenant: vi.fn(),
@@ -101,6 +101,7 @@ describe("getOrCreateSyncConfig", () => {
   beforeEach(() => {
     dbMocks.queryOne.mockReset();
     moduleMocks.assertModuleEnabled.mockReset().mockResolvedValue(undefined);
+    moduleMocks.isModuleEnabledForTenant.mockReset().mockResolvedValue(true);
   });
 
   it("throws APP_INSTALL_NOT_FOUND when the install doesn't belong to this tenant", async () => {
@@ -130,6 +131,7 @@ describe("updateSyncConfig", () => {
   beforeEach(() => {
     dbMocks.queryOne.mockReset();
     moduleMocks.assertModuleEnabled.mockReset().mockResolvedValue(undefined);
+    moduleMocks.isModuleEnabledForTenant.mockReset().mockResolvedValue(true);
   });
 
   function mockExistingConfig() {
@@ -165,6 +167,7 @@ describe("listFieldMappingsForInstall / setFieldMappings", () => {
     dbMocks.query.mockReset();
     dbMocks.execute.mockReset().mockResolvedValue(0);
     moduleMocks.assertModuleEnabled.mockReset().mockResolvedValue(undefined);
+    moduleMocks.isModuleEnabledForTenant.mockReset().mockResolvedValue(true);
   });
 
   it("rejects a crmField that isn't a real mappable column for the module", async () => {
@@ -194,6 +197,7 @@ describe("listSyncRunsForInstall / triggerSyncNow", () => {
     dbMocks.queryOne.mockReset();
     dbMocks.query.mockReset();
     moduleMocks.assertModuleEnabled.mockReset().mockResolvedValue(undefined);
+    moduleMocks.isModuleEnabledForTenant.mockReset().mockResolvedValue(true);
   });
 
   it("listSyncRunsForInstall throws APP_INSTALL_NOT_FOUND for another tenant's install", async () => {
@@ -310,6 +314,7 @@ describe("dryRunSync", () => {
     dbMocks.queryOne.mockReset();
     dbMocks.query.mockReset().mockResolvedValue([]);
     moduleMocks.assertModuleEnabled.mockReset().mockResolvedValue(undefined);
+    moduleMocks.isModuleEnabledForTenant.mockReset().mockResolvedValue(true);
     crmMocks.listLeadsForTenant.mockReset();
     dbMocks.execute.mockReset();
   });

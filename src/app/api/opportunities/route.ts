@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { assertFeatureEnabled } from "@/lib/server/entitlements";
 import {
   createOpportunityForTenant,
   listOpportunitiesForTenantByType,
@@ -9,14 +10,26 @@ import { badRequest, serverError, unauthorized } from "@/lib/server/http";
 export async function GET(request: Request) {
   try {
     const user = await requireCurrentUser(request);
+    await assertFeatureEnabled(user.tenantId, "opportunityEnabled", { isPlatformAdmin: user.isPlatformAdmin });
     const { searchParams } = new URL(request.url);
     const limit = Number(searchParams.get("limit") ?? "100");
     const page = Number(searchParams.get("page") ?? "1");
     const opportunityTypeId = searchParams.get("opportunityTypeId");
     const filters = searchParams.get("filters");
-    const parsedFilters = filters ? JSON.parse(filters) : null;
-
-    const response = await listOpportunitiesForTenantByType(user, limit, opportunityTypeId, parsedFilters, page);
+    let parsedFilters = null;
+    try {
+      parsedFilters = filters ? JSON.parse(filters) : null;
+    } catch {
+      return badRequest("Filters must be valid JSON");
+    }
+    // Search and sort (UI/UX plan Phase 2), as on the leads list.
+    const sortId = searchParams.get("sort");
+    const response = await listOpportunitiesForTenantByType(user, limit, opportunityTypeId, parsedFilters, page, {
+      search: searchParams.get("q"),
+      sort: sortId ? { id: sortId, desc: searchParams.get("dir") !== "asc" } : null,
+      // Smart Views: refuse a filter the server can't apply rather than widen the result.
+      strictFilters: searchParams.get("strict") === "1",
+    });
     return NextResponse.json(response);
   } catch (error) {
     if (error instanceof Error && error.message === "UNAUTHORIZED") {

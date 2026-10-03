@@ -6,7 +6,8 @@ import { requireCurrentUser } from "@/lib/server/auth";
 export async function GET(request: Request) {
   try {
     const user = await requireCurrentUser(request);
-    const forms = await listFormsForTenant(user);
+    // ?archived=1: archived forms (restorable for 30 days).
+    const forms = await listFormsForTenant(user, { archived: new URL(request.url).searchParams.get("archived") === "1" });
     return NextResponse.json(forms);
   } catch (error) {
     if (error instanceof Error && error.message === "UNAUTHORIZED") return unauthorized();

@@ -7,7 +7,7 @@ import * as z from 'zod';
 import { Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useObjectMetadata } from '@/hooks/use-object-metadata';
-import { MuiDynamicField } from '@/components/forms/mui-dynamic-field';
+import { DynamicField } from '@/components/forms/dynamic-field';
 import { apiFetch } from '@/lib/api';
 import { ErrorState } from '@/components/common/error-state';
 import { toast } from 'sonner';
@@ -35,6 +35,9 @@ interface DynamicFormRendererProps {
     onCancel?: () => void;
     saveUrl?: string;
     fieldOverrides?: Record<string, (props: { field: any, control: any, errors: any, setValue: any, watch: any }) => React.ReactNode>;
+    // Cross-field rules the per-field schema can't express. Returns field key -> message; any
+    // entry blocks the save and shows the message on that field.
+    validate?: (values: any) => Record<string, string> | null;
 }
 
 export function DynamicFormRenderer({
@@ -44,7 +47,8 @@ export function DynamicFormRenderer({
     onSuccess,
     onCancel,
     saveUrl,
-    fieldOverrides
+    fieldOverrides,
+    validate
 }: DynamicFormRendererProps) {
     const { metadata: fetchedMetadata, loading: metadataLoading, error: metadataError, retry: retryMetadata } = useObjectMetadata(objectName || '');
     const metadata = externalMetadata || fetchedMetadata;
@@ -101,6 +105,7 @@ export function DynamicFormRenderer({
         formState: { errors, isDirty },
         reset,
         setValue,
+        setError,
         watch,
     } = useForm({
         resolver: zodResolver(schema),
@@ -141,6 +146,11 @@ export function DynamicFormRenderer({
 
     const onSubmit = async (values: any) => {
         if (savingRef.current || currentDraft().pending || !metadata || isMetadataLoading || (!externalMetadata && metadataError)) return;
+        const ruleErrors = validate?.(values);
+        if (ruleErrors && Object.keys(ruleErrors).length > 0) {
+            Object.entries(ruleErrors).forEach(([key, message], index) => setError(key, { type: 'validate', message }, { shouldFocus: index === 0 }));
+            return;
+        }
         const requestVersion = version.current;
         savingRef.current = true;
         setSaveError('');
@@ -245,7 +255,7 @@ export function DynamicFormRenderer({
                                                 name={field.key}
                                                 control={control}
                                                 render={({ field: hookField }) => (
-                                                    <MuiDynamicField
+                                                    <DynamicField
                                                         field={{ ...field, required: field.isRequired ?? field.required }}
                                                         value={hookField.value}
                                                         onChange={hookField.onChange}
@@ -270,7 +280,7 @@ export function DynamicFormRenderer({
                     )}
                     <Button type="submit" disabled={isSaving} className="px-6">
                         {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-                        {isSaving ? 'Saving...' : `Save ${objectName}`}
+                        {isSaving ? 'Saving...' : initialData?.id ? 'Save changes' : `Save ${objectName || metadata?.name || 'record'}`}
                     </Button>
                 </div>
             </div>

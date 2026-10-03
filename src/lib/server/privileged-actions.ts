@@ -2,7 +2,7 @@ import { randomUUID } from "crypto";
 import { query, queryOne, execute, queryOneAsSystem, executeAsSystem } from "@/lib/db/query";
 import { createAuditLog } from "@/lib/server/crm";
 import { getEffectiveSecurityPolicy } from "@/lib/server/security-policy";
-import { changeTenantStatus, impersonateTenantUser, updatePermissionTemplateForTenant } from "@/lib/server/admin";
+import { impersonateTenantUser, setTenantStatusForPlatformAdmin, updatePermissionTemplateForTenant } from "@/lib/server/admin";
 import { rotateApiKeyForTenant } from "@/lib/server/api-keys";
 
 export type PrivilegedActionType =
@@ -107,7 +107,7 @@ export async function listPrivilegedActionRequests(scope: { tenantId: string | n
 // starting an impersonation session hands back a token that has to go to the ORIGINAL
 // requester's browser, not the approver's, so that one is deferred to claimApprovedImpersonation
 // below instead of executed here.
-async function executeApprovedAction(row: PrivilegedActionRequestRow) {
+async function executeApprovedAction(row: PrivilegedActionRequestRow, approver: TenantUser) {
   switch (row.actionType) {
     case "DISTRIBUTION_REASSIGNMENT": {
       // Dynamic import: distribution-engine.ts imports createPrivilegedActionRequest from this
@@ -135,10 +135,16 @@ async function executeApprovedAction(row: PrivilegedActionRequestRow) {
       return;
     }
     case "TENANT_SUSPEND":
-      if (row.targetId) await changeTenantStatus(row.targetId, "SUSPENDED");
-      return;
     case "TENANT_UNSUSPEND":
-      if (row.targetId) await changeTenantStatus(row.targetId, "ACTIVE");
+      // Logged as the requester's change, with the approver; requests made before a reason was
+      // required say so rather than failing the approval.
+      if (row.targetId) {
+        await setTenantStatusForPlatformAdmin({ id: row.requestedBy }, row.targetId, row.actionType === "TENANT_SUSPEND" ? "SUSPENDED" : "ACTIVE", {
+          reason: row.reason?.trim() || (row.actionType === "TENANT_SUSPEND" ? "No reason recorded on the request" : null),
+          requestId: row.id,
+          approvedBy: approver.id,
+        });
+      }
       return;
     case "PERMISSION_TEMPLATE_UPDATE":
       if (row.targetId) await updatePermissionTemplateForTenant(row.tenantId as string, row.targetId, row.payload as any);
@@ -181,7 +187,7 @@ export async function approvePrivilegedActionRequest(approver: TenantUser, reque
   if (row.actionType === "IMPERSONATION_START") {
     await executeAsSystem(`update "PrivilegedActionRequest" set status = 'APPROVED', "decidedBy" = $1, "decidedAt" = $2 where id = $3`, [approver.id, now, requestId]);
   } else {
-    await executeApprovedAction(row);
+    await executeApprovedAction(row, approver);
     await executeAsSystem(
       `update "PrivilegedActionRequest" set status = 'EXECUTED', "decidedBy" = $1, "decidedAt" = $2, "executedAt" = $2 where id = $3`,
       [approver.id, now, requestId],

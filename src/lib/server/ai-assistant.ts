@@ -1,9 +1,9 @@
+import { assertModuleEnabled, assertTenantModule } from "@/lib/server/module-entitlements";
 import { randomUUID } from "crypto";
 import { AI_RECORD_WORKFLOWS, type AiRecordWorkflow } from "@/lib/ai-workflows";
 import { z } from "zod";
 import { query, queryOne, execute, jsonbParam } from "@/lib/db/query";
 import { createAuditLog } from "@/lib/server/crm";
-import { assertModuleEnabled } from "@/lib/server/module-entitlements";
 import { queueCommunicationForTenant, renderTemplate } from "@/lib/server/communications";
 import { applyRecordScopeClause } from "@/lib/server/record-scope";
 import { maskFieldsForUser } from "@/lib/server/field-permissions";
@@ -61,6 +61,7 @@ const DEFAULT_SETTINGS = {
 };
 
 export async function getAiProviderSettingsForTenant(user: TenantUser) {
+  await assertTenantModule(user, "AI_COPILOT");
   const tenantId = requireTenantId(user);
   const row = await queryOne<any>(`select ${SETTINGS_COLUMNS} from "AiProviderSettings" where "tenantId" = $1`, [tenantId]);
   return redactSettings(row ?? DEFAULT_SETTINGS);

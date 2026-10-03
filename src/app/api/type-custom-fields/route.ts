@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { requireCurrentUser } from "@/lib/server/auth";
+import { requireCurrentUser, requireTenantAdmin } from "@/lib/server/auth";
 import { createCustomFieldForTenant } from "@/lib/server/admin-modules";
 import { badRequest, forbidden, serverError, unauthorized } from "@/lib/server/http";
 
@@ -10,7 +10,7 @@ const ENTITY_TYPE_TO_OBJECT_TYPE: Record<string, string> = {
 
 export async function POST(request: Request) {
   try {
-    const user = await requireCurrentUser(request);
+    const user = await requireTenantAdmin(request);
     if (!user.tenantId) return forbidden("Tenant context required");
     const body = await request.json().catch(() => null);
     const objectType = ENTITY_TYPE_TO_OBJECT_TYPE[String(body?.entityType ?? "")];
@@ -48,6 +48,7 @@ export async function POST(request: Request) {
     });
   } catch (error) {
     if (error instanceof Error && error.message === "UNAUTHORIZED") return unauthorized();
+    if (error instanceof Error && error.message === "FORBIDDEN") return forbidden("Only admins can do this");
     return serverError("Failed to create type custom field", error);
   }
 }

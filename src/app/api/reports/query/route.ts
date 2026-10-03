@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { badRequest, requestTimeout, serverError, unauthorized } from "@/lib/server/http";
 import { requireCurrentUser } from "@/lib/server/auth";
+import { assertFeatureEnabled } from "@/lib/server/entitlements";
 import {
   executeReportQueryForTenant,
   getReportQueryCatalog,
@@ -9,7 +10,8 @@ import {
 
 export async function GET(request: Request) {
   try {
-    await requireCurrentUser(request);
+    const user = await requireCurrentUser(request);
+    await assertFeatureEnabled(user.tenantId, "advancedReporting", { isPlatformAdmin: user.isPlatformAdmin });
     return NextResponse.json({ objects: getReportQueryCatalog() });
   } catch (error) {
     if (error instanceof Error && error.message === "UNAUTHORIZED") return unauthorized();
@@ -30,6 +32,10 @@ export async function POST(request: Request) {
     return NextResponse.json(result);
   } catch (error) {
     if (error instanceof Error && error.message === "UNAUTHORIZED") return unauthorized();
+    if (error instanceof Error && error.message === "REPORT_SOURCE_VIEW_NOT_FOUND") return badRequest("The Smart View this report draws from was deleted or archived. Choose another record source.");
+    if (error instanceof Error && error.message === "REPORT_SOURCE_VIEW_UNSUPPORTED") {
+      return badRequest(`The Smart View this report draws from uses ${(error as any).field === "OR" ? "\"match any\" filters" : `a filter (${(error as any).field})`} a report can't apply. Choose "All permitted records" or another view.`);
+    }
     if (error instanceof Error && /Unsupported|required|definition/i.test(error.message)) {
       return badRequest(error.message);
     }

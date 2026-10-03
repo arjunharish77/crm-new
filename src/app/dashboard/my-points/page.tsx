@@ -1,17 +1,21 @@
 "use client";
 
+import { useConfirm } from "@/components/common/dialogs-provider";
+import { ErrorState } from "@/components/common/error-state";
 import { useEffect, useState } from "react";
 import { apiFetch } from "@/lib/api";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { motion } from "framer-motion";
-import { staggerContainer, staggerItem, fadeInUp, spring } from "@/lib/motion";
+import { PageHeader } from "@/components/layout/page-header";
+import Link from "next/link";
+import { Award } from "lucide-react";
 import { toast } from "sonner";
 import { TableSkeleton } from "@/components/common/skeletons";
 import { EmptyState } from "@/components/common/empty-state";
 import { formatWorkspaceDateTime } from "@/lib/date-format";
 import { cn } from "@/lib/utils";
+import { humanizeEnum } from "@/lib/display/status";
 import { useFeature } from "@/components/auth/feature-gate";
 
 type LedgerEntry = {
@@ -48,6 +52,25 @@ type Redemption = {
     createdAt: string;
 };
 
+const REDEMPTION_STATUS: Record<Redemption["status"], { label: string; tone: "warning" | "success" | "danger" }> = {
+    REQUESTED: { label: "Waiting for an admin", tone: "warning" },
+    FULFILLED: { label: "Fulfilled", tone: "success" },
+    FAILED: { label: "Failed", tone: "danger" },
+};
+const LEDGER_LABEL: Record<string, string> = {
+    REDEEMED: "Reward redeemed",
+    REDEMPTION_FAILED_REFUND: "Refund for a declined reward",
+    MANUAL_ADJUSTMENT: "Adjusted by an admin",
+    EARNED: "Points earned",
+};
+const REWARD_TYPE_LABEL: Record<RewardCatalogItem["rewardType"], string> = {
+    MONETARY: "Cash",
+    THIRD_PARTY_REWARD: "Gift card or voucher",
+    INTERNAL_PERK: "Perk",
+};
+
+// Insights › My points (UI/UX plan §5.17): a load error shows an error, never a balance of 0;
+// redeeming confirms the cost first; with nothing to show yet, one empty state, not five.
 export default function MyPointsPage() {
     const gamificationEnabled = useFeature("gamificationEnabled");
     const [ledger, setLedger] = useState<LedgerEntry[]>([]);
@@ -57,11 +80,15 @@ export default function MyPointsPage() {
     const [redemptions, setRedemptions] = useState<Redemption[]>([]);
     const [redeemingKey, setRedeemingKey] = useState<string | null>(null);
     const [loading, setLoading] = useState(true);
+    // The balance couldn't be loaded: show an error, not a balance of 0 (UI/UX plan §5.17).
+    const [pointsFailed, setPointsFailed] = useState(false);
+    const confirm = useConfirm();
 
     const fetchAll = () => {
         setLoading(true);
+        setPointsFailed(false);
         Promise.all([
-            apiFetch<{ ledger: LedgerEntry[]; balance: number }>("/gamification/me/points").catch(() => ({ ledger: [], balance: 0 })),
+            apiFetch<{ ledger: LedgerEntry[]; balance: number }>("/gamification/me/points").catch(() => { setPointsFailed(true); return { ledger: [], balance: 0 }; }),
             apiFetch<UserBadgeRow[]>("/gamification/me/badges").catch(() => []),
             apiFetch<RewardCatalogItem[]>("/gamification/rewards").catch(() => []),
             apiFetch<Redemption[]>("/gamification/me/redemptions").catch(() => []),
@@ -73,7 +100,7 @@ export default function MyPointsPage() {
                 setRewards(Array.isArray(settingsData) ? settingsData.filter((reward) => reward.isActive !== false) : []);
                 setRedemptions(Array.isArray(redemptionsData) ? redemptionsData : []);
             })
-            .catch(() => toast.error("Failed to load points"))
+            .catch(() => setPointsFailed(true))
             .finally(() => setLoading(false));
     };
 
@@ -82,6 +109,13 @@ export default function MyPointsPage() {
     }, []);
 
     const handleRedeem = async (reward: RewardCatalogItem, index: number) => {
+        const cost = Number(reward.pointsCost ?? 0);
+        const ok = await confirm({
+            title: `Redeem ${reward.name}?`,
+            description: `It costs ${cost.toLocaleString()} points, leaving you ${(balance - cost).toLocaleString()}. The points are taken now and given back if an admin turns the request down.`,
+            confirmLabel: `Redeem for ${cost.toLocaleString()} points`,
+        });
+        if (!ok) return;
         const catalogItemKey = reward.key || `${reward.rewardType}:${reward.name}:${index}`;
         setRedeemingKey(catalogItemKey);
         try {
@@ -94,7 +128,7 @@ export default function MyPointsPage() {
                     notes: "",
                 }),
             });
-            toast.success("Redemption requested");
+            toast.success(`${reward.name} requested`);
             fetchAll();
         } catch (error: any) {
             toast.error(error.message || "Failed to request redemption");
@@ -104,148 +138,138 @@ export default function MyPointsPage() {
     };
 
     if (!gamificationEnabled) {
-        return (
-            <div className="mx-auto max-w-[1000px] p-4 md:p-6">
-                <EmptyState title="Gamification isn't enabled" description="This feature isn't enabled for your workspace. Contact your admin if you think this is a mistake." />
-            </div>
-        );
+        return <EmptyState title="Gamification isn't turned on" description="Ask an admin to turn on the Gamification module." />;
     }
 
+    const nothingYet = rewards.length === 0 && redemptions.length === 0 && badges.length === 0 && ledger.length === 0;
+
     return (
-        <motion.div variants={fadeInUp} initial="initial" animate="animate" className="mx-auto max-w-[1000px] p-4 md:p-6">
-            <h1 className="text-lg font-extrabold tracking-tight">My Points</h1>
-            <p className="mt-1 text-xs text-muted-foreground">Your gamification points and earned badges.</p>
+        <div className="mx-auto min-w-0 max-w-[1000px]">
+            <PageHeader
+                title="My points"
+                description="Points you've earned, rewards you can redeem, and badges."
+                secondaryActions={<Button variant="outline" asChild><Link href="/dashboard/leaderboard">Leaderboard</Link></Button>}
+            />
 
             {loading ? (
-                <TableSkeleton rows={4} columns={2} />
+                <TableSkeleton rows={4} columns={2} hasToolbar={false} />
+            ) : pointsFailed ? (
+                <ErrorState description="Your points couldn't be loaded." onRetry={fetchAll} />
             ) : (
-                <>
-                    <motion.div
-                        initial={{ opacity: 0, scale: 0.9 }}
-                        animate={{ opacity: 1, scale: 1, transition: spring.expressive }}
-                        className="mt-5 rounded-[18px] border bg-gradient-to-br from-amber-400/12 to-primary/6 p-6 text-center"
-                    >
-                        <p className="text-xs uppercase tracking-wide text-muted-foreground">Total Points</p>
-                        <p className="mt-1 text-3xl font-extrabold">{balance.toLocaleString()}</p>
-                    </motion.div>
+                <div className="space-y-6">
+                    <div className="rounded-xl border bg-card p-5">
+                        <p className="text-sm text-muted-foreground">Your balance</p>
+                        <p className="mt-1 text-3xl font-semibold tabular-nums">{balance.toLocaleString()} <span className="text-base font-normal text-muted-foreground">points</span></p>
+                    </div>
 
-                    <h2 className="mt-6 mb-3 text-sm font-bold">Reward Catalog</h2>
-                    {rewards.length === 0 ? (
-                        <EmptyState title="No rewards configured" description="Rewards appear here once an admin adds them." />
-                    ) : (
-                        <div className="grid gap-3 md:grid-cols-3">
-                            {rewards.map((reward, index) => {
-                                const catalogItemKey = reward.key || `${reward.rewardType}:${reward.name}:${index}`;
-                                const canRedeem = balance >= Number(reward.pointsCost ?? 0);
-                                return (
-                                    <div key={catalogItemKey} className="rounded-xl border bg-card p-4">
-                                        <div className="flex items-start justify-between gap-3">
-                                            <div>
-                                                <p className="text-sm font-bold">{reward.name}</p>
-                                                <p className="mt-1 text-xs text-muted-foreground">{reward.rewardType.replaceAll("_", " ")}</p>
+                    {nothingYet ? (
+                        <EmptyState icon={<Award />} title="Nothing here yet" description="Points, badges and rewards appear here as you work leads and opportunities and an admin sets up rewards." />
+                    ) : null}
+
+                    {rewards.length > 0 ? (
+                        <section aria-labelledby="rewards-heading">
+                            <h2 id="rewards-heading" className="mb-3 text-sm font-semibold">Rewards</h2>
+                            <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-3">
+                                {rewards.map((reward, index) => {
+                                    const catalogItemKey = reward.key || `${reward.rewardType}:${reward.name}:${index}`;
+                                    const cost = Number(reward.pointsCost ?? 0);
+                                    const canRedeem = balance >= cost;
+                                    return (
+                                        <div key={catalogItemKey} className="flex flex-col rounded-xl border bg-card p-4">
+                                            <div className="flex items-start justify-between gap-3">
+                                                <div className="min-w-0">
+                                                    <p className="break-words text-sm font-semibold">{reward.name}</p>
+                                                    <p className="mt-0.5 text-xs text-muted-foreground">{REWARD_TYPE_LABEL[reward.rewardType] ?? reward.rewardType}</p>
+                                                </div>
+                                                <Badge tone="neutral" className="shrink-0 tabular-nums">{cost.toLocaleString()} pts</Badge>
                                             </div>
-                                            <Badge variant="outline" className="rounded-md text-[0.65rem] font-semibold">
-                                                {Number(reward.pointsCost).toLocaleString()} pts
-                                            </Badge>
+                                            {reward.monetaryAmount ? <p className="mt-2 text-xs text-muted-foreground">Value: ₹{Number(reward.monetaryAmount).toLocaleString()}</p> : null}
+                                            {reward.thirdPartyProvider ? <p className="mt-1 text-xs text-muted-foreground">From {reward.thirdPartyProvider}</p> : null}
+                                            <div className="mt-auto pt-4">
+                                                <Button
+                                                    className="w-full"
+                                                    size="sm"
+                                                    variant={canRedeem ? "default" : "outline"}
+                                                    disabled={!canRedeem}
+                                                    isLoading={redeemingKey === catalogItemKey}
+                                                    onClick={() => handleRedeem(reward, index)}
+                                                >
+                                                    {canRedeem ? "Redeem" : `${(cost - balance).toLocaleString()} more points needed`}
+                                                </Button>
+                                            </div>
                                         </div>
-                                        {reward.monetaryAmount ? (
-                                            <p className="mt-2 text-xs text-muted-foreground">Value: ₹{Number(reward.monetaryAmount).toLocaleString()}</p>
-                                        ) : null}
-                                        {reward.thirdPartyProvider ? (
-                                            <p className="mt-2 text-xs text-muted-foreground">Provider: {reward.thirdPartyProvider}</p>
-                                        ) : null}
-                                        <Button
-                                            className="mt-4 w-full"
-                                            size="sm"
-                                            variant={canRedeem ? "default" : "outline"}
-                                            disabled={!canRedeem || redeemingKey === catalogItemKey}
-                                            onClick={() => handleRedeem(reward, index)}
-                                        >
-                                            {redeemingKey === catalogItemKey ? "Requesting..." : canRedeem ? "Redeem" : "Not enough points"}
-                                        </Button>
-                                    </div>
-                                );
-                            })}
-                        </div>
-                    )}
+                                    );
+                                })}
+                            </div>
+                        </section>
+                    ) : null}
 
-                    <h2 className="mt-6 mb-3 text-sm font-bold">Redemption History</h2>
-                    {redemptions.length === 0 ? (
-                        <EmptyState title="No redemptions yet" description="Requested rewards and fulfillment status appear here." />
-                    ) : (
-                        <div className="space-y-2">
-                            {redemptions.slice(0, 10).map((redemption) => (
-                                <div key={redemption.id} className="rounded-xl border bg-card p-3">
-                                    <div className="flex items-center justify-between gap-4">
-                                        <div>
-                                            <p className="text-sm font-semibold">{redemption.rewardName ?? redemption.redemptionType}</p>
-                                            <p className="text-xs text-muted-foreground">{formatWorkspaceDateTime(redemption.createdAt)}</p>
-                                            {redemption.failureReason ? (
-                                                <p className="text-xs text-destructive">{redemption.failureReason}</p>
-                                            ) : null}
-                                        </div>
-                                        <div className="text-right">
-                                            <Badge variant="outline" className="rounded-md text-[0.65rem] font-semibold">
-                                                {redemption.status}
-                                            </Badge>
-                                            <p className="mt-1 text-xs font-bold text-destructive">-{redemption.pointsRedeemed} pts</p>
-                                        </div>
-                                    </div>
-                                </div>
-                            ))}
-                        </div>
-                    )}
+                    {redemptions.length > 0 ? (
+                        <section aria-labelledby="redemptions-heading">
+                            <h2 id="redemptions-heading" className="mb-3 text-sm font-semibold">Your redemptions</h2>
+                            <ul className="divide-y rounded-xl border bg-card">
+                                {redemptions.slice(0, 10).map((redemption) => {
+                                    const status = REDEMPTION_STATUS[redemption.status];
+                                    return (
+                                        <li key={redemption.id} className="flex items-center justify-between gap-4 p-3">
+                                            <div className="min-w-0">
+                                                <p className="break-words text-sm font-medium">{redemption.rewardName ?? redemption.redemptionType}</p>
+                                                <p className="text-xs text-muted-foreground">{formatWorkspaceDateTime(redemption.createdAt)}</p>
+                                                {redemption.failureReason ? <p className="text-xs text-destructive">{redemption.failureReason}</p> : null}
+                                            </div>
+                                            <div className="shrink-0 text-right">
+                                                <Badge tone={status?.tone ?? "neutral"}>{status?.label ?? redemption.status}</Badge>
+                                                <p className="mt-1 text-xs tabular-nums text-muted-foreground">−{redemption.pointsRedeemed.toLocaleString()} pts</p>
+                                            </div>
+                                        </li>
+                                    );
+                                })}
+                            </ul>
+                        </section>
+                    ) : null}
 
-                    <h2 className="mt-6 mb-3 text-sm font-bold">Badges Earned</h2>
-                    {badges.length === 0 ? (
-                        <EmptyState title="No badges yet" description="Badges appear here once you meet a milestone." />
-                    ) : (
-                        <motion.div variants={staggerContainer} initial="initial" animate="animate">
-                            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
+                    {badges.length > 0 ? (
+                        <section aria-labelledby="badges-heading">
+                            <h2 id="badges-heading" className="mb-3 text-sm font-semibold">Badges</h2>
+                            <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
                                 {badges.map((userBadge) => (
-                                    <motion.div key={userBadge.id} variants={staggerItem}>
+                                    <li key={userBadge.id}>
                                         <Tooltip>
                                             <TooltipTrigger asChild>
-                                                <div className="rounded-2xl border border-amber-400/30 bg-amber-400/[0.04] p-4 text-center">
-                                                    <p className="text-[2rem] leading-none">{userBadge.Badge?.iconEmoji ?? "🏆"}</p>
-                                                    <p className="mt-1 text-sm font-bold">{userBadge.Badge?.name}</p>
-                                                    <p className="text-xs text-muted-foreground">
-                                                        {formatWorkspaceDateTime(userBadge.earnedAt)}
-                                                    </p>
+                                                <div tabIndex={userBadge.Badge?.description ? 0 : undefined} className="rounded-xl border bg-card p-4 text-center">
+                                                    <p className="text-3xl leading-none" aria-hidden>{userBadge.Badge?.iconEmoji ?? "🏆"}</p>
+                                                    <p className="mt-2 break-words text-sm font-medium">{userBadge.Badge?.name}</p>
+                                                    <p className="text-xs text-muted-foreground">{formatWorkspaceDateTime(userBadge.earnedAt)}</p>
                                                 </div>
                                             </TooltipTrigger>
-                                            {userBadge.Badge?.description && (
-                                                <TooltipContent>{userBadge.Badge.description}</TooltipContent>
-                                            )}
+                                            {userBadge.Badge?.description ? <TooltipContent>{userBadge.Badge.description}</TooltipContent> : null}
                                         </Tooltip>
-                                    </motion.div>
+                                    </li>
                                 ))}
-                            </div>
-                        </motion.div>
-                    )}
+                            </ul>
+                        </section>
+                    ) : null}
 
-                    <h2 className="mt-6 mb-3 text-sm font-bold">Recent Activity</h2>
-                    {ledger.length === 0 ? (
-                        <EmptyState title="No points earned yet" description="Points appear here as you work leads and opportunities." />
-                    ) : (
-                        <div className="space-y-2">
-                            {ledger.slice(0, 20).map((entry) => (
-                                <div key={entry.id} className="rounded-xl border bg-card p-3">
-                                    <div className="flex items-center justify-between gap-4">
-                                        <div>
-                                            <p className="text-sm font-semibold">{entry.triggerEvent ?? entry.entryType}</p>
+                    {ledger.length > 0 ? (
+                        <section aria-labelledby="ledger-heading">
+                            <h2 id="ledger-heading" className="mb-3 text-sm font-semibold">Recent points</h2>
+                            <ul className="divide-y rounded-xl border bg-card">
+                                {ledger.slice(0, 20).map((entry) => (
+                                    <li key={entry.id} className="flex items-center justify-between gap-4 p-3">
+                                        <div className="min-w-0">
+                                            <p className="break-words text-sm font-medium">{LEDGER_LABEL[entry.triggerEvent ?? ""] ?? LEDGER_LABEL[entry.entryType] ?? humanizeEnum(entry.triggerEvent ?? entry.entryType)}</p>
                                             <p className="text-xs text-muted-foreground">{formatWorkspaceDateTime(entry.createdAt)}</p>
                                         </div>
-                                        <span className={cn("text-sm font-bold", entry.points < 0 ? "text-destructive" : "text-primary")}>
-                                            {entry.points > 0 ? "+" : ""}{entry.points}
+                                        <span className={cn("shrink-0 text-sm font-semibold tabular-nums", entry.points < 0 ? "text-destructive" : "text-status-success-foreground")}>
+                                            {entry.points > 0 ? "+" : entry.points < 0 ? "−" : ""}{Math.abs(entry.points).toLocaleString()}
                                         </span>
-                                    </div>
-                                </div>
-                            ))}
-                        </div>
-                    )}
-                </>
+                                    </li>
+                                ))}
+                            </ul>
+                        </section>
+                    ) : null}
+                </div>
             )}
-        </motion.div>
+        </div>
     );
 }

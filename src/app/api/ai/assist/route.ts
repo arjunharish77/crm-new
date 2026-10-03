@@ -1,5 +1,6 @@
 import { AI_RECORD_WORKFLOWS } from "@/lib/ai-workflows";
 import { NextResponse } from "next/server";
+import { assertTenantModule } from "@/lib/server/module-entitlements";
 import { requireCurrentUser } from "@/lib/server/auth";
 import { badRequest, forbidden, serverError, unauthorized } from "@/lib/server/http";
 import {
@@ -30,6 +31,7 @@ const ACTIONS: Record<string, (user: any, entityType: string, entityId: string) 
 export async function POST(request: Request) {
   try {
     const user = await requireCurrentUser(request);
+    await assertTenantModule(user, "AI_COPILOT");
     if (!user.tenantId) return forbidden("Tenant context required");
     const body = await request.json().catch(() => null);
     const actionKey = String(body?.action ?? "");

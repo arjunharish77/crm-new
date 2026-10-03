@@ -1,7 +1,8 @@
+import { archiveItemForTenant } from "@/lib/server/archive-items";
+import { assertFeatureEnabled, isFeatureEnabledForTenant } from "@/lib/server/entitlements";
 import { randomUUID } from "crypto";
 import { createAuditLog, automationConditionMatches } from "@/lib/server/crm";
 import { userMatchesTargetingConfig, type ParticipantConfig } from "@/lib/server/partner-access";
-import { assertFeatureEnabled, isFeatureEnabledForTenant } from "@/lib/server/entitlements";
 import { execute, query, queryOne, jsonbParam } from "@/lib/db/query";
 
 type TenantUser = {
@@ -87,7 +88,9 @@ const DEFAULT_PARTICIPANT_CONFIG: ParticipantConfig = {
   partnerOrganizationIds: [],
 };
 
-export async function getGamificationSettingsForTenant(user: TenantUser) {
+// Unguarded reader for callers that already checked the module (e.g. the per-save hot path);
+// routes use getGamificationSettingsForTenant, which checks first.
+export async function readGamificationSettings(user: TenantUser) {
   if (!user.tenantId) return null;
   const data = await queryOne<any>(
     `select id, "tenantId", levels, "leaderboardConfig", "redemptionCatalog", "antiGamingRules",
@@ -106,10 +109,15 @@ export async function getGamificationSettingsForTenant(user: TenantUser) {
   };
 }
 
+export async function getGamificationSettingsForTenant(user: TenantUser) {
+  await assertFeatureEnabled(user.tenantId, "gamificationEnabled", { isPlatformAdmin: user.isPlatformAdmin });
+  return readGamificationSettings(user);
+}
+
 export async function upsertGamificationSettingsForTenant(user: TenantUser, input: GamificationSettingsInput) {
   if (!user.tenantId) throw new Error("TENANT_CONTEXT_REQUIRED");
   await assertFeatureEnabled(user.tenantId, "gamificationEnabled", { isPlatformAdmin: user.isPlatformAdmin });
-  const existing = await getGamificationSettingsForTenant(user);
+  const existing = await readGamificationSettings(user);
   const now = new Date().toISOString();
   const payload = {
     levels: jsonbParam(Array.isArray(input.levels) ? input.levels : DEFAULT_LEVELS),
@@ -183,17 +191,18 @@ function normalizeParticipantConfig(config?: ParticipantConfig | null): Particip
 
 export async function isUserIncludedInGamification(user: TenantUser, targetUserId: string) {
   if (!user.tenantId) return false;
-  const settings = await getGamificationSettingsForTenant(user);
+  const settings = await readGamificationSettings(user);
   return userMatchesTargetingConfig(user.tenantId, targetUserId, settings?.participantConfig, "ALL");
 }
 
 export async function listGamificationRulesForTenant(user: TenantUser) {
   if (!user.tenantId) return [];
+  await assertFeatureEnabled(user.tenantId, "gamificationEnabled", { isPlatformAdmin: user.isPlatformAdmin });
   return query<any>(
     `select id, "tenantId", name, "triggerEventType", "audienceScope", conditions, "pointsAwarded",
             priority, "isActive", "createdAt", "updatedAt"
      from "GamificationRule"
-     where "tenantId" = $1
+     where "tenantId" = $1 and "deletedAt" is null
      order by priority desc, "createdAt" desc`,
     [user.tenantId],
   );
@@ -240,7 +249,7 @@ export async function updateGamificationRuleForTenant(
     `select id, "tenantId", name, "triggerEventType", "audienceScope", conditions, "pointsAwarded",
             priority, "isActive", "createdAt", "updatedAt"
      from "GamificationRule"
-     where "tenantId" = $1 and id = $2
+     where "tenantId" = $1 and id = $2 and "deletedAt" is null
      limit 1`,
     [user.tenantId, id],
   );
@@ -257,7 +266,7 @@ export async function updateGamificationRuleForTenant(
   const data = await queryOne<any>(
     `update "GamificationRule"
      set ${assignments}
-     where "tenantId" = $${columns.length + 1} and id = $${columns.length + 2}
+     where "tenantId" = $${columns.length + 1} and id = $${columns.length + 2} and "deletedAt" is null
      returning id, "tenantId", name, "triggerEventType", "audienceScope", conditions, "pointsAwarded",
                priority, "isActive", "createdAt", "updatedAt"`,
     [...values, user.tenantId, id],
@@ -274,15 +283,17 @@ export async function deleteGamificationRuleForTenant(user: TenantUser, id: stri
     `select id, "tenantId", name, "triggerEventType", "audienceScope", conditions, "pointsAwarded",
             priority, "isActive", "createdAt", "updatedAt"
      from "GamificationRule"
-     where "tenantId" = $1 and id = $2
+     where "tenantId" = $1 and id = $2 and "deletedAt" is null
      limit 1`,
     [user.tenantId, id],
   );
   if (!existing) return null;
 
-  await execute('delete from "GamificationRule" where "tenantId" = $1 and id = $2', [user.tenantId, id]);
-  await createAuditLog(user as any, "DELETE", "GAMIFICATION_RULE", id, existing, null, null);
-  return existing;
+  // Delete archives the rule (decision 31): it stops applying to new events at once and can be
+  // restored for 30 days; what it already awarded is unchanged, and a rule something was awarded
+  // under is never purged.
+  const archived = await archiveItemForTenant(user as any, "gamification-rule", id);
+  return { ...existing, purgeAfter: archived.purgeAfter };
 }
 
 // Deliberately different resolution semantics from commission's first-match-wins:
@@ -304,7 +315,7 @@ export async function resolveMatchingGamificationRules(
     `select id, "tenantId", name, "triggerEventType", "audienceScope", conditions, "pointsAwarded",
             priority, "isActive", "createdAt", "updatedAt"
      from "GamificationRule"
-     where "tenantId" = $1 and "triggerEventType" = $2 and "isActive" = true`,
+     where "tenantId" = $1 and "triggerEventType" = $2 and "isActive" = true and "deletedAt" is null`,
     [tenantId, params.triggerEventType],
   );
   return rules.filter(
@@ -395,7 +406,7 @@ export async function awardPointsForEvent(
     record,
   });
 
-  const settings = await getGamificationSettingsForTenant(user);
+  const settings = await readGamificationSettings(user);
   const antiGamingRules = (settings?.antiGamingRules ?? {}) as {
     maxPointsPerUserPerDay?: number;
     duplicateEventWindowMinutes?: number;
@@ -508,6 +519,7 @@ async function hasRecentDuplicateAward(
 
 export async function listGamificationPointsLedgerForUser(user: TenantUser, targetUserId: string) {
   if (!user.tenantId) return [];
+  await assertFeatureEnabled(user.tenantId, "gamificationEnabled", { isPlatformAdmin: user.isPlatformAdmin });
   return query<any>(
     `select id, "tenantId", "userId", "gamificationRuleId", points, "entryType", "sourceEntityType",
             "sourceEntityId", "triggerEvent", "redemptionId", "createdAt", "createdBy"
@@ -537,7 +549,7 @@ function normalizeCatalogItem(item: any, index: number): RedemptionCatalogItem |
 }
 
 async function resolveRedemptionCatalogItem(user: TenantUser, input: GamificationRedemptionInput) {
-  const settings = await getGamificationSettingsForTenant(user);
+  const settings = await readGamificationSettings(user);
   const catalog = Array.isArray(settings?.redemptionCatalog)
     ? settings.redemptionCatalog.map(normalizeCatalogItem).filter(Boolean) as RedemptionCatalogItem[]
     : [];
@@ -555,6 +567,7 @@ async function resolveRedemptionCatalogItem(user: TenantUser, input: Gamificatio
 
 export async function listGamificationRedemptionsForUser(user: TenantUser, targetUserId: string) {
   if (!user.tenantId) return [];
+  await assertFeatureEnabled(user.tenantId, "gamificationEnabled", { isPlatformAdmin: user.isPlatformAdmin });
   return query<any>(
     `select id, "tenantId", "userId", "redemptionType", "pointsRedeemed", "monetaryAmount",
             "thirdPartyProvider", "thirdPartyReference", status, "catalogItemKey", "rewardName",
@@ -568,6 +581,7 @@ export async function listGamificationRedemptionsForUser(user: TenantUser, targe
 
 export async function listGamificationRedemptionsForTenant(user: TenantUser) {
   if (!user.tenantId) return [];
+  await assertFeatureEnabled(user.tenantId, "gamificationEnabled", { isPlatformAdmin: user.isPlatformAdmin });
   const redemptions = await query<any>(
     `select id, "tenantId", "userId", "redemptionType", "pointsRedeemed", "monetaryAmount",
             "thirdPartyProvider", "thirdPartyReference", status, "catalogItemKey", "rewardName",
@@ -646,7 +660,7 @@ export async function updateGamificationRedemptionStatus(
             "thirdPartyProvider", "thirdPartyReference", status, "catalogItemKey", "rewardName",
             notes, "failureReason", "reviewedBy", "reviewedAt", "createdAt", "updatedAt"
      from "GamificationRedemption"
-     where "tenantId" = $1 and id = $2
+     where "tenantId" = $1 and id = $2 and "deletedAt" is null
      limit 1`,
     [user.tenantId, id],
   );

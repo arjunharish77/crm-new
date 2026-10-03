@@ -1,9 +1,10 @@
-import { randomUUID, randomBytes, createHmac } from "crypto";
+import { randomUUID, randomBytes } from "crypto";
 import { execute, query, queryOne, jsonbParam, executeAsSystem, queryAsSystem, queryOneAsSystem } from "@/lib/db/query";
 import { DatabaseError } from "@/lib/db/errors";
 import { createAuditLog } from "@/lib/server/crm";
 import { assertModuleEnabled } from "@/lib/server/module-entitlements";
-import { decryptSecretAtRestOrNull, encryptSecretAtRest } from "@/lib/server/secret-encryption";
+import { encryptSecretAtRest } from "@/lib/server/secret-encryption";
+import { APP_SIGNING_COLUMNS, appSignatureHeaders, type AppSigningRow } from "@/lib/server/app-signing";
 
 type TenantUser = { id: string; tenantId: string | null; isPlatformAdmin?: boolean };
 
@@ -450,9 +451,9 @@ export async function getConnectorContractForApp(user: TenantUser, appId: string
       retryScheduleMinutes: [1, 5, 30, 120, 720],
       verification: {
         algorithm: "HMAC-SHA256",
-        secretSource: "the app's own signingSecret, shown once at registration/rotation",
+        secretSource: "the app's own signingSecret, shown once at registration, install or signing-secret rotation",
         signedPayload: "`${timestamp}.${rawBody}`",
-        headers: { timestamp: "x-app-timestamp", signature: "x-app-signature", eventType: "x-app-event" },
+        headers: { timestamp: "x-app-timestamp", signature: "x-app-signature", previousSignature: "x-app-signature-previous (for 24 hours after the signing secret is rotated)", eventType: "x-app-event" },
       },
     },
     errorFormat: {
@@ -1006,13 +1007,37 @@ export async function rotateAppSecret(user: TenantUser, appId: string) {
   );
   if (!updated) throw new Error("APP_SECRET_ROTATE_FAILED");
   await createAuditLog(user as any, "ROTATE", "TENANT_APP_SECRET", existing.id, null, null, { appId }).catch(() => undefined);
-  return { secret, signingSecret: decryptSecretAtRestOrNull(updated.signingSecret), lastRotatedAt: updated.lastRotatedAt };
+  // Only the new API secret: the webhook signing secret doesn't change here and isn't returned
+  // again (it has its own rotation, rotateAppSigningSecret).
+  return { secret, lastRotatedAt: updated.lastRotatedAt };
+}
+
+// A new webhook signing secret, shown once. The old one keeps signing deliveries (as
+// x-app-signature-previous) for ROTATION_GRACE_MS so receivers can switch over.
+export async function rotateAppSigningSecret(user: TenantUser, appId: string) {
+  await assertMarketplaceEnabled(user);
+  const tenantId = user.tenantId!;
+  const existing = await queryOne<any>(`select id, "signingSecret" from "TenantAppSecret" where "tenantId" = $1 and "appId" = $2 limit 1`, [tenantId, appId]);
+  if (!existing) throw new Error("APP_SECRET_NOT_FOUND");
+  const now = new Date();
+  const signingSecret = randomBytes(24).toString("hex");
+  const previousValidUntil = new Date(now.getTime() + ROTATION_GRACE_MS).toISOString();
+  const updated = await queryOne<any>(
+    `update "TenantAppSecret"
+     set "signingSecret" = $1, "previousSigningSecret" = $2, "previousSigningSecretExpiresAt" = $3, "signingSecretRotatedAt" = $4
+     where id = $5 returning id`,
+    [encryptSecretAtRest(signingSecret), existing.signingSecret, previousValidUntil, now.toISOString(), existing.id],
+  );
+  if (!updated) throw new Error("APP_SECRET_ROTATE_FAILED");
+  await createAuditLog(user as any, "ROTATE_SIGNING_SECRET", "TENANT_APP_SECRET", existing.id, null, null, { appId }).catch(() => undefined);
+  return { signingSecret, previousValidUntil };
 }
 
 export async function listAppSecretsMaskedForTenant(user: TenantUser) {
   await assertMarketplaceEnabled(user);
   return query<any>(
-    `select "appId", "lastRotatedAt", "rotatedBy", "createdAt", (case when "previousSecret" is not null and "previousSecretExpiresAt" > now() then true else false end) as "hasActiveGraceSecret"
+    `select "appId", "lastRotatedAt", "rotatedBy", "createdAt", (case when "previousSecret" is not null and "previousSecretExpiresAt" > now() then true else false end) as "hasActiveGraceSecret",
+            "signingSecretRotatedAt", (case when "previousSigningSecret" is not null and "previousSigningSecretExpiresAt" > now() then "previousSigningSecretExpiresAt" end) as "previousSigningSecretValidUntil"
      from "TenantAppSecret" where "tenantId" = $1`,
     [user.tenantId],
   );
@@ -1102,7 +1127,7 @@ export async function rotateAppSecretAsPlatformAdmin(platformAdminUser: { id: st
   );
   if (!updated) throw new Error("APP_SECRET_ROTATE_FAILED");
   await createAuditLog({ id: platformAdminUser.id, tenantId } as any, "PLATFORM_ADMIN_ROTATE_SECRET", "TENANT_APP_SECRET", existing.id, null, null, { appId }).catch(() => undefined);
-  return { secret, signingSecret: decryptSecretAtRestOrNull(updated.signingSecret) };
+  return { secret };
 }
 
 // --- Publish/vendor-version approval ("publish/unpublish apps" + "approve vendor/app
@@ -1392,10 +1417,6 @@ export async function listAppsWithAutomationTriggerGrant(user: TenantUser) {
   );
 }
 
-function signAppPayload(secret: string, timestamp: string, rawBody: string) {
-  return createHmac("sha256", secret).update(`${timestamp}.${rawBody}`).digest("hex");
-}
-
 // The actual runtime call an automation's "call_app_action" node makes (see
 // automations-postgres.ts). Re-checks the "automations":"write" grant itself rather than
 // trusting the automation builder already checked it at config time -- an app's grant can be
@@ -1441,15 +1462,14 @@ export async function invokeAppAction(user: TenantUser, appId: string, actionKey
     return { status: "FAILED" as const, errorMessage: message };
   }
 
-  const secretRowEncrypted = await queryOne<{ signingSecret: string }>(`select "signingSecret" from "TenantAppSecret" where "tenantId" = $1 and "appId" = $2`, [tenantId, appId]);
-  const secretRow = secretRowEncrypted ? { signingSecret: decryptSecretAtRestOrNull(secretRowEncrypted.signingSecret) } : null;
+  const signingRow = await queryOne<NonNullable<AppSigningRow>>(`select ${APP_SIGNING_COLUMNS} from "TenantAppSecret" where "tenantId" = $1 and "appId" = $2`, [tenantId, appId]);
   const timestamp = Math.floor(Date.now() / 1000).toString();
   const rawBody = JSON.stringify({ type: "action", actionKey, tenantId, input });
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 15_000);
   try {
     const headers: Record<string, string> = { "content-type": "application/json", "x-app-timestamp": timestamp, "x-app-event": `action:${actionKey}` };
-    if (secretRow?.signingSecret) headers["x-app-signature"] = signAppPayload(secretRow.signingSecret, timestamp, rawBody);
+    Object.assign(headers, appSignatureHeaders(signingRow, timestamp, rawBody));
     const response = await fetch(app.webhookUrl, { method: "POST", headers, body: rawBody, signal: controller.signal });
     const responseBody = (await response.text().catch(() => "")).slice(0, 2000);
     if (!response.ok) {
@@ -1625,8 +1645,7 @@ export async function getAppReportData(user: TenantUser, appId: string, reportKe
   }
 
   if (!report.isActive || !report.webhookUrl) throw new Error("APP_REPORT_APP_UNAVAILABLE");
-  const secretRowEncrypted = await queryOne<{ signingSecret: string }>(`select "signingSecret" from "TenantAppSecret" where "tenantId" = $1 and "appId" = $2`, [tenantId, appId]);
-  const secretRow = secretRowEncrypted ? { signingSecret: decryptSecretAtRestOrNull(secretRowEncrypted.signingSecret) } : null;
+  const signingRow = await queryOne<NonNullable<AppSigningRow>>(`select ${APP_SIGNING_COLUMNS} from "TenantAppSecret" where "tenantId" = $1 and "appId" = $2`, [tenantId, appId]);
   const timestamp = Math.floor(Date.now() / 1000).toString();
   const rawBody = JSON.stringify({ type: "report", reportKey, tenantId });
   const controller = new AbortController();
@@ -1639,7 +1658,7 @@ export async function getAppReportData(user: TenantUser, appId: string, reportKe
   let errorMessage: string | null = null;
   try {
     const headers: Record<string, string> = { "content-type": "application/json", "x-app-timestamp": timestamp, "x-app-event": `report:${reportKey}` };
-    if (secretRow?.signingSecret) headers["x-app-signature"] = signAppPayload(secretRow.signingSecret, timestamp, rawBody);
+    Object.assign(headers, appSignatureHeaders(signingRow, timestamp, rawBody));
     const response = await fetch(report.webhookUrl, { method: "POST", headers, body: rawBody, signal: controller.signal });
     const body = await response.json().catch(() => null);
     if (!response.ok || !Array.isArray(body?.rows)) {

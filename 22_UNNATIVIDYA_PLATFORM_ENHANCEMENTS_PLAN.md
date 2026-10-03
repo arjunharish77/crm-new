@@ -1,5 +1,9 @@
 # Unnati Vidya — Platform Enhancements Plan (Conversion Tracking, Shortlist, FAQ Expansion, CMS Sync)
 
+> CMS publishing update — 30 September 2026: public catalog readers now use validated published database records. Before upgrading, follow [CMS publishing deployment](apps/unnatividya/docs/CMS_PUBLISHING_DEPLOYMENT.md), including the new image’s read-only readiness check before restart. Older static-source descriptions below are historical.
+
+> Update — 30 September 2026: the historical catalog-mirror behavior described below is superseded. `sync-catalog-to-db.js` now inserts missing records as unpublished drafts, preserves all existing records and never archives entries missing from the code export. Public pages still use static catalog data pending the publishing migration. Current status: [implementation progress](apps/unnatividya/docs/IMPLEMENTATION_PROGRESS.md).
+
 Companion to `20_UNNATIVIDYA_CONTENT_SEO_MASTER_PLAN.md` (content/SEO expansion, phases 0-4, complete) and `21_UNNATIVIDYA_NEW_ASSETS_CHECKLIST.md` (imagery). This document covers the next batch of work — not SEO content this time, but product/conversion features and a data-integrity fix. Status: **plan only, no development started.** This is a living document — more tasks will be added before development begins.
 
 **Architecture decision already made** (confirmed 2026-08-09): for the Postgres CMS fix (§4), the direction is **keep `catalog.ts` as the source of truth, sync the DB to match it** — not migrate to Postgres, not retire the DB. See §4 for what that does and doesn't unlock.

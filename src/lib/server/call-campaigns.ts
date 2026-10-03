@@ -1,7 +1,8 @@
+import { assertTenantModule } from "@/lib/server/module-entitlements";
 import { randomUUID } from "crypto";
 import { query, queryOne, execute } from "@/lib/db/query";
 import { createAuditLog } from "@/lib/server/crm";
-import { resolveJourneyAudienceRecordIds } from "@/lib/server/marketing-journeys";
+import { forEachJourneyAudienceBatch } from "@/lib/server/marketing-journeys";
 import { getLeadForTenant } from "@/lib/repositories/leads-postgres";
 import { getOpportunityForTenant } from "@/lib/repositories/opportunities-postgres";
 import { checkTelephonyComplianceForCall } from "@/lib/server/telephony-webhook";
@@ -48,6 +49,7 @@ async function isTeamMember(user: TenantUser, teamId: string) {
 }
 
 export async function listCallCampaignsForTenant(user: TenantUser) {
+  await assertTenantModule(user, "TELEPHONY");
   const tenantId = requireTenantId(user);
   const [campaigns, memberCounts] = await Promise.all([
     query<any>(`select ${CAMPAIGN_COLUMNS} from "CallCampaign" where "tenantId" = $1 order by "createdAt" desc`, [tenantId]),
@@ -65,7 +67,34 @@ export async function listCallCampaignsForTenant(user: TenantUser) {
   return campaigns.map((campaign) => ({ ...campaign, memberCounts: countsByCampaign.get(campaign.id) ?? {} }));
 }
 
+// "My campaigns" on the Call center page (UI/UX plan §5.14): active campaigns this person can
+// take calls from -- the same rule getNextCampaignCallForAgent enforces (no assigned team, or a
+// member or supervisor of it) -- with how many calls are due now.
+export async function listMyCallCampaigns(user: TenantUser) {
+  await assertTenantModule(user, "TELEPHONY");
+  const tenantId = requireTenantId(user);
+  const campaigns = await query<any>(
+    `select c.id, c.name, c.description, c.module, c."assignedTeamId", t.name as "assignedTeamName", t."leadId" as "teamLeadId",
+            (select count(*)::int from "CallCampaignMember" m
+              where m."tenantId" = c."tenantId" and m."campaignId" = c.id
+                and (m.status = 'PENDING' or (m.status = 'QUEUED' and m."nextEligibleAt" <= now()))) as "dueNow"
+     from "CallCampaign" c
+     left join "Team" t on t."tenantId"::text = c."tenantId" and t.id::text = c."assignedTeamId"::text
+     where c."tenantId" = $1 and c.status = 'ACTIVE'
+     order by c.name`,
+    [tenantId],
+  );
+  const userTeam = await queryOne<any>('select "teamId" from "User" where id::text = $1', [user.id]);
+  return campaigns
+    .filter((campaign) =>
+      !campaign.assignedTeamId ||
+      isQueueSupervisor(user, { leadId: campaign.teamLeadId }) ||
+      (userTeam?.teamId != null && String(userTeam.teamId) === String(campaign.assignedTeamId)))
+    .map(({ teamLeadId: _teamLeadId, ...campaign }) => campaign);
+}
+
 export async function getCallCampaignForTenant(user: TenantUser, id: string) {
+  await assertTenantModule(user, "TELEPHONY");
   const tenantId = requireTenantId(user);
   const campaign = await queryOne<any>(`select ${CAMPAIGN_COLUMNS} from "CallCampaign" where "tenantId" = $1 and id = $2`, [tenantId, id]);
   if (!campaign) throw new Error("CALL_CAMPAIGN_NOT_FOUND");
@@ -73,6 +102,7 @@ export async function getCallCampaignForTenant(user: TenantUser, id: string) {
 }
 
 export async function createCallCampaignForTenant(user: TenantUser, input: Record<string, unknown>) {
+  await assertTenantModule(user, "TELEPHONY");
   const tenantId = requireTenantId(user);
   if (!hasCallCampaignAdminAccess(user)) throw new Error("FORBIDDEN");
   const name = String(input.name ?? "").trim();
@@ -107,6 +137,7 @@ export async function createCallCampaignForTenant(user: TenantUser, input: Recor
 }
 
 export async function updateCallCampaignForTenant(user: TenantUser, id: string, input: Record<string, unknown>) {
+  await assertTenantModule(user, "TELEPHONY");
   const tenantId = requireTenantId(user);
   if (!hasCallCampaignAdminAccess(user)) throw new Error("FORBIDDEN");
   const existing = await queryOne<any>(`select ${CAMPAIGN_COLUMNS} from "CallCampaign" where "tenantId" = $1 and id = $2`, [tenantId, id]);
@@ -142,42 +173,43 @@ export async function updateCallCampaignForTenant(user: TenantUser, id: string, 
 }
 
 export async function deleteCallCampaignForTenant(user: TenantUser, id: string) {
+  await assertTenantModule(user, "TELEPHONY");
   const tenantId = requireTenantId(user);
   if (!hasCallCampaignAdminAccess(user)) throw new Error("FORBIDDEN");
   await execute(`delete from "CallCampaign" where "tenantId" = $1 and id = $2`, [tenantId, id]);
   await createAuditLog(user, "DELETE", "CALL_CAMPAIGN", id, null, null, null).catch(() => undefined);
 }
 
-// Resolves the campaign's configured audience (reusing resolveJourneyAudienceRecordIds
-// unchanged -- confirmed it already does exactly MANUAL/LEAD_LIST/SAVED_VIEW resolution this
-// needs, so this doesn't reimplement it) and inserts a CallCampaignMember per record, skipping
-// any already-a-member (the partial unique indexes on (campaignId, leadId)/(campaignId,
-// opportunityId) make this an idempotent "top up the audience" operation, safe to call again
-// after a SAVED_VIEW's live filter picks up new matches).
+// Adds the campaign's configured audience (the journeys' MANUAL/LEAD_LIST/SAVED_VIEW resolution,
+// all of it, a batch at a time; §8 #24: it took the first 500/1,000/5,000) as CallCampaignMember
+// rows, skipping any already-a-member (the partial unique indexes on (campaignId, leadId)/
+// (campaignId, opportunityId) make this an idempotent "top up the audience" operation, safe to
+// call again after a SAVED_VIEW's live filter picks up new matches).
 export async function addAudienceToCallCampaign(user: TenantUser, campaignId: string) {
+  await assertTenantModule(user, "TELEPHONY");
   const tenantId = requireTenantId(user);
   if (!hasCallCampaignAdminAccess(user)) throw new Error("FORBIDDEN");
   const campaign = await queryOne<any>(`select ${CAMPAIGN_COLUMNS} from "CallCampaign" where "tenantId" = $1 and id = $2`, [tenantId, campaignId]);
   if (!campaign) throw new Error("CALL_CAMPAIGN_NOT_FOUND");
 
-  const { recordIds } = await resolveJourneyAudienceRecordIds(user, campaign.module, campaign.audienceType, campaign.audienceConfig ?? {});
-
+  let requested = 0;
   let added = 0;
   const now = new Date().toISOString();
-  for (const recordId of recordIds) {
-    const column = campaign.module === "OPPORTUNITY" ? '"opportunityId"' : '"leadId"';
-    const inserted = await execute(
+  const column = campaign.module === "OPPORTUNITY" ? '"opportunityId"' : '"leadId"';
+  await forEachJourneyAudienceBatch(user, campaign.module, campaign.audienceType, campaign.audienceConfig ?? {}, async (recordIds) => {
+    requested += recordIds.length;
+    added += await execute(
       `insert into "CallCampaignMember" (id, "tenantId", "campaignId", ${column}, status, "createdAt", "updatedAt")
-       values ($1, $2, $3, $4, 'PENDING', $5, $5)
+       select gen_random_uuid()::text, $1, $2, record_id, 'PENDING', $4, $4 from unnest($3::text[]) as record_id
        on conflict do nothing`,
-      [randomUUID(), tenantId, campaignId, recordId, now],
+      [tenantId, campaignId, recordIds, now],
     );
-    if (inserted) added += 1;
-  }
-  return { requested: recordIds.length, added };
+  });
+  return { requested, added };
 }
 
 export async function getCallCampaignProgressForTenant(user: TenantUser, campaignId: string) {
+  await assertTenantModule(user, "TELEPHONY");
   const tenantId = requireTenantId(user);
   const rows = await query<{ status: string; count: number }>(
     `select status, count(*)::int as count from "CallCampaignMember" where "tenantId" = $1 and "campaignId" = $2 group by status`,
@@ -196,6 +228,7 @@ export async function getCallCampaignProgressForTenant(user: TenantUser, campaig
 // CallDisposition logged since the campaign started, giving a real disposition breakdown --
 // not just the member-status counts getCallCampaignProgressForTenant already reports.
 export async function getCallCampaignAnalyticsForTenant(user: TenantUser, campaignId: string) {
+  await assertTenantModule(user, "TELEPHONY");
   const tenantId = requireTenantId(user);
   const campaign = await queryOne<any>(`select "createdAt" from "CallCampaign" where "tenantId" = $1 and id = $2`, [tenantId, campaignId]);
   if (!campaign) throw new Error("CALL_CAMPAIGN_NOT_FOUND");
@@ -235,6 +268,7 @@ export async function getCallCampaignAnalyticsForTenant(user: TenantUser, campai
 // enforces (checkTelephonyComplianceForCall), marking it DO_NOT_CALL rather than serving a
 // blocked number to an agent.
 export async function getNextCampaignCallForAgent(user: TenantUser, campaignId: string) {
+  await assertTenantModule(user, "TELEPHONY");
   const tenantId = requireTenantId(user);
   const campaign = await queryOne<any>(`select ${CAMPAIGN_COLUMNS} from "CallCampaign" where "tenantId" = $1 and id = $2`, [tenantId, campaignId]);
   if (!campaign) throw new Error("CALL_CAMPAIGN_NOT_FOUND");
@@ -297,6 +331,7 @@ export async function recordCallCampaignAttemptOutcome(
   memberId: string,
   outcome: { callbackAt?: string | null; disposed: boolean },
 ) {
+  await assertTenantModule(user, "TELEPHONY");
   const tenantId = requireTenantId(user);
   const now = new Date().toISOString();
   const status = outcome.callbackAt ? "CALLBACK_SCHEDULED" : "COMPLETED";

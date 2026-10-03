@@ -6,7 +6,8 @@ import { requireInternalUser } from "@/lib/server/auth";
 export async function GET(request: Request) {
   try {
     const user = await requireInternalUser(request);
-    const automations = await listAutomationsForTenant(user);
+    // ?archived=1: archived automations (restorable for 30 days).
+    const automations = await listAutomationsForTenant(user, { archived: new URL(request.url).searchParams.get("archived") === "1" });
     return NextResponse.json(automations);
   } catch (error) {
     if (error instanceof Error && error.message === "UNAUTHORIZED") return unauthorized();

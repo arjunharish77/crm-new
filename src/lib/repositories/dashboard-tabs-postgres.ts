@@ -19,7 +19,7 @@ function tenantClause(user: TenantUser, values: unknown[]): string {
 }
 
 const TAB_COLUMNS = `id, name, "order", "isDefault", "currentVersion", "deprecationStatus", "deprecatedReason",
-  "deprecatedAt", "viewCount", "lastOpenedAt", "createdAt", "updatedAt"`;
+  "deprecatedAt", "viewCount", "lastOpenedAt", "createdAt", "updatedAt", draft, "draftUpdatedAt"`;
 
 export async function listDashboardTabsForTenant(user: TenantUser) {
   const values: unknown[] = [user.id];
@@ -246,10 +246,65 @@ async function getOwnedTab(user: TenantUser, tabId: string) {
   return queryOne<any>(`select ${TAB_COLUMNS} from "DashboardTab" where id = $1 and "userId" = $2 and ${clause}`, values);
 }
 
+// Edit-mode draft (decision 29): layout changes and removals, kept until Publish. Only the
+// owner's own widgets on this tab (or, on the default tab, ones with no tab) can be in it.
+type TabDraft = { layouts: Record<string, { x: number; y: number; w: number; h: number }>; removed: string[] };
+
+async function ownedWidgetIdsOnTab(user: TenantUser, tab: { id: string; isDefault?: boolean }) {
+  const values: unknown[] = [tab.id, user.id];
+  const clause = tenantClause(user, values);
+  const rows = await query<{ id: string }>(
+    `select id from "DashboardWidget" where "userId" = $2 and ${clause} and ("tabId" = $1${tab.isDefault ? ' or "tabId" is null' : ""})`,
+    values,
+  );
+  return new Set(rows.map((row) => row.id));
+}
+
+export async function saveDashboardTabDraftForTenant(user: TenantUser, tabId: string, input: unknown) {
+  const tab = await getOwnedTab(user, tabId);
+  if (!tab) throw new Error("DASHBOARD_TAB_NOT_FOUND");
+  const owned = await ownedWidgetIdsOnTab(user, tab);
+  const raw = (input && typeof input === "object" ? input : {}) as Partial<TabDraft>;
+  const layouts: TabDraft["layouts"] = {};
+  for (const [id, layout] of Object.entries(raw.layouts ?? {})) {
+    if (!owned.has(id) || !layout) continue;
+    const box = { x: Number(layout.x), y: Number(layout.y), w: Number(layout.w), h: Number(layout.h) };
+    if (Object.values(box).every((value) => Number.isFinite(value) && value >= 0)) layouts[id] = box;
+  }
+  const removed = [...new Set((raw.removed ?? []).filter((id) => owned.has(String(id))).map(String))];
+  const empty = !Object.keys(layouts).length && !removed.length;
+  const values: unknown[] = [empty ? null : jsonbParam({ layouts, removed }), empty ? null : new Date().toISOString(), tabId, user.id];
+  const clause = tenantClause(user, values);
+  return queryOne<any>(`update "DashboardTab" set draft = $1, "draftUpdatedAt" = $2 where id = $3 and "userId" = $4 and ${clause} returning ${TAB_COLUMNS}`, values);
+}
+
+export async function discardDashboardTabDraftForTenant(user: TenantUser, tabId: string) {
+  return saveDashboardTabDraftForTenant(user, tabId, {});
+}
+
+// Publish applies the draft (layouts, removals) to the widgets, then records the tab as the next
+// version.
 export async function publishDashboardTabVersion(user: TenantUser, tabId: string, publishNotes?: string | null) {
   await assertFeatureEnabled(user.tenantId, "advancedReporting", { isPlatformAdmin: user.isPlatformAdmin });
   const tab = await getOwnedTab(user, tabId);
   if (!tab) throw new Error("DASHBOARD_TAB_NOT_FOUND");
+  if (tab.draft) {
+    const draft = tab.draft as TabDraft;
+    const owned = await ownedWidgetIdsOnTab(user, tab);
+    const now = new Date().toISOString();
+    for (const [id, box] of Object.entries(draft.layouts ?? {})) {
+      if (!owned.has(id) || (draft.removed ?? []).includes(id)) continue;
+      const values: unknown[] = [box.x, box.y, box.w, box.h, now, id, user.id];
+      await execute(`update "DashboardWidget" set x = $1, y = $2, w = $3, h = $4, "updatedAt" = $5 where id = $6 and "userId" = $7 and ${tenantClause(user, values)}`, values);
+    }
+    for (const id of draft.removed ?? []) {
+      if (!owned.has(id)) continue;
+      const values: unknown[] = [id, user.id];
+      await execute(`delete from "DashboardWidget" where id = $1 and "userId" = $2 and ${tenantClause(user, values)}`, values);
+    }
+    const clearValues: unknown[] = [tabId, user.id];
+    await execute(`update "DashboardTab" set draft = null, "draftUpdatedAt" = null where id = $1 and "userId" = $2 and ${tenantClause(user, clearValues)}`, clearValues);
+  }
 
   const widgetValues: unknown[] = [tabId, user.id];
   const widgetClause = tenantClause(user, widgetValues);

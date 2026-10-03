@@ -1,0 +1,36 @@
+[
+  {
+    "courseId": "ba-amity",
+    "checkedAt": "2026-10-03",
+    "title": "Foreign-applicant requirements need confirmation",
+    "summary": "The official BA page rendered successfully on 3 October and showed domestic requirements, but no foreign-applicant section was visible. Missing content does not resolve foreign or NRI eligibility.",
+    "requiredReview": "Confirm current foreign and NRI admission requirements before proposing a complete eligibility correction. Do not copy another Amity program’s criteria.",
+    "sources": [
+      {
+        "label": "Amity BA program page",
+        "url": "https://amityonline.com/bachelor-of-arts-online"
+      }
+    ]
+  },
+  {
+    "courseId": "msc-mathematics-muj",
+    "checkedAt": "2026-10-03",
+    "title": "Official eligibility sources differ",
+    "summary": "The program page and 2026–27 prospectus retain compulsory-mathematics wording. The programme project report adds 50% marks (45% for reserved categories) without repeating that condition. Rechecked on 3 October; the conflict remains unresolved.",
+    "requiredReview": "Obtain current admissions confirmation of mathematics prerequisites and marks for each route and applicant category. Omitted conditions must not be treated as waivers.",
+    "sources": [
+      {
+        "label": "MUJ MSc Mathematics program page",
+        "url": "https://www.onlinemanipal.com/online-msc-mathematics-muj"
+      },
+      {
+        "label": "MUJ programme project report — printed page 45",
+        "url": "https://muj.onlinemanipal.com/wp-content/uploads/sites/2/2026/08/M.Sc-Mathematics-PPR.pdf"
+      },
+      {
+        "label": "MUJ 2026–27 prospectus — PDF page 3",
+        "url": "https://www.onlinemanipal.com/wp-content/uploads/2025/05/MUJ-MSc-Mathematics.pdf"
+      }
+    ]
+  }
+]

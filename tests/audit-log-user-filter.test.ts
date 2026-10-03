@@ -5,7 +5,8 @@ vi.mock("@/lib/db/query", () => dbMocks);
 
 import { listAuditLogsForTenant } from "@/lib/server/crm";
 
-const user = { id: "admin-1", tenantId: "tenant-1" };
+const user = { id: "admin-1", tenantId: "tenant-1", isTenantAdmin: true };
+const rep = { id: "rep-1", tenantId: "tenant-1", isTenantAdmin: false };
 
 // Gap checklist Module 10's "user-level audit of productivity actions" item -- previously no
 // filter anywhere in this stack could answer "what did user X do," only "what happened to
@@ -38,5 +39,20 @@ describe("listAuditLogsForTenant userId filter", () => {
     expect(sql).toContain('"userId" = $');
     expect(sql).toContain('"entityType" = $');
     expect(values).toEqual(expect.arrayContaining(["tenant-1", "LEAD", "target-user-1"]));
+  });
+
+  // The workspace audit log is for admins; anyone else sees only their own entries.
+  it("limits a non-admin to their own entries, whatever userId they ask for", async () => {
+    await listAuditLogsForTenant(rep, { userId: "target-user-1" });
+    const [sql, values] = dbMocks.query.mock.calls[0];
+    expect(sql).toContain('"userId" = $');
+    expect(values).toContain("rep-1");
+    expect(values).not.toContain("target-user-1");
+  });
+
+  it("limits a non-admin to their own entries when no userId is given", async () => {
+    await listAuditLogsForTenant(rep, {});
+    const [, values] = dbMocks.query.mock.calls[0];
+    expect(values).toContain("rep-1");
   });
 });

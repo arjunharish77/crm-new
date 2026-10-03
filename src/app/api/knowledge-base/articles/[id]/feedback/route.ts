@@ -14,6 +14,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     return NextResponse.json({ success: true });
   } catch (error) {
     if (error instanceof Error && error.message === "UNAUTHORIZED") return unauthorized();
+    if (error instanceof Error && error.message === "KB_ARTICLE_NOT_FOUND") return NextResponse.json({ message: "Article not found" }, { status: 404 });
+    if (error instanceof Error && error.message === "KB_CASE_NOT_FOUND") return badRequest("Case not found");
     return serverError("Failed to submit article feedback", error);
   }
 }

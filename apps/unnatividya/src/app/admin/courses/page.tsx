@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
-import Link from "next/link";
+import { redirect } from "next/navigation";
+import { getAdminSession } from "@/lib/admin-auth";
+import { CatalogReviewQueue, type QueueParams } from "@/components/catalog-review-queue";
 import { query } from "@/lib/db";
 
 export const metadata: Metadata = {
@@ -10,6 +12,8 @@ export const metadata: Metadata = {
 export const dynamic = "force-dynamic";
 
 type CourseRow = {
+  university_id: string;
+  university_name: string | null;
   id: string;
   name: string;
   short_name: string;
@@ -21,62 +25,15 @@ type CourseRow = {
   is_published: boolean;
 };
 
-export default async function AdminCoursesPage() {
-  const courses = await query<CourseRow>(
-    `select id, name, short_name, level, stream, fee_inr, duration, status, is_published
-     from course
-     order by stream, name`,
-  ).catch(() => ({ rows: [] as CourseRow[] }));
-
-  return (
-    <section className="admin-shell">
-      <div className="container">
-        <div className="admin-page-head">
-          <div>
-            <span className="eyebrow">CMS</span>
-            <h1>Course review queue</h1>
-            <p>Imported course records stay draft until a reviewer confirms source, fee, approvals, and page copy.</p>
-          </div>
-          <div className="course-actions" style={{ marginTop: 0 }}>
-            <div className="admin-count">{courses.rows.length} records</div>
-            <Link className="btn primary" href="/admin/courses/new">New course</Link>
-          </div>
-        </div>
-
-        <div className="admin-table-card">
-          <table className="admin-table">
-            <thead>
-              <tr>
-                {["Course", "Level", "Stream", "Duration", "Fee", "Status", "Published", "Action"].map((head) => (
-                  <th key={head}>{head}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {courses.rows.map((course) => (
-                <tr key={course.id}>
-                  <td>
-                    <strong>{course.name}</strong>
-                    <span>{course.short_name}</span>
-                  </td>
-                  <td>{course.level}</td>
-                  <td>{course.stream}</td>
-                  <td>{course.duration || "-"}</td>
-                  <td>{course.fee_inr ? `₹${course.fee_inr.toLocaleString("en-IN")}` : "Fee pending"}</td>
-                  <td><span className="admin-status">{course.status}</span></td>
-                  <td>{course.is_published ? "Yes" : "No"}</td>
-                  <td><Link className="text-link" href={`/admin/courses/${course.id}`}>Edit</Link></td>
-                </tr>
-              ))}
-              {!courses.rows.length ? (
-                <tr>
-                  <td colSpan={8}>No courses available.</td>
-                </tr>
-              ) : null}
-            </tbody>
-          </table>
-        </div>
-      </div>
-    </section>
-  );
+export default async function AdminCoursesPage({ searchParams }: { searchParams: Promise<QueueParams> }) {
+  const session = await getAdminSession();
+  if (!session) redirect("/admin/login");
+  const [courses, universities] = await Promise.all([
+    query<CourseRow>(`select c.id, c.name, c.short_name, c.level, c.stream, c.fee_inr, c.duration, c.status, c.is_published, c.university_id, u.name as university_name from course c left join university u on u.id = c.university_id order by c.stream, c.name, c.id`),
+    query<{ id: string; name: string }>("select id, name from university order by name, id"),
+  ]);
+  return <CatalogReviewQueue type="course" canCreate={session.role !== "VIEWER"} params={await searchParams} universities={universities.rows} records={courses.rows.map(course => ({
+    id: course.id, name: course.name, searchText: `${course.name} ${course.id} ${course.short_name}`, status: course.status, published: course.is_published, universityId: course.university_id, universityName: course.university_name || "University unavailable",
+    fields: [{ label: "Level", value: course.level }, { label: "Stream", value: course.stream }, { label: "Duration", value: course.duration || "Not provided" }, { label: "Recorded tuition (INR)", value: course.fee_inr ? `₹${Number(course.fee_inr).toLocaleString("en-IN")}` : "Fee pending" }],
+  }))} />;
 }

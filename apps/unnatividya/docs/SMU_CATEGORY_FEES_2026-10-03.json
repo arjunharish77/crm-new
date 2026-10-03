@@ -1,0 +1,310 @@
+{
+  "checkedAt": "2026-10-03",
+  "scope": "All nine existing SMU programs; 18 displayed category schedules.",
+  "method": "Read-only direct official program GET; DOM extraction scoped to course-fee; cross-check with visually transcribed PDF table. Base values precede promotions.",
+  "prospectus": {
+    "url": "https://www.onlinemanipal.com/wp-content/uploads/2024/06/SMU-Combined-Domestic-Brochure.pdf",
+    "label": "2026-27",
+    "pdfPage": 29,
+    "sha256": "a329f8a37dd1c8435625b5a1b404e29ae351ee68e8aed491a65786d54491e7bc",
+    "editionNote": "Directly downloaded content is 2026-27; search retrieval showed older 2024-25 content at the same URL. Use captured edition/hash, not URL path year."
+  },
+  "programs": [
+    {
+      "courseId": "mba-smu",
+      "sourceUrl": "https://www.onlinemanipal.com/online-mba-degree-dual-specialization-smu",
+      "htmlSha256": "9f934a8689412f63a0bb6f8d7211c1d06c3f560a6a31f46a6a023012e2792a66",
+      "categories": [
+        {
+          "category": "Indian Nationals",
+          "prospectusCategory": "Indian Nationals",
+          "currency": "INR",
+          "semesterFee": 30000,
+          "baseTotal": 120000,
+          "semesterCount": 4,
+          "reconciles": true,
+          "matchesProspectus": true,
+          "matchesSeptemberObservation": true
+        },
+        {
+          "category": "International students",
+          "prospectusCategory": "Other Nationals",
+          "currency": "USD",
+          "semesterFee": 375,
+          "baseTotal": 1500,
+          "semesterCount": 4,
+          "reconciles": true,
+          "matchesProspectus": true,
+          "matchesSeptemberObservation": true
+        }
+      ],
+      "domesticApplicationFeeInr": 500,
+      "nriStatus": "No separately priced NRI row in this evidence; confirm category applicability.",
+      "publicationStatus": "not_applied"
+    },
+    {
+      "courseId": "bcom-smu",
+      "sourceUrl": "https://www.onlinemanipal.com/online-bcom-degree-smu",
+      "htmlSha256": "c4d60bc676809cefc81a3f619b45a9f4cf46a3ebada798105934c4c5c83dab04",
+      "categories": [
+        {
+          "category": "Indian Nationals",
+          "prospectusCategory": "Indian Nationals",
+          "currency": "INR",
+          "semesterFee": 12500,
+          "baseTotal": 75000,
+          "semesterCount": 6,
+          "reconciles": true,
+          "matchesProspectus": true,
+          "matchesSeptemberObservation": true
+        },
+        {
+          "category": "International students",
+          "prospectusCategory": "Other Nationals",
+          "currency": "USD",
+          "semesterFee": 170,
+          "baseTotal": 1020,
+          "semesterCount": 6,
+          "reconciles": true,
+          "matchesProspectus": true,
+          "matchesSeptemberObservation": true
+        }
+      ],
+      "domesticApplicationFeeInr": 500,
+      "nriStatus": "No separately priced NRI row in this evidence; confirm category applicability.",
+      "publicationStatus": "not_applied"
+    },
+    {
+      "courseId": "ba-smu",
+      "sourceUrl": "https://www.onlinemanipal.com/online-ba-degree-smu",
+      "htmlSha256": "18e75b8947eb3ea6ebbb5d94516fc285dd6685f70bf946aefe4a5b7b67614b27",
+      "categories": [
+        {
+          "category": "Indian Nationals",
+          "prospectusCategory": "Indian Nationals",
+          "currency": "INR",
+          "semesterFee": 12500,
+          "baseTotal": 75000,
+          "semesterCount": 6,
+          "reconciles": true,
+          "matchesProspectus": true,
+          "matchesSeptemberObservation": true
+        },
+        {
+          "category": "International students",
+          "prospectusCategory": "Other Nationals",
+          "currency": "USD",
+          "semesterFee": 170,
+          "baseTotal": 1020,
+          "semesterCount": 6,
+          "reconciles": true,
+          "matchesProspectus": true,
+          "matchesSeptemberObservation": true
+        }
+      ],
+      "domesticApplicationFeeInr": 500,
+      "nriStatus": "No separately priced NRI row in this evidence; confirm category applicability.",
+      "publicationStatus": "not_applied"
+    },
+    {
+      "courseId": "bba-smu",
+      "sourceUrl": "https://www.onlinemanipal.com/online-bba-degree-smu",
+      "htmlSha256": "29f700ce26d344de961bd8be27a5641ea201268fc1cd91aa4fcac96dc3b40cbf",
+      "categories": [
+        {
+          "category": "Indian Nationals",
+          "prospectusCategory": "Indian Nationals",
+          "currency": "INR",
+          "semesterFee": 15000,
+          "baseTotal": 90000,
+          "semesterCount": 6,
+          "reconciles": true,
+          "matchesProspectus": true,
+          "matchesSeptemberObservation": true
+        },
+        {
+          "category": "International students",
+          "prospectusCategory": "Other Nationals",
+          "currency": "USD",
+          "semesterFee": 200,
+          "baseTotal": 1200,
+          "semesterCount": 6,
+          "reconciles": true,
+          "matchesProspectus": true,
+          "matchesSeptemberObservation": true
+        }
+      ],
+      "domesticApplicationFeeInr": 500,
+      "nriStatus": "No separately priced NRI row in this evidence; confirm category applicability.",
+      "publicationStatus": "not_applied"
+    },
+    {
+      "courseId": "mca-smu",
+      "sourceUrl": "https://www.onlinemanipal.com/online-mca-degree-smu",
+      "htmlSha256": "c23db777524273c061f7586ef7f6d9c652e16e5d094e061e5216acae43a17f24",
+      "categories": [
+        {
+          "category": "Indian Nationals",
+          "prospectusCategory": "Indian Nationals",
+          "currency": "INR",
+          "semesterFee": 27500,
+          "baseTotal": 110000,
+          "semesterCount": 4,
+          "reconciles": true,
+          "matchesProspectus": true,
+          "matchesSeptemberObservation": true
+        },
+        {
+          "category": "International students",
+          "prospectusCategory": "Other Nationals",
+          "currency": "USD",
+          "semesterFee": 340,
+          "baseTotal": 1360,
+          "semesterCount": 4,
+          "reconciles": true,
+          "matchesProspectus": true,
+          "matchesSeptemberObservation": true
+        }
+      ],
+      "domesticApplicationFeeInr": 500,
+      "nriStatus": "No separately priced NRI row in this evidence; confirm category applicability.",
+      "publicationStatus": "not_applied"
+    },
+    {
+      "courseId": "mcom-smu",
+      "sourceUrl": "https://www.onlinemanipal.com/online-mcom-degree-smu",
+      "htmlSha256": "ade66d2a23fec9295bc293dbf9091c693014fa9c167e86dbdbb2e7763190a2a8",
+      "categories": [
+        {
+          "category": "Indian Nationals",
+          "prospectusCategory": "Indian Nationals",
+          "currency": "INR",
+          "semesterFee": 18750,
+          "baseTotal": 75000,
+          "semesterCount": 4,
+          "reconciles": true,
+          "matchesProspectus": true,
+          "matchesSeptemberObservation": true
+        },
+        {
+          "category": "International students",
+          "prospectusCategory": "Other Nationals",
+          "currency": "USD",
+          "semesterFee": 245,
+          "baseTotal": 980,
+          "semesterCount": 4,
+          "reconciles": true,
+          "matchesProspectus": true,
+          "matchesSeptemberObservation": true
+        }
+      ],
+      "domesticApplicationFeeInr": 500,
+      "nriStatus": "No separately priced NRI row in this evidence; confirm category applicability.",
+      "publicationStatus": "not_applied"
+    },
+    {
+      "courseId": "ma-english-smu",
+      "sourceUrl": "https://www.onlinemanipal.com/online-ma-english-degree",
+      "htmlSha256": "2196017d89bc3e7e6fcffeb6bd151ff8e0732c46f037bb25ef2930d5270d19f1",
+      "categories": [
+        {
+          "category": "Indian Nationals",
+          "prospectusCategory": "Indian Nationals",
+          "currency": "INR",
+          "semesterFee": 18750,
+          "baseTotal": 75000,
+          "semesterCount": 4,
+          "reconciles": true,
+          "matchesProspectus": true,
+          "matchesSeptemberObservation": true
+        },
+        {
+          "category": "International students",
+          "prospectusCategory": "Other Nationals",
+          "currency": "USD",
+          "semesterFee": 245,
+          "baseTotal": 980,
+          "semesterCount": 4,
+          "reconciles": true,
+          "matchesProspectus": true,
+          "matchesSeptemberObservation": true
+        }
+      ],
+      "domesticApplicationFeeInr": 500,
+      "nriStatus": "No separately priced NRI row in this evidence; confirm category applicability.",
+      "publicationStatus": "not_applied"
+    },
+    {
+      "courseId": "ma-political-science-smu",
+      "sourceUrl": "https://www.onlinemanipal.com/online-ma-political-science-degree",
+      "htmlSha256": "8fbd038f0eadbab47cf04d49bb4db95a2bba42ddfeef66d886dd404106b56519",
+      "categories": [
+        {
+          "category": "Indian Nationals",
+          "prospectusCategory": "Indian Nationals",
+          "currency": "INR",
+          "semesterFee": 18750,
+          "baseTotal": 75000,
+          "semesterCount": 4,
+          "reconciles": true,
+          "matchesProspectus": true,
+          "matchesSeptemberObservation": true
+        },
+        {
+          "category": "International students",
+          "prospectusCategory": "Other Nationals",
+          "currency": "USD",
+          "semesterFee": 245,
+          "baseTotal": 980,
+          "semesterCount": 4,
+          "reconciles": true,
+          "matchesProspectus": true,
+          "matchesSeptemberObservation": true
+        }
+      ],
+      "domesticApplicationFeeInr": 500,
+      "nriStatus": "No separately priced NRI row in this evidence; confirm category applicability.",
+      "publicationStatus": "not_applied"
+    },
+    {
+      "courseId": "ma-sociology-smu",
+      "sourceUrl": "https://www.onlinemanipal.com/online-ma-sociology-degree",
+      "htmlSha256": "7f3bd6a89e25cd3c9cf55d7c69bb0d45f9b6d84b9d790a6a483de25c4bfac33b",
+      "categories": [
+        {
+          "category": "Indian Nationals",
+          "prospectusCategory": "Indian Nationals",
+          "currency": "INR",
+          "semesterFee": 18750,
+          "baseTotal": 75000,
+          "semesterCount": 4,
+          "reconciles": true,
+          "matchesProspectus": true,
+          "matchesSeptemberObservation": true
+        },
+        {
+          "category": "International students",
+          "prospectusCategory": "Other Nationals",
+          "currency": "USD",
+          "semesterFee": 245,
+          "baseTotal": 980,
+          "semesterCount": 4,
+          "reconciles": true,
+          "matchesProspectus": true,
+          "matchesSeptemberObservation": true
+        }
+      ],
+      "domesticApplicationFeeInr": 500,
+      "nriStatus": "No separately priced NRI row in this evidence; confirm category applicability.",
+      "publicationStatus": "not_applied"
+    }
+  ],
+  "sharedNotes": [
+    "Website International students and prospectus Other Nationals are retained as source labels. No new NRI-specific amount is inferred.",
+    "INR payments are specified for Nepal, Bhutan, Bangladesh and Sri Lanka; confirm their applicable tuition.",
+    "Additional non-refundable INR 500 application charge is specified for Indian and the four named neighbouring-country groups; other-category charges remain unconfirmed.",
+    "Domestic fee panels restrict combining financing with additional offers; discounted prices are excluded from base tuition.",
+    "Exam/resit, convocation, certificate, taxes, payment-processing and other charges remain unresolved; this is not a full-cost certification."
+  ],
+  "publicationStatus": "evidence_only_pending_administrator_review"
+}

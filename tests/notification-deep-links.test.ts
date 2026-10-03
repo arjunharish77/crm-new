@@ -39,8 +39,8 @@ describe("resolveNotificationLink", () => {
     expect(resolveNotificationLink({ leadId: "lead-2" })).toBe("/dashboard/leads/lead-2");
   });
 
-  it("falls back to the tasks list page (no per-record detail route) for taskId", () => {
-    expect(resolveNotificationLink({ taskId: "task-1" })).toBe("/dashboard/tasks");
+  it("opens the task itself in the tasks page's editor for taskId", () => {
+    expect(resolveNotificationLink({ taskId: "task-1" })).toBe("/dashboard/tasks?taskId=task-1");
   });
 
   it("prefers entityType/entityId over the legacy leadId/opportunityId fallback fields when both are present", () => {

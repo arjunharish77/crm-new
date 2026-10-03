@@ -1,4 +1,8 @@
-import { courseWithUniversity, courses, formatFee, type Course } from "@/data/catalog";
+import type { courseWithUniversity } from "@/data/catalog";
+
+import type { CatalogReader } from "@/lib/catalog-snapshot";
+import { formatFee } from "@/lib/catalog-format";
+import { type Course } from "@/data/catalog";
 import { courseKey, courseLabel } from "@/lib/programmatic-seo";
 
 export type EnrichedCourse = ReturnType<typeof courseWithUniversity>;
@@ -21,7 +25,8 @@ export function specializationKey(value: string) {
 // alongside real specializations already gets full coverage via those; skip it here.
 const SKIPPED_SPECIALIZATIONS = new Set(["general"]);
 
-export function allSpecializationPages(): SpecializationPage[] {
+export function allSpecializationPages(catalog: CatalogReader): SpecializationPage[] {
+  const { courseWithUniversity, courses } = catalog;
   const byCourseName = new Map<string, Course[]>();
   for (const course of courses) {
     const key = courseKey(course.name);
@@ -58,8 +63,8 @@ export function allSpecializationPages(): SpecializationPage[] {
   return pages.sort((a, b) => a.slug.localeCompare(b.slug));
 }
 
-export function getSpecializationPageBySlug(slug: string) {
-  return allSpecializationPages().find((page) => page.slug === slug) || null;
+export function getSpecializationPageBySlug(catalog: CatalogReader, slug: string) {
+  return allSpecializationPages(catalog).find((page) => page.slug === slug) || null;
 }
 
 export function specializationFaqs(page: SpecializationPage): Array<[string, string]> {

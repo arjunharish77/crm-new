@@ -39,20 +39,24 @@ import {
 } from 'lucide-react';
 import { useAuth } from '@/providers/auth-provider';
 import { apiFetch } from '@/lib/api';
+import { useCachedPersonalization } from '@/lib/personalization-cache';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { useModuleEnabled } from '@/components/auth/feature-gate';
+import { useModuleAccess } from '@/hooks/use-module-access';
+import { BrandLogo, BrandMark } from '@/components/brand/brand-logo';
 
 const drawerWidth = 240;
 const railWidth = 64;
+// Five task groups plus Settings (UI/UX plan decision 27). Exports moved into each list's
+// Export menu; My points is reached from the Leaderboard.
 const MAIN_NAV_GROUPS = [
-    { title: "My work", paths: ["/dashboard", "/dashboard/leads", "/dashboard/tasks", "/dashboard/activities"] },
-    { title: "Sales", paths: ["/dashboard/opportunities", "/dashboard/applications", "/dashboard/lists", "/dashboard/views"] },
-    { title: "Service", paths: ["/dashboard/call-center", "/dashboard/cases"] },
-    { title: "Growth", paths: ["/dashboard/forms", "/dashboard/automations-v2", "/dashboard/marketing"] },
-    { title: "Insights", paths: ["/dashboard/reports", "/dashboard/leaderboard", "/dashboard/my-points"] },
-    { title: "Data operations", paths: ["/dashboard/exports"] },
+    { title: "My work", paths: ["/dashboard", "/dashboard/tasks", "/dashboard/activities", "/dashboard/approvals"] },
+    { title: "Sales", paths: ["/dashboard/leads", "/dashboard/opportunities", "/dashboard/applications", "/dashboard/lists", "/dashboard/views"] },
+    { title: "Service", paths: ["/dashboard/cases", "/dashboard/call-center"] },
+    { title: "Marketing & automation", paths: ["/dashboard/marketing", "/dashboard/forms", "/dashboard/automations-v2"] },
+    { title: "Insights", paths: ["/dashboard/reports", "/dashboard/leaderboard", "/dashboard/payouts"] },
 ];
 
 interface NavItem {
@@ -67,7 +71,6 @@ export function NavigationDrawer({ open, isMobile, toggleDrawer }: { open: boole
     const pathname = usePathname();
     const { user } = useAuth();
 
-    const [adminOpen, setAdminOpen] = React.useState(true);
     const [openGroups, setOpenGroups] = React.useState<string[]>(["My work", "Sales"]);
     React.useEffect(() => {
         const activeGroup = MAIN_NAV_GROUPS.find(group => group.paths.some(path => pathname === path || (path !== "/dashboard" && pathname.startsWith(path + "/"))));
@@ -79,13 +82,13 @@ export function NavigationDrawer({ open, isMobile, toggleDrawer }: { open: boole
     const [customObjects, setCustomObjects] = React.useState<any[]>([]);
     const [canAccessPayouts, setCanAccessPayouts] = React.useState(true);
     // "Pinned modules" (gap checklist Module 10's user workspace personalization item).
-    const [pinnedModules, setPinnedModules] = React.useState<string[]>([]);
-
-    React.useEffect(() => {
-        apiFetch('/settings/personalization')
-            .then((data: any) => setPinnedModules(Array.isArray(data?.pinnedModules) ? data.pinnedModules : []))
-            .catch(() => undefined);
-    }, []);
+    // Read from the personalization cache GeneralSettingsProvider fills (no second fetch), and
+    // updated live when they change in My account › Preferences.
+    const personalization = useCachedPersonalization();
+    const pinnedModules = React.useMemo<string[]>(() => {
+        const pinned = personalization?.pinnedModules;
+        return Array.isArray(pinned) ? pinned.filter((href): href is string => typeof href === 'string') : [];
+    }, [personalization]);
 
     React.useEffect(() => {
         apiFetch('/metadata/objects')
@@ -98,7 +101,13 @@ export function NavigationDrawer({ open, isMobile, toggleDrawer }: { open: boole
     }, []);
 
     const isPartner = !!(user?.role as any)?.permissions?.isPartnerRole;
+    // Role module permissions, the same rule the server enforces (lib/module-access.ts).
+    const can = useModuleAccess();
+    // Payouts for internal users is the admin workspace (decision 32): every payout and
+    // redemption review endpoint is admin-only, so only admins see the entry.
+    const canSeePayouts = !!user?.isTenantAdmin || !!user?.isPlatformAdmin;
     const serviceDeskEnabled = useModuleEnabled('SERVICE_DESK');
+    const telephonyEnabled = useModuleEnabled('TELEPHONY');
     const applicationsEnabled = useModuleEnabled('PRODUCT_CATALOG');
     // Journeys live as a tab on the same /dashboard/marketing page and work independently of
     // Marketing Communications (its own module) -- keep the nav entry reachable if either is
@@ -127,28 +136,29 @@ export function NavigationDrawer({ open, isMobile, toggleDrawer }: { open: boole
         ]
         : [
             { name: 'Dashboard', href: '/dashboard', icon: <LayoutDashboard className="size-5" /> },
-            { name: 'Leads', href: '/dashboard/leads', icon: <Users className="size-5" />, enabled: true },
-            { name: 'Lists', href: '/dashboard/lists', icon: <List className="size-5" />, enabled: true },
-            { name: 'Opportunities', href: '/dashboard/opportunities', icon: <BriefcaseBusiness className="size-5" />, enabled: user?.features?.opportunityEnabled !== false },
-            { name: 'Activities', href: '/dashboard/activities', icon: <Activity className="size-5" /> },
-            { name: 'Tasks', href: '/dashboard/tasks', icon: <CheckSquare className="size-5" /> },
-            { name: 'Call Center', href: '/dashboard/call-center', icon: <Phone className="size-5" /> },
-            { name: 'Applications', href: '/dashboard/applications', icon: <BriefcaseBusiness className="size-5" />, enabled: applicationsEnabled && canUseApplications(user, 'read') },
+            { name: 'Tasks', href: '/dashboard/tasks', icon: <CheckSquare className="size-5" />, enabled: can('tasks') },
+            { name: 'Activities', href: '/dashboard/activities', icon: <Activity className="size-5" />, enabled: can('activities') },
+            { name: 'Approvals', href: '/dashboard/approvals', icon: <Inbox className="size-5" /> },
+            { name: 'Leads', href: '/dashboard/leads', icon: <Users className="size-5" />, enabled: can('leads') },
+            { name: 'Opportunities', href: '/dashboard/opportunities', icon: <BriefcaseBusiness className="size-5" />, enabled: user?.features?.opportunityEnabled !== false && can('opportunities') },
+            { name: 'Applications', href: '/dashboard/applications', icon: <FileText className="size-5" />, enabled: applicationsEnabled && canUseApplications(user, 'read') },
+            { name: 'Lists', href: '/dashboard/lists', icon: <List className="size-5" />, enabled: can('leads') },
+            { name: 'Views', href: '/dashboard/views', icon: <LayoutList className="size-5" />, enabled: can('views') },
             { name: 'Cases', href: '/dashboard/cases', icon: <LifeBuoy className="size-5" />, enabled: serviceDeskEnabled },
-            { name: 'Views', href: '/dashboard/views', icon: <LayoutList className="size-5" /> },
-            { name: 'Exports', href: '/dashboard/exports', icon: <Download className="size-5" /> },
-            { name: 'Forms', href: '/dashboard/forms', icon: <FileText className="size-5" />, enabled: user?.features?.formBuilderEnabled !== false },
-            { name: 'Automations', href: '/dashboard/automations-v2', icon: <WandSparkles className="size-5" />, enabled: user?.features?.automationEnabled !== false },
-            { name: 'Marketing', href: '/dashboard/marketing', icon: <Megaphone className="size-5" />, enabled: marketingEnabled || journeyOrchestrationEnabled },
-            { name: 'Reports', href: '/dashboard/reports', icon: <BarChart3 className="size-5" />, enabled: user?.features?.advancedReporting !== false },
+            { name: 'Call center', href: '/dashboard/call-center', icon: <Phone className="size-5" />, enabled: telephonyEnabled },
+            { name: 'Campaigns', href: '/dashboard/marketing', icon: <Megaphone className="size-5" />, enabled: marketingEnabled || journeyOrchestrationEnabled },
+            { name: 'Forms', href: '/dashboard/forms', icon: <FileText className="size-5" />, enabled: user?.features?.formBuilderEnabled !== false && can('forms') },
+            { name: 'Automations', href: '/dashboard/automations-v2', icon: <WandSparkles className="size-5" />, enabled: user?.features?.automationEnabled !== false && can('automations') },
+            { name: 'Reports', href: '/dashboard/reports', icon: <BarChart3 className="size-5" />, enabled: user?.features?.advancedReporting !== false && can('reports') },
             { name: 'Leaderboard', href: '/dashboard/leaderboard', icon: <Trophy className="size-5" />, enabled: user?.features?.gamificationEnabled !== false },
-            { name: 'My Points', href: '/dashboard/my-points', icon: <Star className="size-5" />, enabled: user?.features?.gamificationEnabled !== false },
+            { name: 'Payouts', href: '/dashboard/payouts', icon: <BadgeDollarSign className="size-5" />, enabled: canSeePayouts && (user?.features?.payoutsEnabled !== false || user?.features?.gamificationEnabled !== false) },
         ];
 
-    const adminNavigation: NavItem[] = [
-        { name: 'Approvals', href: '/dashboard/approvals', icon: <Inbox className="size-5" /> },
-        { name: 'Settings', href: '/dashboard/settings', icon: <SlidersHorizontal className="size-5" /> },
-    ];
+    // Settings is for admins (decision 8); everyone has My account in the account menu.
+    const isWorkspaceAdmin = !!user?.isTenantAdmin || !!user?.isPlatformAdmin;
+    const adminNavigation: NavItem[] = isWorkspaceAdmin
+        ? [{ name: 'Settings', href: '/dashboard/settings', icon: <SlidersHorizontal className="size-5" /> }]
+        : [];
 
     const platformNavigation: NavItem[] = [
         { name: 'Platform overview', href: '/platform-admin', icon: <ShieldCheck className="size-5" />, adminOnly: true },
@@ -168,30 +178,27 @@ export function NavigationDrawer({ open, isMobile, toggleDrawer }: { open: boole
                 aria-label={item.name}
                 aria-current={active ? "page" : undefined}
                 onClick={() => { if (isMobile) toggleDrawer(); }}
+                // Quiet navigation (UI/UX plan decision 24): the active item is a light grey fill
+                // with a 2px accent bar and medium-weight text; nothing else is coloured.
                 className={cn(
-                    "group flex min-h-10 w-full items-center rounded-full px-3 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/20",
+                    "group relative flex min-h-9 w-full items-center rounded-md px-3 text-sm font-medium transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                     labelVisible ? "justify-start gap-3" : "mx-auto size-10 justify-center px-0",
                     active
-                        ? "bg-secondary text-secondary-foreground"
-                        : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+                        ? "bg-muted text-foreground before:absolute before:inset-y-1.5 before:left-0 before:w-0.5 before:rounded-full before:bg-primary"
+                        : "text-muted-foreground hover:bg-muted hover:text-foreground"
                 )}
             >
-                <span
-                    className={cn(
-                        "flex size-7 shrink-0 items-center justify-center rounded-lg",
-                        !labelVisible && active ? "bg-secondary text-secondary-foreground" : "text-current"
-                    )}
-                >
+                <span className="flex size-6 shrink-0 items-center justify-center text-current [&>svg]:size-[18px]">
                     {item.icon}
                 </span>
                 {labelVisible ? (
-                    <span className={cn("truncate", active ? "font-bold" : "font-medium")}>{item.name}</span>
+                    <span className="truncate">{item.name}</span>
                 ) : null}
             </Link>
         );
 
         return (
-            <li key={item.name} className="mb-1">
+            <li key={item.name}>
                 {!labelVisible ? (
                     <Tooltip>
                         <TooltipTrigger asChild>{button}</TooltipTrigger>
@@ -211,14 +218,12 @@ export function NavigationDrawer({ open, isMobile, toggleDrawer }: { open: boole
         const filtered = items.filter(item => item.enabled !== false && (!item.adminOnly || user?.isPlatformAdmin));
         if (filtered.length === 0) return null;
 
-        const hasActiveChild = filtered.some(item => pathname === item.href || pathname.startsWith(item.href + '/'));
         const labelVisible = open || isMobile;
 
         if (!labelVisible) {
             return (
                 <div className="relative mb-2">
-                    <ul className="space-y-1 px-2">{filtered.map(renderNavItem)}</ul>
-                    {hasActiveChild ? <div className="absolute left-0 top-2 h-6 w-1 rounded-r bg-primary" /> : null}
+                    <ul className="space-y-0.5 px-2">{filtered.map(renderNavItem)}</ul>
                 </div>
             );
         }
@@ -229,15 +234,12 @@ export function NavigationDrawer({ open, isMobile, toggleDrawer }: { open: boole
                     type="button"
                     onClick={onToggle}
                     aria-expanded={isOpen}
-                    className={cn(
-                        "mb-1 flex min-h-8 w-full items-center justify-between rounded-md px-3 text-xs font-bold uppercase tracking-[0.04em] text-muted-foreground hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                        hasActiveChild && "text-primary"
-                    )}
+                    className="mb-0.5 flex min-h-8 w-full items-center justify-between rounded-md px-3 text-xs font-medium text-subtle-foreground hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 >
                     <span>{title}</span>
                     {isOpen ? <ChevronUp className="size-4" /> : <ChevronDown className="size-4" />}
                 </button>
-                {isOpen ? <ul className="space-y-1 px-2">{filtered.map(renderNavItem)}</ul> : null}
+                {isOpen ? <ul className="space-y-0.5 px-2">{filtered.map(renderNavItem)}</ul> : null}
             </div>
         );
     };
@@ -247,20 +249,19 @@ export function NavigationDrawer({ open, isMobile, toggleDrawer }: { open: boole
             <div className="flex min-h-14 items-center justify-between px-3">
                 {(open || isMobile) ? (
                     <>
-                        <div className="flex items-center gap-3">
-                            <div className="flex size-8 items-center justify-center rounded-xl bg-primary text-base font-bold text-primary-foreground">
-                                U
-                            </div>
-                            <div className="text-sm font-extrabold">Unnatify</div>
-                        </div>
+                        <Link href="/dashboard" className="flex items-center rounded-md px-1 py-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                            <BrandLogo className="h-7" title="Unnatify home" />
+                        </Link>
                         <Button variant="ghost" size="icon-sm" onClick={toggleDrawer} aria-label="Collapse navigation">
                             <ChevronLeft className="size-5" />
                         </Button>
                     </>
                 ) : (
                     <div className="flex w-full justify-center">
-                        <Button variant="ghost" size="icon-sm" onClick={toggleDrawer} aria-label="Expand navigation">
-                            <ChevronRight className="size-5" />
+                        {/* The mark; on hover or focus it turns into the expand arrow. */}
+                        <Button variant="ghost" size="icon" onClick={toggleDrawer} aria-label="Expand navigation" className="group">
+                            <BrandMark className="size-7 group-hover:hidden group-focus-visible:hidden" />
+                            <ChevronRight className="hidden size-5 group-hover:block group-focus-visible:block" />
                         </Button>
                     </div>
                 )}
@@ -290,12 +291,12 @@ export function NavigationDrawer({ open, isMobile, toggleDrawer }: { open: boole
                 })}
 
                 {!isPartner && (open || isMobile) ? <div className="mx-3 my-2 h-px bg-border" /> : null}
-                {!isPartner && renderSection('Administration', adminNavigation, adminOpen, () => setAdminOpen(!adminOpen))}
+                {!isPartner ? <ul className="space-y-0.5 px-2">{adminNavigation.map(renderNavItem)}</ul> : null}
 
                 {!isPartner && customObjects.length > 0 ? (
                     <>
                         {(open || isMobile) ? <div className="mx-3 my-2 h-px bg-border" /> : null}
-                        {renderSection('Custom Objects', customObjects.map(obj => ({
+                        {renderSection('Custom objects', customObjects.map(obj => ({
                             name: obj.label || obj.name,
                             href: `/dashboard/objects/${obj.name}`,
                             icon: <Puzzle className="size-5" />,
@@ -316,7 +317,7 @@ export function NavigationDrawer({ open, isMobile, toggleDrawer }: { open: boole
     if (isMobile) {
         return (
             <Sheet open={open} onOpenChange={(next) => { if (next !== open) toggleDrawer(); }}>
-                <SheetContent side="left" showCloseButton={false} className="w-[min(280px,calc(100dvw-32px))] gap-0 p-0" aria-describedby={undefined}
+                <SheetContent side="left" showCloseButton={false} className="w-[min(280px,calc(100dvw-32px))] gap-0 bg-sidebar p-0" aria-describedby={undefined}
                     onCloseAutoFocus={(event) => {
                         event.preventDefault();
                         document.getElementById("mobile-navigation-trigger")?.focus();
@@ -331,7 +332,7 @@ export function NavigationDrawer({ open, isMobile, toggleDrawer }: { open: boole
     return (
         <aside
             aria-label="Main navigation"
-            className="sticky top-0 hidden h-dvh shrink-0 flex-col self-start border-r bg-background transition-[width] duration-200 ease-in-out motion-reduce:transition-none md:flex"
+            className="sticky top-0 hidden h-dvh shrink-0 flex-col self-start border-r border-sidebar-border bg-sidebar transition-[width] duration-200 ease-in-out motion-reduce:transition-none md:flex"
             style={{ width: open ? drawerWidth : railWidth }}
         >
             {drawerContent}

@@ -24,7 +24,7 @@ export async function POST(request: Request) {
   } catch (error) {
     if (error instanceof Error && error.message === "UNAUTHORIZED") return unauthorized();
     if (error instanceof Error && error.message === "DUPLICATE_EXPORT_TEMPLATE_NAME") {
-      return badRequest("A template with this name already exists");
+      return badRequest("A template with this name already exists (archived templates count too: restore it, or delete it for good from Archived)");
     }
     return serverError("Failed to create export template", error);
   }

@@ -160,7 +160,7 @@ export default function LeadListsPage() {
                     className="block text-inherit"
                     onClick={(event) => event.stopPropagation()}
                 >
-                    <div className="font-extrabold leading-tight text-primary">{row.original.name}</div>
+                    <div className="font-semibold leading-tight text-primary">{row.original.name}</div>
                     {row.original.description ? (
                         <div className="truncate text-xs text-muted-foreground">{row.original.description}</div>
                     ) : null}
@@ -176,8 +176,8 @@ export default function LeadListsPage() {
                     variant="outline"
                     className={
                         row.original.type === "SMART"
-                            ? "border-primary/20 bg-primary/10 font-extrabold text-primary"
-                            : "border-border bg-muted font-extrabold text-muted-foreground"
+                            ? "border-primary/20 bg-primary/10 font-semibold text-primary"
+                            : "border-border bg-muted font-semibold text-muted-foreground"
                     }
                 >
                     {row.original.type === "SMART" ? "Smart list" : "Static list"}
@@ -189,7 +189,7 @@ export default function LeadListsPage() {
             header: "Leads",
             size: 120,
             cell: ({ row }) => (
-                <span className="font-extrabold">{row.original.count ?? 0}</span>
+                <span className="font-semibold">{row.original.count ?? 0}</span>
             ),
         },
         {

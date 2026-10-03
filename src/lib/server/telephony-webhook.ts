@@ -1,3 +1,4 @@
+import { assertModuleEnabled, assertTenantModule } from "@/lib/server/module-entitlements";
 import { randomUUID, createHmac, timingSafeEqual } from "crypto";
 import { query, queryOne, execute } from "@/lib/db/query";
 import { createAuditLog, createActivityForTenant, ensureSystemActivityType } from "@/lib/server/crm";
@@ -85,6 +86,7 @@ export async function checkTelephonyComplianceForCall(
 // audit pass.
 export async function rotateTelephonyWebhookSecret(user: TenantUser) {
   if (!user.tenantId) throw new Error("TENANT_REQUIRED");
+  await assertTenantModule(user, "TELEPHONY");
   const setting = await getTelephonySetting(user.tenantId);
   if (!setting) throw new Error("TELEPHONY_NOT_CONFIGURED");
   const now = new Date();
@@ -244,6 +246,7 @@ async function resolveCallEventActor(tenantId: string, config: any, input: Recor
 // exactly who's placing the call -- skips the agent-mapping/oldest-tenant-user inference
 // entirely, which only exists to attribute events from the unauthenticated provider webhook.
 export async function recordTelephonyCallEvent(tenantId: string, input: Record<string, unknown>, actorOverride?: TenantUser) {
+  await assertModuleEnabled(tenantId, "TELEPHONY");
   const setting = await getTelephonySetting(tenantId);
   const actor = actorOverride ?? (await resolveCallEventActor(tenantId, setting?.config, input));
   if (!actor) throw new Error("NO_TENANT_USER");
@@ -352,6 +355,7 @@ export async function recordTelephonyCallEvent(tenantId: string, input: Record<s
 
 export async function listTelephonyWebhookEventsForTenant(user: TenantUser, limit = 50) {
   if (!user.tenantId) return [];
+  await assertTenantModule(user, "TELEPHONY");
   return query<any>(
     `select id, provider, "callId", status, "fromNumber", "toNumber", duration, "activityId", "createdAt"
      from "TelephonyCallLog"

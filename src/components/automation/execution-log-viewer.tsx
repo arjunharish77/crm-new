@@ -110,7 +110,7 @@ export function ExecutionLogViewer({ steps }: ExecutionLogViewerProps) {
                                     {isSuccess ? (
                                         <CheckCircle2 className="size-[18px] text-emerald-500" />
                                     ) : isFailed ? (
-                                        <XCircle className="size-[18px] text-red-500" />
+                                        <XCircle className="size-[18px] text-destructive" />
                                     ) : isWaiting ? (
                                         <Clock className="size-[18px] animate-pulse text-blue-500" />
                                     ) : null}

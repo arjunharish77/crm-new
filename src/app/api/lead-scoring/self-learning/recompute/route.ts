@@ -1,12 +1,12 @@
 import { NextResponse } from "next/server";
-import { requireCurrentUser } from "@/lib/server/auth";
+import { requireCurrentUser, requireTenantAdmin } from "@/lib/server/auth";
 import { forbidden, serverError, unauthorized } from "@/lib/server/http";
 import { enqueueSelfLearningScoringRecompute } from "@/lib/server/job-queue";
 import { assertModuleEnabled } from "@/lib/server/module-entitlements";
 
 export async function POST(request: Request) {
   try {
-    const user = await requireCurrentUser(request);
+    const user = await requireTenantAdmin(request);
     if (!user.tenantId) return forbidden("Tenant context required");
     // The actual recompute runs later on the worker (this route only enqueues a job), so
     // the guard inside recomputeSelfLearningScoresForTenant itself wouldn't surface until
@@ -26,6 +26,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ queued: true, alreadyRunning: alreadyQueued }, { status: 202 });
   } catch (error) {
     if (error instanceof Error && error.message === "UNAUTHORIZED") return unauthorized();
+    if (error instanceof Error && error.message === "FORBIDDEN") return forbidden("Only admins can do this");
     if (error instanceof Error && error.message.startsWith("MODULE_DISABLED")) return forbidden("Predictive Scoring module is disabled for this tenant");
     return serverError("Failed to queue predictive score recompute", error);
   }

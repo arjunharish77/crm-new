@@ -1,9 +1,9 @@
+import { assertModuleEnabled, assertTenantModule } from "@/lib/server/module-entitlements";
 import { randomUUID } from "crypto";
 import { createAuditLog } from "@/lib/server/crm";
 import { query as pgQuery, queryOne as pgQueryOne, queryAsSystem as pgQueryAsSystem } from "@/lib/db/query";
 import { trainViaMlService, scoreViaMlService } from "@/lib/server/ml-service-client";
 import { refreshNextBestActionsForRecord } from "@/lib/server/next-best-action";
-import { assertModuleEnabled } from "@/lib/server/module-entitlements";
 import { computeTelephonySignals, type TelephonyCallSignal, type TelephonyDispositionSignal } from "@/lib/server/telephony-signals";
 
 type TenantUser = {
@@ -876,6 +876,7 @@ function opportunityScoreFromFeatures(snapshot: FeatureSnapshot, opportunity: an
 }
 
 export async function getScoringSettingsForTenant(user: TenantUser): Promise<ScoringSettings> {
+  await assertTenantModule(user, "PREDICTIVE_SCORING");
   const tenantId = requireTenantId(user);
   const data = await pgQueryOne<any>(
     `select id, "tenantId", "isEnabled", "targetModules", objective, "minimumHistoricalRecords",
@@ -991,6 +992,7 @@ function normalizeSettings(data: any): ScoringSettings {
 }
 
 export async function listScoresForTenant(user: TenantUser, input: { recordType?: RecordType | null; recordId?: string | null } = {}) {
+  await assertTenantModule(user, "PREDICTIVE_SCORING");
   const tenantId = requireTenantId(user);
   const filters = ['"tenantId" = $1'];
   const values: unknown[] = [tenantId];
@@ -1019,6 +1021,7 @@ export async function listScoresForTenant(user: TenantUser, input: { recordType?
 }
 
 export async function listScoreHistoryForTenant(user: TenantUser, input: { recordType: RecordType; recordId: string }) {
+  await assertTenantModule(user, "PREDICTIVE_SCORING");
   const tenantId = requireTenantId(user);
   return pgQuery<any>(
     `select id, "recordType", "recordId", "previousScore", "nextScore", "changeReason", "createdAt"
@@ -1031,6 +1034,7 @@ export async function listScoreHistoryForTenant(user: TenantUser, input: { recor
 }
 
 export async function listFeatureCatalogForTenant(user: TenantUser, targetModule?: RecordType | null) {
+  await assertTenantModule(user, "PREDICTIVE_SCORING");
   const tenantId = requireTenantId(user);
   const values: unknown[] = [tenantId];
   const clauses = ['"tenantId" = $1'];
@@ -1157,6 +1161,7 @@ async function syncSettingsFeatureCatalog(user: TenantUser) {
 }
 
 export async function listScoringModelVersionsForTenant(user: TenantUser, targetModule?: RecordType) {
+  await assertTenantModule(user, "PREDICTIVE_SCORING");
   const tenantId = requireTenantId(user);
   const models = await pgQuery<any>(
     `select id, name, "targetModule", objective, status, "createdAt"

@@ -187,9 +187,9 @@ export function FilterBuilder({ fields, value, onChange }: FilterBuilderProps) {
             <div className="flex flex-col items-start justify-between gap-2 sm:flex-row sm:items-center">
                 <div className="flex items-center gap-1.5">
                     <Filter size={18} />
-                    <span className="text-sm font-extrabold">Filters</span>
+                    <span className="text-sm font-semibold">Filters</span>
                     {value.conditions.length > 0 ? (
-                        <Badge variant="secondary" className="h-[22px] font-extrabold">
+                        <Badge variant="secondary" className="h-[22px] font-semibold">
                             {value.conditions.length}
                         </Badge>
                     ) : null}
@@ -201,7 +201,7 @@ export function FilterBuilder({ fields, value, onChange }: FilterBuilderProps) {
                         </Button>
                     ) : null}
                     {value.conditions.length > 0 ? (
-                        <Button variant="ghost" size="sm" onClick={clearAll} className="h-[30px] font-extrabold">
+                        <Button variant="ghost" size="sm" onClick={clearAll} className="h-[30px] font-semibold">
                             Clear All
                         </Button>
                     ) : null}
@@ -218,7 +218,7 @@ export function FilterBuilder({ fields, value, onChange }: FilterBuilderProps) {
                         >
                             <div className="w-full shrink-0 text-left md:w-11 md:text-center">
                                 {index > 0 ? (
-                                    <Badge variant="outline" className="h-6 font-extrabold">
+                                    <Badge variant="outline" className="h-6 font-semibold">
                                         {value.logic}
                                     </Badge>
                                 ) : null}
@@ -280,7 +280,7 @@ export function FilterBuilder({ fields, value, onChange }: FilterBuilderProps) {
             </div>
 
             <div>
-                <Button variant="outline" size="sm" onClick={addCondition} className="rounded-md font-extrabold">
+                <Button variant="outline" size="sm" onClick={addCondition} className="rounded-md font-semibold">
                     <Plus size={16} />
                     Add Filter
                 </Button>

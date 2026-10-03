@@ -1,7 +1,9 @@
+export const dynamic = "force-dynamic";
+import { PublishedCatalogBoundary } from "@/components/published-catalog-boundary";
+import { getPublishedCatalog } from "@/lib/catalog-snapshot-server";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { ShortlistView } from "@/components/shortlist-view";
-import { courses } from "@/data/catalog";
 
 export const metadata: Metadata = {
   title: "Your Shortlist",
@@ -9,10 +11,12 @@ export const metadata: Metadata = {
   robots: { index: false, follow: false },
 };
 
-export default function ShortlistPage() {
+export default async function ShortlistPage() {
+  const catalog = await getPublishedCatalog();
+  const { courses } = catalog;
   const shell = { maxWidth: 1200, margin: "0 auto", paddingLeft: 24, paddingRight: 24, width: "100%", boxSizing: "border-box" as const };
 
-  return (
+  return <PublishedCatalogBoundary>{(
     <div style={{ background: "#F7F8F9", flex: 1, display: "flex", flexDirection: "column" }}>
       <div style={{ background: "#fff", borderBottom: "1px solid #EAEAEA" }}>
         <div style={{ ...shell, paddingTop: 28, paddingBottom: 28 }}>
@@ -26,5 +30,5 @@ export default function ShortlistPage() {
         <ShortlistView courses={courses} />
       </div>
     </div>
-  );
+  )}</PublishedCatalogBoundary>;
 }

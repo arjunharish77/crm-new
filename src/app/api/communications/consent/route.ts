@@ -1,7 +1,23 @@
 import { NextResponse } from "next/server";
 import { requireTenantAdmin } from "@/lib/server/auth";
-import { upsertCommunicationConsentForTenant } from "@/lib/server/communications";
+import { listCurrentConsentForTenant, upsertCommunicationConsentForTenant } from "@/lib/server/communications";
 import { badRequest, forbidden, serverError, unauthorized } from "@/lib/server/http";
+
+// Current consent per channel for a record (the consent card on lead and opportunity pages).
+export async function GET(request: Request) {
+  try {
+    const user = await requireTenantAdmin(request);
+    const url = new URL(request.url);
+    const entityType = url.searchParams.get("entityType");
+    const entityId = url.searchParams.get("entityId");
+    if (!entityType || !entityId) return badRequest("entityType and entityId are required");
+    return NextResponse.json(await listCurrentConsentForTenant(user, entityType, entityId));
+  } catch (error) {
+    if (error instanceof Error && error.message === "UNAUTHORIZED") return unauthorized();
+    if (error instanceof Error && error.message === "FORBIDDEN") return forbidden();
+    return serverError("Failed to fetch consent", error);
+  }
+}
 
 export async function PUT(request: Request) {
   try {

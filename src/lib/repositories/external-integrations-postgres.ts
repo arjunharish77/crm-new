@@ -1,3 +1,4 @@
+import { assertTenantModule } from "@/lib/server/module-entitlements";
 import { randomUUID } from "crypto";
 import { execute, query, queryOne, jsonbParam, type Queryable } from "@/lib/db/query";
 import { DatabaseError } from "@/lib/db/errors";
@@ -31,6 +32,7 @@ function tenantWhere(user: TenantUser, startIndex = 1) {
 }
 
 export async function listExternalIntegrationsForTenant(user: TenantUser) {
+  await assertTenantModule(user, "DATA_PLATFORM");
   const tenant = tenantWhere(user);
   return query<any>(
     `select id, "tenantId", name, "targetSystem", "endpointUrl", "httpMethod", "authType", config, "isActive", "createdAt", "updatedAt"
@@ -40,6 +42,7 @@ export async function listExternalIntegrationsForTenant(user: TenantUser) {
 }
 
 export async function getExternalIntegrationForTenant(user: TenantUser, id: string) {
+  await assertTenantModule(user, "DATA_PLATFORM");
   const tenant = tenantWhere(user, 2);
   return queryOne<any>(
     `select id, "tenantId", name, "targetSystem", "endpointUrl", "httpMethod", "authType", config, "isActive", "createdAt", "updatedAt"
@@ -50,6 +53,7 @@ export async function getExternalIntegrationForTenant(user: TenantUser, id: stri
 
 export async function createExternalIntegrationForTenant(user: TenantUser, payload: Record<string, unknown>) {
   if (!user.tenantId) throw new Error("TENANT_REQUIRED");
+  await assertTenantModule(user, "DATA_PLATFORM");
   const now = new Date().toISOString();
   try {
     const created = await queryOne<any>(
@@ -82,6 +86,7 @@ export async function createExternalIntegrationForTenant(user: TenantUser, paylo
 }
 
 export async function updateExternalIntegrationForTenant(user: TenantUser, id: string, payload: Record<string, unknown>) {
+  await assertTenantModule(user, "DATA_PLATFORM");
   const tenant = tenantWhere(user, 2);
   const columns: string[] = [];
   const values: unknown[] = [];
@@ -122,6 +127,7 @@ export async function updateExternalIntegrationForTenant(user: TenantUser, id: s
 }
 
 export async function deleteExternalIntegrationForTenant(user: TenantUser, id: string) {
+  await assertTenantModule(user, "DATA_PLATFORM");
   const tenant = tenantWhere(user, 2);
   const count = await execute(`delete from "ExternalIntegration" where id = $1 and ${tenant.sql}`, [id, ...tenant.values]);
   return count > 0;
@@ -288,6 +294,7 @@ export async function previewExternalIntegrationPush(
   integrationId: string,
   input: { leadId?: string | null; opportunityId?: string | null },
 ) {
+  await assertTenantModule(user, "DATA_PLATFORM");
   const integration = await loadActiveIntegration(user, integrationId);
   const resolved = await resolveExternalPushRequest(user.tenantId as string, integration, input.leadId ?? null, input.opportunityId ?? null);
   return {
@@ -305,6 +312,7 @@ export async function pushExternalIntegration(
   integrationId: string,
   input: { leadId?: string | null; opportunityId?: string | null },
 ) {
+  await assertTenantModule(user, "DATA_PLATFORM");
   const integration = await loadActiveIntegration(user, integrationId);
   const leadId = input.leadId ?? null;
   const opportunityId = input.opportunityId ?? null;
@@ -381,6 +389,7 @@ export async function listExternalPushAttemptsForRecord(
   input: { leadId?: string | null; opportunityId?: string | null },
 ) {
   if (!user.tenantId) throw new Error("TENANT_REQUIRED");
+  await assertTenantModule(user, "DATA_PLATFORM");
   const leadId = input.leadId ?? null;
   const opportunityId = input.opportunityId ?? null;
   if (!leadId && !opportunityId) return [];

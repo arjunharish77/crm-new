@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
-import Link from "next/link";
+import { redirect } from "next/navigation";
+import { getAdminSession } from "@/lib/admin-auth";
+import { CatalogReviewQueue, type QueueParams } from "@/components/catalog-review-queue";
 import { query } from "@/lib/db";
 
 export const metadata: Metadata = {
@@ -20,58 +22,12 @@ type UniversityRow = {
   updated_at: string;
 };
 
-export default async function AdminUniversitiesPage() {
-  const universities = await query<UniversityRow>(
-    `select id, slug, name, short_name, city, status, is_published, updated_at
-     from university
-     order by name`,
-  ).catch(() => ({ rows: [] as UniversityRow[] }));
-
-  return (
-    <section className="admin-shell">
-      <div className="container">
-        <div className="admin-page-head">
-          <div>
-            <span className="eyebrow">CMS</span>
-            <h1>University review queue</h1>
-            <p>Manage university source data, status, and publish visibility for public pages.</p>
-          </div>
-          <div className="course-actions" style={{ marginTop: 0 }}>
-            <div className="admin-count">{universities.rows.length} records</div>
-            <Link className="btn primary" href="/admin/universities/new">New university</Link>
-          </div>
-        </div>
-
-        <div className="admin-table-card">
-          <table className="admin-table">
-            <thead>
-              <tr>
-                {["University", "City", "Slug", "Status", "Published", "Updated", "Action"].map((head) => (
-                  <th key={head}>{head}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {universities.rows.map((university) => (
-                <tr key={university.id}>
-                  <td><strong>{university.name}</strong><span>{university.short_name}</span></td>
-                  <td>{university.city || "-"}</td>
-                  <td>{university.slug}</td>
-                  <td><span className="admin-status">{university.status}</span></td>
-                  <td>{university.is_published ? "Yes" : "No"}</td>
-                  <td>{new Date(university.updated_at).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })}</td>
-                  <td><Link className="text-link" href={`/admin/universities/${university.id}`}>Edit</Link></td>
-                </tr>
-              ))}
-              {!universities.rows.length ? (
-                <tr>
-                  <td colSpan={7}>No universities available.</td>
-                </tr>
-              ) : null}
-            </tbody>
-          </table>
-        </div>
-      </div>
-    </section>
-  );
+export default async function AdminUniversitiesPage({ searchParams }: { searchParams: Promise<QueueParams> }) {
+  const session = await getAdminSession();
+  if (!session) redirect("/admin/login");
+  const universities = await query<UniversityRow>(`select id, slug, name, short_name, city, status, is_published, updated_at from university order by name, id`);
+  return <CatalogReviewQueue type="university" canCreate={session.role !== "VIEWER"} params={await searchParams} records={universities.rows.map(university => ({
+    id: university.id, name: university.name, searchText: `${university.name} ${university.id} ${university.short_name}`, status: university.status, published: university.is_published,
+    fields: [{ label: "City", value: university.city || "Not provided" }, { label: "URL slug", value: university.slug }, { label: "Updated (India time)", value: new Date(university.updated_at).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" }) }],
+  }))} />;
 }

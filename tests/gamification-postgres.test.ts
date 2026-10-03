@@ -1,5 +1,5 @@
 // Business-data tests use an enabled catalog; combined gate behavior is tested separately.
-vi.mock("@/lib/server/module-entitlements", () => ({isModuleEnabledForTenant:vi.fn().mockResolvedValue(true)}));
+vi.mock("@/lib/server/module-entitlements", () => ({isModuleEnabledForTenant:vi.fn().mockResolvedValue(true),assertTenantModule:vi.fn().mockResolvedValue(undefined)}));
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const queryMock = vi.fn();
@@ -30,7 +30,6 @@ describe("direct Postgres gamification", () => {
 
   it("awards points through Postgres rules and ledger writes", async () => {
     queryOneMock
-      .mockResolvedValueOnce(null) // TenantFeature entitlement check (defaults to enabled)
       .mockResolvedValueOnce(null)
       .mockResolvedValueOnce(null)
       .mockResolvedValueOnce({ id: "settings-1", antiGamingRules: { maxPointsPerUserPerDay: 100 } })

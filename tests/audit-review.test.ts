@@ -10,7 +10,8 @@ import {
   listAuditLogComments,
 } from "@/lib/server/audit-review";
 
-const user = { id: "user-1", tenantId: "tenant-a" };
+const user = { id: "user-1", tenantId: "tenant-a", isTenantAdmin: true };
+const nonAdmin = { id: "user-2", tenantId: "tenant-a", isTenantAdmin: false };
 
 beforeEach(() => {
   dbMocks.query.mockReset().mockResolvedValue([]);
@@ -104,5 +105,16 @@ describe("addAuditLogComment / listAuditLogComments", () => {
     const [sql, params] = dbMocks.query.mock.calls[0];
     expect(sql).toContain('order by c."createdAt" asc');
     expect(params).toEqual(["log-1", "tenant-a"]);
+  });
+});
+
+// Reviewing the audit log is an admin task (it was open to any signed-in user).
+describe("audit review needs an admin", () => {
+  it("rejects a non-admin before touching the database", async () => {
+    const { updateAuditLogReview, addAuditLogComment, listAuditLogComments, setAuditLogLegalHold } = await import("@/lib/server/audit-review");
+    await expect(updateAuditLogReview(nonAdmin, "log-1", { reviewStatus: "RESOLVED" })).rejects.toThrow("FORBIDDEN");
+    await expect(addAuditLogComment(nonAdmin, "log-1", "hi")).rejects.toThrow("FORBIDDEN");
+    await expect(listAuditLogComments(nonAdmin, "log-1")).rejects.toThrow("FORBIDDEN");
+    await expect(setAuditLogLegalHold(nonAdmin, "log-1", true)).rejects.toThrow("FORBIDDEN");
   });
 });

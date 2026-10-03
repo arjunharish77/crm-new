@@ -43,6 +43,19 @@ const DETAIL_ROUTES: Partial<Record<SmartViewModule, string>> = {
     OPPORTUNITIES: "/dashboard/opportunities",
 };
 
+// Where a row's record opens (same tab, UI/UX plan §5.9), or null when it has no page.
+export function viewRecordHref(module: SmartViewModule, record: any): string | null {
+    const detailRoute = DETAIL_ROUTES[module];
+    if (detailRoute && record?.id) return `${detailRoute}/${record.id}`;
+    if (module === "ACTIVITIES") return record?.opportunityId ? `/dashboard/opportunities/${record.opportunityId}` : record?.leadId ? `/dashboard/leads/${record.leadId}` : null;
+    return null;
+}
+
+// A readable name for a row, for labels such as "Select Jane Doe".
+export function viewRecordLabel(record: any): string {
+    return String(record?.name || record?.title || record?.subject || [record?.firstName, record?.lastName].filter(Boolean).join(" ") || record?.email || "this record");
+}
+
 export function ViewRowActionsMenu({
     module,
     record,
@@ -128,14 +141,14 @@ export function ViewRowActionsMenu({
         <>
             <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                    <Button variant="ghost" size="icon-sm" aria-label="Row actions">
+                    <Button variant="ghost" size="icon-sm" aria-label={`More actions for ${viewRecordLabel(record)}`}>
                         <MoreHorizontal className="size-4" />
                     </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
                     {(detailRoute || relatedRoute) && (
                         <DropdownMenuItem asChild>
-                            <Link href={detailRoute ? `${detailRoute}/${record.id}` : relatedRoute!} target="_blank" rel="noreferrer">
+                            <Link href={detailRoute ? `${detailRoute}/${record.id}` : relatedRoute!}>
                                 <ExternalLink className="size-4" />
                                 Open record
                             </Link>

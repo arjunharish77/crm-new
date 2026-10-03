@@ -38,10 +38,10 @@ export function ImpersonationBanner() {
     };
 
     return (
-        <div className="bg-yellow-500 text-yellow-950 border-b border-yellow-600">
+        <div className="border-b border-status-warning-foreground/30 bg-status-warning text-status-warning-foreground">
             <div className="container mx-auto px-4 py-2 flex flex-wrap items-center justify-between gap-2">
                 <div className="flex min-w-0 items-center gap-3 break-words">
-                    <AlertTriangle className="h-5 wh-5" />
+                    <AlertTriangle className="size-5 shrink-0" aria-hidden />
                     <div>
                         <span className="font-semibold">Impersonating:</span>{' '}
                         <span className="font-medium">{user?.name}</span> ({user?.email})

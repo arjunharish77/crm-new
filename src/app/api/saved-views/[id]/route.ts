@@ -60,8 +60,8 @@ export async function DELETE(
   try {
     const user = await requireCurrentUser(request);
     const { id } = await params;
-    await deleteSavedViewForTenant(user, id);
-    return NextResponse.json({ success: true });
+    const archived = await deleteSavedViewForTenant(user, id);
+    return NextResponse.json({ success: true, purgeAfter: archived?.purgeAfter ?? null });
   } catch (error) {
     if (error instanceof Error && error.message === "UNAUTHORIZED") {
       return unauthorized();

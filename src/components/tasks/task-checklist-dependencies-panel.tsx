@@ -194,7 +194,7 @@ export function TaskChecklistDependenciesPanel({ task, siblingTasks, onRefresh }
                                     )}
                                 />
                                 <span className="flex-1">{sibling.title}</span>
-                                <Badge variant="outline" className="text-[0.6rem]">{sibling.status}</Badge>
+                                <Badge variant="outline" className="text-xs">{sibling.status}</Badge>
                             </label>
                         ))}
                     </div>

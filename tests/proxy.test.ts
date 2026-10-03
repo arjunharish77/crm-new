@@ -2,9 +2,10 @@ import { describe, expect, it } from "vitest";
 import { NextRequest } from "next/server";
 import { proxy } from "@/proxy";
 
-function request(path: string, opts: { method?: string; fetchSite?: string } = {}) {
+function request(path: string, opts: { method?: string; fetchSite?: string; cookie?: string } = {}) {
   const headers: Record<string, string> = {};
   if (opts.fetchSite) headers["sec-fetch-site"] = opts.fetchSite;
+  if (opts.cookie) headers.cookie = opts.cookie;
   return new NextRequest(new URL(path, "https://app.example.com"), { method: opts.method ?? "GET", headers });
 }
 
@@ -14,8 +15,9 @@ describe("proxy (CSRF defense-in-depth)", () => {
     expect(res.status).toBe(200);
   });
 
-  it("passes through non-API paths untouched", async () => {
-    const res = proxy(request("/dashboard/leads", { method: "POST", fetchSite: "cross-site" }));
+  // Signed in, so the page's sign-in redirect (tests/proxy-and-return-path.test.ts) doesn't apply.
+  it("does not apply the cross-site check to non-API paths", async () => {
+    const res = proxy(request("/dashboard/leads", { method: "POST", fetchSite: "cross-site", cookie: "token=abc" }));
     expect(res.status).toBe(200);
   });
 

@@ -1,5 +1,7 @@
 "use client";
 
+import Link from "next/link";
+
 import { ErrorState } from "@/components/common/error-state";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -8,7 +10,8 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { DataTable } from "@/components/ui/data-table";
+import type { ColumnDef } from "@tanstack/react-table";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { EmptyState } from "@/components/common/empty-state";
@@ -17,7 +20,9 @@ import { useFeature } from "@/components/auth/feature-gate";
 import { SaveViewDialog } from "@/components/views/save-view-dialog";
 import { fieldLabel, getSmartViewFields, isSmartViewModuleEnabled, smartViewModuleDisabledReason, SMART_VIEW_MODULE_OPTIONS } from "@/components/views/smart-view-fields";
 import { applySmartViewFilters } from "@/components/views/smart-view-filtering";
-import { ViewRowActionsMenu } from "@/components/views/view-row-actions";
+import { SERVER_FILTERED_PATHS, serverListUrl, serverSortKey, toServerQuery, type ServerGroup } from "@/components/views/smart-view-server-query";
+import { useDebouncedValue } from "@/hooks/use-debounced-value";
+import { viewRecordHref, viewRecordLabel, ViewRowActionsMenu } from "@/components/views/view-row-actions";
 import { apiFetch } from "@/lib/api";
 import { formatWorkspaceDateTime } from "@/lib/date-format";
 import { fetchCached } from "@/lib/views-metadata-cache";
@@ -27,6 +32,9 @@ import { SmartViewModule, SmartViewTab } from "@/types/smart-views";
 import { Archive, ChevronLeft, ChevronRight, Copy, LayoutList, MessageSquare, MoreHorizontal, Pencil, Plus, RefreshCw, Search, SlidersHorizontal, Star, Trash2, UserCog } from "lucide-react";
 import { toast } from "sonner";
 import { getFavoriteRecords, isFavoriteRecord, recordRecentView, toggleFavoriteRecord } from "@/lib/recent-records";
+import { useAskText, useConfirm } from "@/components/common/dialogs-provider";
+import { useArchiveActions } from "@/hooks/use-archive-actions";
+import { ArchivedItemsSection } from "@/components/common/archived-items-section";
 
 type ViewRecord = {
     id: string;
@@ -77,10 +85,14 @@ function hasModuleWriteAccess(user: CurrentUser | null, module: SmartViewModule)
 }
 
 const EMPTY_FILTERS: FilterConfig = { conditions: [], logic: "AND" };
-// Matches the per-module fetch cap in fetchModuleData below -- used only to detect (not
-// enforce) truncation, so the UI can say so explicitly rather than silently showing a
-// partial result set as if it were complete.
-const ROW_LIMIT = 500;
+// Leads, opportunities and activities filter on the server (smart-view-server-query.ts): a tab
+// loads one page of matches with the exact total. Other modules, and a tab using a filter the
+// server can't apply, filter in the browser, so such a tab must load every record it filters or a
+// match past the first page would silently be missing (complete data, UI/UX plan §5.9): it loads
+// page by page up to ROW_CAP, and past that says exactly how many records it checked.
+const PAGE_SIZE = 500;
+const ROW_CAP = 5000;
+type Coverage = { checked: number; total: number };
 
 const DEFAULT_COLUMNS: Record<SmartViewModule, string[]> = {
     LEADS: ["name", "email", "status", "source", "score", "createdAt"],
@@ -93,6 +105,8 @@ const DEFAULT_COLUMNS: Record<SmartViewModule, string[]> = {
 };
 
 export default function ViewsPage() {
+    const confirm = useConfirm();
+    const askText = useAskText();
     const opportunityEnabled = useFeature("opportunityEnabled");
     const advancedReporting = useFeature("advancedReporting");
     const payoutsEnabled = useFeature("payoutsEnabled");
@@ -111,10 +125,22 @@ export default function ViewsPage() {
     const [activeTabId, setActiveTabId] = useState<string | null>(null);
     const [recordsByTab, setRecordsByTab] = useState<Record<string, any[]>>({});
     const [tabErrors, setTabErrors] = useState<Record<string, string>>({});
-    const [truncatedTabs, setTruncatedTabs] = useState<Record<string, boolean>>({});
+    const [truncatedTabs, setTruncatedTabs] = useState<Record<string, Coverage | undefined>>({});
     const [loadingRecords, setLoadingRecords] = useState(false);
     const [lastUpdatedAt, setLastUpdatedAt] = useState<string | null>(null);
     const [search, setSearch] = useState("");
+    const debouncedSearch = useDebouncedValue(search, 300);
+    // Server-filtered tabs: totals for the tab headers, and the active tab's current page.
+    const [tabTotals, setTabTotals] = useState<Record<string, number | undefined>>({});
+    const [browserOnlyTabs, setBrowserOnlyTabs] = useState<Record<string, string>>({});
+    const [pageState, setPageState] = useState({ pageIndex: 0, pageSize: 50 });
+    const [tableSort, setTableSort] = useState<{ id: string; desc: boolean } | null>(null);
+    const [serverRows, setServerRows] = useState<any[]>([]);
+    const [serverTotal, setServerTotal] = useState(0);
+    const [serverLoading, setServerLoading] = useState(false);
+    const [serverError, setServerError] = useState<string | null>(null);
+    const [chipTotals, setChipTotals] = useState<Record<string, number | null>>({});
+    const [refreshToken, setRefreshToken] = useState(0);
     const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
     const [users, setUsers] = useState<Array<{ id: string; name?: string | null; email?: string | null }>>([]);
     const [leadLists, setLeadLists] = useState<Array<{ id: string; name: string }>>([]);
@@ -208,12 +234,34 @@ export default function ViewsPage() {
         setSelectedRecordIds([]);
     }, [activeTabId]);
 
+    // Each server-filtered tab's filter group (null = no filters). A tab missing here filters in
+    // the browser.
+    const serverQueries = useMemo(() => {
+        const queries: Record<string, ServerGroup | null> = {};
+        for (const tab of tabs) {
+            if (!SERVER_FILTERED_PATHS[tab.module] || browserOnlyTabs[tab.id]) continue;
+            const query = toServerQuery(tab.module, tab.filters);
+            if (query.ok) queries[tab.id] = query.group;
+        }
+        return queries;
+    }, [tabs, browserOnlyTabs]);
+    const isServerTab = useCallback((tabId: string) => Object.prototype.hasOwnProperty.call(serverQueries, tabId), [serverQueries]);
+    const activeIsServer = !!activeTab && isServerTab(activeTab.id);
+    const activeServerGroup = activeTab && activeIsServer ? serverQueries[activeTab.id] : null;
+    // The server refused a filter (it can't apply it): filter that tab in the browser instead.
+    const fallBackToBrowser = useCallback((tabId: string, error: any) => {
+        if (error?.body?.code !== "FILTER_UNSUPPORTED") return false;
+        setBrowserOnlyTabs((current) => ({ ...current, [tabId]: String(error.body.field ?? "") }));
+        return true;
+    }, []);
+
     const loadRecords = useCallback(async (view: ViewRecord | null, nextTabs: SmartViewTab[]) => {
         if (!view || nextTabs.length === 0) return;
         setLoadingRecords(true);
         const nextRecords: Record<string, any[]> = {};
         const nextErrors: Record<string, string> = {};
-        const nextTruncated: Record<string, boolean> = {};
+        const nextTruncated: Record<string, Coverage | undefined> = {};
+        const nextTotals: Record<string, number | undefined> = {};
 
         await Promise.all(nextTabs.map(async (tab) => {
             if (!isSmartViewModuleEnabled(tab.module, { opportunityEnabled, advancedReporting, payoutsEnabled })) {
@@ -221,9 +269,20 @@ export default function ViewsPage() {
                 nextErrors[tab.id] = smartViewModuleDisabledReason(tab.module) ?? `The ${moduleLabel(tab.module)} module is disabled for this tenant.`;
                 return;
             }
+            if (isServerTab(tab.id)) {
+                try {
+                    const response: any = await apiFetch(serverListUrl(tab.module, [serverQueries[tab.id]], { page: 1, limit: 1 }));
+                    nextRecords[tab.id] = [];
+                    nextTotals[tab.id] = Number(response?.meta?.total ?? 0);
+                } catch (error: any) {
+                    nextRecords[tab.id] = [];
+                    if (!fallBackToBrowser(tab.id, error)) nextErrors[tab.id] = error?.message || `Failed to load ${moduleLabel(tab.module)}`;
+                }
+                return;
+            }
             try {
-                const records = await fetchRecordsForTab(tab, currentUser);
-                nextTruncated[tab.id] = records.length >= ROW_LIMIT;
+                const { records, coverage } = await fetchRecordsForTab(tab, currentUser);
+                nextTruncated[tab.id] = coverage.checked < coverage.total ? coverage : undefined;
                 nextRecords[tab.id] = applySmartViewFilters(records, tab.filters ?? EMPTY_FILTERS);
             } catch (error: any) {
                 nextRecords[tab.id] = [];
@@ -236,13 +295,88 @@ export default function ViewsPage() {
         setRecordsByTab(nextRecords);
         setTabErrors(nextErrors);
         setTruncatedTabs(nextTruncated);
+        setTabTotals(nextTotals);
         setLastUpdatedAt(new Date().toISOString());
         setLoadingRecords(false);
-    }, [currentUser, opportunityEnabled, advancedReporting, payoutsEnabled]);
+    }, [currentUser, opportunityEnabled, advancedReporting, payoutsEnabled, isServerTab, serverQueries, fallBackToBrowser]);
 
     useEffect(() => {
         loadRecords(selectedView, tabs);
     }, [loadRecords, selectedView, tabs]);
+
+    const refresh = useCallback(() => {
+        loadRecords(selectedView, tabs);
+        setRefreshToken((current) => current + 1);
+    }, [loadRecords, selectedView, tabs]);
+
+    // A new tab starts on page 1 in its own sort order; a new search goes back to page 1.
+    useEffect(() => {
+        setPageState((current) => ({ ...current, pageIndex: 0 }));
+        setServerRows([]);
+        setTableSort(activeTab?.sort?.field ? { id: activeTab.sort.field, desc: activeTab.sort.order !== "asc" } : null);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [activeTab?.id, selectedViewId]);
+    useEffect(() => {
+        setPageState((current) => ({ ...current, pageIndex: 0 }));
+    }, [debouncedSearch]);
+
+    // The active server-filtered tab's page: its matches, searched and sorted on the server.
+    useEffect(() => {
+        if (!activeTab || !activeIsServer) return;
+        let cancelled = false;
+        setServerLoading(true);
+        setServerError(null);
+        apiFetch<any>(serverListUrl(activeTab.module, [activeServerGroup], {
+            page: pageState.pageIndex + 1,
+            limit: pageState.pageSize,
+            search: debouncedSearch,
+            sort: tableSort,
+        }))
+            .then((response) => {
+                if (cancelled) return;
+                const data = Array.isArray(response?.data) ? response.data : [];
+                setServerRows(data.map((record: any) => decorateRecord(activeTab.module, record, currentUser)));
+                setServerTotal(Number(response?.meta?.total ?? data.length));
+            })
+            .catch((error: any) => {
+                if (cancelled) return;
+                setServerRows([]);
+                setServerTotal(0);
+                if (!fallBackToBrowser(activeTab.id, error)) setServerError(error?.message || `Failed to load ${moduleLabel(activeTab.module)}`);
+            })
+            .finally(() => {
+                if (!cancelled) setServerLoading(false);
+            });
+        return () => {
+            cancelled = true;
+        };
+    }, [activeTab, activeIsServer, activeServerGroup, pageState, debouncedSearch, tableSort, refreshToken, currentUser, fallBackToBrowser]);
+
+    // Count chips on a server-filtered tab: the tab's filters plus the chip's, counted on the
+    // server. A chip the server can't count shows a dash rather than a guess.
+    useEffect(() => {
+        if (!activeTab || !activeIsServer || !activeTab.countChips?.length) {
+            setChipTotals({});
+            return;
+        }
+        let cancelled = false;
+        setChipTotals({});
+        Promise.all(activeTab.countChips.map(async (chip) => {
+            const query = toServerQuery(activeTab.module, { logic: "AND", conditions: [{ id: chip.id, field: chip.field, operator: chip.operator, value: chip.value }] });
+            if (!query.ok) return [chip.id, null] as const;
+            try {
+                const response: any = await apiFetch(serverListUrl(activeTab.module, [activeServerGroup, query.group], { page: 1, limit: 1 }));
+                return [chip.id, Number(response?.meta?.total ?? 0)] as const;
+            } catch {
+                return [chip.id, null] as const;
+            }
+        })).then((entries) => {
+            if (!cancelled) setChipTotals(Object.fromEntries(entries));
+        });
+        return () => {
+            cancelled = true;
+        };
+    }, [activeTab, activeIsServer, activeServerGroup, refreshToken]);
 
     const cloneView = async (view: ViewRecord) => {
         try {
@@ -254,15 +388,12 @@ export default function ViewsPage() {
         }
     };
 
+    // Delete moves the view to "Recently deleted" (decision 31): Undo in the toast, restore for 30
+    // days. Archive / Show archived is a separate state that stays as it was.
+    const [deletedToken, setDeletedToken] = useState(0);
+    const { archive: archiveView } = useArchiveActions({ basePath: "/saved-views", archiveKind: "saved-view", noun: "Smart View", onChange: () => { fetchViews(); setDeletedToken((token) => token + 1); } });
     const deleteView = async (view: ViewRecord) => {
-        if (!confirm(`Delete Smart View "${view.name}"?`)) return;
-        try {
-            await apiFetch(`/saved-views/${view.id}`, { method: "DELETE" });
-            toast.success("Smart View deleted");
-            fetchViews();
-        } catch {
-            toast.error("Failed to delete Smart View");
-        }
+        await archiveView({ id: view.id, name: view.name });
     };
 
     const updateView = async (view: ViewRecord, patch: Partial<ViewRecord>) => {
@@ -329,7 +460,7 @@ export default function ViewsPage() {
     };
 
     const renameView = async (view: ViewRecord) => {
-        const name = window.prompt("Rename Smart View", view.name);
+        const name = await askText({ title: "Rename Smart View", label: "Name", defaultValue: view.name, required: true, singleLine: true, confirmLabel: "Rename" });
         if (!name?.trim() || name.trim() === view.name) return;
         await updateView(view, { name: name.trim() });
     };
@@ -366,6 +497,24 @@ export default function ViewsPage() {
     const activeRecords = recordsByTab[activeTab?.id ?? ""] ?? [];
     const visibleRecords = useMemo(() => applySearchAndSort(activeRecords, activeTab, search), [activeRecords, activeTab, search]);
     const columns = useMemo(() => activeTab ? columnsForTab(activeTab) : [], [activeTab]);
+    // Server-filtered: the page the server returned. In the browser: a page of the filtered rows.
+    const tableRows = useMemo(
+        () => activeIsServer ? serverRows : visibleRecords.slice(pageState.pageIndex * pageState.pageSize, (pageState.pageIndex + 1) * pageState.pageSize),
+        [activeIsServer, serverRows, visibleRecords, pageState],
+    );
+    const tableTotal = activeIsServer ? serverTotal : visibleRecords.length;
+    const tableColumns = useMemo<ColumnDef<any, any>[]>(() => activeTab ? columns.map((column, index) => ({
+        id: column.key,
+        accessorFn: (record: any) => displayValue(activeTab.module, record, column.key),
+        header: column.label,
+        enableSorting: activeIsServer && !!serverSortKey(activeTab.module, column.key),
+        cell: ({ row }: { row: { original: any } }) => {
+            const value = formatCell(displayValue(activeTab.module, row.original, column.key));
+            // The first column opens the record (UI/UX plan §5.9).
+            const href = index === 0 ? viewRecordHref(activeTab.module, row.original) : null;
+            return href ? <Link href={href} onClick={(event) => event.stopPropagation()} className="font-medium hover:underline">{value}</Link> : value;
+        },
+    })) : [], [activeTab, columns, activeIsServer]);
     // Precomputed once per (records, chip config) change rather than recalculated on every
     // render (e.g. typing in search, toggling row selection) -- each chip re-scans up to 500
     // records through applySmartViewFilters, which isn't free to redo on unrelated re-renders.
@@ -446,7 +595,7 @@ export default function ViewsPage() {
                         ) : null}
                     </div>
                     <div className="flex flex-wrap items-center gap-2">
-                        <Button variant="outline" size="sm" onClick={() => loadRecords(selectedView, tabs)} disabled={!selectedView || loadingRecords}>
+                        <Button variant="outline" size="sm" onClick={refresh} disabled={!selectedView || loadingRecords}>
                             <RefreshCw className={cn("size-4", loadingRecords && "animate-spin")} />
                             Refresh
                         </Button>
@@ -544,7 +693,7 @@ export default function ViewsPage() {
                         <div className="flex max-w-full overflow-x-auto px-2 md:px-4" role="group" aria-label="View sections">
                             {tabs.map((tab) => {
                                 const active = tab.id === activeTab.id;
-                                const count = recordsByTab[tab.id]?.length;
+                                const count = isServerTab(tab.id) ? tabTotals[tab.id] : recordsByTab[tab.id]?.length;
                                 const enabled = isSmartViewModuleEnabled(tab.module, { opportunityEnabled, advancedReporting, payoutsEnabled });
                                 return (
                                     <button
@@ -560,12 +709,12 @@ export default function ViewsPage() {
                                         <div className="flex items-center justify-between gap-2">
                                             <span className={cn("truncate text-sm font-bold", active && "text-foreground")}>{tab.name}</span>
                                             {!enabled ? (
-                                                <Badge variant="destructive" className="h-5 rounded-md px-1.5 text-[0.65rem]">Disabled</Badge>
+                                                <Badge variant="destructive" className="h-5 rounded-md px-1.5 text-xs">Disabled</Badge>
                                             ) : tab.filters?.conditions?.length ? (
-                                                <Badge variant="outline" className="h-5 rounded-md px-1.5 text-[0.65rem]">{tab.filters.conditions.length}</Badge>
+                                                <Badge variant="outline" className="h-5 rounded-md px-1.5 text-xs">{tab.filters.conditions.length}</Badge>
                                             ) : null}
                                         </div>
-                                        <div className={cn("mt-0.5 text-lg font-extrabold", active ? "text-primary" : "text-muted-foreground")}>
+                                        <div className={cn("mt-0.5 text-lg font-semibold", active ? "text-primary" : "text-muted-foreground")}>
                                             {!enabled || tabErrors[tab.id] ? "—" : loadingRecords && count === undefined ? "..." : (count ?? 0).toLocaleString()}
                                         </div>
                                         <div className="text-xs text-muted-foreground">{moduleLabel(tab.module)}</div>
@@ -581,7 +730,7 @@ export default function ViewsPage() {
                                 <span className={cn("size-2.5 rounded-full", tabErrors[activeTab.id] ? "bg-destructive" : "bg-primary")} />
                                 <span>Last Updated: {lastUpdatedAt ? relativeTime(lastUpdatedAt) : "Never"}</span>
                                 <span className="hidden sm:inline">|</span>
-                                <button type="button" className="font-semibold text-primary" onClick={() => loadRecords(selectedView, tabs)}>
+                                <button type="button" className="font-semibold text-primary" onClick={refresh}>
                                     Refresh
                                 </button>
                             </div>
@@ -596,15 +745,16 @@ export default function ViewsPage() {
                                         className="h-9 rounded-md pl-8"
                                         value={search}
                                         onChange={(event) => setSearch(event.target.value)}
+                                        aria-label={`Search ${moduleLabel(activeTab.module).toLowerCase()} in this view`}
                                         placeholder={`Search ${moduleLabel(activeTab.module).toLowerCase()}`}
                                     />
                                 </div>
                                 <Badge variant="outline" className="h-9 rounded-md px-3">
-                                    {visibleRecords.length.toLocaleString()} records
+                                    {activeIsServer && serverLoading ? "Loading…" : `${tableTotal.toLocaleString()} records`}
                                 </Badge>
-                                {truncatedTabs[activeTab.id] ? (
-                                    <Badge variant="secondary" className="h-9 rounded-md px-3" title="This tab stops at the per-load row limit. Add more specific filters to see records beyond this cap.">
-                                        Showing first {ROW_LIMIT} -- add filters for more
+                                {!activeIsServer && truncatedTabs[activeTab.id] ? (
+                                    <Badge tone="warning" className="h-9 rounded-md px-3">
+                                        Checked the first {truncatedTabs[activeTab.id]!.checked.toLocaleString()} of {truncatedTabs[activeTab.id]!.total.toLocaleString()} {moduleLabel(activeTab.module).toLowerCase()}; later matches aren&apos;t shown
                                     </Badge>
                                 ) : null}
                             </div>
@@ -613,7 +763,9 @@ export default function ViewsPage() {
                             <div className="mt-2 flex flex-wrap gap-2">
                                 {activeTab.countChips.map((chip) => (
                                     <Badge key={chip.id} variant="secondary" className="rounded-md">
-                                        {chip.label}: {(chipCounts.get(chip.id) ?? 0).toLocaleString()}
+                                        {chip.label}: {activeIsServer
+                                            ? (chipTotals[chip.id] === undefined ? "…" : chipTotals[chip.id] === null ? <span title="This count can't be worked out on the server">—</span> : chipTotals[chip.id]!.toLocaleString())
+                                            : (chipCounts.get(chip.id) ?? 0).toLocaleString()}
                                     </Badge>
                                 ))}
                             </div>
@@ -624,8 +776,8 @@ export default function ViewsPage() {
                                 <QueueExportButton
                                     moduleName={activeTab.module}
                                     selectedIds={selectedRecordIds}
-                                    currentPageIds={visibleRecords.map((record) => record.id)}
-                                    totalItems={visibleRecords.length}
+                                    currentPageIds={tableRows.map((record) => record.id)}
+                                    totalItems={tableTotal}
                                     size="sm"
                                 />
                                 <Button variant="ghost" size="sm" onClick={() => setSelectedRecordIds([])}>Clear</Button>
@@ -633,36 +785,47 @@ export default function ViewsPage() {
                         )}
                     </div>
 
-                    <div className="min-h-0 min-w-0 flex-1 bg-background">
-                        {tabErrors[activeTab.id] ? (
-                            <div className="p-4">
-                                <ErrorState title="Cannot load this tab" description={tabErrors[activeTab.id]} onRetry={() => loadRecords(selectedView, tabs)} />
-                            </div>
-                        ) : loadingRecords && visibleRecords.length === 0 ? (
-                            <div className="p-4 text-sm text-muted-foreground">Loading records...</div>
-                        ) : visibleRecords.length === 0 ? (
-                            <div className="p-4">
-                                <EmptyState title="No records found" description="Adjust the Smart View filters or refresh this tab." />
-                            </div>
-                        ) : (
-                            <InlineRecordsTable
-                                tab={activeTab}
-                                records={visibleRecords}
-                                columns={columns}
-                                selectedIds={selectedRecordIds}
-                                onToggleSelect={(id, checked) => setSelectedRecordIds((current) => checked ? [...current, id] : current.filter((existing) => existing !== id))}
-                                onToggleSelectAll={(checked) => setSelectedRecordIds(checked ? visibleRecords.map((record) => record.id) : [])}
-                                quickActions={hasModuleWriteAccess(currentUser, activeTab.module) ? activeTab.quickActions ?? [] : []}
-                                users={users}
-                                leadLists={leadLists}
-                                activityTypes={activityTypes}
-                                stagesByOpportunityTypeId={stagesByOpportunityTypeId}
-                                onActionDone={() => loadRecords(selectedView, tabs)}
-                            />
-                        )}
+                    <div className="min-h-0 min-w-0 flex-1 bg-background p-2 md:p-3">
+                        <DataTable
+                            key={activeTab.id}
+                            data={tableRows}
+                            columns={tableColumns}
+                            getRowId={(record) => String(record.id)}
+                            loading={activeIsServer ? serverLoading : loadingRecords}
+                            error={tabErrors[activeTab.id] || (activeIsServer ? serverError : null)}
+                            onRetry={refresh}
+                            emptyState={{ title: "No records found", description: search.trim() ? "Nothing matches this search in this tab." : "Adjust the Smart View filters or refresh this tab." }}
+                            enableRowSelection
+                            rowSelectionIds={selectedRecordIds}
+                            onRowSelectionIdsChange={setSelectedRecordIds}
+                            totalItems={tableTotal}
+                            pageIndex={pageState.pageIndex}
+                            pageSize={pageState.pageSize}
+                            pageSizeOptions={[25, 50, 100]}
+                            onPaginationChange={({ pageIndex, pageSize }) => setPageState({ pageIndex, pageSize })}
+                            sort={activeIsServer ? tableSort : null}
+                            onSortChange={activeIsServer ? (next) => { setTableSort(next); setPageState((current) => ({ ...current, pageIndex: 0 })); } : undefined}
+                            defaultDensity={activeTab.density === "compact" ? "compact" : "comfortable"}
+                            rowActions={(record) => (
+                                <ViewRowActionsMenu
+                                    module={activeTab.module}
+                                    record={record}
+                                    quickActions={hasModuleWriteAccess(currentUser, activeTab.module) ? activeTab.quickActions ?? [] : []}
+                                    users={users}
+                                    leadLists={leadLists}
+                                    activityTypes={activityTypes}
+                                    stagesByOpportunityTypeId={stagesByOpportunityTypeId}
+                                    onDone={refresh}
+                                />
+                            )}
+                        />
                     </div>
                 </>
             ) : null}
+
+            <div className="px-4 pb-4 md:px-5">
+                <ArchivedItemsSection kind="saved-view" basePath="/saved-views" noun="Smart View" title="Recently deleted" refreshToken={deletedToken} onChange={fetchViews} />
+            </div>
 
             <SaveViewDialog
                 open={builderOpen}
@@ -751,23 +914,47 @@ function normalizeTabs(view: ViewRecord | null): SmartViewTab[] {
 }
 
 async function fetchRecordsForTab(tab: SmartViewTab, currentUser: CurrentUser | null) {
+    const paged = PAGED_ENDPOINTS[tab.module];
+    if (paged) {
+        const { records, total } = await fetchAllPages(paged);
+        return { records: records.map((record: any) => decorateRecord(tab.module, record, currentUser)), coverage: { checked: records.length, total } };
+    }
     const response = await fetchModuleData(tab.module);
     const records = Array.isArray(response) ? response : Array.isArray(response?.data) ? response.data : [];
-    return records.map((record: any) => decorateRecord(tab.module, record, currentUser));
+    return { records: records.map((record: any) => decorateRecord(tab.module, record, currentUser)), coverage: { checked: records.length, total: records.length } };
 }
 
+// Browser-filtered tabs load these page by page (up to ROW_CAP, saying how much was checked).
+// Tasks used to be one unpaged call that stopped at 500 rows, and Payouts read only the newest
+// cycle; both looked complete when they weren't (Section 8 #4).
+const PAGED_ENDPOINTS: Partial<Record<SmartViewModule, string>> = {
+    LEADS: "/leads",
+    OPPORTUNITIES: "/opportunities",
+    ACTIVITIES: "/activities",
+    TASKS: "/tasks",
+    PAYOUTS: "/payouts",
+};
+
+// Every page of a paged list, up to ROW_CAP, with the total the server reports.
+async function fetchAllPages(path: string): Promise<{ records: any[]; total: number }> {
+    const records: any[] = [];
+    let total = 0;
+    for (let page = 1; records.length < ROW_CAP; page++) {
+        const response: any = await apiFetch(`${path}?page=${page}&limit=${PAGE_SIZE}`);
+        const data = Array.isArray(response) ? response : Array.isArray(response?.data) ? response.data : [];
+        records.push(...data);
+        total = Number(response?.meta?.total ?? records.length);
+        // Stop on an empty page or once the reported total is reached (a server may return
+        // fewer than PAGE_SIZE per page, so a short page alone doesn't mean the end).
+        if (data.length === 0 || records.length >= total || !response?.meta) break;
+    }
+    return { records, total: Math.max(total, records.length) };
+}
+
+// Partners and reports come back whole (every partner profile, every saved report).
 async function fetchModuleData(module: SmartViewModule) {
-    if (module === "LEADS") return apiFetch("/leads?page=1&limit=500");
-    if (module === "OPPORTUNITIES") return apiFetch("/opportunities?limit=500");
-    if (module === "ACTIVITIES") return apiFetch("/activities?limit=500");
-    if (module === "TASKS") return apiFetch("/tasks");
     if (module === "PARTNERS") return apiFetch("/partners");
     if (module === "REPORTS") return apiFetch("/reports/custom");
-    if (module === "PAYOUTS") {
-        const cycles = await apiFetch<any[]>("/payout-cycles");
-        const cycleId = Array.isArray(cycles) ? cycles[0]?.id : null;
-        return cycleId ? apiFetch(`/payout-cycles/${cycleId}/payouts`) : [];
-    }
     return [];
 }
 
@@ -855,87 +1042,6 @@ function applySearchAndSort(records: any[], tab: SmartViewTab | null, search: st
         next = [...next].sort((a, b) => compareValues(readValue(a, tab.sort!.field), readValue(b, tab.sort!.field)) * direction);
     }
     return next;
-}
-
-function InlineRecordsTable({
-    tab,
-    records,
-    columns,
-    selectedIds,
-    onToggleSelect,
-    onToggleSelectAll,
-    quickActions,
-    users,
-    leadLists,
-    activityTypes,
-    stagesByOpportunityTypeId,
-    onActionDone,
-}: {
-    tab: SmartViewTab;
-    records: any[];
-    columns: Array<{ key: string; label: string }>;
-    selectedIds: string[];
-    onToggleSelect: (id: string, checked: boolean) => void;
-    onToggleSelectAll: (checked: boolean) => void;
-    quickActions: string[];
-    users: Array<{ id: string; name?: string | null; email?: string | null }>;
-    leadLists: Array<{ id: string; name: string }>;
-    activityTypes: Array<{ id: string; name: string }>;
-    stagesByOpportunityTypeId: Map<string, any[]>;
-    onActionDone: () => void;
-}) {
-    const densityClass = tab.density === "compact" ? "py-2" : tab.density === "spacious" ? "py-5" : "py-3";
-    const selectedSet = new Set(selectedIds);
-    const allSelected = records.length > 0 && records.every((record) => selectedSet.has(record.id));
-    return (
-        <div className="min-w-0 max-w-full overflow-x-auto">
-            <Table>
-                <TableHeader className="sticky top-0 z-10 bg-muted">
-                    <TableRow>
-                        <TableHead className="w-10 border-r">
-                            <Checkbox checked={allSelected} onCheckedChange={(checked) => onToggleSelectAll(!!checked)} aria-label="Select all" />
-                        </TableHead>
-                        {columns.map((column) => (
-                            <TableHead key={column.key} className="min-w-[170px] whitespace-nowrap border-r text-xs font-extrabold uppercase tracking-[0.04em] text-muted-foreground">
-                                {column.label}
-                            </TableHead>
-                        ))}
-                        <TableHead className="w-10" />
-                    </TableRow>
-                </TableHeader>
-                <TableBody>
-                    {records.map((record, index) => (
-                        <TableRow key={record.id ?? `${tab.id}-${index}`} className="hover:bg-surface-container-low/70">
-                            <TableCell className="border-r align-top">
-                                <Checkbox
-                                    checked={selectedSet.has(record.id)}
-                                    onCheckedChange={(checked) => onToggleSelect(record.id, !!checked)}
-                                    aria-label={`Select ${record.id}`}
-                                />
-                            </TableCell>
-                            {columns.map((column) => (
-                                <TableCell key={column.key} className={cn("max-w-[340px] whitespace-normal border-r align-top text-sm", densityClass)}>
-                                    {formatCell(displayValue(tab.module, record, column.key))}
-                                </TableCell>
-                            ))}
-                            <TableCell className="align-top">
-                                <ViewRowActionsMenu
-                                    module={tab.module}
-                                    record={record}
-                                    quickActions={quickActions}
-                                    users={users}
-                                    leadLists={leadLists}
-                                    activityTypes={activityTypes}
-                                    stagesByOpportunityTypeId={stagesByOpportunityTypeId}
-                                    onDone={onActionDone}
-                                />
-                            </TableCell>
-                        </TableRow>
-                    ))}
-                </TableBody>
-            </Table>
-        </div>
-    );
 }
 
 function countForChip(records: any[], chip: NonNullable<SmartViewTab["countChips"]>[number]) {

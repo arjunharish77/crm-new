@@ -1,11 +1,11 @@
 import { NextResponse } from "next/server";
-import { requireCurrentUser } from "@/lib/server/auth";
+import { requireCurrentUser, requireTenantAdmin } from "@/lib/server/auth";
 import { reorderOpportunityTypesForTenant } from "@/lib/server/admin-modules";
 import { badRequest, forbidden, serverError, unauthorized } from "@/lib/server/http";
 
 export async function PUT(request: Request) {
   try {
-    const user = await requireCurrentUser(request);
+    const user = await requireTenantAdmin(request);
     if (!user.tenantId) return forbidden("Tenant context required");
     const body = await request.json().catch(() => null);
     const ids = Array.isArray(body?.ids) ? body.ids.map(String) : [];
@@ -14,6 +14,7 @@ export async function PUT(request: Request) {
     return NextResponse.json({ success: true });
   } catch (error) {
     if (error instanceof Error && error.message === "UNAUTHORIZED") return unauthorized();
+    if (error instanceof Error && error.message === "FORBIDDEN") return forbidden("Only admins can do this");
     return serverError("Failed to reorder opportunity types", error);
   }
 }

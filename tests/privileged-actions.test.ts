@@ -9,7 +9,7 @@ const dbMocks = vi.hoisted(() => {
 const crmMocks = vi.hoisted(() => ({ createAuditLog: vi.fn().mockResolvedValue(undefined) }));
 const policyMocks = vi.hoisted(() => ({ getEffectiveSecurityPolicy: vi.fn() }));
 const adminMocks = vi.hoisted(() => ({
-  changeTenantStatus: vi.fn().mockResolvedValue(undefined),
+  setTenantStatusForPlatformAdmin: vi.fn().mockResolvedValue(undefined),
   impersonateTenantUser: vi.fn().mockResolvedValue({ token: "impersonation-token", user: { id: "target-user" } }),
   updatePermissionTemplateForTenant: vi.fn().mockResolvedValue({ id: "template-1" }),
 }));
@@ -63,7 +63,7 @@ beforeEach(() => {
   dbMocks.execute.mockReset().mockResolvedValue(undefined);
   crmMocks.createAuditLog.mockClear();
   policyMocks.getEffectiveSecurityPolicy.mockReset().mockResolvedValue({ privilegedActionApprovalRequired: false });
-  adminMocks.changeTenantStatus.mockClear();
+  adminMocks.setTenantStatusForPlatformAdmin.mockClear();
   adminMocks.impersonateTenantUser.mockClear();
   adminMocks.updatePermissionTemplateForTenant.mockClear();
   apiKeyMocks.rotateApiKeyForTenant.mockClear();
@@ -147,10 +147,10 @@ describe("approvePrivilegedActionRequest", () => {
     await expect(approvePrivilegedActionRequest(admin2, "request-1")).rejects.toThrow("FORBIDDEN");
   });
 
-  it("executes TENANT_SUSPEND and marks EXECUTED", async () => {
-    dbMocks.queryOne.mockResolvedValueOnce(pendingRow({ tenantId: null, actionType: "TENANT_SUSPEND", targetId: "tenant-x", requestedBy: "platform-1" }));
+  it("executes TENANT_SUSPEND with the request's reason and marks EXECUTED", async () => {
+    dbMocks.queryOne.mockResolvedValueOnce(pendingRow({ tenantId: null, actionType: "TENANT_SUSPEND", targetId: "tenant-x", requestedBy: "platform-1", reason: "Unpaid invoices" }));
     const result = await approvePrivilegedActionRequest(platformAdmin2, "request-1");
-    expect(adminMocks.changeTenantStatus).toHaveBeenCalledWith("tenant-x", "SUSPENDED");
+    expect(adminMocks.setTenantStatusForPlatformAdmin).toHaveBeenCalledWith({ id: "platform-1" }, "tenant-x", "SUSPENDED", { reason: "Unpaid invoices", requestId: "request-1", approvedBy: platformAdmin2.id });
     expect(dbMocks.execute).toHaveBeenCalledWith(expect.stringContaining("status = 'EXECUTED'"), expect.anything());
     expect(result).toEqual({ status: "EXECUTED" });
   });
@@ -158,7 +158,7 @@ describe("approvePrivilegedActionRequest", () => {
   it("executes TENANT_UNSUSPEND", async () => {
     dbMocks.queryOne.mockResolvedValueOnce(pendingRow({ tenantId: null, actionType: "TENANT_UNSUSPEND", targetId: "tenant-x", requestedBy: "platform-1" }));
     await approvePrivilegedActionRequest(platformAdmin2, "request-1");
-    expect(adminMocks.changeTenantStatus).toHaveBeenCalledWith("tenant-x", "ACTIVE");
+    expect(adminMocks.setTenantStatusForPlatformAdmin).toHaveBeenCalledWith({ id: "platform-1" }, "tenant-x", "ACTIVE", { reason: null, requestId: "request-1", approvedBy: platformAdmin2.id });
   });
 
   it("executes PERMISSION_TEMPLATE_UPDATE with the stored payload", async () => {

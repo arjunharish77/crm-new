@@ -1,3 +1,4 @@
+import { assertModuleEnabled, assertTenantModule } from "@/lib/server/module-entitlements";
 import { randomUUID, randomBytes, createHmac, timingSafeEqual } from "crypto";
 import { query, queryOne, execute, jsonbParam } from "@/lib/db/query";
 import { createAuditLog, createLeadForTenant } from "@/lib/server/crm";
@@ -46,6 +47,7 @@ async function ensureInboundWebhookSetting(tenantId: string) {
 // anywhere here today), not a new regression introduced by this feature.
 export async function getInboundWebhookSettingsForTenant(user: TenantUser) {
   if (!user.tenantId) throw new Error("TENANT_REQUIRED");
+  await assertTenantModule(user, "DATA_PLATFORM");
   const setting = await ensureInboundWebhookSetting(user.tenantId);
   return {
     currentSecret: setting.config.currentSecret,
@@ -57,6 +59,7 @@ export async function getInboundWebhookSettingsForTenant(user: TenantUser) {
 
 export async function rotateInboundWebhookSecret(user: TenantUser) {
   if (!user.tenantId) throw new Error("TENANT_REQUIRED");
+  await assertTenantModule(user, "DATA_PLATFORM");
   const setting = await ensureInboundWebhookSetting(user.tenantId);
   const now = new Date();
   const nextConfig: InboundWebhookConfig = {
@@ -165,6 +168,7 @@ async function findDuplicateInboundEvent(tenantId: string, idempotencyKey: strin
 // Centralized here (not left inline in the route) so the "test payload" console below can
 // exercise the exact same path a real external caller hits.
 export async function captureInboundLead(tenantId: string, body: any, idempotencyKey?: string | null) {
+  await assertModuleEnabled(tenantId, "DATA_PLATFORM");
   const validationError = validateInboundLeadPayload(body);
   if (validationError) {
     await recordInboundWebhookEvent({ tenantId, idempotencyKey, status: "REJECTED", payload: body, errorMessage: validationError });
@@ -201,6 +205,7 @@ export async function captureInboundLead(tenantId: string, body: any, idempotenc
 
 export async function listInboundWebhookEventsForTenant(user: TenantUser, limit = 50) {
   if (!user.tenantId) return [];
+  await assertTenantModule(user, "DATA_PLATFORM");
   return query<any>(
     `select id, "idempotencyKey", status, payload, "leadId", "errorMessage", "createdAt"
      from "InboundWebhookEvent" where "tenantId" = $1 order by "createdAt" desc limit $2`,
@@ -213,6 +218,7 @@ export async function listInboundWebhookEventsForTenant(user: TenantUser, limit 
 // ACCEPTED/DUPLICATE already have an outcome.
 export async function retryInboundWebhookEvent(user: TenantUser, eventId: string) {
   if (!user.tenantId) throw new Error("TENANT_REQUIRED");
+  await assertTenantModule(user, "DATA_PLATFORM");
   const event = await queryOne<{ id: string; payload: any; status: string }>(
     `select id, payload, status from "InboundWebhookEvent" where id = $1 and "tenantId" = $2 limit 1`,
     [eventId, user.tenantId],
@@ -229,6 +235,7 @@ export async function retryInboundWebhookEvent(user: TenantUser, eventId: string
 // payload through the real capture path so the result shown is genuine, not simulated.
 export async function sendTestInboundWebhookPayload(user: TenantUser, payload: Record<string, unknown>) {
   if (!user.tenantId) throw new Error("TENANT_REQUIRED");
+  await assertTenantModule(user, "DATA_PLATFORM");
   const setting = await ensureInboundWebhookSetting(user.tenantId);
   const timestamp = Math.floor(Date.now() / 1000).toString();
   const rawBody = JSON.stringify(payload);

@@ -26,16 +26,34 @@ function slugify(title: string) {
 // ─── Categories ────────────────────────────────────────────────────────────────────────────
 
 export async function listKnowledgeBaseCategoriesForTenant(user: TenantUser) {
-  const tenantId = requireTenantId(user);
+  const tenantId = await assertServiceDeskEnabled(user);
   return query<any>(
     'select id, "tenantId", name, description, "parentId", "order", "isActive", "createdAt", "updatedAt" from "KnowledgeBaseCategory" where "tenantId" = $1 order by "order" asc, name asc',
     [tenantId],
   );
 }
 
+// A category name is unique in the workspace (ignoring case), and a parent must be one of the
+// workspace's own categories (it was taken on trust).
+async function assertCategoryInput(tenantId: string, input: { name?: string; parentId?: string | null }, exceptId?: string) {
+  if (input.name !== undefined) {
+    const taken = await queryOne<{ id: string }>(
+      `select id from "KnowledgeBaseCategory" where "tenantId" = $1 and lower(name) = lower($2) and ($3::text is null or id <> $3) limit 1`,
+      [tenantId, input.name.trim(), exceptId ?? null],
+    );
+    if (taken) throw new Error("KB_CATEGORY_NAME_TAKEN");
+  }
+  if (input.parentId) {
+    if (input.parentId === exceptId) throw new Error("KB_CATEGORY_PARENT_INVALID");
+    const parent = await queryOne<{ id: string }>(`select id from "KnowledgeBaseCategory" where "tenantId" = $1 and id = $2`, [tenantId, input.parentId]);
+    if (!parent) throw new Error("KB_CATEGORY_PARENT_INVALID");
+  }
+}
+
 export async function createKnowledgeBaseCategoryForTenant(user: TenantUser, input: { name: string; description?: string | null; parentId?: string | null; order?: number }) {
   const tenantId = await assertServiceDeskEnabled(user);
   if (!input.name?.trim()) throw new Error("KB_CATEGORY_NAME_REQUIRED");
+  await assertCategoryInput(tenantId, input);
   const now = new Date().toISOString();
   return queryOne<any>(
     `insert into "KnowledgeBaseCategory" (id, "tenantId", name, description, "parentId", "order", "isActive", "createdAt", "updatedAt")
@@ -46,16 +64,20 @@ export async function createKnowledgeBaseCategoryForTenant(user: TenantUser, inp
 
 export async function updateKnowledgeBaseCategoryForTenant(user: TenantUser, id: string, input: Partial<{ name: string; description: string | null; parentId: string | null; order: number; isActive: boolean }>) {
   const tenantId = await assertServiceDeskEnabled(user);
+  if (input.name !== undefined && !String(input.name).trim()) throw new Error("KB_CATEGORY_NAME_REQUIRED");
+  await assertCategoryInput(tenantId, input, id);
   const patch: Record<string, unknown> = { updatedAt: new Date().toISOString() };
   for (const key of ["name", "description", "parentId", "order", "isActive"] as const) {
     if (input[key] !== undefined) patch[key] = input[key];
   }
   const columns = Object.keys(patch);
   const assignments = columns.map((column, index) => `"${column}" = $${index + 1}`).join(", ");
-  return queryOne<any>(
+  const row = await queryOne<any>(
     `update "KnowledgeBaseCategory" set ${assignments} where "tenantId" = $${columns.length + 1} and id = $${columns.length + 2} returning id, "tenantId", name, description, "parentId", "order", "isActive", "createdAt", "updatedAt"`,
-    [...columns.map((column) => patch[column]), tenantId, id],
+    [...columns.map((column) => (column === "name" ? String(patch[column]).trim() : patch[column])), tenantId, id],
   );
+  if (!row) throw new Error("KB_CATEGORY_NOT_FOUND");
+  return row;
 }
 
 export async function deleteKnowledgeBaseCategoryForTenant(user: TenantUser, id: string) {
@@ -69,7 +91,7 @@ export async function deleteKnowledgeBaseCategoryForTenant(user: TenantUser, id:
 const ARTICLE_COLUMNS = 'id, "tenantId", "categoryId", title, slug, body, version, visibility, "isActive", "createdBy", "updatedBy", "createdAt", "updatedAt"';
 
 export async function listKnowledgeBaseArticlesForTenant(user: TenantUser, categoryId?: string | null) {
-  const tenantId = requireTenantId(user);
+  const tenantId = await assertServiceDeskEnabled(user);
   const clauses = ['"tenantId" = $1'];
   const values: unknown[] = [tenantId];
   if (categoryId) {
@@ -122,7 +144,7 @@ export async function setKnowledgeBaseArticleActive(user: TenantUser, id: string
 // predictive-scoring feature vectors, not a queryable article-similarity index), scored by how
 // many of the case's significant words (>=4 chars, deduped) appear in the article's title/body.
 export async function suggestKnowledgeBaseArticlesForCase(user: TenantUser, caseId: string, limit = 5) {
-  const tenantId = requireTenantId(user);
+  const tenantId = await assertServiceDeskEnabled(user);
   const caseRow = await queryOne<{ subject: string; description: string | null }>('select subject, description from "Case" where "tenantId" = $1 and id = $2', [tenantId, caseId]);
   if (!caseRow) return [];
 
@@ -151,7 +173,14 @@ export async function suggestKnowledgeBaseArticlesForCase(user: TenantUser, case
 }
 
 export async function submitKnowledgeBaseArticleFeedback(user: TenantUser, input: { articleId: string; caseId?: string | null; isHelpful: boolean; comment?: string | null }) {
-  const tenantId = requireTenantId(user);
+  const tenantId = await assertServiceDeskEnabled(user);
+  // The article (and the case, when given) must be this workspace's own.
+  const article = await queryOne<{ id: string }>(`select id from "KnowledgeBaseArticle" where "tenantId" = $1 and id = $2`, [tenantId, input.articleId]);
+  if (!article) throw new Error("KB_ARTICLE_NOT_FOUND");
+  if (input.caseId) {
+    const found = await queryOne<{ id: string }>(`select id from "Case" where "tenantId" = $1 and id = $2`, [tenantId, input.caseId]);
+    if (!found) throw new Error("KB_CASE_NOT_FOUND");
+  }
   await execute(
     `insert into "KnowledgeBaseArticleFeedback" (id, "tenantId", "articleId", "caseId", "userId", "isHelpful", comment, "createdAt")
      values ($1,$2,$3,$4,$5,$6,$7,$8)`,
@@ -160,7 +189,7 @@ export async function submitKnowledgeBaseArticleFeedback(user: TenantUser, input
 }
 
 export async function getKnowledgeBaseArticleFeedbackSummary(user: TenantUser, articleId: string) {
-  const tenantId = requireTenantId(user);
+  const tenantId = await assertServiceDeskEnabled(user);
   const row = await queryOne<{ helpful: string; unhelpful: string }>(
     `select count(*) filter (where "isHelpful") as helpful, count(*) filter (where not "isHelpful") as unhelpful
      from "KnowledgeBaseArticleFeedback" where "tenantId" = $1 and "articleId" = $2`,

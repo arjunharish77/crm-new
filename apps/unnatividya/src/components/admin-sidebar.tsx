@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import type { AdminSession } from "@/lib/admin-auth";
 
@@ -13,6 +13,8 @@ const NAV_ITEMS: NavItem[] = [
   { label: "Leads", href: "/admin/leads" },
   { label: "Courses", href: "/admin/courses" },
   { label: "Universities", href: "/admin/universities" },
+  { label: "Catalog preview", href: "/admin/catalog-preview" },
+  { label: "Catalog revisions", href: "/admin/catalog-revisions" },
   { label: "Content quality", href: "/admin/content-quality" },
   { label: "CRM sync", href: "/admin/crm-sync" },
   { label: "Redirects", href: "/admin/redirects" },
@@ -20,17 +22,27 @@ const NAV_ITEMS: NavItem[] = [
   { label: "Source imports", href: "/admin/source-imports" },
 ];
 
-export function AdminSidebar({
-  session,
-  counts,
-  children,
-}: {
-  session: AdminSession;
-  counts: Record<string, number>;
-  children: ReactNode;
-}) {
+type AdminSidebarProps = { session: AdminSession; counts: Record<string, number>; children: ReactNode };
+
+export function AdminSidebar(props: AdminSidebarProps) {
   const pathname = usePathname();
-  const [query, setQuery] = useState("");
+  return <AdminSidebarContent key={pathname} pathname={pathname} {...props} />;
+}
+
+function AdminSidebarContent({ session, counts, children, pathname }: AdminSidebarProps & { pathname: string }) {
+  const [openPath, setOpenPath] = useState<string | null>(null);
+  const navigationOpen = openPath === pathname;
+  const toggle = useRef<HTMLButtonElement>(null);
+  const setNavigationOpen = (open: boolean) => setOpenPath(open ? pathname : null);
+  const currentSection = NAV_ITEMS.find(item => item.href !== "/admin" && (pathname === item.href || pathname.startsWith(`${item.href}/`))) || NAV_ITEMS[0];
+  const nested = pathname !== currentSection.href;
+  const nestedLabel = pathname.endsWith("/new") ? "New record" : pathname.endsWith("/history") ? "History" : pathname.endsWith("/mappings") ? "Field mappings" : "Record details";
+  useEffect(() => {
+    const media = window.matchMedia("(max-width: 850px)");
+    const close = () => setOpenPath(null);
+    media.addEventListener("change", close);
+    return () => media.removeEventListener("change", close);
+  }, []);
   const isActive = (href: string) => (href === "/admin" ? pathname === "/admin" : pathname === href || pathname.startsWith(`${href}/`));
 
   async function logout() {
@@ -39,17 +51,20 @@ export function AdminSidebar({
   }
 
   return (
-    <div style={{ display: "flex", minHeight: "100vh" }}>
-      <aside style={{ width: 236, flexShrink: 0, background: "#263238", color: "#B8C4CA", display: "flex", flexDirection: "column", position: "sticky", top: 0, height: "100vh" }}>
-        <div style={{ padding: "20px 20px 16px", borderBottom: "1px solid rgba(255,255,255,0.08)" }}>
+    <div className="cms-layout" style={{ display: "flex", minHeight: "100vh" }}>
+      <aside onKeyDown={event => { if (event.key === "Escape" && navigationOpen) { event.preventDefault(); setNavigationOpen(false); toggle.current?.focus(); } }} className="cms-sidebar" data-open={navigationOpen} style={{ width: 236, flexShrink: 0, background: "#263238", color: "#B8C4CA", display: "flex", flexDirection: "column", position: "sticky", top: 0, height: "100vh" }}>
+        <div className="cms-sidebar-brand" style={{ padding: "20px 20px 16px", borderBottom: "1px solid rgba(255,255,255,0.08)" }}>
           <span style={{ color: "#fff", fontSize: 15, fontWeight: 700 }}>Unnati Vidya CMS</span>
+          <button ref={toggle} type="button" className="cms-navigation-toggle" aria-expanded={navigationOpen} aria-controls="cms-navigation" onClick={()=>setNavigationOpen(!navigationOpen)}>{navigationOpen ? "Close menu" : "Menu"}</button>
         </div>
-        <nav style={{ flex: 1, padding: "12px 10px", display: "flex", flexDirection: "column", gap: 2, overflowY: "auto" }}>
+        <nav id="cms-navigation" aria-label="CMS navigation" style={{ flex: 1, padding: "12px 10px", display: "flex", flexDirection: "column", gap: 2, overflowY: "auto" }}>
           {NAV_ITEMS.map((item) => {
             const count = counts[item.label];
             const active = isActive(item.href);
             return (
               <Link
+                onClick={()=>setNavigationOpen(false)}
+                aria-current={active ? (pathname === item.href ? "page" : "location") : undefined}
                 key={item.href}
                 href={item.href}
                 style={{
@@ -72,7 +87,7 @@ export function AdminSidebar({
             );
           })}
         </nav>
-        <div style={{ padding: 16, borderTop: "1px solid rgba(255,255,255,0.08)" }}>
+        <div className="cms-account" style={{ padding: 16, borderTop: "1px solid rgba(255,255,255,0.08)" }}>
           <div style={{ color: "#fff", fontSize: 13, fontWeight: 700 }}>{session.email}</div>
           <div style={{ fontSize: 12, color: "#B8C4CA", marginTop: 2 }}>{session.role}</div>
           <div style={{ display: "flex", gap: 12, marginTop: 10 }}>
@@ -84,28 +99,16 @@ export function AdminSidebar({
         </div>
       </aside>
 
-      <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column" }}>
-        <div style={{ background: "#fff", borderBottom: "1px solid #EAEAEA", padding: "14px 24px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16 }}>
-          <form
-            action="/admin/leads"
-            style={{ flex: 1, maxWidth: 420 }}
-            onSubmit={(event) => {
-              if (!query.trim()) event.preventDefault();
-            }}
-          >
-            <input
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              name="q"
-              placeholder="Search leads by name or email…"
-              style={{ width: "100%", height: 38, padding: "0 14px", border: "1px solid #CFDAE6", borderRadius: 4, fontSize: 13, color: "#555" }}
-            />
-          </form>
-          <Link href="/api/admin/leads/export" className="btn secondary" style={{ height: 38, fontSize: 13, display: "inline-flex", alignItems: "center", padding: "0 16px" }}>
-            Export CSV
-          </Link>
+      <div className="cms-main" style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column" }}>
+        <div className="cms-toolbar" style={{ background: "#fff", borderBottom: "1px solid #EAEAEA", padding: "14px 24px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16 }}>
+          <nav aria-label="CMS breadcrumb" className="cms-breadcrumb">
+            {pathname === "/admin" ? <span aria-current="page">Dashboard</span> : <>
+              <Link href="/admin">Dashboard</Link><span aria-hidden="true">/</span>
+              {nested ? <><Link href={currentSection.href}>{currentSection.label}</Link><span aria-hidden="true">/</span><span aria-current="page">{nestedLabel}</span></> : <span aria-current="page">{currentSection.label}</span>}
+            </>}
+          </nav>
         </div>
-        <div style={{ flex: 1 }}>{children}</div>
+        <div className="cms-content" style={{ flex: 1 }}>{children}</div>
       </div>
     </div>
   );

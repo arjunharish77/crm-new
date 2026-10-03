@@ -13,6 +13,7 @@ import { processDueScheduledScoringRetraining, recomputeSelfLearningScoresForTen
 import { createUserNotification } from "@/lib/server/notifications";
 import { processDueNextBestActionRefresh } from "@/lib/server/next-best-action";
 import { processDueJourneyEnrollmentRefresh, alertDegradedJourneys } from "@/lib/server/marketing-journeys";
+import { processDueCampaignLaunches } from "@/lib/server/marketing-communications";
 import { runScheduledDataQualityScan } from "@/lib/server/inbuilt-reports";
 import { processWebhookOutbox } from "@/lib/server/webhook-outbox";
 import { processAppEventDeliveries } from "@/lib/server/marketplace-events";
@@ -21,7 +22,12 @@ import { expireCallRecordings } from "@/lib/server/call-recordings";
 import { processDueDataRetentionEnforcement } from "@/lib/server/retention";
 import { processDueSuppressionExpiry } from "@/lib/server/communications";
 import { processApplicationDocumentReminders } from "@/lib/repositories/applications-postgres";
+import { purgeArchivedAutomations } from "@/lib/repositories/automations-postgres";
+import { purgeArchivedForms } from "@/lib/repositories/forms-postgres";
+import { purgeArchivedItems } from "@/lib/server/archive-items";
 import { processCaseSlaEscalations, alertStaleUnassignedCases } from "@/lib/repositories/cases-postgres";
+import { processModuleTrials } from "@/lib/server/module-entitlements";
+import { processModuleHealth } from "@/lib/server/module-health";
 import { computeDueMetricGrainSnapshots } from "@/lib/server/metrics";
 import { dispatchCaseSurveys } from "@/lib/repositories/case-survey-postgres";
 import { refreshCaseAnalyticsSnapshots } from "@/lib/server/inbuilt-reports";
@@ -66,14 +72,20 @@ const operationalJobs = [
   { name: "automation.processDue", processor: () => processDueAutomationJobs(50) },
   { name: "tasks.processOverdue", processor: () => processOverdueTaskAutomations() },
   { name: "journeys.processEnrollmentRefresh", processor: () => processDueJourneyEnrollmentRefresh() },
+  { name: "marketing.continueCampaignLaunches", processor: () => processDueCampaignLaunches() },
   { name: "journeys.alertDegraded", processor: () => alertDegradedJourneys(100) },
   { name: "dataQuality.processScheduledScan", processor: () => runScheduledDataQualityScan(25) },
   { name: "marketplace.processAppDeliveries", processor: () => processAppEventDeliveries(25) },
   { name: "marketplace.processAppSyncs", processor: () => processDueAppSyncs(25) },
   { name: "telephony.expireRecordings", processor: () => expireCallRecordings(100) },
   { name: "retention.enforce", processor: () => processDueDataRetentionEnforcement(25) },
+  // Decision 31: archived automations, forms, views, reports, rules and templates are kept for 30
+  // days, then removed.
+  { name: "archive.purge", processor: async () => ({ automations: await purgeArchivedAutomations(200), forms: await purgeArchivedForms(200), ...(await purgeArchivedItems(200)) }) },
   { name: "communications.processSuppressionExpiry", processor: () => processDueSuppressionExpiry(100) },
   { name: "cases.processSlaEscalations", processor: () => processCaseSlaEscalations(200) },
+  { name: "modules.processTrials", processor: () => processModuleTrials() },
+  { name: "modules.processHealth", processor: () => processModuleHealth(20) },
   { name: "cases.dispatchSurveys", processor: () => dispatchCaseSurveys(100) },
   { name: "cases.refreshAnalyticsSnapshots", processor: () => refreshCaseAnalyticsSnapshots(50) },
   { name: "cases.alertStaleUnassigned", processor: () => alertStaleUnassignedCases(24, 100) },

@@ -26,7 +26,10 @@ export async function GET(request: Request) {
     // "me" resolves to the caller's own id so a user can request their own activity without
     // needing to already know their own userId -- used by the new "My Activity" rollup view.
     const userIdParam = searchParams.get("userId") ?? undefined;
-    const userId = userIdParam === "me" ? user.id : userIdParam;
+    // The workspace audit log is for admins. Everyone else sees only their own entries (My
+    // account › My activity), whatever userId they ask for -- it used to return every entry.
+    const isAdmin = !!(user.isTenantAdmin || user.isPlatformAdmin);
+    const userId = !isAdmin ? user.id : userIdParam === "me" ? user.id : userIdParam;
     const logs = await listAuditLogsForTenant(user, {
       entityType: entityTypes ? undefined : entityType,
       entityTypes,

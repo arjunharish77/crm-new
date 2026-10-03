@@ -7,6 +7,7 @@ import { StandardDialog } from "@/components/common/standard-dialog";
 import { LeadForm } from "./lead-form";
 import { ContextualFormsPanel } from "@/components/forms/contextual-forms-panel";
 import { Lead } from "@/types/leads";
+import { Slot } from "@radix-ui/react-slot";
 
 interface CreateLeadDialogProps {
     onSuccess: () => void;
@@ -30,18 +31,20 @@ export function CreateLeadDialog({ onSuccess, trigger, open: controlledOpen, onO
     return (
         <>
             {trigger ? (
-                <div onClick={handleOpen}>{trigger}</div>
+                // Slot, not a wrapping <div onClick>: the trigger keeps its own button semantics and
+                // keyboard behaviour (UI/UX plan gap check D6).
+                <Slot onClick={handleOpen}>{trigger}</Slot>
             ) : (
                 <Button onClick={handleOpen}>
                     <Plus />
-                    Add Lead
+                    Create lead
                 </Button>
             )}
 
             <StandardDialog
                 open={open}
                 onClose={handleClose}
-                title="Create New Lead"
+                title="Create lead"
                 subtitle="Add a new prospect to your CRM"
                 icon={<UserPlus className="size-5" />}
             >

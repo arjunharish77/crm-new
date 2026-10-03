@@ -49,6 +49,9 @@ function zonedStartOfDay(reference: Date, timeZone: string): Date {
 const RELATIVE_DATE_LABELS: Record<string, string> = {
   "@today": "Today",
   "@yesterday": "Yesterday",
+  "@tomorrow": "Tomorrow",
+  "@this_week": "This week",
+  "@next_7_days": "Next 7 days",
   "@last_7_days": "Last 7 days",
   "@last_30_days": "Last 30 days",
   "@this_month": "This month",
@@ -76,6 +79,19 @@ export function resolveRelativeDateRange(
   if (token === "@yesterday") {
     const start = new Date(todayStart.getTime() - MS_PER_DAY);
     return { start: start.toISOString(), end: todayStart.toISOString() };
+  }
+  if (token === "@tomorrow") {
+    const start = new Date(todayStart.getTime() + MS_PER_DAY);
+    return { start: start.toISOString(), end: new Date(start.getTime() + MS_PER_DAY).toISOString() };
+  }
+  if (token === "@this_week") {
+    // Monday to Sunday, in the workspace's time zone.
+    const weekday = new Date(Date.UTC(year, month - 1, zonedYearMonthDay(now, timeZone).day)).getUTCDay();
+    const start = new Date(todayStart.getTime() - ((weekday + 6) % 7) * MS_PER_DAY);
+    return { start: start.toISOString(), end: new Date(start.getTime() + 7 * MS_PER_DAY).toISOString() };
+  }
+  if (token === "@next_7_days") {
+    return { start: todayStart.toISOString(), end: new Date(todayStart.getTime() + 8 * MS_PER_DAY).toISOString() };
   }
   if (token === "@last_7_days") {
     const start = new Date(todayStart.getTime() - 7 * MS_PER_DAY);
@@ -124,6 +140,12 @@ function resolveDateRangeForValue(value: unknown, timeZone: string): { start: st
   return { start: start.toISOString(), end: new Date(start.getTime() + MS_PER_DAY).toISOString() };
 }
 
+// "Contains 50%" or "starts with a_b" means those characters, not LIKE wildcards (backslash is
+// Postgres's default LIKE escape).
+export function escapeLike(value: string) {
+  return value.replace(/[\\%_]/g, (match) => `\\${match}`);
+}
+
 function pushClause(clauses: string[], values: unknown[], sql: string, ...args: unknown[]) {
   const placeholders = args.map((arg) => {
     values.push(arg);
@@ -145,8 +167,9 @@ export function applyFilterCondition(
   rawValue: unknown,
   kind: FilterValueKind = "text",
   timeZone: string = DEFAULT_SERVER_TIME_ZONE,
+  expression?: string,
 ) {
-  const quoted = `"${column}"`;
+  const quoted = expression ?? `"${column}"`;
   const op = operator ?? "equals";
 
   if (op === "is_empty") {
@@ -189,18 +212,23 @@ export function applyFilterCondition(
   } else if (op === "not_equals") {
     if (Array.isArray(rawValue)) pushClause(clauses, values, `${quoted}::text <> all(?::text[])`, rawValue.map(String));
     else pushClause(clauses, values, `${quoted} <> ?`, rawValue);
+  } else if (op === "not_equals_or_empty") {
+    // "Isn't X" including records with no value -- e.g. a Smart View's "owner: someone else",
+    // which must also list unowned records.
+    if (Array.isArray(rawValue)) pushClause(clauses, values, `(${quoted} is null or ${quoted}::text <> all(?::text[]))`, rawValue.map(String));
+    else pushClause(clauses, values, `(${quoted} is null or ${quoted}::text <> ?)`, String(rawValue ?? ""));
   } else if ((op === "in") && Array.isArray(rawValue)) {
     pushClause(clauses, values, `${quoted}::text = any(?::text[])`, rawValue.map(String));
   } else if ((op === "not_in") && Array.isArray(rawValue)) {
     pushClause(clauses, values, `${quoted}::text <> all(?::text[])`, rawValue.map(String));
   } else if (op === "contains" && typeof rawValue === "string") {
-    pushClause(clauses, values, `${quoted} ilike ?`, `%${rawValue}%`);
+    pushClause(clauses, values, `${quoted} ilike ?`, `%${escapeLike(rawValue)}%`);
   } else if (op === "not_contains" && typeof rawValue === "string") {
-    pushClause(clauses, values, `${quoted} not ilike ?`, `%${rawValue}%`);
+    pushClause(clauses, values, `${quoted} not ilike ?`, `%${escapeLike(rawValue)}%`);
   } else if (op === "starts_with" && typeof rawValue === "string") {
-    pushClause(clauses, values, `${quoted} ilike ?`, `${rawValue}%`);
+    pushClause(clauses, values, `${quoted} ilike ?`, `${escapeLike(rawValue)}%`);
   } else if (op === "ends_with" && typeof rawValue === "string") {
-    pushClause(clauses, values, `${quoted} ilike ?`, `%${rawValue}`);
+    pushClause(clauses, values, `${quoted} ilike ?`, `%${escapeLike(rawValue)}`);
   } else if (op === "greater_than") {
     pushClause(clauses, values, `${quoted} > ?`, rawValue);
   } else if (op === "less_than") {
@@ -213,6 +241,33 @@ export function applyFilterCondition(
 }
 
 type ConditionLike = { field?: string; operator?: string; value?: unknown };
+
+// buildGroupedFilterClause skips a condition it can't apply (unknown field, operator or value),
+// which widens the result. Callers that must not show a widened result as the answer (Smart
+// Views) check first and get this error naming the condition instead.
+export class UnsupportedFilterError extends Error {
+  constructor(public field: string, public operator: string) {
+    super("FILTER_UNSUPPORTED");
+  }
+}
+
+export function assertFilterGroupsSupported(
+  groups: unknown,
+  columnMap: Map<string, FilterColumnEntry>,
+  timeZone: string = DEFAULT_SERVER_TIME_ZONE,
+) {
+  for (const group of normalizeFilterGroups(groups)) {
+    const conditions: ConditionLike[] =
+      "conditions" in group && Array.isArray((group as any).conditions) ? (group as any).conditions : [group as ConditionLike];
+    for (const condition of conditions) {
+      if (!condition?.field) continue;
+      const entry = columnMap.get(condition.field);
+      const probe: string[] = [];
+      if (entry) applyFilterCondition(probe, [], entry.column, condition.operator, condition.value, entry.kind, timeZone, entry.subquery ? undefined : entry.expression);
+      if (!entry || probe.length === 0) throw new UnsupportedFilterError(condition.field, String(condition.operator ?? "equals"));
+    }
+  }
+}
 type GroupLike = ConditionLike | { logic?: "AND" | "OR"; conditions?: ConditionLike[] };
 
 // WP09 (F12): a field whose real data doesn't live on the table being filtered (predictive
@@ -229,12 +284,25 @@ type GroupLike = ConditionLike | { logic?: "AND" | "OR"; conditions?: ConditionL
 export type FilterColumnEntry = {
   column: string;
   kind: FilterValueKind;
+  // A fixed SQL expression from code (never user input) used instead of the quoted column,
+  // e.g. the lead status category (UI/UX plan decision 6).
+  expression?: string;
   subquery?: {
     table: string; // already-quoted, e.g. `"RecordScore"`
     matchColumn: string; // already-quoted, e.g. `"recordId"`
     recordType: string; // fixed literal for this columnMap (e.g. "LEAD"), not user input
   };
 };
+
+// A single `{ logic, conditions }` group (or a single bare condition) is one group, not "no
+// filter". Callers that sent one object instead of an array -- e.g. the lead/opportunity
+// timelines asking for `leadId equals X` -- used to have the filter silently dropped, which
+// returned every activity in the tenant instead of the record's own (fail-open).
+export function normalizeFilterGroups(groups: unknown): GroupLike[] {
+  if (Array.isArray(groups)) return groups as GroupLike[];
+  if (groups && typeof groups === "object") return [groups as GroupLike];
+  return [];
+}
 
 // Real bug found and fixed while unifying the three modules' filter builders: every module's own
 // buildWhere-style function flattened EVERY group's conditions and joined them ALL with a single
@@ -255,7 +323,7 @@ export function buildGroupedFilterClause(
   timeZone: string = DEFAULT_SERVER_TIME_ZONE,
   subqueryTenantId?: string | null,
 ) {
-  for (const group of Array.isArray(groups) ? groups : []) {
+  for (const group of normalizeFilterGroups(groups)) {
     const conditions: ConditionLike[] =
       "conditions" in group && Array.isArray((group as any).conditions) ? (group as any).conditions : [group as ConditionLike];
     const logic = "logic" in group && (group as any).logic === "OR" ? "OR" : "AND";
@@ -279,7 +347,7 @@ export function buildGroupedFilterClause(
         groupClauses.push(`id in (select ${entry.subquery.matchColumn} from ${entry.subquery.table} where ${innerClauses.join(" and ")})`);
         continue;
       }
-      applyFilterCondition(groupClauses, values, entry.column, condition.operator, condition.value, entry.kind, timeZone);
+      applyFilterCondition(groupClauses, values, entry.column, condition.operator, condition.value, entry.kind, timeZone, entry.expression);
     }
     if (groupClauses.length === 0) continue;
     clauses.push(groupClauses.length === 1 ? groupClauses[0] : `(${groupClauses.join(` ${logic} `)})`);

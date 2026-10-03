@@ -21,6 +21,8 @@ export async function POST(
     if (error instanceof Error && error.message.startsWith("FEATURE_DISABLED")) {
       return badRequest("Automations is not enabled for this workspace");
     }
+    if (error instanceof Error && error.message === "AUTOMATION_ARCHIVED") return badRequest("This automation is archived. Restore it to test it.");
+    if (error instanceof Error && error.message === "AUTOMATION_NOT_FOUND") return badRequest("Automation not found");
     return serverError("Failed to test automation", error);
   }
 }

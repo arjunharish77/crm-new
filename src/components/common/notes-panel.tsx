@@ -14,6 +14,7 @@ import { formatWorkspaceRelativeTime, parseWorkspaceDate } from '@/lib/date-form
 import { useRetainedEditorDraft } from '@/providers/editor-draft-provider';
 import { useEditorDismissGuard } from '@/hooks/use-editor-dismiss-guard';
 import { cn } from '@/lib/utils';
+import { useConfirm } from "@/components/common/dialogs-provider";
 
 interface NoteAuthor {
     id: string;
@@ -37,6 +38,7 @@ interface NotesPanelProps {
 }
 
 export function NotesPanel({ entityType, entityId, currentUserId }: NotesPanelProps) {
+    const confirmAction = useConfirm();
     const [notes, setNotes] = useState<Note[]>([]);
     const [loading, setLoading] = useState(true);
     const newDraft = useRetainedEditorDraft(`notes:new:${entityType}:${entityId}`);
@@ -66,17 +68,29 @@ export function NotesPanel({ entityType, entityId, currentUserId }: NotesPanelPr
     const setActionError = (error: string) => editDraft.update({ error });
     useEditorDismissGuard(!!content.trim(), submitting);
     const canDismissEdit = useEditorDismissGuard(!!editingNote && editContent !== editingNote.content, !!editingNote && pendingAction);
+    // Load once per record (and per Retry). Every action already updates `notes` locally, so a
+    // finished add/edit/delete must not clear and reload the list (UI/UX plan B10: flicker, lost
+    // scroll and focus). The load still waits while a retained save is pending, so a panel that
+    // remounts mid-save loads once that save has settled.
+    const loadedKey = useRef<string | null>(null);
     useEffect(() => {
-        if (submitting || pendingAction) return;
+        const key = `${entityType}:${entityId}:${attempt}`;
+        if (submitting || pendingAction || loadedKey.current === key) return;
+        loadedKey.current = key;
         const controller = new AbortController();
+        let settled = false;
         setLoading(true);
         setLoadError(false);
         setNotes([]);
         apiFetch<Note[]>(`/notes?entityType=${entityType}&entityId=${entityId}`, { signal: controller.signal })
             .then(data => { if (!controller.signal.aborted) setNotes(Array.isArray(data) ? data : []); })
             .catch(() => { if (!controller.signal.aborted) setLoadError(true); })
-            .finally(() => { if (!controller.signal.aborted) setLoading(false); });
-        return () => controller.abort();
+            .finally(() => { settled = true; if (!controller.signal.aborted) setLoading(false); });
+        return () => {
+            // Interrupted before it finished: let the next run load again.
+            if (!settled && loadedKey.current === key) loadedKey.current = null;
+            controller.abort();
+        };
     }, [entityId, entityType, attempt, submitting, pendingAction]);
 
     const handleSubmit = async (e: React.FormEvent) => {
@@ -123,7 +137,9 @@ export function NotesPanel({ entityType, entityId, currentUserId }: NotesPanelPr
     };
 
     const handleDelete = async (noteId: string) => {
-        if (actionRef.current || submittingRef.current || !confirm('Delete this note?')) return;
+        if (actionRef.current || submittingRef.current) return;
+        if (!(await confirmAction({ title: 'Delete note?', description: 'This note will be deleted.', confirmLabel: 'Delete note', destructive: true }))) return;
+        if (actionRef.current || submittingRef.current) return;
         actionRef.current = true;
         setPendingAction(true);
         setActionError('');
@@ -177,7 +193,7 @@ export function NotesPanel({ entityType, entityId, currentUserId }: NotesPanelPr
                 <span className="text-base font-bold">
                     Notes
                 </span>
-                <Badge variant="secondary" className="h-[18px] rounded-md text-[0.7rem]">
+                <Badge variant="secondary" className="h-[18px] rounded-md text-xs">
                     {notes.length}
                 </Badge>
             </div>
@@ -185,7 +201,7 @@ export function NotesPanel({ entityType, entityId, currentUserId }: NotesPanelPr
             {/* Compose */}
             <form
                 onSubmit={handleSubmit}
-                className="overflow-hidden rounded-[10px] border transition-[box-shadow,border-color] focus-within:border-primary focus-within:ring-3 focus-within:ring-primary/10"
+                className="overflow-hidden rounded-xl border transition-[box-shadow,border-color] focus-within:border-primary focus-within:ring-3 focus-within:ring-primary/10"
             >
                 <Textarea
                     ref={textRef}
@@ -196,8 +212,8 @@ export function NotesPanel({ entityType, entityId, currentUserId }: NotesPanelPr
                     className="min-h-16 resize-none rounded-none border-0 bg-transparent shadow-none focus-visible:ring-0"
                 />
                 <div className="flex flex-wrap justify-end gap-2 border-t bg-muted/40 px-2 py-1.5">
-                    {!!content.trim() && <Button type="button" variant="ghost" size="sm" disabled={submitting || pendingAction} onClick={() => {
-                        if (window.confirm("Discard this unsaved note?")) { setContent(''); setSaveError(''); }
+                    {!!content.trim() && <Button type="button" variant="ghost" size="sm" disabled={submitting || pendingAction} onClick={async () => {
+                        if (await confirmAction({ title: "Discard note?", description: "Your unsaved note will be lost.", confirmLabel: "Discard", destructive: true })) { setContent(''); setSaveError(''); }
                     }}>Discard note draft</Button>}
                     <Button
                         type="submit"
@@ -230,12 +246,12 @@ export function NotesPanel({ entityType, entityId, currentUserId }: NotesPanelPr
                         <div
                             key={note.id}
                             className={cn(
-                                "rounded-[10px] border p-3 transition-colors",
+                                "rounded-xl border p-3 transition-colors",
                                 note.isPinned ? "border-amber-500 bg-amber-500/[0.04]" : "border-border bg-card"
                             )}
                         >
                             <div className="flex items-start gap-3">
-                                <Avatar className="size-7 shrink-0 text-[0.72rem]">
+                                <Avatar className="size-7 shrink-0 text-xs">
                                     <AvatarFallback>{note.author.name[0].toUpperCase()}</AvatarFallback>
                                 </Avatar>
                                 <div className="min-w-0 flex-1">
@@ -245,7 +261,7 @@ export function NotesPanel({ entityType, entityId, currentUserId }: NotesPanelPr
                                                 {note.author.name}
                                             </span>
                                             {note.isPinned && (
-                                                <Badge className="h-4 gap-0.5 rounded-[5px] bg-amber-500 text-[0.6rem] text-black hover:bg-amber-500">
+                                                <Badge className="h-4 gap-0.5 rounded-md bg-amber-500 text-xs text-black hover:bg-amber-500">
                                                     <Pin className="size-2.5" />
                                                     Pinned
                                                 </Badge>

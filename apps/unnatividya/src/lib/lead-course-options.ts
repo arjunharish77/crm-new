@@ -1,4 +1,5 @@
-import { courses, courseWithUniversity } from "@/data/catalog";
+import type { CatalogReader } from "@/lib/catalog-snapshot";
+
 import { courseLabel } from "@/lib/programmatic-seo";
 
 export type LeadCourseOption = {
@@ -13,7 +14,8 @@ const STREAM_ORDER = ["Management", "IT & Computers", "Commerce", "Arts & Humani
 // carrying the specific university+course-id options that actually offer it -- used by the lead
 // wizard's course selector so picking a type-only lead (no specific university narrowed down
 // yet) is still possible, while picking both resolves to one exact catalog course id.
-export function leadCourseOptions(): LeadCourseOption[] {
+export function leadCourseOptions(catalog: CatalogReader): LeadCourseOption[] {
+  const { courses, courseWithUniversity } = catalog;
   const byLabel = new Map<string, LeadCourseOption>();
   for (const course of courses) {
     const label = courseLabel(course.name);

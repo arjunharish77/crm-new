@@ -1,7 +1,7 @@
+import { getPublishedCatalog } from "@/lib/catalog-snapshot-server";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { query } from "@/lib/db";
-import { courses } from "@/data/catalog";
 
 export const metadata: Metadata = {
   title: "CMS Dashboard",
@@ -29,28 +29,30 @@ function pctDelta(current: number, previous: number) {
 }
 
 export default async function AdminDashboardPage() {
+  const catalog = await getPublishedCatalog();
+  const { courses } = catalog;
   const [weekly, verification, crm, recent, byProgram, contentQuality] = await Promise.all([
     query<{ this_week: string; prior_week: string }>(
       `select
          count(*) filter (where created_at >= now() - interval '7 days')::text as this_week,
          count(*) filter (where created_at >= now() - interval '14 days' and created_at < now() - interval '7 days')::text as prior_week
        from lead_capture`,
-    ).catch(() => null),
+    ),
     query<{ verified: string; total: string }>(
       `select count(*) filter (where email_otp_verified)::text as verified, count(*)::text as total from lead_capture`,
-    ).catch(() => null),
+    ),
     query<{ synced: string; total: string }>(
       `select count(*) filter (where crm_sync_status = 'SUCCESS')::text as synced, count(*)::text as total from lead_capture`,
-    ).catch(() => null),
+    ),
     query<LeadRow>(
       `select id, name, email, course_id, email_otp_verified, crm_sync_status, created_at
-       from lead_capture order by created_at desc limit 6`,
-    ).catch(() => ({ rows: [] as LeadRow[] })),
+       from lead_capture order by created_at desc, id desc limit 6`,
+    ),
     query<CourseCountRow>(
       `select course_id, count(*)::text as count from lead_capture
-       where course_id is not null group by course_id order by count(*) desc limit 6`,
-    ).catch(() => ({ rows: [] as CourseCountRow[] })),
-    query<{ total: string; published: string }>(`select count(*)::text as total, count(*) filter (where is_published)::text as published from course`).catch(() => null),
+       where course_id is not null group by course_id order by count(*) desc, course_id limit 6`,
+    ),
+    query<{ total: string; published: string }>(`select count(*)::text as total, count(*) filter (where is_published)::text as published from course`),
   ]);
 
   const thisWeek = Number(weekly?.rows[0]?.this_week || 0);
@@ -66,76 +68,76 @@ export default async function AdminDashboardPage() {
   const maxProgramCount = Math.max(1, ...byProgram.rows.map((row) => Number(row.count)));
 
   return (
-    <section className="admin-shell">
+    <section className="admin-shell admin-dashboard">
       <div className="container">
         <div className="admin-page-head">
           <div>
             <span className="eyebrow">CMS</span>
             <h1>Dashboard</h1>
-            <p>Real counts from the live database — no demo numbers.</p>
+            <p>Review recent enquiries, delivery status and published content.</p>
           </div>
         </div>
 
+        <nav className="dashboard-shortcuts" aria-label="Dashboard shortcuts">
+          <Link className="btn primary" href="/admin/leads">Open lead inbox</Link>
+          <Link className="btn secondary" href="/admin/content-quality">Review content checks</Link>
+          <Link className="btn ghost" href="/admin/catalog-revisions">Review revisions</Link>
+        </nav>
         <div className="admin-grid">
           <article className="card admin-tile">
-            <span className="admin-tag">Leads this week</span>
+            <span className="admin-tag">Leads in the last 7 days</span>
             <h2>{thisWeek}</h2>
             <p>{pctDelta(thisWeek, priorWeek)} vs the previous 7 days ({priorWeek})</p>
           </article>
           <article className="card admin-tile">
-            <span className="admin-tag">Email OTP verified</span>
+            <span className="admin-tag">Email verified · all time</span>
             <h2>{verified}</h2>
             <p>{totalLeads ? Math.round((verified / totalLeads) * 100) : 0}% of {totalLeads} total leads</p>
           </article>
           <article className="card admin-tile">
-            <span className="admin-tag">CRM synced</span>
+            <span className="admin-tag">CRM synced · all time</span>
             <h2>{synced}</h2>
-            <p>{crmTotal ? Math.round((synced / crmTotal) * 100) : 0}% of leads pushed successfully</p>
+            <p>{crmTotal ? Math.round((synced / crmTotal) * 100) : 0}% of {crmTotal} total leads delivered successfully</p>
           </article>
           <article className="card admin-tile">
-            <span className="admin-tag">Content readiness</span>
+            <span className="admin-tag">Course publication</span>
             <h2>{publishedCourses}/{totalCourses}</h2>
-            <p>course pages published — <Link href="/admin/content-quality" className="text-link" style={{ marginTop: 0 }}>full breakdown</Link></p>
+            <p>records have their published flag enabled — <Link href="/admin/content-quality" className="text-link" style={{ marginTop: 0 }}>full breakdown</Link></p>
           </article>
         </div>
 
-        <div style={{ display: "grid", gridTemplateColumns: "1.4fr 1fr", gap: 20, marginTop: 24 }} className="grid-mobile-stack">
+        <div className="dashboard-sections">
           <section className="admin-table-card">
             <div className="admin-table-head">
               <h2>Recent leads</h2>
               <Link href="/admin/leads" className="text-link" style={{ marginTop: 0 }}>View all →</Link>
             </div>
-            <table className="admin-table">
-              <thead>
-                <tr>{["Name", "Interest", "Verified", "CRM", "Created"].map((head) => <th key={head}>{head}</th>)}</tr>
-              </thead>
-              <tbody>
-                {recent.rows.map((lead) => (
-                  <tr key={lead.id}>
-                    <td><Link href={`/admin/leads/${lead.id}`} className="text-link" style={{ marginTop: 0 }}>{lead.name}</Link></td>
-                    <td>{lead.course_id ? nameById.get(lead.course_id) || lead.course_id : "—"}</td>
-                    <td><span className={lead.email_otp_verified ? "admin-status good" : "admin-status"}>{lead.email_otp_verified ? "Verified" : "Pending"}</span></td>
-                    <td><span className="admin-status">{lead.crm_sync_status}</span></td>
-                    <td>{new Date(lead.created_at).toLocaleDateString("en-IN")}</td>
-                  </tr>
-                ))}
-                {!recent.rows.length ? <tr><td colSpan={5}>No leads captured yet.</td></tr> : null}
-              </tbody>
-            </table>
+            <div className="dashboard-leads">
+              {recent.rows.map(lead => <article key={lead.id} className="dashboard-lead">
+                <h3><Link href={`/admin/leads/${encodeURIComponent(lead.id)}`}>{lead.name}</Link></h3>
+                <dl>
+                  <div><dt>Program interest</dt><dd>{lead.course_id ? `${nameById.get(lead.course_id) || "Program"} (${lead.course_id})` : "Not selected yet"}</dd></div>
+                  <div><dt>Email verification</dt><dd>{lead.email_otp_verified ? "Verified" : "Pending"}</dd></div>
+                  <div><dt>CRM delivery</dt><dd>{lead.crm_sync_status}</dd></div>
+                  <div><dt>Captured (India time)</dt><dd>{new Date(lead.created_at).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })}</dd></div>
+                </dl>
+              </article>)}
+              {!recent.rows.length && <p>No enquiries captured yet. New enquiries appear here after contact details are saved.</p>}
+            </div>
           </section>
 
           <section className="admin-table-card">
             <div className="admin-table-head">
-              <h2>Leads by program</h2>
+              <h2>Top program interests</h2>
             </div>
-            <div style={{ padding: "4px 20px 20px", display: "flex", flexDirection: "column", gap: 10 }}>
+            <div className="dashboard-programs"><p className="admin-muted">All-time leads with a program selected; up to six programs shown. Leads without a selection are excluded.</p>
               {byProgram.rows.map((row) => (
                 <div key={row.course_id}>
-                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, color: "#363634", marginBottom: 4 }}>
-                    <span>{nameById.get(row.course_id) || row.course_id}</span>
+                  <div className="dashboard-program-label">
+                    <span>{nameById.get(row.course_id) || "Program"}<small>{row.course_id}</small></span>
                     <b>{row.count}</b>
                   </div>
-                  <div style={{ height: 6, borderRadius: 999, background: "#F0F0F0" }}>
+                  <div aria-hidden="true" style={{ height: 6, borderRadius: 999, background: "#F0F0F0" }}>
                     <div style={{ height: 6, borderRadius: 999, background: "#544CC8", width: `${(Number(row.count) / maxProgramCount) * 100}%` }} />
                   </div>
                 </div>

@@ -29,6 +29,8 @@ import { OPERATORS_BY_TYPE, type FilterField, type FilterFieldType, type FilterO
 import { formatWorkspaceDateInput, workspaceDateInputToIso } from '@/lib/date-format';
 import { RELATIVE_DATE_TOKENS } from '@/lib/query-filters';
 import { useDebouncedValue } from '@/hooks/use-debounced-value';
+import { useAskText } from "@/components/common/dialogs-provider";
+import { storageGet, storageSet } from "@/lib/storage";
 
 export interface FilterCondition {
     id: string;
@@ -60,7 +62,7 @@ function emptyGroups(): FilterGroup[] {
 function loadPresets(storageKey?: string): SavedFilterPreset[] {
     if (!storageKey || typeof window === 'undefined') return [];
     try {
-        const raw = window.localStorage.getItem(`advanced-filters.${storageKey}`);
+        const raw = storageGet(`advanced-filters.${storageKey}`);
         const parsed = raw ? JSON.parse(raw) : [];
         return Array.isArray(parsed) ? parsed : [];
     } catch {
@@ -70,7 +72,7 @@ function loadPresets(storageKey?: string): SavedFilterPreset[] {
 
 function savePresets(storageKey: string, presets: SavedFilterPreset[]) {
     try {
-        window.localStorage.setItem(`advanced-filters.${storageKey}`, JSON.stringify(presets));
+        storageSet(`advanced-filters.${storageKey}`, JSON.stringify(presets));
     } catch {
         // Private browsing / storage disabled -- the preset just doesn't persist this session.
     }
@@ -96,6 +98,7 @@ interface AdvancedFilterDrawerProps {
 }
 
 export function AdvancedFilterDrawer({ open, onClose, fields, onApply, initialGroups, storageKey, previewCount }: AdvancedFilterDrawerProps) {
+    const askText = useAskText();
     const [groups, setGroups] = useState<FilterGroup[]>(initialGroups?.length ? initialGroups : emptyGroups());
     const [presets, setPresets] = useState<SavedFilterPreset[]>([]);
     const [preview, setPreview] = useState<{ status: 'idle' | 'loading' | 'ready' | 'error'; count: number | null }>({ status: 'idle', count: null });
@@ -158,11 +161,11 @@ export function AdvancedFilterDrawer({ open, onClose, fields, onApply, initialGr
     const resetForField = (fieldKey: string) => ({ field: fieldKey, operator: operatorsFor(fieldKey)[0]?.value || 'equals', value: '' });
     const valueArray = (value: unknown) => Array.isArray(value) ? value.map(String) : value ? [String(value)] : [];
 
-    const savePresetAsNew = () => {
+    const savePresetAsNew = async () => {
         if (!storageKey) return;
-        const name = window.prompt('Name this saved filter:');
-        if (!name?.trim()) return;
-        const next = [...presets.filter((p) => p.name !== name.trim()), { name: name.trim(), groups }];
+        const name = await askText({ title: "Save filter", label: "Filter name", confirmLabel: "Save", singleLine: true, required: true });
+        if (!name) return;
+        const next = [...presets.filter((p) => p.name !== name), { name, groups }];
         setPresets(next);
         savePresets(storageKey, next);
     };
@@ -326,7 +329,7 @@ export function AdvancedFilterDrawer({ open, onClose, fields, onApply, initialGr
                                     </button>
                                 </span>
                             ))}
-                            <Button variant="ghost" size="sm" className="ml-auto h-6 px-2 text-xs" onClick={savePresetAsNew}>Save current as...</Button>
+                            <Button variant="ghost" size="sm" className="ml-auto h-6 px-2 text-xs" onClick={savePresetAsNew}>Save filter…</Button>
                         </div>
                     )}
 

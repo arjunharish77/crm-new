@@ -5,14 +5,16 @@ import { writePrivateFile, readPrivateFile, deletePrivateFile } from "@/lib/stor
 import { enqueueExportJob } from "@/lib/server/job-queue";
 import { getCurrentUserById } from "@/lib/repositories/auth-admin-postgres";
 import { createAuditLog, exportCustomReportForTenant, exportFormSubmissionsForTenant } from "@/lib/server/crm";
+import { customReportVisibilityClause } from "@/lib/repositories/reports-dashboards-postgres";
+import { archiveItemForTenant } from "@/lib/server/archive-items";
 import { generateCycleFinanceCsv } from "@/lib/server/partner-invoices";
 import * as inbuiltReports from "@/lib/server/inbuilt-reports";
-import { formatExportDateValue, formatTenantDate, getTenantTimeZone } from "@/lib/server/date-format";
+import { formatExportDateValue, formatTenantDate, getTenantTimeZone, getTenantTodayRange } from "@/lib/server/date-format";
 import { DatabaseError } from "@/lib/db/errors";
 import { checkRateLimitWithAlert, RateLimitExceededError } from "@/lib/server/rate-limit";
 import { assertAccountActiveForDownload } from "@/lib/server/file-download-guards";
 import { generateSignedDownloadToken, verifySignedDownloadToken } from "@/lib/server/signed-urls";
-import { applyRecordScopeClause } from "@/lib/server/record-scope";
+import { applyRecordScopeClause, applyTaskScopeClause } from "@/lib/server/record-scope";
 import { fieldPermissionMap } from "@/lib/server/field-permissions";
 
 // F03 fix (WP04): the export query results use friendly column headers ("Email", "Phone")
@@ -461,6 +463,8 @@ async function fetchExportRows(user: TenantUser, moduleName: ExportModuleName, f
 
   if (moduleName === "TASKS") {
     const clauses = [tenantClause(user, values, "t")];
+    // Own / Team / All, the same rule as the Tasks list (it was Own-or-everything here too).
+    applyTaskScopeClause(clauses, values, user, user.tenantId ? values.length : null, "t");
     applySelectedExportIds(clauses, values, filters, "t");
     for (const [field, column] of [
       ["status", "status"],
@@ -482,11 +486,9 @@ async function fetchExportRows(user: TenantUser, moduleName: ExportModuleName, f
       values.push(now.toISOString());
       clauses.push(`t."dueAt" < $${values.length} and t.status not in ('COMPLETED', 'CANCELLED')`);
     } else if (due === "today") {
-      const start = new Date(now);
-      start.setHours(0, 0, 0, 0);
-      const end = new Date(start);
-      end.setDate(end.getDate() + 1);
-      values.push(start.toISOString(), end.toISOString());
+      // The workspace's today, as on the Tasks page.
+      const today = await getTenantTodayRange(user.tenantId);
+      values.push(today.start, today.end);
       clauses.push(`t."dueAt" >= $${values.length - 1} and t."dueAt" < $${values.length}`);
     } else if (due === "upcoming") {
       values.push(now.toISOString());
@@ -494,9 +496,12 @@ async function fetchExportRows(user: TenantUser, moduleName: ExportModuleName, f
     } else if (due === "completed") {
       clauses.push("t.status = 'COMPLETED'");
     }
-    if (own) {
-      values.push(user.id);
-      clauses.push(`t."ownerId" = $${values.length}`);
+    // The Tasks page's "Open" view and search, so the export matches what is on screen.
+    if (filters.open === true) clauses.push("t.status in ('OPEN', 'IN_PROGRESS')");
+    const search = typeof filters.q === "string" ? filters.q.trim() : "";
+    if (search) {
+      values.push(`%${search.replace(/[\\%_]/g, (match) => `\\${match}`)}%`);
+      clauses.push(`(t.title ilike $${values.length} or coalesce(t.description, '') ilike $${values.length})`);
     }
     values.push(limit);
     return query<Record<string, unknown>>(
@@ -594,12 +599,16 @@ async function fetchExportRows(user: TenantUser, moduleName: ExportModuleName, f
   }
 
   if (moduleName === "REPORTS") {
-    const clauses = [tenantClause(user, values, "r")];
+    // Only reports this person can see (decided 2026-10-03); this list also selected two columns
+    // that don't exist ("reportType", "isShared"), so it failed every time.
+    const clauses = [tenantClause(user, values, "r"), `r."chartType" is distinct from 'SAVED_VIEW'`, `r."deletedAt" is null`];
+    clauses.push(customReportVisibilityClause(user as any, values, "r"));
     applySelectedExportIds(clauses, values, filters, "r");
     values.push(limit);
     return query<Record<string, unknown>>(
-      `select r.name as "Report", r.description as "Description", r."reportType" as "Type",
-              r."chartType" as "Chart", r."isShared" as "Shared", r."createdAt" as "Created At"
+      `select r.name as "Report", r.description as "Description", r.module as "Type",
+              r."chartType" as "Chart", case when r."isPublic" then 'Everyone' else 'Only owner' end as "Shared with",
+              r."createdAt" as "Created At"
        from "CustomReport" r
        where ${clauses.join(" and ")}
        order by r."createdAt" desc
@@ -845,7 +854,7 @@ export async function deleteExportSensitiveFieldRuleForTenant(user: TenantUser, 
 export async function listExportTemplatesForTenant(user: TenantUser) {
   if (!user.tenantId) return [];
   return query<any>(
-    `select id, name, "moduleName", filters, columns, "createdAt" from "ExportTemplate" where "tenantId" = $1 order by name asc`,
+    `select id, name, "moduleName", filters, columns, "createdAt" from "ExportTemplate" where "tenantId" = $1 and "deletedAt" is null order by name asc`,
     [user.tenantId],
   );
 }
@@ -874,8 +883,16 @@ export async function createExportTemplateForTenant(
   }
 }
 
+// Templates are shared with the workspace; only the person who saved one, or an admin, can
+// delete it (anyone signed in could delete anyone's before).
+// Delete archives it (decision 31; the owner or an admin, as before); restore within 30 days.
 export async function deleteExportTemplateForTenant(user: TenantUser, templateId: string) {
-  await execute(`delete from "ExportTemplate" where id = $1 and "tenantId" = $2`, [templateId, user.tenantId]);
+  try {
+    return await archiveItemForTenant(user as any, "export-template", templateId);
+  } catch (error) {
+    if (error instanceof Error && error.message === "ARCHIVE_ITEM_NOT_FOUND") throw new Error("EXPORT_TEMPLATE_NOT_FOUND");
+    throw error;
+  }
 }
 
 const DEFAULT_EXPORT_RETENTION_DAYS = 7;

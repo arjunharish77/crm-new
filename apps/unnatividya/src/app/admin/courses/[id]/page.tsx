@@ -1,3 +1,5 @@
+import { FeeReviewNotice } from "@/components/fee-review-notice";
+import { getAdminSession } from "@/lib/admin-auth";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -34,6 +36,7 @@ type UniversityOption = {
 };
 
 export default async function EditCoursePage({ params }: { params: Promise<{ id: string }> }) {
+  const session = await getAdminSession();
   const { id } = await params;
   const [courseResult, universityResult] = await Promise.all([
     query<CourseRow>(
@@ -64,8 +67,12 @@ export default async function EditCoursePage({ params }: { params: Promise<{ id:
           </div>
           <Link className="btn ghost" href="/admin/courses">Back to courses</Link>
         </div>
+        <p><Link className="btn primary" href={`/admin/catalog-revisions?type=course&id=${encodeURIComponent(id)}`}>Propose or review revisions</Link></p>
+        <FeeReviewNotice courseId={id} />
+        <details className="editor-advanced"><summary>Advanced record settings</summary>
         <section className="card admin-detail-card">
           <CourseEditForm
+            role={session?.role || "VIEWER"}
             universities={universityResult.rows}
             course={{
               id: course.id,
@@ -85,6 +92,7 @@ export default async function EditCoursePage({ params }: { params: Promise<{ id:
             }}
           />
         </section>
+        </details>
       </div>
     </section>
   );

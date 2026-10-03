@@ -8,6 +8,16 @@ vi.mock("@/lib/repositories/leads-postgres", () => leadsRepoMocks);
 
 import { createWebhookForTenant, updateWebhookForTenant } from "@/lib/server/crm";
 
+// Webhook/integration logic under test; the DATA_PLATFORM module gate itself is covered by
+// tests/data-platform-module-gate.test.ts.
+vi.mock("@/lib/server/module-entitlements", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/server/module-entitlements")>()),
+  assertTenantModule: vi.fn(async () => undefined),
+  assertModuleEnabled: vi.fn(async () => undefined),
+  isModuleEnabledForTenant: vi.fn(async () => true),
+}));
+
+
 const user = { id: "user-1", tenantId: "tenant-a" };
 
 describe("updateWebhookForTenant", () => {

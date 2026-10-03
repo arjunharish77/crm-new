@@ -1,8 +1,9 @@
+import { archiveItemForTenant } from "@/lib/server/archive-items";
+import { assertFeatureEnabled, isFeatureEnabledForTenant } from "@/lib/server/entitlements";
 import { randomUUID } from "crypto";
 import { createAuditLog, automationConditionMatches } from "@/lib/server/crm";
 import { getPayoutVisiblePartnerUserIds } from "@/lib/server/partner-access";
 import { execute, query, queryOne } from "@/lib/db/query";
-import { assertFeatureEnabled, isFeatureEnabledForTenant } from "@/lib/server/entitlements";
 
 type TenantUser = {
   id: string;
@@ -40,12 +41,13 @@ const UPDATABLE_FIELDS = [
 
 export async function listCommissionRulesForTenant(user: TenantUser) {
   if (!user.tenantId) return [];
+  await assertFeatureEnabled(user.tenantId, "payoutsEnabled", { isPlatformAdmin: user.isPlatformAdmin });
 
   return query<any>(
     `select id, "tenantId", name, "partnerId", "opportunityTypeId", conditions, "ruleType", value, priority,
             "isActive", "effectiveFrom", "effectiveTo", "createdAt", "updatedAt"
      from "CommissionRule"
-     where "tenantId" = $1
+     where "tenantId" = $1 and "deletedAt" is null
      order by priority desc, "createdAt" desc`,
     [user.tenantId],
   );
@@ -101,7 +103,7 @@ export async function updateCommissionRuleForTenant(
     `select id, "tenantId", name, "partnerId", "opportunityTypeId", conditions, "ruleType", value, priority,
             "isActive", "effectiveFrom", "effectiveTo", "createdAt", "updatedAt"
      from "CommissionRule"
-     where "tenantId" = $1 and id = $2
+     where "tenantId" = $1 and id = $2 and "deletedAt" is null
      limit 1`,
     [user.tenantId, id],
   );
@@ -120,7 +122,7 @@ export async function updateCommissionRuleForTenant(
   const data = await queryOne<any>(
     `update "CommissionRule"
      set ${assignments}
-     where "tenantId" = $${columns.length + 1} and id = $${columns.length + 2}
+     where "tenantId" = $${columns.length + 1} and id = $${columns.length + 2} and "deletedAt" is null
      returning id, "tenantId", name, "partnerId", "opportunityTypeId", conditions, "ruleType", value,
                priority, "isActive", "effectiveFrom", "effectiveTo", "createdAt", "updatedAt"`,
     [...values, user.tenantId, id],
@@ -140,15 +142,17 @@ export async function deleteCommissionRuleForTenant(user: TenantUser, id: string
     `select id, "tenantId", name, "partnerId", "opportunityTypeId", conditions, "ruleType", value, priority,
             "isActive", "effectiveFrom", "effectiveTo", "createdAt", "updatedAt"
      from "CommissionRule"
-     where "tenantId" = $1 and id = $2
+     where "tenantId" = $1 and id = $2 and "deletedAt" is null
      limit 1`,
     [user.tenantId, id],
   );
   if (!existing) return null;
 
-  await execute('delete from "CommissionRule" where "tenantId" = $1 and id = $2', [user.tenantId, id]);
-  await createAuditLog(user as any, "DELETE", "COMMISSION_RULE", id, existing, null, null);
-  return existing;
+  // Delete archives the rule (decision 31): it stops applying to new events at once and can be
+  // restored for 30 days; what it already awarded is unchanged, and a rule something was awarded
+  // under is never purged.
+  const archived = await archiveItemForTenant(user as any, "commission-rule", id);
+  return { ...existing, purgeAfter: archived.purgeAfter };
 }
 
 // Priority-ordered, first-match-wins resolution — same pattern as
@@ -167,7 +171,7 @@ export async function resolveCommissionRule(
     `select id, "tenantId", name, "partnerId", "opportunityTypeId", conditions, "ruleType", value, priority,
             "isActive", "effectiveFrom", "effectiveTo", "createdAt", "updatedAt"
      from "CommissionRule"
-     where "tenantId" = $1 and "isActive" = true
+     where "tenantId" = $1 and "isActive" = true and "deletedAt" is null
      order by priority desc, "createdAt" desc`,
     [tenantId],
   );
@@ -247,6 +251,7 @@ export async function writeCommissionLedgerEntry(user: TenantUser, input: Commis
 
 export async function listCommissionLedgerForPartner(user: TenantUser, partnerId: string) {
   if (!user.tenantId) return [];
+  await assertFeatureEnabled(user.tenantId, "payoutsEnabled", { isPlatformAdmin: user.isPlatformAdmin });
   const visiblePartnerUserIds = user.isTenantAdmin || user.isPlatformAdmin
     ? [partnerId]
     : await getPayoutVisiblePartnerUserIds(user);

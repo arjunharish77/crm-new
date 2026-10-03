@@ -1,7 +1,8 @@
 import { randomUUID } from "crypto";
+import { assertTenantModule, isModuleEnabledForTenant } from "@/lib/server/module-entitlements";
 import { execute, query, queryOne } from "@/lib/db/query";
 
-type TenantUser = { id: string; tenantId: string | null };
+type TenantUser = { id: string; tenantId: string | null; isPlatformAdmin?: boolean };
 
 // Priority Module 12's "product catalog" -- the first repository code written against the
 // catalog schema (migrations 0100/0101), which until this module's own earlier items had zero
@@ -22,6 +23,7 @@ export type CatalogProgram = {
 };
 
 export async function listProgramsForTenant(user: TenantUser): Promise<CatalogProgram[]> {
+  if (!user.isPlatformAdmin && !(await isModuleEnabledForTenant(user.tenantId, "PRODUCT_CATALOG"))) return []; // also read by the Opportunity-type dialog: empty, not an error
   if (!user.tenantId) return [];
   return query<CatalogProgram>(
     `select p.id, p.name, p.level, p."universityId", u.name as "universityName"
@@ -159,6 +161,7 @@ function pickWhitelistedFields(config: CatalogEntityConfig, input: Record<string
 }
 
 export async function listCatalogEntitiesForTenant(user: TenantUser, entityKey: CatalogEntityKey, parentId?: string | null) {
+  await assertTenantModule(user, "PRODUCT_CATALOG");
   const tenantId = requireTenantId(user);
   const config = CATALOG_ENTITY_CONFIGS[entityKey];
   if (config.parentColumn && parentId) {
@@ -175,6 +178,7 @@ export async function createCatalogEntityForTenant(
   entityKey: CatalogEntityKey,
   input: Record<string, unknown> & { parentId?: string },
 ) {
+  await assertTenantModule(user, "PRODUCT_CATALOG");
   const tenantId = requireTenantId(user);
   const config = CATALOG_ENTITY_CONFIGS[entityKey];
   const fields = pickWhitelistedFields(config, input);
@@ -214,6 +218,7 @@ export async function updateCatalogEntityForTenant(
   id: string,
   input: Record<string, unknown>,
 ) {
+  await assertTenantModule(user, "PRODUCT_CATALOG");
   const tenantId = requireTenantId(user);
   const config = CATALOG_ENTITY_CONFIGS[entityKey];
   const fields = pickWhitelistedFields(config, input);
@@ -231,6 +236,7 @@ export async function updateCatalogEntityForTenant(
 }
 
 export async function deleteCatalogEntityForTenant(user: TenantUser, entityKey: CatalogEntityKey, id: string) {
+  await assertTenantModule(user, "PRODUCT_CATALOG");
   const tenantId = requireTenantId(user);
   const config = CATALOG_ENTITY_CONFIGS[entityKey];
   await execute(`delete from "${config.table}" where "tenantId" = $1 and id = $2`, [tenantId, id]);

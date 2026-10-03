@@ -1,5 +1,7 @@
 "use client";
-import { MODULE_COVERAGE_NOTES, MODULE_FEATURE_KEYS } from "@/lib/tenant-provisioning";
+import { useAskText, useConfirm } from "@/components/common/dialogs-provider";
+import { MODULE_COVERAGE_NOTES } from "@/lib/tenant-provisioning";
+import { dependencyViolations, moduleChangeBlockedReason, requiredModules } from "@/lib/module-dependencies";
 
 import { useCallback, useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
@@ -20,7 +22,7 @@ import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { formatWorkspaceRelativeTime } from "@/lib/date-format";
+import { formatWorkspaceDate, formatWorkspaceRelativeTime } from "@/lib/date-format";
 import { ArrowLeft, UserCog, Activity, Users, Flag, LayoutGrid, ShieldOff, ShieldCheck, Wrench, FlaskConical } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -28,6 +30,8 @@ import { toast } from "sonner";
 import { useAuth } from "@/providers/auth-provider";
 import { cn } from "@/lib/utils";
 import { StandardDialog } from "@/components/common/standard-dialog";
+import { TenantUsageLimits } from "@/components/admin/tenant-usage-limits";
+import { ModuleHealthBadge, ModuleHealthIssues, healthWorthShowing, type ModuleHealth } from "@/components/admin/module-health";
 
 type ModuleEntitlement = {
     key: string;
@@ -35,7 +39,24 @@ type ModuleEntitlement = {
     category: string;
     isCore: boolean;
     status: "ENABLED" | "DISABLED" | "SUSPENDED" | "TRIAL";
+    trialEndsAt?: string | null;
+    pausedCount?: number;
 };
+
+type ModuleAccessRequest = {
+    id: string;
+    moduleKey: string;
+    moduleName: string;
+    message: string | null;
+    createdAt: string;
+    requestedByName: string | null;
+    requestedByEmail: string | null;
+};
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+const dateInputValue = (date: Date) => date.toISOString().slice(0, 10);
+// End of the chosen day in the admin's browser time zone.
+const trialEndIso = (value: string) => new Date(`${value}T23:59:59`).toISOString();
 
 const MODULE_STATUS_BADGE: Record<ModuleEntitlement["status"], string> = {
     ENABLED: "border-primary/20 bg-primary/10 text-primary",
@@ -55,18 +76,16 @@ type TenantFeatureFlags = {
     gamificationEnabled: boolean;
 };
 
-const FEATURE_FLAG_LABELS: Record<keyof TenantFeatureFlags, string> = {
-    opportunityEnabled: "Opportunities",
-    automationEnabled: "Automations",
-    salesGroupsEnabled: "Sales Groups",
-    formBuilderEnabled: "Form Builder",
-    advancedReporting: "Advanced Reporting",
-    apiAccessEnabled: "API Access",
-    payoutsEnabled: "Payouts & Commissions",
-    gamificationEnabled: "Gamification",
+// Only the flags that aren't modules (decision 15). Opportunities, Automations, Forms, Advanced
+// reporting, Payouts and Gamification are switched in Modules.
+const FEATURE_FLAG_LABELS: Partial<Record<keyof TenantFeatureFlags, string>> = {
+    apiAccessEnabled: "API access",
+    salesGroupsEnabled: "Sales groups",
 };
 
 export default function TenantDetailPage() {
+    const confirm = useConfirm();
+    const askText = useAskText();
     const params = useParams();
     const router = useRouter();
     const { login } = useAuth();
@@ -80,6 +99,21 @@ export default function TenantDetailPage() {
     const [savingFlag, setSavingFlag] = useState<string | null>(null);
     const [modules, setModules] = useState<ModuleEntitlement[]>([]);
     const [savingModule, setSavingModule] = useState<string | null>(null);
+    const [moduleChange, setModuleChange] = useState<{ module: ModuleEntitlement; status: ModuleEntitlement["status"] } | null>(null);
+    const [moduleImpact, setModuleImpact] = useState<{ items: { label: string; count: number | null }[]; blockedReason: string | null } | null>(null);
+    const [moduleImpactFailed, setModuleImpactFailed] = useState(false);
+    const [moduleReason, setModuleReason] = useState("");
+    const [moduleChangeError, setModuleChangeError] = useState("");
+    const [moduleTrialEnd, setModuleTrialEnd] = useState("");
+    const [accessRequests, setAccessRequests] = useState<ModuleAccessRequest[]>([]);
+    const [moduleHealth, setModuleHealth] = useState<Record<string, ModuleHealth>>({});
+    const [moduleHealthState, setModuleHealthState] = useState<"loading" | "ready" | "error">("loading");
+    const [resolving, setResolving] = useState<{ request: ModuleAccessRequest; decision: "APPROVED" | "DECLINED" } | null>(null);
+    const [resolveStatus, setResolveStatus] = useState<"ENABLED" | "TRIAL">("ENABLED");
+    const [resolveTrialEnd, setResolveTrialEnd] = useState("");
+    const [resolveNote, setResolveNote] = useState("");
+    const [resolveError, setResolveError] = useState("");
+    const [resolveSaving, setResolveSaving] = useState(false);
     const [savingStatus, setSavingStatus] = useState(false);
     const [savingEnvironment, setSavingEnvironment] = useState(false);
     const [maintenanceDraft, setMaintenanceDraft] = useState({ active: false, message: "" });
@@ -91,8 +125,60 @@ export default function TenantDetailPage() {
     const [seedingDemo, setSeedingDemo] = useState(false);
     const [resettingDemo, setResettingDemo] = useState(false);
 
+    // Pending requests are supplementary; a failure here must not hide the Modules section.
+    const fetchAccessRequests = () => {
+        apiFetch<ModuleAccessRequest[]>(`/platform-admin/module-requests?tenantId=${encodeURIComponent(String(tenantId))}&status=PENDING`)
+            .then((rows) => setAccessRequests(Array.isArray(rows) ? rows : []))
+            .catch(() => setAccessRequests([]));
+    };
+
+    // Health is computed live and supplementary: a failure shows a retry, never hides Modules.
+    const fetchModuleHealth = () => {
+        setModuleHealthState("loading");
+        apiFetch<unknown>(`/platform-admin/tenants/${tenantId}/module-health`)
+            .then((rows) => {
+                if (!Array.isArray(rows)) throw new Error("Unexpected module health response");
+                setModuleHealth(Object.fromEntries((rows as ModuleHealth[]).map((row) => [row.moduleKey, row])));
+                setModuleHealthState("ready");
+            })
+            .catch(() => setModuleHealthState("error"));
+    };
+
     const fetchModules = () => {
         apiFetch<ModuleEntitlement[]>(`/platform-admin/tenants/${tenantId}/modules`).then(setModules).catch(() => setLoadError(true));
+        fetchAccessRequests();
+        fetchModuleHealth();
+    };
+
+    const openResolve = (request: ModuleAccessRequest, decision: "APPROVED" | "DECLINED") => {
+        setResolving({ request, decision });
+        setResolveStatus("ENABLED");
+        setResolveTrialEnd(dateInputValue(new Date(Date.now() + 14 * DAY_MS)));
+        setResolveNote("");
+        setResolveError("");
+    };
+
+    const confirmResolve = async () => {
+        if (!resolving) return;
+        setResolveSaving(true);
+        setResolveError("");
+        try {
+            await apiFetch(`/platform-admin/module-requests/${resolving.request.id}`, {
+                method: "PATCH",
+                body: JSON.stringify({
+                    decision: resolving.decision,
+                    note: resolveNote.trim() || null,
+                    ...(resolving.decision === "APPROVED" ? { status: resolveStatus, trialEndsAt: resolveStatus === "TRIAL" && resolveTrialEnd ? trialEndIso(resolveTrialEnd) : null } : {}),
+                }),
+            });
+            toast.success(resolving.decision === "APPROVED" ? `${resolving.request.moduleName} approved` : "Request declined");
+            setResolving(null);
+            fetchModules();
+        } catch (error: any) {
+            setResolveError(error.message || "Failed to resolve the request");
+        } finally {
+            setResolveSaving(false);
+        }
     };
 
     const fetchDemoStatus = () => {
@@ -117,6 +203,8 @@ export default function TenantDetailPage() {
                 setUsers(usersData);
                 setFeatureFlags(flagsData);
                 setModules(moduleData);
+                fetchAccessRequests();
+                fetchModuleHealth();
                 setDemoStatus(demoData);
             }).catch(() => setLoadError(true))
                 .finally(() => setLoading(false));
@@ -143,7 +231,7 @@ export default function TenantDetailPage() {
     };
 
     const handleResetDemoData = async () => {
-        if (!confirm("Delete all demo data for this tenant? This only removes records flagged as demo data (seeded by the button above) -- real leads and opportunities are never touched.")) return;
+        if (!(await confirm({ title: "Delete this workspace's demo data?", description: "Only records added as demo data are removed. Real leads, opportunities and everything else are left alone.", confirmLabel: "Delete demo data", destructive: true }))) return;
         setResettingDemo(true);
         try {
             await apiFetch(`/platform-admin/tenants/${tenantId}/demo-data/reset`, { method: "POST" });
@@ -156,20 +244,56 @@ export default function TenantDetailPage() {
         }
     };
 
+    // Per-module state, the same rule the server uses for dependency checks (the status alone,
+    // decision 15) -- see src/lib/module-dependencies.ts.
+    const moduleNames = Object.fromEntries(modules.map((module) => [module.key, module.name]));
+    const moduleName = (key: string) => moduleNames[key] ?? key;
+    const moduleStates = Object.fromEntries(modules.map((module) => [module.key, module.status === "ENABLED" || module.status === "TRIAL"]));
+    const dependencyWarnings = dependencyViolations(moduleStates, moduleName);
+
     const handleModuleStatusChange = async (module: ModuleEntitlement, status: ModuleEntitlement["status"]) => {
         if (status === module.status) return;
-        const reason = status === "DISABLED" || status === "SUSPENDED" ? window.prompt(`Reason for changing ${module.name} to ${status.toLowerCase()}? (optional)`) : "";
-        if (reason === null) return;
+        setModuleChange({ module, status });
+        const currentEnd = module.trialEndsAt ? new Date(module.trialEndsAt) : null;
+        setModuleTrialEnd(dateInputValue(currentEnd && currentEnd.getTime() > Date.now() ? currentEnd : new Date(Date.now() + 14 * DAY_MS)));
+        setModuleReason("");
+        setModuleChangeError("");
+        setModuleImpactFailed(false);
+        const disabling = status === "DISABLED" || status === "SUSPENDED";
+        if (!disabling) {
+            setModuleImpact({ items: [], blockedReason: moduleChangeBlockedReason(moduleStates, module.key, true, moduleName) });
+            return;
+        }
+        setModuleImpact(null);
+        try {
+            const impact: any = await apiFetch(`/platform-admin/tenants/${tenantId}/modules/${module.key}/impact`);
+            setModuleImpact({
+                items: Array.isArray(impact?.items) ? impact.items : [],
+                blockedReason: typeof impact?.blockedReason === "string" ? impact.blockedReason : moduleChangeBlockedReason(moduleStates, module.key, false, moduleName),
+            });
+        } catch {
+            // The preview is advisory; the server still enforces dependencies on save.
+            setModuleImpactFailed(true);
+            setModuleImpact({ items: [], blockedReason: moduleChangeBlockedReason(moduleStates, module.key, false, moduleName) });
+        }
+    };
+
+    const confirmModuleStatusChange = async () => {
+        if (!moduleChange) return;
+        const { module, status } = moduleChange;
         setSavingModule(module.key);
+        setModuleChangeError("");
         try {
             await apiFetch(`/platform-admin/tenants/${tenantId}/modules/${module.key}`, {
                 method: "PATCH",
-                body: JSON.stringify({ status, reason: reason || null }),
+                body: JSON.stringify({ status, reason: moduleReason.trim() || null, trialEndsAt: status === "TRIAL" && moduleTrialEnd ? trialEndIso(moduleTrialEnd) : null }),
             });
             toast.success(`${module.name} set to ${status}`);
+            setModuleChange(null);
             fetchModules();
         } catch (error: any) {
-            toast.error(error.message || "Failed to update module status");
+            // Keep the dialog (and the typed reason) open so the admin can read why and retry.
+            setModuleChangeError(error.message || "Failed to update module status");
         } finally {
             setSavingModule(null);
         }
@@ -177,10 +301,14 @@ export default function TenantDetailPage() {
 
     const handleToggleSuspend = async () => {
         const suspending = config.tenant.status !== "SUSPENDED";
-        if (suspending && !confirm("Suspend this tenant? Its users will be immediately signed out and unable to log back in until unsuspended.")) return;
+        // A suspension needs a reason; both are recorded in the workspace's audit log (Section 8 #12).
+        const reason = await askText(suspending
+            ? { title: "Suspend this workspace?", description: "Everyone in it is signed out straight away and can't sign in until it is unsuspended. Their data is kept.", label: "Reason (kept in the workspace's audit log)", required: true, confirmLabel: "Suspend workspace", destructive: true }
+            : { title: "Unsuspend this workspace?", description: "Its users can sign in again.", label: "Note (optional, kept in the workspace's audit log)", confirmLabel: "Unsuspend" });
+        if (reason === null) return;
         setSavingStatus(true);
         try {
-            const result = await apiFetch<{ pendingApproval?: boolean }>(`/platform-admin/tenants/${tenantId}/${suspending ? "suspend" : "unsuspend"}`, { method: "POST" });
+            const result = await apiFetch<{ pendingApproval?: boolean }>(`/platform-admin/tenants/${tenantId}/${suspending ? "suspend" : "unsuspend"}`, { method: "POST", body: JSON.stringify({ reason }) });
             if (result?.pendingApproval) {
                 toast.success("Request submitted -- a different platform admin must approve it before this takes effect.");
                 return;
@@ -313,6 +441,7 @@ export default function TenantDetailPage() {
                 </div>
                 <Button
                     variant={tenant.status === 'ACTIVE' ? 'destructive' : 'default'}
+                    className="h-auto min-h-9 max-w-full whitespace-normal break-words"
                     disabled={savingStatus}
                     onClick={handleToggleSuspend}
                 >
@@ -409,38 +538,23 @@ export default function TenantDetailPage() {
 
                 </div> },
                 { id: "users", label: "Users & usage", content: <div className="min-w-0 space-y-4">
-            <div className="grid gap-4 @min-[700px]/tenant:grid-cols-2">
-                <Card className="min-w-0">
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Provisioned Users</CardTitle>
-                        <Users className="h-4 w-4 text-muted-foreground" />
-                    </CardHeader>
-                    <CardContent>
-                        <div className="text-2xl font-bold">{users.length}</div>
-                        <p className="text-xs text-muted-foreground">
-                            Limit: {config.userLimit || 'Unlimited'}
-                        </p>
-                    </CardContent>
-                </Card>
-                <Card className="min-w-0">
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Storage Used</CardTitle>
-                        <Activity className="h-4 w-4 text-muted-foreground" />
-                    </CardHeader>
-                    <CardContent>
-                        <div className="text-2xl font-bold">Unavailable</div>
-                        <p className="text-xs text-muted-foreground">
-                            Quota: {config.storageQuota || 1} GB
-                        </p>
-                    </CardContent>
-                </Card>
-            </div>
+            <Card className="min-w-0">
+                <CardHeader>
+                    <CardTitle className="text-base">Usage &amp; limits</CardTitle>
+                    <p className="text-sm text-muted-foreground">{users.length} provisioned user{users.length === 1 ? "" : "s"} in total (active and inactive).</p>
+                </CardHeader>
+                <CardContent>
+                    <TenantUsageLimits endpoint={`/platform-admin/tenants/${tenantId}/usage`} editable />
+                </CardContent>
+            </Card>
 
             <Card className="min-w-0">
                 <CardHeader>
                     <CardTitle>User Management</CardTitle>
                 </CardHeader>
                 <CardContent>
+                    {/* Scrolls inside the card on narrow screens instead of widening the whole page. */}
+                    <div className="min-w-0 overflow-x-auto">
                     <Table>
                         <TableHeader>
                             <TableRow>
@@ -473,6 +587,7 @@ export default function TenantDetailPage() {
                             ))}
                         </TableBody>
                     </Table>
+                    </div>
                 </CardContent>
             </Card>
 
@@ -482,9 +597,9 @@ export default function TenantDetailPage() {
                 <CardHeader>
                     <CardTitle className="flex min-w-0 flex-wrap items-center gap-2">
                         <Flag className="h-4 w-4" />
-                        Feature Flags
+                        Feature flags
                     </CardTitle>
-                    <p className="text-sm text-muted-foreground">These switches control feature access, including API Access. Some overlap with the module catalog; review both sections when changing access. Changes save immediately.</p>
+                    <p className="text-sm text-muted-foreground">Switches that aren&apos;t modules. Opportunities, Automations, Forms, Reports, Payouts and Gamification are switched in Modules. Changes save straight away.</p>
                 </CardHeader>
                 <CardContent>
                     {!featureFlags ? (
@@ -515,32 +630,68 @@ export default function TenantDetailPage() {
                         Modules
                     </CardTitle>
                     <p className="text-sm text-muted-foreground">{modules.length} catalog modules. Core modules stay enabled. Enabled and Trial permit module access; also review the separate Feature flags section and tenant role permissions. Changes save immediately.</p>
+                    <div className="flex min-w-0 flex-wrap items-center gap-2 text-xs text-muted-foreground" aria-live="polite">
+                        <span className="min-w-0 break-words">
+                            {moduleHealthState === "loading" ? "Checking module health…" : moduleHealthState === "error" ? "Module health could not be checked." : "Health checked just now. Failing connectors and backed-up work notify admins once a day."}
+                        </span>
+                        <Button size="sm" variant="outline" className="h-auto min-h-8 max-w-full whitespace-normal break-words" disabled={moduleHealthState === "loading"} onClick={fetchModuleHealth}>Recheck health</Button>
+                    </div>
                 </CardHeader>
-                <CardContent>
+                {/* Tighter padding on small screens: at 200% text the default rem padding left the status picker too narrow to show "Enabled". */}
+                <CardContent className="px-3 sm:px-6">
+                    {dependencyWarnings.length > 0 && (
+                        <div role="alert" className="mb-3 space-y-1 rounded-xl border border-destructive/40 bg-destructive/5 p-3 text-sm">
+                            <p className="font-medium">Module dependency problems</p>
+                            {dependencyWarnings.map((warning) => <p key={warning.moduleKey} className="break-words">{warning.message}</p>)}
+                        </div>
+                    )}
+                    {accessRequests.length > 0 && (
+                        <section aria-label="Pending module requests" className="mb-3 space-y-2 rounded-xl border p-3">
+                            <p className="text-sm font-medium">Pending requests from this tenant</p>
+                            {accessRequests.map((request) => (
+                                <div key={request.id} className="flex min-w-0 flex-wrap items-center justify-between gap-2 border-t pt-2 first:border-t-0 first:pt-0">
+                                    <div className="min-w-0 flex-1 basis-48 break-words text-sm">
+                                        <p className="font-medium">{request.moduleName}</p>
+                                        <p className="text-xs text-muted-foreground">{request.requestedByName || request.requestedByEmail || "A tenant admin"} · {formatWorkspaceDate(request.createdAt)}</p>
+                                        {request.message && <p className="mt-1 text-xs">&ldquo;{request.message}&rdquo;</p>}
+                                    </div>
+                                    <div className="flex flex-wrap gap-2">
+                                        <Button size="sm" variant="outline" onClick={() => openResolve(request, "DECLINED")}>Decline</Button>
+                                        <Button size="sm" onClick={() => openResolve(request, "APPROVED")}>Approve…</Button>
+                                    </div>
+                                </div>
+                            ))}
+                        </section>
+                    )}
                     {modules.length === 0 ? (
                         <p className="text-sm text-muted-foreground">No module entitlements are available.</p>
                     ) : (
                         <div className="space-y-2">
                             {modules.map((module) => (
-                                <div key={module.key} className="flex min-w-0 flex-wrap items-center justify-between gap-3 rounded-xl border p-3">
+                                <div key={module.key} className="flex min-w-0 flex-wrap items-center justify-between gap-3 rounded-xl border p-2 sm:p-3">
                                     <div className="min-w-0 flex-1 basis-48 break-words">
                                         <div className="flex min-w-0 flex-wrap items-center gap-2">
                                             <span className="min-w-0 max-w-full break-words text-sm font-medium">{module.name}</span>
-                                            <Badge variant="outline" className={cn("rounded-md text-[0.65rem] font-semibold", MODULE_STATUS_BADGE[module.status])}>
+                                            <Badge variant="outline" className={cn("rounded-md text-xs font-semibold", MODULE_STATUS_BADGE[module.status])}>
                                                 {module.status}
                                             </Badge>
-                                            {module.isCore && <Badge variant="outline" className="rounded-md text-[0.65rem]">Core</Badge>}
+                                            {module.isCore && <Badge variant="outline" className="rounded-md text-xs">Core</Badge>}
+                                            {healthWorthShowing(moduleHealth[module.key]) && <ModuleHealthBadge health={moduleHealth[module.key]} />}
                                         </div>
+                                        {moduleHealth[module.key] && <ModuleHealthIssues health={moduleHealth[module.key]} links={false} showDetail />}
                                         <p className="text-xs text-muted-foreground">{module.category}</p>
+                                        {requiredModules(module.key).length > 0 && <p className="mt-1 text-xs text-muted-foreground">Requires {requiredModules(module.key).map(moduleName).join(" and ")}.</p>}
+                                        {module.status === "TRIAL" && <p className="mt-1 text-xs">{module.trialEndsAt ? `Trial ends ${formatWorkspaceDate(module.trialEndsAt)} — then suspended (data kept).` : "Trial has no end date. Set one to have it end automatically."}</p>}
+                                        {!!module.pausedCount && <p className="mt-1 text-xs text-muted-foreground">{module.pausedCount} scheduled item{module.pausedCount === 1 ? "" : "s"} paused — restored when enabled.</p>}
                                         {MODULE_COVERAGE_NOTES[module.key] && <p className="mt-2 text-xs font-medium">{MODULE_COVERAGE_NOTES[module.key]}</p>}
-                                        {MODULE_FEATURE_KEYS[module.key] && featureFlags?.[MODULE_FEATURE_KEYS[module.key]] === false && <p className="mt-1 text-xs text-destructive">Also blocked by Feature flags: {FEATURE_FLAG_LABELS[MODULE_FEATURE_KEYS[module.key]]}. Enable that flag as well to permit access.</p>}
+
                                     </div>
                                     <Select
                                         value={module.status}
                                         disabled={module.isCore || savingModule === module.key}
                                         onValueChange={(value) => handleModuleStatusChange(module, value as ModuleEntitlement["status"])}
                                     >
-                                        <SelectTrigger aria-label={`${module.name} status`} className="w-full sm:w-[140px]"><SelectValue /></SelectTrigger>
+                                        <SelectTrigger aria-label={`${module.name} status`} className="w-full gap-1 px-2 whitespace-normal data-[size=default]:h-auto min-h-9 *:data-[slot=select-value]:line-clamp-none *:data-[slot=select-value]:[overflow-wrap:anywhere] sm:w-[140px] sm:gap-2 sm:px-3"><SelectValue /></SelectTrigger>
                                         <SelectContent>
                                             <SelectItem value="ENABLED">Enabled</SelectItem>
                                             <SelectItem value="TRIAL">Trial</SelectItem>
@@ -557,6 +708,100 @@ export default function TenantDetailPage() {
 
                 </div> }
             ]} />
+
+            <StandardDialog
+                open={!!moduleChange}
+                onClose={() => { if (!savingModule) setModuleChange(null); }}
+                title={moduleChange ? `Change ${moduleChange.module.name} to ${moduleChange.status.toLowerCase()}?` : ""}
+                maxWidth="sm"
+                actions={
+                    <>
+                        <Button variant="outline" onClick={() => setModuleChange(null)} disabled={!!savingModule}>Cancel</Button>
+                        <Button onClick={confirmModuleStatusChange} disabled={!!savingModule || !moduleImpact || !!moduleImpact.blockedReason || (moduleChange?.status === "TRIAL" && !moduleTrialEnd)}>
+                            {savingModule ? "Saving..." : "Save change"}
+                        </Button>
+                    </>
+                }
+            >
+                <div className="min-w-0 space-y-3 text-sm">
+                    {!moduleImpact ? (
+                        <p role="status">Checking what this change affects…</p>
+                    ) : moduleImpact.blockedReason ? (
+                        <p role="alert" className="break-words text-destructive">{moduleImpact.blockedReason}</p>
+                    ) : moduleChange && (moduleChange.status === "DISABLED" || moduleChange.status === "SUSPENDED") ? (
+                        <>
+                            <p>Records are kept. Until the module is re-enabled, this tenant&apos;s users lose access, and these are paused (and restored when it is re-enabled):</p>
+                            {moduleImpact.items.length ? (
+                                <ul className="list-disc space-y-1 pl-5">
+                                    {moduleImpact.items.map((item) => (
+                                        <li key={item.label} className="break-words">{item.label}: <span className="font-medium">{item.count === null ? "unknown" : item.count}</span></li>
+                                    ))}
+                                </ul>
+                            ) : <p className="text-muted-foreground">No active items were found for this module.</p>}
+                            {moduleImpactFailed && <p className="text-muted-foreground">The impact preview could not be loaded; dependencies are still checked when you save.</p>}
+                        </>
+                    ) : (
+                        <>
+                            <p>This tenant&apos;s users will be able to use {moduleChange?.module.name} (subject to their role permissions).</p>
+                            {!!moduleChange?.module.pausedCount && <p>{moduleChange.module.pausedCount} scheduled item{moduleChange.module.pausedCount === 1 ? "" : "s"} paused when it was switched off will be restored.</p>}
+                        </>
+                    )}
+                    {moduleChange?.status === "TRIAL" && !moduleImpact?.blockedReason && (
+                        <div className="space-y-1">
+                            <Label htmlFor="module-trial-end">Trial ends on</Label>
+                            <Input id="module-trial-end" type="date" value={moduleTrialEnd} min={dateInputValue(new Date(Date.now() + DAY_MS))} onChange={(event) => setModuleTrialEnd(event.target.value)} />
+                            <p className="text-xs text-muted-foreground">Platform and tenant admins are warned 7 days before. At the end date the module is suspended (data kept, scheduled work paused), together with any enabled module that depends on it.</p>
+                        </div>
+                    )}
+                    {!moduleImpact?.blockedReason && (
+                        <div className="space-y-1">
+                            <Label htmlFor="module-change-reason">Reason (optional, recorded in the audit log)</Label>
+                            <Textarea id="module-change-reason" value={moduleReason} maxLength={500} onChange={(event) => setModuleReason(event.target.value)} />
+                        </div>
+                    )}
+                    {moduleChangeError && <p role="alert" className="break-words text-destructive">{moduleChangeError}</p>}
+                </div>
+            </StandardDialog>
+
+            <StandardDialog
+                open={!!resolving}
+                onClose={() => { if (!resolveSaving) setResolving(null); }}
+                title={resolving ? `${resolving.decision === "APPROVED" ? "Approve" : "Decline"} ${resolving.request.moduleName}?` : ""}
+                maxWidth="sm"
+                actions={
+                    <>
+                        <Button variant="outline" onClick={() => setResolving(null)} disabled={resolveSaving}>Cancel</Button>
+                        <Button onClick={confirmResolve} disabled={resolveSaving || (resolving?.decision === "APPROVED" && resolveStatus === "TRIAL" && !resolveTrialEnd)}>
+                            {resolveSaving ? "Saving..." : resolving?.decision === "APPROVED" ? "Approve" : "Decline"}
+                        </Button>
+                    </>
+                }
+            >
+                <div className="min-w-0 space-y-3 text-sm">
+                    {resolving?.decision === "APPROVED" && (
+                        <>
+                            <div className="space-y-1">
+                                <Label htmlFor="resolve-status">Grant as</Label>
+                                <select id="resolve-status" className="h-10 w-full rounded-md border bg-background px-2" value={resolveStatus} onChange={(event) => setResolveStatus(event.target.value as "ENABLED" | "TRIAL")}>
+                                    <option value="ENABLED">Enabled</option>
+                                    <option value="TRIAL">Trial</option>
+                                </select>
+                            </div>
+                            {resolveStatus === "TRIAL" && (
+                                <div className="space-y-1">
+                                    <Label htmlFor="resolve-trial-end">Trial ends on</Label>
+                                    <Input id="resolve-trial-end" type="date" value={resolveTrialEnd} min={dateInputValue(new Date(Date.now() + DAY_MS))} onChange={(event) => setResolveTrialEnd(event.target.value)} />
+                                </div>
+                            )}
+                        </>
+                    )}
+                    <div className="space-y-1">
+                        <Label htmlFor="resolve-note">Note to the requester (optional)</Label>
+                        <Textarea id="resolve-note" value={resolveNote} maxLength={1000} onChange={(event) => setResolveNote(event.target.value)} />
+                    </div>
+                    {resolveError && <p role="alert" className="break-words text-destructive">{resolveError}</p>}
+                </div>
+            </StandardDialog>
 
             <StandardDialog
                 open={!!impersonateTarget}

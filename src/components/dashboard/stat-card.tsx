@@ -40,7 +40,7 @@ export function StatCard({ title, value, icon, trend }: StatCardProps) {
                     </div>
                 </div>
 
-                <div className="mb-1 text-3xl font-extrabold tracking-tight">
+                <div className="mb-1 text-3xl font-semibold tracking-tight">
                     {value}
                 </div>
 

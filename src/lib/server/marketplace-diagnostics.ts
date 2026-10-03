@@ -1,16 +1,13 @@
-import { randomUUID, createHmac } from "crypto";
+import { assertTenantModule } from "@/lib/server/module-entitlements";
+import { randomUUID } from "crypto";
 import { query, queryOne } from "@/lib/db/query";
 import { APP_EVENT_TYPES, getAppHealthForTenant, getAppUsageForTenant, listAppDeliveriesForTenant } from "@/lib/server/marketplace-events";
-import { decryptSecretAtRestOrNull } from "@/lib/server/secret-encryption";
+import { APP_SIGNING_COLUMNS, appSignatureHeaders, type AppSigningRow } from "@/lib/server/app-signing";
 import { assertSafeOutboundUrl } from "@/lib/server/outbound-request-guard";
 
 type TenantUser = { id: string; tenantId: string | null };
 
 const REQUEST_TIMEOUT_MS = 15_000;
-
-function signPayload(secret: string, timestamp: string, rawBody: string) {
-  return createHmac("sha256", secret).update(`${timestamp}.${rawBody}`).digest("hex");
-}
 
 // "Request inspector" + "sample payloads": mirrors sendTestWebhookDelivery's (outbound webhook
 // governance) design exactly -- builds a synthetic sample event, signs and sends it for real
@@ -19,14 +16,14 @@ function signPayload(secret: string, timestamp: string, rawBody: string) {
 // the webhook console: test traffic shouldn't pollute real delivery-health stats.
 export async function sendTestAppEvent(user: TenantUser, appId: string, eventType?: string) {
   if (!user.tenantId) throw new Error("TENANT_REQUIRED");
+  await assertTenantModule(user, "MARKETPLACE");
   const app = await queryOne<{ id: string; webhookUrl: string | null; eventSubscriptions: string[] }>(
     `select id, "webhookUrl", "eventSubscriptions" from "MarketplaceApp" where "tenantId" = $1 and id = $2 limit 1`,
     [user.tenantId, appId],
   );
   if (!app) throw new Error("MARKETPLACE_APP_NOT_FOUND");
   if (!app.webhookUrl) throw new Error("APP_HAS_NO_WEBHOOK_URL");
-  const secretRowEncrypted = await queryOne<{ signingSecret: string }>(`select "signingSecret" from "TenantAppSecret" where "tenantId" = $1 and "appId" = $2`, [user.tenantId, appId]);
-  const secretRow = secretRowEncrypted ? { signingSecret: decryptSecretAtRestOrNull(secretRowEncrypted.signingSecret) } : null;
+  const signingRow = await queryOne<NonNullable<AppSigningRow>>(`select ${APP_SIGNING_COLUMNS} from "TenantAppSecret" where "tenantId" = $1 and "appId" = $2`, [user.tenantId, appId]);
 
   const resolvedEventType = (eventType && (APP_EVENT_TYPES as readonly string[]).includes(eventType) ? eventType : app.eventSubscriptions?.[0]) ?? APP_EVENT_TYPES[0];
   const timestamp = Math.floor(Date.now() / 1000).toString();
@@ -38,7 +35,7 @@ export async function sendTestAppEvent(user: TenantUser, appId: string, eventTyp
     data: { id: "test-record-id", name: "Test Record", message: "This is a test delivery from the CRM marketplace console." },
   });
   const headers: Record<string, string> = { "content-type": "application/json", "x-app-timestamp": timestamp, "x-app-event": resolvedEventType };
-  if (secretRow?.signingSecret) headers["x-app-signature"] = signPayload(secretRow.signingSecret, timestamp, rawBody);
+  Object.assign(headers, appSignatureHeaders(signingRow, timestamp, rawBody));
 
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
@@ -62,6 +59,7 @@ export async function sendTestAppEvent(user: TenantUser, appId: string, eventTyp
 // so it gets its own independent attempt count/history rather than mutating history.
 export async function replayAppDelivery(user: TenantUser, deliveryId: string) {
   if (!user.tenantId) throw new Error("TENANT_REQUIRED");
+  await assertTenantModule(user, "MARKETPLACE");
   const original = await queryOne<{ appId: string; eventType: string; payload: any }>(
     `select "appId", "eventType", payload from "TenantAppDelivery" where "tenantId" = $1 and id = $2 limit 1`,
     [user.tenantId, deliveryId],
@@ -89,6 +87,7 @@ function csvEscape(value: unknown) {
 // synchronous string build, not routed through the async export-governance pipeline (exports.ts),
 // since a single app's delivery log is small and this needs to feel instant, not queued.
 export async function exportAppDeliveryLogsCsv(user: TenantUser, appId: string) {
+  await assertTenantModule(user, "MARKETPLACE");
   const deliveries = await listAppDeliveriesForTenant(user, appId, 500);
   const header = ["id", "eventType", "status", "attempts", "httpStatus", "latencyMs", "error", "createdAt", "processedAt"];
   const rows = deliveries.map((d: any) => [d.id, d.eventType, d.status, d.attempts, d.httpStatus ?? "", d.latencyMs ?? "", d.error ?? "", d.createdAt, d.processedAt ?? ""]);
@@ -102,6 +101,7 @@ export async function exportAppDeliveryLogsCsv(user: TenantUser, appId: string) 
 // same secret-handling discipline the rest of this module already has.
 export async function generateAppSupportBundle(user: TenantUser, appId: string) {
   if (!user.tenantId) throw new Error("TENANT_REQUIRED");
+  await assertTenantModule(user, "MARKETPLACE");
   const app = await queryOne<any>(
     `select id, name, description, category, "webhookUrl", "redirectUrls", "eventSubscriptions", "requestedPermissions", "dailyDeliveryLimit", "createdAt"
      from "MarketplaceApp" where "tenantId" = $1 and id = $2 limit 1`,

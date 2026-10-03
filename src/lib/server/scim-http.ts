@@ -19,6 +19,10 @@ function scimErrorBody(status: number, detail: string, scimType?: string) {
 // SCIM connector parses this specific schema for its own retry/alerting logic.
 export function scimErrorResponse(error: unknown) {
   if (error instanceof ScimError) return scimJson(scimErrorBody(error.status, error.message, error.scimType), error.status);
+  // Seat limit reached (Module 21): a clear SCIM 403, not an "Internal error".
+  if (error instanceof Error && error.message.startsWith("USAGE_LIMIT_REACHED:")) {
+    return scimJson(scimErrorBody(403, (error as Error & { explanation?: string }).explanation ?? "Usage limit reached"), 403);
+  }
   if (error instanceof ApiKeyAuthenticationError) {
     const mapped = apiKeyAuthErrorResponse(error.reason);
     return scimJson(scimErrorBody(mapped.status, "Authentication failed"), mapped.status);

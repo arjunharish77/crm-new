@@ -162,7 +162,7 @@ describe("partner organization logins", () => {
     const login = await createPartnerLoginForTenant(adminUser, "primary-profile", {
       name: "Alpha Finance",
       email: "finance@alpha.example",
-      password: "secret123",
+      password: "Secret-Pass-2026",
       roleId: "partner-role",
       partnerLoginRole: "FINANCE",
       canAccessPayouts: true,
@@ -197,7 +197,7 @@ describe("partner organization logins", () => {
     const login = await createPartnerLoginForTenant(adminUser, "legacy-profile", {
       name: "Legacy Manager",
       email: "manager@legacy.example",
-      password: "secret123",
+      password: "Secret-Pass-2026",
       roleId: "partner-role",
       partnerLoginRole: "MANAGER",
     });
@@ -228,7 +228,7 @@ describe("partner organization logins", () => {
       createPartnerLoginForTenant(adminUser, "primary-profile", {
         name: "Alpha Finance",
         email: "finance@alpha.example",
-        password: "secret123",
+        password: "Secret-Pass-2026",
         roleId: "partner-role",
       }),
     ).rejects.toThrow("MODULE_DISABLED");

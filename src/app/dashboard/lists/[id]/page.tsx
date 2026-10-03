@@ -3,6 +3,8 @@
 import { PageHeader } from "@/components/layout/page-header";
 import { ErrorState } from "@/components/common/error-state";
 
+import { useDebouncedValue } from "@/hooks/use-debounced-value";
+import { LeadStatusBadge } from "@/components/leads/lead-status";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
@@ -22,6 +24,8 @@ import { StandardDialog } from "@/components/common/standard-dialog";
 import { BulkActionsToolbar } from "@/components/bulk-actions/bulk-toolbar";
 import { formatWorkspaceDate } from "@/lib/date-format";
 import { cn } from "@/lib/utils";
+import { useRecordTitle } from "@/components/app-states/page-title";
+import { useConfirm } from "@/components/common/dialogs-provider";
 
 type LeadRecord = {
     id: string;
@@ -41,16 +45,23 @@ type LeadListDetail = {
     name: string;
     description?: string | null;
     type: "SMART" | "STATIC";
+    // One page of the list's leads (searched and paged on the server, Section 8 #4).
     leads: LeadRecord[];
+    // Leads matching the search that this person can see, across all pages.
+    total: number;
     count: number;
+    // Members this user can't see (record access); counted, not shown.
+    hiddenCount?: number;
     updatedAt?: string;
 };
 
 export default function LeadListDetailPage() {
+    const confirm = useConfirm();
     const params = useParams<{ id: string }>();
     const router = useRouter();
     const listId = params.id;
     const [list, setList] = useState<LeadListDetail | null>(null);
+    useRecordTitle(list?.name);
     const [leadsLoading, setLeadsLoading] = useState(false);
     const [leadsError, setLeadsError] = useState<string | null>(null);
     const [allLeads, setAllLeads] = useState<LeadRecord[]>([]);
@@ -62,31 +73,39 @@ export default function LeadListDetailPage() {
     const [selectedRows, setSelectedRows] = useState<string[]>([]);
     const [pagination, setPagination] = useState({ pageIndex: 0, pageSize: 25 });
 
+    const debouncedSearch = useDebouncedValue(search.trim(), 250);
     const fetchList = useCallback(async () => {
         setLoading(true);
         setFetchError(null);
         try {
-            const data = await apiFetch<LeadListDetail>(`/lead-lists/${listId}`);
+            const params = new URLSearchParams({ page: String(pagination.pageIndex + 1), limit: String(pagination.pageSize) });
+            if (debouncedSearch) params.set("q", debouncedSearch);
+            const data = await apiFetch<LeadListDetail>(`/lead-lists/${listId}?${params.toString()}`);
             setList(data);
         } catch {
             setFetchError("Failed to load this list.");
         } finally {
             setLoading(false);
         }
-    }, [listId]);
+    }, [listId, pagination.pageIndex, pagination.pageSize, debouncedSearch]);
 
+    // The add picker searches on the server, 50 at a time (UI/UX plan §5.9: it loaded 5,000 leads).
+    const [leadSearch, setLeadSearch] = useState("");
+    const debouncedLeadSearch = useDebouncedValue(leadSearch.trim(), 250);
     const fetchAllLeads = useCallback(async () => {
         setLeadsLoading(true);
         setLeadsError(null);
         try {
-            const response = await apiFetch<any>("/leads?page=1&limit=5000");
+            const params = new URLSearchParams({ page: "1", limit: "50" });
+            if (debouncedLeadSearch) params.set("q", debouncedLeadSearch);
+            const response = await apiFetch<any>(`/leads?${params.toString()}`);
             setAllLeads(Array.isArray(response) ? response : response.data ?? []);
         } catch {
-            setLeadsError("Failed to load available leads.");
+            setLeadsError("Leads couldn't be loaded.");
         } finally {
             setLeadsLoading(false);
         }
-    }, []);
+    }, [debouncedLeadSearch]);
 
     useEffect(() => {
         fetchList();
@@ -96,26 +115,14 @@ export default function LeadListDetailPage() {
         if (addOpen) fetchAllLeads();
     }, [addOpen, fetchAllLeads]);
 
+    // Only this page's leads are known here; picking one that is already in the list is harmless
+    // (the server skips it and says how many were added).
     const existingLeadIds = useMemo(() => new Set((list?.leads ?? []).map((lead) => lead.id)), [list?.leads]);
     const addableLeads = useMemo(() => allLeads.filter((lead) => !existingLeadIds.has(lead.id)), [allLeads, existingLeadIds]);
-    const visibleLeads = useMemo(() => {
-        const term = search.trim().toLowerCase();
-        if (!term) return list?.leads ?? [];
-        return (list?.leads ?? []).filter((lead) =>
-            `${lead.name} ${lead.email ?? ""} ${lead.phone ?? ""} ${lead.company ?? ""} ${lead.source ?? ""} ${lead.status ?? ""}`
-                .toLowerCase()
-                .includes(term)
-        );
-    }, [list?.leads, search]);
 
     useEffect(() => {
-        setPagination((current) => ({ ...current, pageIndex: 0 }));
-    }, [search, listId]);
-
-    const paginatedLeads = useMemo(() => {
-        const start = pagination.pageIndex * pagination.pageSize;
-        return visibleLeads.slice(start, start + pagination.pageSize);
-    }, [visibleLeads, pagination]);
+        setPagination((current) => (current.pageIndex === 0 ? current : { ...current, pageIndex: 0 }));
+    }, [debouncedSearch, listId]);
 
     const addLeads = async () => {
         const leadIds = selectedToAdd.map((lead) => lead.id);
@@ -124,11 +131,13 @@ export default function LeadListDetailPage() {
             return;
         }
         try {
-            await apiFetch(`/lead-lists/${listId}/members`, {
+            const result = await apiFetch<{ addedLeadIds?: string[] }>(`/lead-lists/${listId}/members`, {
                 method: "POST",
                 body: JSON.stringify({ leadIds }),
             });
-            toast.success(`${leadIds.length} lead${leadIds.length === 1 ? "" : "s"} added`);
+            const added = Array.isArray(result?.addedLeadIds) ? result.addedLeadIds.length : leadIds.length;
+            const already = leadIds.length - added;
+            toast.success(`${added} lead${added === 1 ? "" : "s"} added${already ? ` (${already} already in the list)` : ""}`);
             setAddOpen(false);
             setSelectedToAdd([]);
             fetchList();
@@ -138,7 +147,7 @@ export default function LeadListDetailPage() {
     };
 
     const removeLead = async (leadId: string) => {
-        if (!confirm("Remove this lead from the list?")) return;
+        if (!(await confirm({ title: "Remove this lead from the list?", description: "The lead itself isn't deleted.", confirmLabel: "Remove", destructive: true }))) return;
         try {
             await apiFetch(`/lead-lists/${listId}/members/${leadId}`, { method: "DELETE" });
             toast.success("Lead removed from list");
@@ -151,7 +160,7 @@ export default function LeadListDetailPage() {
 
     const removeSelected = async () => {
         if (!list || list.type !== "STATIC" || selectedRows.length === 0) return;
-        if (!confirm(`Remove ${selectedRows.length} selected lead${selectedRows.length === 1 ? "" : "s"} from this list?`)) return;
+        if (!(await confirm({ title: `Remove ${selectedRows.length} lead${selectedRows.length === 1 ? "" : "s"} from this list?`, description: "The leads themselves aren't deleted.", confirmLabel: "Remove", destructive: true }))) return;
         try {
             await Promise.all(selectedRows.map((leadId) => apiFetch(`/lead-lists/${listId}/members/${leadId}`, { method: "DELETE" })));
             toast.success("Selected leads removed");
@@ -170,7 +179,7 @@ export default function LeadListDetailPage() {
             cell: ({ row }) => (
                 <Link
                     href={`/dashboard/leads/${row.original.id}`}
-                    className="font-extrabold text-primary hover:underline"
+                    className="font-semibold text-primary hover:underline"
                     onClick={(event) => event.stopPropagation()}
                 >
                     {row.original.name || "Untitled Lead"}
@@ -197,13 +206,9 @@ export default function LeadListDetailPage() {
         },
         {
             accessorKey: "status",
-            header: "Stage",
+            header: "Status",
             size: 130,
-            cell: ({ row }) => (
-                <Badge variant="outline" className="border-border bg-muted font-extrabold text-muted-foreground">
-                    {row.original.status || "-"}
-                </Badge>
-            ),
+            cell: ({ row }) => <LeadStatusBadge value={row.original.status} />,
         },
         {
             accessorKey: "source",
@@ -273,10 +278,10 @@ export default function LeadListDetailPage() {
                         <div className="min-w-0 flex-1">
                             <div className="flex flex-wrap items-center gap-2">
                                 <h1 className="[overflow-wrap:anywhere] break-words text-2xl font-semibold">{list?.name ?? "Lead List"}</h1>
-                                <Badge className={list?.type === "SMART" ? "font-extrabold" : "font-extrabold"} variant={list?.type === "SMART" ? "default" : "secondary"}>
+                                <Badge className={list?.type === "SMART" ? "font-semibold" : "font-semibold"} variant={list?.type === "SMART" ? "default" : "secondary"}>
                                     {list?.type === "SMART" ? "Smart list" : "Static list"}
                                 </Badge>
-                                <Badge variant="outline" className="font-extrabold">{loading || fetchError ? "— leads" : `${list?.count ?? 0} leads`}</Badge>
+                                <Badge variant="outline" className="font-semibold">{loading || fetchError ? "— leads" : `${list?.count ?? 0} leads`}</Badge>
                             </div>
                             <p className="break-words text-sm text-muted-foreground">
                                 {list?.description || "Search, review, and manage leads in this list."}
@@ -297,6 +302,13 @@ export default function LeadListDetailPage() {
                     </div>
                 </div>
 
+                {/* The count covers every member; say why some aren't listed (never look complete when it isn't). */}
+                {list?.hiddenCount ? (
+                    <p role="status" className="rounded-lg border bg-muted px-3 py-2 text-sm">
+                        {`${list.hiddenCount.toLocaleString()} of the ${list.count.toLocaleString()} leads in this list aren't shown because your role can't see them.`}
+                    </p>
+                ) : null}
+
                 <Card className="rounded-xl p-2.5">
                     <div className="relative">
                         <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
@@ -312,7 +324,7 @@ export default function LeadListDetailPage() {
                 <Card className="overflow-hidden rounded-xl">
                     <DataTable
                         storageKey="lead-list-detail-table"
-                        data={paginatedLeads}
+                        data={list?.leads ?? []}
                         columns={columns}
                         loading={loading}
                         error={fetchError}
@@ -321,7 +333,7 @@ export default function LeadListDetailPage() {
                         enableRowSelection
                         rowSelectionIds={selectedRows}
                         onRowSelectionIdsChange={setSelectedRows}
-                        totalItems={visibleLeads.length}
+                        totalItems={list?.total ?? 0}
                         pageIndex={pagination.pageIndex}
                         pageSize={pagination.pageSize}
                         pageSizeOptions={[25, 50, 100]}
@@ -383,8 +395,8 @@ export default function LeadListDetailPage() {
                             </button>
                         </PopoverTrigger>
                         <PopoverContent className="w-[var(--radix-popover-trigger-width)] max-w-[calc(100dvw-2rem)] p-0" align="start">
-                            <Command>
-                                <CommandInput placeholder="Search leads..." />
+                            <Command shouldFilter={false}>
+                                <CommandInput placeholder="Search leads by name, email or phone…" value={leadSearch} onValueChange={setLeadSearch} />
                                 <CommandList>
                                     <CommandEmpty>{leadsLoading ? "Loading leads…" : leadsError || "No leads found."}</CommandEmpty>
                                     <CommandGroup>

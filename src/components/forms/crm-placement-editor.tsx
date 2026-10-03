@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Plus as AddIcon, ChevronDown, Save as SaveIcon, X as CloseIcon } from "lucide-react";
 import { nanoid } from "nanoid";
 import { toast } from "sonner";
@@ -120,6 +120,9 @@ type PlacementRule = {
     userConditions: Array<Record<string, any>>;
 };
 
+const PLACEMENT_KEYS = ["placements", "placementRules"] as const;
+const sameValue = (a: unknown, b: unknown) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
+
 export function CrmPlacementEditor({ initialForm, onSaved }: { initialForm: any; onSaved?: (form: any) => void }) {
     const opportunityEnabled = useFeature("opportunityEnabled");
     const [config, setConfig] = useState<any>(initialForm.config ?? {});
@@ -130,9 +133,23 @@ export function CrmPlacementEditor({ initialForm, onSaved }: { initialForm: any;
     const [opportunityTypes, setOpportunityTypes] = useState<any[]>([]);
     const [activityTypes, setActivityTypes] = useState<any[]>([]);
     const [saving, setSaving] = useState(false);
+    // This tab owns only the placement keys of the form config. It saves just those (when changed),
+    // and takes in a newer saved version (for example from the builder) without dropping your
+    // unsaved placement edits (UI/UX plan B5).
+    const baseline = useRef({ config: initialForm.config ?? {}, updatedAt: initialForm.updatedAt as string | undefined });
 
     useEffect(() => {
-        setConfig(initialForm.config ?? {});
+        const base = baseline.current;
+        if (initialForm?.updatedAt && initialForm.updatedAt === base.updatedAt) return;
+        const next = initialForm.config ?? {};
+        setConfig((current: any) => {
+            const merged = { ...next };
+            for (const key of PLACEMENT_KEYS) {
+                if (!sameValue(current?.[key], base.config?.[key])) merged[key] = current[key];
+            }
+            return merged;
+        });
+        baseline.current = { config: next, updatedAt: initialForm.updatedAt };
     }, [initialForm]);
 
     useEffect(() => {
@@ -207,17 +224,25 @@ export function CrmPlacementEditor({ initialForm, onSaved }: { initialForm: any;
     };
 
     const save = async () => {
+        if (saving) return;
+        const base = baseline.current;
+        const changed = Object.fromEntries(PLACEMENT_KEYS.filter((key) => !sameValue(config?.[key], base.config?.[key])).map((key) => [key, config[key]]));
+        if (Object.keys(changed).length === 0) {
+            toast.success("No changes to save");
+            return;
+        }
         setSaving(true);
         try {
-            const form = await apiFetch(`/forms/${initialForm.id}`, {
+            const form = await apiFetch<any>(`/forms/${initialForm.id}`, {
                 method: "PATCH",
-                body: JSON.stringify({ config, isActive: initialForm.isActive }),
+                body: JSON.stringify({ config: changed, expectedUpdatedAt: base.updatedAt ?? null }),
             });
+            baseline.current = { config: { ...base.config, ...changed }, updatedAt: form?.updatedAt };
             toast.success("CRM placement saved");
             onSaved?.(form);
-        } catch (error) {
+        } catch (error: any) {
             console.error(error);
-            toast.error("Failed to save CRM placement");
+            toast.error(error?.message || "Failed to save CRM placement");
         } finally {
             setSaving(false);
         }
@@ -228,7 +253,7 @@ export function CrmPlacementEditor({ initialForm, onSaved }: { initialForm: any;
             <div className="flex flex-col gap-4">
                 <div className="flex flex-col justify-between gap-3 md:flex-row">
                     <div>
-                        <h2 className="text-lg font-extrabold">CRM Placement</h2>
+                        <h2 className="text-lg font-semibold">CRM Placement</h2>
                         <p className="text-sm text-muted-foreground">
                             Configure where this form appears, who can see it, and which record/user conditions must match.
                         </p>
@@ -248,7 +273,7 @@ export function CrmPlacementEditor({ initialForm, onSaved }: { initialForm: any;
                             <div className="flex flex-col justify-between gap-2 md:flex-row">
                                 <div>
                                     <div className="flex items-center gap-2">
-                                        <span className="text-base font-extrabold">{placement.label}</span>
+                                        <span className="text-base font-semibold">{placement.label}</span>
                                         <Badge variant={rule.enabled ? "default" : "outline"}>{rule.enabled ? "Enabled" : "Off"}</Badge>
                                     </div>
                                     <p className="text-xs text-muted-foreground">{placement.helper}</p>
@@ -453,7 +478,7 @@ function ConditionGroup({
         <div className="space-y-2">
             <div className="flex flex-col justify-between gap-2 md:flex-row">
                 <div>
-                    <p className="text-sm font-extrabold">{title}</p>
+                    <p className="text-sm font-semibold">{title}</p>
                     <p className="text-xs text-muted-foreground">{description}</p>
                 </div>
                 <div className="flex items-center gap-2">

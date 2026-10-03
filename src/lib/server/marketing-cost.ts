@@ -1,4 +1,5 @@
 import { randomUUID } from "crypto";
+import { assertTenantModule } from "@/lib/server/module-entitlements";
 import { query, queryOne, execute } from "@/lib/db/query";
 import { createAuditLog } from "@/lib/server/crm";
 
@@ -22,6 +23,7 @@ function requireTenantId(user: TenantUser) {
 }
 
 export async function listCostEntriesForTenant(user: TenantUser, scopeType?: string, scopeId?: string) {
+  await assertTenantModule(user, "MARKETING");
   const tenantId = requireTenantId(user);
   const conditions = ['"tenantId" = $1'];
   const values: unknown[] = [tenantId];
@@ -41,6 +43,7 @@ export async function listCostEntriesForTenant(user: TenantUser, scopeType?: str
 }
 
 export async function createCostEntryForTenant(user: TenantUser, input: CostEntryInput) {
+  await assertTenantModule(user, "MARKETING");
   const tenantId = requireTenantId(user);
   const amount = Number(input.amount);
   if (!Number.isFinite(amount)) throw new Error("COST_ENTRY_AMOUNT_REQUIRED");
@@ -71,6 +74,7 @@ export async function createCostEntryForTenant(user: TenantUser, input: CostEntr
 }
 
 export async function deleteCostEntryForTenant(user: TenantUser, id: string) {
+  await assertTenantModule(user, "MARKETING");
   const tenantId = requireTenantId(user);
   await execute(`delete from "MarketingCostEntry" where "tenantId" = $1 and id = $2`, [tenantId, id]);
 }
@@ -82,6 +86,7 @@ export async function deleteCostEntryForTenant(user: TenantUser, id: string) {
 // is the revenue figure used, not a downstream commission calculation -- a documented scope
 // simplification, not an oversight.
 export async function getScopeCostSummary(user: TenantUser, scopeType: "JOURNEY" | "CAMPAIGN", scopeId: string) {
+  await assertTenantModule(user, "MARKETING");
   const tenantId = requireTenantId(user);
   const spend = await queryOne<{ total: number }>(
     `select coalesce(sum(amount), 0)::float as total from "MarketingCostEntry"

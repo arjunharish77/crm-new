@@ -3,7 +3,7 @@ import Image from "next/image";
 
 export function SiteFooter() {
   return (
-    <footer style={{ background: "#263238", color: "#B8C4CA", marginTop: "auto" }}>
+    <footer className="site-footer" style={{ background: "#263238", color: "#B8C4CA", marginTop: "auto" }}>
       <div className="uv-footer-grid" style={{ maxWidth: 1200, margin: "0 auto", padding: "48px 24px 32px", display: "grid", gridTemplateColumns: "1.4fr 1fr 1fr 1fr", gap: 32 }}>
           <div>
             <Image
@@ -29,40 +29,41 @@ export function SiteFooter() {
               ))}
             </div>
           </div>
-          <div style={{ display: "flex", flexDirection: "column", gap: 8, fontSize: 13 }}>
-            <p style={{ fontWeight: 700, color: "#fff", fontSize: 14, margin: "0 0 4px" }}>Explore</p>
+          <nav aria-label="Explore the website" className="footer-links">
+            <h2>Explore</h2>
             <Link href="/courses" style={{ color: "#B8C4CA" }}>All courses</Link>
             <Link href="/universities" style={{ color: "#B8C4CA" }}>Universities</Link>
             <Link href="/compare" style={{ color: "#B8C4CA" }}>Compare programs</Link>
-            <Link href="/recommender" style={{ color: "#B8C4CA" }}>AI recommender</Link>
+            <Link href="/recommender" style={{ color: "#B8C4CA" }}>Find my course</Link>
             <Link href="/online-degree-guides" style={{ color: "#B8C4CA" }}>Degree guides</Link>
             <Link href="/specializations" style={{ color: "#B8C4CA" }}>Specializations</Link>
             <Link href="/tools/emi-calculator" style={{ color: "#B8C4CA" }}>EMI calculator</Link>
-          </div>
-          <div style={{ display: "flex", flexDirection: "column", gap: 8, fontSize: 13 }}>
-            <p style={{ fontWeight: 700, color: "#fff", fontSize: 14, margin: "0 0 4px" }}>Top courses</p>
+          </nav>
+          <nav aria-label="Featured courses" className="footer-links">
+            <h2>Courses</h2>
             <Link href="/courses/online-mba-manipal-university-jaipur" style={{ color: "#B8C4CA" }}>Online MBA</Link>
             <Link href="/courses/online-bca-manipal-university-jaipur" style={{ color: "#B8C4CA" }}>Online BCA</Link>
             <Link href="/courses/online-mca-manipal-university-jaipur" style={{ color: "#B8C4CA" }}>Online MCA</Link>
             <Link href="/courses/online-bcom-manipal-university-jaipur" style={{ color: "#B8C4CA" }}>Online B.Com</Link>
             <Link href="/courses/online-msc-data-science-amity-online" style={{ color: "#B8C4CA" }}>Online MSc Data Science</Link>
-          </div>
-          <div style={{ display: "flex", flexDirection: "column", gap: 8, fontSize: 13 }}>
-            <p style={{ fontWeight: 700, color: "#fff", fontSize: 14, margin: "0 0 4px" }}>Company</p>
-            <Link href="/blog" style={{ color: "#B8C4CA" }}>Blog & guides</Link>
+          </nav>
+          <nav aria-label="About and support" className="footer-links">
+            <h2>Company</h2>
+            <Link href="/blog" style={{ color: "#B8C4CA" }}>Articles</Link>
             <Link href="/about" style={{ color: "#B8C4CA" }}>About us</Link>
             <Link href="/how-we-verify" style={{ color: "#B8C4CA" }}>How we verify our data</Link>
             <Link href="/shortlist" style={{ color: "#B8C4CA" }}>My shortlist</Link>
-            <span>Contact: 1800-120-4050</span>
-          </div>
+            <Link href="/lead?intent=footer" data-open-lead className="btn primary footer-apply">Apply now</Link>
+            <a href="tel:18001204050" style={{ color: "#B8C4CA" }}>Call 1800-120-4050</a>
+          </nav>
       </div>
       <div style={{ borderTop: "1px solid rgba(255,255,255,0.10)" }}>
         <div style={{ maxWidth: 1200, margin: "0 auto", padding: "16px 24px", fontSize: 12, display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
           <span>© 2026 Unnati Vidya</span>
-          <span>
-            <Link href="/privacy" style={{ color: "#B8C4CA" }}>Privacy</Link> · <Link href="/terms" style={{ color: "#B8C4CA" }}>Terms</Link> ·{" "}
+          <nav aria-label="Legal policies" className="footer-policies">
+            <Link href="/privacy" style={{ color: "#B8C4CA" }}>Privacy</Link> <Link href="/terms" style={{ color: "#B8C4CA" }}>Terms</Link>{" "}
             <Link href="/refund-policy" style={{ color: "#B8C4CA" }}>Refund policy</Link>
-          </span>
+          </nav>
         </div>
       </div>
     </footer>

@@ -13,9 +13,13 @@ import { GeneralSettingsProvider } from "../providers/general-settings-provider"
 import { ColorThemeProvider } from "../providers/color-theme-provider";
 import { COLOR_THEME_STORAGE_KEY, DEFAULT_COLOR_THEME } from "@/lib/color-themes";
 import { Toaster } from "@/components/ui/sonner";
+import { DialogsProvider } from "@/components/common/dialogs-provider";
+import { TooltipProvider } from "@/components/ui/tooltip";
 import { MotionConfig } from "framer-motion";
 
 export const metadata: Metadata = {
+  // Absolute URLs for the share image (opengraph-image.png) and icons.
+  metadataBase: new URL(process.env.APP_URL || "http://localhost:3000"),
   title: "Unnatify",
   description: "Secure, multi-tenant CRM SaaS",
 };
@@ -48,18 +52,22 @@ export default function RootLayout({
             this app's many `motion.div` call sites individually. */}
         <MotionConfig reducedMotion="user">
           <ThemeRegistry>
+            <TooltipProvider>
             <ColorThemeProvider>
               <AuthProvider>
                 <GeneralSettingsProvider>
                   <NotificationProvider>
                     <InboundCallPopupProvider>
-                      {children}
+                      <DialogsProvider>
+                        {children}
+                      </DialogsProvider>
                       <Toaster />
                     </InboundCallPopupProvider>
                   </NotificationProvider>
                 </GeneralSettingsProvider>
               </AuthProvider>
             </ColorThemeProvider>
+            </TooltipProvider>
           </ThemeRegistry>
         </MotionConfig>
       </body>

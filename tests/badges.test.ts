@@ -189,7 +189,7 @@ describe("evaluateBadgesForEvent", () => {
 describe("entitlement gating", () => {
   it("rejects creating a badge when the Gamification module is disabled for the tenant", async () => {
     dbMocks.queryOne.mockImplementation(async (sql: string) => {
-      if (sql.includes('from "TenantFeature"')) return { gamificationEnabled: false };
+      if (sql.includes('from "TenantModuleEntitlement"')) return { status: "DISABLED" };
       return null;
     });
 
@@ -201,7 +201,7 @@ describe("entitlement gating", () => {
 
   it("rejects updating a badge when the Gamification module is disabled for the tenant", async () => {
     dbMocks.queryOne.mockImplementation(async (sql: string) => {
-      if (sql.includes('from "TenantFeature"')) return { gamificationEnabled: false };
+      if (sql.includes('from "TenantModuleEntitlement"')) return { status: "DISABLED" };
       return null;
     });
 
@@ -211,7 +211,7 @@ describe("entitlement gating", () => {
 
   it("rejects deleting a badge when the Gamification module is disabled for the tenant", async () => {
     dbMocks.queryOne.mockImplementation(async (sql: string) => {
-      if (sql.includes('from "TenantFeature"')) return { gamificationEnabled: false };
+      if (sql.includes('from "TenantModuleEntitlement"')) return { status: "DISABLED" };
       return null;
     });
 
@@ -221,7 +221,7 @@ describe("entitlement gating", () => {
 
   it("allows a platform admin to bypass the Gamification gate", async () => {
     dbMocks.queryOne.mockImplementation(async (sql: string) => {
-      if (sql.includes('from "TenantFeature"')) return { gamificationEnabled: false };
+      if (sql.includes('from "TenantModuleEntitlement"')) return { status: "DISABLED" };
       if (sql.includes('insert into "Badge"')) return { id: "badge-1", tenantId: TENANT, name: "10 Wins" };
       return null;
     });

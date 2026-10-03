@@ -5,6 +5,7 @@ import { History } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { StandardDialog } from "@/components/common/standard-dialog";
 import { ActivityForm } from "./activity-form";
+import { Slot } from "@radix-ui/react-slot";
 
 interface CreateActivityDialogProps {
     onSuccess: () => void;
@@ -36,18 +37,20 @@ export function CreateActivityDialog({
     return (
         <>
             {trigger ? (
-                <div onClick={handleOpen}>{trigger}</div>
+                // Slot, not a wrapping <div onClick>: the trigger keeps its own button semantics and
+                // keyboard behaviour (UI/UX plan gap check D6).
+                <Slot onClick={handleOpen}>{trigger}</Slot>
             ) : (
                 <Button onClick={handleOpen}>
                     <History className="size-4" />
-                    Log Activity
+                    Log activity
                 </Button>
             )}
 
             <StandardDialog
                 open={open}
                 onClose={handleClose}
-                title="Log Activity"
+                title="Log activity"
                 subtitle="Record an interaction with a lead or opportunity"
                 icon={<History className="size-4" />}
             >

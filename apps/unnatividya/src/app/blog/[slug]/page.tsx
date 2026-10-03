@@ -1,3 +1,5 @@
+export const dynamic = "force-dynamic";
+import { PublishedCatalogBoundary } from "@/components/published-catalog-boundary";
 import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
@@ -6,9 +8,7 @@ import { JsonLd } from "@/components/json-ld";
 import { blogPosts, getBlogPostBySlug, resolveBlogCover } from "@/data/blog";
 import { publicAssetExists } from "@/lib/asset-exists";
 
-export function generateStaticParams() {
-  return blogPosts.map((post) => ({ slug: post.slug }));
-}
+
 
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
   const { slug } = await params;
@@ -26,7 +26,8 @@ export default async function ArticlePage({ params }: { params: Promise<{ slug: 
   const { slug } = await params;
   const post = getBlogPostBySlug(slug);
   if (!post) notFound();
-  const related = blogPosts.filter((item) => item.slug !== post.slug).slice(0, 3);
+  const related = blogPosts.filter((item) => item.slug !== post.slug).sort((a, b) => Number(b.category === post.category) - Number(a.category === post.category)).slice(0, 3);
+  const sections = post.body.flatMap((block, index) => block.type === "h2" ? [{ id: `article-section-${index}`, title: block.text }] : []);
   const cover = resolveBlogCover(post, publicAssetExists);
   const siteUrl = process.env.NEXT_PUBLIC_UNNATIVIDYA_SITE_URL || "https://unnatividya.com";
   const articleJsonLd = {
@@ -38,9 +39,9 @@ export default async function ArticlePage({ params }: { params: Promise<{ slug: 
     datePublished: post.publishedDate,
     dateModified: post.publishedDate,
     author: {
-      "@type": "Person",
-      name: "Ritika Desai",
-      jobTitle: "Senior education counsellor, Unnati Vidya",
+      "@type": "Organization",
+      name: "Content Team, Unnati Vidya",
+      url: `${siteUrl}/authors/content-team`,
     },
     publisher: {
       "@type": "Organization",
@@ -66,30 +67,35 @@ export default async function ArticlePage({ params }: { params: Promise<{ slug: 
     mainEntity: post.faqs.map(([question, answer]) => ({ "@type": "Question", name: question, acceptedAnswer: { "@type": "Answer", text: answer } })),
   };
 
-  return (
+  return <PublishedCatalogBoundary>{(
     <>
       <JsonLd data={[articleJsonLd, breadcrumbJsonLd, faqJsonLd]} />
-      <div className="article-layout">
-        <article className="article-main">
+      <div className="article-layout article-reading-layout">
+        <article className="article-main" id="article-top">
         <div className="breadcrumb" style={{ marginBottom: 12 }}>
           <Link href="/">Home</Link> &gt; <Link href="/blog">Blog</Link> &gt; {post.category}
         </div>
         <div className="course-meta" style={{ marginBottom: 12 }}>
           <span style={{ fontSize: 11, fontWeight: 700, color: "#0F5BB8", background: "rgba(79,168,255,0.12)", borderRadius: 999, whiteSpace: "nowrap", padding: "3px 9px" }}>{post.category}</span>
           <span style={{ color: "#707070", fontSize: 12 }}>
-            {post.read} · Updated{" "}
-            {new Date(post.publishedDate).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" })}
+            {post.read} · Published{" "}
+            <time dateTime={post.publishedDate}>{new Date(`${post.publishedDate}T00:00:00Z`).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" })}</time>
           </span>
         </div>
-        <h1 style={{ fontSize: 34, fontWeight: 700, color: "#363634", margin: "0 0 16px", lineHeight: 1.2, textWrap: "pretty" }}>{post.title}</h1>
+        <h1 className="article-reading-title">{post.title}</h1>
         <div className="author-row">
-          <div className="author-avatar">RD</div>
+          <div className="author-avatar" aria-hidden="true">UV</div>
           <div>
-            <strong>Ritika Desai</strong>
-            <span>Senior education counsellor, UnnatiVidya</span>
+            <strong><Link href="/authors/content-team">Content Team, Unnati Vidya</Link></strong>
+            <span>Editorial team</span>
           </div>
         </div>
-        <div className="article-cover" style={{ height: 280, borderRadius: 8, overflow: "hidden", marginBottom: 28 }}>
+        <p className="article-introduction">{post.excerpt}</p>
+        <details className="article-contents">
+          <summary>On this page</summary>
+          <nav aria-label="Article sections"><ul>{sections.map(section => <li key={section.id}><a href={`#${section.id}`}>{section.title}</a></li>)}{post.faqs.length > 0 && <li><a href="#article-faq">Frequently asked questions</a></li>}</ul></nav>
+        </details>
+        <div className="article-cover">
           <Image
             src={cover}
             alt={post.title}
@@ -102,7 +108,7 @@ export default async function ArticlePage({ params }: { params: Promise<{ slug: 
 
         <div className="article-body">
           {post.body.map((block, index) => {
-            if (block.type === "h2") return <h2 key={index}>{block.text}</h2>;
+            if (block.type === "h2") return <h2 id={`article-section-${index}`} tabIndex={-1} key={index}>{block.text}</h2>;
             if (block.type === "note") return (
               <div className="note-box" key={index}>
                 <b>Unnati Vidya tip:</b> {block.text.replace(/^Unnati Vidya tip:\s*/i, "")}
@@ -127,7 +133,7 @@ export default async function ArticlePage({ params }: { params: Promise<{ slug: 
           })}
         </div>
 
-        <section className="detail-section">
+        <section className="detail-section" id="article-faq" tabIndex={-1}>
           <h2>Frequently asked questions</h2>
           <div className="faq-list">
             {post.faqs.map(([question, answer]) => (
@@ -141,11 +147,12 @@ export default async function ArticlePage({ params }: { params: Promise<{ slug: 
 
         <div className="newsletter-band article-cta">
           <div>
-            <h2>Want us to verify a program for you?</h2>
-            <p>Free check against approval, fee, eligibility, and admission requirements.</p>
+            <h2>Explore courses for your next step</h2>
+            <p>Browse course details or leave your enquiry for the team to follow up.</p>
           </div>
-          <Link href="/lead?intent=article-help" className="btn primary" data-open-lead style={{ minHeight: 42, height: 42, padding: "0 22px" }}>Ask a counsellor</Link>
+          <Link href="/lead?intent=article-help" className="btn primary" data-open-lead style={{ minHeight: 42, height: 42, padding: "0 22px" }}>Apply now</Link>
         </div>
+        <a href="#article-top" className="article-back-top">Back to article start ↑</a>
         </article>
 
         <aside className="article-rail">
@@ -163,7 +170,7 @@ export default async function ArticlePage({ params }: { params: Promise<{ slug: 
             </div>
           </div>
           <div className="card course-card" style={{ background: "#F4F3FC" }}>
-            <h2>Compare UGC-entitled programs</h2>
+            <h2>Compare course details</h2>
             <p>Compare fees and approvals side by side.</p>
             <Link href="/compare" className="btn primary" style={{ width: "100%", minHeight: 38, height: 38, fontSize: 13 }}>Open compare</Link>
           </div>
@@ -179,5 +186,5 @@ export default async function ArticlePage({ params }: { params: Promise<{ slug: 
         </aside>
       </div>
     </>
-  );
+  )}</PublishedCatalogBoundary>;
 }

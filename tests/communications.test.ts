@@ -1,5 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+// Delivery logic under test; the monthly message limit is covered by tests/usage-limits.test.ts.
+vi.mock("@/lib/server/usage-limits", () => ({ reserveMonthlyMessage: vi.fn(async () => true) }));
+
+
 const queryMock = vi.fn();
 const queryOneMock = vi.fn();
 const executeMock = vi.fn();
@@ -547,13 +551,33 @@ describe("communications connectors", () => {
     });
 
     it("setTemplateApprovalStatusForTenant flips approvalStatus and stamps approvedBy/approvedAt only on APPROVED", async () => {
-      queryOneMock.mockResolvedValueOnce({ id: "template-1", approvalStatus: "APPROVED", approvedBy: "admin-1" });
+      queryOneMock
+        .mockResolvedValueOnce({ approvalStatus: "PENDING_APPROVAL", createdBy: "author-1" }) // current status and author
+        .mockResolvedValueOnce({ id: "template-1", approvalStatus: "APPROVED", approvedBy: "admin-1" });
 
       const { setTemplateApprovalStatusForTenant } = await import("@/lib/server/communications");
       const row = await setTemplateApprovalStatusForTenant({ id: "admin-1", tenantId: "tenant-1" }, "template-1", "APPROVED");
 
       expect(row.approvalStatus).toBe("APPROVED");
-      expect(queryOneMock.mock.calls[0][1]).toEqual(["APPROVED", "admin-1", expect.any(String), "tenant-1", "template-1"]);
+      // Only a version waiting for approval can be approved; the guard is part of the update.
+      expect(String(queryOneMock.mock.calls[1][0])).toContain('"approvalStatus" = any($6::text[])');
+      expect(queryOneMock.mock.calls[1][1]).toEqual(["APPROVED", "admin-1", expect.any(String), "tenant-1", "template-1", ["PENDING_APPROVAL"]]);
+    });
+
+    it("setTemplateApprovalStatusForTenant refuses a status change out of order", async () => {
+      queryOneMock
+        .mockResolvedValueOnce({ approvalStatus: "DRAFT", createdBy: "author-1" })
+        .mockResolvedValueOnce(null); // the guarded update matched nothing
+      const { setTemplateApprovalStatusForTenant } = await import("@/lib/server/communications");
+      await expect(setTemplateApprovalStatusForTenant({ id: "admin-1", tenantId: "tenant-1" }, "template-1", "APPROVED")).rejects.toThrow("TEMPLATE_APPROVAL_INVALID_TRANSITION");
+    });
+
+    it("setTemplateApprovalStatusForTenant refuses self-approval when the workspace requires approval", async () => {
+      queryOneMock
+        .mockResolvedValueOnce({ approvalStatus: "PENDING_APPROVAL", createdBy: "admin-1" })
+        .mockResolvedValueOnce({ requireTemplateApproval: true }); // MessagingSettings
+      const { setTemplateApprovalStatusForTenant } = await import("@/lib/server/communications");
+      await expect(setTemplateApprovalStatusForTenant({ id: "admin-1", tenantId: "tenant-1" }, "template-1", "APPROVED")).rejects.toThrow("TEMPLATE_SELF_APPROVAL");
     });
 
     it("renders a locked header/footer around the body and substitutes snippets at send time", async () => {
@@ -568,7 +592,8 @@ describe("communications connectors", () => {
           tokenDefaults: {},
           lockedHeader: "-- header --",
           lockedFooter: "-- footer --",
-        }) // getTemplate
+          approvalStatus: "APPROVED",
+        }) // getTemplate (approved, so the approval setting isn't read)
         .mockResolvedValueOnce({ id: "outbox-1", tenantId: "tenant-1", channel: "EMAIL", recipient: "lead@example.com", status: "QUEUED", body: "" });
       queryMock.mockResolvedValueOnce([{ key: "legal", body: "Terms apply." }]); // substituteSnippets lookup
 

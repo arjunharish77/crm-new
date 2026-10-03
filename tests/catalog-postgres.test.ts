@@ -5,6 +5,16 @@ vi.mock("@/lib/db/query", () => dbMocks);
 
 import { listProgramsForTenant } from "@/lib/repositories/catalog-postgres";
 
+// Catalog logic under test; the PRODUCT_CATALOG module gate is covered by the module-gate audit
+// (scripts/audit-module-gates.cjs, tests/module-gate-audit.test.ts).
+vi.mock("@/lib/server/module-entitlements", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/server/module-entitlements")>()),
+  assertTenantModule: vi.fn(async () => undefined),
+  assertModuleEnabled: vi.fn(async () => undefined),
+  isModuleEnabledForTenant: vi.fn(async () => true),
+}));
+
+
 // Priority Module 12's "product catalog" -- the first repository code against the new catalog
 // schema (migrations 0100/0101).
 describe("listProgramsForTenant", () => {

@@ -1,225 +1,259 @@
 'use client';
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import {
-    DropdownMenu,
-    DropdownMenuContent,
-    DropdownMenuItem,
-    DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
-import { Plus, Search, ListFilter, Pencil, Trash2 } from 'lucide-react';
 import { ColumnDef } from '@tanstack/react-table';
-import { Bolt, GitBranch, History, MoreVertical, Workflow } from 'lucide-react';
+import { toast } from 'sonner';
+import { Archive, ArchiveRestore, MoreHorizontal, Pencil, Plus, Power, Trash2, Workflow } from 'lucide-react';
+import { purgeDate, useArchiveActions } from '@/hooks/use-archive-actions';
+import { apiFetch } from '@/lib/api';
+import { PageHeader } from '@/components/layout/page-header';
+import { ListToolbar } from '@/components/common/list-toolbar';
 import { DataTable } from '@/components/ui/data-table';
 import { Badge } from '@/components/ui/badge';
-import { Button as IconButton } from '@/components/ui/button';
-import { apiFetch } from '@/lib/api';
-import { toast } from 'sonner';
+import { Button } from '@/components/ui/button';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import { triggerLabel } from '@/components/automations/trigger-types';
+import { useUrlState } from '@/hooks/use-url-state';
+import { useAuth } from '@/providers/auth-provider';
+import { formatCount } from '@/lib/display/format';
+import { formatWorkspaceDate } from '@/lib/date-format';
 
 interface Automation {
     id: string;
     name: string;
+    createdBy?: string | null;
     description?: string;
     isActive: boolean;
     trigger: any;
     workflow: any;
     createdAt: string;
-    _count?: {
-        executions: number;
-    };
+    deletedAt?: string | null;
+    publishedVersion?: number;
+    hasDraft?: boolean;
+    draftName?: string | null;
+    _count?: { executions: number };
 }
 
+const STATUS_FILTERS = ['all', 'active', 'off', 'archived'] as const;
+type StatusFilter = (typeof STATUS_FILTERS)[number];
+
+// Marketing & automation › Automations (UI/UX plan §5.12): a load error shows an error, not "No
+// automations"; the Filters button that did nothing is now a working On/Off filter; triggers read
+// as words; the row menu is labelled; turning an automation on or off happens from the list.
 export default function AutomationsV2Page() {
+    const { user } = useAuth();
+    // Archive, restore and delete for good: the creator or an admin (decided 2026-10-03).
+    const canManage = (item: { createdBy?: string | null }) => !user || !!(user as any).isTenantAdmin || !!(user as any).isPlatformAdmin || (!!item.createdBy && item.createdBy === user.id);
     const router = useRouter();
     const [automations, setAutomations] = useState<Automation[]>([]);
     const [loading, setLoading] = useState(true);
-    const [openMenuId, setOpenMenuId] = useState<string | null>(null);
-    const [searchTerm, setSearchTerm] = useState('');
+    const [failed, setFailed] = useState(false);
+    const [search, setSearch] = useUrlState<string>('q', '');
+    const [status, setStatus] = useUrlState<StatusFilter>('status', 'all', { allowed: STATUS_FILTERS });
 
+    const [archivedItems, setArchivedItems] = useState<Automation[]>([]);
+    const showArchived = status === 'archived';
     const fetchAutomations = useCallback(async () => {
         setLoading(true);
+        setFailed(false);
         try {
-            const data = await apiFetch('/automation-v2');
-            setAutomations(data);
-        } catch (error) {
-            console.error('Failed to fetch automations:', error);
-            setAutomations([]);
+            // Archived automations come from their own list (decision 31).
+            const [data, archivedData] = await Promise.all([
+                apiFetch<Automation[]>('/automation-v2'),
+                showArchived ? apiFetch<Automation[]>('/automation-v2?archived=1') : Promise.resolve(null),
+            ]);
+            setAutomations(Array.isArray(data) ? data : []);
+            if (archivedData) setArchivedItems(Array.isArray(archivedData) ? archivedData : []);
+        } catch {
+            setFailed(true);
         } finally {
             setLoading(false);
         }
-    }, []);
+    }, [showArchived]);
+    useEffect(() => { fetchAutomations(); }, [fetchAutomations]);
 
-    useEffect(() => {
-        fetchAutomations();
-    }, [fetchAutomations]);
+    // Delete archives, with Undo; archived ones restore or delete for good (UI/UX plan §11.6 D).
+    const archiveActions = useArchiveActions({
+        basePath: '/automation-v2',
+        noun: 'automation',
+        consequence: (item) => {
+            const runs = (item as Automation)._count?.executions ?? 0;
+            return runs ? `its ${formatCount(runs)} past runs` : null;
+        },
+        onChange: fetchAutomations,
+    });
 
-    const deleteAutomation = async (id: string) => {
-        if (!confirm('Are you sure you want to delete this automation?')) return;
-
+    const setActive = async (automation: Automation, isActive: boolean) => {
         try {
-            await apiFetch(`/automation-v2/${id}`, { method: 'DELETE' });
-            setAutomations(automations.filter((a) => a.id !== id));
-            toast.success("Automation deleted");
-        } catch (error) {
-            console.error('Failed to delete automation:', error);
-            toast.error("Failed to delete automation");
+            await apiFetch(`/automation-v2/${automation.id}`, { method: 'PATCH', body: JSON.stringify({ isActive }) });
+            setAutomations((current) => current.map((item) => (item.id === automation.id ? { ...item, isActive } : item)));
+            toast.success(isActive ? `Turned on: ${automation.name}` : `Turned off: ${automation.name}`);
+        } catch (error: any) {
+            toast.error(error?.message || "The automation couldn't be changed");
         }
     };
+    // The table's columns are memoised; the row menu reaches the latest handlers through a ref.
+    const handlers = useRef({ archiveActions, setActive });
+    useEffect(() => { handlers.current = { archiveActions, setActive }; });
 
-    const filteredAutomations = automations.filter(a =>
-        a.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (a.description && a.description.toLowerCase().includes(searchTerm.toLowerCase()))
-    );
+    const counts = useMemo(() => ({
+        all: automations.length,
+        active: automations.filter((item) => item.isActive).length,
+        off: automations.filter((item) => !item.isActive).length,
+    }), [automations]);
+    const visible = useMemo(() => {
+        const term = search.trim().toLowerCase();
+        return (showArchived ? archivedItems : automations).filter((item) =>
+            (status === 'all' || status === 'archived' || (status === 'active') === item.isActive) &&
+            (!term || item.name.toLowerCase().includes(term) || (item.description ?? '').toLowerCase().includes(term) || triggerLabel(item.trigger?.type).toLowerCase().includes(term)),
+        );
+    }, [automations, archivedItems, showArchived, search, status]);
 
     const columns = useMemo<ColumnDef<Automation, any>[]>(() => [
         {
             accessorKey: 'name',
-            header: 'Automation Name',
-            size: 280,
+            header: 'Name',
+            size: 300,
             cell: ({ row }) => (
-                <div className="py-1">
-                    <div className="text-sm font-bold text-primary">{row.original.name}</div>
-                    <div className="block max-w-[320px] truncate text-xs text-muted-foreground">
-                        {row.original.description || "No description"}
-                    </div>
+                <div className="min-w-0 py-1">
+                    <Link href={`/dashboard/automations-v2/${row.original.id}`} className="font-medium hover:underline" onClick={(event) => event.stopPropagation()}>
+                        {!row.original.publishedVersion && row.original.draftName ? row.original.draftName : row.original.name}
+                    </Link>
+                    {row.original.description ? <div className="max-w-[360px] truncate text-xs text-muted-foreground">{row.original.description}</div> : null}
                 </div>
-            )
+            ),
         },
         {
             accessorKey: 'isActive',
             header: 'Status',
-            size: 120,
-            cell: ({ row }) => (
-                <Badge
-                    variant="outline"
-                    className={
-                        row.original.isActive
-                            ? "border-primary/20 bg-primary/10 font-bold uppercase text-primary"
-                            : "border-border bg-muted font-bold uppercase text-muted-foreground"
-                    }
-                >
-                    {row.original.isActive ? 'Active' : 'Inactive'}
-                </Badge>
-            )
+            size: 100,
+            cell: ({ row }) => row.original.deletedAt
+                ? <span className="flex flex-col gap-0.5"><Badge tone="warning">Archived</Badge><span className="text-xs text-muted-foreground">Deleted on {purgeDate(row.original.deletedAt)}</span></span>
+                : !row.original.publishedVersion
+                    ? <Badge tone="info">Draft</Badge>
+                    : <span className="flex flex-col gap-0.5">
+                        <Badge tone={row.original.isActive ? 'success' : 'neutral'}>{row.original.isActive ? 'On' : 'Off'}</Badge>
+                        {row.original.hasDraft ? <span className="text-xs text-muted-foreground">Unpublished changes</span> : null}
+                    </span>,
         },
         {
-            accessorKey: 'trigger',
-            header: 'Trigger',
-            size: 180,
-            cell: ({ row }) => (
-                <div className="flex items-center gap-2">
-                    <Bolt className="size-4 text-secondary" />
-                    <span className="text-sm font-semibold">{row.original.trigger?.type?.replace('_', ' ') || 'Manual'}</span>
-                </div>
-            )
+            id: 'trigger',
+            header: 'Starts when',
+            size: 220,
+            cell: ({ row }) => <span className="text-sm">{triggerLabel(row.original.trigger?.type)}</span>,
         },
         {
             id: 'steps',
             header: 'Steps',
-            size: 100,
-            cell: ({ row }) => (
-                <div className="flex items-center gap-2">
-                    <GitBranch className="size-4 text-muted-foreground" />
-                    <span className="text-sm font-semibold">{row.original.workflow?.nodes?.length || 0}</span>
-                </div>
-            )
+            size: 80,
+            cell: ({ row }) => <span className="text-sm tabular-nums">{formatCount(row.original.workflow?.nodes?.length ?? 0)}</span>,
         },
         {
             id: 'runs',
             header: 'Runs',
-            size: 100,
-            cell: ({ row }) => (
-                <div className="flex items-center gap-2">
-                    <History className="size-4 text-muted-foreground" />
-                    <span className="text-sm font-semibold">{row.original._count?.executions || 0}</span>
-                </div>
-            )
+            size: 80,
+            cell: ({ row }) => <span className="text-sm tabular-nums">{formatCount(row.original._count?.executions ?? 0)}</span>,
         },
         {
-            id: 'actions',
-            header: '',
-            size: 80,
-            cell: ({ row }) => (
-                <DropdownMenu
-                    open={openMenuId === row.original.id}
-                    onOpenChange={(open) => setOpenMenuId(open ? row.original.id : null)}
-                >
-                    <DropdownMenuTrigger asChild>
-                        <IconButton
-                            variant="ghost"
-                            size="icon-sm"
-                            onClick={(event) => event.stopPropagation()}
-                        >
-                            <MoreVertical className="size-4" />
-                        </IconButton>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end" onClick={(event) => event.stopPropagation()}>
-                        <DropdownMenuItem onClick={() => router.push(`/dashboard/automations-v2/${row.original.id}`)}>
-                            <Pencil className="size-4" />
-                            Edit Designer
-                        </DropdownMenuItem>
-                        <DropdownMenuItem
-                            variant="destructive"
-                            onClick={() => deleteAutomation(row.original.id)}
-                        >
-                            <Trash2 className="size-4" />
-                            Delete
-                        </DropdownMenuItem>
-                    </DropdownMenuContent>
-                </DropdownMenu>
-            )
-        }
-    ], [router]);
+            accessorKey: 'createdAt',
+            header: 'Created',
+            size: 120,
+            cell: ({ row }) => <span className="text-sm text-muted-foreground">{formatWorkspaceDate(row.original.createdAt)}</span>,
+        },
+    ], []);
+
+    const narrowed = !!search.trim() || status !== 'all';
 
     return (
-        <div className="mx-auto max-w-[1600px] p-3 md:p-4">
-            <div className="mb-4 flex items-center justify-between">
-                <div>
-                    <h1 className="text-lg font-bold tracking-[-0.5px]">Workflow Automations</h1>
-                    <p className="mt-1 text-sm text-muted-foreground">
-                        Build and manage visual workflows to automate your sales processes
-                    </p>
-                </div>
-                <Button className="rounded-xl" onClick={() => router.push('/dashboard/automations-v2/new')}>
-                    <Plus className="size-4" />
-                    New Automation
-                </Button>
-            </div>
-
-            <div className="mb-6 flex gap-2">
-                <div className="relative w-80">
-                    <Search className="pointer-events-none absolute left-3 top-1/2 size-5 -translate-y-1/2 text-muted-foreground" />
-                    <Input
-                        placeholder="Search automations..."
-                        value={searchTerm}
-                        onChange={(e) => setSearchTerm(e.target.value)}
-                        className="rounded-xl pl-10"
+        <div className="mx-auto min-w-0 max-w-[1600px]">
+            <PageHeader
+                title="Automations"
+                description="Workflows that run on their own when something happens in the CRM."
+                meta={loading || failed ? undefined : <span className="tabular-nums">{formatCount(counts.active)} on · {formatCount(counts.off)} off</span>}
+                primaryAction={<Button asChild><Link href="/dashboard/automations-v2/new"><Plus className="size-4" />New automation</Link></Button>}
+            />
+            <DataTable
+                storageKey="automations-v2-table"
+                data={visible}
+                columns={columns}
+                loading={loading}
+                error={failed ? "The automations couldn't be loaded." : null}
+                onRetry={fetchAutomations}
+                clientSort
+                getRowId={(row) => row.id}
+                onRowClick={(row) => router.push(`/dashboard/automations-v2/${row.id}`)}
+                toolbarActions={
+                    <ListToolbar
+                        search={{ value: search, onChange: setSearch, placeholder: 'Search automations', label: 'Search automations', inputId: 'automations-search' }}
+                        quickFilters={[
+                            { value: 'all', label: 'All', count: counts.all },
+                            { value: 'active', label: 'On', count: counts.active },
+                            { value: 'off', label: 'Off', count: counts.off },
+                            { value: 'archived', label: 'Archived' },
+                        ]}
+                        quickFilter={status}
+                        onQuickFilterChange={(value) => setStatus(value as StatusFilter)}
                     />
-                </div>
-                <Button variant="outline" className="rounded-xl border-dashed">
-                    <ListFilter className="size-4" />
-                    Filters
-                </Button>
-            </div>
-
-            <div className="h-[calc(100vh-280px)] min-h-[600px]">
-                <DataTable
-                    storageKey="automations-v2-table"
-                    data={filteredAutomations}
-                    columns={columns}
-                    loading={loading}
-                    getRowId={(row) => row.id}
-                    onRowClick={(row) => router.push(`/dashboard/automations-v2/${row.id}`)}
-                    emptyState={{
-                        icon: <Workflow className="size-10 text-muted-foreground opacity-50" />,
-                        title: "No automations found",
-                        description: "Create an automation to start streamlining your sales process.",
-                    }}
-                />
-            </div>
+                }
+                rowActions={(automation) => (
+                    <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" size="icon-sm" aria-label={`More actions for ${automation.name}`} onClick={(event) => event.stopPropagation()}>
+                                <MoreHorizontal className="size-4" />
+                            </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" onClick={(event) => event.stopPropagation()}>
+                            {automation.deletedAt ? (
+                                <>
+                                    {canManage(automation) ? <>
+                                        <DropdownMenuItem onSelect={() => handlers.current.archiveActions.restore(automation)}><ArchiveRestore className="size-4" />Restore</DropdownMenuItem>
+                                        <DropdownMenuSeparator />
+                                        <DropdownMenuItem variant="destructive" onSelect={() => handlers.current.archiveActions.deletePermanently(automation)}><Trash2 className="size-4" />Delete for good</DropdownMenuItem>
+                                    </> : <DropdownMenuItem disabled>Only its creator or an admin can restore it</DropdownMenuItem>}
+                                </>
+                            ) : (
+                                <>
+                                    <DropdownMenuItem asChild><Link href={`/dashboard/automations-v2/${automation.id}`}><Pencil className="size-4" />Open in builder</Link></DropdownMenuItem>
+                                    <DropdownMenuItem onSelect={() => handlers.current.setActive(automation, !automation.isActive)}>
+                                        <Power className="size-4" />{automation.isActive ? 'Turn off' : 'Turn on'}
+                                    </DropdownMenuItem>
+                                    {canManage(automation) ? <DropdownMenuSeparator /> : null}
+                                    {canManage(automation) ? <DropdownMenuItem variant="destructive" onSelect={() => handlers.current.archiveActions.archive(automation)}>
+                                        <Archive className="size-4" />Archive
+                                    </DropdownMenuItem> : null}
+                                </>
+                            )}
+                        </DropdownMenuContent>
+                    </DropdownMenu>
+                )}
+                mobileCard={(automation) => (
+                    <div className="space-y-1">
+                        <div className="flex items-start justify-between gap-2">
+                            <span className="min-w-0 break-words font-medium">{automation.name}</span>
+                            <Badge tone={automation.isActive ? 'success' : 'neutral'}>{automation.isActive ? 'On' : 'Off'}</Badge>
+                        </div>
+                        <p className="text-sm text-muted-foreground">Starts when: {triggerLabel(automation.trigger?.type)}</p>
+                        <p className="text-xs text-muted-foreground">{formatCount(automation.workflow?.nodes?.length ?? 0)} steps · {formatCount(automation._count?.executions ?? 0)} runs</p>
+                    </div>
+                )}
+                emptyState={showArchived && !search.trim() ? {
+                    icon: <Archive />,
+                    title: 'Nothing archived',
+                    description: `Archived automations stay here for 30 days, then they're deleted.`,
+                } : narrowed ? {
+                    kind: 'no-match',
+                    title: 'No automations match',
+                    description: 'Try another search or status.',
+                    action: <Button variant="outline" onClick={() => { setSearch(''); setStatus('all'); }}>Clear search and filter</Button>,
+                } : {
+                    icon: <Workflow />,
+                    title: 'No automations yet',
+                    description: 'Automations send emails, assign leads, create tasks and more, on their own, when something happens.',
+                    action: <Button asChild><Link href="/dashboard/automations-v2/new"><Plus className="size-4" />New automation</Link></Button>,
+                }}
+            />
         </div>
     );
 }

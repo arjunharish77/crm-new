@@ -42,11 +42,11 @@ const nextConfig: NextConfig = {
       },
       {
         source: "/sitemap-index.xml",
-        headers: [{ key: "Cache-Control", value: "public, s-maxage=3600, stale-while-revalidate=86400" }],
+        headers: [{ key: "Cache-Control", value: "no-store" }],
       },
       {
         source: "/sitemaps/:path*",
-        headers: [{ key: "Cache-Control", value: "public, s-maxage=3600, stale-while-revalidate=86400" }],
+        headers: [{ key: "Cache-Control", value: "no-store" }],
       },
       {
         source: "/brand/:path*",
@@ -54,11 +54,11 @@ const nextConfig: NextConfig = {
       },
       {
         source: "/universities/:path*",
-        headers: [{ key: "Cache-Control", value: "public, s-maxage=600, stale-while-revalidate=86400" }],
+        headers: [{ key: "Cache-Control", value: "no-store" }],
       },
       {
         source: "/courses/:path*",
-        headers: [{ key: "Cache-Control", value: "public, s-maxage=600, stale-while-revalidate=86400" }],
+        headers: [{ key: "Cache-Control", value: "no-store" }],
       },
     ];
   },

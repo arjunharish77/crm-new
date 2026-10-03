@@ -15,6 +15,15 @@ import {
   releaseQueuedCall,
 } from "@/lib/server/call-queues";
 
+// Telephony business logic under test; the TELEPHONY module gate itself is covered by
+// tests/telephony-module-gate.test.ts.
+vi.mock("@/lib/server/module-entitlements", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/server/module-entitlements")>()),
+  assertTenantModule: vi.fn(async () => undefined),
+  assertModuleEnabled: vi.fn(async () => undefined),
+}));
+
+
 const member = { id: "user-1", tenantId: "tenant-a" };
 const supervisor = { id: "sup-1", tenantId: "tenant-a", role: { permissions: { recordAccess: "TEAM" } } };
 
@@ -57,6 +66,7 @@ describe("call queues and routing", () => {
         { queueId: "team-1", teamName: "Sales", queuedAt: new Date(now - 20 * 60000).toISOString(), claimedBy: "user-1" },
         { queueId: "team-2", teamName: "Support", queuedAt: new Date(now - 5 * 60000).toISOString(), claimedBy: null },
       ]);
+      dbMocks.query.mockResolvedValueOnce([{ teamId: "team-1" }, { teamId: "team-2" }]); // the member's teams
 
       const result = await getCallQueueHealthForTenant(member);
 
@@ -73,6 +83,19 @@ describe("call queues and routing", () => {
       expect(result[0].unclaimed).toBeGreaterThanOrEqual(result[1].unclaimed);
     });
 
+    it("lists only the teams a non-supervisor is on; a supervisor sees every queue", async () => {
+      const queuedAt = new Date().toISOString();
+      const rows = [
+        { queueId: "team-1", teamName: "Sales", queuedAt, claimedBy: null },
+        { queueId: "team-2", teamName: "Support", queuedAt, claimedBy: null },
+      ];
+      dbMocks.query.mockResolvedValueOnce(rows).mockResolvedValueOnce([{ teamId: "team-2" }]);
+      expect((await getCallQueueHealthForTenant(member)).map((row) => row.teamId)).toEqual(["team-2"]);
+
+      dbMocks.query.mockResolvedValueOnce(rows);
+      expect((await getCallQueueHealthForTenant(supervisor)).map((row) => row.teamId).sort()).toEqual(["team-1", "team-2"]);
+    });
+
     it("returns an empty array when nothing is queued", async () => {
       const result = await getCallQueueHealthForTenant(member);
       expect(result).toEqual([]);
@@ -80,12 +103,35 @@ describe("call queues and routing", () => {
   });
 
   describe("listQueuedCallsForTeam", () => {
+    beforeEach(() => {
+      dbMocks.queryOne.mockResolvedValue({ id: "team-1", name: "Sales", leadId: null }); // team lookup
+    });
+
+    it("throws TEAM_NOT_FOUND for a team outside the workspace", async () => {
+      dbMocks.queryOne.mockReset().mockResolvedValueOnce(null);
+      await expect(listQueuedCallsForTeam(supervisor, "team-x")).rejects.toThrow("TEAM_NOT_FOUND");
+    });
+
+    it("throws FORBIDDEN for someone not on the team who doesn't supervise it", async () => {
+      dbMocks.query.mockResolvedValueOnce([{ teamId: "team-2" }]); // the member's teams
+      await expect(listQueuedCallsForTeam(member, "team-1")).rejects.toThrow("FORBIDDEN");
+    });
+
+    it("allows a member on the team's member list", async () => {
+      dbMocks.query
+        .mockResolvedValueOnce([{ teamId: "team-1" }]) // the member's teams (primary, member list, lead)
+        .mockResolvedValueOnce([{ id: "call-1", priority: "LOW", queuedAt: "2026-01-01T00:00:00.000Z", claimedBy: null }]);
+      const result = await listQueuedCallsForTeam(member, "team-1");
+      expect(result.map((call: any) => call.id)).toEqual(["call-1"]);
+      expect(String(dbMocks.query.mock.calls[0][0])).toContain('"TeamMember"');
+    });
+
     it("orders unclaimed calls before claimed ones", async () => {
       dbMocks.query.mockResolvedValueOnce([
         { id: "call-claimed", priority: "URGENT", queuedAt: "2026-01-01T00:00:00.000Z", claimedBy: "user-1" },
         { id: "call-unclaimed", priority: "LOW", queuedAt: "2026-01-02T00:00:00.000Z", claimedBy: null },
       ]);
-      const result = await listQueuedCallsForTeam(member, "team-1");
+      const result = await listQueuedCallsForTeam(supervisor, "team-1");
       expect(result[0].id).toBe("call-unclaimed");
     });
 
@@ -94,7 +140,7 @@ describe("call queues and routing", () => {
         { id: "call-low", priority: "LOW", queuedAt: "2026-01-01T00:00:00.000Z", claimedBy: null },
         { id: "call-urgent", priority: "URGENT", queuedAt: "2026-01-02T00:00:00.000Z", claimedBy: null },
       ]);
-      const result = await listQueuedCallsForTeam(member, "team-1");
+      const result = await listQueuedCallsForTeam(supervisor, "team-1");
       expect(result[0].id).toBe("call-urgent");
     });
 
@@ -103,7 +149,7 @@ describe("call queues and routing", () => {
         { id: "call-newer", priority: "MEDIUM", queuedAt: "2026-01-02T00:00:00.000Z", claimedBy: null },
         { id: "call-older", priority: "MEDIUM", queuedAt: "2026-01-01T00:00:00.000Z", claimedBy: null },
       ]);
-      const result = await listQueuedCallsForTeam(member, "team-1");
+      const result = await listQueuedCallsForTeam(supervisor, "team-1");
       expect(result[0].id).toBe("call-older");
     });
   });
@@ -117,8 +163,8 @@ describe("call queues and routing", () => {
     it("throws FORBIDDEN for a user who is neither a team member nor a supervisor", async () => {
       dbMocks.queryOne
         .mockResolvedValueOnce({ queueId: "team-1" }) // call lookup
-        .mockResolvedValueOnce({ id: "team-1", name: "Sales", leadId: "someone-else" }) // team lookup
-        .mockResolvedValueOnce({ teamId: "other-team" }); // isQueueMember lookup
+        .mockResolvedValueOnce({ id: "team-1", name: "Sales", leadId: "someone-else" }); // team lookup
+      dbMocks.query.mockResolvedValueOnce([{ teamId: "other-team" }]); // the member's teams
       await expect(claimQueuedCall(member, "call-1")).rejects.toThrow("FORBIDDEN");
     });
 
@@ -126,8 +172,8 @@ describe("call queues and routing", () => {
       dbMocks.queryOne
         .mockResolvedValueOnce({ queueId: "team-1" })
         .mockResolvedValueOnce({ id: "team-1", name: "Sales", leadId: null })
-        .mockResolvedValueOnce({ teamId: "team-1" })
         .mockResolvedValueOnce({ id: "call-1", claimedBy: "user-1" });
+      dbMocks.query.mockResolvedValueOnce([{ teamId: "team-1" }]); // on the team's member list
 
       const result = await claimQueuedCall(member, "call-1");
       expect(result.claimedBy).toBe("user-1");
@@ -195,6 +241,17 @@ describe("call queues and routing", () => {
         .mockResolvedValueOnce({ id: "call-1", claimedBy: null });
 
       const result = await releaseQueuedCall(supervisor, "call-1");
+      expect(result.claimedBy).toBeNull();
+      expect(crmMocks.createAuditLog).toHaveBeenCalledWith(supervisor, "RELEASE", "TELEPHONY_CALL_QUEUE", "call-1", expect.anything(), expect.anything(), null);
+    });
+
+    it("allows a workspace admin even with Own record access (they're shown the Release button)", async () => {
+      dbMocks.queryOne
+        .mockResolvedValueOnce({ queueId: "team-1", claimedBy: "user-1" })
+        .mockResolvedValueOnce({ id: "team-1", name: "Sales", leadId: null })
+        .mockResolvedValueOnce({ id: "call-1", claimedBy: null });
+      const admin = { id: "admin-1", tenantId: "tenant-a", isTenantAdmin: true, role: { permissions: { recordAccess: "OWN" } } };
+      const result = await releaseQueuedCall(admin, "call-1");
       expect(result.claimedBy).toBeNull();
     });
   });

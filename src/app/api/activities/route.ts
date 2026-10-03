@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { createActivityForTenant, listActivitiesForTenant } from "@/lib/server/crm";
 import { requireCurrentUser } from "@/lib/server/auth";
-import { badRequest, serverError, unauthorized } from "@/lib/server/http";
+import { badRequest, notFound, serverError, unauthorized } from "@/lib/server/http";
 
 export async function GET(request: Request) {
   try {
@@ -10,9 +10,20 @@ export async function GET(request: Request) {
     const limit = Number(searchParams.get("limit") ?? "100");
     const page = Number(searchParams.get("page") ?? "1");
     const filters = searchParams.get("filters");
-    const parsedFilters = filters ? JSON.parse(filters) : null;
+    let parsedFilters = null;
+    try {
+      parsedFilters = filters ? JSON.parse(filters) : null;
+    } catch {
+      return badRequest("Filters must be valid JSON");
+    }
 
-    const response = await listActivitiesForTenant(user, limit, parsedFilters, page);
+    // Search, sort and strict filters (Smart Views): ?q=, ?sort=<column>&dir=asc|desc, ?strict=1.
+    const sortId = searchParams.get("sort");
+    const response = await listActivitiesForTenant(user, limit, parsedFilters, page, {
+      search: searchParams.get("q"),
+      sort: sortId ? { id: sortId, desc: searchParams.get("dir") !== "asc" } : null,
+      strictFilters: searchParams.get("strict") === "1",
+    });
     return NextResponse.json(response);
   } catch (error) {
     if (error instanceof Error && error.message === "UNAUTHORIZED") {
@@ -39,6 +50,8 @@ export async function POST(request: Request) {
       return unauthorized();
     }
 
+    if (error instanceof Error && error.message === "ACTIVITY_LINK_REQUIRED") return badRequest("Choose the lead or opportunity this activity is for");
+    if (error instanceof Error && error.message === "ACTIVITY_RECORD_NOT_ACCESSIBLE") return notFound("Lead or opportunity not found");
     console.error("Activity create failed", error);
     return serverError("Failed to create activity", error);
   }

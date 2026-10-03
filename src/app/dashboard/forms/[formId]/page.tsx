@@ -1,126 +1,133 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import { useCallback, useEffect, useState } from 'react';
+import { useParams } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowLeft as ArrowBackIcon, ExternalLink as OpenInNewIcon, Loader2 } from 'lucide-react';
+import { toast } from 'sonner';
+import { Copy, ExternalLink, Loader2 } from 'lucide-react';
 import { apiFetch } from '@/lib/api';
 import { FormEditor } from '@/components/forms/form-editor';
 import { SubmissionsTable } from '@/components/forms/submissions-table';
 import { AnalyticsDashboard } from '@/components/forms/form-analytics';
 import { CrmPlacementEditor } from '@/components/forms/crm-placement-editor';
 import { Button } from '@/components/ui/button';
-import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { PageHeader } from '@/components/layout/page-header';
+import { PageTabs, usePageTab, type PageTab } from '@/components/common/page-tabs';
+import { EmptyState } from '@/components/common/empty-state';
+import { ErrorState } from '@/components/common/error-state';
+import { publicFormPath, publicFormUrl } from '@/lib/forms/public-url';
+import { purgeDate } from '@/hooks/use-archive-actions';
+import { useRecordTitle } from "@/components/app-states/page-title";
 
-type BuilderTab = 'editor' | 'submissions' | 'analytics' | 'placement';
+const TABS = [
+    { value: 'editor', label: 'Builder' },
+    { value: 'submissions', label: 'Submissions' },
+    { value: 'analytics', label: 'Analytics' },
+    { value: 'placement', label: 'CRM placement' },
+] as const;
+type BuilderTab = (typeof TABS)[number]['value'];
 
+// Marketing & automation › Forms › one form (UI/UX plan §5.13): status shown once, one public
+// link (/f/{slug}) with a copy button, and a load failure that says so instead of "not found".
 export default function FormBuilderPage() {
     const params = useParams();
-    const router = useRouter();
     const formId = params.formId as string;
     const [form, setForm] = useState<any>(null);
+    useRecordTitle(form?.name);
     const [loading, setLoading] = useState(true);
-    const [activeTab, setActiveTab] = useState<BuilderTab>('editor');
+    const [loadError, setLoadError] = useState<'missing' | 'failed' | null>(null);
+    const [activeTab, setActiveTab] = usePageTab<BuilderTab>(TABS as unknown as PageTab<BuilderTab>[], 'editor');
 
-    useEffect(() => {
+    const load = useCallback(() => {
         if (!formId) return;
-
+        setLoading(true);
+        setLoadError(null);
         apiFetch(`/forms/${formId}`)
-            .then(setForm)
-            .catch(console.error)
+            .then((data: any) => { if (data) setForm(data); else setLoadError('missing'); })
+            .catch((error: any) => setLoadError(error?.status === 404 ? 'missing' : 'failed'))
             .finally(() => setLoading(false));
     }, [formId]);
+    useEffect(() => { load(); }, [load]);
 
-    if (loading) {
+    const restoreArchived = async () => {
+        try {
+            const restored = await apiFetch(`/forms/${formId}/restore`, { method: 'POST' });
+            setForm(restored);
+            toast.success('Form restored');
+        } catch (error: any) {
+            toast.error(error?.message || "The form couldn't be restored");
+        }
+    };
+
+    const copyLink = async () => {
+        try {
+            await navigator.clipboard.writeText(publicFormUrl(form.slug));
+            toast.success('Public link copied');
+        } catch {
+            toast.error("The link couldn't be copied");
+        }
+    };
+
+    if (loading && !form) {
         return (
             <div className="flex min-h-[60vh] items-center justify-center">
-                <Loader2 className="size-8 animate-spin text-primary" />
+                <Loader2 className="size-8 animate-spin text-primary" aria-label="Loading the form" />
             </div>
         );
     }
 
     if (!form) {
         return (
-            <div className="p-6">
-                <h1 className="mb-1 text-lg font-bold">Form not found</h1>
-                <Button onClick={() => router.push('/dashboard/forms')} variant="outline">
-                    Back to Forms
-                </Button>
+            <div className="mx-auto max-w-[1700px]">
+                <PageHeader title={loadError === 'missing' ? 'Form not found' : 'Form'} backHref="/dashboard/forms" backLabel="Forms" />
+                {loadError === 'missing'
+                    ? <EmptyState kind="no-match" title="This form doesn't exist" description="It may have been deleted." action={<Button variant="outline" asChild><Link href="/dashboard/forms">Back to forms</Link></Button>} />
+                    : <ErrorState description="The form couldn't be loaded." onRetry={load} />}
             </div>
         );
     }
 
     return (
-        <div className="mx-auto max-w-[1700px] px-3 py-3 md:px-4 md:py-4">
-            <div className="flex flex-col gap-4">
-                <div>
-                    <Button
-                        variant="ghost"
-                        onClick={() => router.push('/dashboard/forms')}
-                        className="mb-2 h-[34px] text-muted-foreground"
-                    >
-                        <ArrowBackIcon className="size-4" />
-                        Back
-                    </Button>
-                    <div className="flex flex-col justify-between gap-3 md:flex-row md:items-center">
-                        <div>
-                            <h1 className="text-lg font-extrabold tracking-tight">
-                                {form.name}
-                            </h1>
-                            <div className="mt-0.5 flex flex-wrap items-center gap-2">
-                                <span className="text-sm text-muted-foreground">
-                                    {form.isActive ? 'Active' : 'Draft'}
-                                </span>
-                                <span className="text-sm text-muted-foreground">&bull;</span>
-                                <Link
-                                    href={`/public-form/${form.id}`}
-                                    target="_blank"
-                                    rel="noreferrer"
-                                    className="inline-flex items-center gap-1 text-sm font-semibold text-primary no-underline hover:underline"
-                                >
-                                    View Public Page
-                                    <OpenInNewIcon className="size-4" />
-                                </Link>
-                            </div>
-                        </div>
-                        <Badge variant={form.isActive ? "default" : "outline"} className="rounded-md font-bold">
-                            {form.isActive ? 'Live Form' : 'Draft Form'}
-                        </Badge>
-                    </div>
+        <div className="mx-auto min-w-0 max-w-[1700px]">
+            <PageHeader
+                title={form.name}
+                backHref="/dashboard/forms"
+                backLabel="Forms"
+                meta={
+                    <span className="flex flex-wrap items-center gap-2">
+                        <Badge tone={form.deletedAt ? 'warning' : !form.publishedVersion ? 'info' : form.isActive ? 'success' : 'neutral'}>{form.deletedAt ? 'Archived' : !form.publishedVersion ? 'Draft · not published' : form.isActive ? 'Live' : 'Off'}</Badge>
+                        <span className="break-all text-muted-foreground">{publicFormPath(form.slug)}</span>
+                    </span>
+                }
+                secondaryActions={
+                    <>
+                        <Button variant="outline" onClick={copyLink}><Copy className="size-4" />Copy public link</Button>
+                        <Button variant="outline" asChild>
+                            <a href={publicFormPath(form.slug)} target="_blank" rel="noreferrer"><ExternalLink className="size-4" />Open public form</a>
+                        </Button>
+                    </>
+                }
+            />
+            {form.deletedAt ? (
+                <div role="status" className="mb-3 flex flex-wrap items-center justify-between gap-3 rounded-lg bg-status-warning px-3 py-2 text-sm text-status-warning-foreground">
+                    <span>This form is archived: its public link doesn&apos;t work and it can&apos;t be changed. It will be deleted with its submissions on {purgeDate(form.deletedAt)}.</span>
+                    <Button size="sm" variant="outline" onClick={restoreArchived}>Restore</Button>
                 </div>
-
-                <Card className="gap-0 overflow-hidden rounded-2xl py-0">
-                    <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as BuilderTab)}>
-                        <div className="border-b bg-muted/30 px-2 py-2">
-                            <TabsList className="h-auto bg-transparent p-0 gap-1">
-                                <TabsTrigger value="editor" className="rounded-lg data-[state=active]:bg-background data-[state=active]:shadow-sm">Builder</TabsTrigger>
-                                <TabsTrigger value="submissions" className="rounded-lg data-[state=active]:bg-background data-[state=active]:shadow-sm">Submissions</TabsTrigger>
-                                <TabsTrigger value="analytics" className="rounded-lg data-[state=active]:bg-background data-[state=active]:shadow-sm">Analytics</TabsTrigger>
-                                <TabsTrigger value="placement" className="rounded-lg data-[state=active]:bg-background data-[state=active]:shadow-sm">CRM Placement</TabsTrigger>
-                            </TabsList>
-                        </div>
-
-                        <div className="bg-background">
-                            <TabsContent value="editor" className="mt-0 min-h-[calc(100vh-240px)]">
-                                <FormEditor initialForm={form} />
-                            </TabsContent>
-
-                            <TabsContent value="submissions" className="mt-0 p-3 md:p-4">
-                                <SubmissionsTable formId={formId} />
-                            </TabsContent>
-
-                            <TabsContent value="analytics" className="mt-0 p-3 md:p-4">
-                                <AnalyticsDashboard formId={formId} />
-                            </TabsContent>
-
-                            <TabsContent value="placement" className="mt-0">
-                                <CrmPlacementEditor initialForm={form} onSaved={setForm} />
-                            </TabsContent>
-                        </div>
-                    </Tabs>
-                </Card>
+            ) : null}
+            <PageTabs label="Form" tabs={TABS as unknown as PageTab<BuilderTab>[]} value={activeTab} onChange={setActiveTab} className="mb-3" />
+            <div className="rounded-xl border bg-background">
+                {/* The builder and placement panels stay mounted while hidden, so switching tabs
+                    never discards unsaved work (UI/UX plan B5). Both share `form` as the latest
+                    saved version. */}
+                <div hidden={activeTab !== 'editor'} className="min-h-[calc(100vh-240px)]">
+                    <FormEditor initialForm={form} onSaved={setForm} />
+                </div>
+                {activeTab === 'submissions' ? <div className="p-3 md:p-4"><SubmissionsTable formId={formId} /></div> : null}
+                {activeTab === 'analytics' ? <div className="p-3 md:p-4"><AnalyticsDashboard formId={formId} /></div> : null}
+                <div hidden={activeTab !== 'placement'}>
+                    <CrmPlacementEditor initialForm={form} onSaved={setForm} />
+                </div>
             </div>
         </div>
     );

@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getAdminSession } from "@/lib/admin-auth";
-import { query } from "@/lib/db";
+import { withCatalogWrite } from "@/lib/catalog-write";
+import { catalogWriteError } from "@/lib/catalog-permissions";
 
 const universitySchema = z.object({
   id: z.string().trim().min(2).regex(/^[a-z0-9-]+$/),
@@ -29,6 +30,12 @@ export async function POST(request: Request) {
   }
 
   const value = parsed.data;
+  const permissionError = catalogWriteError(session.role, value);
+  if (permissionError) return NextResponse.json({ error: permissionError }, { status: 403 });
+  if (value.isPublished !== (value.status === "PUBLISHED")) {
+    return NextResponse.json({ error: "Published status and public visibility must agree." }, { status: 400 });
+  }
+  return withCatalogWrite(async (query) => {
   await query(
     `insert into university (id, slug, name, short_name, city, status, is_published, data)
      values ($1, $2, $3, $4, $5, $6, $7, $8)`,
@@ -51,4 +58,5 @@ export async function POST(request: Request) {
   );
 
   return NextResponse.json({ id: value.id }, { status: 201 });
+  });
 }

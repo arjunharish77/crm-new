@@ -16,6 +16,16 @@ vi.mock("@/lib/server/marketplace-events", () => eventsMocks);
 import { sendTestAppEvent, replayAppDelivery, exportAppDeliveryLogsCsv, generateAppSupportBundle } from "@/lib/server/marketplace-diagnostics";
 import { encryptSecretAtRest } from "@/lib/server/secret-encryption";
 
+// Marketplace logic under test; the MARKETPLACE module gate is covered by
+// tests/marketplace-module-gate.test.ts.
+vi.mock("@/lib/server/module-entitlements", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/server/module-entitlements")>()),
+  assertTenantModule: vi.fn(async () => undefined),
+  assertModuleEnabled: vi.fn(async () => undefined),
+  isModuleEnabledForTenant: vi.fn(async () => true),
+}));
+
+
 const user = { id: "user-1", tenantId: "tenant-a" };
 
 describe("sendTestAppEvent", () => {

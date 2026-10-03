@@ -50,7 +50,7 @@ function MetricCard({
                     <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                         {title}
                     </p>
-                    <p className="mt-1.5 text-3xl font-extrabold tracking-tight">
+                    <p className="mt-1.5 text-3xl font-semibold tracking-tight">
                         {value}
                     </p>
                     <p className="mt-1.5 text-sm text-muted-foreground">
@@ -130,7 +130,7 @@ export function AnalyticsDashboard({ formId }: AnalyticsDashboardProps) {
     return (
         <div className="flex flex-col gap-4">
             <div>
-                <h2 className="text-lg font-extrabold tracking-tight">
+                <h2 className="text-lg font-semibold tracking-tight">
                     Performance Snapshot
                 </h2>
                 <p className="text-sm text-muted-foreground">
@@ -171,7 +171,7 @@ export function AnalyticsDashboard({ formId }: AnalyticsDashboardProps) {
 
             <div className="grid grid-cols-1 gap-3 lg:grid-cols-12">
                 <Card className="rounded-2xl p-4 lg:col-span-7">
-                    <p className="mb-3 text-base font-extrabold">
+                    <p className="mb-3 text-base font-semibold">
                         Conversion Health
                     </p>
                     <div className="flex flex-col gap-4">
@@ -204,7 +204,7 @@ export function AnalyticsDashboard({ formId }: AnalyticsDashboardProps) {
                             <TrendingUpOutlinedIcon className="size-4" />
                         </div>
                         <div>
-                            <p className="text-base font-extrabold">
+                            <p className="text-base font-semibold">
                                 Recent Activity
                             </p>
                             <p className="text-sm text-muted-foreground">

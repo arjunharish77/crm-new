@@ -454,7 +454,7 @@ export function SaveViewDialog({
             onClose={() => onOpenChange(false)}
             title={isEditing ? "Edit Smart View" : "Create Smart View"}
             subtitle="Define tabs, record sources, filters, layout, and assignment."
-            maxWidth="xl"
+            maxWidth="lg"
             actions={
                 <>
                     <Button variant="outline" onClick={() => onOpenChange(false)} disabled={loading}>
@@ -471,7 +471,7 @@ export function SaveViewDialog({
                 <div className="rounded-xl border bg-card p-3">
                     <div className="mb-3 flex items-center gap-2">
                         <Settings2 className="size-4 text-primary" />
-                        <p className="text-sm font-extrabold">Smart View Setup</p>
+                        <p className="text-sm font-semibold">Smart View Setup</p>
                     </div>
                     <div className="space-y-2">
                     <Label htmlFor="save-view-name">Smart View Name</Label>
@@ -488,7 +488,7 @@ export function SaveViewDialog({
                     <div className="space-y-2 rounded-xl border bg-card p-3">
                         <div className="flex items-center gap-2">
                             <Users className="size-4 text-primary" />
-                            <p className="text-sm font-extrabold">Visibility</p>
+                            <p className="text-sm font-semibold">Visibility</p>
                         </div>
                         <Select value={scope} onValueChange={(value) => setScope(value as typeof scope)}>
                             <SelectTrigger className="w-full">
@@ -548,7 +548,7 @@ export function SaveViewDialog({
                     </div>
                 ) : (
                     <div className="rounded-xl border bg-card p-3">
-                        <p className="text-sm font-extrabold">Private Smart View</p>
+                        <p className="text-sm font-semibold">Private Smart View</p>
                         <p className="mt-1 text-xs text-muted-foreground">Your role can create Smart Views for yourself. Admins can assign Smart Views to users, teams, and sales groups.</p>
                     </div>
                 )}
@@ -556,7 +556,7 @@ export function SaveViewDialog({
                     {canShare ? (
                     <div className="flex items-center justify-between gap-3 rounded-lg bg-surface-container-low px-3 py-2">
                         <div>
-                            <p className="text-sm font-extrabold">Default</p>
+                            <p className="text-sm font-semibold">Default</p>
                             <p className="text-xs text-muted-foreground">Load automatically.</p>
                         </div>
                         <Switch checked={isDefault} onCheckedChange={setIsDefault} />
@@ -564,7 +564,7 @@ export function SaveViewDialog({
                     ) : null}
                     <div className="flex items-center justify-between gap-3 rounded-lg bg-surface-container-low px-3 py-2">
                         <div>
-                            <p className="text-sm font-extrabold">Pinned</p>
+                            <p className="text-sm font-semibold">Pinned</p>
                             <p className="text-xs text-muted-foreground">Keep near the top.</p>
                         </div>
                         <Switch checked={isPinned} onCheckedChange={setIsPinned} />
@@ -576,7 +576,7 @@ export function SaveViewDialog({
                         <div className="flex items-center gap-2">
                             <Layers3 className="size-4" />
                             <div>
-                                <p className="text-sm font-extrabold">Smart View Tabs</p>
+                                <p className="text-sm font-semibold">Smart View Tabs</p>
                                 <p className="text-xs text-muted-foreground">Each tab can point to any CRM module and carry its own conditions.</p>
                             </div>
                         </div>
@@ -594,11 +594,11 @@ export function SaveViewDialog({
                                 onClick={() => setActiveTabId(tab.id)}
                                 className={`w-full rounded-lg border px-3 py-2 text-left text-xs transition-colors ${activeTab?.id === tab.id ? "border-primary bg-primary/10 text-primary" : "bg-card hover:bg-accent"}`}
                             >
-                                <span className="block max-w-[150px] truncate font-extrabold">{tab.name || "Untitled tab"}</span>
+                                <span className="block max-w-[150px] truncate font-semibold">{tab.name || "Untitled tab"}</span>
                                 <span className="text-muted-foreground">
                                     {SMART_VIEW_MODULE_OPTIONS.find((option) => option.value === tab.module)?.label}
                                     {!isSmartViewModuleEnabled(tab.module, moduleFeatures) && (
-                                        <Badge variant="destructive" className="ml-1.5 h-4 rounded-md px-1 text-[0.6rem]">Disabled</Badge>
+                                        <Badge variant="destructive" className="ml-1.5 h-4 rounded-md px-1 text-xs">Disabled</Badge>
                                     )}
                                 </span>
                             </button>
@@ -659,8 +659,8 @@ export function SaveViewDialog({
                                         onClick={() => setBuilderStep(step.value)}
                                         className={`min-w-[132px] flex-1 rounded-md px-3 py-2 text-left transition-colors ${builderStep === step.value ? "bg-background text-primary shadow-sm" : "text-muted-foreground hover:bg-background/70 hover:text-foreground"}`}
                                     >
-                                        <span className="block text-sm font-extrabold">{step.label}</span>
-                                        <span className="block truncate text-[0.7rem] leading-4">{step.description}</span>
+                                        <span className="block text-sm font-semibold">{step.label}</span>
+                                        <span className="block truncate text-xs leading-4">{step.description}</span>
                                     </button>
                                 ))}
                             </div>
@@ -668,7 +668,7 @@ export function SaveViewDialog({
                                 <div className="rounded-lg border bg-card p-4">
                                     <div className="mb-3 flex items-center justify-between gap-3">
                                         <div>
-                                            <p className="text-sm font-extrabold">Filter Conditions</p>
+                                            <p className="text-sm font-semibold">Filter Conditions</p>
                                             <p className="text-xs text-muted-foreground">Use fields from {SMART_VIEW_MODULE_OPTIONS.find((option) => option.value === activeTab.module)?.label} only.</p>
                                         </div>
                                         <Badge variant="outline" className="rounded-md">{activeTab.filters?.conditions?.length ?? 0} filters</Badge>
@@ -684,7 +684,7 @@ export function SaveViewDialog({
                                 <div className="rounded-lg border bg-card p-4">
                                     <div className="mb-4 flex items-center gap-2">
                                         <Columns3 className="size-4" />
-                                        <p className="text-sm font-extrabold">Columns & Layout</p>
+                                        <p className="text-sm font-semibold">Columns & Layout</p>
                                     </div>
                                     <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
                                         <div className="space-y-1.5 rounded-lg bg-surface-container-low p-3 xl:col-span-2">
@@ -773,7 +773,7 @@ export function SaveViewDialog({
                                 <div className="rounded-lg border bg-card p-4">
                                     <div className="mb-4 flex items-center gap-2">
                                         <BarChart3 className="size-4" />
-                                        <p className="text-sm font-extrabold">Chart / Count Summary</p>
+                                        <p className="text-sm font-semibold">Chart / Count Summary</p>
                                     </div>
                                     <div className="grid gap-3 sm:grid-cols-2">
                                         <div className="space-y-1.5 rounded-lg bg-surface-container-low p-3">
@@ -824,7 +824,7 @@ export function SaveViewDialog({
                                     <div className="mb-4 flex items-center justify-between gap-2">
                                         <div className="flex items-center gap-2">
                                             <Tags className="size-4" />
-                                            <p className="text-sm font-extrabold">Count Chips</p>
+                                            <p className="text-sm font-semibold">Count Chips</p>
                                         </div>
                                         <Button type="button" variant="outline" size="sm" className="bg-background" onClick={addCountChip}>
                                             <Plus className="size-4" />
@@ -891,7 +891,7 @@ export function SaveViewDialog({
                                 <div className="rounded-lg border bg-card p-4">
                                     <div className="mb-4 flex items-center gap-2">
                                         <Sparkles className="size-4" />
-                                        <p className="text-sm font-extrabold">Quick Actions</p>
+                                        <p className="text-sm font-semibold">Quick Actions</p>
                                     </div>
                                     <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
                                         {activeQuickActions.map((action) => (

@@ -30,6 +30,7 @@ import {
     DropdownMenuItem,
     DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { storageGet, storageSet, storageRemove } from "@/lib/storage";
 
 type ContextualFormsPanelProps = {
     placement: "LEAD_DETAIL" | "OPPORTUNITY_DETAIL" | "ACTIVITY_DETAIL" | "LEAD_CREATE" | "OPPORTUNITY_CREATE";
@@ -138,7 +139,7 @@ export function ContextualFormsPanel({ placement, context, entityData, onSaved, 
             {autoOpenSingle && availableForms.length === 1 ? (
                 <Button
                     variant="secondary"
-                    className="min-h-9 rounded-[10px] px-3.5"
+                    className="min-h-9 rounded-xl px-3.5"
                     onClick={() => setOpenFormId(availableForms[0].id)}
                 >
                     <DescriptionIcon className="size-4" />
@@ -149,7 +150,7 @@ export function ContextualFormsPanel({ placement, context, entityData, onSaved, 
                     <DropdownMenuTrigger asChild>
                         <Button
                             variant="secondary"
-                            className="min-h-9 rounded-[10px] px-3.5"
+                            className="min-h-9 rounded-xl px-3.5"
                         >
                             <DescriptionIcon className="size-4" />
                             {triggerLabel || "Forms"}
@@ -374,7 +375,7 @@ function FormRenderer({
                 data[field.id] = field.defaultValue;
             }
         });
-        const savedDraft = window.localStorage.getItem(draftKey);
+        const savedDraft = storageGet(draftKey);
         const draftData = parseDraft(savedDraft);
         setFormData({ ...data, ...draftData });
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -382,7 +383,7 @@ function FormRenderer({
 
     useEffect(() => {
         if (submitted || Object.keys(formData).length === 0) return;
-        window.localStorage.setItem(draftKey, JSON.stringify(formData));
+        storageSet(draftKey, JSON.stringify(formData));
     }, [draftKey, formData, submitted]);
 
     // Conditional logic (same engine as the public form renderer). Sections/tabs don't
@@ -507,7 +508,7 @@ function FormRenderer({
                 toast.success("Saved successfully!");
             }
 
-            window.localStorage.removeItem(draftKey);
+            storageRemove(draftKey);
             setSubmitted(true);
             setTimeout(onSuccess, 800);
         } catch (error: any) {
@@ -529,7 +530,7 @@ function FormRenderer({
     }
 
     const clearDraft = () => {
-        window.localStorage.removeItem(draftKey);
+        storageRemove(draftKey);
         setFormData({});
         toast.success("Draft cleared");
     };
