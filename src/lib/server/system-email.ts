@@ -1,4 +1,5 @@
 import nodemailer, { type Transporter } from "nodemailer";
+import { appBaseUrlString } from "@/lib/app-url";
 
 // Account emails sent by the platform itself, not by a workspace (decision 16, 2026-10-02:
 // platform SMTP). Used for password-reset links. Configured once per deployment:
@@ -24,7 +25,7 @@ export function isSystemEmailConfigured() {
 }
 
 export function appBaseUrl() {
-    return (process.env.APP_URL || "http://localhost:3000").replace(/\/$/, "");
+    return appBaseUrlString();
 }
 
 // The logo at the top of system emails (public/brand/logo-email.png, 600×148 shown at 150×37).

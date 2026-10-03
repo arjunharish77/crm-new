@@ -19,12 +19,13 @@ import { MotionConfig } from "framer-motion";
 
 export const metadata: Metadata = {
   // Absolute URLs for the share image (opengraph-image.png) and icons.
-  metadataBase: new URL(process.env.APP_URL || "http://localhost:3000"),
+  metadataBase: appUrl(),
   title: "Unnatify",
   description: "Secure, multi-tenant CRM SaaS",
 };
 
 import ThemeRegistry from "@/components/providers/ThemeRegistry";
+import { appUrl } from "@/lib/app-url";
 
 // Applied before hydration so the chosen color theme never flashes to the
 // "forest" default on load, mirroring how next-themes avoids a dark-mode flash.

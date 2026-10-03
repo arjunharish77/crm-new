@@ -76,7 +76,7 @@ export async function setMyAvailabilityStatus(user: TenantUser, status: string, 
   const now = new Date().toISOString();
   const row = await queryOne<any>(
     `insert into "AgentAvailability" (id, "tenantId", "userId", status, "statusReason", "lastStatusChangeAt", "lastStatusChangedBy", "createdAt", "updatedAt")
-     values ($1, $2, $3, $4, $5, $6, $6, $7, $7)
+     values ($1, $2, $3, $4, $5, $7, $6, $7, $7)
      on conflict ("tenantId", "userId") do update
        set status = excluded.status, "statusReason" = excluded."statusReason",
            "lastStatusChangeAt" = excluded."lastStatusChangeAt", "lastStatusChangedBy" = excluded."lastStatusChangedBy",
