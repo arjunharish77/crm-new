@@ -1710,10 +1710,16 @@ export async function recomputeSelfLearningScoresForTenant(user: TenantUser, inp
            from "Lead" where "tenantId" = $1 and id > $2 order by id limit 500`,
           [tenantId, afterId],
         ));
-        if (!batch.length) break;
+        // Stop when a page doesn't move past the previous one (never expected from the database,
+        // but a loop must not depend on that).
+        if (!batch.length || batch[batch.length - 1].id === afterId) break;
         afterId = batch[batch.length - 1].id;
+        const lastPage = batch.length < 500;
         const rest = batch.filter((lead) => !scoredIds.has(lead.id));
-        if (!rest.length) continue;
+        if (!rest.length) {
+          if (lastPage) break;
+          continue;
+        }
         const ids = rest.map((lead) => lead.id);
         const sinceIso = since.toISOString();
         const [batchOpportunities, batchActivities, batchTasks, batchCalls, batchDispositions] = await Promise.all([
@@ -1759,6 +1765,7 @@ export async function recomputeSelfLearningScoresForTenant(user: TenantUser, inp
           }
           leadProcessed += 1;
         }
+        if (lastPage) break;
       }
       processed += leadProcessed;
 

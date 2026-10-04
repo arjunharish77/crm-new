@@ -603,7 +603,7 @@ export async function recomputeLeadScoresForTenant(user: TenantUser) {
       'select id, name, email, phone, company, status, source, score from "Lead" where "tenantId" = $1 and id > $2 order by id limit 1000',
       [tenantId, afterId],
     );
-    if (!leads.length) break;
+    if (!leads.length || leads[leads.length - 1].id === afterId) break;
     afterId = leads[leads.length - 1].id;
     count += leads.length;
     const ids: string[] = [];
@@ -628,6 +628,7 @@ export async function recomputeLeadScoresForTenant(user: TenantUser) {
         [ids, scores, now, tenantId],
       );
     }
+    if (leads.length < 1000) break;
   }
 
   return { count, changed };
