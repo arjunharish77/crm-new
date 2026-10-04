@@ -2,7 +2,8 @@
 
 import { PageHeader } from "@/components/layout/page-header";
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
+import { useDebouncedValue } from '@/hooks/use-debounced-value';
 import { History, Search, Eye, Shield, AlertTriangle, Lock, Send, Loader2, UserCheck } from 'lucide-react';
 import { apiFetch } from '@/lib/api';
 import { useAuth } from '@/providers/auth-provider';
@@ -90,10 +91,13 @@ export default function AuditLogPage() {
     const [reviewNote, setReviewNote] = useState('');
     const [savingHold, setSavingHold] = useState(false);
 
+    // Typed filters wait for a pause, and only the newest answer is shown (round-2 plan F8).
+    const appliedFilters = useDebouncedValue(filters, 350);
+    const requestSeq = useRef(0);
     useEffect(() => {
         fetchLogs();
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [filters, category]);
+    }, [appliedFilters, category]);
 
     useEffect(() => {
         if (!selectedLog) return;
@@ -106,6 +110,8 @@ export default function AuditLogPage() {
     }, [selectedLog]);
 
     const fetchLogs = async () => {
+        const seq = ++requestSeq.current;
+        const filters = appliedFilters;
         setLoading(true);
         setLoadError(false);
         try {
@@ -118,11 +124,12 @@ export default function AuditLogPage() {
             if (filters.dateFrom) params.set('dateFrom', new Date(filters.dateFrom).toISOString());
             if (filters.dateTo) params.set('dateTo', new Date(filters.dateTo).toISOString());
             const data = await apiFetch(`/governance/audit-logs?${params.toString()}`);
+            if (seq !== requestSeq.current) return;
             setLogs(data || []);
-        } catch (err) {
-            setLoadError(true);
+        } catch {
+            if (seq === requestSeq.current) setLoadError(true);
         } finally {
-            setLoading(false);
+            if (seq === requestSeq.current) setLoading(false);
         }
     };
 

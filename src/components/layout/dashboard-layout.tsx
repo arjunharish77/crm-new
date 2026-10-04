@@ -12,9 +12,12 @@ import { MaintenanceBanner } from "./maintenance-banner";
 import { KeyboardShortcutsProvider } from "@/lib/keyboard-shortcuts";
 import { PageTitleProvider } from "@/components/app-states/page-title";
 import { storageGet, storageSet } from "@/lib/storage";
+import { useAuth } from "@/providers/auth-provider";
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
     const [mounted, setMounted] = React.useState(false);
+    // Pages wait for sign-in to settle before they render and start loading (round-2 plan P1).
+    const { isLoading: authLoading } = useAuth();
     const [isMobile, setIsMobile] = React.useState(false);
     const [desktopOpen, setDesktopOpen] = React.useState(true);
     const [mobileOpen, setMobileOpen] = React.useState(false);
@@ -66,7 +69,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         }
     };
 
-    if (!mounted) return (
+    if (!mounted || authLoading) return (
         <div className="flex min-h-dvh bg-background">
             <div className="hidden w-16 shrink-0 border-r bg-sidebar md:block" />
             <main className="min-w-0 flex-1">

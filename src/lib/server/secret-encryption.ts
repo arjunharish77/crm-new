@@ -12,8 +12,14 @@ import { createCipheriv, createDecipheriv, createHash, randomBytes } from "crypt
 // established "falls back to JWT_SECRET if unset" precedent (signed-urls.ts) -- so this works
 // in every environment that already has working auth (including every existing test), while
 // production can still set a distinct dedicated key.
+//
+// Round-2 plan O1: production no longer falls back to JWT_SECRET, so rotating JWT_SECRET (sign
+// everyone out) can never make stored secrets unreadable. Set MARKETPLACE_SECRET_ENCRYPTION_KEY
+// once, to the current JWT_SECRET value on an existing install, and never change it without a
+// re-encrypt step.
 function getEncryptionKey(): Buffer {
   const configured = process.env.MARKETPLACE_SECRET_ENCRYPTION_KEY;
+  if (!configured && process.env.NODE_ENV === "production") throw new Error("Missing env var: MARKETPLACE_SECRET_ENCRYPTION_KEY");
   const source = configured || process.env.JWT_SECRET;
   if (!source) throw new Error("Missing env var: MARKETPLACE_SECRET_ENCRYPTION_KEY (or JWT_SECRET fallback)");
   return createHash("sha256").update(source).digest();

@@ -35,7 +35,8 @@ export function GeneralSettingsProvider({ children }: { children: React.ReactNod
         };
     }, [isAuthenticated, isLoading]);
 
-    // Keyed only on sign-in state, so signing out or in starts from a clean tree. A display
-    // settings change no longer remounts the app (UI/UX plan B4); see hooks/use-display-settings.
-    return <div key={String(isAuthenticated)}>{children}</div>;
+    // No key here: AuthProvider already starts a clean tree when the signed-in person changes.
+    // Keying on sign-in state remounted the whole app on every full page load (round-2 plan P1),
+    // and a display settings change doesn't remount either (UI/UX plan B4).
+    return <>{children}</>;
 }

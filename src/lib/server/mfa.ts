@@ -5,6 +5,7 @@ import { query, queryOne, execute, queryOneAsSystem, executeAsSystem } from "@/l
 import { generateTotpSecret, generateTotpUri, verifyTotpToken, generateBackupCodes } from "@/lib/server/totp";
 import { getEffectiveSecurityPolicy } from "@/lib/server/security-policy";
 import { createAuditLog } from "@/lib/server/crm";
+import { revokeAllSessionsForUser } from "@/lib/server/sessions";
 
 const TRUSTED_DEVICE_DAYS = 30;
 const BACKUP_CODE_COUNT = 10;
@@ -216,5 +217,7 @@ export async function resetMfaForUserAsAdmin(adminUser: TenantUser, targetUserId
   await execute(`update "User" set "mfaEnabled" = false, "mfaSecret" = null, "mfaEnrolledAt" = null where id = $1`, [targetUserId]);
   await execute(`delete from "MfaBackupCode" where "userId" = $1`, [targetUserId]);
   await execute(`delete from "TrustedDevice" where "userId" = $1`, [targetUserId]);
+  // Whoever is signed in as that user signs in again (with their password, then a new two-factor set-up) (S3).
+  await revokeAllSessionsForUser(targetUserId, "MFA_RESET_BY_ADMIN");
   await createAuditLog(adminUser as any, "MFA_ADMIN_RESET", "USER", targetUserId, null, null, { resetBy: adminUser.id }).catch(() => undefined);
 }

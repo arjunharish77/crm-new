@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 
 type RedirectRow = {
   id: string;
@@ -8,6 +9,7 @@ type RedirectRow = {
 };
 
 export function RedirectCreateForm() {
+  const router = useRouter();
   const [message, setMessage] = useState("");
   const [tone, setTone] = useState<"success" | "error">("success");
   const [busy, setBusy] = useState(false);
@@ -15,6 +17,7 @@ export function RedirectCreateForm() {
   async function save(formData: FormData) {
     setBusy(true);
     setMessage("");
+    try {
     const response = await fetch("/api/admin/seo/redirects", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -35,15 +38,20 @@ export function RedirectCreateForm() {
       return;
     }
     setTone("success");
-    setMessage("Redirect saved. Refreshing...");
-    window.location.reload();
+    setMessage("Redirect saved.");
+    router.refresh();
+    } catch {
+      setTone("error");
+      setMessage("Connection interrupted. Check the redirect list before retrying.");
+    } finally { setBusy(false); }
   }
 
   return (
-    <form action={save} className="admin-form-grid">
+    <form onSubmit={(event) => { event.preventDefault(); void save(new FormData(event.currentTarget)); }} className="admin-form-grid" aria-busy={busy}>
+      <p className="admin-span-2" id="redirect-help">Enter the old path and destination. Saving an existing source path replaces its redirect. An active redirect takes effect immediately.</p>
       <div className="field">
         <label htmlFor="fromPath">From path</label>
-        <input id="fromPath" name="fromPath" placeholder="/old-online-mba" required />
+        <input id="fromPath" name="fromPath" placeholder="/old-online-mba" aria-describedby="redirect-help" required />
       </div>
       <div className="field">
         <label htmlFor="toPath">To path</label>
@@ -64,43 +72,40 @@ export function RedirectCreateForm() {
       </label>
       <div className="field admin-span-2">
         <label htmlFor="reason">Reason</label>
-        <input id="reason" name="reason" placeholder="Course slug changed, campaign URL retired, typo cleanup..." />
+        <input id="reason" name="reason" maxLength={500} placeholder="Course slug changed, campaign URL retired, typo cleanup..." />
       </div>
       <button className="btn primary admin-span-2" type="submit" disabled={busy}>
         {busy ? "Saving..." : "Save redirect"}
       </button>
-      {message ? <p className={tone === "success" ? "admin-success" : "admin-error"}>{message}</p> : null}
+      {message ? <p role={tone === "error" ? "alert" : "status"} className={tone === "success" ? "admin-success" : "admin-error"}>{message}</p> : null}
     </form>
   );
 }
 
 export function RedirectRowActions({ redirect }: { redirect: RedirectRow }) {
+  const router = useRouter();
   const [busy, setBusy] = useState(false);
-
-  async function toggle() {
-    setBusy(true);
-    await fetch(`/api/admin/seo/redirects/${redirect.id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ isActive: !redirect.is_active }),
-    });
-    window.location.reload();
+  const [message, setMessage] = useState("");
+  const [failed, setFailed] = useState(false);
+  async function change(method: "PATCH" | "DELETE") {
+    setBusy(true); setMessage(""); setFailed(false);
+    try {
+      const response = await fetch(`/api/admin/seo/redirects/${redirect.id}`, {
+        method,
+        ...(method === "PATCH" ? { headers: { "Content-Type": "application/json" }, body: JSON.stringify({ isActive: !redirect.is_active }) } : {}),
+      });
+      const body = await response.json().catch(() => null);
+      if (!response.ok) { setFailed(true); setMessage(body?.error || "Could not update redirect."); return; }
+      setMessage(method === "DELETE" ? "Redirect deleted." : "Redirect updated.");
+      router.refresh();
+    } catch { setFailed(true); setMessage("Connection interrupted. Refresh the list to check the redirect before retrying."); }
+    finally { setBusy(false); }
   }
-
-  async function remove() {
-    setBusy(true);
-    await fetch(`/api/admin/seo/redirects/${redirect.id}`, { method: "DELETE" });
-    window.location.reload();
-  }
-
-  return (
+  return <div className="redirect-row-controls" aria-busy={busy}>
     <div className="row-actions">
-      <button type="button" className="text-button" onClick={toggle} disabled={busy}>
-        {redirect.is_active ? "Disable" : "Enable"}
-      </button>
-      <button type="button" className="text-button danger" onClick={remove} disabled={busy}>
-        Delete
-      </button>
+      <button type="button" className="text-button" onClick={() => change("PATCH")} disabled={busy}>{redirect.is_active ? "Disable" : "Enable"}</button>
+      <button type="button" className="text-button danger" onClick={() => change("DELETE")} disabled={busy}>Delete</button>
     </div>
-  );
+    {message && <p role={failed ? "alert" : "status"} className={failed ? "admin-error" : "admin-success"}>{message}</p>}
+  </div>;
 }

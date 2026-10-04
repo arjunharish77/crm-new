@@ -35,9 +35,9 @@ export function CatalogCreateForm({ entityType, role, universities = [] }: {
       if (!response.ok) throw Error(result.error || "Could not create the draft.");
       router.push(`/admin/${entityType === "course" ? "courses" : "universities"}/${encodeURIComponent(result.id)}`);
       router.refresh();
-    } catch (error) { setMessage(error instanceof Error ? error.message : "Connection failed. Your entries are retained; try again."); setBusy(false); }
+    } catch (error) { setMessage(error instanceof TypeError ? "Connection interrupted. Your entries are retained; check the catalog for this record ID before retrying because the draft may have been created." : error instanceof Error ? error.message : "Could not create the draft. Your entries are retained."); setBusy(false); }
   }
-  return <form action={create} className="admin-form-grid">
+  return <form onSubmit={event => { event.preventDefault(); void create(new FormData(event.currentTarget)); }} className="admin-form-grid" aria-busy={busy}>
     <p className="admin-notice admin-span-2">Create a private draft. You can complete missing details later; an administrator must review publication separately. Blank fees stay unknown, not zero.</p>
     {!editable ? <p className="admin-span-2">Read-only: your role cannot create catalog records.</p> : null}
     {missingUniversity ? <p className="admin-error admin-span-2">No universities are available. Create a university draft first, then return to add its courses.</p> : null}

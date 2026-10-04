@@ -7,7 +7,10 @@ import { createHmac, timingSafeEqual } from "crypto";
 // a fresh, independently shorter-lived link for a specific share. A signed token embeds its
 // own expiry and is verified with HMAC-SHA256, so a link generated "expires in 1 hour" actually
 // does, regardless of how long the underlying resource itself remains valid.
+// Round-2 plan O1: production needs its own FILE_DOWNLOAD_SIGNING_SECRET (no JWT_SECRET fallback),
+// so rotating JWT_SECRET doesn't break download links already sent out.
 function getSigningSecret() {
+  if (!process.env.FILE_DOWNLOAD_SIGNING_SECRET && process.env.NODE_ENV === "production") throw new Error("MISSING_SIGNING_SECRET");
   const secret = process.env.FILE_DOWNLOAD_SIGNING_SECRET || process.env.JWT_SECRET;
   if (!secret) throw new Error("MISSING_SIGNING_SECRET");
   return secret;

@@ -40,6 +40,19 @@ describe("updateWebhookForTenant", () => {
     expect(updateCall[1]).toEqual(["https://example.com", JSON.stringify(["LEAD_CREATED"]), false, "s3cret", 60, expect.any(String), "wh-1", "tenant-a"]);
   });
 
+  it("never returns the signing secret or writes it to the audit log (round-2 plan S2)", async () => {
+    dbMocks.queryOne
+      .mockResolvedValueOnce({ id: "wh-1", url: "https://example.com", events: ["LEAD_CREATED"], isActive: true, secret: "s3cret", rateLimitPerMinute: 60 })
+      .mockResolvedValueOnce({ id: "wh-1", url: "https://example.com", events: ["LEAD_CREATED"], isActive: false, hasSecret: true, rateLimitPerMinute: 60 });
+
+    await updateWebhookForTenant(user, "wh-1", { isActive: false });
+
+    const updateSql = String(dbMocks.queryOne.mock.calls[1][0]);
+    expect(updateSql).toMatch(/returning[\s\S]*"hasSecret"/);
+    expect(updateSql).not.toMatch(/returning[^;]*\bsecret,/);
+    expect(JSON.stringify(leadsRepoMocks.createAuditLog.mock.calls[0])).not.toContain("s3cret");
+  });
+
   it("replaces the event subscription list when new events are provided", async () => {
     dbMocks.queryOne
       .mockResolvedValueOnce({ id: "wh-1", url: "https://example.com", events: ["LEAD_CREATED"], isActive: true, secret: null })

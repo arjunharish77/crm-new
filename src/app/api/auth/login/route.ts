@@ -4,7 +4,8 @@ import { getActivePlatformAdminByUserId, getLoginUserByEmail, isTenantSuspended 
 import { signMfaPendingToken, signPasswordChangeToken } from "@/lib/server/auth";
 import { issueSessionForUser } from "@/lib/server/login-flow";
 import { createAuditLog } from "@/lib/server/crm";
-import { badRequest, tooManyRequests, unauthorized } from "@/lib/server/http";
+import { badRequest, serverError, tooManyRequests, unauthorized } from "@/lib/server/http";
+import { enterTenantContext } from "@/lib/db/tenant-context";
 import { checkRateLimit, peekRateLimit, clientIpFromRequest } from "@/lib/server/rate-limit";
 import { getEffectiveSecurityPolicy } from "@/lib/server/security-policy";
 import { resolveMfaRequirement, isPastMfaGracePeriod, isTrustedDevice } from "@/lib/server/mfa";
@@ -53,7 +54,28 @@ function readCookie(request: Request, name: string): string | null {
   return match ? decodeURIComponent(match.slice(name.length + 1)) : null;
 }
 
+
+// Round-2 plan S12: an unknown email used to be answered without a password check, which made
+// it measurably faster than a wrong password and revealed which accounts exist. Comparing against
+// a hash of the same cost evens the timing out.
+let dummyHash: Promise<string> | null = null;
+async function comparePasswordAgainstDummy(password: string) {
+  dummyHash ??= bcrypt.hash("not-a-real-password", 10);
+  await bcrypt.compare(password || "", await dummyHash).catch(() => false);
+}
+
+// Round-2 plan O5: an unexpected failure (e.g. the database is unreachable) gets the normal error
+// reply with a reference, logged with this request's id, instead of an empty 500.
 export async function POST(request: Request) {
+  enterTenantContext({ tenantId: null, userId: null, roleId: null, requestId: request.headers.get("x-request-id") });
+  try {
+    return await signIn(request);
+  } catch (error) {
+    return serverError("Sign-in failed", error);
+  }
+}
+
+async function signIn(request: Request) {
   const body = await request.json().catch(() => null);
   const email = body?.email?.trim()?.toLowerCase();
   const password = body?.password;
@@ -95,6 +117,7 @@ export async function POST(request: Request) {
   }
 
   if (!user) {
+    await comparePasswordAgainstDummy(password);
     console.error("AUTH_LOGIN_FAILED", {
       stage: "user_lookup",
       error: null,
@@ -115,6 +138,7 @@ export async function POST(request: Request) {
   }
 
   if (!user.password) {
+    await comparePasswordAgainstDummy(password);
     console.error("AUTH_LOGIN_FAILED", {
       stage: "missing_password",
       userId: user.id,

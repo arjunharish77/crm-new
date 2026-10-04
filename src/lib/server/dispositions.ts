@@ -8,6 +8,7 @@ import { createTaskForTenant } from "@/lib/repositories/tasks-postgres";
 import { runAutomationsForEvent } from "@/lib/repositories/automations-postgres";
 import { removeCallFromQueue } from "@/lib/server/call-queues";
 import { recordCallCampaignAttemptOutcome } from "@/lib/server/call-campaigns";
+import { requireTenantId } from "@/lib/server/tenant-guard";
 
 type TenantUser = {
   id: string;
@@ -20,11 +21,6 @@ type TenantUser = {
 // registration (the pattern OpportunityType/ActivityType use for genuinely open-ended custom
 // fields), since this set is closed and specific to logging a call outcome.
 const REQUIRABLE_FIELDS = new Set(["reasonLost", "interestLevel", "nextAction", "callbackAt", "notes"]);
-
-function requireTenantId(user: TenantUser) {
-  if (!user.tenantId) throw new Error("TENANT_CONTEXT_REQUIRED");
-  return user.tenantId;
-}
 
 function sanitizeRequiredFields(value: unknown): string[] {
   if (!Array.isArray(value)) return [];

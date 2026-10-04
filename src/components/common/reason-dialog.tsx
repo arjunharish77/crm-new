@@ -20,6 +20,9 @@ export type ReasonRequest = {
     singleLine?: boolean;
     // Returns an error message to show under the field, or null when the value is fine.
     validate?: (value: string) => string | null;
+    // Serious actions (e.g. suspending a workspace): Confirm stays disabled until this exact
+    // text is typed in a second box (round-2 plan N12).
+    typedConfirmation?: string;
 };
 
 type Pending = ReasonRequest & { resolve: (value: string | null) => void };
@@ -37,9 +40,11 @@ type Pending = ReasonRequest & { resolve: (value: string | null) => void };
 export function useReasonDialog(): [React.ReactNode, (request: ReasonRequest) => Promise<string | null>] {
     const [pending, setPending] = React.useState<Pending | null>(null);
     const [value, setValue] = React.useState("");
+    const [typed, setTyped] = React.useState("");
 
     const ask = React.useCallback((request: ReasonRequest) => new Promise<string | null>((resolve) => {
         setValue(request.defaultValue ?? "");
+        setTyped("");
         setPending((current) => {
             current?.resolve(null);
             return { ...request, resolve };
@@ -53,7 +58,8 @@ export function useReasonDialog(): [React.ReactNode, (request: ReasonRequest) =>
 
     const trimmed = value.trim();
     const error = pending?.validate && trimmed ? pending.validate(trimmed) : null;
-    const blocked = (!!pending?.required && !trimmed) || !!error;
+    const typedOk = !pending?.typedConfirmation || typed.trim() === pending.typedConfirmation;
+    const blocked = (!!pending?.required && !trimmed) || !!error || !typedOk;
     const submit = () => { if (!blocked) finish(trimmed); };
 
     const element = (
@@ -98,6 +104,14 @@ export function useReasonDialog(): [React.ReactNode, (request: ReasonRequest) =>
                     />
                 )}
                 {error ? <p id="reason-dialog-error" className="text-xs text-destructive">{error}</p> : null}
+                {pending?.typedConfirmation ? (
+                    <div className="space-y-1.5 pt-2">
+                        <Label htmlFor="reason-dialog-typed">
+                            Type <span className="font-mono font-semibold">{pending.typedConfirmation}</span> to confirm
+                        </Label>
+                        <Input id="reason-dialog-typed" value={typed} autoComplete="off" onChange={(event) => setTyped(event.target.value)} />
+                    </div>
+                ) : null}
             </div>
         </StandardDialog>
     );

@@ -1,0 +1,6 @@
+# Secret scanning (round-2 plan O6), run by CI over the whole history. Gitleaks' default rules;
+# reviewed false positives are listed by fingerprint in .gitleaksignore.
+title = "crm"
+
+[extend]
+useDefault = true

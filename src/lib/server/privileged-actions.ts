@@ -15,7 +15,7 @@ export type PrivilegedActionType =
   | "AI_EXTERNAL_SEND"
   | "CASE_MACRO_EXTERNAL_REPLY";
 
-type TenantUser = { id: string; tenantId: string | null };
+type TenantUser = { id: string; tenantId: string | null; isPlatformAdmin?: boolean };
 
 // Platform-scoped actions have no tenantId of their own (they're platform-admin actions, not
 // bound to a single tenant) -- gated by PlatformSecuritySettings instead of a per-tenant
@@ -182,6 +182,9 @@ export async function approvePrivilegedActionRequest(approver: TenantUser, reque
   // a platform admin approving their own impersonation request).
   if (row.requestedBy === approver.id) throw new Error("CANNOT_APPROVE_OWN_REQUEST");
   if (row.tenantId && row.tenantId !== approver.tenantId) throw new Error("FORBIDDEN");
+  // A platform-level request (suspend/unsuspend a workspace, platform impersonation) has no
+  // workspace; only another platform admin may decide it (round-2 plan S6).
+  if (!row.tenantId && !approver.isPlatformAdmin) throw new Error("FORBIDDEN");
 
   const now = new Date().toISOString();
   if (row.actionType === "IMPERSONATION_START") {
@@ -209,6 +212,9 @@ export async function rejectPrivilegedActionRequest(approver: TenantUser, reques
   if (!row) throw new Error("REQUEST_NOT_PENDING");
   if (row.requestedBy === approver.id) throw new Error("CANNOT_APPROVE_OWN_REQUEST");
   if (row.tenantId && row.tenantId !== approver.tenantId) throw new Error("FORBIDDEN");
+  // A platform-level request (suspend/unsuspend a workspace, platform impersonation) has no
+  // workspace; only another platform admin may decide it (round-2 plan S6).
+  if (!row.tenantId && !approver.isPlatformAdmin) throw new Error("FORBIDDEN");
 
   await executeAsSystem(
     `update "PrivilegedActionRequest" set status = 'REJECTED', "decidedBy" = $1, "decidedAt" = $2, "decisionNote" = $3 where id = $4`,

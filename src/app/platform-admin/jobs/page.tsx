@@ -12,6 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { apiFetch } from "@/lib/api";
 import { formatWorkspaceDateTime } from "@/lib/date-format";
 import { formatCount } from "@/lib/display/format";
+import { StatusBadge } from "@/components/common/status-badge";
 
 // GET /api/platform-admin/jobs/dead-letter: background jobs that failed on their last retry
 // (see job-dead-letter.ts). The endpoint is read-only, so there is no retry or discard here --
@@ -29,6 +30,64 @@ type DeadLetterRow = {
 };
 
 type TenantSummary = { id: string; name: string };
+
+type SystemHealth = {
+    status: "ok" | "degraded" | "down";
+    database: string;
+    redis: string;
+    worker: "ok" | "stale" | "unknown";
+    version: string | null;
+    heartbeats: Record<string, string | null>;
+    queues: Record<string, { waiting?: number; active?: number; delayed?: number; failed?: number } | null>;
+    failedLastDay: number | null;
+};
+
+const HEALTH_TONE: Record<string, "success" | "warning" | "danger" | "neutral"> = { ok: "success", degraded: "warning", stale: "warning", down: "danger", error: "danger", unknown: "neutral", "not configured": "neutral" };
+
+// Round-2 plan O5: database, Redis, worker heartbeats and queue backlog at a glance.
+function SystemHealthPanel({ health }: { health: SystemHealth }) {
+    const classes = ["realtime", "operational", "heavy", "ml"];
+    const age = (iso: string | null | undefined) => {
+        if (!iso) return "never";
+        const seconds = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 1000));
+        return seconds < 90 ? `${seconds} s ago` : `${Math.round(seconds / 60)} min ago`;
+    };
+    return (
+        <section aria-labelledby="system-health-title" className="mb-4 rounded-xl border bg-card p-4">
+            <div className="mb-3 flex flex-wrap items-center gap-2">
+                <h2 id="system-health-title" className="text-sm font-semibold">System health</h2>
+                <StatusBadge tone={HEALTH_TONE[health.status] ?? "neutral"}>{health.status === "ok" ? "All good" : health.status === "degraded" ? "Degraded" : "Down"}</StatusBadge>
+                {health.version ? <span className="text-xs text-muted-foreground">Version {health.version}</span> : null}
+            </div>
+            <dl className="grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">
+                <div><dt className="text-xs text-muted-foreground">Database</dt><dd><StatusBadge tone={HEALTH_TONE[health.database] ?? "neutral"}>{health.database}</StatusBadge></dd></div>
+                <div><dt className="text-xs text-muted-foreground">Redis</dt><dd><StatusBadge tone={HEALTH_TONE[health.redis] ?? "neutral"}>{health.redis}</StatusBadge></dd></div>
+                <div><dt className="text-xs text-muted-foreground">Worker</dt><dd><StatusBadge tone={HEALTH_TONE[health.worker] ?? "neutral"}>{health.worker}</StatusBadge></dd></div>
+                <div><dt className="text-xs text-muted-foreground">Failed in the last 24 h</dt><dd className="tabular-nums">{health.failedLastDay ?? "—"}</dd></div>
+            </dl>
+            <div className="mt-3 overflow-x-auto">
+                <table className="w-full min-w-[480px] text-sm">
+                    <thead><tr className="text-left text-xs text-muted-foreground"><th className="py-1 font-normal">Queue</th><th className="py-1 font-normal">Worker last seen</th><th className="py-1 text-right font-normal">Waiting</th><th className="py-1 text-right font-normal">Running</th><th className="py-1 text-right font-normal">Scheduled</th><th className="py-1 text-right font-normal">Failed (kept)</th></tr></thead>
+                    <tbody>
+                        {classes.map((name) => {
+                            const counts = health.queues?.[name];
+                            return (
+                                <tr key={name} className="border-t">
+                                    <td className="py-1.5">{queueLabel(`crm-jobs-${name}`)}</td>
+                                    <td className="py-1.5 text-muted-foreground">{age(health.heartbeats?.[name])}</td>
+                                    <td className="py-1.5 text-right tabular-nums">{counts?.waiting ?? "—"}</td>
+                                    <td className="py-1.5 text-right tabular-nums">{counts?.active ?? "—"}</td>
+                                    <td className="py-1.5 text-right tabular-nums">{counts?.delayed ?? "—"}</td>
+                                    <td className="py-1.5 text-right tabular-nums">{counts?.failed ?? "—"}</td>
+                                </tr>
+                            );
+                        })}
+                    </tbody>
+                </table>
+            </div>
+        </section>
+    );
+}
 
 const ALL = "all";
 const LIMIT = 200;
@@ -62,10 +121,12 @@ export default function FailedJobsPage() {
     const [queueName, setQueueName] = useState<string>(ALL);
     const [tenantId, setTenantId] = useState<string>(ALL);
     const [selected, setSelected] = useState<DeadLetterRow | null>(null);
+    const [health, setHealth] = useState<SystemHealth | null>(null);
 
     const load = useCallback(() => {
         setLoading(true);
         setLoadError(null);
+        apiFetch<SystemHealth>("/platform-admin/health").then(setHealth).catch(() => setHealth(null));
         const params = new URLSearchParams({ limit: String(LIMIT) });
         if (queueName !== ALL) params.set("queueName", queueName);
         if (tenantId !== ALL) params.set("tenantId", tenantId);
@@ -117,6 +178,7 @@ export default function FailedJobsPage() {
                 meta={loading || loadError ? undefined : <span className="tabular-nums">{rows.length >= LIMIT ? `Latest ${formatCount(LIMIT)}` : `${formatCount(rows.length)} failed`}</span>}
                 secondaryActions={<Button variant="outline" onClick={load} disabled={loading}><RefreshCw className="size-4" />Refresh</Button>}
             />
+            {health ? <SystemHealthPanel health={health} /> : null}
             {loadError ? <ErrorState description={loadError} onRetry={load} /> : (
                 <DataTable
                     storageKey="platform-admin-failed-jobs-table"

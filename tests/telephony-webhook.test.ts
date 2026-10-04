@@ -115,13 +115,13 @@ describe("telephony webhook security", () => {
   });
 
   describe("verifyTelephonyWebhookRequest", () => {
-    it("accepts the legacy global secret for backward compatibility", async () => {
+    it("no longer accepts the old server-wide shared secret (round-2 plan S1)", async () => {
       process.env.WEBHOOK_SIGNING_SECRET = "legacy-secret";
-      const result = await verifyTelephonyWebhookRequest(TENANT_ID, "{}", { legacySecret: "legacy-secret" });
-      expect(result).toEqual({ ok: true, mode: "legacy" });
+      const result = await verifyTelephonyWebhookRequest(TENANT_ID, "{}", { legacySecret: "legacy-secret" } as any);
+      expect(result).toEqual({ ok: false, reason: "MISSING_SIGNATURE" });
     });
 
-    it("rejects a request with no signature or legacy secret", async () => {
+    it("rejects a request with no signature", async () => {
       const result = await verifyTelephonyWebhookRequest(TENANT_ID, "{}", {});
       expect(result).toEqual({ ok: false, reason: "MISSING_SIGNATURE" });
     });

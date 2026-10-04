@@ -54,6 +54,7 @@ export async function POST(request: Request) {
   } catch (error) {
     if (error instanceof Error && error.message === "UNAUTHORIZED") return unauthorized();
     if (error instanceof Error && error.message === "FORBIDDEN") return forbidden();
+    if (error instanceof Error && error.message === "USER_NOT_FOUND") return badRequest("User not found in that workspace");
     if (error instanceof Error && error.message === "IMPERSONATION_REASON_REQUIRED") return badRequest("A reason is required to start impersonation");
     return serverError("Failed to impersonate user", error);
   }

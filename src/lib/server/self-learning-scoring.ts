@@ -5,6 +5,7 @@ import { query as pgQuery, queryOne as pgQueryOne, queryAsSystem as pgQueryAsSys
 import { trainViaMlService, scoreViaMlService } from "@/lib/server/ml-service-client";
 import { refreshNextBestActionsForRecord } from "@/lib/server/next-best-action";
 import { computeTelephonySignals, type TelephonyCallSignal, type TelephonyDispositionSignal } from "@/lib/server/telephony-signals";
+import { requireTenantId } from "@/lib/server/tenant-guard";
 
 type TenantUser = {
   id: string;
@@ -251,11 +252,6 @@ const DEFAULT_SETTINGS: Omit<ScoringSettings, "id" | "tenantId"> = {
   lastRecomputedAt: null,
   updatedBy: null,
 };
-
-function requireTenantId(user: TenantUser) {
-  if (!user.tenantId) throw new Error("TENANT_CONTEXT_REQUIRED");
-  return user.tenantId;
-}
 
 function clampScore(value: number) {
   if (!Number.isFinite(value)) return 0;
@@ -1701,6 +1697,68 @@ export async function recomputeSelfLearningScoresForTenant(user: TenantUser, inp
           ]);
         }
         leadProcessed += 1;
+      }
+
+      // Round-2 plan B5: training uses the newest 2,000 leads in the lookback window, but every
+      // lead gets a score. The rest are scored 500 at a time, each batch with its own activity,
+      // task, call and opportunity history (same lookback window).
+      const scoredIds = new Set(leads.map((lead) => lead.id));
+      let afterId = "";
+      for (;;) {
+        const batch = (await pgQuery<any>(
+          `select id, name, email, phone, company, status, source, score, "ownerId", "createdAt", "updatedAt"
+           from "Lead" where "tenantId" = $1 and id > $2 order by id limit 500`,
+          [tenantId, afterId],
+        ));
+        if (!batch.length) break;
+        afterId = batch[batch.length - 1].id;
+        const rest = batch.filter((lead) => !scoredIds.has(lead.id));
+        if (!rest.length) continue;
+        const ids = rest.map((lead) => lead.id);
+        const sinceIso = since.toISOString();
+        const [batchOpportunities, batchActivities, batchTasks, batchCalls, batchDispositions] = await Promise.all([
+          pgQuery<any>(`select id, "leadId", "stageId", title, amount, priority, "ownerId", "createdAt", "updatedAt" from "Opportunity" where "tenantId" = $1 and "leadId" = any($2::text[])`, [tenantId, ids]),
+          pgQuery<any>(`select id, "leadId", "opportunityId", "createdAt", "updatedAt", "completedAt", "slaStatus" from "Activity" where "tenantId" = $1 and "leadId" = any($2::text[]) and "createdAt" >= $3`, [tenantId, ids, sinceIso]),
+          pgQuery<any>(`select id, "leadId", "opportunityId", status, "dueAt", "createdAt", "updatedAt", "completedAt" from "Task" where "tenantId" = $1 and "leadId" = any($2::text[]) and "createdAt" >= $3`, [tenantId, ids, sinceIso]),
+          pgQuery<any>(`select id, "leadId", "opportunityId", status, duration, "startedAt" from "TelephonyCallLog" where "tenantId" = $1 and "leadId" = any($2::text[]) and "startedAt" >= $3`, [tenantId, ids, sinceIso]),
+          pgQuery<any>(
+            `select cd.id, cd."leadId", cd."opportunityId", cd."interestLevel", cd."callbackAt", cd."taskId", cd."createdAt", o.name as "outcomeName"
+             from "CallDisposition" cd left join "DispositionOutcome" o on o.id = cd."dispositionOutcomeId"
+             where cd."tenantId" = $1 and cd."leadId" = any($2::text[]) and cd."createdAt" >= $3`,
+            [tenantId, ids, sinceIso],
+          ),
+        ]);
+        const byLead = {
+          opportunities: groupByNullableId(batchOpportunities, "leadId"),
+          activities: groupByNullableId(batchActivities, "leadId"),
+          tasks: groupByNullableId(batchTasks, "leadId"),
+          calls: groupByNullableId(batchCalls, "leadId"),
+          dispositions: groupByNullableId(batchDispositions, "leadId"),
+        };
+        const batchTasksById = new Map(batchTasks.map((task) => [task.id, task]));
+        for (const lead of rest) {
+          const snapshot = buildLeadFeatureSnapshot({
+            lead,
+            opportunities: byLead.opportunities.get(lead.id) ?? [],
+            activities: byLead.activities.get(lead.id) ?? [],
+            tasks: byLead.tasks.get(lead.id) ?? [],
+            calls: byLead.calls.get(lead.id) ?? [],
+            dispositions: byLead.dispositions.get(lead.id) ?? [],
+            tasksById: batchTasksById,
+          });
+          const score = leadScoreFromFeatures(snapshot, lead, scoringCalibration, settings, scoringLogisticModel, scoringMlPredictions?.get(lead.id) ?? null);
+          score.similarRecordIds = similarConvertedLeadIdsFor(lead);
+          const persisted = await persistScore(user, snapshot, score, modelVersionId);
+          if (persisted && (settings.isEnabled || input.force)) {
+            await pgQuery('update "Lead" set score = $1, "updatedAt" = $2 where "tenantId" = $3 and id = $4', [
+              score.conversionProbability ?? 0,
+              new Date().toISOString(),
+              tenantId,
+              lead.id,
+            ]);
+          }
+          leadProcessed += 1;
+        }
       }
       processed += leadProcessed;
 

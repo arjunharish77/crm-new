@@ -74,6 +74,7 @@ describe("direct Postgres report infrastructure", () => {
     ]);
     queryOneMock.mockImplementation(async (sql: string) => {
       const text = String(sql);
+      if (text.includes('update "ReportSchedule" set "nextRunAt"')) return { id: "schedule-1" }; // the run is claimed (round-2 plan B11)
       if (text.includes('from "User"')) return { id: "user-1", tenantId: "tenant-1", email: "admin@example.com", rolePermissions: {} };
       if (text.includes('insert into "ReportEmailDelivery"')) return { id: "delivery-1", status: "PENDING" };
       return null;
@@ -169,7 +170,8 @@ describe("direct Postgres report infrastructure", () => {
       ]);
       queryOneMock.mockImplementation(async (sql: string) => {
         const text = String(sql);
-        if (text.includes('from "User"')) return { id: "user-1", tenantId: "tenant-1", email: "admin@example.com", rolePermissions: {} };
+        if (text.includes('update "ReportSchedule" set "nextRunAt"')) return { id: "schedule-1" }; // the run is claimed (round-2 plan B11)
+      if (text.includes('from "User"')) return { id: "user-1", tenantId: "tenant-1", email: "admin@example.com", rolePermissions: {} };
         if (text.includes('from "TenantModuleEntitlement"')) return { status: "DISABLED" };
         return null;
       });

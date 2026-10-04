@@ -4,6 +4,7 @@ import { useEffect } from "react";
 import Link from "next/link";
 import { ErrorState } from "@/components/common/error-state";
 import { Button } from "@/components/ui/button";
+import { reportClientError } from "@/lib/client-error-reporting";
 
 // Shared body of the route error pages (UI/UX plan G1): a crash in a page shows this inside the
 // app shell (navigation and header stay usable) instead of Next's unbranded default, with Try
@@ -17,6 +18,7 @@ export function RouteError({ error, reset, homeHref = "/dashboard", homeLabel = 
 }) {
     useEffect(() => {
         console.error(error);
+        reportClientError(error);
     }, [error]);
 
     return (

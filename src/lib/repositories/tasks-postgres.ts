@@ -367,9 +367,19 @@ async function computeSlaTargets(tenantId: string, priority: string, dueAt: stri
   return { firstActionSlaTarget, slaTarget };
 }
 
+// Round-2 plan C6: a task linked to an opportunity also belongs to that opportunity's lead, so
+// it shows on the lead and refreshes the lead's recommended actions.
+async function leadIdForOpportunity(tenantId: string, opportunityId: string | null | undefined) {
+  if (!opportunityId) return null;
+  const row = await queryOne<{ leadId: string | null }>('select "leadId" from "Opportunity" where "tenantId" = $1 and id = $2 limit 1', [tenantId, opportunityId]);
+  return row?.leadId ?? null;
+}
+
 export async function createTaskForTenant(user: TenantUser, input: TaskInput) {
   if (!user.tenantId) throw new Error("TENANT_CONTEXT_REQUIRED");
   if (!input.title?.trim()) throw new Error("TASK_TITLE_REQUIRED");
+  const title = input.title.trim();
+  if (!input.leadId && input.opportunityId) input = { ...input, leadId: await leadIdForOpportunity(user.tenantId, input.opportunityId) };
   const now = new Date().toISOString();
   const queueId = input.queueId || null;
   const team = queueId ? await getTeamForTenant(user.tenantId, queueId) : null;
@@ -388,7 +398,7 @@ export async function createTaskForTenant(user: TenantUser, input: TaskInput) {
     [
       randomUUID(),
       user.tenantId,
-      input.title.trim(),
+      title,
       input.description || null,
       input.status ?? "OPEN",
       input.priority ?? "MEDIUM",
@@ -547,7 +557,10 @@ export async function updateTaskForTenant(user: TenantUser, id: string, input: T
   if (input.priority !== undefined) patch.priority = input.priority;
   if (input.ownerId !== undefined) patch.ownerId = input.ownerId || user.id;
   if (input.leadId !== undefined) patch.leadId = input.leadId || null;
-  if (input.opportunityId !== undefined) patch.opportunityId = input.opportunityId || null;
+  if (input.opportunityId !== undefined) {
+    patch.opportunityId = input.opportunityId || null;
+    if (input.opportunityId && input.leadId === undefined && !existing.leadId) patch.leadId = await leadIdForOpportunity(user.tenantId!, input.opportunityId);
+  }
   if (input.activityId !== undefined) patch.activityId = input.activityId || null;
   if (input.dueAt !== undefined) patch.dueAt = input.dueAt || null;
   if (input.reminderAt !== undefined) patch.reminderAt = input.reminderAt || null;

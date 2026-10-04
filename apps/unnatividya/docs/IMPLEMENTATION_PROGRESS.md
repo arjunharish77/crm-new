@@ -771,6 +771,112 @@ Implemented on 3 October 2026:
 
 Validation: TypeScript, targeted lint, script syntax, scoped whitespace and production build passed. Eighteen browser checks passed using a disposable VIEWER, synthetic disabled lead and terminal-state attempts; fixtures removed through lead deletion cascade. No queued/processing fixtures, external requests or real CRM delivery. Mobile screenshot reviewed.
 
+## Sixty-third increment: responsive redirect management and save recovery
+
+Implemented on 4 October 2026:
+
+- Replaced the wide redirect table with labelled cards, wrapping long paths, readable state/status labels and India-time hit timestamps.
+- Explained existing-source replacement and immediate activation; aligned the reason input with the API’s 500-character limit.
+- Added accessible success/error messages and busy recovery for create, enable/disable and delete. Failed requests no longer silently reload. Failed form submission preserves entered paths for retry.
+- Removed database-error-as-empty fallback and added stable ordering. Existing redirect rules, API permissions and activation defaults remain unchanged.
+
+Validation: TypeScript, targeted lint, script syntax, scoped whitespace and final production build passed. All 42 browser checks passed across three roles and four widths, including long destinations, blocked network requests, mocked validation errors and mocked successful saves. Temporary inactive redirect and users removed; no real redirect mutations were requested. Mobile screenshot reviewed.
+
+## Sixty-fourth increment: usable SEO route browser
+
+Implemented on 4 October 2026:
+
+- Replaced the full route table and numerous intent tiles with concise overall counts, searchable cards, intent/type filters and 20-route pagination.
+- Added expandable internal references, clear empty states and live-route links; candidate topics do not offer links to unimplemented destinations. Repeated/invalid/long query values are normalized.
+- Clarified that the page lists routes rather than creating pages or submitting URLs. Generator indexing flags are not evidence of robots/canonical correctness or actual indexing; internal references are not official university/regulator sources.
+- Removed blanket verified-data claims from the admin presentation without changing the shared generator, public pages, sitemap or indexing rules.
+
+Validation: TypeScript, targeted lint, script syntax, scoped whitespace and production build passed. All 19 local browser checks passed, covering four widths, filters, pagination, keyboard disclosures, invalid/repeated parameters and the current empty candidate list. Mobile screenshot reviewed; temporary VIEWER removed. Catalog access was read-only, no search-engine submissions occurred, and no migration or environment change is needed.
+
+## Sixty-fifth increment: readable published-catalog preview
+
+Implemented on 4 October 2026:
+
+- Replaced the wide course preview table with responsive cards, course search, university filtering and 12-course pagination. University summaries explicitly remain unfiltered.
+- Collapsed long eligibility and overview text into keyboard-accessible disclosures. Added direct public-page and revision links, with clear labels distinguishing published values from unsaved edits and proposed revisions.
+- Presented structural snapshot issues as wrapping cards while retaining the all-or-nothing snapshot behavior. Source verification remains distinct from structural readiness.
+- Preserved snapshot loading, validation, public catalog contents and publication controls.
+
+Validation: TypeScript, targeted lint, script syntax, scoped whitespace and production build passed. All 18 local browser checks passed for pagination, filters, repeated/invalid parameters, keyboard disclosure and four widths. Mobile screenshot reviewed. Temporary VIEWER removed; no catalog mutations or environment/migration changes. The invalid-snapshot branch was not exercised against the live local catalog.
+
+## Sixty-sixth increment: clearer CRM configuration and save feedback
+
+Implemented on 4 October 2026:
+
+- Grouped configuration into delivery controls, destination and request/response options, with labelled fieldsets and responsive controls.
+- Preserved entries after failed saves; added accessible network/server-error feedback and accurate saved-versus-connected wording. Automatic delivery wording no longer incorrectly implies OTP is always required.
+- Added client checks for string-valued header objects, complete HTTP-code entries and API-aligned timeout bounds. Existing API permissions, configuration defaults and delivery behavior are unchanged.
+- Reused the configuration model for the status summary, eliminating its duplicate query and error-as-disabled fallback.
+
+Validation: TypeScript, targeted lint, script syntax, scoped whitespace and production build passed. All 15 local browser checks passed for validation, recovery, mocked success and four viewport widths. Mobile screenshot reviewed; temporary VIEWER removed. Initial test execution was rejected by automatic approval review; the revised test explicitly blocked configuration requests before page load and used only mocked responses afterward. No settings saved or CRM deliveries made. No migration or environment change.
+
+## Sixty-seventh increment: usable CRM mapping editor
+
+Implemented on 4 October 2026:
+
+- Moved the request editor before the merge-field reference on mobile; added field search, wrapping tokens and bounded scrolling for the reference list.
+- Added clipboard success/failure feedback with a manual-copy fallback, valid-object checks, accessible save feedback and network-error recovery. Failed saves preserve the mapping name and JSON.
+- Clarified that saving activates a mapping for future delivery attempts but does not send a lead or verify connectivity. Added a back-to-settings link.
+- Preserved mapping semantics, existing API permissions and delivery behavior.
+
+Validation: TypeScript, targeted lint, script syntax, scoped whitespace and production build passed. All 14 browser checks passed, covering object validation, failed-save preservation, mocked success, clipboard success/failure, token search and four viewport widths. Mobile capture rechecked after clearing focus/scroll; temporary VIEWER removed. Mapping requests were blocked before page load and only mocked afterward; no mapping changes, real delivery, migration or environment changes.
+
+## Sixty-eighth increment: resilient CMS sign-in UI
+
+Implemented on 4 October 2026:
+
+- Preserved credential/code inputs on failed submissions and restored buttons after network interruptions. Added accessible success/error announcements and busy state.
+- Added a password visibility control, focus transfer to the email-code field and an explicit association between the code input and delivery/expiry guidance.
+- Returning to credentials clears stale code messages and resets password visibility; credentials and the website/CRM account distinction are explained clearly.
+- Authentication endpoints, password checks, OTP rules and rate limits are unchanged. One-time setup remains a separate follow-up.
+
+Validation: TypeScript, targeted lint, script syntax, scoped whitespace and production build passed. All 16 browser checks passed, including password visibility, credential/code preservation, failure recovery, OTP focus, switching login and four widths. Mobile screenshot reviewed. All authentication requests were blocked or mocked; no real sessions, user changes or email delivery. No migration or environment change.
+
+## Sixty-ninth increment: resilient first-admin setup form
+
+Implemented on 4 October 2026:
+
+- Added clear password-length and private setup-token guidance, autocomplete hints, password visibility and an explicit sign-in link.
+- Preserved entries on failed submissions, restored controls after network errors and added accessible feedback. An interrupted request advises checking sign-in before retrying because creation may have completed.
+- Kept the setup token in its existing request header rather than the account payload. Setup availability, authentication checks and server validation are unchanged.
+
+Validation: TypeScript, targeted lint, script syntax, scoped whitespace and final production build passed. All 14 isolated browser checks passed, including network/server failures, value preservation, password visibility, token/header separation, success state and four widths. Mobile screenshot reviewed. The fixture uses the real form with a plain-anchor shim for framework Link and blocked/mocked APIs; it does not test full Next.js navigation. Existing users were not removed to bypass setup restrictions, and no actual account was created. No migration or environment change.
+
+## Seventieth increment: searchable, paginated revision history
+
+Implemented on 4 October 2026:
+
+- Removed the latest-50 history limit; added 20-record database pagination with stable ordering, status filters and literal reason/record/revision-ID search.
+- Preserved record scope across filters, reset and pagination; normalized repeated and invalid query values. History controls sit after the editor, with a reminder to save working drafts before navigation.
+- Added scoped counts, empty-filter guidance and mobile wrapping. Existing proposal editing, approval, rejection, rollback and authorization behavior is unchanged.
+
+Validation: TypeScript, targeted lint, script syntax, scoped whitespace and production build passed. All 17 browser checks passed, including full pagination, literal search, record-scope preservation, status/invalid/repeated parameters and four widths. Mobile screenshot reviewed. Disposable proposals and VIEWER removed; API mutations were blocked, no proposals applied or public records changed. No migration or environment change.
+
+## Seventy-first increment: preserve administrator review notes on failure
+
+Implemented on 4 October 2026:
+
+- Switched review/rollback forms to explicit submission handling so React does not clear their uncontrolled note fields after a handled error; submitter values still distinguish Apply and Reject.
+- Added error announcements and friendly interrupted-request messages for revision/draft operations, advising status checks before retries when an action may have completed.
+- Corrected rejection success feedback to state that the catalog is unchanged. Existing approval, rollback and role-enforcement APIs are unchanged.
+
+Validation: TypeScript, targeted lint, script syntax, scoped whitespace and production build passed. Eleven targeted browser checks passed for interrupted apply/rollback, rejected requests, preserved notes, Reject submitter values and accurate success text. Apply/reject/rollback requests were blocked or mocked; database checks confirmed the pending fixture stayed pending and no rollback was created. Temporary revisions and ADMIN user removed. No public catalog changes, migration or environment changes.
+
+## Seventy-second increment: preserve advanced catalog edits on failed saves
+
+Implemented on 4 October 2026:
+
+- Changed advanced course/university form submission to preserve entered values after client validation, server errors and interrupted requests.
+- Added JSON-object checks, accessible error announcements and busy state; disabled spellcheck for structured JSON.
+- Clarified that an interrupted save may have completed and the record should be checked before retrying. Existing field permissions, status choices and publication APIs are unchanged.
+
+Validation: TypeScript, targeted lint, script syntax, scoped whitespace and production build passed. All 42 browser checks passed across ADMIN, EDITOR and VIEWER roles and four widths, covering JSON validation, interrupted/server-failed saves, mocked success and retained values. Temporary users removed; catalog write endpoints were blocked before page load and only mocked afterward. No published content, migration or environment changes.
+
 ## Remaining approved work
 
 - Full field-level verification across all three universities, including international/NRI fees and regulator evidence; review and publication of corrected catalog facts.

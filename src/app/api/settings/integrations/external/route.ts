@@ -1,12 +1,9 @@
 import { NextResponse } from "next/server";
 import { requireCurrentUser } from "@/lib/server/auth";
+import { hasIntegrationsAccess } from "@/lib/server/integrations-access";
 import { badRequest, forbidden, serverError, unauthorized } from "@/lib/server/http";
 import { createExternalIntegrationForTenant, listExternalIntegrationsForTenant } from "@/lib/repositories/external-integrations-postgres";
 
-function hasIntegrationsAccess(user: any) {
-  const rolePermissions = typeof user.role === "object" && user.role ? (user.role as any).permissions : null;
-  return Boolean(user.isTenantAdmin || user.isPlatformAdmin || rolePermissions?.modules?.integrations === "full");
-}
 
 export async function GET(request: Request) {
   try {

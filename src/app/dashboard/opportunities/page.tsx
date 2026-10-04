@@ -28,7 +28,7 @@ import { StatusBadge } from "@/components/common/status-badge";
 import { EmptyState } from "@/components/common/empty-state";
 import { useAskText, useConfirm } from "@/components/common/dialogs-provider";
 import { KanbanBoard } from "@/components/opportunities/kanban-board";
-import { OpportunityStageAnalytics } from "@/components/opportunities/opportunity-stage-analytics";
+import dynamic from "next/dynamic";
 import { NbaCountChip } from "@/components/next-best-action/nba-count-chip";
 import { FeatureGate } from "@/components/auth/feature-gate";
 import { AdvancedFilterDrawer, FilterGroup } from "@/components/filters/advanced-filter-drawer";
@@ -48,6 +48,9 @@ import { statusDisplay } from "@/lib/display/status";
 import { cn } from "@/lib/utils";
 import { CreateOpportunityDialog } from "./create-opportunity-dialog";
 import { EditOpportunityDialog } from "./edit-opportunity-dialog";
+
+// Stage charts load only when someone opens them (round-2 plan P4).
+const OpportunityStageAnalytics = dynamic(() => import("@/components/opportunities/opportunity-stage-analytics").then((mod) => mod.OpportunityStageAnalytics), { ssr: false });
 
 const SELECTED_TYPE_STORAGE_KEY = "unnatify.opportunities.selectedTypeId";
 const VIEWS = ["all", "OPEN", "WON", "LOST"] as const;

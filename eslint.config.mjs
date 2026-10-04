@@ -23,6 +23,13 @@ const eslintConfig = defineConfig([
       "react-hooks/immutability": "off",
       "react-hooks/incompatible-library": "off",
       "react-hooks/set-state-in-effect": "off",
+      // Checks for React Compiler compatibility, which this app doesn't use (no reactCompiler in
+      // next.config). eslint-plugin-react-hooks 7.1 added them to the recommended set (round-2
+      // plan O7: the lockfile's version, now the one CI and Docker install).
+      "react-hooks/preserve-manual-memoization": "off",
+      "react-hooks/purity": "off",
+      "react-hooks/refs": "off",
+      "react-hooks/use-memo": "off",
     },
   },
   {

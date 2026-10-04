@@ -176,6 +176,14 @@ const operationalEntries = makeRegistry({
     isTenantScoped: false,
     description: "Enforces data-retention policies across all tenants.",
   },
+  "housekeeping.run": {
+    name: "housekeeping.run",
+    queueClass: "operational",
+    isRecurring: true,
+    repeatMs: 6 * 60 * 60 * 1000,
+    isTenantScoped: false,
+    description: "Removes ended sessions, used reset links, old idempotency keys, old failed-job records and old webhook and app deliveries (round-2 plan B14; rules in housekeeping.ts).",
+  },
   "archive.purge": {
     name: "archive.purge",
     queueClass: "operational",

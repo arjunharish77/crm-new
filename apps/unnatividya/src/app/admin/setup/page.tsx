@@ -25,7 +25,7 @@ export default async function AdminSetupPage() {
             Create CMS admin
           </h1>
           <p>
-            This page works only while no CMS admin exists. The admin account is independent from CRM.
+            Create the first website administrator. Setup is available only before a CMS account exists. This account is separate from your CRM login.
           </p>
           <SetupForm />
         </div>

@@ -82,7 +82,13 @@ function logSlowQuery(text: string, startedAt: number, rowCount: number) {
   const durationMs = Date.now() - startedAt;
   if (durationMs < slowQueryThresholdMs()) return;
   const truncated = text.replace(/\s+/g, " ").trim().slice(0, 300);
-  console.warn(`SLOW_QUERY (${Math.round(durationMs)}ms, ${rowCount} rows): ${truncated}`);
+  console.warn(JSON.stringify({ ts: new Date().toISOString(), level: "warn", msg: "SLOW_QUERY", durationMs: Math.round(durationMs), rowCount, query: truncated }));
+  // Round-2 plan O5: very slow queries (5x the threshold) also go to Sentry, one issue per query.
+  if (durationMs >= slowQueryThresholdMs() * 5) {
+    void import("@/lib/server/error-reporting")
+      .then(({ reportWarning }) => reportWarning(`Slow query (${Math.round(durationMs)} ms): ${truncated.slice(0, 120)}`, `slow-query:${truncated.slice(0, 200)}`, { durationMs: Math.round(durationMs) }))
+      .catch(() => undefined);
+  }
 }
 
 export async function query<T extends QueryResultRow = QueryResultRow>(

@@ -4,17 +4,14 @@ import { assertModuleEnabled, isModuleEnabledForTenant } from "@/lib/server/modu
 import { createCaseForTenant, addCommentToCase } from "@/lib/repositories/cases-postgres";
 import { writePrivateFile } from "@/lib/storage/file-storage";
 import { upsertFileObjectForTenant } from "@/lib/repositories/files-postgres";
+import { base64DecodedLength, checkAttachment } from "@/lib/storage/attachment-policy";
+import { requireTenantId } from "@/lib/server/tenant-guard";
 
 type TenantUser = {
   id: string;
   tenantId: string | null;
   isPlatformAdmin?: boolean;
 };
-
-function requireTenantId(user: TenantUser) {
-  if (!user.tenantId) throw new Error("TENANT_CONTEXT_REQUIRED");
-  return user.tenantId;
-}
 
 async function assertServiceDeskEnabled(user: TenantUser) {
   const tenantId = requireTenantId(user);
@@ -91,18 +88,22 @@ type CaptureInboundInput = {
 async function captureInboundAttachments(tenantId: string, caseId: string, commentId: string | null, attachments: CaptureInboundInput["attachments"]) {
   if (!attachments?.length) return;
   for (const attachment of attachments) {
+    // Same rules as manual uploads (S7): safe name, size cap, allowed types. A file that fails
+    // them is skipped; the message itself is still captured.
+    const check = checkAttachment(attachment.filename, base64DecodedLength(String(attachment.base64 ?? "")));
+    if (!check.ok) continue;
     const buffer = Buffer.from(attachment.base64, "base64");
-    const storageKey = `cases/${tenantId}/${caseId}/${randomUUID()}-${attachment.filename}`;
-    const written = await writePrivateFile(storageKey, buffer, { bucket: "case-attachments", contentType: attachment.contentType ?? null });
+    const storageKey = `cases/${tenantId}/${caseId}/${randomUUID()}-${check.fileName}`;
+    const written = await writePrivateFile(storageKey, buffer, { bucket: "case-attachments", contentType: check.contentType });
     const fileObject = await upsertFileObjectForTenant({ id: "system", tenantId }, {
       bucket: written.bucket, storageKey: written.storageKey, storageDriver: written.driver,
-      originalFilename: attachment.filename, contentType: written.contentType, byteSize: written.byteSize,
+      originalFilename: check.fileName, contentType: written.contentType, byteSize: written.byteSize,
       checksum: written.checksum, entityType: "CASE", entityId: caseId, visibility: "TENANT",
     });
     await execute(
       `insert into "CaseAttachment" (id, "tenantId", "caseId", "fileObjectId", "commentId", filename, "contentType", "byteSize", source, "createdAt")
        values ($1,$2,$3,$4,$5,$6,$7,$8,'INBOUND',$9)`,
-      [randomUUID(), tenantId, caseId, fileObject.id, commentId, attachment.filename, attachment.contentType ?? null, written.byteSize, new Date().toISOString()],
+      [randomUUID(), tenantId, caseId, fileObject.id, commentId, check.fileName, check.contentType, written.byteSize, new Date().toISOString()],
     );
   }
 }

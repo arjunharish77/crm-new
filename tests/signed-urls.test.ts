@@ -51,3 +51,16 @@ describe("generateSignedDownloadToken / verifySignedDownloadToken", () => {
     expect(expiresAt).toBeLessThanOrEqual(before + 61);
   });
 });
+
+describe("signed links in production (round-2 plan O1)", () => {
+  it("need their own FILE_DOWNLOAD_SIGNING_SECRET", () => {
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("FILE_DOWNLOAD_SIGNING_SECRET", "");
+    try {
+      expect(() => generateSignedDownloadToken("invoice", "i1", 60)).toThrow("MISSING_SIGNING_SECRET");
+    } finally {
+      vi.unstubAllEnvs();
+      vi.stubEnv("FILE_DOWNLOAD_SIGNING_SECRET", "test-signing-secret");
+    }
+  });
+});

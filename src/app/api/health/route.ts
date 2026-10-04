@@ -1,28 +1,12 @@
 import { NextResponse } from "next/server";
-import { queryOne } from "@/lib/db/query";
+import { healthSummary } from "@/lib/server/system-health";
 
 export const dynamic = "force-dynamic";
 
+// Public summary for Docker's health check and the deploy script (round-2 plan O5): 503 when the
+// database is unreachable; Redis and the worker are reported, and "degraded" when either isn't
+// well. Details (queues, heartbeats, failed jobs) are platform-admin only: /api/platform-admin/health.
 export async function GET() {
-  try {
-    const result = await queryOne<{ ok: number }>("select 1 as ok");
-    return NextResponse.json({
-      ok: result?.ok === 1,
-      database: result?.ok === 1 ? "ok" : "unknown",
-      timestamp: new Date().toISOString(),
-    });
-  } catch (error) {
-    console.error("HEALTHCHECK_FAILED", error);
-    const message =
-      process.env.NODE_ENV === "development" && error instanceof Error ? error.message : "Healthcheck failed";
-    return NextResponse.json(
-      {
-        ok: false,
-        database: "error",
-        message,
-        timestamp: new Date().toISOString(),
-      },
-      { status: 503 },
-    );
-  }
+  const summary = await healthSummary();
+  return NextResponse.json(summary, { status: summary.database === "ok" ? 200 : 503, headers: { "Cache-Control": "no-store" } });
 }

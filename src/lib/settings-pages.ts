@@ -1,7 +1,7 @@
 import type { LucideIcon } from "lucide-react";
 import {
     Bot, Boxes, Briefcase, Building2, ClipboardCheck, Compass, Copy, FileText, Fingerprint, GitBranch, GraduationCap, Handshake,
-    KeyRound, Layers, LifeBuoy, ListChecks, Megaphone, Percent, PhoneCall, PlugZap, ScrollText, ShieldAlert,
+    KeyRound, Layers, LifeBuoy, ListChecks, Megaphone, Palette, Percent, PhoneCall, PlugZap, ScrollText, ShieldAlert,
     ShieldCheck, Sparkles, Store, Headset, Gauge, TextQuote, MessagesSquare, StickyNote, BookOpen, FileLock, Table2, Tags, TimerReset, Trophy, UserCheck, UserCog, Users, UsersRound, Wallet,
 } from "lucide-react";
 
@@ -40,6 +40,8 @@ const base = "/dashboard/settings";
 export const SETTINGS_PAGES: SettingsPage[] = [
     { group: "workspace", title: "Workspace profile", href: `${base}/workspace`, icon: Building2, description: "Company name, time zone, currency and language.", keywords: ["company", "organization", "localization", "timezone", "currency", "language", "general"] },
     { group: "workspace", title: "Modules", href: `${base}/workspace/modules`, icon: Boxes, description: "The modules in your plan, what each needs, and usage.", keywords: ["plan", "features", "usage", "limits"] },
+    // Theme is personal (decision 8: My account), but people look for it here, so Settings links to it.
+    { group: "workspace", title: "Appearance", href: "/dashboard/account/preferences", icon: Palette, description: "Light or dark mode and the accent colour. Your own choice, set in My account › Preferences.", keywords: ["theme", "dark", "light", "dark mode", "colour", "color", "accent", "palette"] },
 
     { group: "access", title: "Users", href: `${base}/access/users`, icon: Users, description: "Invite people, change their role and team, and turn off accounts.", keywords: ["invite", "people", "members", "deactivate", "manager"] },
     { group: "access", title: "Teams", href: `${base}/access/teams`, icon: UsersRound, description: "Teams for record access, queues and reporting.", keywords: ["queue", "members"] },

@@ -62,6 +62,7 @@ ml-service/.cache/
 
 # Production backups contain database records and credentials.
 /deploy/vps/backups/
+/deploy/vps/.deploy-history
 
 # Local UI/browser audit captures (hundreds of MB of screenshots) and Python caches.
 /ui-audit-2026-09/

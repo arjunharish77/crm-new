@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { requireCurrentUser } from "@/lib/server/auth";
+import { hasIntegrationsAccess, INTEGRATIONS_FORBIDDEN_MESSAGE } from "@/lib/server/integrations-access";
 import { deleteWebhookForTenant, updateWebhookForTenant } from "@/lib/server/crm";
-import { badRequest, serverError, unauthorized } from "@/lib/server/http";
+import { badRequest, forbidden, serverError, unauthorized } from "@/lib/server/http";
 import { UnsafeDestinationError } from "@/lib/server/outbound-request-guard";
 
 type Params = {
@@ -11,6 +12,7 @@ type Params = {
 export async function PATCH(request: Request, { params }: Params) {
   try {
     const user = await requireCurrentUser(request);
+    if (!hasIntegrationsAccess(user)) return forbidden(INTEGRATIONS_FORBIDDEN_MESSAGE);
     const { id } = await params;
     const body = await request.json().catch(() => null);
     if (!body) return badRequest("Request body is required");
@@ -27,6 +29,7 @@ export async function PATCH(request: Request, { params }: Params) {
 export async function DELETE(request: Request, { params }: Params) {
   try {
     const user = await requireCurrentUser(request);
+    if (!hasIntegrationsAccess(user)) return forbidden(INTEGRATIONS_FORBIDDEN_MESSAGE);
     const { id } = await params;
     await deleteWebhookForTenant(user, id);
     return NextResponse.json({ success: true });

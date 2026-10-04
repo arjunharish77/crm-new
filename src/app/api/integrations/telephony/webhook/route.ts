@@ -15,11 +15,9 @@ export async function POST(request: Request) {
     const tenantId = body?.tenantId ? String(body.tenantId) : "";
     if (!tenantId) return badRequest("tenantId is required");
 
-    const url = new URL(request.url);
     const auth = await verifyTelephonyWebhookRequest(tenantId, rawBody, {
       signature: request.headers.get("x-webhook-signature"),
       timestamp: request.headers.get("x-webhook-timestamp"),
-      legacySecret: request.headers.get("x-webhook-secret") ?? url.searchParams.get("secret"),
     });
     if (!auth.ok) {
       if (auth.reason === "STALE_TIMESTAMP") return forbidden("Request timestamp is missing or outside the allowed window");

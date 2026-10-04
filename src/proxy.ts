@@ -49,13 +49,30 @@ function pageRedirect(request: NextRequest) {
   return null;
 }
 
+// Round-2 plan O5: every API request gets an id (a caller's own x-request-id is kept when it
+// looks like one). It's passed to the route (logs, Sentry, the "reference" in error replies) and
+// returned in the x-request-id response header.
+function requestIdFor(request: NextRequest) {
+  const supplied = request.headers.get("x-request-id");
+  return supplied && /^[A-Za-z0-9._-]{8,64}$/.test(supplied) ? supplied : crypto.randomUUID();
+}
+
+function continueWithRequestId(request: NextRequest, requestId: string) {
+  const headers = new Headers(request.headers);
+  headers.set("x-request-id", requestId);
+  const response = NextResponse.next({ request: { headers } });
+  response.headers.set("x-request-id", requestId);
+  return response;
+}
+
 export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
   if (!pathname.startsWith("/api/")) {
     return pageRedirect(request) ?? NextResponse.next();
   }
+  const requestId = requestIdFor(request);
   if (!MUTATING_METHODS.has(request.method) || isExempt(pathname)) {
-    return NextResponse.next();
+    return continueWithRequestId(request, requestId);
   }
 
   // Absent for non-browser clients (server-to-server calls, curl, mobile apps) -- those aren't
@@ -63,10 +80,12 @@ export function proxy(request: NextRequest) {
   // only ever blocks an actual cross-site browser request.
   const fetchSite = request.headers.get("sec-fetch-site");
   if (fetchSite === "cross-site") {
-    return NextResponse.json({ message: "Cross-site request blocked" }, { status: 403 });
+    const blocked = NextResponse.json({ message: "Cross-site request blocked" }, { status: 403 });
+    blocked.headers.set("x-request-id", requestId);
+    return blocked;
   }
 
-  return NextResponse.next();
+  return continueWithRequestId(request, requestId);
 }
 
 export const config = {

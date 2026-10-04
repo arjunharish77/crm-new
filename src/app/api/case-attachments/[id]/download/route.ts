@@ -24,7 +24,9 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     const buffer = await readPrivateFile(attachment.storageKey);
     return new NextResponse(buffer, {
       headers: {
-        "Content-Type": attachment.contentType || "application/octet-stream",
+        // Rows written before S7 kept the sender's content type; never serve one that a browser
+        // would run as a page or script.
+        "Content-Type": /html|svg|xml|javascript/i.test(attachment.contentType ?? "") ? "application/octet-stream" : attachment.contentType || "application/octet-stream",
         "Content-Disposition": `attachment; filename="${safeContentDispositionFilename(attachment.filename || "attachment")}"`,
       },
     });

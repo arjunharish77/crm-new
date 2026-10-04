@@ -43,6 +43,10 @@ async function main() {
 
   try {
     // --- Data quality: eligibility, once per local day, fairness under a small batch limit.
+    // Bring every existing tenant up to date first, so the batch-of-1 runs below only compete
+    // among this smoke's own never-scanned tenants (on a fresh CI database the seeded tenant
+    // has never been scanned either).
+    await runScheduledDataQualityScan(1000);
     const fresh = [await newTenant("Sweep smoke A"), await newTenant("Sweep smoke B"), await newTenant("Sweep smoke C")];
     // Reporting turned off: since decision 15 the Reports module alone decides (migration 0126
     // turned every advancedReporting=false flag into a DISABLED module).

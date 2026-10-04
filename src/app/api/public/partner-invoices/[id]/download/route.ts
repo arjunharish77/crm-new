@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getPartnerInvoiceDownloadByToken } from "@/lib/server/partner-invoices";
-import { badRequest, serverError } from "@/lib/server/http";
+import { badRequest, safeContentDispositionFilename, serverError } from "@/lib/server/http";
 
 // Public, token-verified -- no session required. Reached from a link minted by
 // POST /api/partner-invoices/[id]/signed-url, not a session-authenticated route; see that
@@ -14,7 +14,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     return new NextResponse(new Uint8Array(file.file), {
       headers: {
         "Content-Type": file.contentType,
-        "Content-Disposition": `attachment; filename="${file.filename}"`,
+        "Content-Disposition": `attachment; filename="${safeContentDispositionFilename(file.filename, "invoice.pdf")}"`,
       },
     });
   } catch (error) {

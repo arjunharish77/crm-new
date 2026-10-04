@@ -1,4 +1,5 @@
 "use client";
+import { useVisibleInterval } from "@/hooks/use-visible-interval";
 import { ModuleGate } from "@/components/common/module-gate";
 
 import { PageHeader } from "@/components/layout/page-header";
@@ -541,11 +542,9 @@ function CallCenterWorkspacePageContent() {
             });
     }, []);
 
-    useEffect(() => {
-        load();
-        const interval = setInterval(load, POLL_INTERVAL_MS);
-        return () => clearInterval(interval);
-    }, [load]);
+    useEffect(() => { load(); }, [load]);
+    // Paused while the tab is hidden (round-2 plan P9).
+    useVisibleInterval(load, POLL_INTERVAL_MS);
 
     if (loading) {
         return <p className="text-sm text-muted-foreground">Loading the call center…</p>;

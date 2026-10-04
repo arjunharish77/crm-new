@@ -1,5 +1,9 @@
 'use client';
 
+// react-grid-layout's own stylesheet (drag and resize handles, placeholder). Imported here, not
+// in the root layout, so only pages that show a dashboard load it (round-2 plan P4).
+import "react-grid-layout/css/styles.css";
+import "react-resizable/css/styles.css";
 import React, { useEffect, useMemo, useState, useCallback } from 'react';
 import { useConfirm } from '@/components/common/dialogs-provider';
 import { Plus, LayoutDashboard, Loader2, X, Pencil, Trash2, Save, MoreVertical, History, Copy, UserCog, Archive, RotateCcw, Download, Star, Check, ArrowLeft, ArrowRight } from 'lucide-react';
@@ -25,7 +29,7 @@ import { StandardDialog } from '@/components/common/standard-dialog';
 import { apiFetch } from '@/lib/api';
 import { formatWorkspaceDate } from '@/lib/date-format';
 import { toast } from 'sonner';
-import { DashboardWidget, type DashboardCrossFilter } from './widget-library';
+import { DashboardWidget, isChartWidgetType, minWidgetRows, type DashboardCrossFilter } from './widget-library';
 import { NbaPendingApprovalsPanel } from '@/components/next-best-action/nba-pending-approvals-panel';
 // Gap checklist Module 17, item 4 (advanced dashboard builder: true 2D drag/drop grid).
 // Replaces @dnd-kit's vertical-list-only reorder (drag up/down within a single column) with a
@@ -42,6 +46,7 @@ import { usePickRecordDialog } from '@/components/common/record-picker';
 const GridLayout = WidthProvider(ReactGridLayout);
 const GRID_COLUMNS = 12;
 const GRID_ROW_HEIGHT = 32;
+const widgetTypeIsStretchable = (type: string) => isChartWidgetType(type) || ['TABLE', 'PIVOT', 'HEATMAP', 'NBA'].includes(String(type));
 
 // Gap checklist Module 17, item 3 (advanced dashboard builder: "persona templates"). The
 // backend (`seedDashboardPresetForTenant`) already accepts an explicit persona and only ever
@@ -161,15 +166,52 @@ export function DashboardManager() {
     }, [widgets, activeTabId, defaultTabId, showDraft, activeDraft]);
     const layoutOf = useCallback((widget: any) => (showDraft && activeDraft?.layouts?.[widget.id]) || widget.layout || {}, [showDraft, activeDraft]);
 
+    // Dashboards made from the old templates saved their layout in a two-column scheme (w 1 or 2,
+    // h 1), which on this 12-column grid drew every widget as a sliver. Such a tab is laid out
+    // afresh in reading order -- charts half width, numbers a third -- until someone moves a widget
+    // (which saves real positions). Nothing is written just by viewing.
+    const flowedLayouts = useMemo(() => {
+        const isLegacy = (widget: any) => {
+            const layout = layoutOf(widget);
+            return (layout.w ?? 0) <= 2 && (layout.h ?? 0) <= 1;
+        };
+        if (!visibleWidgets.some(isLegacy)) return null;
+        const ordered = [...visibleWidgets].sort((a, b) => (layoutOf(a).y ?? 0) - (layoutOf(b).y ?? 0) || (layoutOf(a).x ?? 0) - (layoutOf(b).x ?? 0));
+        const placed: Record<string, { x: number; y: number; w: number; h: number }> = {};
+        let x = 0;
+        let y = 0;
+        let rowHeight = 0;
+        let lastInRow: any = null;
+        // A row's last widget, if it's a chart, stretches to the row's end (no ragged gap).
+        const closeRow = () => {
+            if (lastInRow && widgetTypeIsStretchable(lastInRow.type)) placed[lastInRow.id].w += GRID_COLUMNS - x;
+        };
+        for (const widget of ordered) {
+            const w = isLegacy(widget) ? (widget.type === 'STAT' ? 4 : 6) : Math.min(GRID_COLUMNS, Math.max(layoutOf(widget).w ?? 4, 2));
+            const h = Math.max(isLegacy(widget) ? 0 : layoutOf(widget).h ?? 0, minWidgetRows(widget.type));
+            if (x + w > GRID_COLUMNS) { closeRow(); x = 0; y += rowHeight; rowHeight = 0; }
+            placed[widget.id] = { x, y, w, h };
+            x += w;
+            rowHeight = Math.max(rowHeight, h);
+            lastInRow = widget;
+        }
+        closeRow();
+        return placed;
+    }, [visibleWidgets, layoutOf]);
+
+    // Each kind of widget has a smallest readable height (minWidgetRows); a saved layout smaller
+    // than that shows at the minimum instead of cutting the widget off.
     const gridLayoutItems = useMemo(() => visibleWidgets.map((widget) => ({
         i: widget.id,
-        x: layoutOf(widget).x ?? 0,
-        y: layoutOf(widget).y ?? 0,
-        w: layoutOf(widget).w ?? 4,
-        h: layoutOf(widget).h ?? 3,
+        x: flowedLayouts?.[widget.id]?.x ?? layoutOf(widget).x ?? 0,
+        y: flowedLayouts?.[widget.id]?.y ?? layoutOf(widget).y ?? 0,
+        w: flowedLayouts?.[widget.id]?.w ?? Math.max(layoutOf(widget).w ?? 4, 2),
+        h: flowedLayouts?.[widget.id]?.h ?? Math.max(layoutOf(widget).h ?? 3, minWidgetRows(widget.type)),
+        minH: minWidgetRows(widget.type),
+        minW: 2,
         isDraggable: customizing && widget.isOwner !== false,
         isResizable: customizing && widget.isOwner !== false,
-    })), [visibleWidgets, customizing, layoutOf]);
+    })), [visibleWidgets, customizing, layoutOf, flowedLayouts]);
 
     // Reading order for the mobile stacked list -- top-to-bottom, left-to-right by each
     // widget's own desktop grid position, so the stacked order still matches what the widget's
@@ -699,7 +741,7 @@ export function DashboardManager() {
             {isMobile ? (
                 <div className="flex flex-col gap-4">
                     {mobileOrderedWidgets.map((widget) => (
-                        <div key={widget.id} className="min-h-[220px]">
+                        <div key={widget.id} className={widget.type === 'STAT' ? 'h-36' : isChartWidgetType(widget.type) ? 'h-80' : 'h-72'}>
                             <DashboardWidget
                                 widget={widget}
                                 onEdit={() => setEditingWidget(widget)}
@@ -1132,7 +1174,7 @@ function AddWidgetDialog({ open, widget, defaultTabId, existingWidgets, onClose,
         // at (0,0) on top of each other.
         const isChartType = type === 'TREND' || type === 'BAR' || type === 'FUNNEL' || type === 'AREA' || type === 'PIE' || type === 'STACKED_BAR' || type === 'HEATMAP' || type === 'TABLE' || type === 'SANKEY' || type === 'PIVOT';
         const nextY = (existingWidgets ?? []).reduce((max, item) => Math.max(max, (item.layout?.y ?? 0) + (item.layout?.h ?? 3)), 0);
-        const createLayout = { x: 0, y: nextY, w: isChartType ? 8 : 4, h: isChartType ? 4 : 3 };
+        const createLayout = { x: 0, y: nextY, w: isChartType ? 8 : 4, h: minWidgetRows(type) };
 
         try {
             await apiFetch(widget ? `/dashboard-widgets/${widget.id}` : '/dashboard-widgets', {

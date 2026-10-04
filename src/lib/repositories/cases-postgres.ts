@@ -7,6 +7,7 @@ import { runAutomationsForEvent } from "@/lib/repositories/automations-postgres"
 import { createUserNotification } from "@/lib/server/notifications";
 import { enqueueWebhookEvent, type WebhookEventType } from "@/lib/server/webhook-outbox";
 import { enqueueAppEvent } from "@/lib/server/marketplace-events";
+import { requireTenantId } from "@/lib/server/tenant-guard";
 
 // Gap checklist Module 16's app event bus, "case" event domain -- previously undelivered since
 // no automation-trigger-equivalent hook existed for Case at the time of that pass; confirmed
@@ -25,11 +26,6 @@ type TenantUser = {
   tenantId: string | null;
   isPlatformAdmin?: boolean;
 };
-
-function requireTenantId(user: TenantUser) {
-  if (!user.tenantId) throw new Error("TENANT_CONTEXT_REQUIRED");
-  return user.tenantId;
-}
 
 async function assertServiceDeskEnabled(user: TenantUser) {
   const tenantId = requireTenantId(user);

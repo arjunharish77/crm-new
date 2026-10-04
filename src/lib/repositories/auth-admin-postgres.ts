@@ -209,6 +209,11 @@ export async function bootstrapPlatformAdmin(input: { name: string; email: strin
   const now = new Date().toISOString();
 
   await withTransaction(null, async (tx) => {
+    // S10: two setup requests racing each other used to both pass the check above. The lock and
+    // the re-check inside the transaction let only the first one create an admin.
+    await tx.query("select pg_advisory_xact_lock(hashtextextended($1, 0))", ["platform-bootstrap"]);
+    const existing = await tx.query('select id from "PlatformAdmin" where "isActive" = true limit 1');
+    if (existing.rows.length) throw new Error("BOOTSTRAP_ALREADY_COMPLETE");
     await insertReturning("Role", {
       id: roleId,
       tenantId: null,
@@ -252,7 +257,7 @@ export async function bootstrapPlatformAdmin(input: { name: string; email: strin
 // function returns, and every query anywhere else in the app runs after that point.
 export async function getCurrentUserById(userId: string) {
   const userRecord = await queryOneAsSystem<any>(
-    'select id, email, name, "tenantId", "roleId", "permissionTemplateId", "mfaEnabled", "teamId" from "User" where id::text = $1 limit 1',
+    'select id, email, name, "tenantId", "roleId", "permissionTemplateId", "mfaEnabled", "teamId", status, "deletedAt" from "User" where id::text = $1 limit 1',
     [userId],
   );
   if (!userRecord) return null;
@@ -343,6 +348,9 @@ export async function getCurrentUserById(userId: string) {
     maintenanceActive: tenantConfigRecord?.maintenanceActive ?? false,
     maintenanceMessage: tenantConfigRecord?.maintenanceMessage ?? null,
     mfaEnabled: !!userRecord.mfaEnabled,
+    // Checked on every request (auth.ts): a deactivated or removed user's sessions stop working.
+    status: (userRecord.status as string | null) ?? "ACTIVE",
+    deletedAt: (userRecord.deletedAt as string | null) ?? null,
   };
 }
 
@@ -813,7 +821,12 @@ export async function getTenantUsersForPlatformAdmin(tenantId: string) {
 // WP07 (F04): CROSS_TENANT_ADMIN, disposition B -- only reachable from
 // POST /api/platform-admin/impersonate, looking up a user in a tenant other than the admin's own.
 export async function impersonateTenantUser(platformAdminUserId: string, tenantId: string, userId: string) {
-  const user = await queryOneAsSystem<any>('select id, email, name, "tenantId", "roleId" from "User" where id = $1 and "tenantId" = $2 limit 1', [userId, tenantId]);
+  const user = await queryOneAsSystem<any>('select id, email, name, "tenantId", "roleId", status, "deletedAt" from "User" where id = $1 and "tenantId" = $2 limit 1', [userId, tenantId]);
   if (!user) throw new Error("USER_NOT_FOUND");
+  // Round-2 plan S11: only active people can be impersonated, never a platform admin.
+  if (user.deletedAt || (user.status && user.status !== "ACTIVE")) throw new Error("IMPERSONATION_TARGET_INACTIVE");
+  if (await getActivePlatformAdminByUserId(user.id)) throw new Error("IMPERSONATION_TARGET_PRIVILEGED");
+  delete user.status;
+  delete user.deletedAt;
   return { user, platformAdminUserId };
 }

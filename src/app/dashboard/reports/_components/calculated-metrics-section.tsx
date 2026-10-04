@@ -1,5 +1,6 @@
 "use client";
 
+import { useConfirm } from "@/components/common/dialogs-provider";
 import { ErrorState } from "@/components/common/error-state";
 import { useEffect, useState } from "react";
 import { apiFetch } from "@/lib/api";
@@ -29,6 +30,7 @@ type CalculatedMetricStepDraft = { metricId: string; operator: string | null };
 // math chaining already-defined metrics only -- no free-text formula box, reusing whatever the
 // metric layer (built earlier this pass) already produces.
 export function CalculatedMetricsSection() {
+    const confirmDialog = useConfirm();
     const [metrics, setMetrics] = useState<any[]>([]);
     const [calculatedMetrics, setCalculatedMetrics] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
@@ -90,9 +92,12 @@ export function CalculatedMetricsSection() {
     };
 
     const deleteCalculatedMetric = async (id: string) => {
+        const metric = calculatedMetrics.find((item) => item.id === id);
+        if (!(await confirmDialog({ title: `Delete ${metric?.name ? `"${metric.name}"` : "this calculated metric"}?`, description: "Widgets and reports that use it stop showing it. This can't be undone.", confirmLabel: "Delete metric", destructive: true }))) return;
         try {
             await apiFetch(`/calculated-metrics/${id}`, { method: "DELETE" });
             setCalculatedMetrics((current) => current.filter((m) => m.id !== id));
+            toast.success("Calculated metric deleted");
         } catch (error: any) {
             toast.error(error.message || "Failed to delete calculated metric");
         }

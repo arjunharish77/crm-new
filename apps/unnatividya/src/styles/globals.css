@@ -4197,3 +4197,51 @@ button {
 .lead-detail-page :is(a, button) { min-height: 44px; }
 .lead-detail-page :is(a, button, summary):focus-visible { outline: 3px solid currentColor; outline-offset: 3px; }
 @media (max-width: 850px) { .lead-detail-page .admin-detail-grid, .lead-detail-page .admin-detail-field { grid-template-columns: minmax(0, 1fr); } }
+
+.redirect-manager .quality-record h3 { margin-block: 12px 0; font-size: 1.05rem; }
+.redirect-manager .quality-record dl { display: grid; grid-template-columns: minmax(0, 1fr); }
+.redirect-manager .row-actions { flex-wrap: wrap; gap: 16px; }
+.redirect-manager .admin-form-grid > * { min-width: 0; }
+.redirect-manager input, .redirect-manager select { min-height: 44px; max-width: 100%; }
+.redirect-manager .admin-check input { min-height: auto; }
+.redirect-manager .admin-detail-card { overflow-wrap: anywhere; }
+
+.crm-config-page .admin-kv strong { min-width: 0; overflow-wrap: anywhere; }
+.crm-config-page .admin-tile, .crm-config-page .admin-detail-card { min-width: 0; }
+.crm-config-form { display: grid; gap: 24px; }
+.crm-config-form fieldset { min-width: 0; margin: 0; padding: 18px; border: 1px solid var(--uv-hairline); border-radius: 12px; }
+.crm-config-form legend { font-weight: 700; padding-inline: 6px; }
+.crm-config-form .admin-form-grid > * { min-width: 0; }
+.crm-config-form input:not([type="checkbox"]), .crm-config-form select, .crm-config-form textarea { max-width: 100%; min-height: 44px; }
+.crm-config-form .admin-check { min-height: 44px; }
+.crm-config-page .text-link { display: inline-flex; align-items: center; min-height: 44px; }
+.crm-config-form button { min-height: 44px; }
+.crm-config-page :is(a, button, input, select, textarea):focus-visible { outline: 3px solid currentColor; outline-offset: 3px; }
+
+.crm-mapping-layout > * { min-width: 0; overflow-wrap: anywhere; }
+.crm-mapping-layout input, .crm-mapping-layout textarea { width: 100%; min-width: 0; min-height: 44px; }
+.crm-mapping-layout textarea { font-family: monospace; }
+.crm-mapping-layout .admin-token { white-space: normal; overflow-wrap: anywhere; min-width: 0; min-height: 44px; user-select: text; }
+.crm-mapping-layout .admin-token-grid { grid-template-columns: minmax(0, 1fr); max-height: 560px; overflow-y: auto; }
+.crm-mapping-layout button, .crm-mapping-page a { min-height: 44px; }
+.crm-mapping-page :is(a, button, input, textarea):focus-visible { outline: 3px solid currentColor; outline-offset: 3px; }
+
+.admin-auth-panel .field { min-width: 0; }
+.admin-auth-panel input { min-width: 0; max-width: 100%; min-height: 44px; }
+.admin-auth-panel button { min-height: 44px; }
+.admin-auth-panel .password-visibility { justify-self: start; margin-top: 8px; }
+.admin-auth-panel :is(input, button):focus-visible { outline: 3px solid currentColor; outline-offset: 3px; }
+.admin-auth-panel :is(p, small) { overflow-wrap: anywhere; }
+
+.admin-setup-form .field { min-width: 0; }
+.admin-setup-form input { min-width: 0; max-width: 100%; min-height: 44px; }
+.admin-setup-form :is(button, a) { min-height: 44px; }
+.admin-setup-form :is(small, p) { overflow-wrap: anywhere; }
+.admin-setup-form :is(input, button, a):focus-visible { outline: 3px solid currentColor; outline-offset: 3px; }
+.admin-setup-form .field > small { display: block; margin-top: 6px; }
+.admin-setup-form .field > .text-button { display: block; margin-top: 6px; }
+
+.catalog-revisions #revision-history { scroll-margin-top: 90px; }
+.catalog-revisions .quality-filters > * { min-width: 0; }
+.catalog-revisions .quality-filters .text-link { display: inline-flex; align-items: center; min-height: 44px; }
+.catalog-revisions > section { min-width: 0; overflow-wrap: anywhere; }

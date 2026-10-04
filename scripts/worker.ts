@@ -31,10 +31,19 @@ import { processModuleHealth } from "@/lib/server/module-health";
 import { computeDueMetricGrainSnapshots } from "@/lib/server/metrics";
 import { dispatchCaseSurveys } from "@/lib/repositories/case-survey-postgres";
 import { refreshCaseAnalyticsSnapshots } from "@/lib/server/inbuilt-reports";
+import { runHousekeeping } from "@/lib/server/housekeeping";
+import { enforceSettingsAtStartup } from "@/lib/server/settings-check";
+import * as Sentry from "@sentry/node";
+import { writeFileSync } from "fs";
+import Redis from "ioredis";
+import { reportError, sentryOptions } from "@/lib/server/error-reporting";
+import { WORKER_HEARTBEAT_KEY } from "@/lib/server/system-health";
+import { queryOneAsSystem } from "@/lib/db/query";
 import {
   QUEUE_NAME_BY_CLASS,
   resolveConcurrency,
   recurringJobNamesForClass,
+  jobRegistryEntry,
   DEFAULT_TENANT_FAIRNESS_MAX_CONCURRENT,
   type JobQueueClass,
 } from "@/lib/server/job-registry";
@@ -58,58 +67,69 @@ dotenv.config({ path: "../.env", override: false });
 // is the single source of truth for this classification -- see its module comment for the full
 // per-job reasoning, and 25_AUDIT_REMEDIATION_PLAN.md's WP10 tracking record for why the first
 // pass only shipped two classes.
-const realtimeJobs = [
-  { name: "communications.processDue", processor: () => processCommunicationOutbox(50) },
-  { name: "webhooks.processOutbox", processor: () => processWebhookOutbox(25) },
-  { name: "tasks.processReminders", processor: () => processDueTaskReminders() },
-  { name: "tasks.processReminderEscalations", processor: () => processTaskReminderEscalations() },
-  { name: "tasks.processSlaBreaches", processor: () => processTaskSlaBreaches() },
-  { name: "nba.processScheduledRefresh", processor: () => processDueNextBestActionRefresh(50) },
-] as const;
-
-const operationalJobs = [
-  { name: "applications.documentReminders", processor: () => processApplicationDocumentReminders(100) },
-  { name: "automation.processDue", processor: () => processDueAutomationJobs(50) },
-  { name: "tasks.processOverdue", processor: () => processOverdueTaskAutomations() },
-  { name: "journeys.processEnrollmentRefresh", processor: () => processDueJourneyEnrollmentRefresh() },
-  { name: "marketing.continueCampaignLaunches", processor: () => processDueCampaignLaunches() },
-  { name: "journeys.alertDegraded", processor: () => alertDegradedJourneys(100) },
-  { name: "dataQuality.processScheduledScan", processor: () => runScheduledDataQualityScan(25) },
-  { name: "marketplace.processAppDeliveries", processor: () => processAppEventDeliveries(25) },
-  { name: "marketplace.processAppSyncs", processor: () => processDueAppSyncs(25) },
-  { name: "telephony.expireRecordings", processor: () => expireCallRecordings(100) },
-  { name: "retention.enforce", processor: () => processDueDataRetentionEnforcement(25) },
+// Round-2 plan B16: one table of processors for every recurring job, keyed by its registry name.
+// Which queue a job runs on, and how often, come from job-registry.ts only; startup fails if a
+// recurring job in the registry has no processor here or this table names one the registry
+// doesn't have.
+const RECURRING_PROCESSORS: Record<string, () => Promise<unknown>> = {
+  // realtime
+  "communications.processDue": () => processCommunicationOutbox(50),
+  "webhooks.processOutbox": () => processWebhookOutbox(25),
+  "tasks.processReminders": () => processDueTaskReminders(),
+  "tasks.processReminderEscalations": () => processTaskReminderEscalations(),
+  "tasks.processSlaBreaches": () => processTaskSlaBreaches(),
+  "nba.processScheduledRefresh": () => processDueNextBestActionRefresh(50),
+  // operational
+  "applications.documentReminders": () => processApplicationDocumentReminders(100),
+  "automation.processDue": () => processDueAutomationJobs(50),
+  "tasks.processOverdue": () => processOverdueTaskAutomations(),
+  "journeys.processEnrollmentRefresh": () => processDueJourneyEnrollmentRefresh(),
+  "marketing.continueCampaignLaunches": () => processDueCampaignLaunches(),
+  "journeys.alertDegraded": () => alertDegradedJourneys(100),
+  "dataQuality.processScheduledScan": () => runScheduledDataQualityScan(25),
+  "marketplace.processAppDeliveries": () => processAppEventDeliveries(25),
+  "marketplace.processAppSyncs": () => processDueAppSyncs(25),
+  "telephony.expireRecordings": () => expireCallRecordings(100),
+  "retention.enforce": () => processDueDataRetentionEnforcement(25),
   // Decision 31: archived automations, forms, views, reports, rules and templates are kept for 30
   // days, then removed.
-  { name: "archive.purge", processor: async () => ({ automations: await purgeArchivedAutomations(200), forms: await purgeArchivedForms(200), ...(await purgeArchivedItems(200)) }) },
-  { name: "communications.processSuppressionExpiry", processor: () => processDueSuppressionExpiry(100) },
-  { name: "cases.processSlaEscalations", processor: () => processCaseSlaEscalations(200) },
-  { name: "modules.processTrials", processor: () => processModuleTrials() },
-  { name: "modules.processHealth", processor: () => processModuleHealth(20) },
-  { name: "cases.dispatchSurveys", processor: () => dispatchCaseSurveys(100) },
-  { name: "cases.refreshAnalyticsSnapshots", processor: () => refreshCaseAnalyticsSnapshots(50) },
-  { name: "cases.alertStaleUnassigned", processor: () => alertStaleUnassignedCases(24, 100) },
-  { name: "metrics.computeGrainSnapshots", processor: () => computeDueMetricGrainSnapshots(200) },
-] as const;
+  "archive.purge": async () => ({ automations: await purgeArchivedAutomations(200), forms: await purgeArchivedForms(200), ...(await purgeArchivedItems(200)) }),
+  "housekeeping.run": () => runHousekeeping(5000),
+  "communications.processSuppressionExpiry": () => processDueSuppressionExpiry(100),
+  "cases.processSlaEscalations": () => processCaseSlaEscalations(200),
+  "modules.processTrials": () => processModuleTrials(),
+  "modules.processHealth": () => processModuleHealth(20),
+  "cases.dispatchSurveys": () => dispatchCaseSurveys(100),
+  "cases.refreshAnalyticsSnapshots": () => refreshCaseAnalyticsSnapshots(50),
+  "cases.alertStaleUnassigned": () => alertStaleUnassignedCases(24, 100),
+  "metrics.computeGrainSnapshots": () => computeDueMetricGrainSnapshots(200),
+  // heavy: each is its own bounded scan across tenants, so the per-tenant fairness wrapper only
+  // applies to the dynamically enqueued exports.process and imports.process (processHeavyJob).
+  "reports.processRollups": () => processPendingReportRefreshJobs(25),
+  "reports.processRollupSchedule": () => processDueReportRollupRefreshes(50),
+  "reports.processSchedules": () => processDueReportSchedules(),
+  "reports.retryFailedSchedules": () => retryFailedReportSchedules(),
+  "exports.processExpiry": () => processExpiredExportFiles(50),
+  // ml
+  "scoring.processScheduledRetraining": () => processDueScheduledScoringRetraining(10),
+};
 
-// Recurring "heavy" jobs -- each of these is its own bounded, multi-tenant scan tick (see
-// job-registry.ts's isTenantScoped doc), so the per-tenant fairness wrapper below does NOT apply
-// to these; it only wraps the two dynamically-enqueued, genuinely-single-tenant-per-job types
-// (exports.process, imports.process) handled in processHeavyJob.
-const heavyRecurringJobs = [
-  { name: "reports.processRollups", processor: () => processPendingReportRefreshJobs(25) },
-  { name: "reports.processRollupSchedule", processor: () => processDueReportRollupRefreshes(50) },
-  { name: "reports.processSchedules", processor: () => processDueReportSchedules() },
-  { name: "reports.retryFailedSchedules", processor: () => retryFailedReportSchedules() },
-  { name: "exports.processExpiry", processor: () => processExpiredExportFiles(50) },
-] as const;
+// A recurring tick that runs longer than this is reported as failed (the next tick still runs).
+const RECURRING_TICK_TIMEOUT_MS = 10 * 60_000;
 
-const mlRecurringJobs = [{ name: "scoring.processScheduledRetraining", processor: () => processDueScheduledScoringRetraining(10) }] as const;
+function withTimeout<T>(work: Promise<T>, ms: number, label: string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`JOB_TIMEOUT: ${label} ran longer than ${Math.round(ms / 60_000)} minutes`)), ms);
+  });
+  return Promise.race([work, timeout]).finally(() => clearTimeout(timer));
+}
 
-type RealtimeJobName = (typeof realtimeJobs)[number]["name"];
-type OperationalJobName = (typeof operationalJobs)[number]["name"];
-type HeavyRecurringJobName = (typeof heavyRecurringJobs)[number]["name"];
-type MlRecurringJobName = (typeof mlRecurringJobs)[number]["name"];
+function runRecurring(name: string) {
+  const processor = RECURRING_PROCESSORS[name];
+  if (!processor) return null;
+  return withTimeout(processor(), RECURRING_TICK_TIMEOUT_MS, name);
+}
 
 function repeatMs() {
   const value = Number(process.env.WORKER_REPEAT_MS || process.env.WORKER_INTERVAL_MS || DEFAULT_REPEAT_MS);
@@ -141,14 +161,17 @@ function redisConnection() {
   };
 }
 
-async function registerRepeatableJobs(queue: Queue, jobs: ReadonlyArray<{ name: string }>) {
-  for (const jobConfig of jobs) {
+// Recurring ticks don't retry (B16): the next tick is the retry, and three attempts of a failing
+// tick only tripled the noise.
+async function registerRepeatableJobs(queue: Queue, queueClass: JobQueueClass) {
+  for (const name of recurringJobNamesForClass(queueClass)) {
     await queue.add(
-      jobConfig.name,
+      name,
       {},
       {
-        jobId: jobConfig.name,
-        repeat: { every: repeatMs() },
+        jobId: name,
+        repeat: { every: jobRegistryEntry(name).repeatMs ?? repeatMs() },
+        attempts: 1,
       },
     );
   }
@@ -159,21 +182,15 @@ function tenantIdFromJobData(data: unknown): string | null {
   return typeof tenantId === "string" && tenantId ? tenantId : null;
 }
 
-async function processRealtimeJob(job: Job) {
-  const recurring = realtimeJobs.find((item) => item.name === (job.name as RealtimeJobName));
-  if (recurring) return recurring.processor();
-  throw new Error(`Unknown job: ${job.name}`);
-}
-
-async function processOperationalJob(job: Job) {
-  const recurring = operationalJobs.find((item) => item.name === (job.name as OperationalJobName));
-  if (recurring) return recurring.processor();
+async function processRecurringJob(job: Job) {
+  const run = runRecurring(job.name);
+  if (run) return run;
   throw new Error(`Unknown job: ${job.name}`);
 }
 
 async function processHeavyJob(job: Job) {
-  const recurring = heavyRecurringJobs.find((item) => item.name === (job.name as HeavyRecurringJobName));
-  if (recurring) return recurring.processor();
+  const recurring = runRecurring(job.name);
+  if (recurring) return recurring;
 
   if (job.name === "exports.process") {
     const exportRequestId = typeof job.data?.exportRequestId === "string" ? job.data.exportRequestId : "";
@@ -197,8 +214,8 @@ async function processHeavyJob(job: Job) {
 }
 
 async function processMlJob(job: Job) {
-  const recurring = mlRecurringJobs.find((item) => item.name === (job.name as MlRecurringJobName));
-  if (recurring) return recurring.processor();
+  const recurring = runRecurring(job.name);
+  if (recurring) return recurring;
 
   if (job.name === "scoring.recomputeRules") {
     const { tenantId, userId } = job.data as { tenantId: string; userId: string };
@@ -235,8 +252,8 @@ async function processMlJob(job: Job) {
 }
 
 const PROCESSOR_BY_CLASS: Record<JobQueueClass, (job: Job) => Promise<unknown>> = {
-  realtime: processRealtimeJob,
-  operational: processOperationalJob,
+  realtime: processRecurringJob,
+  operational: processRecurringJob,
   heavy: processHeavyJob,
   ml: processMlJob,
 };
@@ -263,6 +280,18 @@ function wireWorkerLifecycle(label: string, worker: Worker) {
         message: `${errorLabel} failed after ${job.attemptsMade} attempt${job.attemptsMade === 1 ? "" : "s"}: ${error.message || "Unknown error"}.`,
         data: { type: job.name, error: error.message },
       }).catch(() => undefined);
+    }
+
+    // B16: a failed export or import used to tell nobody; the person who asked is notified.
+    if (isFinalAttempt && (job.name === "exports.process" || job.name === "imports.process")) {
+      notifyFailedTransfer(job, error).catch((notifyError) => console.error(`[worker:${label}] failed to notify about ${job.name}#${job.id}`, notifyError));
+    }
+
+    // Round-2 plan O5: a job that has used up its attempts (or a recurring tick, which has one)
+    // is reported to Sentry, which emails on each new kind of failure.
+    if (isFinalAttempt) {
+      console.error(JSON.stringify({ ts: new Date().toISOString(), level: "error", msg: "job.failed", queue: worker.name, job: job.name, jobId: job.id, tenantId: tenantIdFromJobData(job.data), attempts: job.attemptsMade, error: error?.message }));
+      reportError(error, { job: job.name, queue: worker.name, tenantId: tenantIdFromJobData(job.data) ?? "none" });
     }
 
     // WP10 follow-up (F18 item 4/6): dead-letter tooling -- a durable, queryable row for the
@@ -292,11 +321,34 @@ function wireWorkerLifecycle(label: string, worker: Worker) {
 // plain container logs without needing a separate monitoring stack wired up, and enough to
 // answer "is this specific workload class's worker still alive and how backed up is it" during
 // an incident. `worker.isRunning()` reflects BullMQ's own internal processing-loop state.
-function startHeartbeat(label: string, worker: Worker, queue: Queue) {
-  return setInterval(async () => {
-    const counts = await queue.getJobCounts("waiting", "active", "delayed", "failed").catch(() => null);
-    console.log(`[worker:${label}] heartbeat running=${worker.isRunning()} counts=${counts ? JSON.stringify(counts) : "unavailable"}`);
-  }, 60_000);
+// Round-2 plan O5: every 30 seconds each running class records itself in Redis (read by
+// /api/health and Platform › Failed jobs) and in a local file (read by the worker container's
+// health check, deploy/vps/docker-compose.yml). The log line stays once a minute.
+const HEARTBEAT_FILE = process.env.WORKER_HEARTBEAT_FILE || "/tmp/crm-worker-heartbeat";
+let heartbeatRedis: Redis | null = null;
+function heartbeatClient() {
+  if (!process.env.REDIS_URL) return null;
+  heartbeatRedis ??= new Redis(process.env.REDIS_URL, { maxRetriesPerRequest: 1 });
+  heartbeatRedis.on("error", () => undefined);
+  return heartbeatRedis;
+}
+
+function startHeartbeat(label: JobQueueClass, worker: Worker, queue: Queue) {
+  let ticks = 0;
+  const beat = async () => {
+    ticks += 1;
+    if (worker.isRunning()) {
+      const now = new Date().toISOString();
+      await heartbeatClient()?.multi().hset(WORKER_HEARTBEAT_KEY, label, now).expire(WORKER_HEARTBEAT_KEY, 600).exec().catch(() => undefined);
+      try { writeFileSync(HEARTBEAT_FILE, now); } catch { /* read-only filesystem: only Redis */ }
+    }
+    if (ticks % 2 === 0) {
+      const counts = await queue.getJobCounts("waiting", "active", "delayed", "failed").catch(() => null);
+      console.log(JSON.stringify({ ts: new Date().toISOString(), level: "info", msg: "worker.heartbeat", queueClass: label, running: worker.isRunning(), counts }));
+    }
+  };
+  void beat();
+  return setInterval(() => void beat(), 30_000);
 }
 
 const JOB_QUEUE_CLASSES: JobQueueClass[] = ["realtime", "operational", "heavy", "ml"];
@@ -306,24 +358,46 @@ const JOB_QUEUE_CLASSES: JobQueueClass[] = ["realtime", "operational", "heavy", 
 // silently drifting) if this file's own recurring-job arrays and the registry ever disagree, e.g.
 // a job added to one but not the other.
 function assertRegistryConsistency() {
-  const declaredHere: Record<JobQueueClass, string[]> = {
-    realtime: realtimeJobs.map((job) => job.name),
-    operational: operationalJobs.map((job) => job.name),
-    heavy: heavyRecurringJobs.map((job) => job.name),
-    ml: mlRecurringJobs.map((job) => job.name),
-  };
-  for (const queueClass of JOB_QUEUE_CLASSES) {
-    const expected = [...recurringJobNamesForClass(queueClass)].sort();
-    const actual = [...declaredHere[queueClass]].sort();
-    if (JSON.stringify(expected) !== JSON.stringify(actual)) {
-      throw new Error(
-        `job-registry.ts/scripts/worker.ts recurring-job mismatch for class "${queueClass}": registry=${JSON.stringify(expected)} worker=${JSON.stringify(actual)}`,
-      );
-    }
+  const registered = JOB_QUEUE_CLASSES.flatMap((queueClass) => recurringJobNamesForClass(queueClass) as string[]);
+  const missing = registered.filter((name) => !RECURRING_PROCESSORS[name]);
+  const unknown = Object.keys(RECURRING_PROCESSORS).filter((name) => !registered.includes(name));
+  if (missing.length || unknown.length) {
+    throw new Error(`job-registry.ts/scripts/worker.ts recurring-job mismatch: no processor for ${JSON.stringify(missing)}; not in the registry: ${JSON.stringify(unknown)}`);
   }
 }
 
+async function notifyFailedTransfer(job: Job, error: Error) {
+  const isExport = job.name === "exports.process";
+  const id = String((isExport ? job.data?.exportRequestId : job.data?.importJobId) ?? "");
+  if (!id) return;
+  const message = (error?.message || "Unknown error").slice(0, 300);
+  const row = isExport
+    ? await queryOneAsSystem<{ tenantId: string; userId: string; label: string }>(
+        `update "ExportRequest" set status = case when status in ('QUEUED', 'RUNNING') then 'FAILED' else status end,
+                error = coalesce(error, $2), "updatedAt" = now()
+         where id = $1 returning "tenantId", "userId", "moduleName" as label`,
+        [id, message],
+      )
+    : await queryOneAsSystem<{ tenantId: string; userId: string; label: string }>(
+        `update "ImportJob" set status = case when status in ('QUEUED', 'PROCESSING') then 'FAILED' else status end, "updatedAt" = now()
+         where id = $1 returning "tenantId", "userId", module as label`,
+        [id],
+      );
+  if (!row?.userId) return;
+  const what = `${String(row.label || "").toLowerCase()} ${isExport ? "export" : "import"}`.trim();
+  await createUserNotification({
+    tenantId: row.tenantId,
+    userId: row.userId,
+    title: isExport ? "Export failed" : "Import failed",
+    message: `Your ${what} didn't finish: ${message}. Try again, or ask an admin if it keeps happening.`,
+    data: { type: isExport ? "EXPORT_FAILED" : "IMPORT_FAILED", id },
+  });
+}
+
 async function main() {
+  enforceSettingsAtStartup("worker");
+  // Round-2 plan O5: background-job errors go to Sentry when SENTRY_DSN_WORKER is set.
+  if (process.env.SENTRY_DSN_WORKER) Sentry.init(sentryOptions(process.env.SENTRY_DSN_WORKER, "worker"));
   assertRegistryConsistency();
   const connection = redisConnection();
   const defaultJobOptions = {
@@ -340,10 +414,7 @@ async function main() {
     ml: new Queue(QUEUE_NAME_BY_CLASS.ml, { connection, defaultJobOptions }),
   };
 
-  await registerRepeatableJobs(queues.realtime, realtimeJobs);
-  await registerRepeatableJobs(queues.operational, operationalJobs);
-  await registerRepeatableJobs(queues.heavy, heavyRecurringJobs);
-  await registerRepeatableJobs(queues.ml, mlRecurringJobs);
+  for (const queueClass of JOB_QUEUE_CLASSES) await registerRepeatableJobs(queues[queueClass], queueClass);
 
   // WP10 follow-up (F18 item 4/6): FOUR independent concurrency budgets (one per class), each
   // configurable via its own env var -- see job-registry.ts's resolveConcurrency for the exact
@@ -379,6 +450,8 @@ async function main() {
     heartbeats.forEach(clearInterval);
     await Promise.all(JOB_QUEUE_CLASSES.map((queueClass) => workers[queueClass].close()));
     await Promise.all(JOB_QUEUE_CLASSES.map((queueClass) => queues[queueClass].close()));
+    await Sentry.close(2000).catch(() => undefined);
+    heartbeatRedis?.disconnect();
     process.exit(0);
   };
   process.on("SIGINT", shutdown);

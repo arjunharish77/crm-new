@@ -3,7 +3,7 @@ import { cookies } from "next/headers";
 import * as pgAuth from "@/lib/repositories/auth-admin-postgres";
 import { assertGeneralRateLimit } from "@/lib/server/rate-limit";
 import { validateSession, touchSessionIfStale } from "@/lib/server/sessions";
-import { enterTenantContext } from "@/lib/db/tenant-context";
+import { enterTenantContext, getTenantContext } from "@/lib/db/tenant-context";
 import { canUseModule, moduleRequirementForRequest } from "@/lib/module-access";
 import { ModuleAccessError } from "@/lib/server/module-access-error";
 
@@ -137,16 +137,19 @@ async function resolveUserFromPayload(payload: JwtPayload) {
   // in and use the app exactly as before. Platform admins are exempt so they can still
   // investigate/unsuspend a tenant they just locked out.
   if (user.tenantStatus === "SUSPENDED" && !user.isPlatformAdmin) return null;
+  // A deactivated or removed user is signed out on their next request, not when their token
+  // expires (round-2 plan S3). Same rule as sign-in (api/auth/login): platform admins are exempt
+  // from the status check, never from removal.
+  if (user.deletedAt) return null;
+  if (!user.isPlatformAdmin && user.status && user.status !== "ACTIVE") return null;
 
   // Session-level enforcement (revocation, idle timeout, absolute timeout) -- see sessions.ts.
-  // A token with no "sid" (issued before this feature shipped) skips this entirely rather than
-  // being treated as invalid, so already-logged-in users aren't force-logged-out by this
-  // deploy; it naturally stops applying once that token's own JWT expiry passes.
-  if (payload.sid) {
-    const validation = await validateSession(payload.sid);
-    if (!validation.valid) return null;
-    touchSessionIfStale(payload.sid, validation.row.lastActiveAt).catch(() => undefined);
-  }
+  // Every sign-in has issued a session id for longer than a token lives, so a token without one
+  // can't be revoked and is refused (round-2 plan S19).
+  if (!payload.sid) return null;
+  const validation = await validateSession(payload.sid);
+  if (!validation.valid) return null;
+  touchSessionIfStale(payload.sid, validation.row.lastActiveAt).catch(() => undefined);
 
   // WP07 (F04): make this request's tenant/user/role visible to the db query layer for the rest
   // of this async chain (see tenant-context.ts) so query()/queryOne()/execute() can set a
@@ -188,6 +191,12 @@ export async function getCurrentUser(request?: Request) {
 
 export async function requireCurrentUser(request?: Request) {
   const user = await getCurrentUser(request);
+  // Round-2 plan O5: the request id joins the tenant context for logs and error reports.
+  const requestId = request?.headers.get("x-request-id");
+  if (user && requestId) {
+    const context = getTenantContext();
+    if (context) enterTenantContext({ ...context, requestId });
+  }
 
   if (!user) {
     throw new Error("UNAUTHORIZED");
@@ -200,8 +209,41 @@ export async function requireCurrentUser(request?: Request) {
   // actually calls to gate a real action.
   await assertGeneralRateLimit(user);
   if (request) assertModuleAccessForRequest(user, request);
+  if (request && user.isImpersonating) assertImpersonationAllowsRequest(request);
 
   return user;
+}
+
+// Round-2 plan S11: impersonation is for seeing and fixing records as the person sees them. It
+// must not change how anyone signs in or what they may access, so these areas are read-only
+// while impersonating: own password and two-factor, users, roles, permission templates,
+// sessions, API keys and SCIM settings.
+const IMPERSONATION_READ_ONLY_PREFIXES = [
+  "/api/auth/change-password",
+  "/api/auth/change-expired-password",
+  "/api/mfa/",
+  "/api/admin/users/",
+  "/api/admin/scim/",
+  "/api/users",
+  "/api/roles",
+  "/api/permission-templates",
+  "/api/sessions",
+  "/api/settings/api-keys",
+];
+
+export function impersonationBlocksRequest(method: string, pathname: string) {
+  if (["GET", "HEAD", "OPTIONS"].includes(method.toUpperCase())) return false;
+  return IMPERSONATION_READ_ONLY_PREFIXES.some((prefix) => pathname === prefix || pathname.startsWith(prefix.endsWith("/") ? prefix : `${prefix}/`));
+}
+
+function assertImpersonationAllowsRequest(request: Request) {
+  let pathname: string;
+  try {
+    pathname = new URL(request.url).pathname;
+  } catch {
+    return;
+  }
+  if (impersonationBlocksRequest(request.method, pathname)) throw new Error("IMPERSONATION_BLOCKED:sign_in_and_access_changes");
 }
 
 // Role module permissions (lib/module-access.ts): "none" blocks a module's API, "read" allows

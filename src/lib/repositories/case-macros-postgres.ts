@@ -3,17 +3,13 @@ import { execute, query, queryOne, jsonbParam } from "@/lib/db/query";
 import { assertModuleEnabled } from "@/lib/server/module-entitlements";
 import { addCommentToCase } from "@/lib/repositories/cases-postgres";
 import { queueCommunicationForTenant, renderTemplate } from "@/lib/server/communications";
+import { requireTenantId } from "@/lib/server/tenant-guard";
 
 type TenantUser = {
   id: string;
   tenantId: string | null;
   isPlatformAdmin?: boolean;
 };
-
-function requireTenantId(user: TenantUser) {
-  if (!user.tenantId) throw new Error("TENANT_CONTEXT_REQUIRED");
-  return user.tenantId;
-}
 
 async function assertServiceDeskEnabled(user: TenantUser) {
   const tenantId = requireTenantId(user);

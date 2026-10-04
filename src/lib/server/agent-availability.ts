@@ -3,6 +3,7 @@ import { assertTenantModule } from "@/lib/server/module-entitlements";
 import { randomUUID } from "crypto";
 import { query, queryOne } from "@/lib/db/query";
 import { createAuditLog } from "@/lib/server/crm";
+import { requireTenantId } from "@/lib/server/tenant-guard";
 
 type TenantUser = {
   id: string;
@@ -13,11 +14,6 @@ type TenantUser = {
 };
 
 const STATUSES = new Set(["ONLINE", "OFFLINE", "BREAK"]);
-
-function requireTenantId(user: TenantUser) {
-  if (!user.tenantId) throw new Error("TENANT_CONTEXT_REQUIRED");
-  return user.tenantId;
-}
 
 function hasAvailabilityAdminAccess(user: TenantUser) {
   const rolePermissions = typeof user.role === "object" && user.role ? (user.role as any).permissions : null;

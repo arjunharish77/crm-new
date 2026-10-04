@@ -26,7 +26,6 @@ import {
     Megaphone,
     Package,
     Phone,
-    Puzzle,
     Shield,
     ShieldCheck,
     SlidersHorizontal,
@@ -77,9 +76,7 @@ export function NavigationDrawer({ open, isMobile, toggleDrawer }: { open: boole
         if (activeGroup) setOpenGroups(current => current.includes(activeGroup.title) ? current : [...current, activeGroup.title]);
     }, [pathname]);
     const [platformOpen, setPlatformOpen] = React.useState(true);
-    const [customOpen, setCustomOpen] = React.useState(true);
     const [pinnedOpen, setPinnedOpen] = React.useState(true);
-    const [customObjects, setCustomObjects] = React.useState<any[]>([]);
     const [canAccessPayouts, setCanAccessPayouts] = React.useState(true);
     // "Pinned modules" (gap checklist Module 10's user workspace personalization item).
     // Read from the personalization cache GeneralSettingsProvider fills (no second fetch), and
@@ -89,16 +86,6 @@ export function NavigationDrawer({ open, isMobile, toggleDrawer }: { open: boole
         const pinned = personalization?.pinnedModules;
         return Array.isArray(pinned) ? pinned.filter((href): href is string => typeof href === 'string') : [];
     }, [personalization]);
-
-    React.useEffect(() => {
-        apiFetch('/metadata/objects')
-            .then((data: any[]) => {
-                if (Array.isArray(data)) {
-                    setCustomObjects(data.filter((obj: any) => obj.isCustom));
-                }
-            })
-            .catch(console.error);
-    }, []);
 
     const isPartner = !!(user?.role as any)?.permissions?.isPartnerRole;
     // Role module permissions, the same rule the server enforces (lib/module-access.ts).
@@ -292,17 +279,6 @@ export function NavigationDrawer({ open, isMobile, toggleDrawer }: { open: boole
 
                 {!isPartner && (open || isMobile) ? <div className="mx-3 my-2 h-px bg-border" /> : null}
                 {!isPartner ? <ul className="space-y-0.5 px-2">{adminNavigation.map(renderNavItem)}</ul> : null}
-
-                {!isPartner && customObjects.length > 0 ? (
-                    <>
-                        {(open || isMobile) ? <div className="mx-3 my-2 h-px bg-border" /> : null}
-                        {renderSection('Custom objects', customObjects.map(obj => ({
-                            name: obj.label || obj.name,
-                            href: `/dashboard/objects/${obj.name}`,
-                            icon: <Puzzle className="size-5" />,
-                        })), customOpen, () => setCustomOpen(!customOpen))}
-                    </>
-                ) : null}
 
                 {user?.isPlatformAdmin ? (
                     <>

@@ -1,11 +1,11 @@
 "use client";
-import { storageGet, storageSet } from "@/lib/storage";
+import { storageGet, storageSet, userScopedKey } from "@/lib/storage";
 
 // Gap checklist Module 10's "recent/favorite records" item -- extends the earlier, deliberately
 // narrower "jump to recent records" the global command palette pass built (Lead/Opportunity
 // only, no pin/favorite concept, stated explicitly at the time as this item's own job to
-// complete). Still client-side only (localStorage, per-browser, not synced across devices or
-// tenants server-side) -- a real, working per-user convenience, same tier as this app's other
+// complete). Still client-side only (localStorage, per-browser, not synced across devices),
+// kept per person and workspace (round-2 plan N3, lib/storage.ts userScopedKey) -- a real, working per-user convenience, same tier as this app's other
 // localStorage-backed preferences (DataTable density, keyboard-shortcut enablement), not a
 // second backend feature.
 
@@ -51,7 +51,7 @@ function safeWrite(key: string, value: unknown) {
 export function getRecentRecords(): RecentRecord[] {
   if (typeof window === "undefined") return [];
   try {
-    return safeParse<RecentRecord>(storageGet(RECENT_STORAGE_KEY));
+    return safeParse<RecentRecord>(storageGet(userScopedKey(RECENT_STORAGE_KEY)));
   } catch {
     return [];
   }
@@ -60,10 +60,10 @@ export function getRecentRecords(): RecentRecord[] {
 export function recordRecentView(type: RecordType, id: string, label: string) {
   if (typeof window === "undefined" || !id || !label) return;
   try {
-    const existing = safeParse<RecentRecord>(storageGet(RECENT_STORAGE_KEY));
+    const existing = safeParse<RecentRecord>(storageGet(userScopedKey(RECENT_STORAGE_KEY)));
     const deduped = existing.filter((entry) => !(entry.type === type && entry.id === id));
     const next = [{ type, id, label, viewedAt: new Date().toISOString() }, ...deduped].slice(0, MAX_RECENT);
-    safeWrite(RECENT_STORAGE_KEY, next);
+    safeWrite(userScopedKey(RECENT_STORAGE_KEY), next);
   } catch {
     // See safeWrite above.
   }
@@ -74,7 +74,7 @@ export function recordRecentView(type: RecordType, id: string, label: string) {
 export function getFavoriteRecords(): FavoriteRecord[] {
   if (typeof window === "undefined") return [];
   try {
-    return safeParse<FavoriteRecord>(storageGet(FAVORITES_STORAGE_KEY));
+    return safeParse<FavoriteRecord>(storageGet(userScopedKey(FAVORITES_STORAGE_KEY)));
   } catch {
     return [];
   }
@@ -91,6 +91,6 @@ export function toggleFavoriteRecord(type: RecordType, id: string, label: string
   const next = alreadyFavorite
     ? existing.filter((entry) => !(entry.type === type && entry.id === id))
     : [{ type, id, label, pinnedAt: new Date().toISOString() }, ...existing];
-  safeWrite(FAVORITES_STORAGE_KEY, next);
+  safeWrite(userScopedKey(FAVORITES_STORAGE_KEY), next);
   return next;
 }

@@ -121,14 +121,16 @@ export async function apiFetch<T = any>(endpoint: string, options: RequestInit =
                 debugLog('warn', `[API ${requestId}] Permission denied:`, errorData?.message || errorMessage);
             }
 
-            // Create error with user-friendly message
-            const error: any = new Error(
-                ["DUPLICATE_RULE_BLOCK", "MODULE_DEPENDENCY", "MODULE_DISABLED", "USAGE_LIMIT_REACHED"].includes(errorData.code) ? errorMessage : getUserFriendlyError({
-                    message: errorMessage,
-                    status: response.status,
-                    statusText: response.statusText,
-                })
-            );
+            // Create error with user-friendly message. A server error carries a reference
+            // (round-2 plan O5) that support can find in the logs, so it's shown with the message.
+            const friendly = ["DUPLICATE_RULE_BLOCK", "MODULE_DEPENDENCY", "MODULE_DISABLED", "USAGE_LIMIT_REACHED"].includes(errorData.code) ? errorMessage : getUserFriendlyError({
+                message: errorMessage,
+                status: response.status,
+                statusText: response.statusText,
+            });
+            const reference = response.status >= 500 && typeof errorData?.reference === "string" ? errorData.reference : null;
+            const error: any = new Error(reference ? `${friendly} (reference ${reference})` : friendly);
+            error.reference = reference;
             error.status = response.status;
             error.statusText = response.statusText;
             error.originalMessage = errorMessage;

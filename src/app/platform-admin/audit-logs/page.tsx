@@ -21,6 +21,7 @@ import {
 } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { apiFetch } from '@/lib/api';
+import { useDebouncedValue } from '@/hooks/use-debounced-value';
 import { FileText, Search, ChevronLeft, ChevronRight } from 'lucide-react';
 import { formatWorkspaceDateTime } from '@/lib/date-format';
 
@@ -57,6 +58,10 @@ export default function AuditLogsPage() {
     const [actionFilter, setActionFilter] = useState('');
     const [entityTypeFilter, setEntityTypeFilter] = useState('');
     const [searchQuery, setSearchQuery] = useState('');
+    // Searched on the server after a pause in typing (round-2 plan F8); it used to filter only
+    // the 50 rows on screen and say "no matching logs" when there were some.
+    const appliedSearch = useDebouncedValue(searchQuery, 350);
+    useEffect(() => { setPage(1); }, [appliedSearch]);
 
     const fetchLogs = async () => {
         const version = ++requestVersion.current;
@@ -70,6 +75,7 @@ export default function AuditLogsPage() {
 
             if (actionFilter) queryParams.append('action', actionFilter);
             if (entityTypeFilter) queryParams.append('entityType', entityTypeFilter);
+            if (appliedSearch.trim()) queryParams.append('q', appliedSearch.trim());
 
             const response = await apiFetch(`/audit-logs?${queryParams.toString()}`);
 
@@ -88,11 +94,10 @@ export default function AuditLogsPage() {
 
     useEffect(() => {
         fetchLogs();
-    }, [page, actionFilter, entityTypeFilter]);
+    }, [page, actionFilter, entityTypeFilter, appliedSearch]);
 
 
-    const search = searchQuery.trim().toLowerCase();
-    const visibleLogs = logs.filter((log) => !search || [log.user?.name, log.user?.email, log.entityType, log.entityId].some((value) => String(value ?? "").toLowerCase().includes(search)));
+    const visibleLogs = logs;
 
     const formatChanges = (changes: any) => {
         if (!changes) return 'N/A';
@@ -155,11 +160,11 @@ export default function AuditLogsPage() {
                         </div>
 
                         <div>
-                            <label className="text-sm font-medium mb-2 block">Search current page</label>
+                            <label className="text-sm font-medium mb-2 block">Search</label>
                             <div className="relative">
                                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                                 <Input
-                                    aria-label="Search current page" placeholder="Search this page by user or entity..."
+                                    aria-label="Search audit logs" placeholder="User, email, record type or id…"
                                     value={searchQuery}
                                     onChange={(e) => setSearchQuery(e.target.value)}
                                     className="pl-10"

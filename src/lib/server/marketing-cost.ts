@@ -2,6 +2,7 @@ import { randomUUID } from "crypto";
 import { assertTenantModule } from "@/lib/server/module-entitlements";
 import { query, queryOne, execute } from "@/lib/db/query";
 import { createAuditLog } from "@/lib/server/crm";
+import { requireTenantId } from "@/lib/server/tenant-guard";
 
 type TenantUser = { id: string; tenantId: string | null };
 
@@ -16,11 +17,6 @@ export type CostEntryInput = {
   periodEnd?: string | null;
   notes?: string | null;
 };
-
-function requireTenantId(user: TenantUser) {
-  if (!user.tenantId) throw new Error("TENANT_CONTEXT_REQUIRED");
-  return user.tenantId;
-}
 
 export async function listCostEntriesForTenant(user: TenantUser, scopeType?: string, scopeId?: string) {
   await assertTenantModule(user, "MARKETING");

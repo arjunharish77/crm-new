@@ -6,6 +6,7 @@ import { seedDefaultStages } from "@/lib/repositories/stages-postgres";
 import { execute, query, queryOne, jsonbParam, queryAsSystem, executeAsSystem, type Queryable } from "@/lib/db/query";
 import { withTransaction } from "@/lib/db/transaction";
 import * as pgAdminModules from "@/lib/repositories/admin-modules-postgres";
+import { requireTenantId } from "@/lib/server/tenant-guard";
 
 type TenantUser = {
   id: string;
@@ -23,12 +24,6 @@ type GeneralSettings = {
   dateFormat: string;
 };
 
-function requireTenantId(user: TenantUser) {
-  if (!user.tenantId) {
-    throw new Error("TENANT_CONTEXT_REQUIRED");
-  }
-  return user.tenantId;
-}
 
 function asUuidOrNull(value: unknown) {
   const text = typeof value === "string" ? value : "";
@@ -593,23 +588,49 @@ export async function deleteLeadScoringRuleForTenant(user: TenantUser, id: strin
 // tenant context (it's a headless worker process, not a request).
 export async function recomputeLeadScoresForTenant(user: TenantUser) {
   const tenantId = requireTenantId(user);
-  const [rules, leads] = await Promise.all([
-    listLeadScoringRulesForTenant(user),
-    queryAsSystem<any>('select id, name, email, phone, company, status, source, score from "Lead" where "tenantId" = $1', [tenantId]),
-  ]);
+  const rules = await listLeadScoringRulesForTenant(user);
   const activeRules = rules.filter((rule) => rule.isActive).sort((a, b) => a.order - b.order);
   const now = new Date().toISOString();
 
-  await Promise.all(leads.map(async (lead) => {
-    let score = 0;
-    for (const rule of activeRules) {
-      if (evaluateRuleAgainstLead(rule, lead)) score += Number(rule.scoreChange ?? 0);
+  // Round-2 plan B5: it used to load every lead and fire one update per lead all at once, which
+  // could use up the database connections. Leads are now read 1,000 at a time in id order, and
+  // each batch's changed scores are written in one statement.
+  let count = 0;
+  let changed = 0;
+  let afterId = "";
+  for (;;) {
+    const leads = await queryAsSystem<any>(
+      'select id, name, email, phone, company, status, source, score from "Lead" where "tenantId" = $1 and id > $2 order by id limit 1000',
+      [tenantId, afterId],
+    );
+    if (!leads.length) break;
+    afterId = leads[leads.length - 1].id;
+    count += leads.length;
+    const ids: string[] = [];
+    const scores: number[] = [];
+    for (const lead of leads) {
+      let score = 0;
+      for (const rule of activeRules) {
+        if (evaluateRuleAgainstLead(rule, lead)) score += Number(rule.scoreChange ?? 0);
+      }
+      const nextScore = Math.max(0, Math.min(100, score));
+      if (Number(lead.score) !== nextScore) {
+        ids.push(lead.id);
+        scores.push(nextScore);
+      }
     }
-    const nextScore = Math.max(0, Math.min(100, score));
-    await executeAsSystem('update "Lead" set score = $1, "updatedAt" = $2 where "tenantId" = $3 and id = $4', [nextScore, now, tenantId, lead.id]);
-  }));
+    if (ids.length) {
+      changed += ids.length;
+      await executeAsSystem(
+        `update "Lead" l set score = v.score, "updatedAt" = $3
+         from unnest($1::text[], $2::int[]) as v(id, score)
+         where l."tenantId" = $4 and l.id = v.id`,
+        [ids, scores, now, tenantId],
+      );
+    }
+  }
 
-  return { count: leads.length };
+  return { count, changed };
 }
 
 export async function listCustomFieldsForTenant(user: TenantUser, objectType?: string | null) {

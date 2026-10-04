@@ -32,7 +32,7 @@ import { CallScriptPanel } from "@/components/telephony/call-script-panel";
 import { AiAssistantPanel } from "@/components/ai/ai-assistant-panel";
 import { DetailPageHeader, type DetailMenuItem } from "@/components/detail-shell/detail-page-header";
 import { WorkspaceTabs } from "@/components/detail-shell/workspace-tabs";
-import { RecordComposer } from "@/components/detail-shell/record-composer";
+import { RecordAddDialog, type ComposerMode } from "@/components/detail-shell/record-composer";
 import { RecordActivityFeed } from "@/components/detail-shell/record-activity-feed";
 import { OwnerControl } from "@/components/detail-shell/owner-control";
 import { LeadStatusSelect } from "@/components/leads/lead-status";
@@ -180,11 +180,9 @@ export default function LeadDetailPage() {
         });
     };
 
-    const [composerFocus, setComposerFocus] = useState<{ mode: "note" | "task"; at: number } | null>(null);
-    const focusComposer = (mode: "note" | "task") => {
-        setTab("activity");
-        setComposerFocus({ mode, at: Date.now() });
-    };
+    // "Add note" / "Add task" open a dialog (they used to be a form inline above the history).
+    const [addMode, setAddMode] = useState<ComposerMode | null>(null);
+    const focusComposer = (mode: ComposerMode) => setAddMode(mode);
 
     if (loading) {
         return (
@@ -310,13 +308,6 @@ export default function LeadDetailPage() {
                         <div className="p-3 md:p-4">
                             {tab === "activity" && (
                                 <div className="space-y-4">
-                                    <RecordComposer
-                                        entityType="lead"
-                                        entityId={lead.id}
-                                        onCreated={(kind) => { setFeedKey((key) => key + 1); if (kind === "task") { setTasksRefreshKey((key) => key + 1); loadData(); } }}
-                                        logActivity={<Button size="sm" variant="ghost" onClick={() => setShowActivityDialog(true)}><Plus className="size-4" />Log activity</Button>}
-                                        focusRequest={composerFocus}
-                                    />
                                     <RecordActivityFeed entityType="lead" entityId={lead.id} refreshKey={feedKey} />
                                 </div>
                             )}
@@ -412,6 +403,7 @@ export default function LeadDetailPage() {
             </nav>
 
             <EditLeadDialog lead={lead} open={showEditDialog} onOpenChange={setShowEditDialog} onSuccess={loadData} />
+            <RecordAddDialog entityType="lead" entityId={lead.id} mode={addMode} onClose={() => setAddMode(null)} onCreated={(kind) => { setFeedKey((key) => key + 1); if (kind === "task") { setTasksRefreshKey((key) => key + 1); loadData(); } }} />
             <CreateActivityDialog open={showActivityDialog} onOpenChange={setShowActivityDialog} defaultLeadId={lead.id} trigger={<span hidden />} onSuccess={() => { setFeedKey((key) => key + 1); loadData(); }} />
             <CreateOpportunityDialog open={showOpportunityDialog} onOpenChange={setShowOpportunityDialog} defaultLeadId={lead.id} trigger={<span hidden />} onSuccess={afterOpportunityCreated} />
             {serviceDeskEnabled ? <CreateCaseButton open={showCaseDialog} onOpenChange={setShowCaseDialog} relatedLeadId={lead.id} requesterName={lead.name} requesterEmail={lead.email} /> : null}

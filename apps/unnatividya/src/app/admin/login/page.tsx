@@ -15,7 +15,7 @@ export default function AdminLoginPage() {
           <h1 className="section-title" style={{ fontSize: 32 }}>
             Admin login
           </h1>
-          <p>Sign in with your CMS password. If admin 2FA is enabled, an email OTP will be sent before the CMS opens.</p>
+          <p>Sign in with your CMS password. This website account is separate from your CRM login. If two-step verification is enabled, you’ll also enter a code sent to your email.</p>
           <AdminLoginForm />
         </div>
       </div>

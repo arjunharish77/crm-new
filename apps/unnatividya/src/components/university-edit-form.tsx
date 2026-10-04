@@ -27,10 +27,12 @@ export function UniversityEditForm({ university, role, mode = "edit" }: { role: 
 
     let data: Record<string, unknown>;
     try {
-      data = JSON.parse(dataText || "{}") as Record<string, unknown>;
+      const parsed: unknown = JSON.parse(dataText || "{}");
+      if (!parsed || Array.isArray(parsed) || typeof parsed !== "object") throw new Error("Object required");
+      data = parsed as Record<string, unknown>;
     } catch {
       setStatus("error");
-      setMessage("University data JSON is invalid.");
+      setMessage("Structured data must be a valid JSON object, not an array or a single value.");
       return;
     }
 
@@ -53,7 +55,7 @@ export function UniversityEditForm({ university, role, mode = "edit" }: { role: 
 
     } catch {
       setStatus("error");
-      setMessage("Connection failed. Please try saving again.");
+      setMessage("Connection interrupted. Your edits are preserved; check the record before retrying because the save may have completed.");
       return;
     }
     if (!response.ok) {
@@ -68,7 +70,7 @@ export function UniversityEditForm({ university, role, mode = "edit" }: { role: 
   }
 
   return (
-    <form action={save}>
+    <form onSubmit={event => { event.preventDefault(); void save(new FormData(event.currentTarget)); }} aria-busy={status === "saving"}>
       {!editable ? <p role="status">Read-only: viewers cannot edit; published and archived records require an administrator. Use Propose or review revisions to suggest changes separately.</p> : role === "EDITOR" ? <p>Save a draft or mark it for review. An administrator must publish it.</p> : null}
       <fieldset className="admin-form-grid admin-catalog-fields" disabled={!editable || status === "saving"}>
       <legend className="sr-only">Catalog details</legend>
@@ -110,13 +112,13 @@ export function UniversityEditForm({ university, role, mode = "edit" }: { role: 
 
       <div className="field admin-span-2">
         <label htmlFor="data">Structured data JSON</label>
-        <textarea id="data" rows={14} value={dataText} onChange={(event) => setDataText(event.target.value)} />
+        <textarea id="data" spellCheck={false} rows={14} value={dataText} onChange={(event) => setDataText(event.target.value)} />
       </div>
       <button className="btn primary" type="submit" disabled={status === "saving"}>
         {status === "saving" ? "Saving..." : "Save university"}
       </button>
       </fieldset>
-      {message ? <p role="status" className={status === "error" ? "admin-error" : "admin-success"}>{message}</p> : null}
+      {message ? <p role={status === "error" ? "alert" : "status"} className={status === "error" ? "admin-error" : "admin-success"}>{message}</p> : null}
     </form>
   );
 }

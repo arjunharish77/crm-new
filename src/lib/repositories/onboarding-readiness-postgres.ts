@@ -1,6 +1,7 @@
 import { randomUUID } from "crypto";
 import { queryOne } from "@/lib/db/query";
 import { withTransaction } from "@/lib/db/transaction";
+import { requireTenantId } from "@/lib/server/tenant-guard";
 
 type TenantUser = { id: string; tenantId: string | null };
 
@@ -12,10 +13,6 @@ type TenantUser = { id: string; tenantId: string | null };
 // here) -- it's a guided, dismissible list of what to do next, which is what actually made this
 // checklist item's "sample walkthroughs" sub-item concrete for an admin-provisioned tenant with
 // no self-serve signup flow to hook a tour into.
-function requireTenantId(user: TenantUser) {
-  if (!user.tenantId) throw new Error("TENANT_CONTEXT_REQUIRED");
-  return user.tenantId;
-}
 
 export type OnboardingChecklistItem = {
   key: string;

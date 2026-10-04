@@ -1,18 +1,15 @@
 import { randomUUID } from "crypto";
+import { appBaseUrlString } from "@/lib/app-url";
 import { execute, query, queryOne, queryAsSystem } from "@/lib/db/query";
 import { assertModuleEnabled, isModuleEnabledForTenant } from "@/lib/server/module-entitlements";
 import { createUserNotification } from "@/lib/server/notifications";
+import { requireTenantId } from "@/lib/server/tenant-guard";
 
 type TenantUser = {
   id: string;
   tenantId: string | null;
   isPlatformAdmin?: boolean;
 };
-
-function requireTenantId(user: TenantUser) {
-  if (!user.tenantId) throw new Error("TENANT_CONTEXT_REQUIRED");
-  return user.tenantId;
-}
 
 // Low-score threshold below which a response triggers manager escalation (checklist item 15's
 // "low-score escalation") -- 1-5 scale, matching the CHECK constraint on CaseSurveyResponse.score.
@@ -117,7 +114,8 @@ export async function dispatchCaseSurveys(limit = 100, now = new Date()) {
     );
 
     const { queueCommunicationForTenant } = await import("@/lib/server/communications");
-    const surveyUrl = `${process.env.APP_PUBLIC_URL || ""}/case-survey/${responseId}`;
+    // APP_URL like every other emailed link (APP_PUBLIC_URL was never set, so the link was relative).
+    const surveyUrl = `${appBaseUrlString()}/case-survey/${responseId}`;
     await queueCommunicationForTenant({ id: "system", tenantId: caseRow.tenantId }, {
       channel,
       recipient,

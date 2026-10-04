@@ -31,7 +31,7 @@ import { OpportunityStageHistoryList } from "@/components/opportunities/opportun
 import { StagePath } from "@/components/opportunities/stage-path";
 import { DetailPageHeader, type DetailMenuItem } from "@/components/detail-shell/detail-page-header";
 import { WorkspaceTabs } from "@/components/detail-shell/workspace-tabs";
-import { RecordComposer } from "@/components/detail-shell/record-composer";
+import { RecordAddDialog, type ComposerMode } from "@/components/detail-shell/record-composer";
 import { RecordActivityFeed } from "@/components/detail-shell/record-activity-feed";
 import { OwnerControl } from "@/components/detail-shell/owner-control";
 import { StatusBadge } from "@/components/common/status-badge";
@@ -123,11 +123,9 @@ export default function OpportunityDetailPage() {
     // Refetch when the header's Create menu adds something here (no full reload).
     useRecordsChanged(["activity", "task", "opportunity"], () => { loadData(); setFeedKey((key) => key + 1); });
 
-    const [composerFocus, setComposerFocus] = useState<{ mode: "note" | "task"; at: number } | null>(null);
-    const focusComposer = (mode: "note" | "task") => {
-        setTab("activity");
-        setComposerFocus({ mode, at: Date.now() });
-    };
+    // "Add note" / "Add task" open a dialog (they used to be a form inline above the history).
+    const [addMode, setAddMode] = useState<ComposerMode | null>(null);
+    const focusComposer = (mode: ComposerMode) => setAddMode(mode);
 
     const changeStage = async (stage: StageDefinition) => {
         if (!opportunity || stage.id === opportunity.stageId) return;
@@ -308,13 +306,6 @@ export default function OpportunityDetailPage() {
                         <div className="p-3 md:p-4">
                             {tab === "activity" && (
                                 <div className="space-y-4">
-                                    <RecordComposer
-                                        entityType="opportunity"
-                                        entityId={opportunity.id}
-                                        onCreated={(kind) => { setFeedKey((key) => key + 1); if (kind === "task") { setTasksRefreshKey((key) => key + 1); loadData(); } }}
-                                        logActivity={<Button size="sm" variant="ghost" onClick={() => setShowActivityDialog(true)}><Plus className="size-4" />Log activity</Button>}
-                                        focusRequest={composerFocus}
-                                    />
                                     <RecordActivityFeed entityType="opportunity" entityId={opportunity.id} refreshKey={feedKey} />
                                 </div>
                             )}
@@ -386,6 +377,7 @@ export default function OpportunityDetailPage() {
             </nav>
 
             <EditOpportunityDialog opportunity={opportunity} open={showEditDialog} onOpenChange={setShowEditDialog} onSuccess={loadData} />
+            <RecordAddDialog entityType="opportunity" entityId={opportunity.id} mode={addMode} onClose={() => setAddMode(null)} onCreated={(kind) => { setFeedKey((key) => key + 1); if (kind === "task") { setTasksRefreshKey((key) => key + 1); loadData(); } }} />
             <CreateActivityDialog open={showActivityDialog} onOpenChange={setShowActivityDialog} defaultLeadId={opportunity.leadId || undefined} defaultOpportunityId={opportunity.id} trigger={<span hidden />} onSuccess={() => { setFeedKey((key) => key + 1); loadData(); }} />
             {serviceDeskEnabled ? <CreateCaseButton open={showCaseDialog} onOpenChange={setShowCaseDialog} relatedOpportunityId={opportunity.id} relatedLeadId={opportunity.leadId || undefined} /> : null}
             <ExternalPushDialog open={showPushDialog} onClose={() => setShowPushDialog(false)} leadId={opportunity.leadId} opportunityId={opportunity.id} onPushed={() => setPushRefreshKey((key) => key + 1)} />

@@ -6,6 +6,7 @@ import { forEachJourneyAudienceBatch } from "@/lib/server/marketing-journeys";
 import { getLeadForTenant } from "@/lib/repositories/leads-postgres";
 import { getOpportunityForTenant } from "@/lib/repositories/opportunities-postgres";
 import { checkTelephonyComplianceForCall } from "@/lib/server/telephony-webhook";
+import { requireTenantId } from "@/lib/server/tenant-guard";
 
 type TenantUser = {
   id: string;
@@ -16,11 +17,6 @@ type TenantUser = {
 };
 
 const CAMPAIGN_COLUMNS = `id, name, description, module, "audienceType", "audienceConfig", "callScriptId", "dispositionGroupId", "assignedTeamId", "retryPolicy", "callbackPolicy", status, "createdAt", "updatedAt"`;
-
-function requireTenantId(user: TenantUser) {
-  if (!user.tenantId) throw new Error("TENANT_CONTEXT_REQUIRED");
-  return user.tenantId;
-}
 
 function hasCallCampaignAdminAccess(user: TenantUser) {
   const rolePermissions = typeof user.role === "object" && user.role ? (user.role as any).permissions : null;

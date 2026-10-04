@@ -1,15 +1,11 @@
 import { assertTenantModule } from "@/lib/server/module-entitlements";
 import { query } from "@/lib/db/query";
+import { requireTenantId } from "@/lib/server/tenant-guard";
 
 type TenantUser = {
   id: string;
   tenantId: string | null;
 };
-
-function requireTenantId(user: TenantUser) {
-  if (!user.tenantId) throw new Error("TENANT_CONTEXT_REQUIRED");
-  return user.tenantId;
-}
 
 // Same normalization precedent as inbuilt-reports.ts's duplicate-lead-detection report
 // (strip everything but digits) -- extended here to compare the last 10 digits rather than

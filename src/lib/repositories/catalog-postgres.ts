@@ -1,6 +1,7 @@
 import { randomUUID } from "crypto";
 import { assertTenantModule, isModuleEnabledForTenant } from "@/lib/server/module-entitlements";
 import { execute, query, queryOne } from "@/lib/db/query";
+import { requireTenantId } from "@/lib/server/tenant-guard";
 
 type TenantUser = { id: string; tenantId: string | null; isPlatformAdmin?: boolean };
 
@@ -112,11 +113,6 @@ const CATALOG_ENTITY_CONFIGS: Record<CatalogEntityKey, CatalogEntityConfig> = {
 
 export function isCatalogEntityKey(value: string): value is CatalogEntityKey {
   return value in CATALOG_ENTITY_CONFIGS;
-}
-
-function requireTenantId(user: TenantUser) {
-  if (!user.tenantId) throw new Error("TENANT_CONTEXT_REQUIRED");
-  return user.tenantId;
 }
 
 // A tenant's own catalog is auto-created on first use rather than being a separate concept an

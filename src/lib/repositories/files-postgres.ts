@@ -1,6 +1,7 @@
 import { randomUUID } from "crypto";
 import { query, queryOne } from "@/lib/db/query";
 import type { FileStorageDriver } from "@/lib/storage/file-storage";
+import { requireTenantId } from "@/lib/server/tenant-guard";
 
 type TenantUser = {
   id: string;
@@ -20,11 +21,6 @@ type UpsertFileObjectInput = {
   visibility?: "PRIVATE" | "TENANT";
   metadata?: Record<string, unknown> | null;
 };
-
-function requireTenantId(user: TenantUser) {
-  if (!user.tenantId) throw new Error("TENANT_CONTEXT_REQUIRED");
-  return user.tenantId;
-}
 
 export async function upsertFileObjectForTenant(user: TenantUser, input: UpsertFileObjectInput) {
   const tenantId = requireTenantId(user);

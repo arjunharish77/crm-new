@@ -1,0 +1,197 @@
+# Round-2 plan O6, T1 and O4. Every push and pull request: lockfile and settings checks, type
+# check, lint, unit tests, migrations on a fresh database, every database smoke test, the
+# production build, the API regression against that build, secret and dependency scans, and the
+# Docker image with an image scan. On main, the tested image is published to GitHub Container
+# Registry as sha-<short commit> and latest; the VPS deploys it with deploy/vps/scripts/deploy.sh.
+name: CI
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  NEXT_TELEMETRY_DISABLED: "1"
+
+jobs:
+  checks:
+    name: Typecheck, lint, unit tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - name: Lockfile matches package.json
+        run: node scripts/check-lockfile.js
+      - name: Install (frozen lockfile)
+        run: npm ci
+      - name: Every setting the code reads is documented
+        run: npm run env:check
+      - name: Type check
+        run: npx tsc --noEmit -p .
+      - name: Lint (the CRM's code; apps/unnatividya has its own)
+        run: npm run lint:crm
+      - name: Unit tests
+        env:
+          JWT_SECRET: ci-test-jwt-secret-do-not-use-in-prod
+        run: npm run test
+
+  database:
+    name: Migrations, database smoke tests, API regression
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd pg_isready --health-interval 10s --health-timeout 5s --health-retries 5
+      redis:
+        image: redis:7-alpine
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd "redis-cli ping" --health-interval 10s --health-timeout 5s --health-retries 5
+    env:
+      LOCAL_POSTGRES_ADMIN_URL: postgresql://postgres:postgres@localhost:5432/postgres
+      DATABASE_URL: postgresql://crm_app:crm_app@localhost:5432/crm_ci
+      DIRECT_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/crm_ci
+      BASE_SCHEMA_SQL_PATH: db-bootstrap/base-schema.sql
+      REDIS_URL: redis://localhost:6379
+      JWT_SECRET: ci-test-jwt-secret-do-not-use-in-prod-0123456789
+      MARKETPLACE_SECRET_ENCRYPTION_KEY: ci-test-encryption-key-do-not-use-0123456789
+      FILE_DOWNLOAD_SIGNING_SECRET: ci-test-signing-secret-do-not-use-0123456789
+      APP_URL: http://localhost:3000
+      FILE_STORAGE_ROOT: ${{ github.workspace }}/ci-storage
+      DATA_ACCESS_MODE: postgres
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - name: Install (frozen lockfile)
+        run: npm ci
+      - name: Fresh database, every migration
+        run: |
+          npm run db:setup:local
+          npm run db:migrate:local
+          npm run db:check-migrations
+      - name: Seed a demo workspace
+        run: npx tsx scripts/ci-seed.ts
+      - name: Database smoke tests
+        run: |
+          failed=""
+          for f in scripts/*-smoke.ts; do
+            echo "::group::$f"
+            if ! npx tsx "$f"; then failed="$failed $f"; fi
+            echo "::endgroup::"
+          done
+          if [ -n "$failed" ]; then echo "::error::Failed smoke tests:$failed"; exit 1; fi
+      - name: Production build
+        run: npm run build
+      - name: Start the app and the worker
+        env:
+          NODE_ENV: production
+          PORT: "3000"
+        run: |
+          nohup npx next start -p 3000 > server.log 2>&1 &
+          nohup npx tsx scripts/worker.ts > worker.log 2>&1 &
+          for i in $(seq 1 60); do
+            if curl -fsS http://localhost:3000/api/health > /dev/null; then exit 0; fi
+            sleep 2
+          done
+          echo "::error::The app didn't become healthy"; tail -50 server.log; exit 1
+      - name: API regression
+        env:
+          API_BASE_URL: http://localhost:3000
+        run: node scripts/api-regression-smoke.js
+      - name: Server and worker logs
+        if: failure()
+        run: |
+          tail -200 server.log || true
+          tail -200 worker.log || true
+
+  security:
+    name: Secret and dependency scans
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Secret scan (gitleaks, whole history)
+        run: |
+          docker run --rm -v "$PWD:/repo" ghcr.io/gitleaks/gitleaks:v8.24.3 \
+            git /repo --config /repo/.gitleaks.toml --gitleaks-ignore-path /repo/.gitleaksignore --redact --no-banner --exit-code 1
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+      - name: Dependency advisories (production dependencies, high and critical)
+        run: npm audit --omit=dev --audit-level=high
+
+  image:
+    name: Docker image (scan; publish on main)
+    needs: [checks, database, security]
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: write
+    env:
+      IMAGE: ghcr.io/${{ github.repository }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Image name (lower case) and version
+        id: meta
+        run: |
+          echo "image=${IMAGE,,}" >> "$GITHUB_OUTPUT"
+          echo "version=sha-${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+      - uses: docker/setup-buildx-action@v3
+      - name: Build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          load: true
+          tags: ${{ steps.meta.outputs.image }}:${{ steps.meta.outputs.version }}
+          build-args: |
+            APP_URL=${{ vars.APP_URL || 'https://app.unnatify.com' }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - name: Image scan (critical, with a fix available)
+        uses: aquasecurity/trivy-action@0.33.1
+        with:
+          image-ref: ${{ steps.meta.outputs.image }}:${{ steps.meta.outputs.version }}
+          severity: CRITICAL
+          ignore-unfixed: true
+          exit-code: "1"
+          vuln-type: os,library
+      - name: Log in to GitHub Container Registry
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Publish
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: |
+          docker tag "${{ steps.meta.outputs.image }}:${{ steps.meta.outputs.version }}" "${{ steps.meta.outputs.image }}:latest"
+          docker push "${{ steps.meta.outputs.image }}:${{ steps.meta.outputs.version }}"
+          docker push "${{ steps.meta.outputs.image }}:latest"
+          echo "### Published ${{ steps.meta.outputs.version }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "Deploy on the VPS: \`deploy/vps/scripts/deploy.sh ${{ steps.meta.outputs.version }}\`" >> "$GITHUB_STEP_SUMMARY"

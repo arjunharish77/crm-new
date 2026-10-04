@@ -430,7 +430,7 @@ describe("F01: pending MFA/password-change tokens must never authenticate as a s
 // of the checks covered here.
 describe("F05: getUserFromToken applies the same suspension/session checks as getCurrentUser", () => {
   it("rejects a token whose user belongs to a suspended tenant", async () => {
-    const token = await signAuthToken({ sub: "user-1", email: "test@example.com", tenantId: "tenant-a" });
+    const token = await signAuthToken({ sub: "user-1", email: "test@example.com", tenantId: "tenant-a", sid: "session-1" });
     authRepoMocks.getCurrentUserById.mockResolvedValueOnce({
       id: "user-1", email: "test@example.com", name: "Test User", tenantId: "tenant-a", roleId: null, role: null,
       isPlatformAdmin: false, platformAdminId: null, tenantStatus: "SUSPENDED",
@@ -453,6 +453,11 @@ describe("F05: getUserFromToken applies the same suspension/session checks as ge
     const token = await signAuthToken({ sub: "user-1", email: "test@example.com", tenantId: "tenant-a", sid: "session-1" });
     const user = await getUserFromToken(token);
     expect(user?.id).toBe("user-1");
+  });
+
+  it("rejects a token without a session id (round-2 plan S19)", async () => {
+    const token = await signAuthToken({ sub: "user-1", email: "test@example.com", tenantId: "tenant-a" });
+    expect(await getUserFromToken(token)).toBeNull();
   });
 
   it("still rejects an MFA-pending token routed through getUserFromToken", async () => {

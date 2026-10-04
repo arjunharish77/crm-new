@@ -88,26 +88,20 @@ function safeEqualHex(a: string, b: string) {
 }
 
 export type InboundWebhookAuthResult =
-  | { ok: true; mode: "hmac" | "legacy" }
+  | { ok: true; mode: "hmac" }
   | { ok: false; reason: "MISSING_SIGNATURE" | "STALE_TIMESTAMP" | "INVALID_SIGNATURE" | "NOT_CONFIGURED" };
 
 // Signature covers `${timestamp}.${rawBody}`, not just the body -- binding the timestamp
 // into the signed material (not just checking it separately) is what makes an old captured
 // request unusable even if replayed verbatim: you can't forge a signature for a *new*
-// timestamp without the secret. Legacy fallback (a bare shared secret, no signing, no
-// per-tenant scoping) is intentionally still accepted so an already-configured caller isn't
-// broken by this change -- but it's the one thing every sub-item in this checklist item was
-// written to fix, so new integrations should migrate off it.
+// timestamp without the secret. The old server-wide shared secret (WEBHOOK_SIGNING_SECRET) is
+// no longer accepted: it let anyone holding it write into any workspace (round-2 plan S1).
+// A turned-off webhook rejects everything (S14).
 export async function verifyInboundWebhookRequest(
   tenantId: string,
   rawBody: string,
-  headers: { signature?: string | null; timestamp?: string | null; legacySecret?: string | null },
+  headers: { signature?: string | null; timestamp?: string | null },
 ): Promise<InboundWebhookAuthResult> {
-  const legacyGlobalSecret = process.env.WEBHOOK_SIGNING_SECRET;
-  if (headers.legacySecret && legacyGlobalSecret && headers.legacySecret === legacyGlobalSecret) {
-    return { ok: true, mode: "legacy" };
-  }
-
   if (!headers.signature || !headers.timestamp) return { ok: false, reason: "MISSING_SIGNATURE" };
   const timestampSeconds = Number(headers.timestamp);
   if (!Number.isFinite(timestampSeconds)) return { ok: false, reason: "STALE_TIMESTAMP" };
@@ -115,7 +109,7 @@ export async function verifyInboundWebhookRequest(
   if (Math.abs(nowSeconds - timestampSeconds) > REPLAY_WINDOW_SECONDS) return { ok: false, reason: "STALE_TIMESTAMP" };
 
   const setting = await getInboundWebhookSetting(tenantId);
-  if (!setting?.config?.currentSecret) return { ok: false, reason: "NOT_CONFIGURED" };
+  if (!setting?.isActive || !setting.config?.currentSecret) return { ok: false, reason: "NOT_CONFIGURED" };
 
   const signedPayload = `${headers.timestamp}.${rawBody}`;
   const expectedCurrent = hmacHex(setting.config.currentSecret, signedPayload);

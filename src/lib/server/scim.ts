@@ -1,6 +1,8 @@
 import { randomUUID, randomBytes } from "crypto";
+import { appBaseUrlString } from "@/lib/app-url";
 import { query, queryOne, execute, jsonbParam } from "@/lib/db/query";
 import { createTenantScopedUser, updateTenantScopedUser } from "@/lib/server/admin";
+import { revokeAllSessionsForUser } from "@/lib/server/sessions";
 import { createTeamForTenant, updateTeamForTenant, deleteTeamForTenant, addTeamMemberForTenant, removeTeamMemberForTenant } from "@/lib/server/admin-modules";
 
 // SCIM 2.0 (RFC 7643/7644) core Users + Groups, authenticated via the existing ApiKey bearer
@@ -60,7 +62,7 @@ const SCIM_GROUP_SCHEMA = "urn:ietf:params:scim:schemas:core:2.0:Group";
 const SCIM_LIST_SCHEMA = "urn:ietf:params:scim:api:messages:2.0:ListResponse";
 
 function baseUrl() {
-  return process.env.APP_BASE_URL || process.env.NEXT_PUBLIC_APP_URL || "";
+  return appBaseUrlString();
 }
 
 function scimUserResource(row: any) {
@@ -267,6 +269,7 @@ export async function deleteScimUser(ctx: ScimContext, id: string) {
   if (!existing) throw new ScimError(404, "User not found");
   const now = new Date().toISOString();
   await execute(`update "User" set status = 'INACTIVE', "deletedAt" = $1, "deletedBy" = $2, "updatedAt" = $1 where id = $3`, [now, ctx.actorId, id]);
+  await revokeAllSessionsForUser(id, "USER_DELETED");
   await logScimSync(ctx.tenantId, "USER", id, "DELETE", null, "SUCCESS");
 }
 

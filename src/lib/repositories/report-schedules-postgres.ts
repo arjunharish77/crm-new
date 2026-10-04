@@ -1,5 +1,5 @@
 import { randomUUID } from "crypto";
-import { execute, query, queryOne, queryAsSystem } from "@/lib/db/query";
+import { execute, query, queryOne, queryAsSystem, queryOneAsSystem } from "@/lib/db/query";
 import { assertFeatureEnabled, isFeatureEnabledForTenant } from "@/lib/server/entitlements";
 import { createExportRequestForUser, processExportRequest } from "@/lib/server/exports";
 import { queueCommunicationForTenant } from "@/lib/server/communications";
@@ -176,6 +176,15 @@ export async function processDueReportSchedules(now = new Date()) {
 
   const processed = [];
   for (const schedule of schedules) {
+    // Round-2 plan B11: claim the run first by moving nextRunAt on, only if nobody else has, so
+    // two workers can't both send it. The next run follows the schedule (counted from the run
+    // that was due, not from "now"), skipping runs missed while the server was down.
+    const nextRunAt = nextRunAfter(schedule, now);
+    const claimed = await queryOneAsSystem<{ id: string }>(
+      `update "ReportSchedule" set "nextRunAt" = $1 where id = $2 and "isActive" = true and "nextRunAt" <= $3 returning id`,
+      [nextRunAt.toISOString(), schedule.id, now.toISOString()],
+    );
+    if (!claimed) continue;
     const user = await queryOne<any>(
       `select u.id, u.email, u.name, u."tenantId", u."roleId", r.permissions as "rolePermissions"
        from "User" u
@@ -196,13 +205,12 @@ export async function processDueReportSchedules(now = new Date()) {
 
     const tenantUser = { ...user, role: user.rolePermissions ? { permissions: user.rolePermissions } : null };
     const delivery = await createDelivery(tenantUser, schedule, now);
-    const nextRunAt = computeNextRun(schedule.frequency, schedule.dayOfWeek, schedule.dayOfMonth, now);
     const retryState = nextRetryState(delivery, schedule.retryCount ?? 0, now);
     await execute(
       `update "ReportSchedule"
-       set "lastRunAt" = $1, "lastStatus" = $2, "nextRunAt" = $3, "retryCount" = $4, "nextRetryAt" = $5, "updatedAt" = $1
-       where id = $6`,
-      [now.toISOString(), delivery.status, nextRunAt.toISOString(), retryState.retryCount, retryState.nextRetryAt, schedule.id],
+       set "lastRunAt" = $1, "lastStatus" = $2, "retryCount" = $3, "nextRetryAt" = $4, "updatedAt" = $1
+       where id = $5`,
+      [now.toISOString(), delivery.status, retryState.retryCount, retryState.nextRetryAt, schedule.id],
     );
     processed.push({ scheduleId: schedule.id, deliveryId: delivery.id, status: delivery.status });
   }
@@ -228,6 +236,12 @@ export async function retryFailedReportSchedules(now = new Date()) {
 
   const retried = [];
   for (const schedule of schedules) {
+    // Claimed the same way as a normal run (B11): only one worker retries it.
+    const claimed = await queryOneAsSystem<{ id: string }>(
+      `update "ReportSchedule" set "nextRetryAt" = null where id = $1 and "retryCount" > 0 and "nextRetryAt" <= $2 returning id`,
+      [schedule.id, now.toISOString()],
+    );
+    if (!claimed) continue;
     const user = await queryOne<any>(
       `select u.id, u.email, u.name, u."tenantId", u."roleId", r.permissions as "rolePermissions"
        from "User" u
@@ -261,6 +275,15 @@ export async function retryFailedReportSchedules(now = new Date()) {
 function normalizeRecipients(recipients: string[] | undefined, fallbackEmail?: string | null) {
   const values = recipients?.length ? recipients : fallbackEmail ? [fallbackEmail] : [];
   return [...new Set(values.map((value) => value.trim().toLowerCase()).filter((value) => value.includes("@")))];
+}
+
+// The first run after `now`, counted from the run that was due.
+function nextRunAfter(schedule: { frequency: string; dayOfWeek?: number | null; dayOfMonth?: number | null; nextRunAt?: string | Date | null }, now: Date) {
+  let next = computeNextRun(schedule.frequency, schedule.dayOfWeek, schedule.dayOfMonth, schedule.nextRunAt ? new Date(schedule.nextRunAt) : now);
+  for (let guard = 0; next <= now && guard < 1000; guard += 1) {
+    next = computeNextRun(schedule.frequency, schedule.dayOfWeek, schedule.dayOfMonth, next);
+  }
+  return next <= now ? computeNextRun(schedule.frequency, schedule.dayOfWeek, schedule.dayOfMonth, now) : next;
 }
 
 function computeNextRun(frequency: string, dayOfWeek?: number | null, dayOfMonth?: number | null, from = new Date()) {

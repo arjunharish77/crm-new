@@ -1,4 +1,8 @@
 import { NextResponse } from "next/server";
+import { randomBytes } from "crypto";
+import { getTenantContext } from "@/lib/db/tenant-context";
+import { errorDetail, logEvent } from "@/lib/server/logger";
+import { reportError } from "@/lib/server/error-reporting";
 import { RateLimitExceededError } from "@/lib/server/rate-limit";
 import { ModuleAccessError } from "@/lib/server/module-access-error";
 import { UnsupportedFilterError } from "@/lib/query-filters";
@@ -232,6 +236,8 @@ export function serverError(message = "Internal server error", error?: unknown) 
     const action = error.message.split(":")[1]?.replace(/_/g, " ") ?? "this action";
     return forbidden(`This action (${action}) isn't available while impersonating another user.`);
   }
+  if (error instanceof Error && error.message === "IMPERSONATION_TARGET_INACTIVE") return badRequest("That user isn't active, so they can't be impersonated.");
+  if (error instanceof Error && error.message === "IMPERSONATION_TARGET_PRIVILEGED") return forbidden("Platform admins can't be impersonated.");
 
   if (error instanceof Error && error.message === "IDEMPOTENCY_KEY_CONFLICT") return conflict("This Idempotency-Key was already used with a different request body");
   if (error instanceof Error && error.message === "INVALID_OPPORTUNITY_REFERENCE") return badRequest("Choose an accessible Lead and a valid Opportunity type and stage from this workspace");
@@ -259,14 +265,18 @@ export function serverError(message = "Internal server error", error?: unknown) 
     return NextResponse.json({ code: "DUPLICATE_RULE_BLOCK", message: `Duplicate blocked by rule: ${error.message.slice("DUPLICATE_RULE_BLOCK: ".length)}` }, { status: 409 });
   }
 
-  // Without this, every 500 in production is silently swallowed -- nothing in server
-  // logs to correlate with a user-reported failure.
-  console.error(message, error);
+  // Round-2 plan O5: a structured log line (with the request id the user can quote as the
+  // reference) and, when configured, a Sentry report.
+  // Routes without a request id in context get a short generated one, so every 500 has a
+  // reference that matches a log line.
+  const reference = getTenantContext()?.requestId ?? `ref-${randomBytes(4).toString("hex")}`;
+  logEvent("error", message, { reference, error: errorDetail(error) });
+  reportError(error ?? new Error(message), { route: message, reference });
 
   const body =
     process.env.NODE_ENV === "development" && error !== undefined
-      ? { message, error: getErrorDetail(error) }
-      : { message };
+      ? { message, error: getErrorDetail(error), reference }
+      : { message, reference };
 
   return NextResponse.json(body, { status: 500 });
 }

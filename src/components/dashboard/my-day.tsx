@@ -119,7 +119,14 @@ export function MyDay() {
     useEffect(() => { load(); }, [load]);
     useRecordsChanged(["task", "activity", "lead", "opportunity"], load);
 
+    // The task leaves the card at once and comes back if saving fails (round-2 plan P7).
     const completeTask = async (taskId: string, title: string) => {
+        const before = { overdue, today };
+        const without = (current: Section): Section => current && current.rows.some((row) => row.taskId === taskId)
+            ? { total: Math.max(0, current.total - 1), rows: current.rows.filter((row) => row.taskId !== taskId) }
+            : current;
+        setOverdue(without);
+        setToday(without);
         try {
             await apiFetch(`/tasks/${taskId}`, { method: "PATCH", body: JSON.stringify({ status: "COMPLETED" }) });
             toast.success(`Completed: ${title}`, {
@@ -136,8 +143,9 @@ export function MyDay() {
                     },
                 },
             });
-            load();
         } catch (error: any) {
+            setOverdue(before.overdue);
+            setToday(before.today);
             toast.error(error?.message || "Couldn't complete the task");
         }
     };

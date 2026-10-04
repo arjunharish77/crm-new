@@ -1,12 +1,14 @@
 import { NextResponse } from "next/server";
 import { requireCurrentUser } from "@/lib/server/auth";
-import { badRequest, serverError, unauthorized } from "@/lib/server/http";
+import { hasIntegrationsAccess, INTEGRATIONS_FORBIDDEN_MESSAGE } from "@/lib/server/integrations-access";
+import { badRequest, forbidden, serverError, unauthorized } from "@/lib/server/http";
 import { createWebhookForTenant, listWebhooksForTenant } from "@/lib/server/crm";
 import { UnsafeDestinationError } from "@/lib/server/outbound-request-guard";
 
 export async function GET(request: Request) {
   try {
     const user = await requireCurrentUser(request);
+    if (!hasIntegrationsAccess(user)) return forbidden(INTEGRATIONS_FORBIDDEN_MESSAGE);
     const webhooks = await listWebhooksForTenant(user);
     return NextResponse.json(webhooks);
   } catch (error) {
@@ -18,6 +20,7 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     const user = await requireCurrentUser(request);
+    if (!hasIntegrationsAccess(user)) return forbidden(INTEGRATIONS_FORBIDDEN_MESSAGE);
     const body = await request.json().catch(() => null);
     if (!body?.name || !body?.url) return badRequest("Webhook name and URL are required");
     const webhook = await createWebhookForTenant(user, body);

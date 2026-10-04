@@ -37,3 +37,55 @@ export function storageRemove(key: string): void {
         // Nothing to do: storage is unavailable.
     }
 }
+
+// Round-2 plan N3: things that name records or hold someone's work (recent items, favourites,
+// saved filter presets, form drafts) are kept per person and workspace, so a shared computer
+// never shows one person's leads to the next. AuthProvider sets the scope from the signed-in
+// user; with nobody signed in, scoped keys point at a throwaway slot.
+let userScope = "signed-out";
+
+export function setStorageUserScope(tenantId: string | null | undefined, userId: string | null | undefined) {
+    userScope = userId ? `${tenantId || "platform"}:${userId}` : "signed-out";
+}
+
+export function userScopedKey(key: string) {
+    return `${key}@${userScope}`;
+}
+
+// Recent items and unsent form drafts are removed when this person signs out; favourites and
+// filter presets stay (they're only readable by the same person signing in again).
+const CLEARED_ON_SIGN_OUT = ["crm.recentRecords@", "crm-context-form-draft:"];
+const LEGACY_SHARED_KEYS = ["crm.recentRecords", "crm.favoriteRecords"];
+
+export function clearUserScopedStorageOnSignOut() {
+    try {
+        const target = store();
+        if (!target) return;
+        const suffix = `@${userScope}`;
+        const doomed: string[] = [];
+        for (let index = 0; index < target.length; index += 1) {
+            const key = target.key(index);
+            if (key && key.endsWith(suffix) && CLEARED_ON_SIGN_OUT.some((prefix) => key.startsWith(prefix))) doomed.push(key);
+        }
+        doomed.forEach((key) => target.removeItem(key));
+    } catch {
+        // Nothing to do: storage is unavailable.
+    }
+}
+
+// The shared (unscoped) lists from before N3 can't be attributed to anyone, so they're dropped.
+export function removeLegacySharedStorage() {
+    LEGACY_SHARED_KEYS.forEach(storageRemove);
+    try {
+        const target = store();
+        if (!target) return;
+        const doomed: string[] = [];
+        for (let index = 0; index < target.length; index += 1) {
+            const key = target.key(index);
+            if (key && (key.startsWith("crm-context-form-draft:") || key.startsWith("advanced-filters.")) && !key.includes("@")) doomed.push(key);
+        }
+        doomed.forEach((key) => target.removeItem(key));
+    } catch {
+        // Nothing to do: storage is unavailable.
+    }
+}

@@ -4,6 +4,7 @@ import { signAuthToken } from "@/lib/server/auth";
 import { createAuditLog } from "@/lib/server/crm";
 import { createUserSession } from "@/lib/server/sessions";
 import { queryAsSystem, queryOneAsSystem } from "@/lib/db/query";
+import { revokeAllSessionsForUser } from "@/lib/server/sessions";
 
 // Loose actor shape -- createAuditLog only ever reads id/tenantId off it.
 type AuditActor = { id: string; tenantId: string | null };
@@ -89,6 +90,11 @@ export async function updateTenantScopedUser(tenantId: string, userId: string, i
   const permissionRelevant = input.roleId !== undefined || input.permissionTemplateId !== undefined;
   const before = permissionRelevant ? await pgAdmin.getTenantScopedUserPermissionSummary(tenantId, userId) : null;
   const updated: any = await pgAdmin.updateTenantScopedUser(tenantId, userId, input);
+  // Deactivating someone, or changing their role or permission template, ends their open
+  // sessions, so the change applies at once rather than when a token expires (S3).
+  if ((input.status !== undefined && input.status !== "ACTIVE") || permissionRelevant) {
+    await revokeAllSessionsForUser(userId, input.status !== undefined && input.status !== "ACTIVE" ? "USER_DEACTIVATED" : "PERMISSIONS_CHANGED");
+  }
   if (permissionRelevant && actor) {
     await createAuditLog(actor, "UPDATE", "USER_PERMISSIONS", userId, before, {
       roleId: updated.roleId,

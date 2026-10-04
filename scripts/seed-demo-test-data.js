@@ -1089,8 +1089,8 @@ async function seedReports(records) {
 
 async function seedDistributionAndAutomation() {
   await safeUpsert("AssignmentRule", [
-    { id: "demo-assignment-rule-engineering", tenantId: TENANT, name: "Engineering course routing", description: "Route B.Tech/MCA to engineering admissions group", entityType: "LEAD", conditions: { courseFamily: "Engineering" }, strategy: "ROUND_ROBIN", targetGroupId: "demo-sales-group-engineering", targetUserIds: [], priority: 100, isActive: true, createdAt: iso(-20), updatedAt: iso(0) },
-    { id: "demo-assignment-rule-partner", tenantId: TENANT, name: "Partner source routing", description: "Route partner leads to partner sourced queue", entityType: "LEAD", conditions: { source: "Partner" }, strategy: "ROUND_ROBIN", targetGroupId: "demo-sales-group-partner", targetUserIds: [], priority: 110, isActive: true, createdAt: iso(-20), updatedAt: iso(0) },
+    { id: "demo-assignment-rule-engineering", tenantId: TENANT, name: "Engineering course routing", description: "Route B.Tech/MCA to engineering admissions group", entityType: "LEAD", strategy: "ROUND_ROBIN", targetGroupId: "demo-sales-group-engineering", priority: 100, isActive: true, createdAt: iso(-20), updatedAt: iso(0) },
+    { id: "demo-assignment-rule-partner", tenantId: TENANT, name: "Partner source routing", description: "Route partner leads to partner sourced queue", entityType: "LEAD", strategy: "ROUND_ROBIN", targetGroupId: "demo-sales-group-partner", priority: 110, isActive: true, createdAt: iso(-20), updatedAt: iso(0) },
   ]);
 }
 

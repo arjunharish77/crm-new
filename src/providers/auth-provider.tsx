@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { User, AuthContextType } from '../types/auth';
 import { EditorDraftProvider } from './editor-draft-provider';
 import { AiMessageDraftProvider } from './ai-message-draft-provider';
+import { clearUserScopedStorageOnSignOut, removeLegacySharedStorage, setStorageUserScope } from '@/lib/storage';
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
@@ -23,6 +24,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const [isLoading, setIsLoading] = useState(true);
     const router = useRouter();
     const initRef = useRef(false);
+    // Per-person browser storage (round-2 plan N3). Set while rendering so children read the
+    // right slot on their first render.
+    setStorageUserScope(user?.tenantId, user?.id);
 
     const fetchMe = async (): Promise<User | null> => {
         try {
@@ -41,6 +45,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (initRef.current) return;
         initRef.current = true;
 
+        removeLegacySharedStorage();
         const init = async () => {
             const profile = await fetchMe();
             setUser(profile);
@@ -58,7 +63,27 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setUser(profile);
     };
 
+    // Round-2 plan P1: the tree below used to be keyed on the user's identity, so the first
+    // "who am I" answer (nobody -> you) remounted the whole app and every page loaded twice.
+    // It now starts a fresh tree only when the identity changes after that first answer
+    // (signing in or out, starting or ending impersonation).
+    const identity = JSON.stringify([user?.tenantId, user?.id, user?.isImpersonating]);
+    const settledIdentity = useRef<string | null>(null);
+    const [generation, setGeneration] = useState(0);
+    useEffect(() => {
+        if (isLoading) return;
+        if (settledIdentity.current === null) {
+            settledIdentity.current = identity;
+            return;
+        }
+        if (settledIdentity.current !== identity) {
+            settledIdentity.current = identity;
+            setGeneration((current) => current + 1);
+        }
+    }, [identity, isLoading]);
+
     const logout = () => {
+        clearUserScopedStorageOnSignOut();
         fetch(`${API_URL}/auth/logout`, { method: 'POST' }).catch(() => undefined);
         setUser(null);
         router.push('/login');
@@ -73,7 +98,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             isLoading,
             isImpersonating: !!user?.isImpersonating,
         }}>
-            <AiMessageDraftProvider key={JSON.stringify([user?.tenantId, user?.id, user?.isImpersonating])}>
+            <AiMessageDraftProvider key={generation}>
                 <EditorDraftProvider>{children}</EditorDraftProvider>
             </AiMessageDraftProvider>
         </AuthContext.Provider>

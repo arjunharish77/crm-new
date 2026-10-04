@@ -232,18 +232,6 @@ function normalizeEntityType(entityType: string) {
   return entityType.toUpperCase() as NoteEntityType;
 }
 
-export function schedulePredictiveScoreRefresh(
-  user: TenantUser,
-  targetModules: Array<"LEAD" | "OPPORTUNITY">
-) {
-  if (!user.tenantId || targetModules.length === 0) return;
-  void import("@/lib/server/self-learning-scoring")
-    .then(({ recomputeSelfLearningScoresForTenant }) =>
-      recomputeSelfLearningScoresForTenant(user, { targetModules })
-    )
-    .catch(() => undefined);
-}
-
 function valueAtPath(record: Record<string, unknown>, field: string) {
   const scoringAliases: Record<string, string> = {
     scoreBand: "predictiveScore.scoreBand",
@@ -434,15 +422,23 @@ export async function ensureSystemActivityType(user: TenantUser, name: string, i
   );
   if (existing?.id) return existing.id;
 
+  // Round-2 plan B21: two requests creating the same type at once used to fail on the
+  // ("tenantId", name) unique key; the loser now reads the winner's row.
   const now = new Date().toISOString();
   const created = await queryOne<{ id: string }>(
     `insert into "ActivityType" (id, "tenantId", "objectId", name, icon, color, "defaultOutcome", "defaultSLA", "order", "isActive", "createdAt", "updatedAt")
      values ($1, $2, $3, $4, $5, $6, 'SUCCESS', null, 100, true, $7, $7)
+     on conflict ("tenantId", name) do nothing
      returning id`,
     [randomUUID(), user.tenantId, objectId, name, icon, color, now],
   );
-  if (!created?.id) throw new Error("ACTIVITY_TYPE_INSERT_FAILED");
-  return created.id;
+  if (created?.id) return created.id;
+  const winner = await queryOne<{ id: string }>(
+    `select id from "ActivityType" where name = $1 and ${user.tenantId ? '"tenantId" = $2' : '"tenantId" is null'} limit 1`,
+    user.tenantId ? [name, user.tenantId] : [name],
+  );
+  if (!winner?.id) throw new Error("ACTIVITY_TYPE_INSERT_FAILED");
+  return winner.id;
 }
 
 export async function listActivitiesForTenant(
@@ -563,6 +559,8 @@ export async function listAuditLogsForTenant(
     // no filter anywhere in this stack (repository/API/UI) could answer "what did user X do,"
     // only "what happened to record Y."
     userId?: string;
+    // Round-2 plan F8: text search on the server (user name or email, record type or id).
+    search?: string;
   }
 ) {
   const values: unknown[] = [];
@@ -612,6 +610,12 @@ export async function listAuditLogsForTenant(
   if (filters?.dateTo) {
     values.push(filters.dateTo);
     clauses.push(`"createdAt" <= $${values.length}`);
+  }
+  const search = filters?.search?.trim();
+  if (search) {
+    values.push(`%${search.replace(/[\\%_]/g, (match) => `\\${match}`)}%`);
+    const p = `$${values.length}`;
+    clauses.push(`("entityType" ilike ${p} or "entityId" ilike ${p} or action ilike ${p} or "userId" in (select u.id from "User" u where u.name ilike ${p} or u.email ilike ${p}))`);
   }
 
   const data = await query<any>(
@@ -1269,34 +1273,36 @@ function normalizeDashboardPersona(user: TenantUser, persona?: string | null) {
   return "rep";
 }
 
+// Layouts are in the dashboard grid's units: 12 columns, rows of 32px (charts 8 rows, numbers 4).
+// They used to be in an old two-column scheme (w 1 or 2, h 1), which drew every widget tiny.
 function getDashboardPresetWidgets(persona: string): DashboardWidgetInput[] {
   const presets: Record<string, DashboardWidgetInput[]> = {
     admin: [
-      { title: "Org-wide Funnel", type: "FUNNEL", config: { opportunityTypeId: null }, layout: { w: 2, h: 1, x: 0, y: 0 } },
-      { title: "Source-wise Lead Volume", type: "BAR", config: { module: "LEADS", metric: "COUNT", groupBy: "source" }, layout: { w: 2, h: 1, x: 0, y: 1 } },
-      { title: "SLA Breaches", type: "STAT", config: { reportKey: "sla_response_breaches", metric: "totals.responseBreaches", thresholdHours: 24 }, layout: { w: 1, h: 1, x: 0, y: 2 } },
-      { title: "Rep Wins", type: "BAR", config: { reportKey: "rep_performance", metric: "wonOpportunities", limit: 5 }, layout: { w: 2, h: 1, x: 0, y: 3 } },
-      { title: "Data Quality Flags", type: "BAR", config: { reportKey: "data_quality", metric: "issues", staleDays: 14 }, layout: { w: 2, h: 1, x: 0, y: 4 } },
-      { title: "Reassignment Impact", type: "BAR", config: { reportKey: "reassignment_impact", metric: "wonConversionRate" }, layout: { w: 2, h: 1, x: 0, y: 5 } },
+      { title: "Org-wide Funnel", type: "FUNNEL", config: { opportunityTypeId: null }, layout: { x: 0, y: 0, w: 6, h: 8 } },
+      { title: "Source-wise Lead Volume", type: "BAR", config: { module: "LEADS", metric: "COUNT", groupBy: "source" }, layout: { x: 6, y: 0, w: 6, h: 8 } },
+      { title: "SLA Breaches", type: "STAT", config: { reportKey: "sla_response_breaches", metric: "totals.responseBreaches", thresholdHours: 24 }, layout: { x: 0, y: 16, w: 4, h: 4 } },
+      { title: "Rep Wins", type: "BAR", config: { reportKey: "rep_performance", metric: "wonOpportunities", limit: 5 }, layout: { x: 0, y: 8, w: 6, h: 8 } },
+      { title: "Data Quality Flags", type: "BAR", config: { reportKey: "data_quality", metric: "issues", staleDays: 14 }, layout: { x: 6, y: 8, w: 6, h: 8 } },
+      { title: "Reassignment Impact", type: "BAR", config: { reportKey: "reassignment_impact", metric: "wonConversionRate" }, layout: { x: 4, y: 16, w: 8, h: 8 } },
     ],
     manager: [
-      { title: "Team Opportunity Funnel", type: "FUNNEL", config: { opportunityTypeId: null }, layout: { w: 2, h: 1, x: 0, y: 0 } },
-      { title: "Team Activity Volume", type: "BAR", config: { module: "ACTIVITIES", metric: "COUNT" }, layout: { w: 2, h: 1, x: 0, y: 1 } },
-      { title: "Rep Activity Comparison", type: "BAR", config: { reportKey: "rep_performance", metric: "activitiesCreated", limit: 5 }, layout: { w: 2, h: 1, x: 0, y: 2 } },
-      { title: "Team Reassignment Impact", type: "BAR", config: { reportKey: "reassignment_impact", metric: "wonConversionRate" }, layout: { w: 2, h: 1, x: 0, y: 3 } },
-      { title: "Overdue Follow-ups", type: "STAT", config: { reportKey: "activity_call_volume_trends", metric: "overdue" }, layout: { w: 1, h: 1, x: 0, y: 4 } },
+      { title: "Team Opportunity Funnel", type: "FUNNEL", config: { opportunityTypeId: null }, layout: { x: 0, y: 0, w: 6, h: 8 } },
+      { title: "Team Activity Volume", type: "BAR", config: { module: "ACTIVITIES", metric: "COUNT" }, layout: { x: 6, y: 0, w: 6, h: 8 } },
+      { title: "Rep Activity Comparison", type: "BAR", config: { reportKey: "rep_performance", metric: "activitiesCreated", limit: 5 }, layout: { x: 0, y: 8, w: 6, h: 8 } },
+      { title: "Team Reassignment Impact", type: "BAR", config: { reportKey: "reassignment_impact", metric: "wonConversionRate" }, layout: { x: 6, y: 8, w: 6, h: 8 } },
+      { title: "Overdue Follow-ups", type: "STAT", config: { reportKey: "activity_call_volume_trends", metric: "overdue" }, layout: { x: 0, y: 16, w: 4, h: 4 } },
     ],
     rep: [
-      { title: "My Leads", type: "STAT", config: { module: "LEADS", metric: "COUNT" }, layout: { w: 1, h: 1, x: 0, y: 0 } },
-      { title: "My Conversion", type: "STAT", config: { reportKey: "rep_performance", metric: "conversionRate" }, layout: { w: 1, h: 1, x: 1, y: 0 } },
-      { title: "My Follow-ups Due", type: "STAT", config: { reportKey: "activity_call_volume_trends", metric: "overdue" }, layout: { w: 1, h: 1, x: 2, y: 0 } },
-      { title: "My Activity Trend", type: "TREND", config: { reportKey: "activity_call_volume_trends", metric: "activities" }, layout: { w: 2, h: 1, x: 0, y: 1 } },
+      { title: "My Leads", type: "STAT", config: { module: "LEADS", metric: "COUNT" }, layout: { x: 0, y: 0, w: 4, h: 4 } },
+      { title: "My Conversion", type: "STAT", config: { reportKey: "rep_performance", metric: "conversionRate" }, layout: { x: 4, y: 0, w: 4, h: 4 } },
+      { title: "My Follow-ups Due", type: "STAT", config: { reportKey: "activity_call_volume_trends", metric: "overdue" }, layout: { x: 8, y: 0, w: 4, h: 4 } },
+      { title: "My Activity Trend", type: "TREND", config: { reportKey: "activity_call_volume_trends", metric: "activities" }, layout: { x: 0, y: 4, w: 12, h: 8 } },
     ],
     partner: [
-      { title: "My Referred Leads", type: "STAT", config: { module: "LEADS", metric: "COUNT" }, layout: { w: 1, h: 1, x: 0, y: 0 } },
-      { title: "My Commission Total", type: "STAT", config: { reportKey: "commission_payout_summary", metric: "totals.netCommission" }, layout: { w: 1, h: 1, x: 1, y: 0 } },
-      { title: "My Payout History", type: "BAR", config: { reportKey: "commission_payout_summary", metric: "payoutStatusCounts" }, layout: { w: 2, h: 1, x: 0, y: 1 } },
-      { title: "My Lead Status", type: "BAR", config: { module: "LEADS", metric: "COUNT", groupBy: "status" }, layout: { w: 2, h: 1, x: 0, y: 2 } },
+      { title: "My Referred Leads", type: "STAT", config: { module: "LEADS", metric: "COUNT" }, layout: { x: 0, y: 0, w: 6, h: 4 } },
+      { title: "My Commission Total", type: "STAT", config: { reportKey: "commission_payout_summary", metric: "totals.netCommission" }, layout: { x: 6, y: 0, w: 6, h: 4 } },
+      { title: "My Payout History", type: "BAR", config: { reportKey: "commission_payout_summary", metric: "payoutStatusCounts" }, layout: { x: 0, y: 4, w: 6, h: 8 } },
+      { title: "My Lead Status", type: "BAR", config: { module: "LEADS", metric: "COUNT", groupBy: "status" }, layout: { x: 6, y: 4, w: 6, h: 8 } },
     ],
   };
 
@@ -1575,14 +1581,6 @@ export async function removeLeadFromLeadListForTenant(user: TenantUser, id: stri
 export async function ingestWebsiteVisitForTenant(input: Record<string, unknown>) {
   const tenantId = String(input.tenantId ?? "");
   if (!tenantId) throw new Error("TENANT_ID_REQUIRED");
-  const trackingUser = await queryOne<any>(
-    `select id, name, email, "tenantId"
-     from "User"
-     where "tenantId" = $1
-     limit 1`,
-    [tenantId],
-  );
-  const user: TenantUser = trackingUser ?? { id: "website-tracker", tenantId };
   const email = typeof input.email === "string" ? input.email.toLowerCase() : "";
   const leadId = typeof input.leadId === "string" ? input.leadId : "";
   let lead: any = null;
@@ -1599,6 +1597,19 @@ export async function ingestWebsiteVisitForTenant(input: Record<string, unknown>
     );
   }
   if (!lead?.id) return { tracked: false, reason: "NO_MATCHING_LEAD" };
+
+  // Round-2 plan B21: the visit is recorded as the lead's owner, or else the workspace's
+  // earliest active user, instead of whichever user the database happened to return first.
+  const trackingUser = await queryOne<any>(
+    `select u.id, u.name, u.email, u."tenantId"
+     from "User" u
+     where u."tenantId" = $1 and u.status = 'ACTIVE' and u."deletedAt" is null
+     order by (u.id = (select "ownerId" from "Lead" where "tenantId" = $1 and id = $2)) desc, u."createdAt" asc
+     limit 1`,
+    [tenantId, lead.id],
+  );
+  if (!trackingUser) return { tracked: false, reason: "NO_ACTIVE_USER" };
+  const user: TenantUser = trackingUser;
 
   const typeId = await ensureSystemActivityType(user, "Page Visit", "Globe", "#0ea5e9");
   const pageUrl = String(input.url ?? "");
@@ -1993,7 +2004,7 @@ export async function listWebhooksForTenant(user: TenantUser) {
             url,
             events,
             "isActive",
-            secret,
+            (secret is not null and secret <> '') as "hasSecret",
             "rateLimitPerMinute",
             "createdAt",
             "updatedAt"
@@ -2018,7 +2029,7 @@ export async function createWebhookForTenant(user: TenantUser, input: WebhookInp
     `insert into "WebhookSubscription" (
        id, "tenantId", url, events, secret, "isActive", "rateLimitPerMinute", "createdAt", "updatedAt"
      ) values ($1, $2, $3, $4, $5, $6, $7, $8, $8)
-     returning id, coalesce(nullif(url, ''), 'Webhook') as name, url, events, "isActive", secret, "rateLimitPerMinute", "createdAt", "updatedAt"`,
+     returning id, coalesce(nullif(url, ''), 'Webhook') as name, url, events, "isActive", (secret is not null and secret <> '') as "hasSecret", "rateLimitPerMinute", "createdAt", "updatedAt"`,
     [
       randomUUID(),
       user.tenantId,
@@ -2060,13 +2071,15 @@ export async function updateWebhookForTenant(user: TenantUser, id: string, input
     `update "WebhookSubscription"
      set url = $1, events = $2, "isActive" = $3, secret = $4, "rateLimitPerMinute" = $5, "updatedAt" = $6
      where id = $7 and ${user.tenantId ? '"tenantId" = $8' : '"tenantId" is null'}
-     returning id, coalesce(nullif(url, ''), 'Webhook') as name, url, events, "isActive", secret, "rateLimitPerMinute", "createdAt", "updatedAt"`,
+     returning id, coalesce(nullif(url, ''), 'Webhook') as name, url, events, "isActive", (secret is not null and secret <> '') as "hasSecret", "rateLimitPerMinute", "createdAt", "updatedAt"`,
     user.tenantId
       ? [nextUrl, JSON.stringify(nextEvents), nextIsActive, nextSecret, nextRateLimit, new Date().toISOString(), id, user.tenantId]
       : [nextUrl, JSON.stringify(nextEvents), nextIsActive, nextSecret, nextRateLimit, new Date().toISOString(), id],
   );
   if (!webhook) throw new Error("WEBHOOK_UPDATE_FAILED");
-  await createAuditLog(user, "UPDATE", "WEBHOOK", id, existing, webhook, { isActive: { before: existing.isActive, after: nextIsActive } });
+  // The signing secret is never returned or written to the audit log (round-2 plan S2).
+  const { secret: _existingSecret, ...existingWithoutSecret } = existing;
+  await createAuditLog(user, "UPDATE", "WEBHOOK", id, { ...existingWithoutSecret, hasSecret: !!_existingSecret }, webhook, { isActive: { before: existing.isActive, after: nextIsActive } });
   return webhook;
 }
 

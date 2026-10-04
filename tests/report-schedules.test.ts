@@ -4,7 +4,9 @@ const dbMocks = vi.hoisted(() => {
   const query = vi.fn();
   const queryOne = vi.fn();
   const execute = vi.fn();
-  return { query, queryOne, execute, queryAsSystem: query, queryOneAsSystem: queryOne, executeAsSystem: execute };
+  // Claims (round-2 plan B11) go through queryOneAsSystem; they succeed unless a test says otherwise.
+  const claim = vi.fn();
+  return { query, queryOne, execute, queryAsSystem: query, queryOneAsSystem: claim, executeAsSystem: execute, claim };
 });
 const entitlementsMocks = vi.hoisted(() => ({
   assertFeatureEnabled: vi.fn().mockResolvedValue(undefined),
@@ -68,6 +70,7 @@ describe("processDueReportSchedules", () => {
   beforeEach(() => {
     dbMocks.query.mockReset();
     dbMocks.queryOne.mockReset();
+    dbMocks.claim.mockReset().mockResolvedValue({ id: "claimed" });
     dbMocks.execute.mockReset().mockResolvedValue(undefined);
     entitlementsMocks.isFeatureEnabledForTenant.mockReset().mockResolvedValue(true);
     exportsMocks.createExportRequestForUser.mockReset();
@@ -257,8 +260,32 @@ describe("processDueReportSchedules", () => {
     const scheduleUpdateCall = dbMocks.execute.mock.calls.find((call) => String(call[0]).includes('update "ReportSchedule"'));
     expect(scheduleUpdateCall).toBeTruthy();
     const params = scheduleUpdateCall![1] as unknown[];
-    expect(params[3]).toBe(1); // retryCount
-    expect(params[4]).toBe(new Date(now.getTime() + 60_000).toISOString()); // 1-minute backoff
+    expect(params[2]).toBe(1); // retryCount
+    expect(params[3]).toBe(new Date(now.getTime() + 60_000).toISOString()); // 1-minute backoff
+  });
+
+  it("claims a due run before sending, and skips it when another worker already has (round-2 plan B11)", async () => {
+    dbMocks.query.mockResolvedValueOnce([scheduleRow({ format: "LINK" })]);
+    dbMocks.claim.mockResolvedValueOnce(null);
+    const result = await processDueReportSchedules(new Date("2026-01-08T00:00:00.000Z"));
+    expect(result.processed).toEqual([]);
+    expect(dbMocks.queryOne).not.toHaveBeenCalled();
+    expect(communicationsMocks.queueCommunicationForTenant).not.toHaveBeenCalled();
+  });
+
+  it("counts the next run from the run that was due, not from when the worker got to it (B11)", async () => {
+    // A daily schedule due 2026-01-07 09:00, processed at 09:07, runs next at 2026-01-08 09:00.
+    dbMocks.query.mockResolvedValueOnce([scheduleRow({ format: "LINK", frequency: "DAILY", nextRunAt: "2026-01-07T09:00:00.000Z" })]);
+    dbMocks.queryOne.mockResolvedValueOnce(null);
+    await processDueReportSchedules(new Date("2026-01-07T09:07:00.000Z"));
+    expect(dbMocks.claim.mock.calls[0][1][0]).toBe("2026-01-08T09:00:00.000Z");
+  });
+
+  it("skips runs missed while the server was down instead of sending them all", async () => {
+    dbMocks.query.mockResolvedValueOnce([scheduleRow({ format: "LINK", frequency: "DAILY", nextRunAt: "2026-01-01T09:00:00.000Z" })]);
+    dbMocks.queryOne.mockResolvedValueOnce(null);
+    await processDueReportSchedules(new Date("2026-01-07T10:00:00.000Z"));
+    expect(dbMocks.claim.mock.calls[0][1][0]).toBe("2026-01-08T09:00:00.000Z");
   });
 
   it("does not schedule a retry for a non-retryable failure (an export governance gate)", async () => {
@@ -272,8 +299,8 @@ describe("processDueReportSchedules", () => {
 
     const scheduleUpdateCall = dbMocks.execute.mock.calls.find((call) => String(call[0]).includes('update "ReportSchedule"'));
     const params = scheduleUpdateCall![1] as unknown[];
-    expect(params[3]).toBe(0);
-    expect(params[4]).toBeNull();
+    expect(params[2]).toBe(0);
+    expect(params[3]).toBeNull();
   });
 });
 
@@ -281,6 +308,7 @@ describe("retryFailedReportSchedules", () => {
   beforeEach(() => {
     dbMocks.query.mockReset();
     dbMocks.queryOne.mockReset();
+    dbMocks.claim.mockReset().mockResolvedValue({ id: "claimed" });
     dbMocks.execute.mockReset().mockResolvedValue(undefined);
     entitlementsMocks.isFeatureEnabledForTenant.mockReset().mockResolvedValue(true);
     exportsMocks.createExportRequestForUser.mockReset();

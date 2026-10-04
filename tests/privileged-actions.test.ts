@@ -35,7 +35,7 @@ import {
 const admin1 = { id: "admin-1", tenantId: "tenant-a" };
 const admin2 = { id: "admin-2", tenantId: "tenant-a" };
 const platformAdmin1 = { id: "platform-1", tenantId: null };
-const platformAdmin2 = { id: "platform-2", tenantId: null };
+const platformAdmin2 = { id: "platform-2", tenantId: null, isPlatformAdmin: true };
 
 function pendingRow(overrides: Record<string, unknown> = {}) {
   return {
@@ -153,6 +153,14 @@ describe("approvePrivilegedActionRequest", () => {
     expect(adminMocks.setTenantStatusForPlatformAdmin).toHaveBeenCalledWith({ id: "platform-1" }, "tenant-x", "SUSPENDED", { reason: "Unpaid invoices", requestId: "request-1", approvedBy: platformAdmin2.id });
     expect(dbMocks.execute).toHaveBeenCalledWith(expect.stringContaining("status = 'EXECUTED'"), expect.anything());
     expect(result).toEqual({ status: "EXECUTED" });
+  });
+
+  it("refuses a workspace admin deciding a platform-level request (round-2 plan S6)", async () => {
+    dbMocks.queryOne.mockResolvedValueOnce(pendingRow({ tenantId: null, actionType: "TENANT_SUSPEND", targetId: "tenant-x", requestedBy: "platform-1" }));
+    await expect(approvePrivilegedActionRequest(admin2, "request-1")).rejects.toThrow("FORBIDDEN");
+    dbMocks.queryOne.mockResolvedValueOnce(pendingRow({ tenantId: null, actionType: "IMPERSONATION_START", targetId: "user-x", requestedBy: "platform-1" }));
+    await expect(rejectPrivilegedActionRequest(admin2, "request-1", "no")).rejects.toThrow("FORBIDDEN");
+    expect(adminMocks.setTenantStatusForPlatformAdmin).not.toHaveBeenCalled();
   });
 
   it("executes TENANT_UNSUSPEND", async () => {

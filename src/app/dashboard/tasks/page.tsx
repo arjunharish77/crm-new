@@ -441,10 +441,14 @@ export default function TasksPage() {
     };
 
     // Complete with Undo (reopen), since it is one click from the list.
+    // The row changes at once and goes back if saving fails; only the tab counts are reloaded
+    // (round-2 plan P7: it used to wait for the server and then reload the whole list).
     const setTaskStatus = async (task: Task, status: Task["status"]) => {
+        const optimistic = { status, completedAt: status === "COMPLETED" ? new Date().toISOString() : null };
+        setTasks((current) => current.map((item) => item.id === task.id ? { ...item, ...optimistic } : item));
         try {
             await apiFetch(`/tasks/${task.id}`, { method: "PATCH", body: JSON.stringify({ status }) });
-            refresh();
+            fetchCounts();
             toast.success(status === "COMPLETED" ? `Completed: ${task.title}` : `Reopened: ${task.title}`, {
                 duration: 6000,
                 action: status === "COMPLETED" ? {
@@ -460,6 +464,7 @@ export default function TasksPage() {
                 } : undefined,
             });
         } catch (error: any) {
+            setTasks((current) => current.map((item) => item.id === task.id ? { ...item, status: task.status, completedAt: task.completedAt } : item));
             toast.error(error.message || "Couldn't update the task");
         }
     };

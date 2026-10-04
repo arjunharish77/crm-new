@@ -23,7 +23,7 @@ const fixtures = vi.hoisted(() => ({
 
 vi.mock("@/lib/repositories/auth-admin-postgres", () => ({ getCurrentUserById: fixtures.getUser }));
 vi.mock("@/lib/server/rate-limit", () => ({ assertGeneralRateLimit: vi.fn(), RateLimitExceededError: class extends Error {} }));
-vi.mock("@/lib/server/sessions", () => ({ validateSession: fixtures.validate, touchSessionIfStale: vi.fn() }));
+vi.mock("@/lib/server/sessions", () => ({ validateSession: fixtures.validate, touchSessionIfStale: vi.fn().mockResolvedValue(undefined) }));
 vi.mock("@/lib/server/admin", () => ({
   updateTenantScopedUser: fixtures.update,
   createTenantRole: fixtures.createRole,
@@ -35,7 +35,7 @@ import { PATCH } from "@/app/api/users/[id]/route";
 import { POST } from "@/app/api/roles/route";
 
 function request(actingUserId: string, body?: object) {
-  return signAuthToken({ sub: actingUserId, email: "x@example.invalid", tenantId: "tenant-1" }).then(
+  return signAuthToken({ sub: actingUserId, email: "x@example.invalid", tenantId: "tenant-1", sid: "session-1" }).then(
     (token) =>
       new Request("http://localhost/api/audit", {
         method: body ? "POST" : "GET",
@@ -47,6 +47,7 @@ function request(actingUserId: string, body?: object) {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  fixtures.validate.mockResolvedValue({ valid: true, row: { lastActiveAt: new Date().toISOString() } });
   fixtures.update.mockResolvedValue({ id: "user-1", roleId: "admin-role" });
   fixtures.createRole.mockResolvedValue({ id: "new-admin-role" });
 });

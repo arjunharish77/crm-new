@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { queryOne, execute } from "@/lib/db/query";
 import { cancelPendingJourneyStepsForRecord, setPreferenceForRecord } from "@/lib/server/marketing-journeys";
 import { badRequest, serverError } from "@/lib/server/http";
+import { maskRecipient } from "@/lib/mask-recipient";
 
 async function loadOutboxContext(outboxId: string) {
   return queryOne<any>(
@@ -23,7 +24,7 @@ export async function GET(
     const { outboxId } = await params;
     const outbox = await loadOutboxContext(outboxId);
     if (!outbox) return NextResponse.json({ message: "Not found" }, { status: 404 });
-    return NextResponse.json({ channel: outbox.channel, recipient: outbox.recipient, entityType: outbox.entityType });
+    return NextResponse.json({ channel: outbox.channel, recipient: maskRecipient(outbox.recipient), entityType: outbox.entityType });
   } catch (error) {
     return serverError("Failed to load unsubscribe context", error);
   }

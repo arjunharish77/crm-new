@@ -24,6 +24,7 @@ const formSchema = z.object({
     name: z.string().min(2, "Name must be at least 2 characters"),
     email: z.string().email("Invalid email address"),
     password: z.string().min(8, "Password must be at least 8 characters"),
+    setupToken: z.string().trim().min(1, "Enter the setup token from the server settings"),
 });
 
 export default function BootstrapPage() {
@@ -41,6 +42,7 @@ export default function BootstrapPage() {
             name: "",
             email: "",
             password: "",
+            setupToken: "",
         },
     });
 
@@ -72,7 +74,8 @@ export default function BootstrapPage() {
             toast.success("Platform admin created successfully!");
             setCreated(true);
         } catch (error: any) {
-            setSubmitError(error.message || "Failed to create platform admin");
+            // A wrong or missing setup token is a 403; show the server's own wording for it.
+            setSubmitError((error.status === 403 && error.originalMessage) || error.message || "Failed to create platform admin");
         } finally {
             setLoading(false);
         }
@@ -124,6 +127,20 @@ export default function BootstrapPage() {
                 <CardContent>
                     <Form {...form}>
                         <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+                            <FormField
+                                control={form.control}
+                                name="setupToken"
+                                render={({ field }) => (
+                                    <FormItem>
+                                        <FormLabel>Setup token</FormLabel>
+                                        <FormControl>
+                                            <Input disabled={loading} autoComplete="off" type="password" {...field} />
+                                        </FormControl>
+                                        <p className="text-xs text-muted-foreground">The BOOTSTRAP_TOKEN value from the server&apos;s settings file.</p>
+                                        <FormMessage />
+                                    </FormItem>
+                                )}
+                            />
                             <FormField
                                 control={form.control}
                                 name="name"

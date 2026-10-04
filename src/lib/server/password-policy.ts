@@ -4,7 +4,7 @@ import { query, queryOne, execute, queryAsSystem, queryOneAsSystem, executeAsSys
 import { getEffectiveSecurityPolicy } from "@/lib/server/security-policy";
 import { createAuditLog } from "@/lib/server/crm";
 import { createUserNotification } from "@/lib/server/notifications";
-import { revokeAllSessionsForUser } from "@/lib/server/sessions";
+import { revokeAllOtherSessions, revokeAllSessionsForUser } from "@/lib/server/sessions";
 import { appBaseUrl, emailLogoHtml, isSystemEmailConfigured, sendSystemEmail } from "@/lib/server/system-email";
 
 const RESET_TOKEN_HOURS = 1;
@@ -128,6 +128,10 @@ export async function changeOwnPassword(user: TenantUser, currentPassword: strin
   }
   const policy = await assertPasswordMeetsPolicy(user.tenantId, newPassword);
   await applyNewPassword(user, newPassword, policy);
+  // Every other signed-in session ends; this one stays (S3).
+  const currentSessionId = (user as { sessionId?: string | null }).sessionId;
+  if (currentSessionId) await revokeAllOtherSessions(user.id, currentSessionId, user.id);
+  else await revokeAllSessionsForUser(user.id, "PASSWORD_CHANGED");
   await createAuditLog(user as any, "PASSWORD_CHANGED", "USER", user.id, null, null, null).catch(() => undefined);
 }
 

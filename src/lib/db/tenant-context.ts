@@ -14,6 +14,8 @@ export type TenantContext = {
   tenantId: string | null;
   userId: string | null;
   roleId: string | null;
+  // Round-2 plan O5: the request's id (x-request-id, set in src/proxy.ts), for logs and Sentry.
+  requestId?: string | null;
 };
 
 const storage = new AsyncLocalStorage<TenantContext>();

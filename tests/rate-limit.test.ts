@@ -111,6 +111,7 @@ import {
   peekRateLimit,
   getActiveRateLimitViolationSnapshot,
   RateLimitExceededError,
+  resetRateLimitMemoryForTests,
 } from "@/lib/server/rate-limit";
 
 beforeEach(() => {
@@ -286,5 +287,24 @@ describe("getActiveRateLimitViolationSnapshot", () => {
     });
     const snapshot = await getActiveRateLimitViolationSnapshot();
     expect(snapshot.byTenant.find((row) => row.tenantId === "tenant-expired")).toBeUndefined();
+  });
+});
+
+describe("when Redis is unreachable (round-2 plan S9)", () => {
+  it("keeps limiting with an in-process counter instead of allowing everything", async () => {
+    resetRateLimitMemoryForTests();
+    const multi = vi.spyOn(fakeRedisInstance as any, "multi").mockImplementation(() => {
+      throw new Error("connect ECONNREFUSED");
+    });
+    const get = vi.spyOn(fakeRedisInstance as any, "get").mockRejectedValue(new Error("connect ECONNREFUSED"));
+    try {
+      for (let i = 0; i < 3; i++) expect((await checkRateLimit({ key: "login:down", limit: 3, windowSeconds: 60 })).allowed).toBe(true);
+      expect((await checkRateLimit({ key: "login:down", limit: 3, windowSeconds: 60 })).allowed).toBe(false);
+      expect((await peekRateLimit({ key: "login:down", limit: 3, windowSeconds: 60 })).allowed).toBe(false);
+      expect((await peekRateLimit({ key: "login:other", limit: 3, windowSeconds: 60 })).allowed).toBe(true);
+    } finally {
+      multi.mockRestore();
+      get.mockRestore();
+    }
   });
 });

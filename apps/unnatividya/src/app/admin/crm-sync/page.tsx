@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { CrmSyncConfigForm } from "@/components/crm-sync-config-form";
 import { getCrmSyncConfig } from "@/lib/crm-sync";
-import { query } from "@/lib/db";
+
 
 export const metadata: Metadata = {
   title: "CRM Sync",
@@ -11,34 +11,18 @@ export const metadata: Metadata = {
 
 export const dynamic = "force-dynamic";
 
-type ConfigRow = {
-  is_enabled: boolean;
-  auto_push_enabled: boolean;
-  manual_push_enabled: boolean;
-  api_base_url: string | null;
-  endpoint_path: string | null;
-};
-
 export default async function CrmSyncPage() {
   const configModel = await getCrmSyncConfig();
-  const config = await query<ConfigRow>(
-    `select is_enabled, auto_push_enabled, manual_push_enabled, api_base_url, endpoint_path
-     from crm_sync_config
-     order by created_at
-     limit 1`,
-  ).catch(() => ({ rows: [] as ConfigRow[] }));
-  const row = config.rows[0];
-
   return (
-    <section className="admin-shell">
+    <section className="admin-shell crm-config-page">
       <div className="container">
         <div className="admin-page-head">
           <div>
             <span className="eyebrow">CMS</span>
             <h1>External API / CRM sync</h1>
-            <p>Configure JSON payload handoff with merge-token mappings. Auto-push remains off until approved.</p>
+            <p>Set the CRM destination, review payload mappings and check delivery history. Saving settings does not test the connection.</p>
           </div>
-          <span className={row?.is_enabled ? "admin-status good" : "admin-status"}>{row?.is_enabled ? "Enabled" : "Disabled"}</span>
+          <span className={configModel.isEnabled ? "admin-status good" : "admin-status"}>{configModel.isEnabled ? "Enabled" : "Disabled"}</span>
         </div>
 
         <div className="admin-grid">
@@ -46,10 +30,10 @@ export default async function CrmSyncPage() {
             <span className="admin-tag">Status</span>
             <h2>Current status</h2>
             <div className="admin-kv">
-              <span>Sync</span><strong>{row?.is_enabled ? "Enabled" : "Disabled"}</strong>
-              <span>Manual push</span><strong>{row?.manual_push_enabled ? "Enabled" : "Disabled"}</strong>
-              <span>Auto-push</span><strong>{row?.auto_push_enabled ? "Enabled" : "Disabled"}</strong>
-              <span>Endpoint</span><strong>{row?.api_base_url && row.endpoint_path ? `${row.api_base_url}${row.endpoint_path}` : "Not configured"}</strong>
+              <span>Sync</span><strong>{configModel.isEnabled ? "Enabled" : "Disabled"}</strong>
+              <span>Manual push</span><strong>{configModel.manualPushEnabled ? "Enabled" : "Disabled"}</strong>
+              <span>Auto-push</span><strong>{configModel.autoPushEnabled ? "Enabled" : "Disabled"}</strong>
+              <span>Endpoint</span><strong>{configModel.apiBaseUrl ? `${configModel.apiBaseUrl}${configModel.endpointPath}` : "Not configured"}</strong>
             </div>
           </article>
           <article className="card admin-tile">

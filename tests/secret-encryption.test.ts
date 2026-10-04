@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { decryptSecretAtRest, decryptSecretAtRestOrNull, encryptSecretAtRest } from "@/lib/server/secret-encryption";
 
 // Gap checklist Module 16's app-level secret management sub-item ("encrypted secret storage"),
@@ -44,5 +44,28 @@ describe("secret-encryption", () => {
       const ciphertext = encryptSecretAtRest("value");
       expect(decryptSecretAtRestOrNull(ciphertext)).toBe("value");
     });
+  });
+});
+
+describe("secret-encryption in production (round-2 plan O1)", () => {
+  it("refuses to fall back to JWT_SECRET", () => {
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("MARKETPLACE_SECRET_ENCRYPTION_KEY", "");
+    try {
+      expect(() => encryptSecretAtRest("x")).toThrow("MARKETPLACE_SECRET_ENCRYPTION_KEY");
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it("decrypts what the JWT_SECRET fallback wrote once the key is set to the same value", () => {
+    const written = encryptSecretAtRest("carried-over");
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("MARKETPLACE_SECRET_ENCRYPTION_KEY", process.env.JWT_SECRET ?? "");
+    try {
+      expect(decryptSecretAtRest(written)).toBe("carried-over");
+    } finally {
+      vi.unstubAllEnvs();
+    }
   });
 });

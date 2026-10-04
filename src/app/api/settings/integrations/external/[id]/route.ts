@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireCurrentUser } from "@/lib/server/auth";
+import { hasIntegrationsAccess } from "@/lib/server/integrations-access";
 import { badRequest, forbidden, serverError, unauthorized } from "@/lib/server/http";
 import {
   deleteExternalIntegrationForTenant,
@@ -15,10 +16,6 @@ function notFound(message = "Not found") {
   return NextResponse.json({ message }, { status: 404 });
 }
 
-function hasIntegrationsAccess(user: any) {
-  const rolePermissions = typeof user.role === "object" && user.role ? (user.role as any).permissions : null;
-  return Boolean(user.isTenantAdmin || user.isPlatformAdmin || rolePermissions?.modules?.integrations === "full");
-}
 
 export async function GET(request: Request, { params }: Params) {
   try {

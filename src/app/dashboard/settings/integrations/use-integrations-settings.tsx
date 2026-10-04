@@ -1,5 +1,6 @@
 "use client";
 
+import { useVisibleInterval } from "@/hooks/use-visible-interval";
 import { useModuleEnabled } from "@/components/auth/feature-gate";
 import { useState, useEffect } from "react";
 import { Phone } from "lucide-react";
@@ -132,13 +133,10 @@ export function useIntegrationsSettings() {
 
     // Imports run async now (worker-backed) -- poll while any job is still in flight so the
     // status column reflects real progress without a manual refresh.
-    useEffect(() => {
-        if (!imports.some((job) => ACTIVE_IMPORT_STATUSES.has(job.status))) return;
-        const timer = setInterval(() => {
-            apiFetch('/integrations/csv/jobs').then((data) => setImports(data || [])).catch(() => undefined);
-        }, 4000);
-        return () => clearInterval(timer);
-    }, [imports]);
+    // Paused while the tab is hidden (round-2 plan P9).
+    useVisibleInterval(() => {
+        apiFetch('/integrations/csv/jobs').then((data) => setImports(data || [])).catch(() => undefined);
+    }, 4000, imports.some((job) => ACTIVE_IMPORT_STATUSES.has(job.status)));
 
     const fetchTelephony = () => {
         setSectionState(current => ({ ...current, telephony: 'loading' }));

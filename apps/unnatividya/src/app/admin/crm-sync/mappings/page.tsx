@@ -1,3 +1,4 @@
+import Link from "next/link";
 import type { Metadata } from "next";
 import { CrmMappingForm } from "@/components/crm-mapping-form";
 import { crmSyncTokens, getActiveMapping } from "@/lib/crm-sync";
@@ -13,7 +14,7 @@ export default async function CrmMappingsPage() {
   const activeMapping = await getActiveMapping();
 
   return (
-    <section className="admin-shell">
+    <section className="admin-shell crm-mapping-page">
       <div className="container">
         <div className="admin-page-head">
           <div>
@@ -21,7 +22,7 @@ export default async function CrmMappingsPage() {
             <h1>Field mapping builder</h1>
             <p>Build the JSON request body with approved merge fields. Clicking a token copies it.</p>
           </div>
-          <span className="admin-status">JSON</span>
+          <Link className="btn ghost" href="/admin/crm-sync">Back to CRM settings</Link>
         </div>
         <CrmMappingForm
           tokens={[...crmSyncTokens]}

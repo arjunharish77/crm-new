@@ -3,6 +3,7 @@ import { query, queryOne, execute, queryAsSystem, executeAsSystem } from "@/lib/
 import { createAuditLog } from "@/lib/server/crm";
 import { getLeadForTenant } from "@/lib/repositories/leads-postgres";
 import { getOpportunityForTenant } from "@/lib/repositories/opportunities-postgres";
+import { requireTenantId } from "@/lib/server/tenant-guard";
 
 type TenantUser = {
   id: string;
@@ -11,11 +12,6 @@ type TenantUser = {
   isPlatformAdmin?: boolean;
   role?: { permissions?: any } | string | null;
 };
-
-function requireTenantId(user: TenantUser) {
-  if (!user.tenantId) throw new Error("TENANT_CONTEXT_REQUIRED");
-  return user.tenantId;
-}
 
 function hasRecordingAdminAccess(user: TenantUser) {
   const rolePermissions = typeof user.role === "object" && user.role ? (user.role as any).permissions : null;

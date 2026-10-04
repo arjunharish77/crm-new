@@ -5,6 +5,7 @@ import { createAuditLog, automationConditionMatches } from "@/lib/server/crm";
 import { getLeadForTenant } from "@/lib/repositories/leads-postgres";
 import { getOpportunityForTenant } from "@/lib/repositories/opportunities-postgres";
 import { listRecommendationsForRecord } from "@/lib/server/next-best-action";
+import { requireTenantId } from "@/lib/server/tenant-guard";
 
 type TenantUser = {
   id: string;
@@ -13,11 +14,6 @@ type TenantUser = {
   isPlatformAdmin?: boolean;
   role?: { permissions?: any } | string | null;
 };
-
-function requireTenantId(user: TenantUser) {
-  if (!user.tenantId) throw new Error("TENANT_CONTEXT_REQUIRED");
-  return user.tenantId;
-}
 
 function hasCallScriptAdminAccess(user: TenantUser) {
   const rolePermissions = typeof user.role === "object" && user.role ? (user.role as any).permissions : null;

@@ -1,5 +1,6 @@
 require("dotenv/config");
 
+const crypto = require("crypto");
 const jwt = require("jsonwebtoken");
 const { Pool } = require("pg");
 
@@ -108,10 +109,31 @@ async function discoverContext() {
   return { user, opportunityType, platformAdmin };
 }
 
+// Sign-in tokens must carry a live session id (round-2 plan S19), so the smoke opens a real
+// session row for each user it acts as and removes them afterwards.
+const smokeSessions = new Map();
+
+async function openSmokeSession(user) {
+  if (!user || smokeSessions.has(user.id)) return;
+  const id = `${runId}-session-${smokeSessions.size + 1}`;
+  await pool.query(
+    `insert into "UserSession" (id, "tenantId", "userId", "isImpersonation", "createdAt", "lastActiveAt", "expiresAt")
+     values ($1, $2, $3, false, now(), now(), now() + interval '2 hours')`,
+    [id, user.tenantId || null, user.id],
+  );
+  smokeSessions.set(user.id, id);
+}
+
+async function closeSmokeSessions() {
+  if (!smokeSessions.size) return;
+  await pool.query('delete from "UserSession" where id = any($1::text[])', [[...smokeSessions.values()]]);
+}
+
 function authHeaders(user, overrides = {}) {
   const token = jwt.sign(
     {
       sub: user.id,
+      sid: smokeSessions.get(user.id),
       email: user.email,
       name: user.name,
       tenantId: user.tenantId,
@@ -205,13 +227,13 @@ async function authNegativeSmoke() {
   }
 
   const bootstrapStatus = await publicApi("GET", "/api/auth/bootstrap/status", undefined, {}, [200], "bootstrap status");
-  await publicApi("POST", "/api/auth/bootstrap", {}, {}, [400], "bootstrap rejects missing fields");
+  await publicApi("POST", "/api/auth/bootstrap", {}, {}, [400, 403], "bootstrap rejects missing fields (403 when setup is turned off)");
   if (bootstrapStatus && bootstrapStatus.needsBootstrap === false) {
     await publicApi("POST", "/api/auth/bootstrap", {
       name: `${runId} Platform Admin`,
       email: `${runId}@example.com`,
       password: "TemporaryStrongPass123!",
-    }, {}, [400], "bootstrap rejects once completed");
+    }, {}, [400, 403], "bootstrap rejects once completed (403 when setup is turned off)");
   }
 }
 
@@ -228,16 +250,36 @@ async function webhookSecretSmoke(user) {
     providerMessageId: `${runId}-invalid-message`,
   }, { "x-communications-webhook-secret": "wrong-secret" }, [403], "communications webhook rejects bad secret");
 
+  // The old server-wide shared secret is refused (round-2 plan S1); only the workspace's own
+  // signed requests (x-webhook-signature over "<timestamp>.<body>") are accepted.
   if (process.env.WEBHOOK_SIGNING_SECRET) {
-    const inboundLead = await publicApi("POST", `/api/integrations/inbound/leads/${user.tenantId}`, {
+    await publicApi("POST", `/api/integrations/inbound/leads/${user.tenantId}`, {
+      name: `${runId} legacy-secret lead`,
+    }, { "x-webhook-secret": process.env.WEBHOOK_SIGNING_SECRET }, [403], "inbound lead webhook refuses the old shared secret");
+    await publicApi("POST", "/api/integrations/telephony/webhook", {
+      tenantId: user.tenantId,
+      callId: `${runId}-legacy-call`,
+    }, { "x-webhook-secret": process.env.WEBHOOK_SIGNING_SECRET }, [403], "telephony webhook refuses the old shared secret");
+  }
+  const signed = (secret, body) => {
+    const timestamp = String(Math.floor(Date.now() / 1000));
+    const signature = crypto.createHmac("sha256", secret).update(`${timestamp}.${JSON.stringify(body)}`).digest("hex");
+    return { "x-webhook-timestamp": timestamp, "x-webhook-signature": signature };
+  };
+  const inboundSettings = await api(user, "GET", "/api/integrations/inbound/settings", undefined, [200], "inbound webhook settings (admin)");
+  if (inboundSettings?.currentSecret) {
+    const leadBody = {
       name: `${runId} Inbound Webhook Lead`,
       email: `${runId}.inbound@example.com`,
       company: "Inbound Smoke",
       status: "NEW",
-    }, { "x-webhook-secret": process.env.WEBHOOK_SIGNING_SECRET }, [200], "inbound lead webhook accepts valid secret");
+    };
+    const inboundLead = await publicApi("POST", `/api/integrations/inbound/leads/${user.tenantId}`, leadBody, signed(inboundSettings.currentSecret, leadBody), [200], "inbound lead webhook accepts a signed request");
     if (inboundLead?.id) state.createdLeadIds.push(inboundLead.id);
-
-    const telephonyLog = await publicApi("POST", "/api/integrations/telephony/webhook", {
+  }
+  const telephonySetting = (await pool.query(`select config->>'webhookSecret' as secret from "IntegrationSetting" where "tenantId" = $1 and type = 'TELEPHONY' limit 1`, [user.tenantId])).rows[0];
+  if (telephonySetting?.secret) {
+    const callBody = {
       tenantId: user.tenantId,
       provider: "SMOKE",
       callId: `${runId}-call`,
@@ -246,10 +288,11 @@ async function webhookSecretSmoke(user) {
       toNumber: "+15550002000",
       status: "COMPLETED",
       duration: 42,
-    }, { "x-webhook-secret": process.env.WEBHOOK_SIGNING_SECRET }, [200], "telephony webhook accepts valid secret");
+    };
+    const telephonyLog = await publicApi("POST", "/api/integrations/telephony/webhook", callBody, signed(telephonySetting.secret, callBody), [200], "telephony webhook accepts a signed request");
     if (telephonyLog?.id) state.createdTelephonyCallLogIds.push(telephonyLog.id);
   } else {
-    console.log("skip valid inbound/telephony webhook smoke: WEBHOOK_SIGNING_SECRET is not set in the smoke process");
+    console.log("skip signed telephony webhook smoke: no telephony webhook secret configured for this workspace");
   }
 
   if (process.env.COMMUNICATIONS_WEBHOOK_SECRET) {
@@ -299,6 +342,15 @@ async function platformAdminSmoke(platformAdmin) {
   if (impersonation.data?.access_token || impersonation.data?.token) {
     throw new Error("Impersonation returned the session token in the response body");
   }
+  // While impersonating, records can be read but sign-in and access settings can't be changed (S11).
+  const impersonatedCookie = sessionCookie.split(";")[0];
+  const impersonatedHeaders = { "content-type": "application/json", cookie: impersonatedCookie };
+  await rawRequest("GET", "/api/auth/me", undefined, impersonatedHeaders, [200], "impersonation session can read");
+  await rawRequest("POST", "/api/auth/change-password", { currentPassword: "x", newPassword: "TemporaryStrongPass456!" }, impersonatedHeaders, [403], "impersonation cannot change the password");
+  await rawRequest("POST", "/api/roles", { name: `${runId} role` }, impersonatedHeaders, [403], "impersonation cannot create roles");
+  // A token without a session id is refused (S19).
+  const noSession = jwt.sign({ sub: platformAdmin.id, email: platformAdmin.email, isPlatformAdmin: true }, process.env.JWT_SECRET || "dev-secret", { expiresIn: "5m" });
+  await rawRequest("GET", "/api/auth/me", undefined, { authorization: `Bearer ${noSession}` }, [401], "token without a session id is refused");
 }
 
 async function createSmokePayout(user, partnerId, suffix, amount = 2500) {
@@ -853,6 +905,8 @@ async function dbCleanup(user) {
 
 async function main() {
   const context = await discoverContext();
+  await openSmokeSession(context.user);
+  await openSmokeSession(context.platformAdmin);
   console.log(`API regression smoke: ${baseUrl}`);
   console.log(`Tenant: ${context.user.tenantId}`);
   console.log(`User: ${context.user.email} (${context.user.id})`);
@@ -878,6 +932,7 @@ async function main() {
       console.error(`Cleanup failed: ${cleanupError.message}`);
       if (!testError) testError = cleanupError;
     }
+    await closeSmokeSessions().catch((error) => console.error(`Session cleanup failed: ${error.message}`));
     await pool.end();
   }
 

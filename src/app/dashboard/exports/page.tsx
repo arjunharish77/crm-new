@@ -1,5 +1,6 @@
 "use client";
 
+import { useVisibleInterval } from "@/hooks/use-visible-interval";
 import { ErrorState } from "@/components/common/error-state";
 
 import { PageHeader } from "@/components/layout/page-header";
@@ -209,13 +210,10 @@ export default function ExportRequestsPage() {
   const hasRunning = requests.some((item) => item.status === "QUEUED" || item.status === "RUNNING");
   // While an export is queued or running, check again every few seconds so "Ready" appears
   // without reloading.
-  React.useEffect(() => {
-    if (!hasRunning) return;
-    const timer = window.setInterval(() => {
-      apiFetch<ExportRequest[]>("/exports").then((data) => setRequests(Array.isArray(data) ? data : [])).catch(() => undefined);
-    }, 5000);
-    return () => window.clearInterval(timer);
-  }, [hasRunning]);
+  // Paused while the tab is hidden (round-2 plan P9).
+  useVisibleInterval(() => {
+    apiFetch<ExportRequest[]>("/exports").then((data) => setRequests(Array.isArray(data) ? data : [])).catch(() => undefined);
+  }, 5000, hasRunning);
 
   return (
     <div className="flex min-h-0 min-w-0 flex-col gap-5">

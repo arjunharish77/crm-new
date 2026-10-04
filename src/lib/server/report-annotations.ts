@@ -2,6 +2,7 @@ import { randomUUID } from "crypto";
 import { assertFeatureEnabled } from "@/lib/server/entitlements";
 import { execute, query, queryOne } from "@/lib/db/query";
 import { createAuditLog } from "@/lib/server/crm";
+import { requireTenantId } from "@/lib/server/tenant-guard";
 
 type TenantUser = { id: string; tenantId: string | null; isPlatformAdmin?: boolean };
 
@@ -13,11 +14,6 @@ export type AnnotationInput = {
   category: AnnotationCategory;
   occurredAt: string;
 };
-
-function requireTenantId(user: TenantUser) {
-  if (!user.tenantId) throw new Error("TENANT_CONTEXT_REQUIRED");
-  return user.tenantId;
-}
 
 // Analytics annotations (gap checklist Module 17, item 21) -- marks campaigns/events/outages/
 // policy changes/intake and fee deadlines/launch dates on charts for context.

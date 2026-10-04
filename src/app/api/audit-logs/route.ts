@@ -10,9 +10,10 @@ export async function GET(request: Request) {
     const entityType = searchParams.get("entityType") ?? "";
     const entityId = searchParams.get("entityId") ?? "";
     const action = searchParams.get("action") ?? "";
+    const search = (searchParams.get("q") ?? "").slice(0, 200);
     const page = Math.max(1, Number(searchParams.get("page") ?? 1));
     const limit = Math.max(1, Number(searchParams.get("limit") ?? 50));
-    const logs = await listAuditLogsForTenant(user, { entityType, entityId, action });
+    const logs = await listAuditLogsForTenant(user, { entityType, entityId, action, search });
     const start = (page - 1) * limit;
     const data = logs.slice(start, start + limit);
 

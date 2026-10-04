@@ -39,9 +39,11 @@ describe("db/query.ts slow-query observability", () => {
     expect(rows).toHaveLength(2);
     expect(warnSpy).toHaveBeenCalledTimes(1);
     const message = String(warnSpy.mock.calls[0][0]);
-    expect(message).toContain("SLOW_QUERY");
-    expect(message).toContain("2 rows");
-    expect(message).toContain('from "Lead"');
+    // One JSON log line (round-2 plan O5).
+    const logged = JSON.parse(message);
+    expect(logged).toMatchObject({ level: "warn", msg: "SLOW_QUERY", rowCount: 2 });
+    expect(logged.durationMs).toBeGreaterThanOrEqual(10);
+    expect(logged.query).toContain('from "Lead"');
   });
 
   it("never warns when SLOW_QUERY_THRESHOLD_MS is unset and the query is fast, regardless of row count", async () => {
@@ -63,7 +65,7 @@ describe("db/query.ts slow-query observability", () => {
 
     expect(result).toBe(3);
     expect(warnSpy).toHaveBeenCalledTimes(1);
-    expect(String(warnSpy.mock.calls[0][0])).toContain("3 rows");
+    expect(JSON.parse(String(warnSpy.mock.calls[0][0]))).toMatchObject({ msg: "SLOW_QUERY", rowCount: 3 });
   });
 
   it("does not swallow or alter a real query error", async () => {

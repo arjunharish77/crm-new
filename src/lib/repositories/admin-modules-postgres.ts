@@ -1,6 +1,7 @@
 import { randomUUID } from "crypto";
 import { execute, query, queryOne, jsonbParam } from "@/lib/db/query";
 import { withTransaction } from "@/lib/db/transaction";
+import { requireTenantId } from "@/lib/server/tenant-guard";
 
 type TenantUser = {
   id: string;
@@ -14,11 +15,6 @@ type GeneralSettings = {
   language: string;
   dateFormat: string;
 };
-
-function requireTenantId(user: TenantUser) {
-  if (!user.tenantId) throw new Error("TENANT_CONTEXT_REQUIRED");
-  return user.tenantId;
-}
 
 function asUuidOrNull(value: unknown) {
   const text = typeof value === "string" ? value : "";

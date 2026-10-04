@@ -1,11 +1,14 @@
 "use client";
 
 import "./globals.css";
+import { useEffect } from "react";
 import { BrandLogo } from "@/components/brand/brand-logo";
+import { reportClientError } from "@/lib/client-error-reporting";
 
 // Last-resort fallback when the root layout itself fails (UI/UX plan G1). It replaces the whole
 // document, so it can't rely on providers, the theme or the app shell; plain markup only.
 export default function GlobalError({ error, reset }: { error: Error & { digest?: string }; reset: () => void }) {
+    useEffect(() => { reportClientError(error); }, [error]);
     return (
         <html lang="en">
             <body className="font-sans antialiased">

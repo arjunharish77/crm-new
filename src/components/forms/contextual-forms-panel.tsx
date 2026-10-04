@@ -30,7 +30,7 @@ import {
     DropdownMenuItem,
     DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { storageGet, storageSet, storageRemove } from "@/lib/storage";
+import { storageGet, storageSet, storageRemove, userScopedKey } from "@/lib/storage";
 
 type ContextualFormsPanelProps = {
     placement: "LEAD_DETAIL" | "OPPORTUNITY_DETAIL" | "ACTIVITY_DETAIL" | "LEAD_CREATE" | "OPPORTUNITY_CREATE";
@@ -337,7 +337,7 @@ function FormRenderer({
     const [formData, setFormData] = useState<Record<string, any>>({});
     const [submitting, setSubmitting] = useState(false);
     const [submitted, setSubmitted] = useState(false);
-    const draftKey = `crm-context-form-draft:${formId}:${placement}:${context.leadId || ""}:${context.opportunityId || ""}:${context.activityId || ""}`;
+    const draftKey = userScopedKey(`crm-context-form-draft:${formId}:${placement}:${context.leadId || ""}:${context.opportunityId || ""}:${context.activityId || ""}`);
 
     // Prefill from entityData using field.mapping as the entity key
     useEffect(() => {

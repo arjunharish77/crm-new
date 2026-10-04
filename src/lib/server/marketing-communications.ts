@@ -7,6 +7,7 @@ import { countLeadAudienceForTenant, getPendingNbaCountMap, listLeadAudiencePage
 import { getCurrentUserById } from "@/lib/repositories/auth-admin-postgres";
 import { toServerQuery } from "@/components/views/smart-view-server-query";
 import { assertTemplatesSendableForTenant, expandSnippetsForTenant, queueCommunicationForTenant, renderTemplate } from "@/lib/server/communications";
+import { requireTenantId } from "@/lib/server/tenant-guard";
 
 type TenantUser = {
   id: string;
@@ -57,11 +58,6 @@ const CAMPAIGN_COLUMNS = `id, "tenantId", name, description, channel, "campaignT
   "templateId", "providerConfigId", "senderIdentityId", subject, body, tokens, "utmDefaults", "fallbackConfig",
   "throttlePerMinute", "quietHours", "scheduledAt", "approvedBy", "approvedAt", "createdBy", "updatedBy", "createdAt", "updatedAt",
   "launchState"`;
-
-function requireTenantId(user: TenantUser) {
-  if (!user.tenantId) throw new Error("TENANT_CONTEXT_REQUIRED");
-  return user.tenantId;
-}
 
 function normalizeChannel(channel: unknown): Channel {
   const value = String(channel ?? "EMAIL").toUpperCase();

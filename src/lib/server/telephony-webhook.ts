@@ -117,19 +117,16 @@ function safeEqualHex(a: string, b: string) {
 }
 
 export type TelephonyWebhookAuthResult =
-  | { ok: true; mode: "hmac" | "legacy" }
+  | { ok: true; mode: "hmac" }
   | { ok: false; reason: "MISSING_SIGNATURE" | "STALE_TIMESTAMP" | "INVALID_SIGNATURE" | "NOT_CONFIGURED" };
 
 export async function verifyTelephonyWebhookRequest(
   tenantId: string,
   rawBody: string,
-  headers: { signature?: string | null; timestamp?: string | null; legacySecret?: string | null },
+  headers: { signature?: string | null; timestamp?: string | null },
 ): Promise<TelephonyWebhookAuthResult> {
-  const legacyGlobalSecret = process.env.WEBHOOK_SIGNING_SECRET;
-  if (headers.legacySecret && legacyGlobalSecret && headers.legacySecret === legacyGlobalSecret) {
-    return { ok: true, mode: "legacy" };
-  }
-
+  // Only the workspace's own signed requests; the old server-wide shared secret is no longer
+  // accepted (round-2 plan S1).
   if (!headers.signature || !headers.timestamp) return { ok: false, reason: "MISSING_SIGNATURE" };
   const timestampSeconds = Number(headers.timestamp);
   if (!Number.isFinite(timestampSeconds)) return { ok: false, reason: "STALE_TIMESTAMP" };

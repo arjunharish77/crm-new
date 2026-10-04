@@ -1,5 +1,6 @@
 "use client";
 
+import { useConfirm } from "@/components/common/dialogs-provider";
 import { ErrorState } from "@/components/common/error-state";
 import { useEffect, useMemo, useState } from "react";
 import { apiFetch } from "@/lib/api";
@@ -62,6 +63,7 @@ const METRIC_GRAIN_OPTIONS = [
 // and Data Catalog tabs already fetch, so any object FIELD_CATALOG models (present or future)
 // is selectable here with zero UI changes needed when the backend catalog grows.
 export function MetricsSection() {
+    const confirmDialog = useConfirm();
     const [catalog, setCatalog] = useState<Record<string, string[]>>({});
     const [teams, setTeams] = useState<Array<{ id: string; name: string }>>([]);
     const [metrics, setMetrics] = useState<any[]>([]);
@@ -196,6 +198,8 @@ export function MetricsSection() {
     };
 
     const deleteMetric = async (id: string) => {
+        const metric = metrics.find((item) => item.id === id);
+        if (!(await confirmDialog({ title: `Delete ${metric?.name ? `"${metric.name}"` : "this metric"}?`, description: "Widgets and reports that use it stop showing it. This can't be undone.", confirmLabel: "Delete metric", destructive: true }))) return;
         try {
             await apiFetch(`/metrics/${id}`, { method: "DELETE" });
             setMetrics((current) => current.filter((metric) => metric.id !== id));

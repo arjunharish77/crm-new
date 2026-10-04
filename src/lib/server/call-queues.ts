@@ -1,6 +1,7 @@
 import { assertTenantModule } from "@/lib/server/module-entitlements";
 import { query, queryOne, execute } from "@/lib/db/query";
 import { createAuditLog } from "@/lib/server/crm";
+import { requireTenantId } from "@/lib/server/tenant-guard";
 
 type TenantUser = {
   id: string;
@@ -11,11 +12,6 @@ type TenantUser = {
 };
 
 const PRIORITY_ORDER: Record<string, number> = { URGENT: 4, HIGH: 3, MEDIUM: 2, LOW: 1 };
-
-function requireTenantId(user: TenantUser) {
-  if (!user.tenantId) throw new Error("TENANT_CONTEXT_REQUIRED");
-  return user.tenantId;
-}
 
 async function getTeamForTenant(tenantId: string, teamId: string) {
   return queryOne<{ id: string; name: string; leadId: string | null }>(

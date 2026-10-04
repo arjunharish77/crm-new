@@ -30,7 +30,7 @@ import { formatWorkspaceDateInput, workspaceDateInputToIso } from '@/lib/date-fo
 import { RELATIVE_DATE_TOKENS } from '@/lib/query-filters';
 import { useDebouncedValue } from '@/hooks/use-debounced-value';
 import { useAskText } from "@/components/common/dialogs-provider";
-import { storageGet, storageSet } from "@/lib/storage";
+import { storageGet, storageSet, userScopedKey } from "@/lib/storage";
 
 export interface FilterCondition {
     id: string;
@@ -62,7 +62,7 @@ function emptyGroups(): FilterGroup[] {
 function loadPresets(storageKey?: string): SavedFilterPreset[] {
     if (!storageKey || typeof window === 'undefined') return [];
     try {
-        const raw = storageGet(`advanced-filters.${storageKey}`);
+        const raw = storageGet(userScopedKey(`advanced-filters.${storageKey}`));
         const parsed = raw ? JSON.parse(raw) : [];
         return Array.isArray(parsed) ? parsed : [];
     } catch {
@@ -72,7 +72,7 @@ function loadPresets(storageKey?: string): SavedFilterPreset[] {
 
 function savePresets(storageKey: string, presets: SavedFilterPreset[]) {
     try {
-        storageSet(`advanced-filters.${storageKey}`, JSON.stringify(presets));
+        storageSet(userScopedKey(`advanced-filters.${storageKey}`), JSON.stringify(presets));
     } catch {
         // Private browsing / storage disabled -- the preset just doesn't persist this session.
     }

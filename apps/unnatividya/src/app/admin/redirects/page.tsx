@@ -25,11 +25,11 @@ export default async function RedirectsPage() {
   const redirects = await query<RedirectRow>(
     `select id, from_path, to_path, status_code, reason, is_active, hit_count, last_hit_at, updated_at
      from seo_redirect
-     order by is_active desc, updated_at desc`,
-  ).catch(() => ({ rows: [] as RedirectRow[] }));
+     order by is_active desc, updated_at desc, id desc`,
+  );
 
   return (
-    <section className="admin-shell">
+    <section className="admin-shell content-quality redirect-manager">
       <div className="container">
         <div className="admin-page-head">
           <div>
@@ -45,32 +45,15 @@ export default async function RedirectsPage() {
           <RedirectCreateForm />
         </section>
 
-        <section className="admin-table-card" style={{ marginTop: 18 }}>
-          <table className="admin-table">
-            <thead>
-              <tr>
-                {["From", "To", "Status", "Hits", "Last hit", "State", "Actions"].map((head) => <th key={head}>{head}</th>)}
-              </tr>
-            </thead>
-            <tbody>
-              {redirects.rows.map((redirect) => (
-                <tr key={redirect.id}>
-                  <td><strong>{redirect.from_path}</strong><span>{redirect.reason || "No reason added"}</span></td>
-                  <td>{redirect.to_path}</td>
-                  <td>{redirect.status_code}</td>
-                  <td>{redirect.hit_count}</td>
-                  <td>{redirect.last_hit_at ? new Date(redirect.last_hit_at).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" }) : "-"}</td>
-                  <td><span className={redirect.is_active ? "admin-status good" : "admin-status"}>{redirect.is_active ? "Active" : "Inactive"}</span></td>
-                  <td><RedirectRowActions redirect={redirect} /></td>
-                </tr>
-              ))}
-              {!redirects.rows.length ? (
-                <tr>
-                  <td colSpan={7}>No redirects configured.</td>
-                </tr>
-              ) : null}
-            </tbody>
-          </table>
+        <section aria-labelledby="configured-redirects" style={{ marginTop: 24 }}>
+          <h2 id="configured-redirects">Configured redirects</h2>
+          <div className="quality-records">{redirects.rows.map(redirect => <article className="card quality-record" key={redirect.id}>
+            <div><span className={redirect.is_active ? "admin-status good" : "admin-status"}>{redirect.is_active ? "Active" : "Inactive"}</span><h3>{redirect.from_path}</h3></div>
+            <dl><div><dt>Destination</dt><dd>{redirect.to_path}</dd></div><div><dt>HTTP status</dt><dd>{redirect.status_code} · {[301,308].includes(redirect.status_code) ? "Permanent" : "Temporary"}</dd></div><div><dt>Recorded hits</dt><dd>{redirect.hit_count}</dd></div><div><dt>Last hit (India time)</dt><dd>{redirect.last_hit_at ? new Date(redirect.last_hit_at).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" }) : "No hits recorded"}</dd></div></dl>
+            <p>{redirect.reason || "No reason added"}</p>
+            <RedirectRowActions redirect={redirect} />
+          </article>)}</div>
+          {!redirects.rows.length && <p className="card quality-empty">No redirects configured. Add an old path and its destination above.</p>}
         </section>
       </div>
     </section>

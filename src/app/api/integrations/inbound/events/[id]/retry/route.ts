@@ -1,11 +1,13 @@
 import { NextResponse } from "next/server";
 import { requireCurrentUser } from "@/lib/server/auth";
-import { badRequest, serverError, unauthorized } from "@/lib/server/http";
+import { hasIntegrationsAccess, INTEGRATIONS_FORBIDDEN_MESSAGE } from "@/lib/server/integrations-access";
+import { badRequest, forbidden, serverError, unauthorized } from "@/lib/server/http";
 import { retryInboundWebhookEvent } from "@/lib/server/inbound-webhooks";
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const user = await requireCurrentUser(request);
+    if (!hasIntegrationsAccess(user)) return forbidden(INTEGRATIONS_FORBIDDEN_MESSAGE);
     const { id } = await params;
     const result = await retryInboundWebhookEvent(user, id);
     return NextResponse.json(result);

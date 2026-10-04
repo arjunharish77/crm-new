@@ -495,16 +495,20 @@ rollups/schedules, communications outbox) without errors.
 
 ### Deploying an update
 
+GitHub Actions builds, tests and publishes each commit on `main` as
+`ghcr.io/arjunharish77/crm-new:sha-<short commit>` (round-2 plan O4; first-time setup in
+`docs/SETUP_REQUIREMENTS_GUIDE.md` section 3). On the VPS:
 ```bash
 cd /opt/unnatify-crm
-git pull
-docker compose -f deploy/vps/docker-compose.yml --env-file deploy/vps/.env up -d --build
-deploy/vps/scripts/migrate-postgres.sh   # safe/no-op if there are no new migration files
-deploy/vps/scripts/healthcheck.sh
+git pull                                     # compose file and scripts
+deploy/vps/scripts/deploy.sh sha-xxxxxxx     # the version from the Actions run summary
 ```
-`docker compose up -d --build` rebuilds only what changed and restarts `web`/`worker`
-with a brief interruption (not zero-downtime — acceptable for a first deployment; ask if
-you want a blue-green setup layered on top later).
+`deploy.sh` pulls the image, applies new migrations, restarts `web` and `worker`, waits for
+both health checks and `/api/health`, and starts the previous version again if any step fails.
+There's a brief interruption while the containers restart. Unnatividya isn't touched.
+
+Building on the server still works if needed (`docker compose ... up -d --build web worker`
+followed by `deploy/vps/scripts/migrate-postgres.sh`).
 
 ### Logs
 
@@ -552,22 +556,25 @@ deploy/vps/scripts/healthcheck.sh
 
 ### Monitoring
 
-At minimum, point an external uptime checker (UptimeRobot, Better Uptime, a cron+curl on
-another machine, etc.) at `https://app.unnatify.com/api/health` and
-`https://api.unnatify.com/api/health`, alerting on non-200 responses. There's no
-in-app APM/error-tracking wired up currently (logging is plain `console.*` to stdout,
-captured by Docker) — consider adding Sentry or similar if you want real error
-visibility beyond grepping container logs.
+- `/api/health` returns `status` ok / degraded / down with `database`, `redis`, `worker`
+  (heartbeats from each queue) and the running `version`; it is 503 only when the database is
+  unreachable. Point an external uptime checker at `https://app.unnatify.com/api/health`.
+- Platform › Failed jobs shows the details: queue counts, when each worker queue last
+  reported, and failed jobs in the last 24 hours.
+- Errors from the server, the browser and the worker go to Sentry when `SENTRY_DSN_WEB` and
+  `SENTRY_DSN_WORKER` are set (scrubbed of personal data; setup guide section 2).
+- Logs are one JSON object per line with `requestId`, `tenantId` and `userId`. A user's error
+  message shows "reference …"; find it with
+  `docker compose ... logs web | grep '<reference>'`.
 
 ### Rollback
 
-If a deploy breaks something:
+`deploy.sh` already reverts a deploy that doesn't come up healthy. To go back later:
 ```bash
-cd /opt/unnatify-crm
-git log --oneline -10          # find the last known-good commit
-git checkout <good-commit-sha>
-docker compose -f deploy/vps/docker-compose.yml --env-file deploy/vps/.env up -d --build
+deploy/vps/scripts/rollback.sh               # the version deployed before the current one
+deploy/vps/scripts/rollback.sh sha-xxxxxxx   # or a named one
 ```
+It doesn't run migrations: they only add, so an older version runs on the newer schema.
 If a migration is the problem and you need to restore data too, fall back to your most
 recent `backup-postgres.sh` dump via `restore-postgres.sh` — this is why the quarterly
 restore rehearsal matters: you want the first time you run a real restore under pressure
@@ -611,7 +618,10 @@ deliberate decision, not a forgotten one.
 ### Recommended, not yet done
 
 - Rotate `JWT_SECRET`/all cron+webhook secrets periodically, and immediately if you ever
-  suspect `deploy/vps/.env` was exposed.
+  suspect `deploy/vps/.env` was exposed. Rotating `JWT_SECRET` signs everyone out and is
+  otherwise safe once `MARKETPLACE_SECRET_ENCRYPTION_KEY` and `FILE_DOWNLOAD_SIGNING_SECRET` are
+  set on their own (production requires both). Do **not** rotate
+  `MARKETPLACE_SECRET_ENCRYPTION_KEY`: stored integration secrets would become unreadable.
 - Consider Sentry (or similar) for real error tracking beyond container log greps.
 - Consider a blue-green or rolling-restart deploy strategy if brief downtime during
   deploys becomes a problem.

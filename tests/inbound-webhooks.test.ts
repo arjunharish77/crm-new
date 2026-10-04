@@ -43,13 +43,22 @@ describe("inbound webhook governance", () => {
   });
 
   describe("verifyInboundWebhookRequest", () => {
-    it("accepts the legacy global secret for backward compatibility", async () => {
+    it("no longer accepts the old server-wide shared secret (round-2 plan S1)", async () => {
       process.env.WEBHOOK_SIGNING_SECRET = "legacy-secret";
-      const result = await verifyInboundWebhookRequest(TENANT_ID, "{}", { legacySecret: "legacy-secret" });
-      expect(result).toEqual({ ok: true, mode: "legacy" });
+      // Even a caller that still sends the old secret header gets no signature check bypass.
+      const result = await verifyInboundWebhookRequest(TENANT_ID, "{}", { legacySecret: "legacy-secret" } as any);
+      expect(result).toEqual({ ok: false, reason: "MISSING_SIGNATURE" });
+      expect(dbMocks.queryOne).not.toHaveBeenCalled();
     });
 
-    it("rejects a request with no signature or legacy secret", async () => {
+    it("rejects a correctly signed request when the workspace turned the webhook off (S14)", async () => {
+      dbMocks.queryOne.mockResolvedValueOnce({ id: "setting-1", config: { currentSecret: SECRET }, isActive: false });
+      const timestamp = String(Math.floor(Date.now() / 1000));
+      const result = await verifyInboundWebhookRequest(TENANT_ID, "{}", { timestamp, signature: sign(SECRET, timestamp, "{}") });
+      expect(result).toEqual({ ok: false, reason: "NOT_CONFIGURED" });
+    });
+
+    it("rejects a request with no signature", async () => {
       const result = await verifyInboundWebhookRequest(TENANT_ID, "{}", {});
       expect(result).toEqual({ ok: false, reason: "MISSING_SIGNATURE" });
     });

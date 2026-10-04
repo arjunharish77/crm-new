@@ -11,6 +11,7 @@ import { enqueueWebhookEvent } from "@/lib/server/webhook-outbox";
 import { enqueueAppEvent } from "@/lib/server/marketplace-events";
 import { assertSafeOutboundUrl } from "@/lib/server/outbound-request-guard";
 import { getTenantTimeZone, zonedWallClockParts, zonedWallClockToUTC } from "@/lib/server/date-format";
+import { requireTenantId } from "@/lib/server/tenant-guard";
 
 type TenantUser = {
   id: string;
@@ -121,11 +122,6 @@ type DeliveryControls = {
   throttlePerMinute: number;
   quietHours: Record<string, unknown>;
 };
-
-function requireTenantId(user: TenantUser) {
-  if (!user.tenantId) throw new Error("TENANT_CONTEXT_REQUIRED");
-  return user.tenantId;
-}
 
 function normalizeChannel(channel: unknown): Channel {
   const value = String(channel ?? "").toUpperCase();

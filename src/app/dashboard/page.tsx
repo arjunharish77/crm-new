@@ -2,10 +2,14 @@
 
 import { PageHeader } from "@/components/layout/page-header";
 import { PageTabs, usePageTab } from "@/components/common/page-tabs";
-import { DashboardManager } from "@/components/dashboard/dashboard-manager";
+import dynamic from "next/dynamic";
+import { DashboardSkeleton } from "@/components/common/skeletons";
 import { MyDay } from "@/components/dashboard/my-day";
 import { useModuleAccess } from "@/hooks/use-module-access";
 import { OnboardingChecklistBanner } from "@/components/dashboard/onboarding-checklist-banner";
+
+// The dashboard editor and its charts load only when the Dashboards tab is opened (round-2 plan P4).
+const DashboardManager = dynamic(() => import("@/components/dashboard/dashboard-manager").then((mod) => mod.DashboardManager), { ssr: false, loading: () => <DashboardSkeleton /> });
 
 const TABS = [
     { value: "my-day", label: "My day" },

@@ -8,6 +8,7 @@ import { queueCommunicationForTenant, renderTemplate } from "@/lib/server/commun
 import { applyRecordScopeClause } from "@/lib/server/record-scope";
 import { maskFieldsForUser } from "@/lib/server/field-permissions";
 import { assertSafeOutboundUrl } from "@/lib/server/outbound-request-guard";
+import { requireTenantId } from "@/lib/server/tenant-guard";
 
 type Channel = "EMAIL" | "WHATSAPP" | "SMS";
 
@@ -19,11 +20,6 @@ type TenantUser = {
   permissionTemplates?: any[];
   isPlatformAdmin?: boolean;
 };
-
-function requireTenantId(user: TenantUser) {
-  if (!user.tenantId) throw new Error("TENANT_CONTEXT_REQUIRED");
-  return user.tenantId;
-}
 
 async function requireAiEnabled(user: TenantUser) {
   const tenantId = requireTenantId(user);

@@ -7,13 +7,19 @@ import {
     DropdownMenuContent,
     DropdownMenuItem,
     DropdownMenuLabel,
+    DropdownMenuRadioGroup,
+    DropdownMenuRadioItem,
     DropdownMenuSeparator,
+    DropdownMenuSub,
+    DropdownMenuSubContent,
+    DropdownMenuSubTrigger,
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
-import { Keyboard, LogOut, Menu, Plus, Search, Settings, UserRound } from 'lucide-react';
+import { Keyboard, LogOut, Menu, Monitor, Moon, Palette, Plus, Search, Settings, Sun, UserRound } from 'lucide-react';
+import { useTheme } from 'next-themes';
 import { useAuth } from '@/providers/auth-provider';
 import { NotificationBell } from './notification-bell';
 import { AgentAvailabilityToggle } from './agent-availability-toggle';
@@ -30,6 +36,7 @@ import { BrandMark } from "@/components/brand/brand-logo";
 
 export function Header({ onToggleNavigation, navigationOpen }: { onToggleNavigation: () => void; navigationOpen: boolean }) {
     const { user, logout } = useAuth();
+    const { theme, setTheme } = useTheme();
     const router = useRouter();
     const pathname = usePathname();
     const { openHelp } = useKeyboardShortcutsHelp();
@@ -181,6 +188,22 @@ export function Header({ onToggleNavigation, navigationOpen }: { onToggleNavigat
                                     <UserRound className="size-4" />
                                     My account
                                 </DropdownMenuItem>
+                                {/* Light/dark right here; the accent colour is in My account › Preferences. */}
+                                <DropdownMenuSub>
+                                    <DropdownMenuSubTrigger>
+                                        <Palette className="size-4" />
+                                        Theme
+                                    </DropdownMenuSubTrigger>
+                                    <DropdownMenuSubContent>
+                                        <DropdownMenuRadioGroup value={theme ?? 'system'} onValueChange={setTheme}>
+                                            <DropdownMenuRadioItem value="light"><Sun className="size-4" />Light</DropdownMenuRadioItem>
+                                            <DropdownMenuRadioItem value="dark"><Moon className="size-4" />Dark</DropdownMenuRadioItem>
+                                            <DropdownMenuRadioItem value="system"><Monitor className="size-4" />Same as device</DropdownMenuRadioItem>
+                                        </DropdownMenuRadioGroup>
+                                        <DropdownMenuSeparator />
+                                        <DropdownMenuItem onSelect={() => router.push('/dashboard/account/preferences')}>Accent colour…</DropdownMenuItem>
+                                    </DropdownMenuSubContent>
+                                </DropdownMenuSub>
                                 {user?.isTenantAdmin || user?.isPlatformAdmin ? (
                                     <DropdownMenuItem onSelect={() => router.push('/dashboard/settings')}>
                                         <Settings className="size-4" />

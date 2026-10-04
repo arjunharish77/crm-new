@@ -68,7 +68,7 @@ export async function listLeadListsForTenant(user: TenantUser) {
     const members = await query<{ listId: string; leadId: string }>(
       `select "listId", "leadId"
        from "LeadListMember"
-       where "listId"::text = any($1::text[]) and ${tenantClause(user, memberValues)}`,
+       where "listId" = any($1::uuid[]) and ${tenantClause(user, memberValues)}`,
       [staticListIds.map(String), ...memberValues.slice(1)],
     );
     for (const member of members) {
@@ -137,13 +137,13 @@ export async function getLeadListForTenant(user: TenantUser, id: string) {
     return { ...list, leads: leads.data, count: leads.meta.total };
   }
 
-  const memberValues: unknown[] = [id];
+  const memberValues: unknown[] = [list.id];
   const members = await query<{ leadId: string }>(
     `select "leadId"
      from "LeadListMember"
-     where "listId"::text = $1 and ${tenantClause(user, memberValues)}
+     where "listId" = $1::uuid and ${tenantClause(user, memberValues)}
      order by "createdAt" desc`,
-    [String(id), ...memberValues.slice(1)],
+    [String(list.id), ...memberValues.slice(1)],
   );
   const leadIds = members.map((member) => member.leadId);
   if (leadIds.length === 0) return { ...list, leads: [], count: 0, hiddenCount: 0 };
@@ -197,10 +197,11 @@ export async function getLeadListPageForTenant(
 
   // Static: the visible members (the leads list's own where clause, limited to this list's
   // members), newest addition first.
-  const memberValues: unknown[] = [String(id)];
+  // Member lookups use the list's own id (a real uuid) so the listId index is used (round-2 plan B3).
+  const memberValues: unknown[] = [String(list.id)];
   const memberTenant = tenantClause(user, memberValues);
   const totalMembers = await queryOne<{ count: number }>(
-    `select count(*)::int as count from "LeadListMember" where "listId"::text = $1 and ${memberTenant}`,
+    `select count(*)::int as count from "LeadListMember" where "listId" = $1::uuid and ${memberTenant}`,
     memberValues,
   );
   const inList = (where: { sql: string; values: unknown[] }) => {
@@ -208,11 +209,11 @@ export async function getLeadListPageForTenant(
     const tenantValues: unknown[] = [];
     const tenantSql = user.tenantId ? `m."tenantId"::text = $${listParam + 1}` : `m."tenantId" is null`;
     if (user.tenantId) tenantValues.push(String(user.tenantId));
-    const member = `from "LeadListMember" m where m."listId"::text = $${listParam} and ${tenantSql} and m."leadId" = "Lead".id`;
+    const member = `from "LeadListMember" m where m."listId" = $${listParam}::uuid and ${tenantSql} and m."leadId" = "Lead".id`;
     return {
       sql: `${where.sql ? `${where.sql} and` : "where"} exists (select 1 ${member})`,
       order: `(select max(m."createdAt") ${member}) desc, "Lead".id`,
-      values: [...where.values, String(id), ...tenantValues],
+      values: [...where.values, String(list.id), ...tenantValues],
     };
   };
   const visibleWhere = inList(pgLeads.buildLeadWhere(user, null));
@@ -284,8 +285,8 @@ export async function addLeadsToLeadListForTenant(user: TenantUser, id: string, 
   const existingMembers = await query<{ leadId: string }>(
     `select "leadId"
      from "LeadListMember"
-     where "listId"::text = $1 and "leadId"::text = any($2::text[]) and ${tenantClause(user, existingValues)}`,
-    [String(id), uniqueLeadIds.map(String), ...existingValues.slice(2)],
+     where "listId" = $1::uuid and "leadId" = any($2::text[]) and ${tenantClause(user, existingValues)}`,
+    [String(list.id), uniqueLeadIds.map(String), ...existingValues.slice(2)],
   );
   const existingLeadIds = new Set(existingMembers.map((member) => member.leadId));
   const newLeadIds = uniqueLeadIds.filter((leadId) => !existingLeadIds.has(leadId));
@@ -296,10 +297,11 @@ export async function addLeadsToLeadListForTenant(user: TenantUser, id: string, 
 }
 
 export async function removeLeadFromLeadListForTenant(user: TenantUser, id: string, leadId: string) {
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(id))) return;
   const values: unknown[] = [id, leadId];
   await execute(
     `delete from "LeadListMember"
-     where "listId"::text = $1 and "leadId"::text = $2 and ${tenantClause(user, values)}`,
+     where "listId" = $1::uuid and "leadId" = $2 and ${tenantClause(user, values)}`,
     [String(id), String(leadId), ...values.slice(2)],
   );
 }

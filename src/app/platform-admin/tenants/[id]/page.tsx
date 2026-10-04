@@ -303,7 +303,7 @@ export default function TenantDetailPage() {
         const suspending = config.tenant.status !== "SUSPENDED";
         // A suspension needs a reason; both are recorded in the workspace's audit log (Section 8 #12).
         const reason = await askText(suspending
-            ? { title: "Suspend this workspace?", description: "Everyone in it is signed out straight away and can't sign in until it is unsuspended. Their data is kept.", label: "Reason (kept in the workspace's audit log)", required: true, confirmLabel: "Suspend workspace", destructive: true }
+            ? { title: "Suspend this workspace?", description: "Everyone in it is signed out straight away and can't sign in until it is unsuspended. Their data is kept.", label: "Reason (kept in the workspace's audit log)", required: true, confirmLabel: "Suspend workspace", destructive: true, typedConfirmation: config.tenant.name }
             : { title: "Unsuspend this workspace?", description: "Its users can sign in again.", label: "Note (optional, kept in the workspace's audit log)", confirmLabel: "Unsuspend" });
         if (reason === null) return;
         setSavingStatus(true);

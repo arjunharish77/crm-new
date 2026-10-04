@@ -26,8 +26,8 @@ function getClient(): Redis | null {
   }
   client = new Redis({ ...connection, lazyConnect: true, maxRetriesPerRequest: 1 });
   client.on("error", () => {
-    // Swallowed intentionally — rate limiting fails open (see checkRateLimit below)
-    // rather than taking down request handling if Redis is briefly unavailable.
+    // Swallowed intentionally: when Redis is unavailable the limiter falls back to an
+    // in-process counter (see memoryFallback below) instead of failing the request.
   });
   return client;
 }
@@ -48,10 +48,37 @@ export interface RateLimitResult {
   resetSeconds: number;
 }
 
+// Round-2 plan S9: when Redis is configured but unreachable, limits used to be skipped
+// entirely, so sign-in, two-factor and reset attempts became unlimited during an outage. They now
+// fall back to a per-process fixed-window counter: looser than the shared one (each server process
+// counts on its own) but never "unlimited" and never "locked out".
+const memoryWindows = new Map<string, { count: number; resetAt: number }>();
+
+function memoryFallback(key: string, limit: number, windowSeconds: number, increment: boolean): RateLimitResult {
+  const now = Date.now();
+  if (memoryWindows.size > 10_000) {
+    for (const [entryKey, entry] of memoryWindows) if (entry.resetAt <= now) memoryWindows.delete(entryKey);
+  }
+  let entry = memoryWindows.get(key);
+  if (!entry || entry.resetAt <= now) {
+    entry = { count: 0, resetAt: now + windowSeconds * 1000 };
+    if (increment) memoryWindows.set(key, entry);
+  }
+  if (increment) entry.count += 1;
+  const resetSeconds = Math.max(1, Math.ceil((entry.resetAt - now) / 1000));
+  const allowed = increment ? entry.count <= limit : entry.count < limit;
+  return { allowed, remaining: Math.max(0, limit - entry.count), resetSeconds };
+}
+
+/** Test hook: clears the in-process fallback counters. */
+export function resetRateLimitMemoryForTests() {
+  memoryWindows.clear();
+}
+
 /**
  * Fixed-window counter backed by Redis (already required for BullMQ, so no new
- * infra dependency). Fails OPEN if Redis is unreachable or REDIS_URL is unset —
- * a rate-limit outage should degrade to "unlimited," never to "locked out."
+ * infra dependency). With REDIS_URL unset (local development) nothing is limited; if Redis is
+ * set but unreachable, an in-process counter takes over (S9).
  */
 export async function checkRateLimit({ key, limit, windowSeconds }: RateLimitOptions): Promise<RateLimitResult> {
   const redis = getClient();
@@ -85,7 +112,7 @@ export async function checkRateLimit({ key, limit, windowSeconds }: RateLimitOpt
       resetSeconds,
     };
   } catch {
-    return { allowed: true, remaining: limit, resetSeconds: windowSeconds };
+    return memoryFallback(redisKey, limit, windowSeconds, true);
   }
 }
 
@@ -109,7 +136,7 @@ export async function peekRateLimit({ key, limit, windowSeconds }: RateLimitOpti
     const resetSeconds = ttl > 0 ? ttl : windowSeconds;
     return { allowed: count < limit, remaining: Math.max(0, limit - count), resetSeconds };
   } catch {
-    return { allowed: true, remaining: limit, resetSeconds: windowSeconds };
+    return memoryFallback(redisKey, limit, windowSeconds, false);
   }
 }
 

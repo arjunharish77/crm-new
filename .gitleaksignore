@@ -1,0 +1,5 @@
+# Reviewed false positives (round-2 plan O6): an example Idempotency-Key in an API doc,
+# a sentence of prose, and a test user's id in the regression script. Anything new still fails CI.
+80bb5bd8487ba87ecc4bee4b1802a27c9fd71d90:docs/CRM_CREATE_API.md:generic-api-key:92
+80bb5bd8487ba87ecc4bee4b1802a27c9fd71d90:28_UI_IMPLEMENTATION_PROGRESS.md:generic-api-key:369
+26497f83a2fff5951526f74ec8c3234564b2da9d:scripts/api-regression-smoke.js:generic-api-key:8
