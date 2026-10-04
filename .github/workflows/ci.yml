@@ -1,8 +1,9 @@
 # Round-2 plan O6, T1 and O4. Every push and pull request: lockfile and settings checks, type
 # check, lint, unit tests, migrations on a fresh database, every database smoke test, the
 # production build, the API regression against that build, secret and dependency scans, and the
-# Docker image with an image scan. On main, the tested image is published to GitHub Container
-# Registry as sha-<short commit> and latest; the VPS deploys it with deploy/vps/scripts/deploy.sh.
+# Docker image with an image scan. Publishing to GitHub Container Registry (sha-<short commit> and
+# latest, deployed with deploy/vps/scripts/deploy.sh) is off until the repository variable
+# PUBLISH_IMAGE is set to true (Settings › Secrets and variables › Actions › Variables).
 name: CI
 
 on:
@@ -145,7 +146,7 @@ jobs:
         run: npm audit --omit=dev --audit-level=high
 
   image:
-    name: Docker image (scan; publish on main)
+    name: Docker image (build and scan; publish when enabled)
     needs: [checks, database, security]
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -173,7 +174,7 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
       - name: Image scan (critical, with a fix available)
-        uses: aquasecurity/trivy-action@0.33.1
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: ${{ steps.meta.outputs.image }}:${{ steps.meta.outputs.version }}
           severity: CRITICAL
@@ -181,14 +182,14 @@ jobs:
           exit-code: "1"
           vuln-type: os,library
       - name: Log in to GitHub Container Registry
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.PUBLISH_IMAGE == 'true'
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Publish
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.PUBLISH_IMAGE == 'true'
         run: |
           docker tag "${{ steps.meta.outputs.image }}:${{ steps.meta.outputs.version }}" "${{ steps.meta.outputs.image }}:latest"
           docker push "${{ steps.meta.outputs.image }}:${{ steps.meta.outputs.version }}"
