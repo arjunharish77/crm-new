@@ -117,6 +117,19 @@ function usePersonalization() {
     return { loading, failed, prefs, setPrefs, save, reload: load };
 }
 
+// Mode and accent colour. Shown in My account › Preferences and in Settings › Appearance, where
+// people look for it (it stays a personal, per-browser choice either way).
+export function AppearanceSection({ title = "Appearance" }: { title?: string }) {
+    return (
+        <Section layout="split" title={title} description="Light or dark, and the accent colour. These apply on this browser.">
+            <div className="grid gap-4 sm:grid-cols-2">
+                <div className="space-y-1.5"><Label>Mode</Label><ModeToggle /></div>
+                <div className="space-y-1.5"><Label>Accent colour</Label><ColorThemePicker /></div>
+            </div>
+        </Section>
+    );
+}
+
 export function PreferencesPanel() {
     const confirm = useConfirm();
     const { loading, failed, prefs, setPrefs, save, reload } = usePersonalization();
@@ -148,12 +161,7 @@ export function PreferencesPanel() {
 
     return (
         <div className="space-y-6">
-            <Section layout="split" title="Appearance" description="Light or dark, and the accent colour. These apply on this browser.">
-                <div className="grid gap-4 sm:grid-cols-2">
-                    <div className="space-y-1.5"><Label>Mode</Label><ModeToggle /></div>
-                    <div className="space-y-1.5"><Label>Accent colour</Label><ColorThemePicker /></div>
-                </div>
-            </Section>
+            <AppearanceSection />
 
             <Section layout="split" title="Navigation" description="Where you land after signing in, and what is pinned at the top of the menu.">
                 <div className="grid gap-4 md:grid-cols-2">
