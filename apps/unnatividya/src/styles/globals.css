@@ -4245,3 +4245,33 @@ button {
 .catalog-revisions .quality-filters > * { min-width: 0; }
 .catalog-revisions .quality-filters .text-link { display: inline-flex; align-items: center; min-height: 44px; }
 .catalog-revisions > section { min-width: 0; overflow-wrap: anywhere; }
+
+/* Floating Apply now: only where the header has no Apply now of its own (it collapses into the
+   menu below 1100px) and above the phone layout, which has its own action bars. On wider screens
+   the sticky header's button is always in view, so a second floating one only covered content. */
+@media (min-width: 1101px) {
+  .uv-sticky-ctas { display: none !important; }
+}
+
+/* Course list on phones: full-width search and sort, and compact cards (no logo row, the
+   university is in the title; no specialization chips; two actions side by side). */
+@media (max-width: 640px) {
+  .uv-course-toolbar .uv-course-search, .uv-course-toolbar .uv-course-sort { width: 100% !important; flex: 1 1 100%; }
+  .uv-course-list-card { padding: 14px !important; gap: 10px !important; }
+  .uv-course-list-card .uv-course-card-logo, .uv-course-list-card .uv-course-card-specs { display: none !important; }
+  .uv-course-list-card .uv-course-card-facts { gap: 6px 14px !important; }
+  .uv-course-list-card .uv-course-card-actions { display: grid !important; grid-template-columns: 1fr 1fr; min-width: 0; }
+  .uv-course-list-card .uv-course-card-actions > a:last-child { grid-column: 1 / -1; min-height: 44px; display: inline-flex; align-items: center; justify-content: center; }
+  .uv-course-list-card .uv-course-card-actions > a { height: auto !important; min-height: 44px; line-height: 1.2 !important; display: inline-flex; align-items: center; justify-content: center; }
+}
+
+/* Course page header: one recognition chip and a quieter ratings line (UI fix 5). */
+.uv-recognition-chip { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 2px; min-height: 32px; margin-bottom: 12px; padding: 4px 12px; border: 1px solid rgba(253, 181, 21, 0.6); border-radius: 999px; color: #fdd77a; font-size: 13px; font-weight: 600; text-decoration: none; }
+.uv-recognition-chip:hover { border-color: #fdb515; color: #fff; }
+.uv-recognition-chip:focus-visible { outline: 2px solid #fdb515; outline-offset: 3px; }
+.uv-course-hero-meta { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; font-size: 13px; color: #b8c4ca; }
+@media (min-width: 901px) { .stats-band-grid.uv-stats-four { grid-template-columns: repeat(4, 1fr); } }
+
+/* Article sidebar compare card: no empty gap between its heading and text (UI fix 6). */
+.article-rail .article-rail-compare h2 { margin: 0 0 6px; }
+.article-rail .article-rail-compare p { margin: 0 0 14px; }

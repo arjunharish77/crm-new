@@ -169,7 +169,7 @@ export default async function ArticlePage({ params }: { params: Promise<{ slug: 
               ))}
             </div>
           </div>
-          <div className="card course-card" style={{ background: "#F4F3FC" }}>
+          <div className="card course-card article-rail-compare" style={{ background: "#F4F3FC" }}>
             <h2>Compare course details</h2>
             <p>Compare fees and approvals side by side.</p>
             <Link href="/compare" className="btn primary" style={{ width: "100%", minHeight: 38, height: 38, fontSize: 13 }}>Open compare</Link>
@@ -178,7 +178,7 @@ export default async function ArticlePage({ params }: { params: Promise<{ slug: 
             <h2>Sources</h2>
             <div style={{ display: "flex", flexDirection: "column", gap: 6, fontSize: 13 }}>
               <a href="https://deb.ugc.ac.in/Uploads/Notices_Upload/UGC_20250909172155_1.pdf" target="_blank" rel="noopener noreferrer" style={{ color: "#544CC8" }}>
-                UGC-DEB entitlement notification
+                UGC-DEB entitlement notification (2025-26)
               </a>
               <Link href="/how-we-verify" style={{ color: "#544CC8", fontWeight: 600 }}>How we verify our data →</Link>
             </div>

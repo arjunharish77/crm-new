@@ -877,6 +877,37 @@ Implemented on 4 October 2026:
 
 Validation: TypeScript, targeted lint, script syntax, scoped whitespace and production build passed. All 42 browser checks passed across ADMIN, EDITOR and VIEWER roles and four widths, covering JSON validation, interrupted/server-failed saves, mocked success and retained values. Temporary users removed; catalog write endpoints were blocked before page load and only mocked afterward. No published content, migration or environment changes.
 
+## Seventy-third increment: release readiness on Next.js 16.3.8 and first UI fixes
+
+Implemented on 5 October 2026 (next-phase plan wave 0; see `NEXT_PHASE_PLAN_2026-10.md`):
+
+- **Security:** the website moves to Next.js 16.3.8. Version 16.1.6, which the live site still runs, has a critical remote-code-execution advisory in image optimisation (AVIF is enabled) and 29 other advisories. The Docker build already resolved 16.3.8 from the shared lockfile; `package.json` and the app lockfile now agree.
+- **Fixed before deploy:** every enquiry would have been refused. Lead and OTP routes compared the browser's Origin with `request.url`, which in the container is the bind address (`http://0.0.0.0:3100`), so a real visitor's `https://unnatividya.com` never matched and every Apply now step returned 403. `validOrigin` now compares with the public host (`X-Forwarded-Host`, `Host`) and the configured site URL. Requests from other sites are still refused. Checked locally, through a Caddy-style forwarded request and with a foreign Origin.
+- **UI fixes 1–6** (owner request):
+  1. "Ask UnnatiAI" became "Find my course".
+  2. The course list sorts by relevance by default: same degree side by side, cheaper first. The review-count and rating sorts were removed (unverified figures); old `?sort=popular`/`rating` links fall back. Phones get full-width search and sort and compact cards with the fee and duration first; the mobile course list is about 31% shorter.
+  3. The floating Apply now appears only between 641 and 1100px, where the header has no button of its own, and its phone icon was replaced.
+  4. The dark strip under the header was removed.
+  5. The course header has one recognition chip ("program status being re-checked for 2026-27") instead of four institution badges, a quieter ratings line, and no "Weekly effort" (owner decision 5).
+  6. Article sidebar spacing fixed. The false "Online MBA under ₹1 lakh" title/excerpt corrected (the catalog's lowest MBA fee is ₹1,20,000). Two excerpts no longer open with commentary on Amity's site. The UGC source is labelled 2025-26.
+- **Test maintenance:** these suites had fallen behind earlier increments and were updated:
+  - editor evidence-link count (increment 53);
+  - hidden header Tools link (increment 22);
+  - removed page cache headers (increment 6);
+  - `clamp()` font sizes and the rebuilt application page (increment 41);
+  - the new sort and floating-button rules.
+
+  The two comparison suites wait for `load`: under 16.3 the comparison pages' link prefetches stay open in the browser, although the server answers them at once.
+
+Validation:
+- Production build, TypeScript and source lint passed.
+- The readiness check passed (3 universities, 30 courses).
+- All 55 smoke suites passed against the standalone server started as in the Docker image (`node server.js`, full shared `node_modules`).
+- Desktop and mobile screenshots were reviewed.
+- Disposable fixtures were removed; no real enquiries, OTP emails or CRM deliveries.
+
+No migration or environment change beyond the pending `0004`–`0007`.
+
 ## Remaining approved work
 
 - Full field-level verification across all three universities, including international/NRI fees and regulator evidence; review and publication of corrected catalog facts.

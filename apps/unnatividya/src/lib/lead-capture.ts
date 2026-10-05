@@ -37,7 +37,29 @@ export function ownsLead(token: string, row: { edit_token_hash: string | null; e
   return a.length === b.length && timingSafeEqual(a, b);
 }
 // Accept same-origin browser writes; non-browser clients still require the capability.
+// The browser's Origin is compared with the site's public host: the proxy's X-Forwarded-Host (or
+// Host) and the configured site URL. `request.url` alone isn't enough: in the container it is the
+// server's own bind address (HOSTNAME=0.0.0.0 gives http://0.0.0.0:3100), so it never matched a
+// real visitor's https://unnatividya.com and every enquiry would get 403. A page on another site
+// can't set Host or X-Forwarded-Host, so this still rejects cross-site writes.
 export function validOrigin(request: Request) {
   const origin = request.headers.get("origin");
-  return !origin || origin === new URL(request.url).origin;
+  if (!origin) return true;
+  let originHost: string;
+  try {
+    originHost = new URL(origin).host;
+  } catch {
+    return false;
+  }
+  const allowed = new Set<string>();
+  const forwardedHost = request.headers.get("x-forwarded-host")?.split(",")[0]?.trim();
+  if (forwardedHost) allowed.add(forwardedHost);
+  const host = request.headers.get("host")?.trim();
+  if (host) allowed.add(host);
+  try { allowed.add(new URL(request.url).host); } catch { /* ignore */ }
+  const site = process.env.NEXT_PUBLIC_UNNATIVIDYA_SITE_URL;
+  if (site) {
+    try { allowed.add(new URL(site).host); } catch { /* ignore */ }
+  }
+  return allowed.has(originHost);
 }

@@ -52,7 +52,7 @@ export default async function CoursesPage() {
               style={{ display: "inline-flex", alignItems: "center", gap: 6, border: "1px solid #CFDAE6", borderRadius: 999, padding: "7px 14px", fontSize: 13, fontWeight: 600, color: "#544CC8" }}
             >
               <span style={{ width: 7, height: 7, borderRadius: "50%", background: "linear-gradient(135deg,#4F46E5,#7C3AED)", display: "inline-block" }} aria-hidden="true" />
-              Not sure? Ask UnnatiAI
+              Not sure? Find my course
             </Link>
           </div>
           </div>

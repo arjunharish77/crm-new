@@ -80,7 +80,8 @@ assert(robots.includes("/sitemap-index.xml"), "robots.ts must include sitemap in
 
 const nextConfig = fs.readFileSync(path.join(__dirname, "..", "next.config.ts"), "utf8");
 assert(nextConfig.includes("X-Robots-Tag"), "Admin/API noindex headers are missing");
-assert(nextConfig.includes("s-maxage=600"), "Public page cache headers are missing");
+// Public catalog pages read the live CMS catalog since the sixth increment, so the old s-maxage page cache was removed on purpose.
+assert(!nextConfig.includes("s-maxage=600"), "Public pages must not be cached for 10 minutes: they read the live catalog");
 assert(fs.existsSync(path.join(__dirname, "..", "src", "proxy.ts")), "Admin auth proxy is missing");
 
 console.log(`Route smoke passed: ${expectedPublicPages.length} public pages, ${expectedAdminPages.length} admin pages, ${expectedApiRoutes.length} API routes.`);

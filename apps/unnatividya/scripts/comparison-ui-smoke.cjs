@@ -1,4 +1,6 @@
 // Local UI-only checks. Access responses are mocked, never OTP or lead submissions.
+// Waits for 'load', not 'networkidle': under Next.js 16.3 the comparison pages' link prefetches stay
+// open in the browser (the server answers them at once), so the network never goes idle.
 const assert=require('node:assert/strict');
 const {chromium}=require(process.env.UV_PLAYWRIGHT_MODULE||'playwright');
 const base=process.env.UV_TEST_URL||'http://localhost:3100';
@@ -8,7 +10,7 @@ let checks=0;const check=(a,b)=>{assert.deepEqual(a,b);checks++;};
  const page=await browser.newPage({viewport:{width:390,height:844},reducedMotion:'reduce'});const errors=[];page.on('pageerror',e=>errors.push(e.message));
  await page.route('**/api/compare-access',route=>route.fulfill({json:{unlocked:false}}));
  await page.route('**/api/leads{,/**}',route=>route.abort());await page.route('**/api/otp/**',route=>route.abort());
- await page.goto(base+'/compare?add=mba-muj&add=mba-muj,invalid,mba-amity&utm_source=ui-test',{waitUntil:'networkidle'});
+ await page.goto(base+'/compare?add=mba-muj&add=mba-muj,invalid,mba-amity&utm_source=ui-test',{waitUntil:'load'});
  check(await page.locator('.comparison-slot').count(),2);
  check(await page.getByRole('table').count(),0);check(await page.getByRole('heading',{name:'Unlock the full comparison'}).isVisible(),true);
  const add=page.getByRole('button',{name:'Add a program',exact:true});await add.click();
@@ -24,13 +26,13 @@ let checks=0;const check=(a,b)=>{assert.deepEqual(a,b);checks++;};
  check(await page.locator('#comparison-selection-title').evaluate(el=>el===document.activeElement),true);
  check(new URL(page.url()).searchParams.get('utm_source'),'ui-test');
  await page.goBack();check(await page.locator('.comparison-slot').count(),2);await page.goForward();check(await page.locator('.comparison-slot').count(),3);
- await page.reload({waitUntil:'networkidle'});check(await page.locator('.comparison-slot').count(),3);
+ await page.reload({waitUntil:'load'});check(await page.locator('.comparison-slot').count(),3);
  for(let i=0;i<3;i++)await page.locator('.comparison-remove').first().click();
- check(await page.locator('.comparison-slot').count(),0);await page.reload({waitUntil:'networkidle'});check(await page.locator('.comparison-slot').count(),0);
+ check(await page.locator('.comparison-slot').count(),0);await page.reload({waitUntil:'load'});check(await page.locator('.comparison-slot').count(),0);
  check(await page.getByText('Select at least two programs above to start comparing.').isVisible(),true);
  // Mock unlocked UI only; does not change the server's access policy.
  await page.unroute('**/api/compare-access');await page.route('**/api/compare-access',route=>route.fulfill({json:{unlocked:true}}));
- await page.goto(base+'/compare?add=mba-muj,mba-smu,mba-amity',{waitUntil:'networkidle'});
+ await page.goto(base+'/compare?add=mba-muj,mba-smu,mba-amity',{waitUntil:'load'});
  check(await page.getByRole('table').count(),1);check(await page.locator('thead th').count(),4);check(await page.locator('tbody tr').count(),12);
  for(const width of [320,390,768,1024,1280]){
   await page.setViewportSize({width,height:900});check(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);

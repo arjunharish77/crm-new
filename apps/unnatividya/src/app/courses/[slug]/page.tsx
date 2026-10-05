@@ -5,7 +5,6 @@ import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ApprovalBadge } from "@/components/approval-badge";
 import { JsonLd } from "@/components/json-ld";
 import { SaveButton } from "@/components/save-button";
 import { SectionPillNav } from "@/components/section-pill-nav";
@@ -117,11 +116,14 @@ export default async function CourseDetailPage({ params }: { params: Promise<{ s
             <div className="breadcrumb" style={{ marginBottom: 12, color: "#B8C4CA" }}>
               <Link href="/">Home</Link> &gt; <Link href="/courses">Courses</Link> &gt; {course.name}
             </div>
-            <div className="gold-badges" style={{ marginTop: 0, marginBottom: 12 }}>
-              {course.university.approvals.slice(0, 4).map((approval) => (
-                <ApprovalBadge label={approval} className="gold-badge" key={approval} />
-              ))}
-            </div>
+            {/* One recognition chip instead of four institution badges: the badges are university-level,
+                and this program's 2026-27 recognition is still being re-checked (next-phase plan, UI fix 5). */}
+            <Link href={`/universities/${course.university.slug}#sec-rankings`} className="uv-recognition-chip">
+              <span>University recognitions</span>
+              <span aria-hidden="true"> · </span>
+              <span>program status being re-checked for 2026-27</span>
+              <span aria-hidden="true"> →</span>
+            </Link>
             <div style={{ display: "flex", alignItems: "center", gap: 16, justifyContent: "space-between" }}>
               <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
                 <div style={{ width: 60, height: 60, background: "#fff", borderRadius: 8, flex: "none", display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden" }}>
@@ -139,9 +141,9 @@ export default async function CourseDetailPage({ params }: { params: Promise<{ s
               </div>
               <SaveButton courseId={course.id} />
             </div>
-            <div style={{ display: "flex", gap: 14, flexWrap: "wrap", marginTop: 14, fontSize: 14 }}>
-              <span><span style={{ color: "#FDB515" }}>★</span> <b>{course.rating}</b> ({course.reviews} reviews)</span>
-              <span style={{ color: "#546E7A" }}>|</span>
+            <div className="uv-course-hero-meta">
+              <span><span style={{ color: "#FDB515" }}>★</span> {course.rating} ({course.reviews} reviews)</span>
+              <span aria-hidden="true">·</span>
               <span>{course.university.learners} learners across {course.university.shortName} online programs</span>
             </div>
           </div>
@@ -150,13 +152,12 @@ export default async function CourseDetailPage({ params }: { params: Promise<{ s
 
       <div style={{ background: "#fff", borderBottom: "1px solid #EAEAEA" }}>
         <div className="container">
-          <div className="stats-band-grid">
+          <div className="stats-band-grid uv-stats-four">
             {[
               ["Duration", course.duration],
               ["Total fee", formatFee(course.fee)],
               ["Financing", course.emi],
               ["Level", `${course.level} degree`],
-              ["Weekly effort", course.weeklyHours],
             ].map(([label, value]) => (
               <div key={label}>
                 <div style={{ color: "#707070", fontSize: 12 }}>{label}</div>

@@ -27,7 +27,7 @@ const check = (actual, expected) => { assert.deepEqual(actual, expected); checks
     await page.getByLabel('Sort courses',{exact:true}).selectOption('feeAsc');
     await page.waitForURL('**sort=feeAsc');
     await page.goBack();
-    check(await page.getByLabel('Sort courses',{exact:true}).inputValue(),'popular');
+    check(await page.getByLabel('Sort courses',{exact:true}).inputValue(),'relevance');
     check(await page.getByRole('checkbox',{name:/Undergraduate/}).isChecked(),true);
     await page.goForward();check(await page.getByLabel('Sort courses',{exact:true}).inputValue(),'feeAsc');
     await page.reload({waitUntil:'networkidle'});check(await cards.count(),ugCount);
@@ -47,7 +47,7 @@ const check = (actual, expected) => { assert.deepEqual(actual, expected); checks
     await page.goto(base+'/courses?university=MUJ&q=MBA&q=BBA&maxFee=invalid&sort=unknown',{waitUntil:'networkidle'});
     check(await page.getByRole('checkbox',{name:/^MUJ/}).isChecked(),true);
     check(await page.getByLabel('Search courses',{exact:true}).inputValue(),'MBA');
-    check(await page.getByLabel('Sort courses',{exact:true}).inputValue(),'popular');
+    check(await page.getByLabel('Sort courses',{exact:true}).inputValue(),'relevance');
     check(await cards.count()>0,true);
     await page.goto(base+'/courses?maxFee=0',{waitUntil:'networkidle'});check(await cards.count(),0);
     await page.getByRole('button',{name:'Reset search and filters',exact:true}).click();

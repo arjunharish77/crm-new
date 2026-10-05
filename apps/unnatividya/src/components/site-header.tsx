@@ -91,6 +91,5 @@ function HeaderNavigation({pathname}:{pathname:string}) {
         <Link href="/lead?intent=enquire" data-open-lead className="uv-header-mobile-cta" onClick={closeNavigation}>Apply now</Link>
       </nav>
     </header>
-    <div style={{background:"#263238",color:"#fff",fontSize:12,textAlign:"center",padding:"7px 16px"}}>Compare courses, fees and eligibility · <Link href="/courses" style={{color:"#FDB515",fontWeight:600}}>Explore courses</Link></div>
   </>;
 }

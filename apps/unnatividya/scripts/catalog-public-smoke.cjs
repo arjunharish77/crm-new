@@ -63,7 +63,7 @@ async function api(role, route, method, body) {
   check((await api('ADMIN',`/api/admin/catalog-revisions/${fresh.data.id}`,'PATCH',{action:'APPLY',note:'Verify no-build fee refresh'})).status,200);
   check((await read(`/courses/${id}`)).text.includes('4,56,789'),true);
   if(page) {
-    await page.locator('a[href="/tools/emi-calculator"]').first().click();
+    await page.locator('a[href="/tools/emi-calculator"]:visible').first().click(); // the header's Tools menu link is hidden until opened
     await page.waitForURL('**/tools/emi-calculator');
     await page.locator(`#emi-course option[value="${id}"]`).waitFor({state:'attached'});
     check((await page.locator(`#emi-course option[value="${id}"]`).innerText()).includes('4,56,789'),true);

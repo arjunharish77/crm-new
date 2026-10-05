@@ -215,7 +215,7 @@ async function api(role, route, method, body) {
     check(await page.getByRole('button',{name:'Load eligibility correction',exact:true}).count(),0);
     check(await page.getByRole('heading',{name:'Eligibility evidence needs review',exact:true}).count(),1);
     const notice=page.getByRole('complementary',{name:'Eligibility evidence needs review'});
-    check(await notice.getByRole('link').count(),id==='ba-amity'?1:2);
+    check(await notice.getByRole('link').count(),id==='ba-amity'?1:3); // MSc Mathematics gained a third evidence source in increment 53
     check(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
   }
   const feeBefore=(await db.query("select to_jsonb(t) as snapshot from course t where id='majmc-amity'")).rows[0].snapshot;

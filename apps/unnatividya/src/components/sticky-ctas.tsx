@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
-import { Phone } from "lucide-react";
+import { ArrowRight } from "lucide-react";
 
 // Temporarily hidden on request -- flip back to true to re-enable. Markup/logic below is left intact.
 const SHOW_WHATSAPP = false;
@@ -40,8 +40,8 @@ export function StickyCtas() {
         title="Apply now"
         style={{ height: 46, display: "inline-flex", alignItems: "center", gap: 8, padding: "0 22px", background: "#fff", border: "1.5px solid #544CC8", color: "#544CC8", borderRadius: 999, boxShadow: "0 4px 8px rgba(36,36,36,0.12)", fontSize: 14, fontWeight: 700, whiteSpace: "nowrap" }}
       >
-        <Phone size={18} strokeWidth={2.5} aria-hidden="true" />
         Apply now
+        <ArrowRight size={18} strokeWidth={2.5} aria-hidden="true" />
       </Link>
       {SHOW_WHATSAPP ? (
         <Link

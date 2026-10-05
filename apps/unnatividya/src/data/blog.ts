@@ -55,10 +55,10 @@ export const blogPosts: BlogPost[] = [
   },
   {
     slug: "online-mba-guide",
-    title: "Online MBA under ₹1 lakh: real options compared",
+    title: "Affordable online MBA: comparing fees beyond the headline price",
     category: "Fees & EMI",
     read: "8 min read",
-    excerpt: "Three UGC-entitled MBAs under a lakh, their hidden costs, and when paying more actually pays back.",
+    excerpt: "Online MBA fees in our catalog start at ₹1,20,000. What the total fee includes, and when paying more can be worth it.",
     cover: "/blog/online-mba-guide.webp",
     publishedDate: "2026-07-14",
     body: [
@@ -647,7 +647,7 @@ export const blogPosts: BlogPost[] = [
     title: "Online B.Com vs B.Com Honours at Amity: what's the real difference?",
     category: "Fees & EMI",
     read: "6 min read",
-    excerpt: "A 55% eligibility bar, an ACCA-linked curriculum, and a ₹60,000 fee gap — plus a content mix-up on Amity's own site we found and corrected for.",
+    excerpt: "How Amity Online's B.Com and B.Com Honours differ on eligibility, curriculum and fees, and what to confirm before applying.",
     cover: "/blog/online-bcom-vs-bcom-honours-amity.webp",
     publishedDate: "2026-08-27",
     body: [
@@ -676,7 +676,7 @@ export const blogPosts: BlogPost[] = [
     title: "Online M.Com Fintech specialization at Amity, explained",
     category: "Fees & EMI",
     read: "5 min read",
-    excerpt: "A title-tag mix-up on Amity's own site made this look like a shorter certification — it isn't. Here's what we verified.",
+    excerpt: "What Amity Online's M.Com Fintech specialization covers, who it suits and what to confirm before applying.",
     cover: "/blog/online-mcom-fintech-amity-explained.webp",
     publishedDate: "2026-08-28",
     body: [

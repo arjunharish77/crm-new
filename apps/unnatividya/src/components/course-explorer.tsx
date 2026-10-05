@@ -12,7 +12,9 @@ import { type Course, type University } from "@/data/catalog";
 import { universityMedia } from "@/data/media";
 
 type CourseItem = Course & { university: University };
-type SortKey = "popular" | "feeAsc" | "feeDesc" | "rating";
+// "relevance" replaced review-count ("most reviewed") and rating sorts: both ranked by unverified
+// figures (next-phase plan T4). Older ?sort=popular / ?sort=rating links fall back to relevance.
+type SortKey = "relevance" | "feeAsc" | "feeDesc";
 
 function toggleValue(values: string[], value: string) {
   return values.includes(value) ? values.filter((item) => item !== value) : [...values, value];
@@ -43,7 +45,7 @@ export function CourseExplorer({ courses: initialCourses }: { courses: CourseIte
   const universities = [...new Set(params.getAll("university").flatMap(value=>value.split(",")).map(value=>universityOptions.find(university=>university.id===value || university.shortName===value)?.id).filter((value): value is University["id"]=>Boolean(value)))];
   const feeParam = Number(params.get("maxFee"));
   const maxFee = params.has("maxFee") && Number.isFinite(feeParam) && feeParam>=0 ? Math.min(Math.floor(feeParam),feeCeiling) : feeCeiling;
-  const sort: SortKey = ["feeAsc","feeDesc","rating"].includes(params.get("sort") || "") ? params.get("sort") as SortKey : "popular";
+  const sort: SortKey = ["feeAsc","feeDesc"].includes(params.get("sort") || "") ? params.get("sort") as SortKey : "relevance";
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
   const filterToggle = useRef<HTMLButtonElement>(null);
   function updateFilters(changes: Record<string,string | string[] | null>, replace = false) {
@@ -94,8 +96,11 @@ export function CourseExplorer({ courses: initialCourses }: { courses: CourseIte
       .sort((a, b) => {
         if (sort === "feeAsc") return a.fee - b.fee;
         if (sort === "feeDesc") return b.fee - a.fee;
-        if (sort === "rating") return b.rating - a.rating;
-        return b.reviews - a.reviews;
+        // Relevance: with a search, names that start with it, then names containing it; then the same
+        // degree side by side (easy to compare across universities), cheaper first.
+        const needle = query.trim().toLowerCase();
+        const rank = (name: string) => !needle ? 0 : name.toLowerCase().startsWith(needle) ? 0 : name.toLowerCase().includes(needle) ? 1 : 2;
+        return rank(a.name) - rank(b.name) || a.name.localeCompare(b.name) || a.fee - b.fee;
       });
 
   function clearFilters() {
@@ -194,8 +199,9 @@ export function CourseExplorer({ courses: initialCourses }: { courses: CourseIte
       </aside>
 
       <div>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8, gap: 12, flexWrap: "wrap" }}>
+        <div className="uv-course-toolbar" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8, gap: 12, flexWrap: "wrap" }}>
           <input
+            className="uv-course-search"
             value={query}
             aria-label="Search courses"
             maxLength={200}
@@ -204,11 +210,10 @@ export function CourseExplorer({ courses: initialCourses }: { courses: CourseIte
             placeholder="Search courses, universities or streams…"
             style={{ height: 40, width: 280, maxWidth: "100%", padding: "0 14px", border: "1px solid #CFDAE6", borderRadius: 4, fontSize: 14, color: "#555", outlineColor: "#544CC8", background: "#fff" }}
           />
-          <select aria-label="Sort courses" value={sort} onChange={(event) => updateFilters({sort:event.target.value==="popular"?null:event.target.value})} style={{ height: 40, padding: "0 12px", border: "1px solid #CFDAE6", borderRadius: 4, fontSize: 13, color: "#555", background: "#fff" }}>
-            <option value="popular">Sort: most reviewed</option>
+          <select className="uv-course-sort" aria-label="Sort courses" value={sort} onChange={(event) => updateFilters({sort:event.target.value==="relevance"?null:event.target.value})} style={{ height: 40, padding: "0 12px", border: "1px solid #CFDAE6", borderRadius: 4, fontSize: 13, color: "#555", background: "#fff" }}>
+            <option value="relevance">Sort: relevance</option>
             <option value="feeAsc">Fee: low to high</option>
             <option value="feeDesc">Fee: high to low</option>
-            <option value="rating">Highest rated</option>
           </select>
         </div>
         <p role="status" aria-live="polite" style={{ fontSize: 13, color: "#555", marginBottom: 8 }}>
@@ -232,7 +237,7 @@ export function CourseExplorer({ courses: initialCourses }: { courses: CourseIte
                 gap: 16,
               }}
             >
-              <div style={{ width: 56, height: 56, border: "1px solid #EAEAEA", borderRadius: 8, background: "#F7F8F9", display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden" }}>
+              <div className="uv-course-card-logo" style={{ width: 56, height: 56, border: "1px solid #EAEAEA", borderRadius: 8, background: "#F7F8F9", display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden" }}>
                 <Image src={universityMedia[item.universityId].logo} alt={`${item.university.shortName} logo`} width={44} height={44} style={{ objectFit: "contain" }} />
               </div>
               <div>
@@ -246,13 +251,14 @@ export function CourseExplorer({ courses: initialCourses }: { courses: CourseIte
                 <Link href={`/courses/${item.slug}`} style={{ fontSize: 18, fontWeight: 700, color: "#363634" }}>
                   {item.name} — {item.university.name}
                 </Link>
-                <div style={{ display: "flex", gap: 20, fontSize: 13, color: "#555", marginTop: 8, flexWrap: "wrap" }}>
-                  <span><span style={{ color: "#FDB515" }}>★</span> <b style={{ color: "#363634" }}>{item.rating}</b> ({item.reviews.toLocaleString("en-IN")} reviews)</span>
-                  <span>{item.duration}</span>
+                {/* Fee and duration first: what learners decide on. Rating last and quieter (unverified; owner deferral). */}
+                <div className="uv-course-card-facts" style={{ display: "flex", gap: 20, fontSize: 13, color: "#555", marginTop: 8, flexWrap: "wrap" }}>
                   <span><b style={{ color: "#363634" }}>{formatFee(item.fee)}</b> total</span>
+                  <span>{item.duration}</span>
                   <span>Financing: {item.emi}</span>
+                  <span style={{ color: "#707070" }}><span style={{ color: "#FDB515" }}>★</span> {item.rating} ({item.reviews.toLocaleString("en-IN")})</span>
                 </div>
-                <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 10 }}>
+                <div className="uv-course-card-specs" style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 10 }}>
                   {item.specializations.slice(0, 4).map((spec) => (
                     <span style={{ fontSize: 11, color: "#696868", background: "#F5F5F5", borderRadius: 999, padding: "3px 9px" }} key={spec}>
                       {spec}
@@ -260,7 +266,7 @@ export function CourseExplorer({ courses: initialCourses }: { courses: CourseIte
                   ))}
                 </div>
               </div>
-              <div style={{ display: "flex", flexDirection: "column", gap: 8, justifyContent: "center", minWidth: 150 }}>
+              <div className="uv-course-card-actions" style={{ display: "flex", flexDirection: "column", gap: 8, justifyContent: "center", minWidth: 150 }}>
                 <Link
                   href={`/courses/${item.slug}`}
                   data-track-event="course_card_click"
