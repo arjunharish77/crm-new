@@ -80,7 +80,8 @@ services:
     restart: unless-stopped
     env_file:
       - .env
-    command: ["npm", "run", "worker"]
+    # The same as `npm run worker`; npm isn't in the image (Dockerfile).
+    command: ["node_modules/.bin/tsx", "scripts/worker.ts"]
     volumes:
       - app-storage:/app/storage
     depends_on:

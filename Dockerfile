@@ -25,10 +25,16 @@ ENV NEXT_TELEMETRY_DISABLED=1
 ENV PORT=3000
 
 # psql is needed by scripts/db-migrate-local.js to restore db-bootstrap/base-schema.sql
-# on a brand-new database's first migration run.
+# on a brand-new database's first migration run. Debian's security updates are applied on every
+# build (round-2 plan O6: the image scan found fixed CVEs in the base image's libgnutls). npm and
+# corepack are removed: nothing runs them in the container (the worker starts with tsx directly),
+# and npm's bundled packages carried a critical advisory (tar).
 RUN apt-get update \
+  && apt-get upgrade -y --no-install-recommends \
   && apt-get install -y --no-install-recommends postgresql-client \
-  && rm -rf /var/lib/apt/lists/*
+  && rm -rf /var/lib/apt/lists/* \
+  && rm -rf /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/corepack \
+     /usr/local/bin/npm /usr/local/bin/npx /usr/local/bin/corepack
 
 RUN addgroup --system --gid 1001 nodejs \
   && adduser --system --uid 1001 nextjs \

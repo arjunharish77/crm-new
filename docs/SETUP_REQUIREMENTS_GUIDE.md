@@ -165,7 +165,7 @@ The CRM image will be built and tested by GitHub Actions and published to **GitH
    - **Require status checks to pass**: tick the CI checks once they've run at least once (typecheck, lint, tests, build, smoke tests).
 3. **Settings › Code security**: turn on **Secret scanning** and **Push protection** (free for public repositories; included with GitHub Advanced Security on private ones). Also turn on **Dependabot alerts**.
 
-CI runs four checks on every push and pull request (`.github/workflows/ci.yml`): **Typecheck, lint, unit tests**; **Migrations, database smoke tests, API regression**; **Secret and dependency scans**; **Docker image (scan; publish on main)**. Tick all four in the branch rule. Code scanning (`codeql.yml`) runs separately: it works on a public repository, and on a private one only with GitHub Advanced Security, so it isn't a required check.
+CI runs four checks on every push and pull request (`.github/workflows/ci.yml`): **Typecheck, lint, unit tests**; **Migrations, database smoke tests, API regression**; **Secret and dependency scans**; **Docker image (build and scan; publish when enabled)**. Tick all four in the branch rule. Code scanning (`codeql.yml`) runs separately: it works on a public repository, and on a private one only with GitHub Advanced Security, so it isn't a required check.
 
 Optional: **Settings › Secrets and variables › Actions › Variables** → `APP_URL` = `https://app.unnatify.com` (the default if unset; used for link-preview images built into the image).
 
@@ -185,6 +185,8 @@ read -rsp 'GitHub token: ' T; echo; echo "$T" | docker login ghcr.io -u <your-gi
 It should say `Login Succeeded`. Docker remembers this login.
 
 ### 3.3 Switch the server to published images (once)
+
+Publishing is off until you add the repository variable **`PUBLISH_IMAGE` = `true`** (Settings › Secrets and variables › Actions › Variables). Until then CI builds and scans the image but doesn't publish it, and the server keeps building its own (`$DC build web worker`).
 
 After the first green CI run on `main`, the image is at `ghcr.io/arjunharish77/crm-new` (from the repository name), tagged `sha-<first 7 characters of the commit>` and `latest`. The run's summary page shows the exact deploy command.
 
