@@ -3,7 +3,7 @@ import { cookies } from "next/headers";
 import * as pgAuth from "@/lib/repositories/auth-admin-postgres";
 import { assertGeneralRateLimit } from "@/lib/server/rate-limit";
 import { validateSession, touchSessionIfStale } from "@/lib/server/sessions";
-import { enterTenantContext, getTenantContext } from "@/lib/db/tenant-context";
+import { beginRequestContext, enterTenantContext } from "@/lib/db/tenant-context";
 import { canUseModule, moduleRequirementForRequest } from "@/lib/module-access";
 import { ModuleAccessError } from "@/lib/server/module-access-error";
 
@@ -189,14 +189,15 @@ export async function getCurrentUser(request?: Request) {
   return getUserFromToken(token);
 }
 
-export async function requireCurrentUser(request?: Request) {
+export function requireCurrentUser(request?: Request) {
+  // Round-2 plan O5: open the request's context synchronously, before any await, so the route
+  // (and its error handler) sees the workspace, user and request id that sign-in fills in.
+  if (request) beginRequestContext(request.headers.get("x-request-id"));
+  return requireCurrentUserResolved(request);
+}
+
+async function requireCurrentUserResolved(request?: Request) {
   const user = await getCurrentUser(request);
-  // Round-2 plan O5: the request id joins the tenant context for logs and error reports.
-  const requestId = request?.headers.get("x-request-id");
-  if (user && requestId) {
-    const context = getTenantContext();
-    if (context) enterTenantContext({ ...context, requestId });
-  }
 
   if (!user) {
     throw new Error("UNAUTHORIZED");

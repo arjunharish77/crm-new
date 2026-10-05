@@ -5,7 +5,7 @@ import { signMfaPendingToken, signPasswordChangeToken } from "@/lib/server/auth"
 import { issueSessionForUser } from "@/lib/server/login-flow";
 import { createAuditLog } from "@/lib/server/crm";
 import { badRequest, serverError, tooManyRequests, unauthorized } from "@/lib/server/http";
-import { enterTenantContext } from "@/lib/db/tenant-context";
+import { beginRequestContext } from "@/lib/db/tenant-context";
 import { checkRateLimit, peekRateLimit, clientIpFromRequest } from "@/lib/server/rate-limit";
 import { getEffectiveSecurityPolicy } from "@/lib/server/security-policy";
 import { resolveMfaRequirement, isPastMfaGracePeriod, isTrustedDevice } from "@/lib/server/mfa";
@@ -67,7 +67,7 @@ async function comparePasswordAgainstDummy(password: string) {
 // Round-2 plan O5: an unexpected failure (e.g. the database is unreachable) gets the normal error
 // reply with a reference, logged with this request's id, instead of an empty 500.
 export async function POST(request: Request) {
-  enterTenantContext({ tenantId: null, userId: null, roleId: null, requestId: request.headers.get("x-request-id") });
+  beginRequestContext(request.headers.get("x-request-id"));
   try {
     return await signIn(request);
   } catch (error) {

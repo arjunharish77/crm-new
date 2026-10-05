@@ -16,12 +16,36 @@ export type TenantContext = {
   roleId: string | null;
   // Round-2 plan O5: the request's id (x-request-id, set in src/proxy.ts), for logs and Sentry.
   requestId?: string | null;
+  // Set on a store opened by beginRequestContext: one request's own object, filled in place.
+  requestScoped?: boolean;
 };
 
 const storage = new AsyncLocalStorage<TenantContext>();
 
 export function enterTenantContext(context: TenantContext) {
+  // A request's own store (beginRequestContext) is filled in place: in the Next.js server a store
+  // entered inside an awaited helper wasn't visible to the route afterwards (round-2 plan O5:
+  // error logs and Sentry had no request or workspace id), but the same object is.
+  const current = storage.getStore();
+  if (current?.requestScoped) {
+    Object.assign(current, context, { requestScoped: true, requestId: context.requestId ?? current.requestId ?? null });
+    return;
+  }
   storage.enterWith(context);
+}
+
+// Opens this request's context store. Call it synchronously at the start of request handling
+// (before any await), so the store belongs to the route's own async flow; later
+// enterTenantContext calls fill it in. A store that already exists is kept.
+export function beginRequestContext(requestId: string | null | undefined) {
+  const current = storage.getStore();
+  if (current) {
+    if (requestId && !current.requestId) current.requestId = requestId;
+    return current;
+  }
+  const context: TenantContext = { tenantId: null, userId: null, roleId: null, requestId: requestId ?? null, requestScoped: true };
+  storage.enterWith(context);
+  return context;
 }
 
 export function getTenantContext(): TenantContext | null {

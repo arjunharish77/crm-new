@@ -199,6 +199,22 @@ export function applyFilterCondition(
     return;
   }
 
+  // A number field compared with something that isn't a number (an empty filter row, "abc")
+  // adds no condition, the same as an unreadable date above. It used to reach the database as
+  // `score = ''` and fail the whole list with "invalid input syntax for type integer".
+  if (kind === "number" && !["in", "not_in"].includes(op)) {
+    const toNumber = (value: unknown) => (typeof value === "number" ? value : typeof value === "string" && value.trim() !== "" ? Number(value) : NaN);
+    if (Array.isArray(rawValue)) {
+      const numbers = rawValue.map(toNumber);
+      if (!numbers.length || numbers.some((value) => !Number.isFinite(value))) return;
+      rawValue = numbers;
+    } else {
+      const number = toNumber(rawValue);
+      if (!Number.isFinite(number)) return;
+      rawValue = number;
+    }
+  }
+
   if (kind === "tags" && (op === "includes" || op === "includes_all" || op === "includes_any")) {
     const arr = (Array.isArray(rawValue) ? rawValue : [rawValue]).map(String);
     if (!arr.length) return;
