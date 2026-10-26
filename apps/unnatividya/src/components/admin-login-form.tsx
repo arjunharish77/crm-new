@@ -47,6 +47,7 @@ export function AdminLoginForm() {
       return;
     }
     setStep("done");
+    // eslint-disable-next-line @next/next/no-location-assign-relative-destination -- A full page load after sign-in renders the CMS fresh for the new session.
     window.location.assign("/admin");
     } catch { setMessageTone("error"); setMessage("Connection interrupted. Check your connection and try again."); }
     finally { setBusy(false); }
@@ -73,6 +74,7 @@ export function AdminLoginForm() {
       return;
     }
     setStep("done");
+    // eslint-disable-next-line @next/next/no-location-assign-relative-destination -- A full page load after sign-in renders the CMS fresh for the new session.
     window.location.assign("/admin");
     } catch { setMessageTone("error"); setMessage("Connection interrupted. Check your connection and try again."); }
     finally { setBusy(false); }

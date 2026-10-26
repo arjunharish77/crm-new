@@ -97,7 +97,8 @@ function iso(offsetDays) { const date = new Date(Date.now() + offsetDays * 86400
   check(guide.includes('Check in progress'), true); // mba-amity has no applied result in this test
   check(guide.includes('directly verified'), false);
 
-  const course = await browser.newPage({ viewport: { width: 390, height: 844 } });
+  // The Indian fee is checked first, so the visitor is in India whatever the runner's time zone (CI runs in UTC).
+  const course = await browser.newPage({ viewport: { width: 390, height: 844 }, timezoneId: 'Asia/Kolkata' });
   await course.goto(base + '/courses/mba-muj#sec-fees', { waitUntil: 'load' });
   const fees = course.locator('.uvcd-fees');
   check(await fees.locator('.uvcd-fee-result').innerText().then(value => value.includes('₹' + mujFees.expectedFee.toLocaleString('en-IN'))), true);
