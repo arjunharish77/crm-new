@@ -1,5 +1,7 @@
 # Unnati Vidya: website improvement master plan
 
+This document preserves the approved product requirements and the original pre-implementation audit. Statements in §14 such as “no CMS or database change has been made” describe the date that decision was recorded; many requirements were implemented in later increments. For present delivery state, remaining work and the next release, use [CURRENT_STATUS_AND_RELEASE_PLAN.md](CURRENT_STATUS_AND_RELEASE_PLAN.md) and [IMPLEMENTATION_PROGRESS.md](IMPLEMENTATION_PROGRESS.md). The detailed course/university and other page content expansion is in [CONTENT_AND_UI_EXPANSION_PLAN.md](CONTENT_AND_UI_EXPANSION_PLAN.md). Updated note: 8 October 2026; the latest code has not been pushed to the VPS. **8 October consent update:** the owner removed the optional newsletter/WhatsApp checkbox from Apply now; marketing sign-up is now a separate footer/article flow. Earlier references to a marketing checkbox in Apply now are historical.
+
 Date: 29 September 2026. Status: **owner approved phased implementation after the decisions recorded below; implementation began with contact-first lead capture.** See IMPLEMENTATION_PROGRESS.md for tested work and remaining scope.
 
 ## Confirmed owner requirements — revision 2

@@ -1,4 +1,6 @@
 // Local calculator checks; no lead or OTP submissions.
+// UI redesign 2026-10: design layout with sliders, tenure pills, navy result card and peer table;
+// the original number inputs, ranges, INR guard and formula are unchanged.
 const assert=require('node:assert/strict');
 const {chromium}=require(process.env.UV_PLAYWRIGHT_MODULE||'playwright');
 const base=process.env.UV_TEST_URL||'http://localhost:3001';
@@ -20,11 +22,31 @@ let checks=0;const check=(a,b)=>{assert.deepEqual(a,b);checks++;};
  await rate.fill('-1');check(await rate.getAttribute('aria-invalid'),'true');await rate.fill('51');check(await rate.getAttribute('aria-invalid'),'true');await rate.fill('0');
  await fee.fill('');check(await fee.getAttribute('aria-invalid'),'true');check(await page.locator('[data-emi="monthly"]').count(),0);
  await fee.fill('0');check(await amount('overall'),0);
- await page.getByLabel('Choose a program (optional)',{exact:true}).selectOption('mba-muj');check(await months.inputValue(),'24');check(Number(await fee.inputValue())>0,true);
- check(await page.getByRole('link',{name:'View selected course'}).isVisible(),true);
- await fee.fill('123456');check(await page.getByLabel('Choose a program (optional)',{exact:true}).inputValue(),'');check(await page.getByRole('link',{name:'View selected course'}).count(),0);
+ await page.getByLabel('Program (optional)',{exact:true}).selectOption('mba-muj');check(await months.inputValue(),'24');check(Number(await fee.inputValue())>0,true);
+ check(await page.getByRole('link',{name:'View program'}).isVisible(),true);
+ check(await page.getByRole('radio',{name:'24 months'}).isChecked(),true);check(await page.locator('.uvt-emi-for').innerText(),'For 24 months · Online MBA, MUJ');
+ const apply=page.locator('.uvt-emi-result').getByRole('link',{name:'Apply now',exact:true});check(await apply.getAttribute('data-open-lead'),'true');check((await apply.getAttribute('href')).includes('course=mba-muj'),true);check(await page.getByRole('link',{name:'Check loan eligibility'}).count(),0);
+ const peers=page.locator('.uvt-peer-table tbody tr');check(await peers.count()>=2,true);check(await page.locator('.uvt-peer-table tr[aria-current="true"]').count(),1);
+ check(/\b(Best|Lowest)\b/.test(await page.locator('.uvt-emi-peers').innerText()),false);
+ const other=page.locator('.uvt-peer-table tbody tr:not([aria-current]) button').first();const otherName=(await other.getAttribute('aria-label')).replace(/^Use /,'');await other.click();check((await page.locator('.uvt-peer-table tr[aria-current="true"] th').innerText()).trim().replace(' — ',', '),otherName);check(await page.getByLabel('Program (optional)',{exact:true}).inputValue()!=='mba-muj',true);
+ await page.getByLabel('Program (optional)',{exact:true}).selectOption('mba-muj');
+ await page.getByRole('radio',{name:'12 months'}).check();check(await months.inputValue(),'12');await months.fill('24');check(await page.getByRole('radio',{name:'24 months'}).isChecked(),true);
+ await page.getByLabel('Down payment slider').fill('40000');check(await down.inputValue(),'40000');check(await page.getByLabel('Down payment slider').getAttribute('aria-valuetext'),'₹40,000');
+ await page.getByLabel('Interest rate slider').fill('12');check(await rate.inputValue(),'12');await rate.fill('0');await down.fill('20000');
+ check(await page.getByRole('img',{name:/^Down payment ₹20,000, loan amount/}).count(),1);
+ await fee.fill('123456');check(await page.getByLabel('Program (optional)',{exact:true}).inputValue(),'');check(await page.getByRole('link',{name:'View program'}).count(),0);check(await page.locator('.uvt-peer-table').count(),0);
  await down.fill('10000');await months.fill('120');await rate.fill('0.01');check(await amount('monthly')>0,true);
- for(const width of [320,390,768,1024,1280]){await page.setViewportSize({width,height:900});check(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);check(await page.locator('.emi-result').evaluate(el=>el.scrollWidth<=el.clientWidth+1),true);}
- await page.setViewportSize({width:390,height:844});await page.locator('.emi-result').scrollIntoViewIfNeeded();if(process.env.UV_SCREENSHOT_PATH)await page.screenshot({path:process.env.UV_SCREENSHOT_PATH});
+ for(const width of [320,390,768,1024,1280]){await page.setViewportSize({width,height:900});check(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);check(await page.locator('.uvt-emi-result').evaluate(el=>el.scrollWidth<=el.clientWidth+1),true);}
+ await page.setViewportSize({width:390,height:844});await page.locator('.uvt-emi-result').scrollIntoViewIfNeeded();if(process.env.UV_SCREENSHOT_PATH)await page.screenshot({path:process.env.UV_SCREENSHOT_PATH});
+ check(await page.locator('.uv-mobile-action-bar, .uv-mobile-bar').count(),0);check(await page.locator('#sec-faq .uv-faq-item').count(),7);
+ // Q24: ?course= pre-selects a published program; an unknown id leaves the calculator as it opens.
+ await page.goto(base+'/tools/emi-calculator?course=mba-muj',{waitUntil:'networkidle'});check(await page.locator('#emi-course').inputValue(),'mba-muj');check(Number(await page.locator('#emi-fee').inputValue())>0,true);
+ await page.goto(base+'/tools/emi-calculator?course=not-a-course',{waitUntil:'networkidle'});check(await page.locator('#emi-course').inputValue(),'');
+ // Wave 4 A4: the optional processing fee counts in the total payable; the semester comparison only uses a published schedule.
+ await page.goto(base+'/tools/emi-calculator?course=mba-muj',{waitUntil:'networkidle'});const proc=page.getByLabel('Lender processing fee (₹, optional)');
+ const totalBefore=await amount('overall');await proc.fill('2500');check(await amount('processing'),2500);check(await amount('overall'),totalBefore+2500);check(await amount('overall'),(await amount('down'))+(await amount('repayment'))+2500);
+ await proc.fill('-1');check(await proc.getAttribute('aria-invalid'),'true');await proc.fill('0');check(await page.locator('[data-emi="processing"]').count(),0);
+ const semesters=page.getByRole('region',{name:'Ways to pay: upfront, each semester or a loan'});check(await semesters.isVisible(),true);
+ if(await semesters.locator('[data-emi="schedule-total"]').count())check((await semesters.innerText()).includes('published'),true);else check((await semesters.innerText()).includes('No semester schedule is published'),true);
  check(errors,[]);console.log(`PASS ${checks} EMI calculation/UI checks; no records or messages created.`);
 }finally{await browser.close();}})().catch(e=>{console.error(e.stack);process.exitCode=1;});

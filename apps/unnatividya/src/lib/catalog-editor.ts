@@ -19,7 +19,7 @@ export function normalizeEditorialContent(value:Record<string,unknown>) {
 
 const labels:Record<string,string>={dataQuality:"Verification status",name:"Name",short_name:"Short name",fee_inr:"Total tuition fee (INR)",duration:"Duration",stream:"Stream",city:"City",
   eligibility:"Eligibility",specializations:"Specializations",careerRoles:"Career roles",sourceUrls:"Source links",about:"About the university",established:"Year established",
-  approvals:"Approvals",overview:"Overview",emi:"EMI information",applicationFee:"Application fee",lastAdmissionDate:"Admission deadline",feePlans:"Payment plans",highlights:"Highlights",curriculum:"Curriculum"};
+  approvals:"Approvals",overview:"Overview",emi:"EMI information",applicationFee:"Application fee",lastAdmissionDate:"Admission deadline",intakes:"Confirmed intakes",categoryFees:"Student-category fees",eligibilityRules:"Structured eligibility rules",feeReview:"Fee source check",eligibilityReview:"Eligibility source check",curriculumReview:"Curriculum source check",recognition:"UGC-DEB recognition",feePlans:"Payment plans",highlights:"Highlights",curriculum:"Curriculum",programDetails:"Program learning, assessment and charges"};
 export function editorialFieldLabel(key:string) { return labels[key] || key.replaceAll("_"," "); }
 export function editorialChanges(before:Record<string,unknown>,after:Record<string,unknown>) {
   const changes:Array<{key:string;label:string;before:unknown;after:unknown}>=[];
@@ -57,5 +57,6 @@ export function updateEditorialField(content:Record<string,unknown>,key:string,n
     const quality=data.dataQuality && typeof data.dataQuality==="object" && !Array.isArray(data.dataQuality)?data.dataQuality as Record<string,unknown>:{};
     data.dataQuality={...quality,[key]:"generic"};
   }
+  if(key==="eligibility") delete data.eligibilityRules;
   return {...content,data};
 }

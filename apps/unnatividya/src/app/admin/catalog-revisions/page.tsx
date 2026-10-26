@@ -3,8 +3,19 @@ import { FeeReviewNotice } from "@/components/fee-review-notice";
 import type { CatalogWorkingDraft } from "@/lib/catalog-working-drafts";
 import eligibilityIssues from "@/data/eligibility-review-issues.json";
 import preparedEligibility from "@/data/prepared-eligibility-drafts.json";
-import preparedFees from "@/data/prepared-fee-corrections.json";
+import preparedFeesJson from "@/data/prepared-fee-corrections.json";
+import type { PreparedFeeCorrection } from "@/lib/prepared-fee-correction";
+
+const preparedFees = preparedFeesJson as PreparedFeeCorrection[];
+import preparedCategoryFees from "@/data/prepared-category-fees.json";
+import preparedRecognition from "@/data/prepared-recognition.json";
+import type { PreparedRecognition } from "@/lib/prepared-recognition";
+import type { PreparedCategoryFees } from "@/lib/prepared-category-fees";
 import preparedCurricula from "@/data/prepared-curriculum-drafts.json";
+import preparedProgramDetails from "@/data/prepared-program-details.json";
+import preparedEligibilityRules from "@/data/prepared-eligibility-rules.json";
+import type { PreparedEligibilityRules } from "@/lib/prepared-eligibility-rules";
+import type { PreparedProgramDetails } from "@/lib/prepared-program-details";
 import type { Metadata } from "next";
 import { redirect, notFound } from "next/navigation";
 import { getAdminSession } from "@/lib/admin-auth";
@@ -56,6 +67,6 @@ export default async function CatalogRevisionsPage({ searchParams }: { searchPar
   const rows = revisions.rows.map(row=>({...row,created_at:new Date(row.created_at).toISOString()}));
   return <section className="admin-shell"><div className="container"><div className="admin-page-head"><div><span className="eyebrow">CMS review</span><h1>Catalog revisions</h1><p>{snapshot ? String(snapshot.name) : "Review proposed course and university changes."}</p></div></div>
     {entityType === "course" && params.id ? <FeeReviewNotice courseId={params.id} /> : null}
-    <CatalogRevisionPanel historyControls={historyControls} historyPagination={historyPagination} workingDraft={workingDraft} eligibilityIssue={entityType==="course"?eligibilityIssues.find(issue=>issue.courseId===params.id):undefined} key={snapshot ? JSON.stringify(snapshot) : "all"} role={session.role} entityType={entityType} entityId={params.id} snapshot={snapshot} revisions={rows} eligibilityDraft={entityType==="course"?preparedEligibility.find(draft=>draft.courseId===params.id):undefined} feeCorrection={entityType==="course"?preparedFees.find(draft=>draft.courseId===params.id):undefined} curriculumDraft={entityType==="course"?preparedCurricula.find(draft=>draft.courseId===params.id):undefined}/>
+    <CatalogRevisionPanel historyControls={historyControls} historyPagination={historyPagination} workingDraft={workingDraft} eligibilityIssue={entityType==="course"?eligibilityIssues.find(issue=>issue.courseId===params.id):undefined} key={snapshot ? JSON.stringify(snapshot) : "all"} role={session.role} entityType={entityType} entityId={params.id} snapshot={snapshot} revisions={rows} eligibilityDraft={entityType==="course"?preparedEligibility.find(draft=>draft.courseId===params.id):undefined} eligibilityRuleDraft={entityType==="course"?(preparedEligibilityRules as PreparedEligibilityRules[]).find(draft=>draft.courseId===params.id):undefined} feeCorrection={entityType==="course"?preparedFees.find(draft=>draft.courseId===params.id):undefined} categoryFeeDraft={entityType==="course"?(preparedCategoryFees as PreparedCategoryFees[]).find(draft=>draft.courseId===params.id):undefined} recognitionDraft={entityType==="course"?(preparedRecognition as PreparedRecognition[]).find(draft=>draft.courseId===params.id):undefined} curriculumDraft={entityType==="course"?preparedCurricula.find(draft=>draft.courseId===params.id):undefined} programDetailsDraft={entityType==="course"?(preparedProgramDetails as PreparedProgramDetails[]).find(draft=>draft.courseId===params.id):undefined}/>
   </div></section>;
 }

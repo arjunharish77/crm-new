@@ -1,0 +1,741 @@
+{
+ "checkedAt": "2026-10-12",
+ "scope": "All 30 programs: official program-page fee panels for the new batch, base tuition excluding promotional discounts.",
+ "method": "Direct HTTPS GET of each official program page; fee panels read in page order (MUJ: Indian, NRI, foreign; SMU: Indian, international). Extra MUJ panels after the third (a commented-out tab's panel) are ignored, as on 3 October. Amity: INR panel amounts in page order, base total before the discounted figure.",
+ "prospectusNote": "The MUJ 2026-27 combined prospectus PDF is unchanged since 3 October (same SHA-256) and still prints the earlier Indian fees.",
+ "publicationStatus": "research_only; changes prepared as CMS corrections",
+ "programs": [
+  {
+   "courseId": "ba-amity",
+   "universityId": "amity",
+   "sourceUrl": "https://amityonline.com/bachelor-of-arts-online",
+   "retrieval": "Direct HTTPS GET, HTTP 200; no form submission",
+   "pageSha256": "2bf8d06b292a632511a19acfeffa7e4660c66818801c9b97ced726fa5db228e8",
+   "catalogFeeInr": 115000,
+   "categories": [
+    {
+     "category": "INR page response; domestic applicability to confirm",
+     "currency": "INR",
+     "baseTotal": 115000,
+     "semesterFee": 19200
+    }
+   ],
+   "previousBaseTotal": 115000,
+   "officialIndianBaseInr": 115000,
+   "changedSinceCatalog": false
+  },
+  {
+   "courseId": "ba-smu",
+   "universityId": "smu",
+   "sourceUrl": "https://www.onlinemanipal.com/online-ba-degree-smu",
+   "retrieval": "Direct HTTPS GET, HTTP 200; no form submission",
+   "pageSha256": "c6b843b285561807d9cb21cdc7e434e6c3f73e7e862e82321b51b524316a366f",
+   "catalogFeeInr": 75000,
+   "categories": [
+    {
+     "category": "Indian Nationals",
+     "currency": "INR",
+     "baseTotal": 75000,
+     "semesterFee": 12500
+    },
+    {
+     "category": "International students",
+     "currency": "USD",
+     "baseTotal": 1020,
+     "semesterFee": 170
+    }
+   ],
+   "extraPanelsIgnored": 0,
+   "officialIndianBaseInr": 75000,
+   "changedSinceCatalog": false
+  },
+  {
+   "courseId": "bajmc-amity",
+   "universityId": "amity",
+   "sourceUrl": "https://amityonline.com/bachelor-of-arts-journalism-and-mass-communication-online",
+   "retrieval": "Direct HTTPS GET, HTTP 200; no form submission",
+   "pageSha256": "364964edb92909b03941b671547f413ad62f2fbd7bee67bb46d4f49f66973d51",
+   "catalogFeeInr": 190000,
+   "categories": [
+    {
+     "category": "INR page response; domestic applicability to confirm",
+     "currency": "INR",
+     "baseTotal": 190000,
+     "semesterFee": 31700
+    }
+   ],
+   "previousBaseTotal": 190000,
+   "officialIndianBaseInr": 190000,
+   "changedSinceCatalog": false
+  },
+  {
+   "courseId": "bba-amity",
+   "universityId": "amity",
+   "sourceUrl": "https://amityonline.com/bachelor-of-business-administration-online",
+   "retrieval": "Direct HTTPS GET, HTTP 200; no form submission",
+   "pageSha256": "c02044fe25c34c7126c07e3ffde015a8e2d380f1b0d2a6e5db1dcb96b1c554b9",
+   "catalogFeeInr": 199000,
+   "categories": [
+    {
+     "category": "INR page response; domestic applicability to confirm",
+     "currency": "INR",
+     "baseTotal": 199000,
+     "semesterFee": 33200
+    }
+   ],
+   "previousBaseTotal": 199000,
+   "officialIndianBaseInr": 199000,
+   "changedSinceCatalog": false
+  },
+  {
+   "courseId": "bba-muj",
+   "universityId": "muj",
+   "sourceUrl": "https://www.onlinemanipal.com/online-bba-degree-muj",
+   "retrieval": "Direct HTTPS GET, HTTP 200; no form submission",
+   "pageSha256": "87dca5ca1a95c87ac4dfd6df86e671f3c0ed10bd844174b67df68afadc520a27",
+   "catalogFeeInr": 139500,
+   "categories": [
+    {
+     "category": "Indian Nationals",
+     "currency": "INR",
+     "baseTotal": 144000,
+     "semesterFee": 24000
+    },
+    {
+     "category": "Non-Resident Indians",
+     "currency": "USD",
+     "baseTotal": 2274,
+     "semesterFee": 379
+    },
+    {
+     "category": "Foreign Nationals",
+     "currency": "USD",
+     "baseTotal": 2646,
+     "semesterFee": 441
+    }
+   ],
+   "extraPanelsIgnored": 0,
+   "officialIndianBaseInr": 144000,
+   "changedSinceCatalog": true
+  },
+  {
+   "courseId": "bba-smu",
+   "universityId": "smu",
+   "sourceUrl": "https://www.onlinemanipal.com/online-bba-degree-smu",
+   "retrieval": "Direct HTTPS GET, HTTP 200; no form submission",
+   "pageSha256": "5bb93fb79386fad5f7f3d774c93de15d6327dcc0c7873b2b735a15e4aac02868",
+   "catalogFeeInr": 90000,
+   "categories": [
+    {
+     "category": "Indian Nationals",
+     "currency": "INR",
+     "baseTotal": 90000,
+     "semesterFee": 15000
+    },
+    {
+     "category": "International students",
+     "currency": "USD",
+     "baseTotal": 1200,
+     "semesterFee": 200
+    }
+   ],
+   "extraPanelsIgnored": 0,
+   "officialIndianBaseInr": 90000,
+   "changedSinceCatalog": false
+  },
+  {
+   "courseId": "bca-amity",
+   "universityId": "amity",
+   "sourceUrl": "https://amityonline.com/bachelor-of-computer-applications-online",
+   "retrieval": "Direct HTTPS GET, HTTP 200; no form submission",
+   "pageSha256": "308eb0eb77f72471e1e6bfcd8961190056c4ec082321986c5aede8d481c5386a",
+   "catalogFeeInr": 175000,
+   "categories": [
+    {
+     "category": "INR page response; domestic applicability to confirm",
+     "currency": "INR",
+     "baseTotal": 175000,
+     "semesterFee": 29200
+    }
+   ],
+   "previousBaseTotal": 175000,
+   "officialIndianBaseInr": 175000,
+   "changedSinceCatalog": false
+  },
+  {
+   "courseId": "bca-muj",
+   "universityId": "muj",
+   "sourceUrl": "https://www.onlinemanipal.com/online-bca-degree-muj",
+   "retrieval": "Direct HTTPS GET, HTTP 200; no form submission",
+   "pageSha256": "d36660de57b082d4cd7876803c1f8ded937b14bcdc5ad24c843fec6921b04d4d",
+   "catalogFeeInr": 139500,
+   "categories": [
+    {
+     "category": "Indian Nationals",
+     "currency": "INR",
+     "baseTotal": 144000,
+     "semesterFee": 24000
+    },
+    {
+     "category": "Non-Resident Indians",
+     "currency": "USD",
+     "baseTotal": 2274,
+     "semesterFee": 379
+    },
+    {
+     "category": "Foreign Nationals",
+     "currency": "USD",
+     "baseTotal": 2646,
+     "semesterFee": 441
+    }
+   ],
+   "extraPanelsIgnored": 0,
+   "officialIndianBaseInr": 144000,
+   "changedSinceCatalog": true
+  },
+  {
+   "courseId": "bcom-amity",
+   "universityId": "amity",
+   "sourceUrl": "https://amityonline.com/bachelor-of-commerce-online",
+   "retrieval": "Direct HTTPS GET, HTTP 200; no form submission",
+   "pageSha256": "e4dd12c189fa1fa0cd0f5095cffe1fc50f4520a71476a96990b3af9ba1ecabb7",
+   "catalogFeeInr": 115000,
+   "categories": [
+    {
+     "category": "INR page response; domestic applicability to confirm",
+     "currency": "INR",
+     "baseTotal": 115000,
+     "semesterFee": 19200
+    }
+   ],
+   "previousBaseTotal": 115000,
+   "officialIndianBaseInr": 115000,
+   "changedSinceCatalog": false
+  },
+  {
+   "courseId": "bcom-honours-amity",
+   "universityId": "amity",
+   "sourceUrl": "https://amityonline.com/bachelor-of-commerce-honours",
+   "retrieval": "Direct HTTPS GET, HTTP 200; no form submission",
+   "pageSha256": "df1857fabf93e397d325bb245614e06de787912f97ebe88dcae19f950e1707bd",
+   "catalogFeeInr": 175000,
+   "categories": [
+    {
+     "category": "INR page response; domestic applicability to confirm",
+     "currency": "INR",
+     "baseTotal": 175000,
+     "semesterFee": 29200
+    }
+   ],
+   "previousBaseTotal": 175000,
+   "officialIndianBaseInr": 175000,
+   "changedSinceCatalog": false
+  },
+  {
+   "courseId": "bcom-muj",
+   "universityId": "muj",
+   "sourceUrl": "https://www.onlinemanipal.com/online-bcom-degree-muj",
+   "retrieval": "Direct HTTPS GET, HTTP 200; no form submission",
+   "pageSha256": "8cf00a7a94474b391fc3d8d6182f5172a8a2a8df8af761abed7792db8b20758c",
+   "catalogFeeInr": 99000,
+   "categories": [
+    {
+     "category": "Indian Nationals",
+     "currency": "INR",
+     "baseTotal": 105000,
+     "semesterFee": 17500
+    },
+    {
+     "category": "Non-Resident Indians",
+     "currency": "USD",
+     "baseTotal": 1458,
+     "semesterFee": 243
+    },
+    {
+     "category": "Foreign Nationals",
+     "currency": "USD",
+     "baseTotal": 1698,
+     "semesterFee": 283
+    }
+   ],
+   "extraPanelsIgnored": 1,
+   "officialIndianBaseInr": 105000,
+   "changedSinceCatalog": true
+  },
+  {
+   "courseId": "bcom-smu",
+   "universityId": "smu",
+   "sourceUrl": "https://www.onlinemanipal.com/online-bcom-degree-smu",
+   "retrieval": "Direct HTTPS GET, HTTP 200; no form submission",
+   "pageSha256": "ebaafeec28c1e5699bd7938a60c0a3b83e26010474f80ceb0e2e7bf2ab52a065",
+   "catalogFeeInr": 75000,
+   "categories": [
+    {
+     "category": "Indian Nationals",
+     "currency": "INR",
+     "baseTotal": 75000,
+     "semesterFee": 12500
+    },
+    {
+     "category": "International students",
+     "currency": "USD",
+     "baseTotal": 1020,
+     "semesterFee": 170
+    }
+   ],
+   "extraPanelsIgnored": 0,
+   "officialIndianBaseInr": 75000,
+   "changedSinceCatalog": false
+  },
+  {
+   "courseId": "ma-economics-muj",
+   "universityId": "muj",
+   "sourceUrl": "https://www.onlinemanipal.com/online-ma-economics-degree",
+   "retrieval": "Direct HTTPS GET, HTTP 200; no form submission",
+   "pageSha256": "5995b05183c27044a662782be60c7770b07020ee9883bbfc6c605e06871a3d19",
+   "catalogFeeInr": 80000,
+   "categories": [
+    {
+     "category": "Indian Nationals",
+     "currency": "INR",
+     "baseTotal": 80000,
+     "semesterFee": 20000
+    },
+    {
+     "category": "Non-Resident Indians",
+     "currency": "USD",
+     "baseTotal": 1160,
+     "semesterFee": 290
+    },
+    {
+     "category": "Foreign Nationals",
+     "currency": "USD",
+     "baseTotal": 1340,
+     "semesterFee": 335
+    }
+   ],
+   "extraPanelsIgnored": 1,
+   "officialIndianBaseInr": 80000,
+   "changedSinceCatalog": false
+  },
+  {
+   "courseId": "ma-english-smu",
+   "universityId": "smu",
+   "sourceUrl": "https://www.onlinemanipal.com/online-ma-english-degree",
+   "retrieval": "Direct HTTPS GET, HTTP 200; no form submission",
+   "pageSha256": "ff2ad0dad443588c75f7b853ba3befde31b03e962b06cb2e102b73a5c36eea7d",
+   "catalogFeeInr": 75000,
+   "categories": [
+    {
+     "category": "Indian Nationals",
+     "currency": "INR",
+     "baseTotal": 75000,
+     "semesterFee": 18750
+    },
+    {
+     "category": "International students",
+     "currency": "USD",
+     "baseTotal": 980,
+     "semesterFee": 245
+    }
+   ],
+   "extraPanelsIgnored": 0,
+   "officialIndianBaseInr": 75000,
+   "changedSinceCatalog": false
+  },
+  {
+   "courseId": "ma-political-science-smu",
+   "universityId": "smu",
+   "sourceUrl": "https://www.onlinemanipal.com/online-ma-political-science-degree",
+   "retrieval": "Direct HTTPS GET, HTTP 200; no form submission",
+   "pageSha256": "17899d2785d176a97fbb1786c9ae100877307685b593259e2dcb92c7a96aa570",
+   "catalogFeeInr": 75000,
+   "categories": [
+    {
+     "category": "Indian Nationals",
+     "currency": "INR",
+     "baseTotal": 75000,
+     "semesterFee": 18750
+    },
+    {
+     "category": "International students",
+     "currency": "USD",
+     "baseTotal": 980,
+     "semesterFee": 245
+    }
+   ],
+   "extraPanelsIgnored": 0,
+   "officialIndianBaseInr": 75000,
+   "changedSinceCatalog": false
+  },
+  {
+   "courseId": "ma-public-policy-governance-amity",
+   "universityId": "amity",
+   "sourceUrl": "https://amityonline.com/ma-public-policy",
+   "retrieval": "Direct HTTPS GET, HTTP 200; no form submission",
+   "pageSha256": "c3d21c951fa2a6935be226035b332963ac3d95da2d60e9d4e2d52f4fe2b80423",
+   "catalogFeeInr": 150000,
+   "categories": [
+    {
+     "category": "INR page response; domestic applicability to confirm",
+     "currency": "INR",
+     "baseTotal": 150000,
+     "semesterFee": 37500
+    }
+   ],
+   "previousBaseTotal": 150000,
+   "officialIndianBaseInr": 150000,
+   "changedSinceCatalog": false
+  },
+  {
+   "courseId": "ma-sociology-smu",
+   "universityId": "smu",
+   "sourceUrl": "https://www.onlinemanipal.com/online-ma-sociology-degree",
+   "retrieval": "Direct HTTPS GET, HTTP 200; no form submission",
+   "pageSha256": "ed953b81cb9d5df7fb342f1b66b445ca9c765190096de07ee2333cb3e387afa9",
+   "catalogFeeInr": 75000,
+   "categories": [
+    {
+     "category": "Indian Nationals",
+     "currency": "INR",
+     "baseTotal": 75000,
+     "semesterFee": 18750
+    },
+    {
+     "category": "International students",
+     "currency": "USD",
+     "baseTotal": 980,
+     "semesterFee": 245
+    }
+   ],
+   "extraPanelsIgnored": 0,
+   "officialIndianBaseInr": 75000,
+   "changedSinceCatalog": false
+  },
+  {
+   "courseId": "majmc-amity",
+   "universityId": "amity",
+   "sourceUrl": "https://amityonline.com/master-of-arts-journalism-and-mass-communication-online",
+   "retrieval": "Direct HTTPS GET, HTTP 200; no form submission",
+   "pageSha256": "aa78c16d7d0acfded8fcafb26baa0529412fdf185dab4ba6942e6c7b7f99fb23",
+   "catalogFeeInr": 130000,
+   "categories": [
+    {
+     "category": "INR page response; domestic applicability to confirm",
+     "currency": "INR",
+     "baseTotal": 190000,
+     "semesterFee": 47500
+    }
+   ],
+   "previousBaseTotal": 190000,
+   "officialIndianBaseInr": 190000,
+   "changedSinceCatalog": true
+  },
+  {
+   "courseId": "majmc-muj",
+   "universityId": "muj",
+   "sourceUrl": "https://www.onlinemanipal.com/online-ma-journalism-and-mass-communication",
+   "retrieval": "Direct HTTPS GET, HTTP 200; no form submission",
+   "pageSha256": "5d0647bc9c74dfbc9b4f6369b4fc4cf5d4652eedca523bf803329b18417b25bb",
+   "catalogFeeInr": 80000,
+   "categories": [
+    {
+     "category": "Indian Nationals",
+     "currency": "INR",
+     "baseTotal": 80000,
+     "semesterFee": 20000
+    },
+    {
+     "category": "Non-Resident Indians",
+     "currency": "USD",
+     "baseTotal": 1200,
+     "semesterFee": 300
+    },
+    {
+     "category": "Foreign Nationals",
+     "currency": "USD",
+     "baseTotal": 1400,
+     "semesterFee": 350
+    }
+   ],
+   "extraPanelsIgnored": 1,
+   "officialIndianBaseInr": 80000,
+   "changedSinceCatalog": false
+  },
+  {
+   "courseId": "mba-amity",
+   "universityId": "amity",
+   "sourceUrl": "https://amityonline.com/master-of-business-administration-online",
+   "retrieval": "Direct HTTPS GET, HTTP 200; no form submission",
+   "pageSha256": "c6ec5304ba9b9d3252ee38511946584025e0a449c8acddcd666e169b88839c22",
+   "catalogFeeInr": 225000,
+   "categories": [
+    {
+     "category": "INR page response; domestic applicability to confirm",
+     "currency": "INR",
+     "baseTotal": 225000,
+     "semesterFee": 56300
+    }
+   ],
+   "previousBaseTotal": 225000,
+   "officialIndianBaseInr": 225000,
+   "changedSinceCatalog": false
+  },
+  {
+   "courseId": "mba-muj",
+   "universityId": "muj",
+   "sourceUrl": "https://www.onlinemanipal.com/online-mba-manipal-university-jaipur",
+   "retrieval": "Direct HTTPS GET, HTTP 200; no form submission",
+   "pageSha256": "f1c997a8d4ec8b95277067c286ba1f604981ef05625ae9c20c6506fa62d2e4b8",
+   "catalogFeeInr": 180000,
+   "categories": [
+    {
+     "category": "Indian Nationals",
+     "currency": "INR",
+     "baseTotal": 184000,
+     "semesterFee": 46000
+    },
+    {
+     "category": "Non-Resident Indians",
+     "currency": "USD",
+     "baseTotal": 2772,
+     "semesterFee": 693
+    },
+    {
+     "category": "Foreign Nationals",
+     "currency": "USD",
+     "baseTotal": 3236,
+     "semesterFee": 809
+    }
+   ],
+   "extraPanelsIgnored": 0,
+   "officialIndianBaseInr": 184000,
+   "changedSinceCatalog": true
+  },
+  {
+   "courseId": "mba-smu",
+   "universityId": "smu",
+   "sourceUrl": "https://www.onlinemanipal.com/online-mba-degree-dual-specialization-smu",
+   "retrieval": "Direct HTTPS GET, HTTP 200; no form submission",
+   "pageSha256": "9a7ad0da76be4cf7cc07a1a93781c4367b2ddb7d8f1f729ebfd2fbbc6684d46d",
+   "catalogFeeInr": 120000,
+   "categories": [
+    {
+     "category": "Indian Nationals",
+     "currency": "INR",
+     "baseTotal": 120000,
+     "semesterFee": 30000
+    },
+    {
+     "category": "International students",
+     "currency": "USD",
+     "baseTotal": 1500,
+     "semesterFee": 375
+    }
+   ],
+   "extraPanelsIgnored": 0,
+   "officialIndianBaseInr": 120000,
+   "changedSinceCatalog": false
+  },
+  {
+   "courseId": "mca-amity",
+   "universityId": "amity",
+   "sourceUrl": "https://amityonline.com/master-of-computer-applications-online",
+   "retrieval": "Direct HTTPS GET, HTTP 200; no form submission",
+   "pageSha256": "a4d14f30993d545b23661501ead8b53b1a92186e028ad3a7d87298b56caf68aa",
+   "catalogFeeInr": 199000,
+   "categories": [
+    {
+     "category": "INR page response; domestic applicability to confirm",
+     "currency": "INR",
+     "baseTotal": 199000,
+     "semesterFee": 49800
+    }
+   ],
+   "previousBaseTotal": 199000,
+   "officialIndianBaseInr": 199000,
+   "changedSinceCatalog": false
+  },
+  {
+   "courseId": "mca-muj",
+   "universityId": "muj",
+   "sourceUrl": "https://www.onlinemanipal.com/online-mca-degree-muj",
+   "retrieval": "Direct HTTPS GET, HTTP 200; no form submission",
+   "pageSha256": "e133a0341739b91e8da7b2cb2f2325dd3dd63d0bc21c276a969cb8fb7896dafe",
+   "catalogFeeInr": 158000,
+   "categories": [
+    {
+     "category": "Indian Nationals",
+     "currency": "INR",
+     "baseTotal": 164000,
+     "semesterFee": 41000
+    },
+    {
+     "category": "Non-Resident Indians",
+     "currency": "USD",
+     "baseTotal": 2432,
+     "semesterFee": 608
+    },
+    {
+     "category": "Foreign Nationals",
+     "currency": "USD",
+     "baseTotal": 2836,
+     "semesterFee": 709
+    }
+   ],
+   "extraPanelsIgnored": 1,
+   "officialIndianBaseInr": 164000,
+   "changedSinceCatalog": true
+  },
+  {
+   "courseId": "mca-smu",
+   "universityId": "smu",
+   "sourceUrl": "https://www.onlinemanipal.com/online-mca-degree-smu",
+   "retrieval": "Direct HTTPS GET, HTTP 200; no form submission",
+   "pageSha256": "9c438ef33ca03466f708a1ab53469917946a365ae63e9c9bb449444a721d5c47",
+   "catalogFeeInr": 110000,
+   "categories": [
+    {
+     "category": "Indian Nationals",
+     "currency": "INR",
+     "baseTotal": 110000,
+     "semesterFee": 27500
+    },
+    {
+     "category": "International students",
+     "currency": "USD",
+     "baseTotal": 1360,
+     "semesterFee": 340
+    }
+   ],
+   "extraPanelsIgnored": 0,
+   "officialIndianBaseInr": 110000,
+   "changedSinceCatalog": false
+  },
+  {
+   "courseId": "mcom-amity",
+   "universityId": "amity",
+   "sourceUrl": "https://amityonline.com/master-of-commerce-financial-management-online",
+   "retrieval": "Direct HTTPS GET, HTTP 200; no form submission",
+   "pageSha256": "b4cee9a124a485b76138de80bafda2bcd3de4c3316fddd0912d095774c7b7c04",
+   "catalogFeeInr": 150000,
+   "categories": [
+    {
+     "category": "INR page response; domestic applicability to confirm",
+     "currency": "INR",
+     "baseTotal": 150000,
+     "semesterFee": 37500
+    }
+   ],
+   "previousBaseTotal": 150000,
+   "officialIndianBaseInr": 150000,
+   "changedSinceCatalog": false
+  },
+  {
+   "courseId": "mcom-muj",
+   "universityId": "muj",
+   "sourceUrl": "https://www.onlinemanipal.com/online-mcom-degree-muj",
+   "retrieval": "Direct HTTPS GET, HTTP 200; no form submission",
+   "pageSha256": "f549e6de35f5aece79302b8a9215ac869ef02f330e773119cbad4421a43755bc",
+   "catalogFeeInr": 108000,
+   "categories": [
+    {
+     "category": "Indian Nationals",
+     "currency": "INR",
+     "baseTotal": 108000,
+     "semesterFee": 27000
+    },
+    {
+     "category": "Non-Resident Indians",
+     "currency": "USD",
+     "baseTotal": 1620,
+     "semesterFee": 405
+    },
+    {
+     "category": "Foreign Nationals",
+     "currency": "USD",
+     "baseTotal": 1892,
+     "semesterFee": 473
+    }
+   ],
+   "extraPanelsIgnored": 1,
+   "officialIndianBaseInr": 108000,
+   "changedSinceCatalog": false
+  },
+  {
+   "courseId": "mcom-smu",
+   "universityId": "smu",
+   "sourceUrl": "https://www.onlinemanipal.com/online-mcom-degree-smu",
+   "retrieval": "Direct HTTPS GET, HTTP 200; no form submission",
+   "pageSha256": "d257a90c36c6aa6821509749a2feec83af4d3d399ce7e1c24fe67d31932b3d97",
+   "catalogFeeInr": 75000,
+   "categories": [
+    {
+     "category": "Indian Nationals",
+     "currency": "INR",
+     "baseTotal": 75000,
+     "semesterFee": 18750
+    },
+    {
+     "category": "International students",
+     "currency": "USD",
+     "baseTotal": 980,
+     "semesterFee": 245
+    }
+   ],
+   "extraPanelsIgnored": 0,
+   "officialIndianBaseInr": 75000,
+   "changedSinceCatalog": false
+  },
+  {
+   "courseId": "msc-data-science-amity",
+   "universityId": "amity",
+   "sourceUrl": "https://amityonline.com/msc-in-data-science",
+   "retrieval": "Direct HTTPS GET, HTTP 200; no form submission",
+   "pageSha256": "dfd9aa30d3f4d50a3c7b1739759702ce28217693b907d6086be279fa54bf9edc",
+   "catalogFeeInr": 275000,
+   "categories": [
+    {
+     "category": "INR page response; domestic applicability to confirm",
+     "currency": "INR",
+     "baseTotal": 275000,
+     "semesterFee": 68800
+    }
+   ],
+   "previousBaseTotal": 275000,
+   "officialIndianBaseInr": 275000,
+   "changedSinceCatalog": false
+  },
+  {
+   "courseId": "msc-mathematics-muj",
+   "universityId": "muj",
+   "sourceUrl": "https://www.onlinemanipal.com/online-msc-mathematics-muj",
+   "retrieval": "Direct HTTPS GET, HTTP 200; no form submission",
+   "pageSha256": "ebc680354d85a28c69f6ce312a47e5d118c22167649caea8d9966016e4b6422d",
+   "catalogFeeInr": 80000,
+   "categories": [
+    {
+     "category": "Indian Nationals",
+     "currency": "INR",
+     "baseTotal": 84000,
+     "semesterFee": 21000
+    },
+    {
+     "category": "Non-Resident Indians",
+     "currency": "USD",
+     "baseTotal": 1160,
+     "semesterFee": 290
+    },
+    {
+     "category": "Foreign Nationals",
+     "currency": "USD",
+     "baseTotal": 1340,
+     "semesterFee": 335
+    }
+   ],
+   "extraPanelsIgnored": 1,
+   "officialIndianBaseInr": 84000,
+   "changedSinceCatalog": true
+  }
+ ]
+}

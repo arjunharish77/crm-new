@@ -11,7 +11,7 @@ export default function GlobalError(props: { error: Error & { digest?: string };
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <meta name="robots" content="noindex" />
       </head>
-      <body style={{ margin: 0, background: "#fff", color: "#363634", fontFamily: "Arial, sans-serif", fontSize: 16 }}>
+      <body style={{ margin: 0, background: "#fff", color: "#16133f", fontFamily: "\"Plus Jakarta Sans\", ui-sans-serif, system-ui, -apple-system, \"Segoe UI\", Arial, sans-serif", fontSize: 16 }}>
         <main><PageErrorView {...props} /></main>
       </body>
     </html>

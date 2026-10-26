@@ -3,83 +3,87 @@ import { PublishedCatalogBoundary } from "@/components/published-catalog-boundar
 import { getPublishedCatalog } from "@/lib/catalog-snapshot-server";
 import type { Metadata } from "next";
 import Link from "next/link";
-import { CourseExplorer } from "@/components/course-explorer";
+import { Sparkles } from "lucide-react";
+import { CourseExplorer, CourseSearch } from "@/components/course-explorer";
 import { JsonLd } from "@/components/json-ld";
 import { formatFee } from "@/lib/catalog-format";
+import { allComparisonPairs } from "@/lib/comparisons";
+import { withSocial } from "@/lib/page-metadata";
 
 const SITE_URL = process.env.NEXT_PUBLIC_UNNATIVIDYA_SITE_URL || "https://unnatividya.com";
 
-export const metadata: Metadata = {
+export const metadata: Metadata = withSocial({
   title: "Online Degree Courses",
   description: "Browse UGC-approved online MBA, BBA, BCA, MCA, BCom, MCom, BA, and MA programs.",
   alternates: { canonical: "/courses" },
-};
+});
+
+// Design "Quick compare" chips. They open the public editorial comparison pages (ungated,
+// crawlable), not the OTP-gated /compare tool.
+const QUICK_COMPARE: Array<[string, string, string]> = [
+  ["MBA: MUJ vs Amity", "mba-muj", "mba-amity"],
+  ["MBA: SMU vs MUJ", "mba-smu", "mba-muj"],
+  ["BCA: MUJ vs Amity", "bca-muj", "bca-amity"],
+  ["MCA: MUJ vs SMU", "mca-muj", "mca-smu"],
+];
 
 export default async function CoursesPage() {
   const catalog = await getPublishedCatalog();
   const { courses, courseWithUniversity } = catalog;
   const items = courses.map(courseWithUniversity);
-  const shell = { maxWidth: 1200, margin: "0 auto", paddingLeft: 24, paddingRight: 24, width: "100%", boxSizing: "border-box" as const };
+  const pairs = allComparisonPairs(catalog);
+  const quickCompare = QUICK_COMPARE.map(([label, a, b]) => {
+    const pair = pairs.find((item) => [item.left.id, item.right.id].sort().join() === [a, b].sort().join());
+    return pair ? { label, href: `/compare/${pair.key}/${pair.slug}` } : null;
+  }).filter((item): item is { label: string; href: string } => Boolean(item));
 
-  // Google's "Course list" structured data — a plain ItemList of Course objects, min 3 items,
-  // description capped at 60 chars. This is the type that actually appears in Google's current
-  // Search Gallery; the per-course `Course` markup on each detail page does not (see 23_...'s §5.1).
+  // Google's course list (carousel) format: ListItem entries with a position, each holding a
+  // Course with a distinct name and a real description (technical SEO review M4).
   const courseListJsonLd = {
     "@context": "https://schema.org",
     "@type": "ItemList",
-    itemListElement: items.map((course) => ({
-      "@type": "Course",
-      url: `${SITE_URL}/courses/${course.slug}`,
-      name: course.name,
-      description: `${course.level} · ${course.duration} · ${formatFee(course.fee)}`,
-      provider: { "@type": "Organization", name: course.university.name },
+    itemListElement: items.map((course, index) => ({
+      "@type": "ListItem",
+      position: index + 1,
+      item: {
+        "@type": "Course",
+        url: `${SITE_URL}/courses/${course.slug}`,
+        name: `${course.name} (${course.university.shortName})`,
+        description: `${course.name} from ${course.university.name}: ${course.duration}, total fee ${formatFee(course.fee)}.`,
+        provider: { "@type": "CollegeOrUniversity", name: course.university.name, sameAs: `${SITE_URL}/universities/${course.university.slug}` },
+      },
     })),
   };
 
   return <PublishedCatalogBoundary>{(
-    <>
+    <div className="uvc-page">
       <JsonLd data={courseListJsonLd} />
-      <div style={{ background: "#F7F8F9", flex: 1, display: "flex", flexDirection: "column" }}>
-        <div style={{ background: "#fff", borderBottom: "1px solid #EAEAEA" }}>
-          <div style={{ ...shell, paddingTop: 28, paddingBottom: 28 }}>
-          <div style={{ color: "#707070", fontSize: 12, marginBottom: 8 }}>
-            <Link href="/" style={{ color: "#707070" }}>Home</Link> &gt; Courses
+      <section className="uvc-hero" aria-labelledby="courses-title">
+        <div className="uvc-hero-inner">
+          <nav aria-label="Breadcrumb">
+            <ol className="uv-breadcrumb">
+              <li><Link href="/">Home</Link></li>
+              <li><span aria-current="page">Courses</span></li>
+            </ol>
+          </nav>
+          <h1 id="courses-title" className="uvc-title">Online degree courses</h1>
+          <p className="uvc-sub">Online degree programs from MUJ, SMU and Amity, with listed tuition and EMI.</p>
+          <div className="uvc-search-row">
+            <CourseSearch />
+            <Link href="/recommender" className="uvc-fit"><Sparkles size={20} aria-hidden="true" />Not sure? Find my course</Link>
           </div>
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, flexWrap: "wrap" }}>
-            <h1 style={{ color: "#363634", fontSize: 28, fontWeight: 700, margin: 0 }}>Online degree courses</h1>
-            <Link
-              href="/recommender"
-              style={{ display: "inline-flex", alignItems: "center", gap: 6, border: "1px solid #CFDAE6", borderRadius: 999, padding: "7px 14px", fontSize: 13, fontWeight: 600, color: "#544CC8" }}
-            >
-              <span style={{ width: 7, height: 7, borderRadius: "50%", background: "linear-gradient(135deg,#4F46E5,#7C3AED)", display: "inline-block" }} aria-hidden="true" />
-              Not sure? Find my course
-            </Link>
-          </div>
-          </div>
+          {quickCompare.length ? <div className="uvc-quick">
+            <span id="quick-compare-label">Quick compare</span>
+            <ul aria-labelledby="quick-compare-label">
+              {quickCompare.map((item) => <li key={item.href}><Link href={item.href}>{item.label}</Link></li>)}
+            </ul>
+          </div> : null}
         </div>
+      </section>
 
-        <div style={{ background: "#F4F3FC", borderBottom: "1px solid #EAEAEA" }}>
-          <div style={{ ...shell, display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", paddingTop: 12, paddingBottom: 12 }}>
-          <details style={{width:"100%"}}><summary style={{cursor:"pointer",fontSize:14,fontWeight:600,color:"#443b9e"}}>Quick comparisons</summary>
-          <div style={{display:"flex",gap:8,flexWrap:"wrap",marginTop:12}}>
-          {[
-            ["MBA: MUJ vs Amity", "/compare?add=mba-muj,mba-amity"],
-            ["MBA: SMU vs MUJ", "/compare?add=mba-smu,mba-muj"],
-            ["BCA: MUJ vs Amity", "/compare?add=bca-muj,bca-amity"],
-            ["MCA: MUJ vs SMU", "/compare?add=mca-muj,mca-smu"],
-          ].map(([label, href]) => (
-            <Link href={href} style={{ fontSize: 13, fontWeight: 600, border: "1px solid #CFDAE6", background: "#fff", borderRadius: 999, padding: "6px 12px", color: "#363634" }} key={label}>
-              {label}
-            </Link>
-          ))}
-          </div></details>
-          </div>
-        </div>
-
-        <div style={{ ...shell, paddingTop: 28, paddingBottom: 56, flex: 1 }}>
-          <CourseExplorer courses={items} />
-        </div>
+      <div className="uvc-main">
+        <CourseExplorer courses={items} />
       </div>
-    </>
+    </div>
   )}</PublishedCatalogBoundary>;
 }

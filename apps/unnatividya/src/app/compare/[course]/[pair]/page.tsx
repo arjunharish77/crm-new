@@ -2,11 +2,21 @@ export const dynamic = "force-dynamic";
 import { PublishedCatalogBoundary } from "@/components/published-catalog-boundary";
 import { getPublishedCatalog } from "@/lib/catalog-snapshot-server";
 import type { Metadata } from "next";
+import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { ArrowRight, ExternalLink, Headset, Plus } from "lucide-react";
 import { JsonLd } from "@/components/json-ld";
-import { buildComparisonRows, comparisonFaqs, getComparisonPair } from "@/lib/comparisons";
+import { ComparisonTable } from "@/components/comparison-table";
+import { FaqAccordion } from "@/components/faq-accordion";
+import { SectionTabs } from "@/components/section-tabs";
+import { universityMedia } from "@/data/media";
+import { comparisonFaqs, comparisonSources, comparisonSummary, getComparisonPair } from "@/lib/comparisons";
+import { formatCheckedDate, sourceHost } from "@/lib/source-checks";
+import { formatFee } from "@/lib/catalog-format";
 import { getEligibilityGuideBySlug } from "@/data/guide-content";
+import { withSocial } from "@/lib/page-metadata";
+import { GroupFeeText } from "@/components/fee-group";
 
 const SITE_URL = process.env.NEXT_PUBLIC_UNNATIVIDYA_SITE_URL || "https://unnatividya.com";
 
@@ -15,22 +25,27 @@ export async function generateMetadata({ params }: { params: Promise<{ course: s
   const { course, pair: pairSlug } = await params;
   const pair = getComparisonPair(catalog, course, pairSlug);
   if (!pair) return {};
-  return {
+  return withSocial({
     title: `${pair.label}: ${pair.left.university.shortName} vs ${pair.right.university.shortName} Compared`,
     description: `${pair.label} at ${pair.left.university.name} vs ${pair.right.university.name} — fees, eligibility, placement, and approvals compared side by side, using listed course catalog information.`,
     alternates: { canonical: `/compare/${course}/${pairSlug}` },
-  };
+  });
 }
 
+// Editorial comparison (public, no gate; plan B §3.3 item 10): the Compare hero, table and tokens,
+// with the byline, section tabs, program and guide links, FAQ and right rail.
 export default async function ComparisonPage({ params }: { params: Promise<{ course: string; pair: string }> }) {
   const catalog = await getPublishedCatalog();
   const { course, pair: pairSlug } = await params;
   const pair = getComparisonPair(catalog, course, pairSlug);
   if (!pair) notFound();
 
-  const rows = buildComparisonRows([pair.left, pair.right]);
   const faqs = comparisonFaqs(pair);
+  const summary = comparisonSummary(pair);
+  const sources = comparisonSources(catalog, pair);
   const eligibilityGuide = getEligibilityGuideBySlug(`${pair.key}-eligibility`);
+  const programs = [pair.left, pair.right];
+  const versus = `${pair.left.university.shortName} vs ${pair.right.university.shortName}`;
 
   const breadcrumbJsonLd = {
     "@context": "https://schema.org",
@@ -38,7 +53,7 @@ export default async function ComparisonPage({ params }: { params: Promise<{ cou
     itemListElement: [
       { "@type": "ListItem", position: 1, name: "Home", item: SITE_URL },
       { "@type": "ListItem", position: 2, name: "Compare", item: `${SITE_URL}/compare` },
-      { "@type": "ListItem", position: 3, name: `${pair.label}: ${pair.left.university.shortName} vs ${pair.right.university.shortName}`, item: `${SITE_URL}/compare/${course}/${pairSlug}` },
+      { "@type": "ListItem", position: 3, name: `${pair.label}: ${versus}`, item: `${SITE_URL}/compare/${course}/${pairSlug}` },
     ],
   };
   const faqJsonLd = {
@@ -48,87 +63,111 @@ export default async function ComparisonPage({ params }: { params: Promise<{ cou
   };
 
   return <PublishedCatalogBoundary>{(
-    <>
+    <div className="uv-cmp-page is-editorial">
       <JsonLd data={[breadcrumbJsonLd, faqJsonLd]} />
-      <div style={{ background: "#F7F8F9" }}>
-        <div style={{ background: "#fff", borderBottom: "1px solid #EAEAEA" }}>
-          <div className="container" style={{ paddingTop: 28, paddingBottom: 28 }}>
-            <div className="breadcrumb" style={{ marginBottom: 8 }}>
-              <Link href="/">Home</Link> &gt; <Link href="/compare">Compare</Link> &gt; {pair.left.university.shortName} vs {pair.right.university.shortName}
+      <section className="uv-page-hero uv-cmp-hero" aria-labelledby="editorial-title">
+        <div className="uv-page-hero-inner">
+          <ol className="uv-breadcrumb" aria-label="Breadcrumb">
+            <li><Link href="/">Home</Link></li>
+            <li><Link href="/compare">Compare</Link></li>
+            <li aria-current="page">{versus}</li>
+          </ol>
+          <h1 id="editorial-title" className="uv-h1"><span className="uv-cmp-accent">{pair.label}</span>: {versus}</h1>
+          <p className="uv-cmp-byline">By <Link href="/authors/content-team">Content Team, Unnati Vidya</Link></p>
+          <p className="uv-cmp-lede">Compared using listed catalog information. Confirm current fees, eligibility and recognition for your admission session.</p>
+          <ul className="uv-cmp-versus" aria-label="Programs compared">
+            {programs.map(item => <li key={item.id}>
+              <span className="uv-cmp-logo"><Image src={universityMedia[item.universityId]?.logo || "/brand/favicon-32x32.png"} alt="" width={34} height={34} /></span>
+              <span><strong>{item.university.name}</strong><small>{item.name} · <GroupFeeText fee={item.fee} categoryFees={item.categoryFees} short /> · {item.duration}</small></span>
+            </li>)}
+          </ul>
+        </div>
+      </section>
+
+      <SectionTabs label="Comparison article sections" items={[
+        { label: "At a glance", href: "#editorial-summary" },
+        { label: "Comparison", href: "#editorial-comparison" },
+        { label: "Specialisations", href: "#editorial-specialisations" },
+        { label: "Program pages", href: "#editorial-programs" },
+        { label: "Sources", href: "#editorial-sources" },
+        { label: "Related guides", href: "#editorial-guides" },
+        { label: "Questions", href: "#editorial-faq" },
+      ]} />
+
+      <div className="uv-shell uv-cmp-editorial">
+        <div className="uv-cmp-editorial-main">
+          <section className="uv-cmp-block" id="editorial-summary" tabIndex={-1} aria-labelledby="editorial-summary-title">
+            <h2 id="editorial-summary-title" className="uv-h2 is-inner">At a glance</h2>
+            <dl className="uv-cmp-summary">
+              {summary.map(item => <div key={item.label}><dt>{item.label}</dt><dd>{item.text}</dd></div>)}
+            </dl>
+            <p className="uv-cmp-footnote">This page doesn&apos;t rank the programs. The right choice depends on your marks, budget, the specialisation you want and the session you are joining.</p>
+          </section>
+
+          <section className="uv-cmp-block" id="editorial-comparison" tabIndex={-1} aria-labelledby="editorial-comparison-title">
+            <h2 id="editorial-comparison-title" className="uv-h2 is-inner">Side-by-side comparison</h2>
+            <ComparisonTable courses={programs} caption={`${pair.label}: listed details for ${pair.left.university.shortName} and ${pair.right.university.shortName}`} regionLabel="University program comparison" />
+            <p className="uv-cmp-footnote">Use these details as a starting point. Check current fees, eligibility, recognition and available support on the course and official university pages before deciding.</p>
+          </section>
+
+          <section className="uv-cmp-block" id="editorial-specialisations" tabIndex={-1} aria-labelledby="editorial-specialisations-title">
+            <h2 id="editorial-specialisations-title" className="uv-h2 is-inner">Specialisations side by side</h2>
+            <div className="uv-cmp-specs">
+              {programs.map(item => <div key={item.id} className="uv-cmp-specs-col">
+                <h3>{item.university.shortName}<small>{item.specializations.length ? `${item.specializations.length} listed` : "General program"}</small></h3>
+                {item.specializations.length ? <ul>{item.specializations.map(name => <li key={name}>{name}</li>)}</ul> : <p>No specialisations are listed for this program.</p>}
+              </div>)}
             </div>
-            <h1 style={{ color: "#363634", fontSize: 28, fontWeight: 700, margin: 0 }}>
-              {pair.label}: {pair.left.university.shortName} vs {pair.right.university.shortName}
-            </h1>
-          <p className="lead-help">By <Link href="/authors/content-team">Content Team, Unnati Vidya</Link></p>
-            <div style={{ color: "#696868", fontSize: 13, marginTop: 8 }}>Compared using listed catalog information. Confirm current fees, eligibility and recognition for your admission session.</div>
+          </section>
+
+          <section className="uv-cmp-block" id="editorial-programs" tabIndex={-1} aria-labelledby="editorial-programs-title">
+            <h2 id="editorial-programs-title" className="uv-h2 is-inner">View each program in full</h2>
+            <div className="editorial-program-actions">
+              {programs.map(item => <Link key={item.id} href={`/courses/${item.slug}`} className="uv-cmp-program-link">
+                <span className="uv-cmp-logo"><Image src={universityMedia[item.universityId]?.logo || "/brand/favicon-32x32.png"} alt="" width={34} height={34} /></span>
+                <span><strong>{item.university.shortName} program page</strong><small>{item.name}, {item.university.name}</small></span>
+                <ArrowRight size={18} aria-hidden="true" />
+              </Link>)}
+            </div>
+          </section>
+
+          <section className="uv-cmp-block" id="editorial-sources" tabIndex={-1} aria-labelledby="editorial-sources-title">
+            <h2 id="editorial-sources-title" className="uv-h2 is-inner">Sources</h2>
+            <ul className="uv-cmp-sources">
+              {sources.map(({ course: item, urls, checkedAt }) => <li key={item.id}>
+                <strong>{item.university.name}</strong>{checkedAt ? <small> · fee checked {formatCheckedDate(checkedAt)}</small> : null}
+                <ul>{urls.map(url => <li key={url}><a href={url} target="_blank" rel="noopener noreferrer">{sourceHost(url)}<ExternalLink size={13} aria-hidden="true" /><span className="sr-only"> (opens in a new tab)</span></a></li>)}</ul>
+              </li>)}
+            </ul>
+            <p className="uv-cmp-footnote"><Link href="/how-we-verify">How we verify information</Link></p>
+          </section>
+
+          <section className="uv-cmp-block" id="editorial-guides" tabIndex={-1} aria-labelledby="editorial-guides-title">
+            <h2 id="editorial-guides-title" className="uv-h2 is-inner">Related guides</h2>
+            <ul className="uv-cmp-guide-links">
+              <li><Link href={`/online-degree-guides/${pair.key}-fees`}>{pair.label} fees <ArrowRight size={16} aria-hidden="true" /></Link></li>
+              {eligibilityGuide ? <li><Link href={`/online-degree-guides/${pair.key}-eligibility`}>{pair.label} eligibility <ArrowRight size={16} aria-hidden="true" /></Link></li> : null}
+            </ul>
+          </section>
+
+          <div className="uv-cmp-block">
+            <FaqAccordion items={faqs} name="comparison-faq" id="editorial-faq" subtitle={`Common questions about ${pair.label} at ${versus}.`} />
           </div>
         </div>
 
-        <div className="container detail-layout guide-reading-layout editorial-comparison">
-          <div className="guide-reading-main">
-            <nav className="guide-detail-nav" aria-label="Comparison article sections"><a href="#editorial-comparison">Comparison</a><a href="#editorial-programs">Program pages</a><a href="#editorial-guides">Related guides</a><a href="#editorial-faq">Questions</a></nav>
-            <section className="detail-section" id="editorial-comparison" tabIndex={-1}>
-              <h2>Side-by-side comparison</h2>
-              <div className="comparison-data-region" role="region" aria-label="University program comparison" tabIndex={0}>
-                <table className="comparison-data">
-                  <caption>{pair.label}: listed details for {pair.left.university.shortName} and {pair.right.university.shortName}</caption>
-                  <thead><tr><th scope="col">Criteria</th>{[pair.left,pair.right].map(item => <th scope="col" key={item.id}>{item.name}<small>{item.university.name}</small></th>)}</tr></thead>
-                  <tbody>{rows.map(row => <tr key={row.label}><th scope="row">{row.label}</th>{row.cells.map((cell,index) => <td key={index}><span className="comparison-mobile-label" aria-hidden="true">{[pair.left,pair.right][index].university.name}</span>{cell.value}</td>)}</tr>)}</tbody>
-                </table>
-              </div>
-              <div style={{ fontSize: 13, color: "#707070", marginTop: 10 }}>
-                Use these details as a starting point. Check current fees, eligibility, recognition and available support on the course and official university pages before deciding.
-              </div>
-            </section>
-
-            <section className="detail-section" id="editorial-programs" tabIndex={-1}>
-              <h2>View each program in full</h2>
-              <div className="editorial-program-actions">
-                <Link href={`/courses/${pair.left.slug}`} className="btn secondary guide-compare-link">
-                  {pair.left.university.shortName} program page
-                </Link>
-                <Link href={`/courses/${pair.right.slug}`} className="btn secondary guide-compare-link">
-                  {pair.right.university.shortName} program page
-                </Link>
-              </div>
-            </section>
-
-            <section className="detail-section" id="editorial-guides" tabIndex={-1}>
-              <h2>Related guides</h2>
-              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                <Link href={`/online-degree-guides/${pair.key}-fees`} style={{ color: "#544CC8", fontWeight: 600, fontSize: 14 }}>{pair.label} fees →</Link>
-                {eligibilityGuide ? (
-                  <Link href={`/online-degree-guides/${pair.key}-eligibility`} style={{ color: "#544CC8", fontWeight: 600, fontSize: 14 }}>{pair.label} eligibility →</Link>
-                ) : null}
-              </div>
-            </section>
-
-            <section className="detail-section" id="editorial-faq" tabIndex={-1}>
-              <h2>Frequently asked questions</h2>
-              <div className="faq-list">
-                {faqs.map(([question, answer]) => (
-                  <details className="faq-item" name="comparison-faq" key={question}>
-                    <summary>{question}</summary>
-                    <p>{answer}</p>
-                  </details>
-                ))}
-              </div>
-            </section>
+        <aside className="uv-cmp-rail" aria-label="Next steps">
+          <div className="uv-cmp-rail-card">
+            <span className="uv-cmp-rail-icon" aria-hidden="true"><Headset size={24} /></span>
+            <h2>Still not sure which is right for you?</h2>
+            <p>A counsellor will help you weigh {versus} against your own goals and budget.</p>
+            <Link href={`/lead?intent=comparison&course=${pair.key}`} rel="nofollow" className="btn primary large" data-open-lead>Apply now</Link>
+            <p className="uv-cmp-rail-note">Free counselling · no hidden charges</p>
           </div>
-
-          <aside className="right-rail">
-            <div style={{ background: "#fff", border: "1px solid #CFDAE6", borderRadius: 8, padding: 22, boxShadow: "0 1px 3px rgba(0,0,0,0.06)" }}>
-              <div style={{ fontSize: 16, fontWeight: 700, color: "#363634" }}>Still not sure which is right for you?</div>
-              <div style={{ fontSize: 13, color: "#696868", margin: "6px 0 14px", lineHeight: 1.5 }}>A counsellor will help you weigh {pair.left.university.shortName} vs {pair.right.university.shortName} against your own goals and budget.</div>
-              <Link href={`/lead?intent=comparison&course=${pair.key}`} className="btn primary" style={{ width: "100%", height: 44, fontSize: 15 }} data-open-lead>Apply now</Link>
-              <div style={{ fontSize: 11, color: "#707070", marginTop: 10 }}>Free service · no spam · unbiased advice</div>
-            </div>
-            <Link href={`/compare?add=${pair.left.id},${pair.right.id}`} className="btn secondary guide-compare-link">
-              Add a 3rd program to compare
-            </Link>
-          </aside>
-        </div>
+          <Link href={`/compare?add=${pair.left.id},${pair.right.id}`} className="btn secondary uv-cmp-rail-more">
+            <Plus size={18} aria-hidden="true" />Add a 3rd program to compare
+          </Link>
+        </aside>
       </div>
-    </>
+    </div>
   )}</PublishedCatalogBoundary>;
 }

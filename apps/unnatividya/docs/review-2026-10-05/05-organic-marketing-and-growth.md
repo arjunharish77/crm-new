@@ -1,5 +1,7 @@
 # Unnati Vidya — organic growth and marketing review
 
+> **Historical plan (5 October 2026).** Owner decision 17 chose **GA4-only**, and local increment 76 removed GTM; GTM-only recommendations below are superseded. Marketing consent/newsletter and the claims register were also implemented locally, pending the next VPS release. The owner chose to defer a funding/ranking disclosure section for now (decision 14) and to retain all 26 articles. Use [current status](../CURRENT_STATUS_AND_RELEASE_PLAN.md) for the active order.
+
 Prepared: 5 October 2026. Scope: organic acquisition, channels, CTR/conversion, measurement and a 90-day / 12-month roadmap for https://unnatividya.com (MUJ, SMU, Amity Online; 30 programs; lead capture via "Apply now").
 Inputs: `docs/WEBSITE_IMPROVEMENT_MASTER_PLAN.md` (§8, §10, §14), the repo at `apps/unnatividya` (read-only), the live homepage, and web research (sources are cited inline and listed at the end with access dates).
 Constraints followed (owner rules, §14): no fake reviews, no purchased links, no city doorway pages, English only for the first release, byline "Content Team, Unnati Vidya", lead capture only (no booking), and no automated campaigns without separate consent.

@@ -14,14 +14,17 @@ import {
   ugcApprovalGuideSitemapUrls,
   universitySitemapUrls,
 } from "@/lib/sitemap";
+import { getPublishedArticles } from "@/lib/articles-server";
+import { isCompleteEligibilityRule } from "@/lib/eligibility-rules";
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const catalog = await getPublishedCatalog();
+  const hasEligibilityRules = catalog.courses.some(course => isCompleteEligibilityRule(catalog.courseWithUniversity(course).eligibilityRules));
   return [
-    ...staticSitemapUrls(),
+    ...staticSitemapUrls(hasEligibilityRules, catalog.courses.some(course => Boolean(catalog.courseWithUniversity(course).recognition))),
     ...courseSitemapUrls(catalog),
     ...universitySitemapUrls(catalog),
-    ...blogSitemapUrls(),
+    ...blogSitemapUrls(await getPublishedArticles()),
     ...feeGuideSitemapUrls(catalog),
     ...eligibilityGuideSitemapUrls(),
     ...careerScopeGuideSitemapUrls(),

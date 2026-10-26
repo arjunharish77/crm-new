@@ -30,6 +30,9 @@ export async function POST(request: Request) {
       await db.query("update otp_request set verified_at=now() where id=$1", [row.id]);
       await db.query("update lead_capture set email_otp_verified=true,email_verified_at=now(),updated_at=now() where id=$1", [lead.id]);
       await db.query("insert into lead_event (lead_capture_id,event_type,metadata) values ($1,'EMAIL_OTP_VERIFIED','{}'::jsonb)", [lead.id]);
+      // A verified email confirms the newsletter sign-up the learner ticked on step 1 (double opt-in).
+      if (lead.marketing_consent) await db.query(`update newsletter_subscriber set status='CONFIRMED', confirmed_at=now(), confirm_token_hash=null, confirm_expires_at=null, updated_at=now()
+        where lead_capture_id=$1 and lower(email)=lower($2) and status='PENDING'`, [lead.id, lead.email]);
     }
     await db.query("commit");
     const response = NextResponse.json({ ok: true });

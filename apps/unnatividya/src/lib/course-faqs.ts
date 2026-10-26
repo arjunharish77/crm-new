@@ -1,4 +1,5 @@
 import { formatFee } from "@/lib/catalog-format";
+import { recognitionSummary } from "@/lib/program-facts";
 import { type courseWithUniversity } from "@/data/catalog";
 
 type EnrichedCourse = ReturnType<typeof courseWithUniversity>;
@@ -11,7 +12,8 @@ export function buildCourseFaqs(course: EnrichedCourse): Array<[string, string]>
   const faqs: Array<[string, string]> = [
     [
       `Is the ${course.name} from ${course.university.name} UGC-entitled?`,
-      `Yes — this program is listed as a UGC-entitled online degree, legally equivalent to an on-campus degree for government jobs, PSU recruitment, and higher studies. Always verify current-cycle entitlement before enrolling; see how-we-verify for our verification process.`,
+      // The published, dated UGC-DEB result; "being re-checked" until one is applied (plan T3, wave 2).
+      recognitionSummary(course).answer,
     ],
     [
       `How much does the ${course.name} cost, and can I pay in EMI?`,
@@ -35,7 +37,7 @@ export function buildCourseFaqs(course: EnrichedCourse): Array<[string, string]>
     ],
     [
       `How long does ${course.name} take to complete?`,
-      `The program runs for ${course.duration} at ${course.university.shortName}, with online-proctored exams — exact scheduling depends on your admission cycle.`,
+      `The program runs for ${course.duration} at ${course.university.shortName}, and the exact schedule depends on your admission cycle. Confirm the exam format with the university.`,
     ],
   ];
   return faqs;

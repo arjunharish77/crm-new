@@ -102,7 +102,7 @@ export default async function AdminDashboardPage() {
           <article className="card admin-tile">
             <span className="admin-tag">Course publication</span>
             <h2>{publishedCourses}/{totalCourses}</h2>
-            <p>records have their published flag enabled — <Link href="/admin/content-quality" className="text-link" style={{ marginTop: 0 }}>full breakdown</Link></p>
+            <p>records have their published flag enabled — <Link href="/admin/content-quality" className="text-link">full breakdown</Link></p>
           </article>
         </div>
 
@@ -110,7 +110,7 @@ export default async function AdminDashboardPage() {
           <section className="admin-table-card">
             <div className="admin-table-head">
               <h2>Recent leads</h2>
-              <Link href="/admin/leads" className="text-link" style={{ marginTop: 0 }}>View all →</Link>
+              <Link href="/admin/leads" className="text-link">View all →</Link>
             </div>
             <div className="dashboard-leads">
               {recent.rows.map(lead => <article key={lead.id} className="dashboard-lead">
@@ -137,12 +137,12 @@ export default async function AdminDashboardPage() {
                     <span>{nameById.get(row.course_id) || "Program"}<small>{row.course_id}</small></span>
                     <b>{row.count}</b>
                   </div>
-                  <div aria-hidden="true" style={{ height: 6, borderRadius: 999, background: "#F0F0F0" }}>
-                    <div style={{ height: 6, borderRadius: 999, background: "#544CC8", width: `${(Number(row.count) / maxProgramCount) * 100}%` }} />
+                  <div aria-hidden="true" className="dashboard-bar">
+                    <div className="dashboard-bar-fill" style={{ width: `${(Number(row.count) / maxProgramCount) * 100}%` }} />
                   </div>
                 </div>
               ))}
-              {!byProgram.rows.length ? <div style={{ fontSize: 13, color: "#707070" }}>No leads with a program attached yet.</div> : null}
+              {!byProgram.rows.length ? <p className="admin-muted">No leads with a program attached yet.</p> : null}
             </div>
           </section>
         </div>

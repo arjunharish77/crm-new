@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 
-export function SourceImportItemActions({ itemId, canApply, canReview = false, referenceOnly = false }: { itemId: string; canApply: boolean; canReview?: boolean; referenceOnly?: boolean }) {
+export function SourceImportItemActions({ itemId, canApply, canReview = false, referenceOnly = false, evidenceOnly = false }: { itemId: string; canApply: boolean; canReview?: boolean; referenceOnly?: boolean; evidenceOnly?: boolean }) {
   const router = useRouter();
   const [status, setStatus] = useState<"idle" | "saving" | "done" | "error">("idle");
   const [message, setMessage] = useState("");
@@ -37,7 +37,7 @@ export function SourceImportItemActions({ itemId, canApply, canReview = false, r
         <button className="btn ghost" type="button" onClick={() => act("SKIP")} disabled={status === "saving"}>Skip item</button>
       </div>
       <p role={status === "error" ? "alert" : "status"} className={status === "error" ? "admin-error" : "admin-success"}>{status === "saving" ? "Saving review action…" : message}</p>
-      {referenceOnly ? <p className="admin-muted">Reference-only item: source notes cannot be attached to catalog records.</p> : !canApply ? <p className="admin-muted">Only administrators can attach source notes to eligible course or university records.</p> : <p className="admin-muted">Attaching notes stores source evidence for review. Publish fact changes separately through catalog revisions.</p>}
+      {evidenceOnly ? <p className="admin-muted">Weekly evidence: verify the official page and propose any factual edits through Catalog revisions.</p> : referenceOnly ? <p className="admin-muted">Reference-only item: source notes cannot be attached to catalog records.</p> : !canApply ? <p className="admin-muted">Only administrators can attach source notes to eligible course or university records.</p> : <p className="admin-muted">Attaching notes stores source evidence for review. Publish fact changes separately through catalog revisions.</p>}
     </div>
   );
 }

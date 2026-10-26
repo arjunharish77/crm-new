@@ -2,7 +2,7 @@ import { catalogLastModified } from "@/lib/catalog-snapshot";
 
 import type { CatalogReader } from "@/lib/catalog-snapshot";
 
-import { blogPosts } from "@/data/blog";
+import type { BlogPost } from "@/data/blog";
 import { feeGuides } from "@/lib/fee-guides";
 import { allComparisonPairs } from "@/lib/comparisons";
 import { allCareerScopeGuides, allEligibilityGuides, allUgcApprovalGuides } from "@/data/guide-content";
@@ -19,6 +19,12 @@ export const staticSitemapRoutes = [
   "/online-degree-guides",
   "/specializations",
   "/tools/emi-calculator",
+  "/tools/total-cost",
+  "/tools/document-checklist",
+  "/tools/mode-helper",
+  "/tools/study-planner",
+  "/tools/specialization-finder",
+  "/tools/exam-check",
   "/how-we-verify",
   "/about",
   "/authors/content-team",
@@ -57,9 +63,11 @@ export function sitemapIndexXml(paths: string[]) {
   return `<?xml version="1.0" encoding="UTF-8"?><sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">${body}</sitemapindex>`;
 }
 
-export function staticSitemapUrls() {
+// The eligibility and recognition tools are listed only once they have published data to show
+// (reviewed rules / 2026-27 recognition results); until then their pages are noindex.
+export function staticSitemapUrls(includeEligibilityChecker = false, includeRecognitionCheck = false) {
   const host = siteUrl();
-  return staticSitemapRoutes.map((route) => ({
+  return [...staticSitemapRoutes, ...(includeEligibilityChecker ? ["/tools/eligibility-checker"] : []), ...(includeRecognitionCheck ? ["/tools/recognition-check"] : [])].map((route) => ({
     loc: `${host}${route}`,
     lastmod: undefined,
     changefreq: "weekly" as const,
@@ -89,11 +97,12 @@ export function universitySitemapUrls(catalog: CatalogReader) {
   }));
 }
 
-export function blogSitemapUrls() {
+// Takes the published CMS articles (getPublishedArticles) so the sitemap lists exactly what is live.
+export function blogSitemapUrls(posts: BlogPost[]) {
   const host = siteUrl();
-  return blogPosts.map((post) => ({
+  return posts.map((post) => ({
     loc: `${host}/blog/${post.slug}`,
-    lastmod: new Date(post.publishedDate).toISOString(),
+    lastmod: new Date(post.updatedDate || post.publishedDate).toISOString(),
     changefreq: "monthly" as const,
     priority: 0.6,
   }));
@@ -101,22 +110,30 @@ export function blogSitemapUrls() {
 
 export function feeGuideSitemapUrls(catalog: CatalogReader) {
   const host = siteUrl();
-  return feeGuides(catalog).map((guide) => ({
+  // The fees hub (Wave 4 hub C2) lists every program, so it changes whenever any course does.
+  const hub = { loc: `${host}/online-degree-guides/fees`, lastmod: catalogLastModified(catalog, catalog.courses.map(course => course.id)), changefreq: "monthly" as const, priority: 0.8 };
+  // The NRI and international hub (Wave 5 D4) also lists every program's fees.
+  const international = { ...hub, loc: `${host}/online-degree-guides/international` };
+  // Degree-family hubs (Wave 5 D2, D3).
+  const families = ["computing", "commerce-humanities", "online-learning"].map(slug => ({ ...hub, loc: `${host}/online-degree-guides/${slug}`, priority: 0.75 }));
+  return [hub, international, ...families, ...feeGuides(catalog).map((guide) => ({
     loc: `${host}/online-degree-guides/${guide.slug}`,
     lastmod: catalogLastModified(catalog, guide.courses.map(course=>course.id)),
     changefreq: "monthly" as const,
     priority: 0.75,
-  }));
+  }))];
 }
 
 export function eligibilityGuideSitemapUrls() {
   const host = siteUrl();
-  return allEligibilityGuides().map((guide) => ({
+  // The admissions hub (Wave 4 hub C3) leads into the eligibility guides.
+  const hub = { loc: `${host}/online-degree-guides/admissions`, lastmod: undefined, changefreq: "monthly" as const, priority: 0.8 };
+  return [hub, ...allEligibilityGuides().map((guide) => ({
     loc: `${host}/online-degree-guides/${guide.slug}`,
     lastmod: undefined,
     changefreq: "monthly" as const,
     priority: 0.75,
-  }));
+  }))];
 }
 
 export function careerScopeGuideSitemapUrls() {

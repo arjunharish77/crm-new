@@ -30,6 +30,14 @@ const nextConfig: NextConfig = {
           },
         ],
       },
+      // Decision V10 (Wave 5 B1): only the exam device check may ask for the camera and microphone,
+      // for this origin only. This later rule overrides the site-wide value for that one page.
+      {
+        source: "/tools/exam-check",
+        headers: [
+          { key: "Permissions-Policy", value: "camera=(self), microphone=(self), geolocation=(), payment=()" },
+        ],
+      },
       {
         source: "/admin/:path*",
         headers: [

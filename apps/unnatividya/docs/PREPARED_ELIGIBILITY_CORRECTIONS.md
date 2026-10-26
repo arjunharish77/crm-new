@@ -4,6 +4,8 @@
 
 A [3 October follow-up](CONTENT_VERIFICATION_FOLLOWUP_2026-10-03.md) reconfirmed that the two held eligibility cases remain unresolved; it did not publish any correction.
 
+A 9 October source check found an additional **SMU BA** discrepancy. The current BA program page lists 10+2 or a 10+3 diploma for Indian students. The official 2026–27 BA prospectus explicitly lists 10+2 or AIU-recognised equivalent without repeating the diploma route. An older 2025–26 international BA prospectus unexpectedly states a bachelor's-degree requirement, inconsistent with the current page. The BA free-text proposal remains available but now carries a warning in its notes and a source-linked CMS evidence notice. Obtain current-session confirmation of diploma and NRI/foreign routes before submitting it. The separate structured checker pilot accepts only the consistent Indian Class 12 route; all disputed routes return confirmation.
+
 ## CMS workflow
 
 Open **Courses → Edit → Propose or review revisions → Basic details**. Expand **Preview eligibility correction**, inspect both categories and open the official source. **Load eligibility correction** replaces only the unsaved eligibility text, adds its source and review context, and clears the previous eligibility verification marker. Other edits remain intact. Add a review reason and submit through the normal administrator review/application workflow.

@@ -13,6 +13,18 @@
     ]
   },
   {
+    "courseId": "ba-smu",
+    "checkedAt": "2026-10-09",
+    "title": "BA qualification routes differ across official sources",
+    "summary": "The current BA program page lists 10+2 or 10+3 diploma for Indian applicants. The 2026–27 BA prospectus expressly lists 10+2 or AIU-recognised equivalent but does not repeat the diploma route. An older 2025–26 international brochure appears to require a bachelor's degree for BA, conflicting with the current program page.",
+    "requiredReview": "Confirm current-session 10+3 diploma and NRI/foreign BA routes before approving a complete eligibility paragraph or structured rule. The prepared structured pilot matches Indian 10+2 only; other routes return confirmation.",
+    "sources": [
+      { "label": "SMU BA program page", "url": "https://www.onlinemanipal.com/online-ba-degree-smu" },
+      { "label": "SMU 2026–27 BA prospectus — PDF page 3", "url": "https://www.onlinemanipal.com/wp-content/uploads/2023/06/SMU-BA-Domestic-Brochure-1.pdf" },
+      { "label": "Older 2025–26 international BA brochure — PDF page 3", "url": "https://www.onlinemanipal.com/wp-content/uploads/2023/06/SMU-BA-International-Brochure.pdf" }
+    ]
+  },
+  {
     "courseId": "msc-mathematics-muj",
     "checkedAt": "2026-10-03",
     "title": "Official eligibility sources differ",

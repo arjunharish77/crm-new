@@ -5,8 +5,8 @@ import { query } from "@/lib/db";
 export const metadata: Metadata = { title: "Source Imports", robots: { index: false, follow: false, nocache: true } };
 export const dynamic = "force-dynamic";
 const PAGE_SIZE = 20;
-const STATUSES = ["DRAFT", "FETCHING", "FETCHED", "FAILED"];
-type ImportRow = { id: string; source_name: string; source_url: string; status: string; fetched_at: string; item_count: number; pending_count: number };
+const STATUSES = ["DRAFT", "FETCHING", "FETCHED", "UNCHANGED", "FAILED"];
+type ImportRow = { id: string; source_name: string; source_url: string; status: string; fetched_at: string; metadata: Record<string, unknown>; item_count: number; pending_count: number };
 type Search = Record<string, string | string[] | undefined>;
 function first(value: Search[string]) { return (Array.isArray(value) ? value[0] : value) || ""; }
 
@@ -24,7 +24,7 @@ export default async function SourceImportsPage({ searchParams }: { searchParams
   const pages = Math.max(1, Math.ceil(total / PAGE_SIZE));
   const page = Math.min(pageInput, pages);
   const imports = await query<ImportRow>(
-    `select si.id, si.source_name, si.source_url, si.status, si.fetched_at,
+    `select si.id, si.source_name, si.source_url, si.status, si.fetched_at, si.metadata,
        count(sii.id)::int as item_count,
        count(sii.id) filter (where sii.review_status in ('DRAFT', 'NEEDS_REVIEW'))::int as pending_count
      from source_import si left join source_import_item sii on sii.source_import_id = si.id
@@ -40,7 +40,7 @@ export default async function SourceImportsPage({ searchParams }: { searchParams
   }
   return <section className="admin-shell source-import-list"><div className="container">
     <div className="admin-page-head"><div><span className="eyebrow">CMS</span><h1>Source imports</h1>
-      <p>Find captured source pages and review their evidence. A fetched source is not a verified or published catalog update.</p></div></div>
+      <p>Find captured source pages and review their evidence. Weekly checks create private evidence items only; they never publish course facts.</p></div></div>
     <form action="/admin/source-imports" method="get" className="source-import-filters" role="search" aria-label="Find source imports">
       <div><label htmlFor="import-search">Search imports</label><input id="import-search" type="search" name="q" maxLength={200} defaultValue={q} placeholder="Source name, URL or import ID" /></div>
       <div><label htmlFor="import-status">Import status</label><select id="import-status" name="status" defaultValue={status}><option value="">All statuses</option>{STATUSES.map(value => <option key={value} value={value}>{value.charAt(0) + value.slice(1).toLowerCase()}</option>)}</select></div>
@@ -56,6 +56,7 @@ export default async function SourceImportsPage({ searchParams }: { searchParams
         <div><dt>Fetched (India time)</dt><dd>{new Date(item.fetched_at).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })}</dd></div>
       </dl>
       <p className="source-import-url">{item.source_url}</p>
+      {item.metadata?.workflow === "weekly-source-check" && <p className="admin-muted">Weekly check: {String(item.metadata.comparison || item.status).toLowerCase()}. {item.status === "FAILED" ? String(item.metadata.error || "Open the official source manually.") : item.status === "UNCHANGED" ? "No review draft was needed." : "Review the captured source before proposing any catalog change."}</p>}
       <div className="source-import-links"><Link className="btn primary" href={`/admin/source-imports/${item.id}`} aria-label={`Review import: ${item.source_name}`}>Review import</Link><a className="text-link" href={item.source_url} target="_blank" rel="noreferrer">Open source (new tab)</a></div>
     </article>)}</div> : <section className="card admin-detail-card"><h2>{q || status ? "No matching imports" : "No sources captured yet"}</h2><p>{q || status ? "Try a broader source name or choose another status." : "Captured sources will appear here after a source-import run. Ask the site administrator to run the configured importer."}</p>{(q || status) && <Link href="/admin/source-imports" className="text-link">View all imports</Link>}</section>}
     {total > PAGE_SIZE && <nav aria-label="Import pages" className="source-import-pagination">

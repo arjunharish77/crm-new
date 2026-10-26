@@ -13,12 +13,16 @@ type LeadRow = {
   email_otp_verified: boolean;
   phone_otp_verified: boolean;
   crm_sync_status: string;
+  marketing_consent: boolean;
   created_at: string;
 };
 
 function csvCell(value: string) {
-  if (/[",\n]/.test(value)) return `"${value.replace(/"/g, '""')}"`;
-  return value;
+  // A leading = or @ (or + / - not starting a number, so phone numbers stay intact) would run as a
+  // formula in a spreadsheet, for example a name typed as "=HYPERLINK(...)".
+  const safe = /^(?:[=@\t\r]|[+-](?!\d))/.test(value) ? `'${value}` : value;
+  if (/[",\n]/.test(safe)) return `"${safe.replace(/"/g, '""')}"`;
+  return safe;
 }
 
 // F26 fix (WP16): src/proxy.ts gates every /api/admin/* route, but only checks the cookie's own
@@ -34,13 +38,13 @@ export async function GET() {
   }
 
   const leads = await query<LeadRow>(
-    `select id, name, email, phone, city, course_id, university_id, email_otp_verified, phone_otp_verified, crm_sync_status, created_at
+    `select id, name, email, phone, city, course_id, university_id, email_otp_verified, phone_otp_verified, crm_sync_status, marketing_consent, created_at
      from lead_capture
      order by created_at desc
      limit 2000`,
   ).catch(() => ({ rows: [] as LeadRow[] }));
 
-  const header = ["Name", "Email", "Phone", "City", "Course", "University", "Email verified", "Phone verified", "CRM status", "Created"];
+  const header = ["Name", "Email", "Phone", "City", "Course", "University", "Email verified", "Phone verified", "CRM status", "Marketing consent", "Created"];
   const rows = leads.rows.map((lead) => [
     lead.name,
     lead.email,
@@ -51,6 +55,7 @@ export async function GET() {
     lead.email_otp_verified ? "Verified" : "Pending",
     lead.phone_otp_verified ? "Verified" : "Pending",
     lead.crm_sync_status,
+    lead.marketing_consent ? "Yes" : "No",
     new Date(lead.created_at).toISOString(),
   ]);
   const csv = [header, ...rows].map((row) => row.map(csvCell).join(",")).join("\n");

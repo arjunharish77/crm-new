@@ -18,6 +18,7 @@ export type LeadFormContext = {
   university?: string;
   intent?: string;
   goal?: string;
+  feeCategoryKey?: string;
   // Pre-fills from the course page's own rail form (see course-detail's right rail) -- the
   // visitor already typed these once, so the wizard shouldn't ask again from scratch.
   name?: string;

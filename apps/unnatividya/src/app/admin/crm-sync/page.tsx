@@ -54,7 +54,7 @@ export default async function CrmSyncPage() {
           </article>
         </div>
 
-        <section className="card admin-detail-card" style={{ marginTop: 18 }}>
+        <section className="card admin-detail-card admin-section-gap">
           <h2>Sync settings</h2>
           <CrmSyncConfigForm initialConfig={configModel} />
         </section>

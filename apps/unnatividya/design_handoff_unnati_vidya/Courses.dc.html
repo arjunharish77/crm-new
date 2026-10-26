@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,400,0..1,0&display=block" rel="stylesheet">
+<script src="uv-data.js"></script>
+<style>body{margin:0;font-family:'Plus Jakarta Sans',system-ui,sans-serif;color:#16133F;-webkit-font-smoothing:antialiased}*{box-sizing:border-box}a{color:#5B4CF0;text-decoration:none}a:hover{color:#4A3BDB;text-decoration:underline}select,input{font-family:inherit}</style>
+</helmet>
+<div data-screen-label="Courses" style="min-height:100vh;display:flex;flex-direction:column;background:#fff">
+<dc-import name="UVHeader" active="courses" hint-size="100%,68px" style="position:sticky;top:0;z-index:40;display:block"></dc-import>
+<section style="background:radial-gradient(500px 260px at 90% 0%,#E6E1FF 0%,rgba(230,225,255,0) 70%),linear-gradient(180deg,#F7F5FF,#FBFAFF);border-bottom:1px solid #EEECF8">
+  <div style="max-width:1240px;margin:0 auto;padding:24px clamp(16px,3vw,32px) 28px">
+    <div style="font-size:13px;color:#6F6D8C;display:flex;gap:6px;align-items:center"><a href="Home.dc.html">Home</a><span style="font-family:'Material Symbols Rounded';font-size:16px">chevron_right</span><span style="color:#16133F">Explore degrees</span></div>
+    <h1 style="margin:14px 0 0;font-size:clamp(30px,4.2vw,44px);letter-spacing:-0.035em;font-weight:800">Online degree courses</h1>
+    <p style="margin:8px 0 0;color:#4A4867;font-size:16px">Every UGC-entitled program from MUJ, SMU and Amity, with listed tuition and EMI.</p>
+    <div style="display:flex;flex-wrap:wrap;gap:10px;margin-top:20px;align-items:center">
+      <div style="flex:1 1 320px;display:flex;align-items:center;gap:10px;padding:0 16px;height:52px;background:#fff;border:1px solid #E4E1F3;border-radius:14px;box-shadow:0 10px 30px -22px rgba(60,45,170,0.4)">
+        <span style="font-family:'Material Symbols Rounded';font-size:22px;color:#6F6D8C">search</span>
+        <input value="{{ q }}" onChange="{{ setQ }}" placeholder="Search MBA, Data Science, Finance…" style="flex:1;border:0;outline:none;font-size:15px;background:transparent;min-width:0">
+      </div>
+      <a href="Recommender.dc.html" style="height:52px;padding:0 18px;border-radius:14px;background:#fff;border:1px solid #D6D0FA;font-weight:700;font-size:14px;display:flex;align-items:center;gap:8px"><span style="font-family:'Material Symbols Rounded';font-size:20px">auto_awesome</span>Not sure? Find my fit</a>
+    </div>
+    <div style="display:flex;gap:8px;margin-top:16px;align-items:center;overflow-x:auto;padding-bottom:2px">
+      <span style="font-size:13px;font-weight:700;color:#4A4867;white-space:nowrap">Quick compare</span>
+      <sc-for list="{{ quick }}" as="k" hint-placeholder-count="4"><a href="{{ k.href }}" style="white-space:nowrap;padding:7px 12px;border-radius:99px;background:#fff;border:1px solid #E4E1F3;font-size:13px;font-weight:600;color:#2B2950" style-hover="border-color:#5B4CF0;color:#5B4CF0;text-decoration:none">{{ k.label }}</a></sc-for>
+    </div>
+  </div>
+</section>
+<main style="flex:1;max-width:1240px;width:100%;margin:0 auto;padding:24px clamp(16px,3vw,32px) 120px;display:flex;flex-wrap:wrap;gap:28px;align-items:flex-start">
+  <sc-if value="{{ mobile }}">
+    <div style="flex:1 1 100%;display:flex;gap:8px;align-items:center">
+      <div onClick="{{ toggleFilters }}" style="cursor:pointer;display:flex;align-items:center;gap:8px;padding:11px 16px;border-radius:12px;border:1px solid #E4E1F3;font-weight:700;font-size:14px"><span style="font-family:'Material Symbols Rounded';font-size:20px">tune</span>Filters{{ activeCountLabel }}</div>
+      <select onChange="{{ setSort }}" value="{{ sort }}" style="flex:1;padding:11px 12px;border-radius:12px;border:1px solid #E4E1F3;font-size:14px;font-weight:600;background:#fff"><option value="rel">Sort: relevance</option><option value="low">Fee: low to high</option><option value="high">Fee: high to low</option><option value="rating">Highest rated</option></select>
+    </div>
+  </sc-if>
+  <sc-if value="{{ showFilters }}" hint-placeholder-val="{{ true }}">
+    <aside style="flex:1 1 250px;max-width:{{ asideMax }};display:flex;flex-direction:column;gap:22px;padding:20px;border:1px solid #E8E6F3;border-radius:16px;background:#fff">
+      <div style="display:flex;justify-content:space-between;align-items:center"><span style="font-weight:800;font-size:16px">Filters</span><span onClick="{{ clear }}" style="cursor:pointer;font-size:13px;font-weight:700;color:#5B4CF0">Clear all</span></div>
+      <sc-for list="{{ groups }}" as="g" hint-placeholder-count="4">
+        <div>
+          <div style="font-size:12px;font-weight:700;letter-spacing:0.05em;text-transform:uppercase;color:#6F6D8C;margin-bottom:8px">{{ g.title }}</div>
+          <div style="display:flex;flex-direction:column;gap:2px">
+            <sc-for list="{{ g.opts }}" as="o" hint-placeholder-count="3">
+              <div onClick="{{ o.pick }}" style="cursor:pointer;display:flex;align-items:center;gap:10px;padding:8px 8px;border-radius:9px;font-size:14px;font-weight:600;color:#2B2950" style-hover="background:#F8F7FD">
+                <span style="width:20px;height:20px;border-radius:6px;display:flex;align-items:center;justify-content:center;font-family:'Material Symbols Rounded';font-size:16px;color:#fff;border:1.5px solid {{ o.bd }};background:{{ o.bg }}">check</span>
+                <span style="flex:1">{{ o.label }}</span><span style="font-size:12px;color:#8E8CA8">{{ o.count }}</span>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+      </sc-for>
+      <div>
+        <div style="font-size:12px;font-weight:700;letter-spacing:0.05em;text-transform:uppercase;color:#6F6D8C;margin-bottom:8px">Maximum total tuition</div>
+        <input type="range" min="75000" max="275000" step="5000" value="{{ max }}" onChange="{{ setMax }}" style="width:100%;accent-color:#5B4CF0">
+        <div style="display:flex;justify-content:space-between;font-size:13px;color:#6F6D8C"><span>₹75,000</span><b style="color:#16133F">Up to {{ maxF }}</b></div>
+      </div>
+      <sc-if value="{{ mobile }}"><div onClick="{{ toggleFilters }}" style="cursor:pointer;text-align:center;padding:14px;border-radius:12px;background:#5B4CF0;color:#fff;font-weight:700">Show {{ count }} results</div></sc-if>
+    </aside>
+  </sc-if>
+  <div style="flex:999 1 560px;min-width:0">
+    <sc-if value="{{ desktop }}" hint-placeholder-val="{{ true }}">
+      <div style="display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:12px;margin-bottom:16px">
+        <div><b>{{ count }} of 30 programs</b><span style="color:#6F6D8C;font-size:13px"> · Tuition shown. Check each program for current fees and eligibility.</span></div>
+        <select onChange="{{ setSort }}" value="{{ sort }}" style="padding:9px 12px;border-radius:10px;border:1px solid #E4E1F3;font-size:14px;font-weight:600;background:#fff"><option value="rel">Sort: relevance</option><option value="low">Fee: low to high</option><option value="high">Fee: high to low</option><option value="rating">Highest rated</option></select>
+      </div>
+    </sc-if>
+    <sc-if value="{{ hasChips }}">
+      <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:14px"><sc-for list="{{ chips }}" as="c" hint-placeholder-count="1"><span onClick="{{ c.remove }}" style="cursor:pointer;display:flex;align-items:center;gap:4px;padding:6px 8px 6px 12px;border-radius:99px;background:#ECE9FE;color:#5B4CF0;font-size:13px;font-weight:700">{{ c.label }}<span style="font-family:'Material Symbols Rounded';font-size:16px">close</span></span></sc-for></div>
+    </sc-if>
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,300px),1fr));gap:14px">
+      <sc-for list="{{ results }}" as="id" hint-placeholder-count="6"><dc-import name="UVCard" course-id="{{ id }}" hint-size="100%,300px"></dc-import></sc-for>
+    </div>
+    <sc-if value="{{ none }}"><div style="padding:40px 20px;text-align:center;border:1.5px dashed #D6D0FA;border-radius:20px;display:flex;flex-direction:column;align-items:center;gap:10px"><div style="position:relative;width:180px;height:130px;margin:0 auto"><div style="position:absolute;left:18px;top:22px;width:120px;height:84px;border-radius:16px;background:#ECE9FE;transform:rotate(-8deg)"></div><div style="position:absolute;left:44px;top:14px;width:120px;height:84px;border-radius:16px;background:#fff;border:1px solid #E4E1F3;box-shadow:0 14px 30px -18px rgba(60,45,170,0.45);transform:rotate(6deg);padding:14px;display:flex;flex-direction:column;gap:8px"><div style="height:8px;width:60%;border-radius:4px;background:#ECE9FE"></div><div style="height:8px;width:85%;border-radius:4px;background:#F3F1F9"></div><div style="height:8px;width:45%;border-radius:4px;background:#F3F1F9"></div></div><div style="position:absolute;left:62px;top:64px;width:56px;height:56px;border-radius:50%;background:#5B4CF0;color:#fff;display:flex;align-items:center;justify-content:center;font-family:'Material Symbols Rounded';font-size:28px;box-shadow:0 10px 24px -8px rgba(91,76,240,0.6)">search_off</div><div style="position:absolute;right:4px;top:6px;width:10px;height:10px;border-radius:50%;background:#F0A30A"></div><div style="position:absolute;left:6px;bottom:10px;width:8px;height:8px;border-radius:50%;background:#12A35C"></div></div><div style="font-size:20px;font-weight:800;margin-top:6px">No programs match these filters</div><div style="color:#4A4867;max-width:380px;font-size:14px">Try raising the fee limit or removing a filter.</div><div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:center;margin-top:6px"><div onClick="{{ clear }}" style="cursor:pointer;padding:11px 16px;border-radius:11px;background:#5B4CF0;color:#fff;font-weight:700">Clear filters</div><a href="Recommender.dc.html" style="padding:10px 16px;border-radius:11px;border:1px solid #D6D0FA;font-weight:700">Find my fit</a></div></div></sc-if>
+  </div>
+</main>
+<sc-if value="{{ hasTray }}">
+  <div style="position:fixed;left:50%;transform:translateX(-50%);bottom:16px;z-index:50;width:min(720px,calc(100% - 24px));background:#16133F;color:#fff;border-radius:16px;padding:10px 10px 10px 16px;display:flex;align-items:center;gap:12px;box-shadow:0 24px 50px -18px rgba(22,19,63,0.7)">
+    <div style="display:flex;gap:6px;flex:1;min-width:0;overflow-x:auto">
+      <sc-for list="{{ tray }}" as="t" hint-placeholder-count="0"><span style="display:flex;align-items:center;gap:6px;padding:6px 8px;border-radius:9px;background:rgba(255,255,255,0.1);font-size:13px;white-space:nowrap"><img src="{{ t.logo }}" alt="" style="width:18px;height:18px;object-fit:contain;background:#fff;border-radius:4px;padding:1px">{{ t.label }}<span onClick="{{ t.remove }}" style="cursor:pointer;font-family:'Material Symbols Rounded';font-size:16px;color:#B7B3E6">close</span></span></sc-for>
+    </div>
+    <a href="Compare.dc.html" style="flex:none;padding:11px 16px;border-radius:11px;background:#fff;color:#16133F;font-weight:800;font-size:14px;white-space:nowrap">Compare {{ trayCount }} →</a>
+  </div>
+</sc-if>
+<dc-import name="UVFooter" hint-size="100%,360px"></dc-import>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  state = { ok: !!window.UV, w: 1280, open: false, q: '', sort: 'rel', max: 275000, f: { lvl: [], stream: [], uni: [], degree: [] }, t: 0 };
+  componentDidMount() {
+    const p = k => { try { return new URLSearchParams(location.search).get(k); } catch (e) { return null; } };
+    const f = { lvl: [], stream: [], uni: [], degree: [] };
+    ['lvl', 'stream', 'uni', 'degree'].forEach(k => { const v = p(k); if (v) f[k] = [v]; });
+    this.setState({ f, q: p('q') || '' });
+    this._r = () => this.setState({ w: window.innerWidth }); this._r(); window.addEventListener('resize', this._r);
+    this._s = () => this.setState(s => ({ t: s.t + 1 })); window.addEventListener('uv-store', this._s);
+    if (!window.UV) this._i = setInterval(() => { if (window.UV) { clearInterval(this._i); this.setState({ ok: true }); } }, 50);
+  }
+  componentWillUnmount() { window.removeEventListener('resize', this._r); window.removeEventListener('uv-store', this._s); clearInterval(this._i); }
+  tog(k, v) { this.setState(s => { const a = s.f[k]; return { f: { ...s.f, [k]: a.includes(v) ? a.filter(x => x !== v) : [...a, v] } }; }); }
+  renderVals() {
+    const UV = window.UV, s = this.state, mobile = s.w < 860;
+    const base = { mobile, desktop: !mobile, showFilters: !mobile || s.open, asideMax: mobile ? '100%' : '270px', q: s.q, sort: s.sort, max: s.max,
+      setQ: e => this.setState({ q: e.target.value }), setSort: e => this.setState({ sort: e.target.value }), setMax: e => this.setState({ max: +e.target.value }),
+      toggleFilters: () => this.setState(st => ({ open: !st.open })), clear: () => this.setState({ q: '', max: 275000, f: { lvl: [], stream: [], uni: [], degree: [] } }),
+      quick: [['MBA: MUJ vs Amity', 'mba-muj,mba-amity'], ['MBA: SMU vs MUJ', 'mba-smu,mba-muj'], ['BCA: MUJ vs Amity', 'bca-muj,bca-amity'], ['MCA: MUJ vs SMU', 'mca-muj,mca-smu']].map(([label, ids]) => ({ label, href: 'Compare.dc.html?ids=' + ids })) };
+    if (!UV) return { ...base, groups: [], results: ['', '', '', '', '', ''], chips: [], tray: [], count: '…', maxF: '' };
+    const f = s.f, q = s.q.trim().toLowerCase();
+    const match = (c, skip) => (skip === 'lvl' || !f.lvl.length || f.lvl.includes(c.lvl)) && (skip === 'stream' || !f.stream.length || f.stream.includes(c.stream)) && (skip === 'uni' || !f.uni.length || f.uni.includes(c.uni)) && (skip === 'degree' || !f.degree.length || f.degree.includes(c.short)) && c.fee <= s.max && (!q || (c.title + ' ' + UV.UNIS[c.uni].name + ' ' + c.specs.join(' ')).toLowerCase().includes(q));
+    let list = UV.C.filter(c => match(c));
+    if (s.sort === 'low') list = [...list].sort((a, b) => a.fee - b.fee);
+    if (s.sort === 'high') list = [...list].sort((a, b) => b.fee - a.fee);
+    if (s.sort === 'rating') list = [...list].sort((a, b) => b.rating - a.rating);
+    const opt = (k, v, label) => { const on = f[k].includes(v); return { label, count: UV.C.filter(c => c[k === 'degree' ? 'short' : k] === v && match(c, k)).length, pick: () => this.tog(k, v), bg: on ? '#5B4CF0' : '#fff', bd: on ? '#5B4CF0' : '#CFCCE0' }; };
+    const groups = [
+      { title: 'Degree level', opts: [opt('lvl', 'UG', 'Undergraduate'), opt('lvl', 'PG', 'Postgraduate')] },
+      { title: 'Degree', opts: ['MBA', 'BBA', 'BCA', 'MCA', 'B.Com', 'M.Com', 'BA'].map(d => opt('degree', d, 'Online ' + d)) },
+      { title: 'Stream', opts: ['Management', 'IT & Computers', 'Commerce', 'Arts & Humanities'].map(x => opt('stream', x, x)) },
+      { title: 'University', opts: Object.values(UV.UNIS).map(u => opt('uni', u.id, u.name)) }
+    ];
+    const chips = [];
+    Object.entries(f).forEach(([k, arr]) => arr.forEach(v => chips.push({ label: k === 'uni' ? UV.UNIS[v].short : k === 'lvl' ? (v === 'PG' ? 'Postgraduate' : 'Undergraduate') : v, remove: () => this.tog(k, v) })));
+    if (s.max < 275000) chips.push({ label: 'Up to ' + UV.inr(s.max), remove: () => this.setState({ max: 275000 }) });
+    const cmp = UV.store.compare().map(UV.byId).filter(Boolean);
+    return { ...base, groups, results: list.map(c => c.id), count: list.length, none: !list.length, maxF: UV.inr(s.max), chips, hasChips: chips.length > 0,
+      activeCountLabel: chips.length ? ' (' + chips.length + ')' : '',
+      hasTray: cmp.length > 0, trayCount: cmp.length, tray: cmp.map(c => ({ label: c.short + ' · ' + UV.UNIS[c.uni].short, logo: UV.logo(c.uni), remove: () => UV.store.toggleCompare(c.id) })) };
+  }
+}
+</script>
+</body>
+</html>

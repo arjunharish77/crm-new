@@ -13,8 +13,13 @@ export type BlogPost = {
   excerpt: string;
   cover: string;
   publishedDate: string;
+  // Set only when a fact or the advice changes (not for typo fixes); drives dateModified and the
+  // sitemap lastmod (technical SEO review M4/M8).
+  updatedDate?: string;
   body: BlogBlock[];
   faqs: Array<[question: string, answer: string]>;
+  // Per-post sources with the date each was checked (content plan template fix).
+  sources?: Array<{ label: string; url: string; checkedAt: string }>;
 };
 
 // One real, already-approved image per category, used as a fallback whenever a post's own
@@ -61,6 +66,7 @@ export const blogPosts: BlogPost[] = [
     excerpt: "Online MBA fees in our catalog start at ₹1,20,000. What the total fee includes, and when paying more can be worth it.",
     cover: "/blog/online-mba-guide.webp",
     publishedDate: "2026-07-14",
+    updatedDate: "2026-10-05",
     body: [
       { type: "p", text: "A low headline fee only tells part of the story. Before picking the cheapest online MBA, check what the total fee actually includes: application charges, exam fees, specialisation electives, and whether the semester-wise or EMI plan carries any processing cost." },
       { type: "h2", text: "What actually varies between universities" },
@@ -179,12 +185,13 @@ export const blogPosts: BlogPost[] = [
     excerpt: "MUJ, SMU, and Amity's real eligibility rules for both degrees, and how to decide based on where you want your career to go.",
     cover: "/blog/online-mba-vs-online-mca-which-is-better.webp",
     publishedDate: "2026-08-09",
+    updatedDate: "2026-10-05",
     body: [
-      { type: "p", text: "Both are open to any bachelor's degree at MUJ, SMU, and Amity — none of the three requires a specific undergraduate discipline for either program. The real decision isn't about eligibility; it's about which direction you want your career to go." },
+      { type: "p", text: "The online MBA is open to a bachelor's degree in any discipline at MUJ, SMU, and Amity. The online MCA is not the same at all three: MUJ accepts any discipline, SMU prefers a Computer Applications, CS or IT background, and Amity asks for a BCA, a bachelor's degree with Mathematics, or a CS-related B.Tech/BE. Check the MCA rule before you choose on career direction." },
       { type: "h2", text: "Online MBA: broader, management-track" },
       { type: "p", text: "MUJ and SMU require a minimum of 50% marks (45% for reserved categories) for their MBA; Amity's bar is lower, at 40%, with an internal test available below that. No work experience or entrance exam is required at any of the three." },
       { type: "h2", text: "Online MCA: technical, with a real catch for non-CS backgrounds" },
-      { type: "p", text: "If you haven't studied Mathematics or computing fundamentals at 10+2 or graduation, all three universities require a compulsory bridge course in your first semester — not a rejection, just extra groundwork before the core MCA content starts." },
+      { type: "p", text: "MUJ accepts a bachelor's degree in any discipline (50% marks, 45% for reserved categories) and adds a compulsory mathematics or computing bridge course in Semester 1 if you haven't studied them at 10+2 or graduation. SMU prefers a Computer Applications, CS or IT degree and applies a computing-fundamentals bridge course otherwise. Amity lists BCA, a Science, Commerce or Arts degree with Mathematics, or a CS-related B.Tech/BE, with a qualifying bridge course if Mathematics wasn't studied at 10+2 or graduation." },
       { type: "note", text: "Unnati Vidya tip: if you're deciding between the two, think about role, not difficulty — MBA skews toward management and cross-functional roles, MCA toward hands-on technical and engineering roles." },
       { type: "links", heading: "Compare the real numbers", items: [
         { href: "/online-degree-guides/mba-eligibility", label: "Online MBA eligibility across universities" },
@@ -193,8 +200,8 @@ export const blogPosts: BlogPost[] = [
       ] },
     ],
     faqs: [
-      ["Do I need a specific undergraduate degree for online MBA or MCA?", "No — both are open to any bachelor's degree at MUJ, SMU, and Amity; none of the three requires a specific undergraduate discipline for either program."],
-      ["What happens if I don't have a Math/computing background and want an online MCA?", "All three universities require a compulsory bridge course in your first semester if you haven't studied Mathematics or computing fundamentals at 10+2 or graduation — it's extra groundwork, not a rejection."],
+      ["Do I need a specific undergraduate degree for online MBA or MCA?", "Not for the MBA: MUJ, SMU and Amity accept a bachelor's degree in any discipline. For the MCA it depends on the university: MUJ accepts any discipline, SMU prefers a Computer Applications, CS or IT degree, and Amity lists BCA, a bachelor's degree with Mathematics, or a CS-related B.Tech/BE."],
+      ["What happens if I don't have a Math/computing background and want an online MCA?", "MUJ and SMU add a bridge course in mathematics or computing fundamentals. Amity applies a qualifying bridge course if Mathematics wasn't studied at 10+2 or graduation, but its main eligibility list asks for BCA, a degree with Mathematics or a CS-related B.Tech/BE, so confirm your case with the university."],
       ["How should I decide between online MBA and MCA?", "Think about role, not difficulty — MBA skews toward management and cross-functional roles, while MCA skews toward hands-on technical and engineering roles."],
     ],
   },
@@ -206,10 +213,11 @@ export const blogPosts: BlogPost[] = [
     excerpt: "\"Online\" and \"distance\" are two separate regulatory categories under UGC, not marketing labels — here's why that matters before you enrol.",
     cover: "/blog/online-mba-vs-distance-mba-difference.webp",
     publishedDate: "2026-08-10",
+    updatedDate: "2026-10-05",
     body: [
       { type: "p", text: "\"Online\" and \"distance\" (ODL) aren't interchangeable marketing words — they're two separate approval categories under UGC, and a university's entitlement for one doesn't automatically cover the other." },
       { type: "h2", text: "Why the distinction matters to you" },
-      { type: "p", text: "The MBA programs listed on this site (MUJ, SMU, Amity) are entitled specifically under UGC-DEB's \"Online\" category, verified directly against the UGC-DEB's own published entitlement list — not the separate ODL category some other providers use." },
+      { type: "p", text: "The MBA programs listed on this site (MUJ, SMU, Amity) are offered in online mode, which UGC-DEB lists under its \"Online\" category, not the separate ODL (distance) category. We are re-checking each program against the 2026-27 entitlement list; until that is published here, look up your program under the Online category at deb.ugc.ac.in." },
       { type: "h2", text: "What to actually check" },
       { type: "p", text: "Before enrolling anywhere, confirm which specific category (Online vs ODL) a program is entitled under, and for which academic year — entitlement is renewed and re-published periodically, and a university can be entitled for one mode and not the other." },
       { type: "note", text: "Unnati Vidya tip: don't take a program page's \"UGC approved\" badge at face value — check the specific mode (Online vs ODL) and academic year against deb.ugc.ac.in directly." },
@@ -220,7 +228,7 @@ export const blogPosts: BlogPost[] = [
     ],
     faqs: [
       ["Are 'online' and 'distance' MBA the same thing under UGC rules?", "No — they're two separate approval categories under UGC. A university's entitlement for one doesn't automatically cover the other."],
-      ["Which UGC-DEB category are the MBA programs on this site entitled under?", "The 'Online' category specifically, verified directly against the UGC-DEB's own published entitlement list — not the separate ODL (distance) category some other providers use."],
+      ["Which UGC-DEB category are the MBA programs on this site entitled under?", "They are offered in online mode, which UGC-DEB lists under its 'Online' category, not the ODL (distance) category. Our 2026-27 re-check is in progress, so look up your program under the Online category at deb.ugc.ac.in before you enrol."],
       ["What should I check before enrolling, given this distinction?", "Confirm which specific category (Online vs ODL) a program is entitled under, and for which academic year — don't take a program page's 'UGC approved' badge at face value."],
     ],
   },
@@ -258,13 +266,14 @@ export const blogPosts: BlogPost[] = [
     excerpt: "₹1.8L vs ₹2.25L, 50% vs 40% minimum marks, and 13 vs 14 specializations — the real numbers side by side.",
     cover: "/blog/manipal-university-jaipur-vs-amity-online-mba.webp",
     publishedDate: "2026-08-12",
+    updatedDate: "2026-10-05",
     body: [
       { type: "p", text: "MUJ's online MBA costs ₹1,80,000 total; Amity's costs ₹2,25,000 — a ₹45,000 difference. Before deciding on fee alone, here's what else genuinely differs." },
       { type: "h2", text: "Eligibility: Amity's bar is lower" },
       { type: "p", text: "MUJ requires a minimum of 50% marks (45% reserved categories); Amity's requirement is lower, at 40%, with an internal eligibility test available below that. Neither requires work experience or an entrance exam." },
       { type: "h2", text: "Specializations: both are genuinely broad" },
       { type: "p", text: "MUJ lists 13 real specializations including Finance, Analytics & Data Science, and BFSI. Amity lists 14, including an ACCA-linked International Finance track not available at MUJ." },
-      { type: "note", text: "Unnati Vidya tip: a higher fee doesn't mean a better degree — both are UGC-entitled online degrees with equal validity. Compare placement rate and average package alongside fee." },
+      { type: "note", text: "Unnati Vidya tip: a higher fee doesn't by itself mean a better degree. Validity depends on each program's UGC-DEB entitlement for your session, so check that first, then compare curriculum, eligibility and support alongside the fee." },
       { type: "links", heading: "See the full comparison", items: [
         { href: "/compare/mba/amity-online-vs-manipal-university-jaipur", label: "Online MBA: MUJ vs Amity, side by side" },
         { href: "/online-degree-guides/mba-fees", label: "Online MBA fees across all universities" },
@@ -284,8 +293,9 @@ export const blogPosts: BlogPost[] = [
     excerpt: "₹90,000 vs ₹1,99,000 — a genuinely large fee gap, and specializations that don't overlap at all.",
     cover: "/blog/sikkim-manipal-vs-amity-online-bba.webp",
     publishedDate: "2026-08-13",
+    updatedDate: "2026-10-05",
     body: [
-      { type: "p", text: "SMU's online BBA costs ₹90,000 total, more than a lakh cheaper than Amity's ₹1,99,000. That's the widest fee gap of any comparison on this site for the same course name." },
+      { type: "p", text: "SMU's online BBA costs ₹90,000 total, more than a lakh cheaper than Amity's ₹1,99,000." },
       { type: "h2", text: "Specializations don't overlap" },
       { type: "p", text: "SMU's real specializations are Business Analytics & FinTech, Entrepreneurship, Operations & Supply Chain Management, and Banking & Insurance. Amity's are Data Analytics and Travel and Tourism Management — genuinely different focus areas, not just different names for the same tracks." },
       { type: "h2", text: "Eligibility is the same" },
@@ -297,7 +307,7 @@ export const blogPosts: BlogPost[] = [
       ] },
     ],
     faqs: [
-      ["How big is the fee gap between SMU and Amity's online BBA?", "SMU costs ₹90,000 total versus Amity's ₹1,99,000 — more than a lakh difference, the widest fee gap of any comparison on this site for the same course name."],
+      ["How big is the fee gap between SMU and Amity's online BBA?", "SMU costs ₹90,000 total versus Amity's ₹1,99,000 — a difference of ₹1,09,000."],
       ["Do SMU and Amity's online BBA specializations overlap?", "No — SMU offers Business Analytics & FinTech, Entrepreneurship, Operations & Supply Chain Management, and Banking & Insurance, while Amity offers Data Analytics and Travel and Tourism Management — genuinely different focus areas."],
       ["Is the eligibility criteria different between SMU and Amity's online BBA?", "No — neither states a minimum percentage on its own dedicated BBA page, and both accept any 10+2 stream."],
     ],
@@ -385,24 +395,25 @@ export const blogPosts: BlogPost[] = [
     title: "Online M.Com for working professionals: is it worth it?",
     category: "Careers",
     read: "5 min read",
-    excerpt: "You don't need a B.Com to apply — a real, verified finding that surprises most people considering this degree.",
+    excerpt: "Who an online M.Com suits while you work, what eligibility to confirm first, and what the universities do and don't publish about outcomes.",
     cover: "/blog/online-mcom-working-professionals-worth-it.webp",
     publishedDate: "2026-08-17",
+    updatedDate: "2026-10-05",
     body: [
-      { type: "p", text: "Contrary to what most people assume, none of MUJ, SMU, or Amity require a B.Com or related bachelor's degree for their online M.Com — all three explicitly or effectively accept graduates from any discipline." },
+      { type: "p", text: "Whether you need a B.Com for an online M.Com is not settled across MUJ, SMU and Amity. Our catalog lists graduation in commerce or a related discipline for all three, and we are re-checking each university's current rule. If your degree is not in commerce, ask the university to confirm you qualify before you apply." },
       { type: "h2", text: "Who this is actually worth it for" },
       { type: "p", text: "If you're already working in finance-adjacent roles without a formal commerce credential, an M.Com can formalize that experience. MUJ and SMU's own pages highlight auditing, corporate finance, and financial-analytics roles; Amity's Financial Management and Fintech specializations lead toward distinctly different tracks — CFO-track roles versus Fintech Analyst/Blockchain Developer roles, respectively." },
       { type: "h2", text: "What to verify before enrolling" },
       { type: "p", text: "None of the three universities publish an official, program-specific placement percentage or salary figure — ask a counsellor for realistic expectations rather than relying on unverified marketing claims." },
-      { type: "note", text: "Unnati Vidya tip: if Fintech interests you, Amity's M.Com Fintech specialization is a genuine UGC-entitled degree track, not a shorter certification — despite a labeling mix-up on Amity's own site that we found and verified during our research." },
+      { type: "note", text: "Unnati Vidya tip: if Fintech interests you, Amity lists Fintech as a specialization within its online M.Com degree, not as a separate certification, although some of Amity's own page labels are inconsistent. Confirm the specialization and its recognition for your session with the university." },
       { type: "links", heading: "Check real eligibility and specializations", items: [
         { href: "/online-degree-guides/m-com-eligibility", label: "Online M.Com eligibility across universities" },
         { href: "/specializations/m-com-financial-technology", label: "Online M.Com in Financial Technology at Amity" },
       ] },
     ],
     faqs: [
-      ["Do I need a B.Com to apply for online M.Com?", "No — contrary to common assumption, none of MUJ, SMU, or Amity require a B.Com or related bachelor's degree; all three explicitly or effectively accept graduates from any discipline."],
-      ["Is Amity's M.Com Fintech specialization a full degree or a shorter certification?", "A genuine UGC-entitled degree track, not a shorter certification — despite a labeling mix-up on Amity's own site that was found and verified during this site's research."],
+      ["Do I need a B.Com to apply for online M.Com?", "Possibly. Our catalog lists graduation in commerce or a related discipline for MUJ, SMU and Amity, and we are re-checking each university's current rule. If your degree is not in commerce, ask the university to confirm you qualify before you apply."],
+      ["Is Amity's M.Com Fintech specialization a full degree or a shorter certification?", "Amity lists Fintech as a specialization within its online M.Com degree, not as a separate certification, although some of Amity's own page labels are inconsistent. Confirm the specialization and its recognition for your session with the university."],
       ["Is there an official salary figure for online M.Com?", "No — none of the three universities publish an official, program-specific placement percentage or salary figure. Ask a counsellor for realistic expectations rather than relying on unverified marketing claims."],
     ],
   },
@@ -437,23 +448,24 @@ export const blogPosts: BlogPost[] = [
     title: "Is an online MBA valid for government jobs?",
     category: "Validity",
     read: "5 min read",
-    excerpt: "The MBA programs on this site are confirmed on the primary UGC-DEB entitlement list — here's what that actually means for government-job eligibility.",
+    excerpt: "What UGC-DEB entitlement means for government-job eligibility, and how to check an online MBA for your own admission session.",
     cover: "/blog/is-online-mba-valid-for-government-jobs.webp",
     publishedDate: "2026-08-19",
+    updatedDate: "2026-10-05",
     body: [
-      { type: "p", text: "All three online MBA programs on this site — MUJ, SMU, and Amity — are explicitly named on the UGC-DEB's published \"Entitled Online\" list, an independent government source, not just each university's own marketing claim." },
+      { type: "p", text: "For a government job, what matters is whether your exact online MBA program is on the UGC-DEB \"Entitled Online\" list for your admission session. That list is an independent government source; a university's own badge is not. We are re-checking the MUJ, SMU and Amity MBA programs against the 2026-27 list and will show the dated result on each course page." },
       { type: "h2", text: "What UGC-DEB entitlement actually means" },
       { type: "p", text: "A UGC-DEB entitled online degree is treated as equivalent to an on-campus degree for higher education and employment purposes, including government job eligibility, subject to current entitlement at the time you graduate." },
       { type: "h2", text: "What to double-check for your own situation" },
       { type: "p", text: "Entitlement is confirmed per academic year, so if you're planning around a specific job notification, verify current-cycle entitlement for your exact program directly against deb.ugc.ac.in, not just a university's badge." },
-      { type: "note", text: "Unnati Vidya tip: entitlement gaps do get found and resolved — during our own research we found and then directly verified three programs where a university's marketing claim didn't initially match the published list. Always check the specific program, not just the university's general reputation." },
+      { type: "note", text: "Unnati Vidya tip: check the specific program, not just the university. A university can be entitled while a particular program or session is not listed." },
       { type: "links", heading: "Check the primary source yourself", items: [
         { href: "/online-degree-guides/mba-ugc-approval", label: "Is Online MBA UGC approved? Validity explained" },
         { href: "/how-we-verify", label: "How we verify our data" },
       ] },
     ],
     faqs: [
-      ["Are MUJ, SMU, and Amity's online MBA programs confirmed on the UGC-DEB entitlement list?", "Yes — all three are explicitly named on the UGC-DEB's published 'Entitled Online' list, an independent government source, not just each university's own marketing claim."],
+      ["Are MUJ, SMU, and Amity's online MBA programs on the UGC-DEB entitlement list?", "We are re-checking all three against the 2026-27 'Entitled Online' list and will show the dated result on each course page. Until then, look up the exact program for your session at deb.ugc.ac.in."],
       ["What does UGC-DEB entitlement actually guarantee for government jobs?", "A UGC-DEB entitled online degree is treated as equivalent to an on-campus degree for higher education and employment purposes, including government job eligibility, subject to current entitlement at the time you graduate."],
       ["Should I verify entitlement myself before relying on it for a job application?", "Yes — entitlement is confirmed per academic year, so if you're planning around a specific job notification, verify current-cycle entitlement for your exact program directly against deb.ugc.ac.in."],
     ],
@@ -466,13 +478,14 @@ export const blogPosts: BlogPost[] = [
     excerpt: "A university's own \"UGC approved\" badge isn't proof — here's the actual government source to check, and a real example of why it matters.",
     cover: "/blog/how-to-verify-ugc-approved-degree.webp",
     publishedDate: "2026-08-20",
+    updatedDate: "2026-10-05",
     body: [
       { type: "p", text: "The single most reliable check for any online degree's validity is the UGC-DEB's own published \"Entitled Online\" list at deb.ugc.ac.in — not a university's own \"UGC approved\" badge, which is a marketing claim, not independent proof." },
-      { type: "h2", text: "A real example of why this matters" },
-      { type: "p", text: "During our own research, we found three programs where a university's own site claimed UGC entitlement, but the exact program name didn't initially appear on the published list — in one case, appearing instead under a completely different university. We verified all three directly with the universities before publishing anything, and updated our pages accordingly once confirmed." },
+      { type: "h2", text: "Why the badge isn't enough" },
+      { type: "p", text: "Entitlement is granted per program and per session. A university's site can describe a program as UGC-entitled even when that exact program name doesn't appear on the list for your session, or appears under a differently named legal entity. The list, not the badge, is what counts." },
       { type: "h2", text: "How to check a program yourself" },
       { type: "p", text: "Look up the university's exact legal name on the UGC-DEB list (large universities sometimes have more than one legally distinct entity), then confirm your specific program is named exactly — not just that the university appears somewhere on the list." },
-      { type: "note", text: "Unnati Vidya tip: if you can't find your exact program name on the current list, that's not necessarily a red flag — ask the university directly for their entitlement documentation, the way we did." },
+      { type: "note", text: "Unnati Vidya tip: if you can't find your exact program name on the current list, that's not necessarily a red flag — ask the university directly for their entitlement documentation." },
       { type: "links", heading: "See our verification approach", items: [
         { href: "/how-we-verify", label: "How we verify our data" },
         { href: "/online-degree-guides", label: "Browse all eligibility, career-scope, and UGC-approval guides" },
@@ -481,7 +494,7 @@ export const blogPosts: BlogPost[] = [
     faqs: [
       ["Is a university's own 'UGC approved' badge proof enough of validity?", "No — the single most reliable check is the UGC-DEB's own published 'Entitled Online' list at deb.ugc.ac.in. A university's own badge is a marketing claim, not independent proof."],
       ["How do I check if my specific program is UGC-DEB entitled?", "Look up the university's exact legal name on the UGC-DEB list (large universities sometimes have more than one legally distinct entity), then confirm your specific program is named exactly — not just that the university appears somewhere on the list."],
-      ["What if I can't find my exact program name on the current UGC-DEB list?", "That's not necessarily a red flag — ask the university directly for their entitlement documentation. During this site's own research, three programs initially didn't appear by exact name but were directly verified and confirmed with the universities."],
+      ["What if I can't find my exact program name on the current UGC-DEB list?", "Ask the university for its entitlement documentation and check the program's exact name and the session it covers. If the program still isn't on the list for your session, treat that as unresolved until the university shows otherwise."],
     ],
   },
   {
@@ -546,13 +559,14 @@ export const blogPosts: BlogPost[] = [
     excerpt: "Amity's real eligibility only requires a Science background — not CS, math, or statistics specifically, contrary to common assumption.",
     cover: "/blog/online-msc-data-science-career-scope.webp",
     publishedDate: "2026-08-23",
+    updatedDate: "2026-10-05",
     body: [
       { type: "p", text: "A genuinely useful, verified fact: Amity's online MSc Data Science requires only a bachelor's degree in any Science discipline — not computer science, mathematics, or statistics specifically, as the common assumption for a data science program would suggest." },
       { type: "h2", text: "Who this actually fits" },
       { type: "p", text: "If your undergraduate degree was in a Science discipline outside CS/math/stats — biology, physics, chemistry — this program's eligibility genuinely doesn't exclude you, though you should honestly assess your own comfort with the technical coursework once enrolled." },
       { type: "h2", text: "Career path" },
       { type: "p", text: "Amity's own page shows a real progression: Data Analyst and Junior Data Scientist roles at entry, moving toward Data Scientist and Machine Learning Engineer, and eventually Senior Data Scientist or Data Science Manager." },
-      { type: "note", text: "Unnati Vidya tip: no official, program-specific salary figure exists for this program — third-party estimates cite ₹6-12 LPA as a general Indian data-science market average, not a guaranteed Amity-specific outcome." },
+      { type: "note", text: "Unnati Vidya tip: there is no official, program-specific salary figure for this program, so we don't quote one. Outcomes depend on your experience, skills and the roles you target." },
       { type: "links", heading: "See the full picture", items: [
         { href: "/online-degree-guides/msc-data-science-eligibility", label: "Online MSc Data Science eligibility" },
         { href: "/online-degree-guides/msc-data-science-career-scope", label: "Online MSc Data Science career scope" },
@@ -561,7 +575,7 @@ export const blogPosts: BlogPost[] = [
     faqs: [
       ["Do I need a computer science or statistics background for online MSc Data Science at Amity?", "No — Amity's own eligibility page requires only a bachelor's degree in any Science discipline, not CS, mathematics, or statistics specifically."],
       ["What career progression does Amity show for this program?", "Data Analyst and Junior Data Scientist roles at entry, moving toward Data Scientist and Machine Learning Engineer, and eventually Senior Data Scientist or Data Science Manager."],
-      ["Is there a verified salary figure for online MSc Data Science?", "No official, program-specific salary figure exists. Third-party estimates cite ₹6-12 LPA as a general Indian data-science market average, not a guaranteed Amity-specific outcome."],
+      ["Is there a verified salary figure for online MSc Data Science?", "No. There is no official, program-specific salary figure, so we don't quote one. Outcomes depend on your experience, skills and the roles you target."],
     ],
   },
   {
@@ -572,13 +586,14 @@ export const blogPosts: BlogPost[] = [
     excerpt: "MUJ's real eligibility explicitly requires Mathematics as a compulsory subject — the one program on this site where that's actually true.",
     cover: "/blog/online-msc-mathematics-worth-it.webp",
     publishedDate: "2026-08-24",
+    updatedDate: "2026-10-05",
     body: [
-      { type: "p", text: "Unlike most other master's programs we cover, MUJ's online MSc Mathematics genuinely requires Mathematics as a compulsory subject in your bachelor's degree (or a BSc degree) — a real, verified prerequisite, not a generic placeholder." },
+      { type: "p", text: "Unlike most other master's programs we cover, MUJ's online MSc Mathematics genuinely requires Mathematics as a compulsory subject in your bachelor's degree (or a BSc degree) as listed on MUJ's program page. MUJ's detailed programme regulations word this differently, so confirm the exact requirement with the university before you apply." },
       { type: "h2", text: "Four real elective paths" },
       { type: "p", text: "MUJ confirms four electives: Mathematics, Data Science, Computational Science, and Econometrics, chosen in semesters 3-4 — genuinely different specializations within the same base program, not cosmetic variations." },
       { type: "h2", text: "Career scope" },
       { type: "p", text: "MUJ's own page names Data Scientist, Quantitative Analyst, Actuarial Analyst, Risk Analyst, Business Analyst, and Statistician as career paths — the exact fit depending heavily on which elective you choose." },
-      { type: "note", text: "Unnati Vidya tip: a 10% fee discount applies for 80%+ marks in your bachelor's degree — confirm current eligibility for this with a counsellor before you apply." },
+      { type: "note", text: "Unnati Vidya tip: scholarships and fee waivers change by session. Check MUJ's current fee page, or ask the university, before you count on one." },
       { type: "links", heading: "See the full picture", items: [
         { href: "/online-degree-guides/msc-mathematics-eligibility", label: "Online MSc Mathematics eligibility" },
         { href: "/specializations/msc-mathematics-data-science", label: "Online MSc Mathematics with Data Science elective" },
@@ -587,7 +602,7 @@ export const blogPosts: BlogPost[] = [
     faqs: [
       ["Does online MSc Mathematics at MUJ require Mathematics in my bachelor's degree?", "Yes — unlike most other master's programs on this site, MUJ genuinely requires Mathematics as a compulsory subject in your bachelor's degree (or a BSc degree)."],
       ["What electives can I choose in online MSc Mathematics?", "MUJ confirms four electives — Mathematics, Data Science, Computational Science, and Econometrics — chosen in semesters 3-4, genuinely different specializations within the same base program."],
-      ["Is there a fee discount for good academic performance?", "Yes — a 10% fee discount applies for 80%+ marks in your bachelor's degree, per MUJ's own fee page. Confirm current eligibility for this with a counsellor."],
+      ["Is there a fee discount for good academic performance?", "Scholarships and fee waivers change by session, so we don't list one here. Check MUJ's current fee page, or ask the university, before you apply."],
     ],
   },
   {
@@ -624,12 +639,13 @@ export const blogPosts: BlogPost[] = [
     excerpt: "A specific, unusual eligibility requirement most applicants don't expect: 3 years of English-medium schooling.",
     cover: "/blog/online-ba-jmc-what-to-expect.webp",
     publishedDate: "2026-08-26",
+    updatedDate: "2026-10-05",
     body: [
       { type: "p", text: "Amity's online BA in Journalism & Mass Communication has a real, specific requirement not seen on most of this site's other undergraduate programs: a minimum of 3 years of education in English medium, on top of a 10+2 pass. No minimum percentage is stated." },
       { type: "h2", text: "Career progression" },
       { type: "p", text: "Amity's own page shows a real tiered path: Content Writer and Social Media Coordinator at entry, PR Specialist and Journalist at mid-level, and Communications Manager or Editor with more experience." },
       { type: "h2", text: "A caution worth knowing" },
-      { type: "p", text: "No official salary figure appears on Amity's program page. A separate Amity blog claims an entry salary around ₹3.9 LPA and a placement-cell average of ₹6-9 LPA — treat this as Amity's own marketing claim, not independently verified." },
+      { type: "p", text: "No official salary figure appears on Amity's program page, so we don't quote one. Outcomes in journalism and media depend heavily on your portfolio, internships and the roles you target." },
       { type: "note", text: "Unnati Vidya tip: this is distinct from Amity's postgraduate MA JMC, which has different eligibility and doesn't carry the same English-medium schooling requirement." },
       { type: "links", heading: "See the full picture", items: [
         { href: "/online-degree-guides/ba-jmc-eligibility", label: "Online BA JMC eligibility" },

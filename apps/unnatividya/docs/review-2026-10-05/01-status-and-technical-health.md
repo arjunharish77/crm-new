@@ -1,5 +1,7 @@
 # Unnati Vidya website: status audit (read-only)
 
+> **Historical snapshot (5 October 2026).** Live-versus-repository statements below describe that audit time, before later local increments. The owner confirms the latest code has not been pushed to the VPS, but the exact current VPS commit has not been independently checked for the 8 October update. Use [current status](../CURRENT_STATUS_AND_RELEASE_PLAN.md) and the [single runbook](../CMS_PUBLISHING_DEPLOYMENT.md) for present decisions.
+
 Date: 5 October 2026. Scope: `crm/apps/unnatividya` at `main` = `13b392b` (in sync with origin/main), compared with the live site https://unnatividya.com.
 Method: read the docs, spot-checked the code, ran `tsc` and `eslint`, ran `npm audit` on temporary copies of the lockfiles, and fetched public pages with curl. No repo files were modified. No forms were submitted. The local database query was **denied by the permission classifier and not run**, so the local CMS/DB state (applied revisions, published flags) is inferred from docs and files only.
 

@@ -1,0 +1,629 @@
+[
+ {
+  "courseId": "mba-muj",
+  "expectedFee": 184000,
+  "programUrl": "https://www.onlinemanipal.com/online-mba-manipal-university-jaipur",
+  "categoryFees": {
+   "checkedAt": "2026-10-12",
+   "sourceUrl": "https://www.onlinemanipal.com/online-mba-manipal-university-jaipur",
+   "sourceLabel": "Official program page fee tabs (new batch), read 12 October 2026",
+   "rows": [
+    {
+     "category": "Indian applicants",
+     "currency": "INR",
+     "total": 184000,
+     "perSemester": 46000,
+     "semesters": 4
+    },
+    {
+     "category": "NRI applicants",
+     "currency": "USD",
+     "total": 2772,
+     "perSemester": 693,
+     "semesters": 4
+    },
+    {
+     "category": "Foreign nationals",
+     "currency": "USD",
+     "total": 3236,
+     "perSemester": 809,
+     "semesters": 4
+    }
+   ],
+   "notes": [
+    "Base tuition only. Exam, resit, convocation, tax and payment charges are not included.",
+    "NRI and foreign-national fees are separate schedules in US dollars. We don't convert them.",
+    "Applicants from Nepal, Bhutan, Bangladesh and Sri Lanka pay in INR. Confirm the tuition that applies with the university.",
+    "The 2026-27 combined prospectus still prints the earlier Indian fee; the program page is newer. USD schedules match both."
+   ]
+  }
+ },
+ {
+  "courseId": "bba-muj",
+  "expectedFee": 144000,
+  "programUrl": "https://www.onlinemanipal.com/online-bba-degree-muj",
+  "categoryFees": {
+   "checkedAt": "2026-10-12",
+   "sourceUrl": "https://www.onlinemanipal.com/online-bba-degree-muj",
+   "sourceLabel": "Official program page fee tabs (new batch), read 12 October 2026",
+   "rows": [
+    {
+     "category": "Indian applicants",
+     "currency": "INR",
+     "total": 144000,
+     "perSemester": 24000,
+     "semesters": 6
+    },
+    {
+     "category": "NRI applicants",
+     "currency": "USD",
+     "total": 2274,
+     "perSemester": 379,
+     "semesters": 6
+    },
+    {
+     "category": "Foreign nationals",
+     "currency": "USD",
+     "total": 2646,
+     "perSemester": 441,
+     "semesters": 6
+    }
+   ],
+   "notes": [
+    "Base tuition only. Exam, resit, convocation, tax and payment charges are not included.",
+    "NRI and foreign-national fees are separate schedules in US dollars. We don't convert them.",
+    "Applicants from Nepal, Bhutan, Bangladesh and Sri Lanka pay in INR. Confirm the tuition that applies with the university.",
+    "The 2026-27 combined prospectus still prints the earlier Indian fee; the program page is newer. USD schedules match both."
+   ]
+  }
+ },
+ {
+  "courseId": "bca-muj",
+  "expectedFee": 144000,
+  "programUrl": "https://www.onlinemanipal.com/online-bca-degree-muj",
+  "categoryFees": {
+   "checkedAt": "2026-10-12",
+   "sourceUrl": "https://www.onlinemanipal.com/online-bca-degree-muj",
+   "sourceLabel": "Official program page fee tabs (new batch), read 12 October 2026",
+   "rows": [
+    {
+     "category": "Indian applicants",
+     "currency": "INR",
+     "total": 144000,
+     "perSemester": 24000,
+     "semesters": 6
+    },
+    {
+     "category": "NRI applicants",
+     "currency": "USD",
+     "total": 2274,
+     "perSemester": 379,
+     "semesters": 6
+    },
+    {
+     "category": "Foreign nationals",
+     "currency": "USD",
+     "total": 2646,
+     "perSemester": 441,
+     "semesters": 6
+    }
+   ],
+   "notes": [
+    "Base tuition only. Exam, resit, convocation, tax and payment charges are not included.",
+    "NRI and foreign-national fees are separate schedules in US dollars. We don't convert them.",
+    "Applicants from Nepal, Bhutan, Bangladesh and Sri Lanka pay in INR. Confirm the tuition that applies with the university.",
+    "The 2026-27 combined prospectus still prints the earlier Indian fee; the program page is newer. USD schedules match both."
+   ]
+  }
+ },
+ {
+  "courseId": "mca-muj",
+  "expectedFee": 164000,
+  "programUrl": "https://www.onlinemanipal.com/online-mca-degree-muj",
+  "categoryFees": {
+   "checkedAt": "2026-10-12",
+   "sourceUrl": "https://www.onlinemanipal.com/online-mca-degree-muj",
+   "sourceLabel": "Official program page fee tabs (new batch), read 12 October 2026",
+   "rows": [
+    {
+     "category": "Indian applicants",
+     "currency": "INR",
+     "total": 164000,
+     "perSemester": 41000,
+     "semesters": 4
+    },
+    {
+     "category": "NRI applicants",
+     "currency": "USD",
+     "total": 2432,
+     "perSemester": 608,
+     "semesters": 4
+    },
+    {
+     "category": "Foreign nationals",
+     "currency": "USD",
+     "total": 2836,
+     "perSemester": 709,
+     "semesters": 4
+    }
+   ],
+   "notes": [
+    "Base tuition only. Exam, resit, convocation, tax and payment charges are not included.",
+    "NRI and foreign-national fees are separate schedules in US dollars. We don't convert them.",
+    "Applicants from Nepal, Bhutan, Bangladesh and Sri Lanka pay in INR. Confirm the tuition that applies with the university.",
+    "The 2026-27 combined prospectus still prints the earlier Indian fee; the program page is newer. USD schedules match both."
+   ]
+  }
+ },
+ {
+  "courseId": "bcom-muj",
+  "expectedFee": 105000,
+  "programUrl": "https://www.onlinemanipal.com/online-bcom-degree-muj",
+  "categoryFees": {
+   "checkedAt": "2026-10-12",
+   "sourceUrl": "https://www.onlinemanipal.com/online-bcom-degree-muj",
+   "sourceLabel": "Official program page fee tabs (new batch), read 12 October 2026",
+   "rows": [
+    {
+     "category": "Indian applicants",
+     "currency": "INR",
+     "total": 105000,
+     "perSemester": 17500,
+     "semesters": 6
+    },
+    {
+     "category": "NRI applicants",
+     "currency": "USD",
+     "total": 1458,
+     "perSemester": 243,
+     "semesters": 6
+    },
+    {
+     "category": "Foreign nationals",
+     "currency": "USD",
+     "total": 1698,
+     "perSemester": 283,
+     "semesters": 6
+    }
+   ],
+   "notes": [
+    "Base tuition only. Exam, resit, convocation, tax and payment charges are not included.",
+    "NRI and foreign-national fees are separate schedules in US dollars. We don't convert them.",
+    "Applicants from Nepal, Bhutan, Bangladesh and Sri Lanka pay in INR. Confirm the tuition that applies with the university.",
+    "The 2026-27 combined prospectus still prints the earlier Indian fee; the program page is newer. USD schedules match both."
+   ]
+  }
+ },
+ {
+  "courseId": "mcom-muj",
+  "expectedFee": 108000,
+  "programUrl": "https://www.onlinemanipal.com/online-mcom-degree-muj",
+  "categoryFees": {
+   "checkedAt": "2026-10-03",
+   "sourceUrl": "https://www.onlinemanipal.com/wp-content/uploads/2022/11/MUJ-Combined-Brochure.pdf",
+   "sourceLabel": "MUJ combined prospectus 2026–27, PDF page 36",
+   "rows": [
+    {
+     "category": "Indian applicants",
+     "currency": "INR",
+     "total": 108000,
+     "perSemester": 27000,
+     "semesters": 4
+    },
+    {
+     "category": "NRI applicants",
+     "currency": "USD",
+     "total": 1620,
+     "perSemester": 405,
+     "semesters": 4
+    },
+    {
+     "category": "Foreign nationals",
+     "currency": "USD",
+     "total": 1892,
+     "perSemester": 473,
+     "semesters": 4
+    }
+   ],
+   "notes": [
+    "Base tuition only. Exam, resit, convocation, tax and payment charges are not included.",
+    "NRI and foreign-national fees are separate schedules in US dollars. We don't convert them.",
+    "Applicants from Nepal, Bhutan, Bangladesh and Sri Lanka pay in INR. Confirm the tuition that applies with the university."
+   ]
+  }
+ },
+ {
+  "courseId": "ma-economics-muj",
+  "expectedFee": 80000,
+  "programUrl": "https://www.onlinemanipal.com/online-ma-economics-degree",
+  "categoryFees": {
+   "checkedAt": "2026-10-03",
+   "sourceUrl": "https://www.onlinemanipal.com/wp-content/uploads/2022/11/MUJ-Combined-Brochure.pdf",
+   "sourceLabel": "MUJ combined prospectus 2026–27, PDF page 36",
+   "rows": [
+    {
+     "category": "Indian applicants",
+     "currency": "INR",
+     "total": 80000,
+     "perSemester": 20000,
+     "semesters": 4
+    },
+    {
+     "category": "NRI applicants",
+     "currency": "USD",
+     "total": 1160,
+     "perSemester": 290,
+     "semesters": 4
+    },
+    {
+     "category": "Foreign nationals",
+     "currency": "USD",
+     "total": 1340,
+     "perSemester": 335,
+     "semesters": 4
+    }
+   ],
+   "notes": [
+    "Base tuition only. Exam, resit, convocation, tax and payment charges are not included.",
+    "NRI and foreign-national fees are separate schedules in US dollars. We don't convert them.",
+    "Applicants from Nepal, Bhutan, Bangladesh and Sri Lanka pay in INR. Confirm the tuition that applies with the university."
+   ]
+  }
+ },
+ {
+  "courseId": "majmc-muj",
+  "expectedFee": 80000,
+  "programUrl": "https://www.onlinemanipal.com/online-ma-journalism-and-mass-communication",
+  "categoryFees": {
+   "checkedAt": "2026-10-03",
+   "sourceUrl": "https://www.onlinemanipal.com/wp-content/uploads/2022/11/MUJ-Combined-Brochure.pdf",
+   "sourceLabel": "MUJ combined prospectus 2026–27, PDF page 36",
+   "rows": [
+    {
+     "category": "Indian applicants",
+     "currency": "INR",
+     "total": 80000,
+     "perSemester": 20000,
+     "semesters": 4
+    },
+    {
+     "category": "NRI applicants",
+     "currency": "USD",
+     "total": 1200,
+     "perSemester": 300,
+     "semesters": 4
+    },
+    {
+     "category": "Foreign nationals",
+     "currency": "USD",
+     "total": 1400,
+     "perSemester": 350,
+     "semesters": 4
+    }
+   ],
+   "notes": [
+    "Base tuition only. Exam, resit, convocation, tax and payment charges are not included.",
+    "NRI and foreign-national fees are separate schedules in US dollars. We don't convert them.",
+    "Applicants from Nepal, Bhutan, Bangladesh and Sri Lanka pay in INR. Confirm the tuition that applies with the university."
+   ]
+  }
+ },
+ {
+  "courseId": "msc-mathematics-muj",
+  "expectedFee": 84000,
+  "programUrl": "https://www.onlinemanipal.com/online-msc-mathematics-muj",
+  "categoryFees": {
+   "checkedAt": "2026-10-12",
+   "sourceUrl": "https://www.onlinemanipal.com/online-msc-mathematics-muj",
+   "sourceLabel": "Official program page fee tabs (new batch), read 12 October 2026",
+   "rows": [
+    {
+     "category": "Indian applicants",
+     "currency": "INR",
+     "total": 84000,
+     "perSemester": 21000,
+     "semesters": 4
+    },
+    {
+     "category": "NRI applicants",
+     "currency": "USD",
+     "total": 1160,
+     "perSemester": 290,
+     "semesters": 4
+    },
+    {
+     "category": "Foreign nationals",
+     "currency": "USD",
+     "total": 1340,
+     "perSemester": 335,
+     "semesters": 4
+    }
+   ],
+   "notes": [
+    "Base tuition only. Exam, resit, convocation, tax and payment charges are not included.",
+    "NRI and foreign-national fees are separate schedules in US dollars. We don't convert them.",
+    "Applicants from Nepal, Bhutan, Bangladesh and Sri Lanka pay in INR. Confirm the tuition that applies with the university.",
+    "The 2026-27 combined prospectus still prints the earlier Indian fee; the program page is newer. USD schedules match both."
+   ]
+  }
+ },
+ {
+  "courseId": "mba-smu",
+  "expectedFee": 120000,
+  "programUrl": "https://www.onlinemanipal.com/online-mba-degree-dual-specialization-smu",
+  "categoryFees": {
+   "checkedAt": "2026-10-03",
+   "sourceUrl": "https://www.onlinemanipal.com/wp-content/uploads/2024/06/SMU-Combined-Domestic-Brochure.pdf",
+   "sourceLabel": "SMU combined prospectus 2026–27, PDF page 29",
+   "rows": [
+    {
+     "category": "Indian applicants",
+     "currency": "INR",
+     "total": 120000,
+     "perSemester": 30000,
+     "semesters": 4
+    },
+    {
+     "category": "International applicants",
+     "currency": "USD",
+     "total": 1500,
+     "perSemester": 375,
+     "semesters": 4
+    }
+   ],
+   "notes": [
+    "Base tuition only. Exam, resit, convocation, tax and payment charges are not included.",
+    "SMU publishes Indian and international fees only. NRI applicants should ask the university which fee applies to them.",
+    "Applicants from Nepal, Bhutan, Bangladesh and Sri Lanka pay in INR. Confirm the tuition that applies with the university."
+   ]
+  }
+ },
+ {
+  "courseId": "bcom-smu",
+  "expectedFee": 75000,
+  "programUrl": "https://www.onlinemanipal.com/online-bcom-degree-smu",
+  "categoryFees": {
+   "checkedAt": "2026-10-03",
+   "sourceUrl": "https://www.onlinemanipal.com/wp-content/uploads/2024/06/SMU-Combined-Domestic-Brochure.pdf",
+   "sourceLabel": "SMU combined prospectus 2026–27, PDF page 29",
+   "rows": [
+    {
+     "category": "Indian applicants",
+     "currency": "INR",
+     "total": 75000,
+     "perSemester": 12500,
+     "semesters": 6
+    },
+    {
+     "category": "International applicants",
+     "currency": "USD",
+     "total": 1020,
+     "perSemester": 170,
+     "semesters": 6
+    }
+   ],
+   "notes": [
+    "Base tuition only. Exam, resit, convocation, tax and payment charges are not included.",
+    "SMU publishes Indian and international fees only. NRI applicants should ask the university which fee applies to them.",
+    "Applicants from Nepal, Bhutan, Bangladesh and Sri Lanka pay in INR. Confirm the tuition that applies with the university."
+   ]
+  }
+ },
+ {
+  "courseId": "ba-smu",
+  "expectedFee": 75000,
+  "programUrl": "https://www.onlinemanipal.com/online-ba-degree-smu",
+  "categoryFees": {
+   "checkedAt": "2026-10-03",
+   "sourceUrl": "https://www.onlinemanipal.com/wp-content/uploads/2024/06/SMU-Combined-Domestic-Brochure.pdf",
+   "sourceLabel": "SMU combined prospectus 2026–27, PDF page 29",
+   "rows": [
+    {
+     "category": "Indian applicants",
+     "currency": "INR",
+     "total": 75000,
+     "perSemester": 12500,
+     "semesters": 6
+    },
+    {
+     "category": "International applicants",
+     "currency": "USD",
+     "total": 1020,
+     "perSemester": 170,
+     "semesters": 6
+    }
+   ],
+   "notes": [
+    "Base tuition only. Exam, resit, convocation, tax and payment charges are not included.",
+    "SMU publishes Indian and international fees only. NRI applicants should ask the university which fee applies to them.",
+    "Applicants from Nepal, Bhutan, Bangladesh and Sri Lanka pay in INR. Confirm the tuition that applies with the university."
+   ]
+  }
+ },
+ {
+  "courseId": "bba-smu",
+  "expectedFee": 90000,
+  "programUrl": "https://www.onlinemanipal.com/online-bba-degree-smu",
+  "categoryFees": {
+   "checkedAt": "2026-10-03",
+   "sourceUrl": "https://www.onlinemanipal.com/wp-content/uploads/2024/06/SMU-Combined-Domestic-Brochure.pdf",
+   "sourceLabel": "SMU combined prospectus 2026–27, PDF page 29",
+   "rows": [
+    {
+     "category": "Indian applicants",
+     "currency": "INR",
+     "total": 90000,
+     "perSemester": 15000,
+     "semesters": 6
+    },
+    {
+     "category": "International applicants",
+     "currency": "USD",
+     "total": 1200,
+     "perSemester": 200,
+     "semesters": 6
+    }
+   ],
+   "notes": [
+    "Base tuition only. Exam, resit, convocation, tax and payment charges are not included.",
+    "SMU publishes Indian and international fees only. NRI applicants should ask the university which fee applies to them.",
+    "Applicants from Nepal, Bhutan, Bangladesh and Sri Lanka pay in INR. Confirm the tuition that applies with the university."
+   ]
+  }
+ },
+ {
+  "courseId": "mca-smu",
+  "expectedFee": 110000,
+  "programUrl": "https://www.onlinemanipal.com/online-mca-degree-smu",
+  "categoryFees": {
+   "checkedAt": "2026-10-03",
+   "sourceUrl": "https://www.onlinemanipal.com/wp-content/uploads/2024/06/SMU-Combined-Domestic-Brochure.pdf",
+   "sourceLabel": "SMU combined prospectus 2026–27, PDF page 29",
+   "rows": [
+    {
+     "category": "Indian applicants",
+     "currency": "INR",
+     "total": 110000,
+     "perSemester": 27500,
+     "semesters": 4
+    },
+    {
+     "category": "International applicants",
+     "currency": "USD",
+     "total": 1360,
+     "perSemester": 340,
+     "semesters": 4
+    }
+   ],
+   "notes": [
+    "Base tuition only. Exam, resit, convocation, tax and payment charges are not included.",
+    "SMU publishes Indian and international fees only. NRI applicants should ask the university which fee applies to them.",
+    "Applicants from Nepal, Bhutan, Bangladesh and Sri Lanka pay in INR. Confirm the tuition that applies with the university."
+   ]
+  }
+ },
+ {
+  "courseId": "mcom-smu",
+  "expectedFee": 75000,
+  "programUrl": "https://www.onlinemanipal.com/online-mcom-degree-smu",
+  "categoryFees": {
+   "checkedAt": "2026-10-03",
+   "sourceUrl": "https://www.onlinemanipal.com/wp-content/uploads/2024/06/SMU-Combined-Domestic-Brochure.pdf",
+   "sourceLabel": "SMU combined prospectus 2026–27, PDF page 29",
+   "rows": [
+    {
+     "category": "Indian applicants",
+     "currency": "INR",
+     "total": 75000,
+     "perSemester": 18750,
+     "semesters": 4
+    },
+    {
+     "category": "International applicants",
+     "currency": "USD",
+     "total": 980,
+     "perSemester": 245,
+     "semesters": 4
+    }
+   ],
+   "notes": [
+    "Base tuition only. Exam, resit, convocation, tax and payment charges are not included.",
+    "SMU publishes Indian and international fees only. NRI applicants should ask the university which fee applies to them.",
+    "Applicants from Nepal, Bhutan, Bangladesh and Sri Lanka pay in INR. Confirm the tuition that applies with the university."
+   ]
+  }
+ },
+ {
+  "courseId": "ma-english-smu",
+  "expectedFee": 75000,
+  "programUrl": "https://www.onlinemanipal.com/online-ma-english-degree",
+  "categoryFees": {
+   "checkedAt": "2026-10-03",
+   "sourceUrl": "https://www.onlinemanipal.com/wp-content/uploads/2024/06/SMU-Combined-Domestic-Brochure.pdf",
+   "sourceLabel": "SMU combined prospectus 2026–27, PDF page 29",
+   "rows": [
+    {
+     "category": "Indian applicants",
+     "currency": "INR",
+     "total": 75000,
+     "perSemester": 18750,
+     "semesters": 4
+    },
+    {
+     "category": "International applicants",
+     "currency": "USD",
+     "total": 980,
+     "perSemester": 245,
+     "semesters": 4
+    }
+   ],
+   "notes": [
+    "Base tuition only. Exam, resit, convocation, tax and payment charges are not included.",
+    "SMU publishes Indian and international fees only. NRI applicants should ask the university which fee applies to them.",
+    "Applicants from Nepal, Bhutan, Bangladesh and Sri Lanka pay in INR. Confirm the tuition that applies with the university."
+   ]
+  }
+ },
+ {
+  "courseId": "ma-political-science-smu",
+  "expectedFee": 75000,
+  "programUrl": "https://www.onlinemanipal.com/online-ma-political-science-degree",
+  "categoryFees": {
+   "checkedAt": "2026-10-03",
+   "sourceUrl": "https://www.onlinemanipal.com/wp-content/uploads/2024/06/SMU-Combined-Domestic-Brochure.pdf",
+   "sourceLabel": "SMU combined prospectus 2026–27, PDF page 29",
+   "rows": [
+    {
+     "category": "Indian applicants",
+     "currency": "INR",
+     "total": 75000,
+     "perSemester": 18750,
+     "semesters": 4
+    },
+    {
+     "category": "International applicants",
+     "currency": "USD",
+     "total": 980,
+     "perSemester": 245,
+     "semesters": 4
+    }
+   ],
+   "notes": [
+    "Base tuition only. Exam, resit, convocation, tax and payment charges are not included.",
+    "SMU publishes Indian and international fees only. NRI applicants should ask the university which fee applies to them.",
+    "Applicants from Nepal, Bhutan, Bangladesh and Sri Lanka pay in INR. Confirm the tuition that applies with the university."
+   ]
+  }
+ },
+ {
+  "courseId": "ma-sociology-smu",
+  "expectedFee": 75000,
+  "programUrl": "https://www.onlinemanipal.com/online-ma-sociology-degree",
+  "categoryFees": {
+   "checkedAt": "2026-10-03",
+   "sourceUrl": "https://www.onlinemanipal.com/wp-content/uploads/2024/06/SMU-Combined-Domestic-Brochure.pdf",
+   "sourceLabel": "SMU combined prospectus 2026–27, PDF page 29",
+   "rows": [
+    {
+     "category": "Indian applicants",
+     "currency": "INR",
+     "total": 75000,
+     "perSemester": 18750,
+     "semesters": 4
+    },
+    {
+     "category": "International applicants",
+     "currency": "USD",
+     "total": 980,
+     "perSemester": 245,
+     "semesters": 4
+    }
+   ],
+   "notes": [
+    "Base tuition only. Exam, resit, convocation, tax and payment charges are not included.",
+    "SMU publishes Indian and international fees only. NRI applicants should ask the university which fee applies to them.",
+    "Applicants from Nepal, Bhutan, Bangladesh and Sri Lanka pay in INR. Confirm the tuition that applies with the university."
+   ]
+  }
+ }
+]

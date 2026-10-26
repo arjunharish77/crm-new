@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,400,0..1,0&display=block" rel="stylesheet">
+<script src="uv-data.js"></script>
+<style>body{margin:0;font-family:'Plus Jakarta Sans',system-ui,sans-serif;color:#16133F;-webkit-font-smoothing:antialiased}*{box-sizing:border-box}a{color:#5B4CF0;text-decoration:none}a:hover{color:#4A3BDB;text-decoration:underline}</style>
+</helmet>
+<div data-screen-label="Course detail" style="min-height:100vh;display:flex;flex-direction:column;background:#fff">
+<dc-import name="UVHeader" active="courses" hint-size="100%,68px" style="position:sticky;top:0;z-index:40;display:block"></dc-import>
+<section style="background:radial-gradient(520px 280px at 0% 0%,#ECE8FF 0%,rgba(236,232,255,0) 70%),linear-gradient(180deg,#F7F5FF,#FBFAFF)">
+  <div style="max-width:1240px;margin:0 auto;padding:22px clamp(16px,3vw,32px) 0">
+    <div style="font-size:13px;color:#6F6D8C;display:flex;gap:6px;align-items:center;flex-wrap:wrap"><a href="Home.dc.html">Home</a><span style="font-family:'Material Symbols Rounded';font-size:16px">chevron_right</span><a href="Courses.dc.html">Courses</a><span style="font-family:'Material Symbols Rounded';font-size:16px">chevron_right</span><span style="color:#16133F">{{ c.title }}</span></div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,440px),1fr));gap:clamp(24px,4vw,48px);align-items:center;margin-top:20px">
+      <div>
+        <div style="display:flex;align-items:center;gap:12px"><div style="width:56px;height:56px;border-radius:14px;background:#fff;border:1px solid #ECEAF6;padding:8px;display:flex;align-items:center;justify-content:center"><img src="{{ c.logo }}" alt="" style="max-width:100%;max-height:100%"></div><div><a href="{{ uniHref }}" style="font-weight:700;font-size:15px">{{ c.uniName }}</a><div style="font-size:13px;color:#6F6D8C">{{ u.loc }}</div></div></div>
+        <h1 style="margin:18px 0 0;font-size:clamp(34px,4.6vw,52px);letter-spacing:-0.04em;font-weight:800;line-height:1.04">{{ c.title }}</h1>
+        <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:14px;align-items:center;font-size:14px;color:#4A4867"><b style="color:#16133F">★ {{ c.rating }}</b><span>({{ reviewsF }} reviews)</span><span>·</span><span>{{ c.lvlLong }} degree</span><span>·</span><span>100% online</span></div>
+        <p style="margin:14px 0 0;color:#4A4867;font-size:16px;line-height:1.65;max-width:560px">{{ about }}</p>
+        <div style="display:flex;flex-wrap:wrap;gap:10px;margin-top:22px">
+          <a href="{{ c.applyHref }}" style="padding:13px 20px;border-radius:11px;background:#5B4CF0;color:#fff;font-weight:700;text-decoration:none;display:flex;align-items:center;gap:6px" style-hover="background:#4A3BDB;color:#fff;text-decoration:none">Apply now <span style="font-family:'Material Symbols Rounded';font-size:20px">arrow_forward</span></a>
+          <a href="{{ compareHref }}" style="padding:12px 18px;border-radius:11px;border:1px solid #D6D0FA;background:#fff;font-weight:700;display:flex;align-items:center;gap:6px"><span style="font-family:'Material Symbols Rounded';font-size:20px">compare_arrows</span>Compare</a>
+          <div onClick="{{ save }}" style="cursor:pointer;padding:12px 18px;border-radius:11px;border:1px solid #D6D0FA;background:#fff;font-weight:700;color:#5B4CF0;display:flex;align-items:center;gap:6px"><span style="font-family:'Material Symbols Rounded';font-size:20px">{{ saveIcon }}</span>{{ saveLabel }}</div>
+        </div>
+      </div>
+      <div style="position:relative">
+        <img src="{{ c.campus }}" alt="" style="width:100%;aspect-ratio:16/10;object-fit:cover;border-radius:22px;display:block;background:#ECE9FE">
+        <div style="position:absolute;right:12px;top:12px;display:flex;flex-direction:column;gap:8px">
+          <sc-for list="{{ ap }}" as="a" hint-placeholder-count="3"><div style="background:#fff;border-radius:12px;padding:9px 14px;font-size:13px;font-weight:700;box-shadow:0 10px 24px -12px rgba(0,0,0,0.3);display:flex;gap:8px;align-items:center"><span style="font-family:'Material Symbols Rounded';font-size:18px;color:#12925A">verified</span>{{ a }}</div></sc-for>
+        </div>
+      </div>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,170px),1fr));background:#fff;border:1px solid #E8E6F3;border-radius:16px;margin-top:32px">
+      <sc-for list="{{ stats }}" as="s" hint-placeholder-count="5"><div style="display:flex;gap:12px;align-items:center;padding:16px 18px;border-right:1px solid #F0EEF8"><span style="width:40px;height:40px;border-radius:10px;background:#F1EEFF;color:#5B4CF0;display:flex;align-items:center;justify-content:center;font-family:'Material Symbols Rounded';font-size:22px;flex:none">{{ s.i }}</span><div><div style="font-size:17px;font-weight:800">{{ s.k }}</div><div style="font-size:12px;color:#6F6D8C">{{ s.v }}</div></div></div></sc-for>
+    </div>
+  </div>
+</section>
+<div style="position:sticky;top:68px;z-index:20;background:rgba(255,255,255,0.97);border-bottom:1px solid #ECEAF6;margin-top:24px">
+  <div style="max-width:1240px;margin:0 auto;padding:0 clamp(16px,3vw,32px);display:flex;gap:26px;overflow-x:auto">
+    <sc-for list="{{ tabs }}" as="t" hint-placeholder-count="8"><div onClick="{{ t.go }}" style="cursor:pointer;white-space:nowrap;padding:15px 0;font-size:14px;font-weight:700;color:{{ t.color }};border-bottom:2px solid {{ t.bd }}">{{ t.label }}</div></sc-for>
+  </div>
+</div>
+<main style="flex:1;max-width:1240px;width:100%;margin:0 auto;padding:32px clamp(16px,3vw,32px) 0;display:flex;flex-wrap:wrap;gap:32px;align-items:flex-start">
+  <div style="flex:999 1 600px;min-width:0;display:flex;flex-direction:column;gap:20px">
+    <div id="sec-overview" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr));gap:20px">
+      <div style="border:1px solid #E8E6F3;border-radius:18px;padding:24px">
+        <h2 style="margin:0;font-size:22px;font-weight:800;letter-spacing:-0.02em">About this program</h2>
+        <p style="margin:10px 0 0;color:#4A4867;line-height:1.7;font-size:15px">{{ about }}</p>
+        <div style="display:flex;flex-wrap:wrap;gap:16px;margin-top:18px"><sc-for list="{{ ap }}" as="a" hint-placeholder-count="3"><div style="display:flex;align-items:center;gap:8px;font-size:14px;font-weight:700"><span style="width:38px;height:38px;border-radius:50%;background:#F1EEFF;color:#5B4CF0;display:flex;align-items:center;justify-content:center;font-family:'Material Symbols Rounded';font-size:20px">workspace_premium</span>{{ a }}</div></sc-for></div>
+      </div>
+      <div style="border:1px solid #E8E6F3;border-radius:18px;padding:24px">
+        <h2 style="margin:0 0 12px;font-size:22px;font-weight:800;letter-spacing:-0.02em">Key highlights</h2>
+        <sc-for list="{{ facts }}" as="f" hint-placeholder-count="6"><div style="display:flex;justify-content:space-between;gap:12px;padding:10px 0;border-bottom:1px solid #F3F2F9;font-size:14px"><span style="color:#6F6D8C">{{ f.k }}</span><b style="text-align:right">{{ f.v }}</b></div></sc-for>
+      </div>
+    </div>
+    <div id="sec-eligibility" style="border:1px solid #E8E6F3;border-radius:18px;padding:24px">
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap"><h2 style="margin:0;font-size:22px;font-weight:800;letter-spacing:-0.02em">Eligibility</h2><span style="font-size:11px;font-weight:800;letter-spacing:0.05em;padding:4px 8px;border-radius:6px;background:{{ eligBg }};color:{{ eligColor }}">{{ eligTag }}</span></div>
+      <div style="display:flex;gap:14px;margin-top:14px;align-items:flex-start"><span style="width:44px;height:44px;border-radius:12px;background:#F1EEFF;color:#5B4CF0;display:flex;align-items:center;justify-content:center;font-family:'Material Symbols Rounded';font-size:24px;flex:none">school</span><p style="margin:0;color:#2B2950;line-height:1.7;font-size:15px">{{ elig }}</p></div>
+    </div>
+    <div id="sec-admission" style="border:1px solid #E8E6F3;border-radius:18px;padding:24px">
+      <h2 style="margin:0 0 16px;font-size:22px;font-weight:800;letter-spacing:-0.02em">Admission process</h2>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,170px),1fr));gap:14px">
+        <sc-for list="{{ admission }}" as="s" hint-placeholder-count="4"><div style="position:relative;padding:16px;border-radius:14px;background:#F8F7FD"><div style="display:flex;align-items:center;gap:10px"><span style="width:28px;height:28px;border-radius:50%;background:#5B4CF0;color:#fff;font-weight:800;font-size:13px;display:flex;align-items:center;justify-content:center">{{ s.n }}</span><span style="font-family:'Material Symbols Rounded';font-size:22px;color:#5B4CF0">{{ s.icon }}</span></div><div style="font-weight:800;margin-top:12px">{{ s.t }}</div><div style="font-size:13px;color:#4A4867;line-height:1.55;margin-top:4px">{{ s.d }}</div></div></sc-for>
+      </div>
+    </div>
+    <div id="sec-specs" style="border:1px solid #E8E6F3;border-radius:18px;padding:24px">
+      <h2 style="margin:0;font-size:22px;font-weight:800;letter-spacing:-0.02em">{{ specTitle }}</h2>
+      <p style="margin:6px 0 16px;color:#6F6D8C;font-size:14px">Confirm specialisation choices, timing and any fee differences for your admission session.</p>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,220px),1fr));gap:8px">
+        <sc-for list="{{ specs }}" as="s" hint-placeholder-count="6"><a href="{{ s.href }}" style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:12px 14px;border-radius:12px;border:1px solid #E8E6F3;font-size:14px;font-weight:700;color:#16133F" style-hover="border-color:#5B4CF0;color:#5B4CF0;text-decoration:none">{{ s.name }}<span style="font-family:'Material Symbols Rounded';font-size:18px;color:#5B4CF0">arrow_forward</span></a></sc-for>
+      </div>
+    </div>
+    <div id="sec-fees" style="border:1px solid #E8E6F3;border-radius:18px;padding:24px">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap"><h2 style="margin:0;font-size:22px;font-weight:800;letter-spacing:-0.02em">Fees & EMI options</h2><a href="{{ emiHref }}" style="font-weight:700;font-size:14px">Open EMI calculator →</a></div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,190px),1fr));gap:12px;margin-top:16px">
+        <sc-for list="{{ plans }}" as="p" hint-placeholder-count="3"><div style="padding:18px;border-radius:14px;border:1.5px solid {{ p.bd }};background:{{ p.bg }}"><div style="display:flex;justify-content:space-between;align-items:center"><span style="font-weight:700;font-size:14px;color:#4A4867">{{ p.name }}</span><sc-if value="{{ p.tag }}"><span style="font-size:11px;font-weight:800;padding:3px 7px;border-radius:5px;background:#12925A;color:#fff">{{ p.tag }}</span></sc-if></div><div style="font-size:24px;font-weight:800;margin-top:10px;letter-spacing:-0.02em">{{ p.big }}</div><div style="font-size:13px;color:#6F6D8C;margin-top:2px">{{ p.small }}</div></div></sc-for>
+      </div>
+      <p style="margin:14px 0 0;font-size:13px;color:#6F6D8C;line-height:1.6">Payment plans and scholarships depend on current university terms and eligibility. Confirm the total payable and financing charges before applying.</p>
+    </div>
+    <div id="sec-careers" style="border:1px solid #E8E6F3;border-radius:18px;padding:24px">
+      <h2 style="margin:0 0 16px;font-size:22px;font-weight:800;letter-spacing:-0.02em">Placements & career outcomes</h2>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,150px),1fr));gap:10px">
+        <sc-for list="{{ place }}" as="p" hint-placeholder-count="3"><div style="padding:16px;border-radius:14px;background:#F8F7FD"><div style="font-size:22px;font-weight:800">{{ p.k }}</div><div style="font-size:13px;color:#6F6D8C">{{ p.v }}</div></div></sc-for>
+      </div>
+      <sc-if value="{{ hasCareers }}">
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,200px),1fr));gap:10px;margin-top:12px">
+          <sc-for list="{{ careers }}" as="r" hint-placeholder-count="4"><div style="display:flex;justify-content:space-between;align-items:center;padding:14px 16px;border:1px solid #E8E6F3;border-radius:12px"><span style="font-weight:700;font-size:14px">{{ r.role }}</span><span style="font-weight:800;color:#12784B;font-size:14px">{{ r.pay }}</span></div></sc-for>
+        </div>
+      </sc-if>
+      <p style="margin:14px 0 0;font-size:13px;color:#6F6D8C">Placement assistance, not a guaranteed offer — as stated on the university's own pages.</p>
+    </div>
+    <sc-if value="{{ hasCert }}">
+      <div style="border:1px solid #E8E6F3;border-radius:18px;padding:24px;display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,260px),1fr));gap:20px;align-items:center">
+        <div><h2 style="margin:0;font-size:22px;font-weight:800;letter-spacing:-0.02em">Sample degree certificate</h2><p style="margin:10px 0 0;color:#4A4867;font-size:14px;line-height:1.65">Any sample shown is for reference. Confirm the current certificate wording and program recognition with the university.</p></div>
+        <img src="https://unnatividya.com/certificates/mba-muj-certificate-sample.webp" alt="Sample certificate" style="width:100%;border-radius:12px;border:1px solid #E8E6F3;background:#F8F7FD;aspect-ratio:4/3;object-fit:contain">
+      </div>
+    </sc-if>
+    <sc-if value="{{ hasReviews }}">
+      <div id="sec-reviews" style="border:1px solid #E8E6F3;border-radius:18px;padding:24px">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap"><h2 style="margin:0;font-size:22px;font-weight:800;letter-spacing:-0.02em">Student reviews</h2><span style="font-weight:800">★ {{ c.rating }} <span style="font-weight:500;color:#6F6D8C">· {{ reviewsF }} reviews</span></span></div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,260px),1fr));gap:12px;margin-top:16px">
+          <sc-for list="{{ reviews }}" as="r" hint-placeholder-count="2"><div style="padding:18px;border-radius:14px;background:#F8F7FD"><div style="display:flex;align-items:center;gap:10px"><span style="width:36px;height:36px;border-radius:50%;background:#ECE9FE;color:#5B4CF0;font-weight:800;font-size:13px;display:flex;align-items:center;justify-content:center">{{ r.i }}</span><b style="flex:1">{{ r.n }}</b><span style="color:#F0A30A">{{ r.s }}</span></div><p style="margin:12px 0 0;color:#4A4867;line-height:1.6;font-size:14px">{{ r.t }}</p></div></sc-for>
+        </div>
+      </div>
+    </sc-if>
+  </div>
+  <aside style="flex:1 1 300px;position:sticky;top:132px;display:flex;flex-direction:column;gap:14px">
+    <div style="border:1px solid #E4E1F3;border-radius:18px;padding:22px;box-shadow:0 20px 44px -28px rgba(60,45,170,0.45);background:#fff">
+      <div style="font-size:13px;color:#6F6D8C;font-weight:600">Total program fee</div>
+      <div style="font-size:32px;font-weight:800;letter-spacing:-0.03em;margin-top:2px">{{ c.feeF }}</div>
+      <div style="display:inline-flex;margin-top:6px;padding:5px 10px;border-radius:8px;background:#E7F6EE;color:#12784B;font-size:13px;font-weight:700">No-cost EMI from {{ c.emiF }}</div>
+      <div style="display:flex;flex-direction:column;gap:8px;margin-top:18px">
+        <a href="{{ c.applyHref }}" style="text-align:center;padding:14px;border-radius:11px;background:#5B4CF0;color:#fff;font-weight:700;text-decoration:none" style-hover="background:#4A3BDB;color:#fff;text-decoration:none">Start application enquiry</a>
+        <a href="tel:18001204050" style="text-align:center;padding:13px;border-radius:11px;border:1px solid #D6D0FA;font-weight:700;display:flex;align-items:center;justify-content:center;gap:6px"><span style="font-family:'Material Symbols Rounded';font-size:20px">call</span>Call 1800-120-4050</a>
+      </div>
+      <div style="margin-top:18px;padding-top:16px;border-top:1px solid #F0EEF8;display:flex;flex-direction:column;gap:10px;font-size:14px">
+        <div style="font-weight:800">Why learners pick {{ c.uniShort }}</div>
+        <sc-for list="{{ why }}" as="w" hint-placeholder-count="3"><div style="display:flex;gap:8px;color:#2B2950"><span style="font-family:'Material Symbols Rounded';font-size:18px;color:#12925A">check_circle</span><span>{{ w }}</span></div></sc-for>
+      </div>
+      <div style="margin-top:14px;font-size:12px;color:#8E8CA8">Submitting an enquiry does not confirm university admission.</div>
+    </div>
+    <a href="Recommender.dc.html" style="border-radius:18px;padding:18px;background:#F4F2FF;display:flex;gap:12px;align-items:center;color:#16133F" style-hover="text-decoration:none;color:#16133F"><span style="font-family:'Material Symbols Rounded';font-size:28px;color:#5B4CF0">auto_awesome</span><div style="flex:1"><div style="font-weight:800">Not sure this is the one?</div><div style="font-size:13px;color:#4A4867">Answer a few questions to explore matches.</div></div><span style="font-family:'Material Symbols Rounded';color:#5B4CF0">arrow_forward</span></a>
+  </aside>
+  <section style="flex:1 1 100%;margin-top:28px">
+    <h2 style="margin:0 0 18px;font-size:clamp(22px,3vw,28px);letter-spacing:-0.025em;font-weight:800">Similar programs to consider</h2>
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,300px),1fr));gap:14px"><sc-for list="{{ similar }}" as="id" hint-placeholder-count="3"><dc-import name="UVCard" course-id="{{ id }}" hint-size="100%,300px"></dc-import></sc-for></div>
+  </section>
+  <section id="sec-faq" style="flex:1 1 100%;margin-top:40px">
+    <dc-import name="UVFaq" items="{{ faq }}" title="Frequently asked questions" subtitle="{{ faqSub }}" hint-size="100%,300px"></dc-import>
+  </section>
+</main>
+<sc-if value="{{ mobile }}">
+  <div style="position:sticky;bottom:0;z-index:30;background:#fff;border-top:1px solid #E8E6F3;padding:10px 16px;display:flex;align-items:center;gap:12px;box-shadow:0 -10px 30px -20px rgba(22,19,63,0.4);margin-top:24px">
+    <div style="flex:1"><div style="font-size:18px;font-weight:800">{{ c.feeF }}</div><div style="font-size:12px;color:#12784B;font-weight:700">EMI {{ c.emiF }}</div></div>
+    <a href="{{ c.applyHref }}" style="padding:13px 20px;border-radius:11px;background:#5B4CF0;color:#fff;font-weight:700">Apply now</a>
+  </div>
+</sc-if>
+<dc-import name="UVFooter" hint-size="100%,360px"></dc-import>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  state = { ok: !!window.UV, w: 1280, tab: 'sec-overview', t: 0 };
+  componentDidMount() {
+    this._r = () => this.setState({ w: window.innerWidth }); this._r(); window.addEventListener('resize', this._r);
+    this._s = () => this.setState(s => ({ t: s.t + 1 })); window.addEventListener('uv-store', this._s);
+    if (!window.UV) this._i = setInterval(() => { if (window.UV) { clearInterval(this._i); this.setState({ ok: true }); } }, 50);
+  }
+  componentWillUnmount() { window.removeEventListener('resize', this._r); window.removeEventListener('uv-store', this._s); clearInterval(this._i); }
+  renderVals() {
+    const UV = window.UV, s = this.state;
+    if (!UV) return { c: {}, u: {}, ap: [], stats: [], tabs: [], facts: [], admission: [], specs: [], plans: [], place: [], careers: [], reviews: [], why: [], similar: [], faq: [] };
+    const raw = UV.byId(UV.q('id') || this.props.courseId || 'mba-muj') || UV.byId('mba-muj');
+    const c = UV.card(raw), u = UV.UNIS[c.uni], key = c.id === 'mba-muj', sems = c.months / 6, saved = UV.store.saved().includes(c.id);
+    const tabsDef = [['Overview', 'sec-overview'], ['Eligibility', 'sec-eligibility'], ['Admission', 'sec-admission'], ['Specialisations', 'sec-specs'], ['Fees & EMI', 'sec-fees'], ['Careers', 'sec-careers'], ['Reviews', key ? 'sec-reviews' : 'sec-careers'], ['FAQ', 'sec-faq']];
+    const elig = key ? "Bachelor's degree (10+2+3) in any discipline with a minimum of 50% marks (45% for reserved categories). No work experience or entrance test required."
+      : c.lvl === 'PG' ? "Bachelor's degree from a recognised university. Confirm the minimum percentage and any subject requirements for your case with a counsellor before applying." : '10+2 from a recognised board. Confirm the minimum percentage and any subject requirements for your case with a counsellor before applying.';
+    const about = `${c.title} from ${u.name} is a ${c.months} months, UGC-entitled online degree designed for ${c.lvl === 'PG' ? 'graduates and working professionals' : 'school-leavers and early-career learners'} who want flexible learning, online assessments, and career-focused support without relocating.`;
+    return {
+      c, u, about, mobile: s.w < 860, uniHref: 'University.dc.html?id=' + c.uni, reviewsF: c.reviews.toLocaleString('en-IN'),
+      compareHref: 'Compare.dc.html?add=' + c.id, emiHref: 'EMICalculator.dc.html?id=' + c.id,
+      save: () => UV.store.toggleSaved(c.id), saveIcon: saved ? 'bookmark_added' : 'bookmark', saveLabel: saved ? 'Shortlisted' : 'Shortlist',
+      ap: u.approvals.slice(0, 3),
+      stats: [{ i: 'schedule', k: c.months + ' months', v: 'Duration' }, { i: 'payments', k: c.feeF, v: 'Total fee' }, { i: 'credit_card', k: c.emiF, v: 'No-cost EMI' }, { i: 'school', k: c.lvl + ' degree', v: c.lvlLong }, { i: 'laptop_mac', k: '100% online', v: 'Proctored exams' }],
+      tabs: tabsDef.map(([label, id]) => ({ label, color: s.tab === id ? '#5B4CF0' : '#4A4867', bd: s.tab === id ? '#5B4CF0' : 'transparent', go: () => { this.setState({ tab: id }); const el = document.getElementById(id); if (el) window.scrollTo({ top: el.getBoundingClientRect().top + window.scrollY - 130, behavior: 'smooth' }); } })),
+      facts: [{ k: 'Mode', v: '100% online' }, { k: 'Semesters', v: sems + ' semesters' }, { k: 'Credits', v: key ? '80-90 credits' : 'As per university' }, { k: 'Exams', v: 'Online proctored' }, { k: 'Application fee', v: '₹500' }, { k: 'Batches', v: 'January & July' }],
+      elig, eligTag: key ? 'SOURCE VERIFIED' : 'CONFIRM WITH COUNSELLOR', eligBg: key ? '#E7F6EE' : '#FFF4E5', eligColor: key ? '#12784B' : '#A35A0B',
+      admission: UV.ADMISSION,
+      specTitle: c.specs[0] === 'General' ? 'Specialisation' : c.specs.length + ' specialisations',
+      specs: c.specs.map(n => ({ name: n, href: 'Specialization.dc.html?key=' + UV.slugify(c.short + '-' + n) })),
+      plans: [{ name: 'Full payment', tag: 'Save 2%', big: UV.inr(c.fee * 0.98), small: 'one-time', bd: '#12925A', bg: '#F3FBF6' }, { name: 'Semester-wise', tag: '', big: UV.inr(c.fee / sems) + ' /sem', small: sems + ' payments · ' + c.feeF + ' total', bd: '#E8E6F3', bg: '#fff' }, { name: 'No-cost EMI', tag: '', big: c.emiF, small: 'subject to lender approval', bd: '#E8E6F3', bg: '#fff' }],
+      place: [{ k: u.placement + '%', v: 'placement assistance rate' }, { k: u.avg, v: 'average package' }].concat(u.partners !== '—' ? [{ k: u.partners, v: 'hiring partners' }] : []),
+      hasCareers: key, careers: [{ role: 'Business Manager', pay: '₹6-11 LPA' }, { role: 'Marketing Manager', pay: '₹7-14 LPA' }, { role: 'Finance Analyst', pay: '₹5-10 LPA' }, { role: 'Operations Lead', pay: '₹8-15 LPA' }],
+      hasCert: key, hasReviews: key,
+      reviews: [{ i: 'SI', n: 'Sneha Iyer', s: '★★★★★', t: 'Classes are genuinely live, not just recordings. Faculty responds on the forum within a day. Exams were smooth with online proctoring.' }, { i: 'RV', n: 'Rohit Verma', s: '★★★★', t: 'Good curriculum and the EMI made it affordable. Placement cell is helpful but you must be proactive with applications.' }],
+      why: [u.approvals.slice(0, 2).join(', '), u.placement + '% placement assistance rate', 'Financing: ' + c.emiF],
+      similar: UV.C.filter(x => x.id !== c.id && (x.short === c.short || x.stream === c.stream && x.lvl === c.lvl)).sort((a, b) => (b.short === c.short) - (a.short === c.short)).slice(0, 3).map(x => x.id),
+      faqSub: 'Quick answers about the ' + c.title + ' at ' + u.short + '.',
+      faq: [[`Is the ${c.title} from ${u.name} UGC-entitled?`, 'Yes — this program is listed as a UGC-entitled online degree, legally equivalent to an on-campus degree for government jobs, PSU recruitment, and higher studies. Always verify current-cycle entitlement before enrolling.'],
+        [`How much does the ${c.title} cost, and can I pay in EMI?`, `The total program fee is ${c.feeF} for the full ${c.months} months program, with no-cost EMI available from ${c.emiF}, subject to lender approval.`],
+        [`What are the eligibility requirements?`, elig], [`How long does it take to complete?`, `The program runs for ${c.months} months at ${u.short}, with online-proctored exams — exact scheduling depends on your admission cycle.`],
+        ['Are classes live or recorded?', 'Programs combine live sessions with recorded lectures. Confirm the live-class schedule for your batch with the university.'], ['Can I speak to an expert?', 'Yes. Call 1800-120-4050 or request a callback — counselling is free.']]
+    };
+  }
+}
+</script>
+</body>
+</html>

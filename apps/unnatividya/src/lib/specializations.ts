@@ -69,12 +69,10 @@ export function getSpecializationPageBySlug(catalog: CatalogReader, slug: string
 
 export function specializationFaqs(page: SpecializationPage): Array<[string, string]> {
   if (page.isComparison) {
-    const cheapest = page.courses[0];
-    const priciest = page.courses[page.courses.length - 1];
     return [
       [
-        `Which university offers the cheapest ${page.courseLabel} with a ${page.specialization} specialization?`,
-        `${cheapest.university.name} currently lists the lowest total fee for this ${page.courseLabel} specialization at ${formatFee(cheapest.fee)}, compared to ${formatFee(priciest.fee)} at ${priciest.university.name}.`,
+        `How do the fees compare for the ${page.courseLabel} with the ${page.specialization} specialization?`,
+        `For Indian applicants, the listed total tuition is ${listNames(page.courses.map(course => `${formatFee(course.fee)} at ${course.university.name}`))}. Fees for NRI and international applicants are different; each program's fee section shows them where the university publishes them.`,
       ],
       [
         `Is the ${page.specialization} specialization the same curriculum at every university?`,
@@ -85,28 +83,70 @@ export function specializationFaqs(page: SpecializationPage): Array<[string, str
         `No. The specialization affects your elective coursework, not the degree's UGC-entitlement status — that's determined by the base ${page.courseLabel} program at each university.`,
       ],
       [
-        `What career roles does a ${page.specialization} specialization in ${page.courseLabel} lead to?`,
+        `What career roles does the ${page.specialization} specialization in ${page.courseLabel} lead to?`,
         page.courses[0].careerRoles.length
-          ? `The base ${page.courseLabel} program these universities offer commonly leads to roles such as ${page.courses[0].careerRoles.slice(0, 3).join(", ")} — a ${page.specialization} specialization sharpens your fit for these roles rather than opening entirely different ones.`
-          : `Each university's program page outlines the career paths this degree supports — a counsellor can walk you through how the ${page.specialization} specialization fits.`,
+          ? `For the ${page.courseLabel}, ${page.courses[0].university.name} names roles such as ${page.courses[0].careerRoles.slice(0, 3).join(", ")}. Each university's program page lists the roles it names; a counsellor can go through how the ${page.specialization} specialization fits your goals.`
+          : `Each university's program page outlines the career paths this degree supports. A counsellor can go through how the ${page.specialization} specialization fits your goals.`,
       ],
     ];
   }
   const [only] = page.courses;
   return [
     [
-      `Which university offers ${page.courseLabel} with a ${page.specialization} specialization?`,
-      `${only.university.name} is currently the only university on this site listing a ${page.specialization} specialization within its ${page.courseLabel} program, at a total fee of ${formatFee(only.fee)}.`,
+      `Which university offers ${page.courseLabel} with the ${page.specialization} specialization?`,
+      `${only.university.name} is currently the only university on this site listing the ${page.specialization} specialization within its ${page.courseLabel} program, at a listed total tuition of ${formatFee(only.fee)} for Indian applicants.`,
     ],
     [
       `Is this specialization only available at ${only.university.name}?`,
-      `Among the universities compared on this site, yes — ${only.university.name} is the only one listing a ${page.specialization} specialization for ${page.courseLabel}. Other universities may offer differently-named specializations covering similar ground; check each course page's full specialization list.`,
+      `Among the universities compared on this site, yes — ${only.university.name} is the only one listing the ${page.specialization} specialization for ${page.courseLabel}. Other universities may offer differently-named specializations covering similar ground; check each course page's full specialization list.`,
     ],
     [
       `What career roles does this specialization lead to?`,
       only.careerRoles.length
-        ? `${only.university.name}'s ${page.courseLabel} program commonly leads to roles such as ${only.careerRoles.slice(0, 3).join(", ")} — the ${page.specialization} specialization sharpens your fit for these rather than opening entirely different roles.`
-        : `${only.university.name}'s program page outlines the career paths this degree supports — a counsellor can walk you through how this specialization fits.`,
+        ? `For its ${page.courseLabel}, ${only.university.name} names roles such as ${only.careerRoles.slice(0, 3).join(", ")}. A counsellor can go through how the ${page.specialization} specialization fits your goals.`
+        : `${only.university.name}'s program page outlines the career paths this degree supports. A counsellor can go through how this specialization fits your goals.`,
     ],
   ];
+}
+
+const TITLE_SUFFIX = " | Unnati Vidya";
+const TITLE_LIMIT = 60;
+
+// The longest title that still fits in ~60 characters (next-phase plan T8): the old
+// "— Compared Across Universities" titles ran to 70-90 characters and were cut off in results.
+// Long specialization names fall back to dropping "Online", then the site-name suffix.
+export function specializationTitle(page: SpecializationPage): { absolute: string } {
+  const base = `${page.courseLabel} in ${page.specialization}`;
+  const short = base.replace(/^Online /, "");
+  const candidates = page.isComparison
+    ? [`${base}: ${page.courses.length} Universities Compared`, `${base}: Compared`, base, short]
+    : [`${base} at ${page.courses[0].university.shortName}: Fees`, `${base} at ${page.courses[0].university.shortName}`, base, short];
+  const withSuffix = candidates.find((title) => (title + TITLE_SUFFIX).length <= TITLE_LIMIT);
+  if (withSuffix) return { absolute: withSuffix + TITLE_SUFFIX };
+  return { absolute: [base, short].find((title) => title.length <= TITLE_LIMIT) || short };
+}
+
+function listNames(names: string[]) {
+  return names.length > 1 ? `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}` : names.join("");
+}
+
+// Page-specific description built from this page's own fee, duration and university data.
+export function specializationDescription(page: SpecializationPage) {
+  if (page.isComparison) {
+    const fees = page.courses.map((course) => course.fee);
+    return `${page.courseLabel} with the ${page.specialization} specialization at ${listNames(page.courses.map((course) => course.university.shortName))}: listed fees from ${formatFee(Math.min(...fees))} to ${formatFee(Math.max(...fees))}, duration and EMI compared.`;
+  }
+  const [only] = page.courses;
+  return `${page.courseLabel} with the ${page.specialization} specialization at ${only.university.name}: listed fee ${formatFee(only.fee)}, ${only.duration}, EMI from ${only.emi}.`;
+}
+
+// The other specializations each university lists in the same program, so every page carries
+// information that is specific to it rather than the shared template text.
+export function siblingSpecializations(page: SpecializationPage) {
+  return page.courses.map((course) => ({
+    course,
+    others: course.specializations
+      .filter((spec) => spec !== page.specialization && !SKIPPED_SPECIALIZATIONS.has(spec.toLowerCase()))
+      .map((spec) => ({ label: spec, slug: `${page.courseKeyPart}-${specializationKey(spec)}` })),
+  }));
 }

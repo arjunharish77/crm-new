@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,400,0..1,0&display=block" rel="stylesheet">
+<script src="uv-data.js"></script>
+<style>body{margin:0;font-family:'Plus Jakarta Sans',system-ui,sans-serif;color:#16133F;-webkit-font-smoothing:antialiased}*{box-sizing:border-box}a{color:#5B4CF0;text-decoration:none}a:hover{color:#4A3BDB;text-decoration:underline}</style>
+</helmet>
+<div data-screen-label="Specialization detail" style="min-height:100vh;display:flex;flex-direction:column;background:#fff">
+<dc-import name="UVHeader" active="specs" hint-size="100%,68px" style="position:sticky;top:0;z-index:40;display:block"></dc-import>
+<section style="background:radial-gradient(520px 280px at 0% 0%,#ECE8FF 0%,rgba(236,232,255,0) 70%),linear-gradient(180deg,#F7F5FF,#FBFAFF);border-bottom:1px solid #EEECF8">
+  <div style="max-width:1240px;margin:0 auto;padding:22px clamp(16px,3vw,32px) 32px">
+    <div style="font-size:13px;color:#6F6D8C;display:flex;gap:6px;align-items:center;flex-wrap:wrap"><a href="Home.dc.html">Home</a><span style="font-family:'Material Symbols Rounded';font-size:16px">chevron_right</span><a href="Specializations.dc.html">Specializations</a><span style="font-family:'Material Symbols Rounded';font-size:16px">chevron_right</span><span style="color:#16133F">{{ sp.title }}</span></div>
+    <div style="display:flex;gap:16px;align-items:center;margin-top:20px;flex-wrap:wrap">
+      <span style="width:64px;height:64px;border-radius:16px;background:#fff;border:1px solid #ECEAF6;color:#5B4CF0;display:flex;align-items:center;justify-content:center;font-family:'Material Symbols Rounded';font-size:32px">{{ sp.icon }}</span>
+      <div><div style="font-size:13px;font-weight:700;color:#5B4CF0">{{ sp.lvlLong }} · {{ sp.stream }}</div><h1 style="margin:4px 0 0;font-size:clamp(30px,4.4vw,48px);letter-spacing:-0.035em;font-weight:800;line-height:1.05">{{ sp.title }}</h1></div>
+    </div>
+    <p style="margin:14px 0 0;color:#4A4867;font-size:16px;max-width:680px;line-height:1.6">{{ sp.desc }}</p>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,180px),1fr));background:#fff;border:1px solid #E8E6F3;border-radius:16px;margin-top:24px">
+      <sc-for list="{{ stats }}" as="s" hint-placeholder-count="4"><div style="padding:16px 20px;border-right:1px solid #F0EEF8"><div style="font-size:20px;font-weight:800">{{ s.k }}</div><div style="font-size:12px;color:#6F6D8C">{{ s.v }}</div></div></sc-for>
+    </div>
+  </div>
+</section>
+<main style="flex:1;max-width:1240px;width:100%;margin:0 auto;padding:28px clamp(16px,3vw,32px) 0;display:flex;flex-direction:column;gap:40px">
+  <section>
+    <div style="display:flex;flex-wrap:wrap;justify-content:space-between;align-items:end;gap:12px;margin-bottom:16px"><h2 style="margin:0;font-size:clamp(22px,3vw,28px);letter-spacing:-0.025em;font-weight:800">Universities offering {{ sp.name }}</h2><sc-if value="{{ canCompare }}"><a href="{{ compareHref }}" style="padding:10px 16px;border-radius:10px;background:#5B4CF0;color:#fff;font-weight:700;font-size:14px;text-decoration:none">Compare these programs →</a></sc-if></div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,300px),1fr));gap:14px"><sc-for list="{{ courses }}" as="id" hint-placeholder-count="2"><dc-import name="UVCard" course-id="{{ id }}" hint-size="100%,300px"></dc-import></sc-for></div>
+    <p style="margin:12px 0 0;font-size:13px;color:#6F6D8C">Confirm specialisation availability, timing and any fee differences for your admission session.</p>
+  </section>
+  <section style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,380px),1fr));gap:20px">
+    <div style="border:1px solid #E8E6F3;border-radius:18px;padding:24px">
+      <h2 style="margin:0 0 14px;font-size:20px;font-weight:800">Who it suits</h2>
+      <sc-for list="{{ suits }}" as="x" hint-placeholder-count="3"><div style="display:flex;gap:10px;padding:8px 0;font-size:15px;color:#2B2950"><span style="font-family:'Material Symbols Rounded';font-size:20px;color:#12925A">check_circle</span>{{ x }}</div></sc-for>
+    </div>
+    <div style="border:1px solid #E8E6F3;border-radius:18px;padding:24px">
+      <h2 style="margin:0 0 14px;font-size:20px;font-weight:800">Other {{ sp.degree }} specializations</h2>
+      <div style="display:flex;flex-wrap:wrap;gap:8px"><sc-for list="{{ related }}" as="r" hint-placeholder-count="6"><a href="{{ r.href }}" style="padding:8px 12px;border-radius:10px;border:1px solid #E4E1F3;font-size:13px;font-weight:700;color:#2B2950" style-hover="border-color:#5B4CF0;color:#5B4CF0;text-decoration:none">{{ r.name }}</a></sc-for></div>
+    </div>
+  </section>
+  <section><dc-import name="UVFaq" items="{{ faq }}" title="Frequently asked questions" subtitle="{{ faqSub }}" hint-size="100%,240px"></dc-import></section>
+</main>
+<dc-import name="UVFooter" hint-size="100%,360px"></dc-import>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  state = { ok: !!window.UV };
+  componentDidMount() { if (!window.UV) this._i = setInterval(() => { if (window.UV) { clearInterval(this._i); this.setState({ ok: true }); } }, 50); }
+  componentWillUnmount() { clearInterval(this._i); }
+  renderVals() {
+    const UV = window.UV; if (!UV) return { sp: {}, stats: [], courses: [], suits: [], related: [], faq: [] };
+    const x = UV.SPECS[UV.q('key') || 'mba-finance'] || UV.SPECS['mba-finance'];
+    const cs = x.courses.map(UV.byId), fees = cs.map(c => c.fee);
+    const title = 'Online ' + x.degree + ' in ' + x.name;
+    return {
+      sp: { ...x, title, lvlLong: x.lvl === 'PG' ? 'Postgraduate' : 'Undergraduate', desc: `A ${x.name} specialisation within the ${UV.C.find(c => c.short === x.degree).months}-month Online ${x.degree}. Offered by ${cs.length} ${cs.length > 1 ? 'universities' : 'university'} in our catalog, fully online with proctored exams.` },
+      stats: [{ k: cs.length, v: cs.length > 1 ? 'universities offer it' : 'university offers it' }, { k: UV.inr(Math.min(...fees)) + (fees.length > 1 ? ' – ' + UV.inr(Math.max(...fees)) : ''), v: 'total program fee' }, { k: UV.inr(Math.min(...cs.map(c => c.emi))) + '/mo', v: 'EMI from' }, { k: cs[0].months + ' months', v: 'duration' }],
+      courses: x.courses, canCompare: cs.length > 1, compareHref: 'Compare.dc.html?ids=' + x.courses.join(','),
+      suits: x.lvl === 'PG' ? ['Graduates in any discipline looking to specialise', 'Working professionals who need to study around a job', 'Learners targeting roles in ' + x.name.toLowerCase()] : ['12th-pass students starting a career in ' + x.stream.toLowerCase(), 'Learners who want a degree while working', 'Anyone exploring ' + x.name.toLowerCase() + ' early'],
+      related: Object.values(UV.SPECS).filter(o => o.degree === x.degree && o.key !== x.key).map(o => ({ name: o.name, href: 'Specialization.dc.html?key=' + o.key })),
+      faqSub: 'About ' + title + '.',
+      faq: [[`Is ${title} UGC-entitled?`, 'It is part of a UGC-entitled online degree. Always verify current-cycle entitlement before enrolling.'], ['Does the specialisation change the fee?', 'Usually not, but confirm any fee difference for your admission session with the university.'], ['When do I choose my specialisation?', 'This varies by university — some ask at application, others in a later semester.'], ['Will the specialisation appear on my degree?', 'Confirm the certificate and transcript wording with the university.']]
+    };
+  }
+}
+</script>
+</body>
+</html>

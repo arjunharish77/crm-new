@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,400,0..1,0&display=block" rel="stylesheet">
+<script src="uv-data.js"></script>
+<style>body{margin:0;font-family:'Plus Jakarta Sans',system-ui,sans-serif;color:#16133F;-webkit-font-smoothing:antialiased}*{box-sizing:border-box}a{color:#5B4CF0;text-decoration:none}a:hover{color:#4A3BDB;text-decoration:underline}select,input{font-family:inherit}</style>
+</helmet>
+<div data-screen-label="Apply now" style="min-height:100vh;display:flex;flex-direction:column;background:radial-gradient(700px 360px at 90% 0%,#E6E1FF 0%,rgba(230,225,255,0) 70%),linear-gradient(180deg,#F7F5FF 0%,#FFFFFF 60%)">
+<dc-import name="UVHeader" active="" hint-size="100%,68px" style="position:sticky;top:0;z-index:40;display:block"></dc-import>
+<main style="flex:1;max-width:1160px;width:100%;margin:0 auto;padding:clamp(24px,5vw,56px) clamp(16px,3vw,32px) 0;display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,420px),1fr));gap:clamp(28px,5vw,56px);align-items:start">
+  <div>
+    <div style="font-size:12px;font-weight:700;letter-spacing:0.06em;color:#5B4CF0">FREE COUNSELLING · NO OBLIGATION</div>
+    <h1 style="margin:12px 0 0;font-size:clamp(32px,4.6vw,50px);letter-spacing:-0.04em;font-weight:800;line-height:1.05">Start your application enquiry</h1>
+    <p style="margin:14px 0 0;color:#4A4867;font-size:16px;line-height:1.6;max-width:480px">Share your contact details, then choose your course and optional university preference. Our team will follow up.</p>
+    <div style="display:flex;flex-direction:column;gap:16px;margin-top:28px">
+      <sc-for list="{{ perks }}" as="p" hint-placeholder-count="4"><div style="display:flex;gap:14px;align-items:flex-start"><span style="width:44px;height:44px;border-radius:12px;background:#fff;border:1px solid #E4E1F3;color:#5B4CF0;display:flex;align-items:center;justify-content:center;font-family:'Material Symbols Rounded';font-size:22px;flex:none">{{ p.i }}</span><div><div style="font-weight:800">{{ p.k }}</div><div style="font-size:14px;color:#4A4867;margin-top:2px;line-height:1.5">{{ p.v }}</div></div></div></sc-for>
+    </div>
+    <a href="tel:18001204050" style="display:inline-flex;align-items:center;gap:8px;margin-top:28px;font-weight:800;font-size:16px"><span style="font-family:'Material Symbols Rounded'">call</span>Prefer to call? 1800-120-4050</a>
+  </div>
+  <div style="background:#fff;border:1px solid #E4E1F3;border-radius:22px;padding:clamp(20px,3vw,32px);box-shadow:0 30px 60px -40px rgba(60,45,170,0.5)">
+    <sc-if value="{{ form }}" hint-placeholder-val="{{ true }}">
+      <div style="font-size:20px;font-weight:800">Apply now</div>
+      <div style="font-size:13px;color:#6F6D8C;margin-top:4px">Usually within one working day.</div>
+      <div style="display:flex;flex-direction:column;gap:14px;margin-top:20px">
+        <label style="display:flex;flex-direction:column;gap:6px"><span style="font-size:13px;font-weight:700">Full name</span><input value="{{ name }}" onChange="{{ setName }}" placeholder="Your name" style="padding:13px 14px;border-radius:11px;border:1px solid #E4E1F3;font-size:15px"></label>
+        <label style="display:flex;flex-direction:column;gap:6px"><span style="font-size:13px;font-weight:700">Mobile number</span><div style="display:flex;border:1px solid #E4E1F3;border-radius:11px;overflow:hidden"><span style="padding:13px 12px;background:#F8F7FD;font-weight:700;font-size:15px;border-right:1px solid #E4E1F3">+91</span><input value="{{ phone }}" onChange="{{ setPhone }}" placeholder="10-digit mobile" inputmode="numeric" style="flex:1;min-width:0;padding:13px 14px;border:0;outline:none;font-size:15px"></div></label>
+        <label style="display:flex;flex-direction:column;gap:6px"><span style="font-size:13px;font-weight:700">Email</span><input placeholder="you@email.com" style="padding:13px 14px;border-radius:11px;border:1px solid #E4E1F3;font-size:15px"></label>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px">
+          <label style="display:flex;flex-direction:column;gap:6px"><span style="font-size:13px;font-weight:700">Course</span><select onChange="{{ setCourse }}" value="{{ course }}" style="padding:13px 12px;border-radius:11px;border:1px solid #E4E1F3;font-size:15px;background:#fff"><sc-for list="{{ degrees }}" as="d" hint-placeholder-count="1"><option value="{{ d }}">Online {{ d }}</option></sc-for></select></label>
+          <label style="display:flex;flex-direction:column;gap:6px"><span style="font-size:13px;font-weight:700">University <span style="font-weight:500;color:#6F6D8C">(optional)</span></span><select onChange="{{ setUni }}" value="{{ uni }}" style="padding:13px 12px;border-radius:11px;border:1px solid #E4E1F3;font-size:15px;background:#fff"><option value="">No preference</option><option value="muj">Manipal University Jaipur</option><option value="smu">Sikkim Manipal University</option><option value="amity">Amity University Online</option></select></label>
+        </div>
+        <label style="display:flex;gap:10px;align-items:flex-start;font-size:13px;color:#4A4867;line-height:1.5;cursor:pointer"><input type="checkbox" checked="{{ consent }}" onChange="{{ toggleConsent }}" style="margin-top:3px;accent-color:#5B4CF0;width:16px;height:16px">I agree to be contacted by Unnati Vidya by phone, SMS, WhatsApp or email about my enquiry.</label>
+        <sc-if value="{{ error }}"><div style="font-size:13px;color:#B42318;font-weight:600">{{ error }}</div></sc-if>
+        <div onClick="{{ submit }}" style="cursor:pointer;text-align:center;padding:15px;border-radius:12px;background:#5B4CF0;color:#fff;font-weight:800;font-size:16px" style-hover="background:#4A3BDB">Apply now</div>
+        <div style="font-size:12px;color:#8E8CA8;display:flex;gap:6px;align-items:center"><span style="font-family:'Material Symbols Rounded';font-size:15px">lock</span>Submitting an enquiry does not confirm university admission.</div>
+      </div>
+    </sc-if>
+    <sc-if value="{{ done }}">
+      <div style="display:flex;flex-direction:column;align-items:flex-start;gap:12px">
+        <span style="width:60px;height:60px;border-radius:50%;background:#E7F6EE;color:#12925A;display:flex;align-items:center;justify-content:center;font-family:'Material Symbols Rounded';font-size:32px">check_circle</span>
+        <div style="font-size:24px;font-weight:800">Thanks, {{ firstName }}. We'll call you soon.</div>
+        <div style="color:#4A4867;line-height:1.6">A counsellor will call +91 {{ phone }} about the Online {{ course }}{{ uniLabel }}, usually within one working day.</div>
+        <div style="width:100%;margin-top:8px;display:flex;flex-direction:column;gap:10px">
+          <div style="font-size:13px;font-weight:800;color:#6F6D8C;letter-spacing:0.04em">WHAT HAPPENS NEXT</div>
+          <sc-for list="{{ next }}" as="n" hint-placeholder-count="3"><div style="display:flex;gap:12px;align-items:center"><span style="width:28px;height:28px;border-radius:50%;background:#5B4CF0;color:#fff;font-size:13px;font-weight:800;display:flex;align-items:center;justify-content:center;flex:none">{{ n.n }}</span><span style="font-size:14px">{{ n.t }}</span></div></sc-for>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px"><a href="Compare.dc.html" style="padding:11px 16px;border-radius:11px;border:1px solid #D6D0FA;font-weight:700">Compare programs meanwhile</a><a href="Home.dc.html" style="padding:11px 16px;border-radius:11px;font-weight:700;color:#4A4867">Back to home</a></div>
+      </div>
+    </sc-if>
+  </div>
+</main>
+<dc-import name="UVFooter" hint-size="100%,360px"></dc-import>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  state = { name: '', phone: '', course: 'MBA', uni: '', consent: true, done: false, error: '' };
+  componentDidMount() {
+    const init = () => { const UV = window.UV, c = UV.byId(UV.q('course') || ''), u = UV.q('uni'); if (c) this.setState({ course: c.short, uni: c.uni }); else if (u) this.setState({ uni: u }); };
+    if (window.UV) init(); else this._i = setInterval(() => { if (window.UV) { clearInterval(this._i); init(); } }, 50);
+  }
+  componentWillUnmount() { clearInterval(this._i); }
+  renderVals() {
+    const s = this.state, UV = window.UV;
+    return { ...s, form: !s.done, firstName: s.name.split(' ')[0] || 'there',
+      degrees: UV ? [...new Set(UV.C.map(c => c.short))] : ['MBA'],
+      uniLabel: s.uni && UV ? ' at ' + UV.UNIS[s.uni].short : '',
+      setName: e => this.setState({ name: e.target.value }), setPhone: e => this.setState({ phone: e.target.value.replace(/\D/g, '').slice(0, 10) }),
+      setCourse: e => this.setState({ course: e.target.value }), setUni: e => this.setState({ uni: e.target.value }), toggleConsent: () => this.setState({ consent: !s.consent }),
+      submit: () => { if (!s.name.trim()) return this.setState({ error: 'Please enter your name.' }); if (s.phone.length !== 10) return this.setState({ error: 'Please enter a valid 10-digit mobile number.' }); if (!s.consent) return this.setState({ error: 'Please agree to be contacted.' }); this.setState({ done: true, error: '' }); },
+      perks: [{ i: 'balance', k: 'Unbiased by design', v: 'Every university pays us the same — advice follows your goals, not commissions.' }, { i: 'verified', k: 'Approvals verified', v: 'UGC, NAAC and AICTE status re-checked every admission cycle.' }, { i: 'account_balance_wallet', k: 'Loans & EMI help', v: 'Quick education loan facility and no-cost EMI options.' }, { i: 'support_agent', k: 'Support till enrolment', v: 'Documents, loans and follow-ups handled until your LMS login arrives.' }],
+      next: [{ n: 1, t: 'A counsellor calls to understand your goals' }, { n: 2, t: 'You get a shortlist with fees and eligibility' }, { n: 3, t: 'We help with documents, loans and admission' }] };
+  }
+}
+</script>
+</body>
+</html>

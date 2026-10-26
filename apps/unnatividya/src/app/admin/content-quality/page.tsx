@@ -2,6 +2,7 @@ import feeIssues from "@/data/fee-review-issues.json";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { query } from "@/lib/db";
+import { AdminState, statusTone } from "@/components/admin-state";
 
 export const metadata: Metadata = {
   title: "Content Quality",
@@ -128,7 +129,7 @@ export default async function ContentQualityPage({ searchParams }: { searchParam
         <div className="quality-records">
           {filtered.map(row => <article className="card quality-record" key={`${row.type}:${row.id}`}>
             <div><span className="admin-tag">{row.type === "course" ? "Course" : "University"}</span><h2>{row.label}</h2><p className="admin-muted">{row.id}</p></div>
-            <dl><div><dt>Record status</dt><dd>{row.status.replaceAll("_", " ")}</dd></div><div><dt>Published flag</dt><dd>{row.published ? "Yes" : "No"}</dd></div></dl>
+            <dl><div><dt>Record status</dt><dd><AdminState tone={statusTone(row.status)}>{row.status.replaceAll("_", " ")}</AdminState></dd></div><div><dt>Published flag</dt><dd>{row.published ? "Yes" : "No"}</dd></div></dl>
             {row.issues.length ? <details><summary>{row.issues.length} open checks</summary><ul>{row.issues.map(issue => <li key={issue}>{issue}</li>)}</ul></details> : <p>No listed checks. Complete editorial verification before publication.</p>}
             <div className="quality-record-actions"><Link className="btn secondary" href={row.href} aria-label={`Review record: ${row.label} (${row.id})`}>Review record</Link><Link className="text-link" href={`/admin/catalog-revisions?type=${row.type}&id=${encodeURIComponent(row.id)}`} aria-label={`View revisions: ${row.label} (${row.id})`}>View revisions</Link></div>
           </article>)}

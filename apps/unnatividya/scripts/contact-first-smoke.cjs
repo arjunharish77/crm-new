@@ -34,7 +34,17 @@ async function api(route, method, body, capability = token) {
  check((await api(`/api/leads/${leadId}`,'PATCH',{coursePreference:'Online MBA',university:''})).status,200);
  const row=(await db.query('select * from lead_capture where id=$1',[leadId])).rows[0];
  check([row.course_preference,row.course_id,row.university_id],['Online MBA',null,null]);
- check(row.email_otp_verified,false);check(row.consent_version,'application-follow-up-2026-09-29');
+ check(row.email_otp_verified,false);check(row.consent_version,'application-follow-up-2026-10-08-v2');
+ const evidence=(await db.query("select metadata from lead_event where lead_capture_id=$1 and event_type='CONTACT_DETAILS_SAVED'",[leadId])).rows[0]?.metadata;
+ check(evidence?.consentVersion,'application-follow-up-2026-10-08-v2');
+ check(evidence?.consentText.includes('email, SMS, WhatsApp, or voice call'),true);
+ check(evidence?.consentText.includes('finish the form or verify my email'),false);
+ // A saved lead from an older release records the new wording if contact is edited again.
+ await db.query('update lead_capture set consent_version=$2 where id=$1',[leadId,'application-follow-up-2026-09-29']);
+ check((await api(`/api/leads/${leadId}`,'PATCH',{contact:body})).status,200);
+ check((await db.query('select consent_version from lead_capture where id=$1',[leadId])).rows[0].consent_version,'application-follow-up-2026-10-08-v2');
+ const reaffirmed=(await db.query("select metadata from lead_event where lead_capture_id=$1 and event_type='CONTACT_CONSENT_REAFFIRMED'",[leadId])).rows[0]?.metadata;
+ check(reaffirmed?.consentText.includes('email, SMS, WhatsApp, or voice call'),true);
  check((await api('/api/otp/send','POST',{leadId},'bad')).status,403);
  // Insert a synthetic code directly instead of invoking the email provider.
  const code='5678';const hash=createHash('sha256').update(`${code}:${process.env.UNNATIVIDYA_SESSION_SECRET || 'dev-secret-change-me'}`).digest('hex');
@@ -48,5 +58,9 @@ async function api(route, method, body, capability = token) {
  check((await db.query('select count(*)::int n from otp_request where lead_capture_id=$1',[leadId])).rows[0].n,0);
  check((await api(`/api/leads/${leadId}`,'PATCH',{coursePreference:'Online MBA',university:'muj'})).status,200);
  const selected=(await db.query('select course_id,university_id from lead_capture where id=$1',[leadId])).rows[0];check(selected,{course_id:'mba-muj',university_id:'muj'});
+ check((await api(`/api/leads/${leadId}`,'PATCH',{coursePreference:'Online MBA',university:'muj',feeCategoryKey:'row-99'})).status,400);
+ check((await api(`/api/leads/${leadId}`,'PATCH',{coursePreference:'Online MBA',university:'muj',feeCategoryKey:''})).status,200);
+ const feeContext=(await db.query("select metadata from lead_event where lead_capture_id=$1 and event_type='PREFERENCES_SAVED' order by created_at desc limit 1",[leadId])).rows[0]?.metadata;
+ check(feeContext?.feeCategory,null);
  console.log(`PASS ${checks} contact-first database/HTTP checks; no external delivery attempted.`);
 })().catch(e=>{console.error(e.message);process.exitCode=1}).finally(async()=>{await db.query('delete from lead_capture where submission_key=$1',[submissionKey]);await db.end()});

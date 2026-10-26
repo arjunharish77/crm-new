@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,400,0..1,0&display=block" rel="stylesheet">
+<script src="uv-data.js"></script>
+<style>body{margin:0;font-family:'Plus Jakarta Sans',system-ui,sans-serif;color:#16133F;-webkit-font-smoothing:antialiased}*{box-sizing:border-box}a{color:#5B4CF0;text-decoration:none}a:hover{color:#4A3BDB;text-decoration:underline}</style>
+</helmet>
+<div data-screen-label="Universities" style="min-height:100vh;display:flex;flex-direction:column;background:#fff">
+<dc-import name="UVHeader" active="unis" hint-size="100%,68px" style="position:sticky;top:0;z-index:40;display:block"></dc-import>
+<section style="background:radial-gradient(520px 280px at 90% 0%,#E6E1FF 0%,rgba(230,225,255,0) 70%),linear-gradient(180deg,#F7F5FF,#FBFAFF);border-bottom:1px solid #EEECF8">
+  <div style="max-width:1240px;margin:0 auto;padding:24px clamp(16px,3vw,32px) 36px">
+    <div style="font-size:13px;color:#6F6D8C;display:flex;gap:6px;align-items:center"><a href="Home.dc.html">Home</a><span style="font-family:'Material Symbols Rounded';font-size:16px">chevron_right</span><span style="color:#16133F">Universities</span></div>
+    <h1 style="margin:14px 0 0;font-size:clamp(30px,4.2vw,46px);letter-spacing:-0.035em;font-weight:800">Universities we cover</h1>
+    <p style="margin:10px 0 0;color:#4A4867;font-size:16px;max-width:620px">Three institutions, every program checked against the UGC-DEB entitlement list. Approvals re-checked every admission cycle.</p>
+  </div>
+</section>
+<main style="flex:1;max-width:1240px;width:100%;margin:0 auto;padding:32px clamp(16px,3vw,32px) 0;display:flex;flex-direction:column;gap:18px">
+  <sc-for list="{{ unis }}" as="u" hint-placeholder-count="0">
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,340px),1fr));border:1px solid #E8E6F3;border-radius:20px;overflow:hidden;background:#fff">
+      <div style="position:relative;min-height:240px;background:#ECE9FE"><img src="{{ u.campus }}" alt="" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover"><div style="position:absolute;left:16px;top:16px;background:#fff;border-radius:10px;padding:6px 10px;font-size:13px;font-weight:800">★ {{ u.rating }} <span style="font-weight:500;color:#6F6D8C">({{ u.reviews }})</span></div></div>
+      <div style="padding:clamp(18px,3vw,28px);display:flex;flex-direction:column;gap:14px">
+        <div style="display:flex;gap:14px;align-items:center"><div style="width:56px;height:56px;border-radius:14px;border:1px solid #ECEAF6;padding:8px;display:flex;align-items:center;justify-content:center;flex:none"><img src="{{ u.logo }}" alt="" style="max-width:100%;max-height:100%"></div><div><div style="font-size:22px;font-weight:800;letter-spacing:-0.02em">{{ u.name }}</div><div style="font-size:14px;color:#6F6D8C">{{ u.loc }} · est. {{ u.est }}</div></div></div>
+        <p style="margin:0;color:#4A4867;line-height:1.6;font-size:15px">{{ u.about }}</p>
+        <div style="display:flex;gap:6px;flex-wrap:wrap"><sc-for list="{{ u.approvals }}" as="a" hint-placeholder-count="3"><span style="font-size:12px;font-weight:700;padding:5px 10px;border-radius:7px;background:#E7F6EE;color:#12784B;display:flex;align-items:center;gap:4px"><span style="font-family:'Material Symbols Rounded';font-size:15px">verified</span>{{ a }}</span></sc-for></div>
+        <div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;padding:14px;border-radius:14px;background:#F8F7FD">
+          <div><div style="font-size:18px;font-weight:800">{{ u.programs }}</div><div style="font-size:12px;color:#6F6D8C">programs</div></div>
+          <div><div style="font-size:18px;font-weight:800">{{ u.placement }}%</div><div style="font-size:12px;color:#6F6D8C">placement</div></div>
+          <div><div style="font-size:18px;font-weight:800">{{ u.avg }}</div><div style="font-size:12px;color:#6F6D8C">avg package</div></div>
+          <div><div style="font-size:18px;font-weight:800">{{ u.feeFrom }}</div><div style="font-size:12px;color:#6F6D8C">fee/yr from</div></div>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:auto">
+          <a href="{{ u.href }}" style="flex:1 1 160px;text-align:center;padding:12px;border-radius:11px;background:#5B4CF0;color:#fff;font-weight:700;text-decoration:none" style-hover="background:#4A3BDB;color:#fff;text-decoration:none">View {{ u.short }} programs</a>
+          <a href="{{ u.coursesHref }}" style="flex:1 1 160px;text-align:center;padding:11px;border-radius:11px;border:1px solid #D6D0FA;font-weight:700">Browse all {{ u.programs }} courses</a>
+        </div>
+      </div>
+    </div>
+  </sc-for>
+  <section style="margin-top:40px">
+    <h2 style="margin:0 0 6px;font-size:clamp(22px,3vw,28px);letter-spacing:-0.025em;font-weight:800">Universities at a glance</h2>
+    <p style="margin:0 0 18px;color:#4A4867">The best value in each row is highlighted.</p>
+    <div style="border:1px solid #E8E6F3;border-radius:16px;overflow-x:auto">
+      <div style="min-width:640px">
+        <div style="display:grid;grid-template-columns:1.2fr repeat(3,1fr);background:#F8F7FD;border-bottom:1px solid #E8E6F3"><div style="padding:14px 18px"></div><sc-for list="{{ unis }}" as="u" hint-placeholder-count="0"><div style="padding:14px 18px;display:flex;align-items:center;gap:8px;font-weight:800"><img src="{{ u.logo }}" alt="" style="width:24px;height:24px;object-fit:contain">{{ u.short }}</div></sc-for></div>
+        <sc-for list="{{ rows }}" as="r" hint-placeholder-count="6"><div style="display:grid;grid-template-columns:1.2fr repeat(3,1fr);border-bottom:1px solid #F3F2F9"><div style="padding:13px 18px;color:#6F6D8C;font-size:14px;font-weight:600">{{ r.k }}</div><sc-for list="{{ r.v }}" as="x" hint-placeholder-count="3"><div style="padding:13px 18px;font-size:14px;font-weight:{{ x.w }};color:{{ x.c }};background:{{ x.bg }}">{{ x.t }}</div></sc-for></div></sc-for>
+      </div>
+    </div>
+  </section>
+  <section style="margin-top:48px">
+    <dc-import name="UVFaq" items="{{ faq }}" title="Frequently asked questions" subtitle="About the universities we list." hint-size="100%,260px"></dc-import>
+  </section>
+</main>
+<dc-import name="UVFooter" hint-size="100%,360px"></dc-import>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  state = { ok: !!window.UV };
+  componentDidMount() { if (!window.UV) this._i = setInterval(() => { if (window.UV) { clearInterval(this._i); this.setState({ ok: true }); } }, 50); }
+  componentWillUnmount() { clearInterval(this._i); }
+  renderVals() {
+    const UV = window.UV; if (!UV) return { unis: [], rows: [], faq: [] };
+    const U = Object.values(UV.UNIS);
+    const unis = U.map(u => ({ ...u, logo: UV.logo(u.id), campus: UV.campus(u.id), programs: UV.C.filter(c => c.uni === u.id).length, href: 'University.dc.html?id=' + u.id, coursesHref: 'Courses.dc.html?uni=' + u.id }));
+    const row = (k, vals, fmt, mode) => { let b = null; if (mode) b = mode === 'min' ? Math.min(...vals) : Math.max(...vals); return { k, v: vals.map(v => { const best = b !== null && v === b; return { t: fmt ? fmt(v) : v, w: best ? 800 : 500, c: best ? '#12784B' : '#16133F', bg: best ? '#F3FBF6' : '#fff' }; }) }; };
+    const feeN = { muj: 75000, smu: 55000, amity: 99000 };
+    return { unis,
+      rows: [row('Established', U.map(u => u.est)), row('Location', U.map(u => u.loc)), row('Online programs', unis.map(u => u.programs), null, 'max'), row('Annual fee from', U.map(u => feeN[u.id]), UV.inr, 'min'), row('Placement assistance', U.map(u => u.placement), v => v + '%', 'max'), row('Average package', U.map(u => u.avgN), v => '₹' + v + ' LPA', 'max'), row('Approvals', U.map(u => u.approvals.join(', ')))],
+      faq: [['Are all three universities UGC-entitled?', 'Yes. Every program we list is checked against the UGC-DEB entitlement list each admission cycle.'], ['Which university has the lowest fees?', 'Sikkim Manipal University has the lowest listed annual fee (from ₹55,000/yr). Compare specific programs for exact totals.'], ['Are degrees recognised abroad?', 'MUJ and Amity list WES recognition. Confirm requirements with the receiving country or employer.'], ['Can I switch universities after enrolling?', 'Transfers depend on each university’s rules. Talk to a counsellor before you apply.']] };
+  }
+}
+</script>
+</body>
+</html>

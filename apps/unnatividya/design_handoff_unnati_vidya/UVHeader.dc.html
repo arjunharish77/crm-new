@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet><script src="uv-data.js"></script></helmet>
+<header style="background:rgba(255,255,255,0.96);backdrop-filter:blur(12px);border-bottom:1px solid #ECEAF6;font-family:'Plus Jakarta Sans',system-ui,sans-serif">
+  <div style="max-width:1240px;margin:0 auto;padding:0 clamp(16px,3vw,32px);height:68px;display:flex;align-items:center;gap:24px">
+    <a href="Home.dc.html" style="display:flex;align-items:center;flex:none"><img src="https://unnatividya.com/brand/unnatividya-logo-gradient.svg" alt="Unnati Vidya" style="height:32px;display:block"></a>
+    <sc-if value="{{ desktop }}" hint-placeholder-val="{{ true }}">
+      <nav style="display:flex;gap:2px;flex:1;min-width:0">
+        <sc-for list="{{ links }}" as="l" hint-placeholder-count="6">
+          <a href="{{ l.href }}" style="white-space:nowrap;padding:8px 12px;border-radius:8px;font-size:14px;font-weight:600;text-decoration:none;color:{{ l.color }};background:{{ l.bg }}" style-hover="background:#F4F2FF;color:#5B4CF0;text-decoration:none">{{ l.label }}</a>
+        </sc-for>
+      </nav>
+      <div style="display:flex;align-items:center;gap:8px;flex:none">
+        <a href="Courses.dc.html" title="Search" style="width:40px;height:40px;border-radius:10px;display:flex;align-items:center;justify-content:center;color:#16133F;font-family:'Material Symbols Rounded';font-size:22px;text-decoration:none" style-hover="background:#F4F2FF;text-decoration:none">search</a>
+        <a href="Shortlist.dc.html" style="display:flex;align-items:center;gap:6px;padding:9px 12px;border-radius:10px;font-size:14px;font-weight:600;color:#16133F;text-decoration:none;white-space:nowrap" style-hover="background:#F4F2FF;text-decoration:none"><span style="font-family:'Material Symbols Rounded';font-size:20px">bookmark</span>Shortlist ({{ saved }})</a>
+        <a href="Apply.dc.html" style="padding:10px 18px;border-radius:10px;background:#5B4CF0;color:#fff;font-size:14px;font-weight:700;text-decoration:none;white-space:nowrap" style-hover="background:#4A3BDB;color:#fff;text-decoration:none">Apply now</a>
+      </div>
+    </sc-if>
+    <sc-if value="{{ mobile }}">
+      <div style="flex:1"></div>
+      <a href="Shortlist.dc.html" style="position:relative;width:44px;height:44px;display:flex;align-items:center;justify-content:center;color:#16133F;font-family:'Material Symbols Rounded';font-size:24px;text-decoration:none">bookmark<span style="position:absolute;top:6px;right:4px;min-width:17px;height:17px;border-radius:9px;background:#5B4CF0;color:#fff;font-family:'Plus Jakarta Sans',sans-serif;font-size:10px;font-weight:800;display:flex;align-items:center;justify-content:center">{{ saved }}</span></a>
+      <div onClick="{{ toggle }}" style="cursor:pointer;width:44px;height:44px;border-radius:12px;border:1px solid #E8E6F3;display:flex;align-items:center;justify-content:center;font-family:'Material Symbols Rounded';font-size:24px">{{ menuIcon }}</div>
+    </sc-if>
+  </div>
+  <sc-if value="{{ menuOpen }}">
+    <div style="border-top:1px solid #ECEAF6;padding:12px 16px 20px;display:flex;flex-direction:column;gap:2px;background:#fff;max-height:calc(100vh - 68px);overflow:auto">
+      <sc-for list="{{ links }}" as="l" hint-placeholder-count="6">
+        <a href="{{ l.href }}" style="display:flex;align-items:center;gap:14px;padding:14px 12px;border-radius:12px;font-size:16px;font-weight:700;color:#16133F;text-decoration:none;background:{{ l.bg }}"><span style="font-family:'Material Symbols Rounded';font-size:22px;color:#5B4CF0">{{ l.icon }}</span>{{ l.label }}</a>
+      </sc-for>
+      <a href="Recommender.dc.html" style="display:flex;align-items:center;gap:14px;padding:14px 12px;border-radius:12px;font-size:16px;font-weight:700;color:#16133F;text-decoration:none"><span style="font-family:'Material Symbols Rounded';font-size:22px;color:#5B4CF0">auto_awesome</span>Find my fit</a>
+      <a href="Apply.dc.html" style="margin-top:12px;text-align:center;padding:15px;border-radius:12px;background:#5B4CF0;color:#fff;font-weight:700;text-decoration:none">Apply now</a>
+      <a href="tel:18001204050" style="text-align:center;padding:12px;font-weight:700;color:#5B4CF0">Call 1800-120-4050</a>
+    </div>
+  </sc-if>
+</header>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;active&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;&quot;,&quot;courses&quot;,&quot;unis&quot;,&quot;compare&quot;,&quot;specs&quot;,&quot;guides&quot;,&quot;tools&quot;],&quot;default&quot;:&quot;&quot;,&quot;tsType&quot;:&quot;string&quot;}}">
+class Component extends DCLogic {
+  state = { w: 1280, open: false, n: 0 };
+  componentDidMount() {
+    this._r = () => this.setState({ w: window.innerWidth });
+    this._s = () => this.setState({ n: window.UV ? window.UV.store.saved().length : 0 });
+    window.addEventListener('resize', this._r); window.addEventListener('uv-store', this._s);
+    this._r(); this._s(); this._t = setTimeout(this._s, 300);
+  }
+  componentWillUnmount() { window.removeEventListener('resize', this._r); window.removeEventListener('uv-store', this._s); clearTimeout(this._t); }
+  renderVals() {
+    const a = this.props.active || '';
+    const L = [['Explore Degrees','Courses','courses','school'],['Universities','Universities','unis','account_balance'],['Compare','Compare','compare','compare_arrows'],['Specializations','Specializations','specs','category'],['Guides','Guides','guides','menu_book'],['Tools','EMICalculator','tools','calculate']];
+    const desktop = this.state.w >= 1080;
+    return {
+      desktop, mobile: !desktop, menuOpen: !desktop && this.state.open, saved: this.state.n,
+      menuIcon: this.state.open ? 'close' : 'menu', toggle: () => this.setState(s => ({ open: !s.open })),
+      links: L.map(([label, page, key, icon]) => ({ label, icon, href: page + '.dc.html', color: a === key ? '#5B4CF0' : '#2B2950', bg: a === key ? '#F4F2FF' : 'transparent' }))
+    };
+  }
+}
+</script>
+</body>
+</html>

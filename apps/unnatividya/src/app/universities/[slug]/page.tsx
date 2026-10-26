@@ -5,15 +5,23 @@ import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ApprovalBadge } from "@/components/approval-badge";
+import {
+  ArrowRight, Award, BookOpen, Briefcase, BriefcaseBusiness, CalendarDays, ChevronRight, ClipboardCheck, CreditCard, ExternalLink,
+  FileText, GraduationCap, Headset, Banknote, Gift, Medal, MapPin, MessagesSquare, PiggyBank, ShieldCheck, UserCheck, Users, type LucideIcon,
+} from "lucide-react";
+import { STREAM_ICONS } from "@/components/course-card";
+import { FaqAccordion } from "@/components/faq-accordion";
 import { JsonLd } from "@/components/json-ld";
 import { SaveButton } from "@/components/save-button";
-import { SectionPillNav } from "@/components/section-pill-nav";
-import { StickyMobileBar } from "@/components/sticky-mobile-bar";
+import { SectionTabs } from "@/components/section-tabs";
 import { formatFee } from "@/lib/catalog-format";
 import { universityMedia } from "@/data/media";
+import { nirfUniversityRankings } from "@/data/nirf-rankings";
 import { publicAssetExists } from "@/lib/asset-exists";
-import { getApprovalIcon } from "@/lib/approval-icons";
+import { approvalIconWidth, getApprovalIcon } from "@/lib/approval-icons";
+import { withSocial } from "@/lib/page-metadata";
+import { publicSourceUrls } from "@/lib/source-checks";
+import { FeeGroupSwitch, GroupEmiPill, GroupFeeText } from "@/components/fee-group";
 
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
   const catalog = await getPublishedCatalog();
@@ -23,12 +31,49 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
   if (!university) return {};
   const title = `${university.name} Online Degrees`;
   const description = `Explore ${university.name} online degrees, fees, approvals, career support, and eligibility.`;
-  return {
+  return withSocial({
     title,
     description,
     alternates: { canonical: `/universities/${university.slug}` },
     openGraph: { title, description, images: [universityMedia[university.id].src] },
-  };
+  });
+}
+
+// Icons picked from each published label, so the content stays the CMS's own (spec C §2.3 #7–8).
+function supportIcon(label: string): LucideIcon {
+  const text = label.toLowerCase();
+  if (text.includes("resume")) return FileText;
+  if (text.includes("interview")) return MessagesSquare;
+  if (text.includes("job")) return Briefcase;
+  if (text.includes("alumni") || text.includes("network")) return Users;
+  return Headset;
+}
+
+function scholarshipIcon(label: string): LucideIcon {
+  const text = label.toLowerCase();
+  if (text.includes("merit")) return Medal;
+  if (text.includes("emi")) return CreditCard;
+  if (text.includes("defence")) return ShieldCheck;
+  if (text.includes("alumni")) return GraduationCap;
+  if (text.includes("abled")) return Users;
+  if (text.includes("northeast") || text.includes("regional")) return MapPin;
+  return Gift;
+}
+
+// Hostname plus path, so two pages on the same site stay distinguishable.
+function sourceLabel(url: string) {
+  const { hostname, pathname } = new URL(url);
+  return `${hostname.replace(/^www\./, "")}${pathname === "/" ? "" : pathname}`;
+}
+
+// "2–3 years" from the listed durations, without the design's "2–2 years" edge case.
+function durationRange(durations: string[]) {
+  const months = [...new Set(durations.map((value) => parseInt(value, 10)).filter((value) => Number.isFinite(value) && value > 0))].sort((a, b) => a - b);
+  if (!months.length) return null;
+  const inYears = months.every((value) => value % 12 === 0);
+  const format = (value: number) => String(inYears ? value / 12 : value);
+  const unit = inYears ? (months[months.length - 1] === 12 ? "year" : "years") : "months";
+  return months.length === 1 ? `${format(months[0])} ${unit}` : `${format(months[0])}–${format(months[months.length - 1])} ${unit}`;
 }
 
 export default async function UniversityDetailPage({ params }: { params: Promise<{ slug: string }> }) {
@@ -39,14 +84,39 @@ export default async function UniversityDetailPage({ params }: { params: Promise
   if (!university) notFound();
 
   const universityCourses = courses.filter((course) => course.universityId === university.id);
+  const undergraduateCourses = universityCourses.filter((course) => course.level === "UG");
+  const postgraduateCourses = universityCourses.filter((course) => course.level === "PG");
+  const fees = universityCourses.map((course) => course.fee).filter((fee) => Number.isFinite(fee) && fee > 0);
+  const lowestTuition = Math.min(...fees);
+  const highestTuition = Math.max(...fees);
+  const duration = durationRange(universityCourses.map((course) => course.duration));
   const otherUniversities = universities.filter((other) => other.id !== university.id);
   const enrichment = universityEnrichmentById[university.id] || {};
+  const nirfRanking = nirfUniversityRankings[university.id];
   const media = universityMedia[university.id];
   const availablePartnerLogos = media.partnerLogos.filter((logo) => publicAssetExists(logo));
+  const sources = publicSourceUrls(enrichment.sourceUrls);
   const displayedFaqs: Array<[string, string]> = enrichment.faqs || [
     [`Are ${university.shortName} online degrees UGC-entitled?`, `${university.name} programs listed on Unnati Vidya are maintained for UGC-entitled online degree comparison and should be verified for the current admission cycle before enrolment.`],
     ["Can I compare all programs from this university?", "Yes. Use the listed program cards or the compare page to place up to three programs side by side."],
     ["Does Unnati Vidya charge counselling fees?", "No. Counselling is free for learners."],
+  ];
+  const factTiles: Array<[string, string]> = enrichment.factTiles || [
+    ["Established", String(university.established)],
+    ["Location", university.city],
+    ["Online learners", university.learners],
+    ["Annual fee from", university.feeFrom],
+    ["Batches", "January & July"],
+    ["Exams", "Online proctored"],
+  ];
+  // Learner counts are a deferred claim (claims register), so Key highlights leave them out (UI redesign Q19).
+  // "Annual fee from" was a hand-entered figure with no source that disagreed with the catalog; the
+  // listed tuition range below is worked out from the published programs instead.
+  const shownTiles = factTiles.filter(([label]) => !["online learners", "annual fee from"].includes(label.trim().toLowerCase()));
+  const highlights: Array<[string, string]> = [
+    ...shownTiles.slice(0, 2),
+    ...(fees.length ? [["Listed total tuition (Indian applicants)", lowestTuition === highestTuition ? formatFee(lowestTuition) : `${formatFee(lowestTuition)} – ${formatFee(highestTuition)}`] as [string, string]] : []),
+    ...shownTiles.slice(2),
   ];
   const siteUrl = process.env.NEXT_PUBLIC_UNNATIVIDYA_SITE_URL || "https://unnatividya.com";
   const universityJsonLd = {
@@ -58,11 +128,8 @@ export default async function UniversityDetailPage({ params }: { params: Promise
     address: university.city,
     foundingDate: String(university.established),
     description: university.about,
-    aggregateRating: {
-      "@type": "AggregateRating",
-      ratingValue: university.rating,
-      reviewCount: university.reviews,
-    },
+    // No aggregateRating: the visible rating isn't backed by reviews shown on the page, which
+    // Google's review-snippet rules require (next-phase plan T1, owner decision 4). Stars stay visible.
     hasOfferCatalog: {
       "@type": "OfferCatalog",
       name: `${university.shortName} online degrees`,
@@ -91,255 +158,248 @@ export default async function UniversityDetailPage({ params }: { params: Promise
       acceptedAnswer: { "@type": "Answer", text: answer },
     })),
   };
+  const heroStats: Array<[LucideIcon, string, string]> = [
+    [BookOpen, `${universityCourses.length} program${universityCourses.length === 1 ? "" : "s"}`, "Online degrees"],
+    [GraduationCap, `${undergraduateCourses.length} UG · ${postgraduateCourses.length} PG`, "Degree levels"],
+    ...(duration ? [[CalendarDays, duration, "Program duration"] as [LucideIcon, string, string]] : []),
+    [Banknote, fees.length ? `${formatFee(lowestTuition)}+` : "Confirm", "Listed tuition from (Indian applicants)"],
+    [Briefcase, `${university.placement}%`, "Placement assistance, university-wide"],
+  ];
 
   return <PublishedCatalogBoundary>{(
-    <>
+    <div className="uvu-page">
       <JsonLd data={[universityJsonLd, breadcrumbJsonLd, faqJsonLd]} />
-      <section className="detail-hero">
-        <div className="container detail-hero-inner">
-          <div>
-            <div className="breadcrumb" style={{ marginBottom: 12, color: "#B8C4CA" }}>
-              <Link href="/">Home</Link> &gt; <Link href="/universities">Universities</Link> &gt; {university.name}
-            </div>
-            <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
-              <div style={{ width: 60, height: 60, background: "#fff", borderRadius: 8, flex: "none", display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden" }}>
-                <Image src={media.logo} alt={`${university.shortName} logo`} width={48} height={48} style={{ objectFit: "contain" }} />
+      <section className="uvu-detail-hero">
+        <div className="uvu-detail-hero-inner">
+          <nav aria-label="Breadcrumb">
+            <ol className="uv-breadcrumb">
+              <li><Link href="/">Home</Link></li>
+              <li><Link href="/universities">Universities</Link></li>
+              <li><span aria-current="page">{university.name}</span></li>
+            </ol>
+          </nav>
+          <div className="uvu-detail-grid">
+            <div>
+              <span className="uvu-logo-tile is-large"><Image src={media.logo} alt={`${university.shortName} logo`} width={46} height={46} /></span>
+              <h1 className="uvu-detail-title">{university.name}</h1>
+              <p className="uvu-detail-tagline">{university.city} · Established {university.established}</p>
+              <p className="uvu-detail-rating"><span aria-hidden="true">★</span> <b>{university.rating}</b><span className="sr-only"> out of 5</span> ({university.reviews.toLocaleString("en-IN")} reviews)</p>
+              <p className="uvu-detail-about">{university.about}</p>
+              <div className="uvu-detail-actions">
+                <Link href={`/lead?university=${university.id}`} rel="nofollow" className="btn primary large" data-open-lead>Apply now</Link>
+                <Link href={`/courses?university=${university.id}`} className="btn secondary large">Compare {university.shortName} programs <ArrowRight size={18} aria-hidden="true" /></Link>
               </div>
-              <div>
-                <h1>{university.name}</h1>
-                <div className="detail-sub">{university.city} · Established {university.established} · {university.learners} online learners</div>
-              </div>
             </div>
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 14, marginBottom: 0 }}>
-              {university.approvals.map((approval) => {
-                const icon = getApprovalIcon(approval);
-                return icon ? (
-                  <span key={approval} style={{ background: "#fff", borderRadius: 6, height: 36, minWidth: 56, padding: "4px 10px", display: "inline-flex", alignItems: "center", justifyContent: "center", position: "relative" }}>
-                    <Image src={icon} alt={approval} fill sizes="72px" style={{ objectFit: "contain", padding: 4 }} />
-                  </span>
-                ) : (
-                  <ApprovalBadge label={approval} className="gold-badge" key={approval} />
-                );
-              })}
-            </div>
-            <div style={{ display: "flex", gap: 14, marginTop: 14, fontSize: 14, alignItems: "center", flexWrap: "wrap" }}>
-              <span><span style={{ color: "#FDB515" }}>★</span> <b>{university.rating}</b> ({university.reviews.toLocaleString("en-IN")} reviews)</span>
+            <div className="uvu-detail-media">
+              <Image src={media.src} alt={media.alt} fill sizes="(max-width: 960px) calc(100vw - 32px), 580px" priority />
             </div>
           </div>
-          <div className="detail-hero-media" style={{ height: 180 }}>
-            <Image
-              src={media.src}
-              alt={media.alt}
-              width={620}
-              height={360}
-              sizes="(max-width: 900px) 100vw, 420px"
-              priority
-            />
-          </div>
+          <ul className="uvu-stat-strip" aria-label={`${university.shortName} at a glance`}>
+            {heroStats.map(([Icon, value, label]) => <li key={label}>
+              <span className="uvu-stat-icon" aria-hidden="true"><Icon size={22} /></span>
+              <span><strong>{value}</strong><small>{label}</small></span>
+            </li>)}
+          </ul>
         </div>
       </section>
 
-      <section className="stats-band">
-        <div className="container stats-band-grid">
-          {[
-            ["placement assistance rate", `${university.placement}%`],
-            ["average package", university.avgPackage],
-            ["highest package", university.highestPackage],
-            ["hiring partners", `${university.partners}+`],
-            ["annual fee from", university.feeFrom],
-          ].map(([label, value]) => (
-            <div key={label}>
-              <strong>{value}</strong>
-              <span>{label}</span>
-            </div>
-          ))}
-        </div>
-      </section>
-
-      <SectionPillNav
+      <SectionTabs
         label="University sections"
         items={[
-          { label: "About", href: "#sec-about" },
-          { label: "Rankings", href: "#sec-rankings" },
-          { label: "Programs", href: "#sec-programs" },
-          { label: "Placements", href: "#sec-placements" },
+          { label: "Overview", href: "#sec-about" },
+          { label: "Online programs", href: "#sec-programs" },
+          { label: "Recognition", href: "#sec-rankings" },
           { label: "Admission", href: "#sec-admission" },
+          { label: "Placements", href: "#sec-placements" },
           { label: "Scholarships", href: "#sec-scholarships" },
-          { label: "FAQ", href: "#sec-faq" },
+          { label: "FAQs", href: "#sec-faq" },
         ]}
       />
 
-      <div className="container detail-layout" style={{ flex: 1 }}>
-          <div className="detail-stack">
-            <section className="detail-section" id="sec-about">
-              <h2>About {university.shortName} online</h2>
-              {(enrichment.overview || [university.about]).map((paragraph) => (
-                <p style={{ fontSize: 15, lineHeight: 1.65, color: "#555", margin: "0 0 12px" }} key={paragraph}>{paragraph}</p>
-              ))}
-              <div className="grid three" style={{ marginTop: 18 }}>
-                {(enrichment.factTiles || [
-                  ["Established", String(university.established)],
-                  ["Location", university.city],
-                  ["Online learners", university.learners],
-                  ["Annual fee from", university.feeFrom],
-                  ["Batches", "January & July"],
-                  ["Exams", "Online proctored"],
-                ]).map(([label, value]) => (
-                  <div style={{ border: "1px solid #EAEAEA", borderRadius: 8, padding: "12px 14px", background: "#F7F8F9" }} key={label}>
-                    <div style={{ fontSize: 11, color: "#707070" }}>{label}</div>
-                    <div style={{ fontSize: 14, fontWeight: 700, color: "#363634" }}>{value}</div>
-                  </div>
-                ))}
-              </div>
-            </section>
+      <div className="uv-shell uvu-detail-main">
+        <div className="uvu-pair" id="sec-about" tabIndex={-1}>
+          <section className="uvu-card-panel" aria-labelledby="about-title">
+            <h2 id="about-title" className="uvu-panel-title">About {university.shortName} online</h2>
+            {(enrichment.overview || [university.about]).map((paragraph) => <p className="uvu-panel-copy" key={paragraph}>{paragraph}</p>)}
+            <a href="#sec-rankings" className="uvu-inline-link">University-level approvals and NIRF result <ArrowRight size={16} aria-hidden="true" /></a>
+          </section>
+          <section className="uvu-card-panel" aria-labelledby="highlights-title">
+            <h2 id="highlights-title" className="uvu-panel-title">Key highlights</h2>
+            <dl className="uvu-highlights">
+              {highlights.map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}
+            </dl>
+          </section>
+        </div>
 
-            <section className="detail-section" id="sec-rankings">
-              <h2>Recognitions</h2>
-              <div className="grid two">
-                {(enrichment.rankings || university.approvals.slice(0, 4).map((approval) => ({ title: approval, note: "institutional recognition" }))).map((ranking) => {
-                  const icon = getApprovalIcon(ranking.title);
-                  return (
-                    <div style={{ display: "flex", gap: 14, alignItems: "flex-start", border: "1px solid #CFDAE6", borderRadius: 8, padding: 16 }} key={ranking.title}>
-                      {icon ? (
-                        <span style={{ position: "relative", width: 44, height: 36, flexShrink: 0 }}>
-                          <Image src={icon} alt="" fill sizes="44px" style={{ objectFit: "contain" }} />
-                        </span>
-                      ) : null}
-                      <div>
-                        <div style={{ fontSize: 15, fontWeight: 700, color: "#363634" }}>{ranking.title}</div>
-                        <div style={{ fontSize: 12, color: "#696868", marginTop: 4, lineHeight: 1.4 }}>{ranking.note}</div>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </section>
-
-            <section className="detail-section" id="sec-programs">
-              <h2>Online programs offered</h2>
-              <div className="university-program-cards">
-                {universityCourses.map(course => <article className="guide-fee-card university-program-card" key={course.id} aria-labelledby={`university-program-${course.id}`}>
-                  <div className="university-program-heading"><h3 id={`university-program-${course.id}`}><Link href={`/courses/${course.slug}`}>{course.name}</Link></h3><SaveButton courseId={course.id} size={44} /></div>
-                  <p className="lead-help">{course.level === "PG" ? "Postgraduate" : "Undergraduate"}</p>
-                  <dl><div><dt>Duration</dt><dd>{course.duration}</dd></div><div><dt>Listed total tuition</dt><dd>{formatFee(course.fee)}</dd></div><div><dt>EMI from</dt><dd>{course.emi}</dd></div></dl>
-                  <Link href={`/courses/${course.slug}`} className="btn secondary">View program</Link>
-                </article>)}
-              </div>
-              {!universityCourses.length && <p>There are no published programs for this university yet.</p>}
-            </section>
-
-            <section className="detail-section" id="sec-placements">
-              <h2>Placements & hiring partners</h2>
-              <div className="grid-mobile-stack" style={{ display: "grid", gridTemplateColumns: "repeat(6, 1fr)", gap: 12 }}>
-                {media.partnerLogos.map((logo, index) =>
-                  availablePartnerLogos.includes(logo) ? (
-                    <div style={{ height: 72, border: "1px solid #EAEAEA", borderRadius: 4, display: "flex", alignItems: "center", justifyContent: "center", padding: 10, position: "relative" }} key={logo}>
-                      <Image src={logo} alt={`${university.shortName} hiring partner`} fill sizes="120px" style={{ objectFit: "contain", padding: 10 }} />
-                    </div>
-                  ) : (
-                    <div style={{ height: 72, border: "1px dashed #EAEAEA", borderRadius: 4, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, color: "#707070", fontFamily: "monospace" }} key={index}>logo</div>
-                  ),
-                )}
-              </div>
-              <div className="grid four" style={{ marginTop: 16 }}>
-                {(enrichment.placementSupport || ["Resume clinics", "Mock interviews", "Job board access"]).map((support) => (
-                  <div style={{ border: "1px solid #CFDAE6", borderRadius: 8, padding: 14, fontSize: 13, fontWeight: 600, color: "#363634", textAlign: "center" }} key={support}>
-                    {support}
-                  </div>
-                ))}
-              </div>
-              <div style={{ fontSize: 12, color: "#707070", marginTop: 10 }}>Placement assistance, not a guaranteed offer — as stated on the university&apos;s own pages.</div>
-            </section>
-
-            <section className="detail-section" id="sec-admission">
-              <h2>Admission process</h2>
-              <div className="grid four">
-                {(enrichment.admissionSteps || [
-                  { title: "Apply online", copy: "Fill the application on the university portal - 10 minutes." },
-                  { title: "Upload documents", copy: "Mark sheets, ID proof and a photo. We check them first." },
-                  { title: "Pay first semester", copy: "Card, net-banking or no-cost EMI after loan approval." },
-                  { title: "Start learning", copy: "LMS login within 72 hours of approval." },
-                ]).map((step, index) => (
-                  <div style={{ border: "1px solid #CFDAE6", borderRadius: 8, padding: 16 }} key={step.title}>
-                    <div style={{ width: 32, height: 32, borderRadius: 4, background: "rgba(84,76,200,0.10)", color: "#544CC8", fontWeight: 700, fontSize: 14, display: "flex", alignItems: "center", justifyContent: "center" }}>{index + 1}</div>
-                    <div style={{ fontSize: 14, fontWeight: 700, color: "#363634", margin: "10px 0 4px" }}>{step.title}</div>
-                    <div style={{ fontSize: 12, color: "#696868", lineHeight: 1.5 }}>{step.copy}</div>
-                  </div>
-                ))}
-              </div>
-            </section>
-
-            <section className="detail-section" id="sec-scholarships">
-              <h2>Scholarships & fee concessions</h2>
-              {enrichment.scholarships?.length ? <div className="guide-fee-cards university-scholarship-cards">
-                {enrichment.scholarships.map((row,index) => <article className="guide-fee-card" key={`${row[0]}-${index}`}>
-                  <h3>{row[0]}</h3><dl><div><dt>Listed concession</dt><dd>{row[1]}</dd></div><div><dt>Proof required</dt><dd>{row[2]}</dd></div></dl>
-                </article>)}
-              </div> : <p>Scholarship details are not listed yet. Confirm current offers and eligibility with the university.</p>}
-              <p className="lead-help">Confirm the current admission session, eligibility, required documents and whether concessions can be combined directly with the university.</p>
-            </section>
-
-            <section className="detail-section" id="sec-faq">
-              <h2>Frequently asked questions</h2>
-              <div className="faq-list">
-                {displayedFaqs.map(([question, answer]) => (
-                  <details className="faq-item" name="university-faq" key={question}>
-                    <summary>{question}</summary>
-                    <p>{answer}</p>
-                  </details>
-                ))}
-              </div>
-            </section>
-
-            {otherUniversities.length ? (
-              <section className="detail-section">
-                <h2>Other universities to consider</h2>
-                <div className="grid-mobile-stack" style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 12 }}>
-                  {otherUniversities.map((other) => (
-                    <Link href={`/universities/${other.slug}`} className="uv-card" style={{ display: "block", border: "1px solid #CFDAE6", borderRadius: 8, padding: 16, color: "inherit" }} key={other.id}>
-                      <div style={{ fontSize: 15, fontWeight: 700, color: "#363634" }}>{other.name}</div>
-                      <div style={{ fontSize: 13, color: "#555", marginTop: 6 }}>
-                        {other.city} · <span style={{ color: "#FDB515" }}>★</span> {other.rating} · from {other.feeFrom}/yr
-                      </div>
-                    </Link>
-                  ))}
-                </div>
-              </section>
-            ) : null}
+        <section className="uvu-block" id="sec-programs" aria-labelledby="programs-title" tabIndex={-1}>
+          <div className="uv-section-head uvu-block-head">
+            <div>
+              <h2 id="programs-title" className="uv-h2 is-inner">Online programs at {university.name}</h2>
+              <p className="uvu-block-sub">The figures below are each program&apos;s listed total tuition for the applicant group you choose. Open a course to check eligibility, applicant-category fees, recognition and the current intake.</p>
+              <FeeGroupSwitch id="university-fee-group" className="uvu-fee-group" />
+            </div>
+            <Link href={`/courses?university=${university.id}`} className="uv-section-link">View all programs <span aria-hidden="true">→</span></Link>
           </div>
+          {([["Undergraduate degrees", undergraduateCourses], ["Postgraduate degrees", postgraduateCourses]] as const).filter(([, group]) => group.length).map(([title, group]) => <div className="uvu-prog-group" key={title}>
+            <h3>{title}</h3>
+            <div className="uvu-prog-grid">
+              {group.map((course) => {
+                const Icon = STREAM_ICONS[course.stream] || BriefcaseBusiness;
+                const specs = course.specializations.filter((spec) => spec.toLowerCase() !== "general");
+                return <article className="uvu-prog" key={course.id} aria-labelledby={`university-program-${course.id}`}>
+                  <span className="uv-icon-tile" aria-hidden="true"><Icon size={24} /></span>
+                  <div className="uvu-prog-body">
+                    <h4 id={`university-program-${course.id}`}><Link href={`/courses/${course.slug}`} className="uvu-prog-link">{course.name}</Link></h4>
+                    <p className="uvu-prog-meta"><span className="sr-only">Duration: </span>{course.duration} · <span className="sr-only">Listed total tuition: </span><GroupFeeText fee={course.fee} categoryFees={catalog.courseWithUniversity(course).categoryFees} short /></p>
+                    <p className="uvu-prog-meta"><GroupEmiPill emi={course.emi} /></p>
+                    <p className="uvu-prog-specs">{specs.length ? `${specs.length} specialisation${specs.length === 1 ? "" : "s"}` : "General program"}</p>
+                  </div>
+                  <SaveButton courseId={course.id} label={`${course.name}, ${university.shortName}`} />
+                  <ChevronRight size={20} className="uvu-prog-chevron" aria-hidden="true" />
+                </article>;
+              })}
+            </div>
+          </div>)}
+          {!universityCourses.length && <p className="uvu-block-sub">There are no published programs for this university yet.</p>}
+        </section>
 
-          <aside style={{ position: "sticky", top: 118, display: "flex", flexDirection: "column", gap: 16 }}>
-            <div style={{ background: "#fff", border: "1px solid #CFDAE6", borderRadius: 8, padding: 22, boxShadow: "0 1px 3px rgba(0,0,0,0.06)" }}>
-              <div style={{ fontSize: 16, fontWeight: 700, color: "#363634" }}>Get {university.shortName} brochure & fee details</div>
-              <div style={{ fontSize: 13, color: "#696868", margin: "6px 0 14px", lineHeight: 1.5 }}>Talk to a counsellor about eligibility, scholarships and the next batch.</div>
-              <Link href={`/lead?university=${university.id}`} className="btn primary" style={{ width: "100%", height: 44, fontSize: 15 }} data-open-lead>Apply now</Link>
-              <Link href="/compare" style={{ display: "block", textAlign: "center", marginTop: 10, border: "1.5px solid #555", borderRadius: 4, height: 42, lineHeight: "42px", fontSize: 14, fontWeight: 700, color: "#555" }}>Compare with others</Link>
+        <section className="uvu-card-panel uvu-block" id="sec-rankings" aria-labelledby="rankings-title" tabIndex={-1}>
+          <div className="uvu-panel-head"><span className="uv-icon-tile" aria-hidden="true"><ShieldCheck size={22} /></span><h2 id="rankings-title" className="uvu-panel-title">Rankings &amp; recognition</h2></div>
+          <p className="uvu-panel-sub">These are university-level claims. A program&apos;s online-mode listing depends on its awarding institution and academic session; check the Recognition section of the specific course before enrolment.</p>
+          {nirfRanking ? <div className="uvu-nirf">
+            <div className="uvu-nirf-rank">
+              <p className="uvu-nirf-label"><Award size={16} aria-hidden="true" /> NIRF {nirfRanking.year}</p>
+              <p className="uvu-nirf-result">{nirfRanking.result}</p>
+              <p className="uvu-nirf-category">{nirfRanking.category} category</p>
             </div>
-            <div style={{ border: "1px solid #CFDAE6", borderRadius: 8, padding: 18, background: "#F4F3FC" }}>
-              <div style={{ fontSize: 14, fontWeight: 700, color: "#363634", marginBottom: 8 }}>Why learners pick {university.shortName}</div>
-              <div style={{ display: "flex", flexDirection: "column", gap: 6, fontSize: 13, color: "#555", lineHeight: 1.5 }}>
-                <span>Fees from {university.feeFrom} per year</span>
-                <span>Live + recorded weekend classes</span>
-                <span>No-cost EMI on all programs</span>
-                <span>Alumni status equal to on-campus</span>
-              </div>
+            <div className="uvu-nirf-body">
+              <p><strong>Ranked institution:</strong> {nirfRanking.institution}</p>
+              {nirfRanking.note ? <p>{nirfRanking.note}</p> : null}
+              <p>NIRF ranks the institution, not its online courses or mode of delivery.</p>
+              <a href={nirfRanking.sourceUrl} target="_blank" rel="noopener noreferrer" className="uvu-external">Check the official NIRF {nirfRanking.year} University table <ExternalLink size={15} aria-hidden="true" /><span className="sr-only"> (opens in a new tab)</span></a>
             </div>
-            {enrichment.sourceUrls?.length ? (
-              <div style={{ border: "1px solid #CFDAE6", borderRadius: 8, padding: 18 }}>
-                <div style={{ fontSize: 14, fontWeight: 700, color: "#363634", marginBottom: 8 }}>Sources</div>
-                <div style={{ display: "flex", flexDirection: "column", gap: 6, fontSize: 13 }}>
-                  {enrichment.sourceUrls.map((url) => (
-                    <a href={url} target="_blank" rel="noopener noreferrer" key={url} style={{ color: "#544CC8", wordBreak: "break-all" }}>
-                      {new URL(url).hostname.replace(/^www\./, "")}
-                    </a>
-                  ))}
-                  <Link href="/how-we-verify" style={{ color: "#544CC8", fontWeight: 600 }}>How we verify our data →</Link>
-                </div>
-              </div>
-            ) : null}
-          </aside>
+          </div> : null}
+          <h3 className="uvu-subhead">University-level approvals</h3>
+          <ul className="uvu-badges">
+            {(enrichment.rankings || university.approvals.slice(0, 4).map((approval) => ({ title: approval, note: "institutional recognition" }))).map((ranking) => {
+              const icon = getApprovalIcon(ranking.title);
+              return <li key={ranking.title}>
+                <span className="uvu-badge-mark" aria-hidden="true">{icon ? <Image src={icon} alt="" width={approvalIconWidth(icon, 30)} height={30} className="uvu-badge-logo" /> : <Award size={22} />}</span>
+                <strong>{ranking.title}</strong>
+                <span>{ranking.note}</span>
+              </li>;
+            })}
+          </ul>
+        </section>
+
+        <section className="uvu-card-panel uvu-block" id="sec-admission" aria-labelledby="admission-title" tabIndex={-1}>
+          <div className="uvu-panel-head"><span className="uv-icon-tile" aria-hidden="true"><UserCheck size={22} /></span><h2 id="admission-title" className="uvu-panel-title">Admission process</h2></div>
+          <p className="uvu-panel-sub">How an application usually moves at {university.shortName}. Confirm the current session&apos;s steps and documents with the university.</p>
+          <ol className="uvu-steps">
+            {(enrichment.admissionSteps || [
+              { title: "Apply online", copy: "Fill the application on the university portal." },
+              { title: "Upload documents", copy: "Mark sheets, ID proof and a photo, as the university requests." },
+              { title: "Pay the fee", copy: "Pay the first instalment through the university's payment options." },
+              { title: "University approval", copy: "The university reviews your documents and confirms admission." },
+            ]).map((step) => <li key={step.title}>
+              <strong>{step.title}</strong>
+              <span>{step.copy}</span>
+            </li>)}
+          </ol>
+        </section>
+
+        <section className="uvu-card-panel uvu-block" id="sec-placements" aria-labelledby="placements-title" tabIndex={-1}>
+          <div className="uvu-panel-head"><span className="uv-icon-tile" aria-hidden="true"><Briefcase size={22} /></span><h2 id="placements-title" className="uvu-panel-title">Placements &amp; career support</h2></div>
+          <p className="uvu-panel-sub">Career support differs from a guaranteed job. The figures below are university-wide claims; their cohort, collection method and online-program scope are still being reviewed.</p>
+          <dl className="uvu-outcomes">
+            <div><dt>Placement assistance rate (university-wide)</dt><dd>{university.placement}%</dd></div>
+            <div><dt>Average package (university-wide)</dt><dd>{university.avgPackage}</dd></div>
+            <div><dt>Highest package (university-wide)</dt><dd>{university.highestPackage}</dd></div>
+            <div><dt>Hiring partners (university-wide)</dt><dd>{university.partners}+</dd></div>
+          </dl>
+          <h3 className="uvu-subhead">Career support</h3>
+          <ul className="uvu-support">
+            {(enrichment.placementSupport || ["Resume clinics", "Mock interviews", "Job board access"]).map((support) => {
+              const Icon = supportIcon(support);
+              return <li key={support}><Icon size={20} aria-hidden="true" />{support}</li>;
+            })}
+          </ul>
+          {availablePartnerLogos.length ? <>
+            <h3 className="uvu-subhead">Hiring partners</h3>
+            <ul className="uvu-partners" aria-label={`${university.shortName} hiring partners`}>
+              {availablePartnerLogos.map((logo, index) => <li key={logo}><Image src={logo} alt={`${university.shortName} hiring partner ${index + 1}`} fill sizes="160px" /></li>)}
+            </ul>
+          </> : null}
+          <p className="uvu-note">Placement assistance, not a guaranteed offer — as stated on the university&apos;s own pages.</p>
+        </section>
+
+        <section className="uvu-card-panel uvu-block" id="sec-scholarships" aria-labelledby="scholarships-title" tabIndex={-1}>
+          <div className="uvu-panel-head"><span className="uv-icon-tile" aria-hidden="true"><PiggyBank size={22} /></span><h2 id="scholarships-title" className="uvu-panel-title">Scholarships &amp; fee concessions</h2></div>
+          {enrichment.scholarships?.length ? <ul className="uvu-scholarships">
+            {enrichment.scholarships.map((row, index) => {
+              const Icon = scholarshipIcon(row[0]);
+              return <li key={`${row[0]}-${index}`}>
+                <Icon size={24} aria-hidden="true" />
+                <h3>{row[0]}</h3>
+                <dl><div><dt>Listed concession</dt><dd>{row[1]}</dd></div><div><dt>Proof required</dt><dd>{row[2]}</dd></div></dl>
+              </li>;
+            })}
+          </ul> : <p className="uvu-panel-sub">Scholarship details are not listed yet. Confirm current offers and eligibility with the university.</p>}
+          <p className="uvu-note">Confirm the current admission session, eligibility, required documents and whether concessions can be combined directly with the university.</p>
+        </section>
+
+        <section className="uvu-card-panel uvu-block uvu-before" aria-labelledby="before-title">
+          <div className="uvu-panel-head"><span className="uv-icon-tile" aria-hidden="true"><ClipboardCheck size={22} /></span><h2 id="before-title" className="uvu-panel-title">Before choosing {university.shortName}</h2></div>
+          <ul className="uvu-checklist">
+            <li><a href="#sec-programs">Choose the exact degree and check its eligibility.</a></li>
+            <li><a href="#sec-rankings">Check program recognition separately from university badges.</a></li>
+            <li><a href="#sec-scholarships">Confirm your total payable and any concession terms.</a></li>
+          </ul>
+          {sources.length ? <div className="uvu-sources-row">
+            <h3 id="sources-title" className="uvu-subhead">Sources</h3>
+            <ul className="uvu-sources" aria-labelledby="sources-title">
+              {sources.map((url) => <li key={url}><a href={url} target="_blank" rel="noopener noreferrer">{sourceLabel(url)}<ExternalLink size={14} aria-hidden="true" /><span className="sr-only"> (opens in a new tab)</span></a></li>)}
+              <li><Link href="/how-we-verify" className="is-strong">How we verify our data →</Link></li>
+            </ul>
+          </div> : null}
+        </section>
+
+        <section className="uvu-navy-strip uvu-block" aria-labelledby="apply-title">
+          <div>
+            <h2 id="apply-title">Get {university.shortName} brochure &amp; fee details</h2>
+            <p>Talk to a counsellor about eligibility, scholarships and the next batch.</p>
+          </div>
+          <div className="uvu-navy-actions">
+            <Link href={`/lead?university=${university.id}`} rel="nofollow" className="btn on-navy" data-open-lead>Apply now</Link>
+            <Link href="/compare" className="btn outline-on-navy">Compare with others</Link>
+          </div>
+        </section>
+
+        <div className="uvu-block">
+          <FaqAccordion items={displayedFaqs} name="university-faq" id="sec-faq" subtitle={`Quick answers about ${university.name} and its online programs.`} />
+        </div>
+
+        {otherUniversities.length ? (
+          <section className="uvu-block" aria-labelledby="others-title">
+            <h2 id="others-title" className="uv-h2 is-inner uvu-others-title">Other universities to consider</h2>
+            <div className="uvu-others">
+              {otherUniversities.map((other) => {
+                const otherFees = courses.filter((course) => course.universityId === other.id).map((course) => course.fee).filter((fee) => Number.isFinite(fee) && fee > 0);
+                const otherMedia = universityMedia[other.id];
+                return <Link href={`/universities/${other.slug}`} className="uvu-other" key={other.id}>
+                  {otherMedia ? <span className="uvu-other-thumb"><Image src={otherMedia.src} alt="" fill sizes="110px" /></span> : null}
+                  <span className="uvu-other-body">
+                    <strong>{other.name}</strong>
+                    <small>{other.city} · <span className="uvu-rating" aria-hidden="true">★</span> {other.rating}<span className="sr-only"> out of 5</span></small>
+                    {otherFees.length ? <em>Listed tuition from {formatFee(Math.min(...otherFees))} (Indian applicants)</em> : null}
+                  </span>
+                  <ArrowRight size={20} className="uvu-other-arrow" aria-hidden="true" />
+                </Link>;
+              })}
+            </div>
+          </section>
+        ) : null}
       </div>
-      <StickyMobileBar primary={{ label: "Apply now", href: `/lead?university=${university.id}`, openLead: true }} />
-    </>
+    </div>
   )}</PublishedCatalogBoundary>;
 }

@@ -74,7 +74,7 @@ export function UniversityEditForm({ university, role, mode = "edit" }: { role: 
       {!editable ? <p role="status">Read-only: viewers cannot edit; published and archived records require an administrator. Use Propose or review revisions to suggest changes separately.</p> : role === "EDITOR" ? <p>Save a draft or mark it for review. An administrator must publish it.</p> : null}
       <fieldset className="admin-form-grid admin-catalog-fields" disabled={!editable || status === "saving"}>
       <legend className="sr-only">Catalog details</legend>
-      <div style={{ gridColumn: "1 / -1", background: "#FFF4E5", border: "1px solid #F0C36D", borderRadius: 6, padding: "10px 14px", fontSize: 13, color: "#7A5B12", marginBottom: 8 }}>
+      <div className="admin-warning-note">
         Published records appear on the website. Saving changes to a published record updates public pages on the next request.
         Use the revision review workflow to compare changes before applying them. Drafts stay private.
       </div>

@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getAdminSession } from "@/lib/admin-auth";
-import { loadCatalogSnapshot } from "@/lib/catalog-snapshot-server";
+import { loadLiveCatalogSnapshot } from "@/lib/catalog-snapshot-server";
 import { catalogReader } from "@/lib/catalog-snapshot";
 import { formatFee } from "@/lib/catalog-format";
 export const dynamic = "force-dynamic";
@@ -12,7 +12,7 @@ const first = (value: Params[string]) => (Array.isArray(value) ? value[0] : valu
 const PAGE_SIZE = 12;
 export default async function CatalogPreviewPage({ searchParams }: { searchParams: Promise<Params> }) {
   if (!await getAdminSession()) redirect("/admin/login");
-  const result = await loadCatalogSnapshot();
+  const result = await loadLiveCatalogSnapshot();
   const reader = result.snapshot ? catalogReader(result.snapshot) : null;
   const params = await searchParams;
   const q = first(params.q).trim().slice(0, 200);
@@ -53,7 +53,7 @@ export default async function CatalogPreviewPage({ searchParams }: { searchParam
       })}</div>
       {!filtered.length && <section className="card quality-empty"><h3>No matching published courses</h3><p>Try another course name or university.</p><Link className="btn secondary" href="/admin/catalog-preview">View all published courses</Link></section>}
       {pages > 1 && <nav className="source-import-pagination" aria-label="Published course pages">{page > 1 && <Link className="btn ghost" href={pageHref(page - 1)}>Previous page</Link>}<span>Page {page} of {pages}</span>{page < pages && <Link className="btn ghost" href={pageHref(page + 1)}>Next page</Link>}</nav>}
-      <h2 style={{ marginTop: 28 }}>Published CMS universities</h2>
+      <h2 className="admin-section-gap">Published CMS universities</h2>
       <div className="quality-records">{reader.universities.map(item => <article className="card quality-record preview-university" key={item.id}><h3>{item.name}</h3><p>{item.city}</p><details><summary>Published overview</summary><p>{item.about}</p></details><div className="quality-record-actions"><Link className="btn secondary" href={`/admin/catalog-revisions?type=university&id=${encodeURIComponent(item.id)}`} aria-label={`Review university: ${item.id}`}>Review content</Link><Link className="text-link" href={`/universities/${item.slug}`} prefetch={false}>Open public page</Link></div></article>)}</div>
     </>}
   </div></section>;

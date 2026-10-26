@@ -44,6 +44,9 @@ export type UgcApprovalFact = {
   note?: string;
 };
 
+// Wave 2: the UGC-approval guide pages render each program's published UGC-DEB result from the
+// catalog. Only `naac` and `aicte` below are still shown; `ugcDebEntitled`, `note` and `faqs` are
+// legacy text kept for reference and must not be rendered again.
 export type UgcApprovalGuide = {
   key: string;
   slug: string;
@@ -759,10 +762,10 @@ export const careerScopeGuides: Record<string, CareerScopeGuide> = {
     unverifiedClaimsNote:
       "No salary figure appears on MUJ's own program page. Third-party aggregators (Internshala, upGrad) suggest entry ₹5-8 LPA rising to ₹12-20 LPA for data-science/finance-track graduates — generic MSc-Mathematics-market figures, not MUJ-specific or independently verified. The '1000+ job opportunities created every year' claim is stated as an Online Manipal platform-wide figure (covering MAHE, MUJ, and SMU combined), not specific to this program.",
     faqs: [
-      ["What jobs can I get after online MSc Mathematics?", "MUJ's own page names Data Scientist, Quantitative Analyst, Actuarial Analyst, Risk Analyst, and Statistician roles, with the specific elective you choose (Data Science, Computational Science, Econometrics, or Mathematics) shaping which of these fits best."],
+      ["What jobs can I get after online MSc Mathematics?", "MUJ's own page lists job profiles in data science, statistics, quantitative analytics, operations research, cryptography, research, academics and computational science, and industries including finance and banking, and actuarial and risk management."],
       ["What salary can I expect after online MSc Mathematics?", "No official MUJ-specific figure exists. Third-party sources suggest ₹5-8 LPA at entry rising to ₹12-20 LPA for data-science/finance-track roles — treat this as general market information, not a guaranteed outcome."],
       ["Is the '1000+ job opportunities created every year' figure specific to online MSc Mathematics?", "No — MUJ states this as an Online Manipal platform-wide figure covering MAHE, MUJ, and SMU combined, not specific to this program."],
-      ["Which elective within online MSc Mathematics leads to the best career outcomes?", "MUJ's own page suggests the Data Science and Computational Science electives align most closely with higher-paying roles like Data Scientist and Quantitative Analyst, compared to a more traditional Mathematics or Econometrics elective — though no official salary data separates these by elective."],
+      ["Does the elective I choose in online MSc Mathematics change my career options?", "MUJ offers four electives (Mathematics, Data Science, Computational Science and Econometrics) and says they prepare learners for careers in academia, research, finance, data science and other analytical work. Its page doesn't link any elective to particular roles or pay, so ask the university how each elective's courses fit the roles you're aiming for."],
     ],
     lastReviewed: LAST_REVIEWED,
     sourceUrls: ["https://www.onlinemanipal.com/online-msc-mathematics-muj"],
@@ -777,7 +780,7 @@ export const ugcApprovalGuides: Record<string, UgcApprovalGuide> = {
     approvals: [
       { universityId: "muj", ugcDebEntitled: true, naac: "A+ (CGPA 3.28)", aicte: "Confirmed via MUJ's own official recognition page for AY 2024-25/2025-26/2026-27, with NBA accreditation for the MBA program specifically (2023-24 to 2025-26)." },
       { universityId: "smu", ugcDebEntitled: true, naac: "A+ (CGPA 3.28; a third-party aggregator states validity till August 2027, not independently confirmed against NAAC's own portal)", aicte: "Only found as a marketing/aggregator claim — no independent AICTE-portal listing located for SMU's MBA specifically." },
-      { universityId: "amity", ugcDebEntitled: true, naac: "A+ — note: the A+ / CGPA 3.51 figure widely quoted online belongs to Amity Noida, a different legal entity from Amity University Rajasthan (the entity actually UGC-DEB entitled for amityonline.com's programs). Don't assume the two share a NAAC score.", aicte: "Only found as a marketing/aggregator claim — no independent AICTE-portal listing located for Amity's MBA specifically." },
+      { universityId: "amity", ugcDebEntitled: true, naac: "A+. The A+ / CGPA 3.51 figure widely quoted online belongs to Amity University Uttar Pradesh (Noida). Amity Online programs are listed under Amity University Rajasthan, Amity University Uttar Pradesh or both, and these are separate legal entities, so confirm which one awards your degree and check its own NAAC grade.", aicte: "Only found as a marketing/aggregator claim — no independent AICTE-portal listing located for Amity's MBA specifically." },
     ],
     faqs: [
       ["Is an online MBA from MUJ, SMU, or Amity UGC approved?", "Yes. All three universities' Master of Business Administration programs are explicitly named on the UGC-DEB \"Entitled Online 2025-26\" list (deb.ugc.ac.in) — an independent, primary government source, not just each university's own marketing claim."],

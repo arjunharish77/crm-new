@@ -1,24 +1,22 @@
 # syntax=docker/dockerfile:1
 
-FROM node:20-bookworm-slim AS deps
+FROM node:24-bookworm-slim AS deps
 WORKDIR /repo
 ENV NEXT_TELEMETRY_DISABLED=1
 COPY package.json package-lock.json ./
 RUN npm ci
 
-FROM node:20-bookworm-slim AS builder
+FROM node:24-bookworm-slim AS builder
 WORKDIR /repo
 ENV NEXT_TELEMETRY_DISABLED=1
 ARG GOOGLE_SITE_VERIFICATION
 ARG BING_SITE_VERIFICATION
 ARG NEXT_PUBLIC_GA_ID
-ARG NEXT_PUBLIC_GTM_ID
 ARG INDEXNOW_ENABLED
 ARG INDEXNOW_KEY
 ENV GOOGLE_SITE_VERIFICATION=$GOOGLE_SITE_VERIFICATION
 ENV BING_SITE_VERIFICATION=$BING_SITE_VERIFICATION
 ENV NEXT_PUBLIC_GA_ID=$NEXT_PUBLIC_GA_ID
-ENV NEXT_PUBLIC_GTM_ID=$NEXT_PUBLIC_GTM_ID
 ENV INDEXNOW_ENABLED=$INDEXNOW_ENABLED
 ENV INDEXNOW_KEY=$INDEXNOW_KEY
 COPY --from=deps /repo/node_modules ./node_modules
@@ -30,7 +28,7 @@ RUN npm run unnatividya:build
 # compiled Next.js output plus scripts/ and migrations/). See 22_UNNATIVIDYA_PLATFORM_ENHANCEMENTS_PLAN.md §4.
 RUN npm run unnatividya:export-catalog
 
-FROM node:20-bookworm-slim AS runner
+FROM node:24-bookworm-slim AS runner
 WORKDIR /app
 
 ENV NODE_ENV=production

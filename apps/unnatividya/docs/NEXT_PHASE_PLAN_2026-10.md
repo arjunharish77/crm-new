@@ -1,14 +1,13 @@
 # Unnati Vidya: next-phase plan (October 2026)
 
-**Date:** 5 October 2026.
-**Status:** approved by the owner on 5 October 2026 (decisions in §11). Wave 0 is built and tested (progress log, increment 73), including the six UI fixes the owner added and a pre-deploy fix for enquiries being refused behind the proxy. It is waiting for the VPS deploy.
+**Original plan:** 5 October 2026. **Status update:** 8 October 2026. The owner approved the decisions in §11. This file retains the original wave specifications and historical audit baseline; [CURRENT_STATUS_AND_RELEASE_PLAN.md](CURRENT_STATUS_AND_RELEASE_PLAN.md) is the current status and priority index. Increment 73 records Wave 0 as deployed on 5 October, but the current VPS commit has not been independently checked. Waves 1–3 (increments 74–76) are built and locally checked; the owner confirms the latest code has **not** been pushed to the VPS. Nor have prepared catalog proposals thereby become published CMS facts. Search Console/Bing verification and Organization `sameAs` profiles still await owner inputs. The 8 October owner change removed the optional marketing checkbox from Apply now; earlier references to it below are historical. Newsletter opt-in remains a separate footer/article flow.
 
 **Builds on:**
 - [WEBSITE_IMPROVEMENT_MASTER_PLAN.md](WEBSITE_IMPROVEMENT_MASTER_PLAN.md): owner decisions in §14 still apply.
 - [DESIGN_AND_CONTENT_STANDARD.md](DESIGN_AND_CONTENT_STANDARD.md).
-- [IMPLEMENTATION_PROGRESS.md](IMPLEMENTATION_PROGRESS.md): 72 increments.
+- [IMPLEMENTATION_PROGRESS.md](IMPLEMENTATION_PROGRESS.md): implementation history through increment 76.
 
-**Supporting reviews** (5 October 2026, read-only; full evidence and sources in each):
+**Supporting reviews** (5 October 2026, read-only snapshots; later implementation supersedes some recommendations):
 
 | Report | Covers |
 |---|---|
@@ -31,9 +30,9 @@
 
 ---
 
-## 0. Urgent: the live site (do before anything else)
+## 0. Historical urgent findings from the 5 October pre-Wave-0 audit
 
-The live site runs a build from about **28 September 2026**. **None of the 72 increments is deployed.**
+At the time of this audit, the live site appeared to run a build from about **28 September 2026**, and none of the first 72 increments appeared deployed. This is a dated observation, **not** the current release instruction. Use the [current status](CURRENT_STATUS_AND_RELEASE_PLAN.md) and [single VPS runbook](CMS_PUBLISHING_DEPLOYMENT.md) for the next release. The exact current VPS commit still requires confirmation.
 
 | # | Problem on the live site | Why it matters | Fix |
 |---|---|---|---|
@@ -42,7 +41,7 @@ The live site runs a build from about **28 September 2026**. **None of the 72 in
 | **U3** | Old content is still live: the expired "July 2026 batch · last date 20 August" banner, "Talk to an expert", "Verify your number" on compare, a named person ("Ritika Desai") as author on all 26 articles, Amity MAJMC at ₹1,30,000 (official: ₹1,90,000), and "1.75L+ learners". | Misleading or stale facts; breaks the owner's byline rule. | All except the MAJMC fee are fixed in the repo and go live with the deploy. The MAJMC fee needs its prepared correction applied in the admin panel (§3). |
 | **U4** | **The deploy is a real cutover, not a code swap.** Public pages will read the website database, with no static fallback. | A bad catalog or a database outage would take public pages down. | Follow `CMS_PUBLISHING_DEPLOYMENT.md`: back up (owner choice: none for now), build, run website migrations **0004–0007**, run `check-catalog-ready.js` (must say 3 universities, 30 courses), then start. The live database's catalog rows came from the old sync and may fail the readiness check; I'll check that first and fix the data if needed. A "last good snapshot" fallback is in §8. |
 
-**Proposed:** a dedicated release step (wave 0):
+**Historical Wave 0 proposal** (the progress log later records its deployment):
 1. Align the website on Next.js 16.3.8 and re-run its smoke suites.
 2. Readiness-check the production catalog.
 3. Run the four migrations.
@@ -55,7 +54,7 @@ The step-by-step VPS commands will be given one at a time, as for the CRM.
 
 ## 1. Where things stand
 
-**Done in code (72 increments), not yet live:**
+**At the 5 October audit:** done in code through increment 72; then not yet live. Later increments and deployment state are in the [current status](CURRENT_STATUS_AND_RELEASE_PLAN.md).
 - Contact-first Apply now with email verification.
 - Server-validated compare gate.
 - Accessible dialogs and navigation.
@@ -69,7 +68,7 @@ The step-by-step VPS commands will be given one at a time, as for the CRM.
 - Responsive admin.
 - Many accessibility and wording fixes.
 
-**Master plan findings, current repo:**
+**Master plan findings at the 5 October audit, before increments 73–76:**
 
 | Status | Items |
 |---|---|
@@ -86,7 +85,7 @@ The step-by-step VPS commands will be given one at a time, as for the CRM.
 | International/NRI fees | MUJ 9 and SMU 9 cross-checked against the 2026-27 prospectus. SMU's NRI applicability is unconfirmed. Amity 12 unresolved. |
 | Prepared, not applied | 28 eligibility corrections, 30 curriculum outlines, 1 fee correction (about 59 admin approvals) |
 | Held | Amity BA and MUJ MSc Mathematics eligibility |
-| Recognition | Pending for 30/30. The guides cite 2025-26; the **2026-27 UGC-DEB lists are out**. |
+| Recognition | **5 October research:** 25 direct matches; five Amity programs found only under Amity University Uttar Pradesh and recorded as `unclear` in the evidence. The owner states UP awards those five, so the prepared proposals mark them listed with that attribution. They appear on public pages only after an administrator applies the proposals. See [recognition evidence](UGC_DEB_RECOGNITION_2026-27_2026-10-05.md). |
 
 ---
 
@@ -233,7 +232,7 @@ Lighthouse (lab, mobile) currently scores 99 for performance on 5 of the 6 teste
 |---|---|
 | Critical | Remove `aggregateRating` (T1). Deploy (U1–U3). |
 | High | **www → apex redirect** (www currently serves a duplicate site; Caddyfile change). Specialization pages (T8). Contextual links into articles (22 of 26 are linked only from `/blog`). `og:url` points to the home page on 201 pages; 59 pages lack og tags. Layout `canonical: "/"` is inherited by `/lead`, `/shortlist` and 404s. Guide descriptions say "MUJ, SMU and Amity" for single-university programs. |
-| Medium | Merge near-duplicate single-university fee and UGC guides. Stop linking `/lead?…` (robots-blocked; 188 variants) and use a button instead. Structured data: ItemList for the course carousel; drop `offers.url` to `/lead`; Article image and a real `dateModified`; blog breadcrumb; Organization `sameAs` once social profiles exist. **GTM only** (gtag loads twice, about 470 KB third-party JS; CSP blocks some GA hits). Home LCP 5.4 s (hero text appears late). 148 titles over 60 characters (patterns in report 04). Broken Amity source link. |
+| Medium | Merge near-duplicate single-university fee and UGC guides. Stop linking `/lead?…` (robots-blocked; 188 variants) and use a button instead. Structured data: ItemList for the course carousel; drop `offers.url` to `/lead`; Article image and a real `dateModified`; blog breadcrumb; Organization `sameAs` once social profiles exist. **One analytics path** (decision 17 selected GA4-only; increment 76 implemented it). Home LCP 5.4 s in the older audit (retest after deployment). 148 titles over 60 characters in that audit (increment 76 reduced this locally). Broken Amity source link. |
 | Low | Duplicate security headers; IndexNow key file; SVG cache headers; HSTS preload; small contrast and label fixes. |
 
 **Rich results in 2026:**
@@ -248,9 +247,9 @@ FAQ content stays because learners use it, but don't expect FAQ snippets.
 
 **Before promoting anything:**
 - fix U1–U3;
-- set up Search Console, Bing Webmaster Tools (ChatGPT search uses Bing's index) and GA4 via GTM;
+- set up Search Console, Bing Webmaster Tools and the direct GA4 tag chosen in decision 17;
 - record a baseline;
-- add **separate marketing consent** to the form;
+- keep **separate marketing consent** in the newsletter sign-up, outside Apply now;
 - create the brand's social profiles;
 - publish the "how we're funded" page.
 
@@ -313,47 +312,50 @@ Missing pages (exams, intake calendar, NRI fees) are in §4. Once Search Console
 
 ---
 
-## 8. Remaining approved engineering (from the progress log)
+## 8. Engineering backlog (updated after increment 76)
 
 | Item | Needs |
 |---|---|
 | Groq recommender (source-grounded, deterministic eligibility first) | Groq API key, model choice, budget/limits; after tools #1 and #3 |
 | Manual and weekly scheduled source checks that create drafts only | Day, time and timezone; where the scheduler runs |
-| Publishing follow-ups: rendered previews, scheduled publication, **last-good snapshot and caching** (so a database blip doesn't take pages down) | None |
+| Publishing follow-ups: rendered previews, scheduled publication, **persistent** last-good snapshot and cross-request caching | The process-local 24-hour fallback exists (increment 76); persistence across restarts does not |
 | External CRM create/update on step-1 save | Target CRM endpoint, upsert contract, test credentials |
 | Real email (ZeptoMail) end-to-end check | Production key confirmation, sender domain, a test inbox |
 | Node LTS upgrade (Node 20 is EOL) | Target version; done with the CRM |
-| Website CI (typecheck, lint, build, smoke suites); smaller image (UV17); shared rate limit (UV18) | None |
+| Smaller image (UV17); shared rate limit (UV18) | Website CI exists (increment 76); its first GitHub run still needs review |
+| Guide CMS editing and review | Increment 76 implemented the blog article CMS, not a guide editor; decision 8 includes guides |
 
 ---
 
-## 9. Proposed order
+## 9. Original wave order and current interpretation
+
+The effort estimates below were planning estimates, not evidence of completion. Waves 1–3 are implemented locally, with the latest code **not yet pushed to the VPS**. Wave 0 is recorded as deployed but its VPS commit should be checked. After the next release, use [CURRENT_STATUS_AND_RELEASE_PLAN.md](CURRENT_STATUS_AND_RELEASE_PLAN.md) for the order of CMS publication, runtime work, tools and content. GA4-only supersedes the older GTM-only proposal in the Wave 0 row.
 
 | Wave | Contents | Rough effort |
 |---|---|---|
-| **0 · Make the live site safe and current** | U1–U4: Next.js 16.3.8, smoke suites, readiness check, migrations, deploy, post-deploy check; www redirect; GTM only | 2–3 days + your VPS steps |
+| **0 · Make the live site safe and current** | U1–U4: Next.js 16.3.8, smoke suites, readiness check, migrations, deploy, post-deploy check; www redirect; analytics was later set to GA4-only | 2–3 days + your VPS steps |
 | **1 · Trust fixes** | T1–T8 (after decisions); article factual corrections; claims register | 4–6 days |
 | **2 · Publish the data we have** | Admin approvals (your team, with my checklist); category fee selector; sources and dates on pages; recognition status (after the 2026-27 DEB check); intake model | 5–8 days + admin time |
-| **3 · Measurement and foundations** | Search Console, Bing, GA4/GTM events, **separate marketing consent and newsletter/WhatsApp opt-in** (decision 9), Organization profile and `sameAs`, editorial and funding pages, technical SEO highs and mediums, **CMS article editor and migration of the 26 posts** (decision 8), last-good snapshot, website CI | 8–11 days |
+| **3 · Measurement and foundations** | Search Console, Bing, GA4 events, **separate marketing consent and newsletter/WhatsApp opt-in** (decision 9), Organization profile and `sameAs`, editorial and funding pages, technical SEO highs and mediums, **CMS article editor and migration of the 26 posts** (decision 8), process-local last-good snapshot, website CI | 8–11 days |
 | **4 · First tools and hubs** | Tools 1–4; content hubs C1, C2, C3, C5 with their first-priority pieces; enriched MBA, BCA and MCA comparisons | 3–5 weeks |
 | **5 · More tools and clusters** | Tools 5–10, Groq recommender, remaining first-priority content, NRI hub, scheduled source checks | 4–6 weeks |
 | **6 · Ongoing growth** | Weekly content and video cadence, data studies, outreach, quarterly refresh | Ongoing |
 
-Each wave ends with checks (type check, lint, the website's browser suites, production build), a docs update and commit commands. Deploy steps are given one at a time.
+Each implementation wave ends with relevant checks and a docs update. The next owner push/deploy concerns the locally completed Waves 1–3 and any earlier code missing from the VPS; Waves 4–6 remain future work rather than part of that same release. Use the [single deployment runbook](CMS_PUBLISHING_DEPLOYMENT.md).
 
 ---
 
-## 10. What I need from you
+## 10. Owner inputs still needed (original list, updated)
 
-1. Approval of this plan and its order; decisions in §11, one at a time.
-2. For wave 0: approval to deploy, and SSH steps on the VPS (I'll give them one at a time).
+1. ~~Approval of this plan and its order~~: given 5 October; decisions are recorded in §11.
+2. For the next release: the intended pushed commit and a fresh VPS commit/migration check, followed by the [runbook](CMS_PUBLISHING_DEPLOYMENT.md).
 3. Facts:
    - how Unnati Vidya is paid by universities;
-   - legal entity and contact details;
-   - whether the advertised services (document pre-check, loans, post-admission support) exist;
+   - ~~legal entity and contact details~~ (provided 5 October 2026, §11 #12; phone to follow);
+   - ~~whether the advertised services (document pre-check, loans, post-admission support) exist~~ (yes, §11 #13);
    - where the existing ratings, testimonials and learner counts come from.
 4. University admissions answers (listed in §3).
-5. Access: Google Search Console (DNS verification), Bing Webmaster Tools, the GA4 property and GTM container, and one person owning analytics.
+5. Access: Google Search Console (DNS verification), Bing Webmaster Tools and the GA4 property, with one person owning analytics. GTM was removed by decision 17.
 6. Later: the Groq key; the external CRM contract; ZeptoMail test inbox; social profile handles; a content reviewer on your side.
 
 ---
@@ -374,3 +376,11 @@ Asked one at a time; answers recorded here.
 | 8 | Content: who reviews my drafts, how many pieces a week, and do they go through the CMS or code? | **Draft into the CMS** (5 October 2026). Articles and guides move into the admin panel: an article editor with draft → review → publish, the Content Team byline, sources, dates, preview, revisions and rollback, following the existing catalog workflow (about 3–5 days, added to wave 3). The existing 26 posts migrate into it. I draft each piece from official sources into the CMS as a draft; your team reviews and an administrator publishes. Pace about 3 a week unless changed. |
 | 9 | Marketing scope: which channels you'll run (YouTube, LinkedIn/Instagram, WhatsApp Channel, newsletter, webinars), and who on your side | **YouTube, LinkedIn + Instagram, WhatsApp Channel + newsletter** (5 October 2026). Webinars and partnerships are not now. Site support: <ul><li>separate marketing consent on the form (needed for the newsletter and WhatsApp updates);</li><li>an opt-in sign-up with confirmation and unsubscribe;</li><li>Organization `sameAs` links to the new profiles;</li><li>video embeds with transcripts on related guides;</li><li>shareable table images for carousels.</li></ul>I'll prepare scripts and outlines from each published piece. Recording and posting are done by your team. |
 | 10 | Approve the wave order (§9)? | **Approved** (5 October 2026), with answers 1–9 applied. Wave 0 starts now; each wave is reported before the next. |
+| 11 | Homepage "Approvals verified: UGC, NAAC and AICTE status re-checked every admission cycle" is not accurate until the 2026-27 check: reword, keep or remove? | **Reword** (5 October 2026) to "Approvals you can check: we link each program to the official UGC-DEB list and show when we last checked it." Wave 2 adds the per-program UGC-DEB link and the last-checked date. |
+| 12 | About page: which legal entity and contact details to show? | **Owner details** (5 October 2026): Unnati Vidya, A-116, URBTECH Trade Centre, Noida, Uttar Pradesh 201304; admin@unnatividya.com. No phone for now (to be added later). Shown in a "Contact us" section on About and in the site-wide Organization structured data (address and email). |
+| 13 | Homepage "Support till enrolment: documents, loans and follow-ups handled until your LMS login arrives": do all three services exist? | **Yes, all three** (5 October 2026). The line stays; it is recorded in the claims register as an owner-stated service. |
+| 14 | Add a "How we're funded and how listings are ordered" section to About? | **Not now** (5 October 2026). "No hidden charges" stays the only statement; the funding fact in §10 is no longer needed for wave 1. |
+| 15 | Five Amity programs (B.Com, BA, BA JMC, M.Com, MA Public Policy) appear on the 2026-27 UGC-DEB online lists only under Amity University Uttar Pradesh. Which Amity university awards them? | **Amity University Uttar Pradesh (Noida)** (owner, 5 October 2026). The prepared results mark them as listed. The three on UP's "recognized" list carry the printed "valid up to January 2027" note. Recorded in the claims register as owner-stated. |
+| 16 | The footer and policy pages showed "Call 1800-120-4050" (toll-free, 9 am – 9 pm). Is it the owner's number? | **Remove it** (5 October 2026). Replaced by admin@unnatividya.com until the owner gives a number. |
+| 17 | Analytics loads twice (GTM plus a direct GA4 tag). GTM only, GA4 tag only, or leave it? | **GA4 tag only** (5 October 2026). GTM is removed. Events queue until gtag.js loads, so none are dropped. |
+| 18 | Marketing consent wording: one box for email and WhatsApp, two boxes, or the newsletter only? | **One optional box for both** (5 October 2026): "Send me Unnati Vidya's newsletter and WhatsApp updates about online degrees, fees and admission dates. Optional. I can unsubscribe at any time." |

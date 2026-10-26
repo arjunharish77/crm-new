@@ -1,0 +1,106 @@
+[
+  {
+    "courseId": "mba-muj",
+    "notes": [
+      "The assessment and fee-exclusion statements come from the MBA page's program FAQs. Confirm they still apply to the applicant's admission session before publishing.",
+      "The university has not stated a fixed weekly live-class timetable on this source. Do not infer one."
+    ],
+    "programDetails": {
+      "study": {
+        "checkedAt": "2026-10-08",
+        "sourceUrl": "https://www.onlinemanipal.com/online-mba-manipal-university-jaipur",
+        "scope": "MUJ online MBA program page",
+        "points": [
+          "The MBA page describes online classes, assignments, projects and examinations.",
+          "Videos, quizzes, PDFs and recorded lectures are available through the Online Manipal learning platform."
+        ]
+      },
+      "assessment": {
+        "checkedAt": "2026-10-08",
+        "sourceUrl": "https://www.onlinemanipal.com/online-mba-manipal-university-jaipur",
+        "scope": "MUJ online MBA assessment FAQs",
+        "points": [
+          "The stated assessment split is 30% continuous assignments and 70% term-end examinations; the page says learners must score at least 40% in each part.",
+          "Term-end examinations are described as computer-based and online proctored. The page says examination slots can be chosen subject to availability."
+        ]
+      },
+      "additionalCharges": {
+        "checkedAt": "2026-10-08",
+        "sourceUrl": "https://www.onlinemanipal.com/online-mba-manipal-university-jaipur",
+        "scope": "MUJ online MBA fee FAQs",
+        "points": [
+          "The listed program fee excludes possible charges for resit examinations, revaluation, duplicate certificates and other supplementary academic services; the page does not state the amounts."
+        ]
+      },
+      "specialization": {
+        "checkedAt": "2026-10-08",
+        "sourceUrl": "https://www.onlinemanipal.com/online-mba-manipal-university-jaipur",
+        "scope": "MUJ online MBA specialization section",
+        "points": [
+          "The page says learners choose in semester three between one elective group for a single focused specialization and two groups for a dual specialization. Confirm current group availability before applying."
+        ]
+      }
+    }
+  },
+  {
+    "courseId": "mba-smu",
+    "notes": [
+      "The MBA page describes a 75% self-learning-content expectation. Confirm the current handbook and how this rule is measured before publishing it as a formal exam requirement.",
+      "Do not transfer MUJ's elective structure or fees to SMU."
+    ],
+    "programDetails": {
+      "study": {
+        "checkedAt": "2026-10-08",
+        "sourceUrl": "https://www.onlinemanipal.com/online-mba-degree-dual-specialization-smu",
+        "scope": "SMU online MBA learning-format FAQs",
+        "points": [
+          "Learning combines live lectures, recorded videos, faculty discussion forums and self-paced material through the learning platform.",
+          "The page says learning-platform access, the student portal and the e-library begin after admission is confirmed."
+        ]
+      },
+      "assessment": {
+        "checkedAt": "2026-10-08",
+        "sourceUrl": "https://www.onlinemanipal.com/online-mba-degree-dual-specialization-smu",
+        "scope": "SMU online MBA assessment FAQs",
+        "points": [
+          "The stated assessment split is 30% continuous assignments and 70% term-end examinations; the page says learners must score at least 40% in each part.",
+          "Term-end examinations are described as computer-based and online proctored. The university says the exam schedule appears on the student admit card."
+        ]
+      },
+      "additionalCharges": {
+        "checkedAt": "2026-10-08",
+        "sourceUrl": "https://www.onlinemanipal.com/online-mba-degree-dual-specialization-smu",
+        "scope": "SMU online MBA fee FAQs",
+        "points": [
+          "The listed program fee excludes possible charges for resit examinations, revaluation, duplicate certificates and other supplementary academic services; the page does not state the amounts."
+        ]
+      },
+      "specialization": {
+        "checkedAt": "2026-10-08",
+        "sourceUrl": "https://www.onlinemanipal.com/online-mba-degree-dual-specialization-smu",
+        "scope": "SMU online MBA specialization FAQs",
+        "points": [
+          "The page says learners select two specialization areas in semester three and continue them in semester four. Confirm which combinations are currently offered."
+        ]
+      }
+    }
+  },
+  {
+    "courseId": "mba-amity",
+    "notes": [
+      "The Amity MBA page supports live and recorded study details, but it does not give a usable assessment split, exam-location rule or extra-charge schedule in the reviewed section. Leave those blocks unpublished.",
+      "The Amity page displays both USD payment options and an INR FAQ. Applicant-category and awarding-entity applicability require separate resolution before editing fees or recognition."
+    ],
+    "programDetails": {
+      "study": {
+        "checkedAt": "2026-10-08",
+        "sourceUrl": "https://amityonline.com/master-of-business-administration-online",
+        "scope": "Amity Online MBA learning-format FAQs",
+        "points": [
+          "The MBA page describes live weekend sessions and recorded lectures that can be watched later.",
+          "It also describes access to a digital student community and a mobile app for classes and learning material. Confirm current access and class schedules for the relevant cohort."
+        ]
+      }
+    }
+  }
+]

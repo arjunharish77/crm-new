@@ -16,7 +16,7 @@ export function PreparedEligibilityPanel({ draft, content, onChange, disabled }:
       {draft.foreignApplicantsOnly ? <><h4>NRI applicants</h4><p>{nriCategoryNote}</p></> : null}
       <ul>{draft.notes.map(note => <li key={note}>{note}</li>)}</ul>
     </details>
-    <p>Loading replaces eligibility in this unsaved proposal, adds its source and clears the earlier eligibility verification marker. Other edits are retained. It does not save, publish or verify the correction.</p>
+    <p>Loading replaces eligibility in this unsaved proposal, adds its source and clears any earlier structured checker rule so it cannot contradict the new text. Other edits are retained. It does not save, publish or verify the correction.</p>
     <button type="button" className="btn ghost" disabled={disabled || loaded} onClick={() => {
       onChange(JSON.stringify(loadPreparedEligibility(content, draft), null, 2)); setLoaded(true);
     }}>Load eligibility correction</button>

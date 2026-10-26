@@ -1,304 +1,274 @@
 "use client";
 
-import Image from "next/image";
 import Link from "next/link";
-import { useState, useRef } from "react";
-import { useSearchParams } from "next/navigation";
-import { SlidersHorizontal } from "lucide-react";
+import { useRef, useState } from "react";
+import { useLiveSearchParams, useUrlSearchText, writeUrl } from "@/lib/use-live-search-params";
+import { Search, SearchX, SlidersHorizontal, X } from "lucide-react";
 import { trackEvent } from "@/components/analytics";
-import { SaveButton } from "@/components/save-button";
+import { CourseCard } from "@/components/course-card";
 import { formatFee } from "@/lib/catalog-format";
 import { type Course, type University } from "@/data/catalog";
-import { universityMedia } from "@/data/media";
+import { FeeGroupSwitch, useFeeGroup } from "@/components/fee-group";
 
 type CourseItem = Course & { university: University };
 // "relevance" replaced review-count ("most reviewed") and rating sorts: both ranked by unverified
 // figures (next-phase plan T4). Older ?sort=popular / ?sort=rating links fall back to relevance.
 type SortKey = "relevance" | "feeAsc" | "feeDesc";
+type Group = "level" | "degree" | "stream" | "university";
+
+// The design's "Degree" list comes first; any other degree in the catalog sits under "More degrees".
+const PRIMARY_DEGREES = ["MBA", "BBA", "BCA", "MCA", "B.Com", "M.Com", "BA"];
+const FEE_STEP = 5000;
 
 function toggleValue(values: string[], value: string) {
   return values.includes(value) ? values.filter((item) => item !== value) : [...values, value];
 }
 
-function levelStyle(level: CourseItem["level"]) {
-  return {
-    fontSize: 11,
-    fontWeight: 700,
-    color: level === "PG" ? "#4D00FF" : "#0F5BB8",
-    background: level === "PG" ? "rgba(77,0,255,0.10)" : "rgba(79,168,255,0.12)",
-    borderRadius: 999,
-    whiteSpace: "nowrap" as const,
-    padding: "3px 9px",
-  };
+// Writes filter changes to the URL (shareable, back/forward aware). Design aliases (lvl, uni) are
+// read on arrival and dropped on the first write, so the canonical names stay level/university.
+function updateParams(changes: Record<string, string | string[] | null>, replace = false) {
+  const next = new URLSearchParams(window.location.search);
+  for (const [alias, name] of [["lvl", "level"], ["uni", "university"]]) {
+    next.getAll(alias).forEach((value) => next.append(name, value));
+    next.delete(alias);
+  }
+  for (const [key, value] of Object.entries(changes)) {
+    next.delete(key);
+    if (Array.isArray(value)) value.forEach((item) => next.append(key, item));
+    else if (value !== null && value !== "") next.set(key, value);
+  }
+  const url = `${window.location.pathname}${next.size ? `?${next}` : ""}${window.location.hash}`;
+  if (url !== window.location.pathname + window.location.search + window.location.hash) writeUrl(url, replace);
+}
+
+// The hero search box (design Courses hero). A plain GET form, so it also works before
+// JavaScript loads; with it, typing filters live through the `q` URL param.
+export function CourseSearch() {
+  const params = useLiveSearchParams();
+  const query = (params.get("q") || "").slice(0, 200);
+  const [text, setText] = useUrlSearchText(query, value => updateParams({ q: value }, true));
+  // The result count lives in the explorer below; read it from its results region.
+  const track = () => { if (query.trim()) trackEvent("course_search", { result_count: Number(document.getElementById("course-results")?.dataset.count ?? 0) }); };
+  return <form className="uvc-search" action="/courses" method="get" role="search" aria-label="Courses" onSubmit={(event) => { event.preventDefault(); track(); }}>
+    <Search size={22} aria-hidden="true" />
+    <label htmlFor="course-search" className="sr-only">Search courses</label>
+    <input
+      id="course-search"
+      name="q"
+      type="search"
+      value={text}
+      maxLength={200}
+      autoComplete="off"
+      placeholder="Search MBA, Data Science, Finance…"
+      onChange={(event) => setText(event.target.value)}
+      onBlur={track}
+    />
+  </form>;
 }
 
 export function CourseExplorer({ courses: initialCourses }: { courses: CourseItem[] }) {
-  const params = useSearchParams();
-  const feeCeiling = Math.max(1000, Math.ceil(Math.max(0, ...initialCourses.map(course=>course.fee))/1000)*1000);
-  const streamOptions = [...new Set(initialCourses.map(course=>course.stream))].sort();
-  const universityOptions = [...new Map(initialCourses.map(course=>[course.universityId, course.university])).values()].sort((a,b)=>a.name.localeCompare(b.name));
-  const readList = (key: string, allowed: string[]) => [...new Set(params.getAll(key).flatMap(value=>value.split(",")).filter(value=>allowed.includes(value)))];
-  const query = (params.get("q") || "").slice(0,200);
-  const levels = readList("level",["UG","PG"]);
-  const streams = readList("stream",streamOptions);
+  const params = useLiveSearchParams();
+  const fees = initialCourses.map((course) => course.fee);
+  const feeMin = fees.length ? Math.floor(Math.min(...fees) / FEE_STEP) * FEE_STEP : 0;
+  const feeCeiling = Math.max(FEE_STEP, Math.ceil(Math.max(0, ...fees) / FEE_STEP) * FEE_STEP);
+  const streamOptions = [...new Set(initialCourses.map((course) => course.stream))].sort();
+  const universityOptions = [...new Map(initialCourses.map((course) => [course.universityId, course.university])).values()].sort((a, b) => a.name.localeCompare(b.name));
+  const degreeNames = [...new Set(initialCourses.map((course) => course.shortName))];
+  const degreeOptions = [
+    ...PRIMARY_DEGREES.filter((degree) => degreeNames.includes(degree)),
+    ...degreeNames.filter((degree) => !PRIMARY_DEGREES.includes(degree)).sort((a, b) => a.localeCompare(b)),
+  ];
+  const primaryDegreeCount = PRIMARY_DEGREES.filter((degree) => degreeNames.includes(degree)).length;
+
+  const readRaw = (...keys: string[]) => keys.flatMap((key) => params.getAll(key)).flatMap((value) => value.split(","));
+  const readList = (keys: string[], allowed: string[]) => [...new Set(readRaw(...keys).filter((value) => allowed.includes(value)))];
+  const query = (params.get("q") || "").slice(0, 200);
+  const levels = readList(["level", "lvl"], ["UG", "PG"]);
+  const streams = readList(["stream"], streamOptions);
+  // Degree links (?degree=MBA) match the course short name, ignoring case.
+  const degrees = [...new Set(readRaw("degree").map((value) => degreeOptions.find((degree) => degree.toLowerCase() === value.trim().toLowerCase())).filter((value): value is string => Boolean(value)))];
   // Keep existing short-name links working while writing stable university IDs.
-  const universities = [...new Set(params.getAll("university").flatMap(value=>value.split(",")).map(value=>universityOptions.find(university=>university.id===value || university.shortName===value)?.id).filter((value): value is University["id"]=>Boolean(value)))];
+  const universities = [...new Set(readRaw("university", "uni").map((value) => universityOptions.find((university) => university.id === value || university.shortName.toLowerCase() === value.toLowerCase())?.id).filter((value): value is University["id"] => Boolean(value)))];
   const feeParam = Number(params.get("maxFee"));
-  const maxFee = params.has("maxFee") && Number.isFinite(feeParam) && feeParam>=0 ? Math.min(Math.floor(feeParam),feeCeiling) : feeCeiling;
-  const sort: SortKey = ["feeAsc","feeDesc"].includes(params.get("sort") || "") ? params.get("sort") as SortKey : "relevance";
+  const maxFee = params.has("maxFee") && params.get("maxFee") !== "" && Number.isFinite(feeParam) && feeParam >= 0 ? Math.min(Math.floor(feeParam), feeCeiling) : feeCeiling;
+  const feeGroup = useFeeGroup();
+  const sort: SortKey = ["feeAsc", "feeDesc"].includes(params.get("sort") || "") ? params.get("sort") as SortKey : "relevance";
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
   const filterToggle = useRef<HTMLButtonElement>(null);
-  function updateFilters(changes: Record<string,string | string[] | null>, replace = false) {
-    const next = new URLSearchParams(window.location.search);
-    for (const [key,value] of Object.entries(changes)) {
-      next.delete(key);
-      if (Array.isArray(value)) value.forEach(item=>next.append(key,item));
-      else if (value !== null && value !== "") next.set(key,value);
-    }
-    const url = `${window.location.pathname}${next.size ? `?${next}` : ""}${window.location.hash}`;
-    if (url !== window.location.pathname+window.location.search+window.location.hash) window.history[replace ? "replaceState" : "pushState"](null,"",url);
-  }
-  const setLevels = (values: string[])=>updateFilters({level:values});
-  const setStreams = (values: string[])=>updateFilters({stream:values});
-  const setUniversities = (values: string[])=>updateFilters({university:values});
-  const activeFilterCount = levels.length + streams.length + universities.length + (maxFee < feeCeiling ? 1 : 0) + (query.trim() ? 1 : 0);
 
-  function countMatches(overrides: { levels?: string[]; streams?: string[]; universities?: string[]; maxFee?: number } = {}) {
-    const activeLevels = overrides.levels ?? levels;
-    const activeStreams = overrides.streams ?? streams;
-    const activeUniversities = overrides.universities ?? universities;
-    const activeMaxFee = overrides.maxFee ?? maxFee;
-    const text = query.trim().toLowerCase();
-    return initialCourses.filter((course) => {
-      const search = [course.name, course.shortName, course.stream, course.university.name, course.university.shortName, ...course.specializations].join(" ").toLowerCase();
-      return (
-        (!text || search.includes(text)) &&
-        (!activeLevels.length || activeLevels.includes(course.level)) &&
-        (!activeStreams.length || activeStreams.includes(course.stream)) &&
-        (!activeUniversities.length || activeUniversities.includes(course.universityId)) &&
-        course.fee <= activeMaxFee
-      );
-    }).length;
-  }
-
+  const selected: Record<Group, string[]> = { level: levels, degree: degrees, stream: streams, university: universities };
+  const setGroup = (group: Group, values: string[]) => updateParams({ [group]: values });
   const text = query.trim().toLowerCase();
-  const filtered = initialCourses
-      .filter((course) => {
-        const search = [course.name, course.shortName, course.stream, course.university.name, course.university.shortName, ...course.specializations].join(" ").toLowerCase();
-        return (
-          (!text || search.includes(text)) &&
-          (!levels.length || levels.includes(course.level)) &&
-          (!streams.length || streams.includes(course.stream)) &&
-          (!universities.length || universities.includes(course.universityId)) &&
-          course.fee <= maxFee
-        );
-      })
-      .sort((a, b) => {
-        if (sort === "feeAsc") return a.fee - b.fee;
-        if (sort === "feeDesc") return b.fee - a.fee;
-        // Relevance: with a search, names that start with it, then names containing it; then the same
-        // degree side by side (easy to compare across universities), cheaper first.
-        const needle = query.trim().toLowerCase();
-        const rank = (name: string) => !needle ? 0 : name.toLowerCase().startsWith(needle) ? 0 : name.toLowerCase().includes(needle) ? 1 : 2;
-        return rank(a.name) - rank(b.name) || a.name.localeCompare(b.name) || a.fee - b.fee;
-      });
 
-  function clearFilters() {
-    updateFilters({q:null,level:null,stream:null,university:null,maxFee:null,sort:null});
+  function matches(course: CourseItem, active: Record<Group, string[]>, activeMaxFee: number) {
+    const search = [course.name, course.shortName, course.stream, course.university.name, course.university.shortName, ...course.specializations].join(" ").toLowerCase();
+    return (
+      (!text || search.includes(text)) &&
+      (!active.level.length || active.level.includes(course.level)) &&
+      (!active.degree.length || active.degree.includes(course.shortName)) &&
+      (!active.stream.length || active.stream.includes(course.stream)) &&
+      (!active.university.length || active.university.includes(course.universityId)) &&
+      course.fee <= activeMaxFee
+    );
   }
+  // Live count: what you would get if this were the only option chosen in its group.
+  const countMatches = (overrides: Partial<Record<Group, string[]>> = {}, activeMaxFee = maxFee) =>
+    initialCourses.filter((course) => matches(course, { ...selected, ...overrides }, activeMaxFee)).length;
+
+  const filtered = initialCourses
+    .filter((course) => matches(course, selected, maxFee))
+    .sort((a, b) => {
+      if (sort === "feeAsc") return a.fee - b.fee;
+      if (sort === "feeDesc") return b.fee - a.fee;
+      // Relevance: with a search, names that start with it, then names containing it; then the same
+      // degree side by side (easy to compare across universities), cheaper first. Never by rating.
+      const rank = (name: string) => !text ? 0 : name.toLowerCase().startsWith(text) ? 0 : name.toLowerCase().includes(text) ? 1 : 2;
+      return rank(a.name) - rank(b.name) || a.name.localeCompare(b.name) || a.fee - b.fee;
+    });
+
+  // Clears filters and the search; the chosen sort stays (design "Clear all").
+  function clearFilters() {
+    updateParams({ q: null, level: null, degree: null, stream: null, university: null, maxFee: null });
+  }
+  const levelLabel = (value: string) => value === "UG" ? "Undergraduate" : "Postgraduate";
+  const universityLabel = (id: string) => universityOptions.find((item) => item.id === id)?.shortName || id;
   const chips = [
-    ...levels.map(value=>({label:value==="UG"?"Undergraduate":"Postgraduate",remove:()=>setLevels(levels.filter(item=>item!==value))})),
-    ...streams.map(value=>({label:value,remove:()=>setStreams(streams.filter(item=>item!==value))})),
-    ...universities.map(value=>({label:universityOptions.find(item=>item.id===value)?.shortName || value,remove:()=>setUniversities(universities.filter(item=>item!==value))})),
-    ...(maxFee<feeCeiling?[{label:`Up to ${formatFee(maxFee)}`,remove:()=>updateFilters({maxFee:null})}]:[]),
-    ...(query.trim()?[{label:`Search: ${query}`,remove:()=>updateFilters({q:null})}]:[]),
+    ...levels.map((value) => ({ label: levelLabel(value), remove: () => setGroup("level", levels.filter((item) => item !== value)) })),
+    ...degrees.map((value) => ({ label: value, remove: () => setGroup("degree", degrees.filter((item) => item !== value)) })),
+    ...streams.map((value) => ({ label: value, remove: () => setGroup("stream", streams.filter((item) => item !== value)) })),
+    ...universities.map((value) => ({ label: universityLabel(value), remove: () => setGroup("university", universities.filter((item) => item !== value)) })),
+    ...(maxFee < feeCeiling ? [{ label: `Up to ${formatFee(maxFee)}`, remove: () => updateParams({ maxFee: null }) }] : []),
+    ...(query.trim() ? [{ label: `Search: ${query}`, remove: () => updateParams({ q: null }) }] : []),
   ];
 
+  const groups: Array<{ group: Group; title: string; options: Array<[string, string]>; primary?: number }> = [
+    { group: "level", title: "Degree level", options: [["UG", "Undergraduate (UG)"], ["PG", "Postgraduate (PG)"]] },
+    { group: "degree", title: "Degree", options: degreeOptions.map((value) => [value, `Online ${value}`]), primary: primaryDegreeCount || 7 },
+    { group: "stream", title: "Stream", options: streamOptions.map((value) => [value, value]) },
+    { group: "university", title: "University", options: universityOptions.map((university) => [university.id, university.name]) },
+  ];
+
+  function renderOption(group: Group, value: string, label: string, title: string) {
+    const values = selected[group];
+    const id = `filter-${group}-${value.replace(/[^a-z0-9]+/gi, "-").toLowerCase()}`;
+    return <label key={value} className="uvc-option" htmlFor={id}>
+      <input
+        id={id}
+        type="checkbox"
+        checked={values.includes(value)}
+        onChange={() => {
+          const next = toggleValue(values, value);
+          setGroup(group, next);
+          trackEvent("course_filter_applied", { filter_type: title, value, result_count: countMatches({ [group]: next }) });
+        }}
+      />
+      <span className="uvc-option-label">{label}</span>
+      <span className="uvc-option-count">{countMatches({ [group]: [value] })}</span>
+    </label>;
+  }
+
+  const sliderValue = Math.min(Math.max(maxFee, feeMin), feeCeiling);
+  const trackFee = () => trackEvent("course_filter_applied", { filter_type: "Total fee under", value: maxFee, result_count: countMatches() });
+
   return (
-    <>
+    <div className="uvc-body">
       <button
         type="button"
-        className="uv-filter-toggle"
+        className="uvc-filter-toggle"
         ref={filterToggle}
         aria-expanded={mobileFiltersOpen}
         aria-controls="uv-course-filters"
         onClick={() => setMobileFiltersOpen((open) => !open)}
       >
-        <SlidersHorizontal size={16} />
-        Filters{activeFilterCount ? ` (${activeFilterCount})` : ""}
+        <SlidersHorizontal size={20} aria-hidden="true" />
+        Filters{chips.length ? ` (${chips.length})` : ""}
       </button>
-      <div className="uv-courses-layout" style={{ display: "grid", gridTemplateColumns: "250px 1fr", gap: 24, alignItems: "start" }}>
+
+      <div className="uvc-sort">
+        <label htmlFor="course-sort" className="sr-only">Sort courses</label>
+        <select id="course-sort" value={sort} onChange={(event) => updateParams({ sort: event.target.value === "relevance" ? null : event.target.value })}>
+          <option value="relevance">Sort: relevance</option>
+          <option value="feeAsc">Fee: low to high</option>
+          <option value="feeDesc">Fee: high to low</option>
+        </select>
+      </div>
+
       <aside
         id="uv-course-filters"
         aria-label="Course filters"
-        onKeyDown={event=>{if(event.key==="Escape" && mobileFiltersOpen){setMobileFiltersOpen(false);filterToggle.current?.focus();}}}
-        className={mobileFiltersOpen ? "uv-course-filter-panel uv-open" : "uv-course-filter-panel"}
-        style={{ background: "#fff", border: "1px solid #CFDAE6", borderRadius: 8, padding: 20, position: "sticky", top: 88 }}
+        onKeyDown={(event) => { if (event.key === "Escape" && mobileFiltersOpen) { setMobileFiltersOpen(false); filterToggle.current?.focus(); } }}
+        className={mobileFiltersOpen ? "uvc-filters is-open" : "uvc-filters"}
       >
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
-          <span style={{ fontSize: 15, fontWeight: 700, color: "#363634" }}>Filters</span>
-          <button type="button" onClick={clearFilters} style={{ border: "none", background: "none", fontSize: 12, fontWeight: 600, color: "#544CC8", cursor: "pointer", padding: 0 }}>
-            Clear all
-          </button>
+        <div className="uvc-filters-head">
+          <h2>Filters</h2>
+          <button type="button" className="uvc-clear" onClick={clearFilters}>Clear all</button>
         </div>
-        {[
-          ["Degree level", [["UG", "Undergraduate (UG)"], ["PG", "Postgraduate (PG)"]], levels, setLevels],
-          ["Stream", streamOptions.map(value=>[value,value]), streams, setStreams],
-          ["University", universityOptions.map(university=>[university.id,university.shortName]), universities, setUniversities],
-        ].map(([heading, values, selected, setter]) => (
-          <div key={heading as string}>
-            <div style={{ fontSize: 13, fontWeight: 700, color: "#363634", marginBottom: 8 }}>{heading as string}</div>
-            <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 18 }}>
-              {(values as string[][]).map(([value, label]) => {
-                const headingText = heading as string;
-                const overrideKey = headingText === "Degree level" ? "levels" : headingText === "Stream" ? "streams" : "universities";
-                const optionCount = countMatches({ [overrideKey]: [value] });
-                return (
-                  <label key={value} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, fontSize: 14, color: "#555", cursor: "pointer" }}>
-                    <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                      <input
-                        checked={(selected as string[]).includes(value)}
-                        onChange={() => {
-                          const next = toggleValue(selected as string[], value);
-                          (setter as (next: string[]) => void)(next);
-                          trackEvent("course_filter_applied", {
-                            filter_type: headingText,
-                            value,
-                            result_count: countMatches({ [overrideKey]: next }),
-                          });
-                        }}
-                        type="checkbox"
-                        style={{ accentColor: "#544CC8", width: 16, height: 16 }}
-                      />
-                      {label}
-                    </span>
-                    <span style={{ color: "#707070", fontSize: 12 }}>{optionCount}</span>
-                  </label>
-                );
-              })}
+        {groups.map(({ group, title, options, primary }) => {
+          const visible = primary ? options.slice(0, primary) : options;
+          const more = primary ? options.slice(primary) : [];
+          const moreSelected = more.some(([value]) => selected[group].includes(value));
+          return <fieldset key={group} className="uvc-group">
+            <legend>{title}</legend>
+            <div className="uvc-options">
+              {visible.map(([value, label]) => renderOption(group, value, label, title))}
             </div>
-          </div>
-        ))}
-        <label htmlFor="course-max-fee" style={{ fontSize: 13, fontWeight: 700, color: "#363634", marginBottom: 8 }}>Maximum total tuition</label>
-        <input
-          type="range"
-          id="course-max-fee"
-          min={0}
-          max={feeCeiling}
-          step={1000}
-          value={maxFee}
-          onChange={(event) => updateFilters({maxFee:Number(event.target.value)>=feeCeiling?null:event.target.value},true)}
-          onMouseUp={() => trackEvent("course_filter_applied", { filter_type: "Total fee under", value: maxFee, result_count: countMatches() })}
-          onTouchEnd={() => trackEvent("course_filter_applied", { filter_type: "Total fee under", value: maxFee, result_count: countMatches() })}
-          style={{ width: "100%", accentColor: "#544CC8" }}
-        />
-        <div style={{ fontSize: 13, color: "#696868", marginTop: 4 }}>Up to {formatFee(maxFee)}</div>
-        <button type="button" className="uv-filter-apply" onClick={() => {setMobileFiltersOpen(false);filterToggle.current?.focus();}}>
+            {more.length ? <details className="uvc-more" open={moreSelected || undefined}>
+              <summary>More degrees ({more.length})</summary>
+              <div className="uvc-options">{more.map(([value, label]) => renderOption(group, value, label, title))}</div>
+            </details> : null}
+          </fieldset>;
+        })}
+        <div className="uvc-group">
+          <label htmlFor="course-max-fee" className="uvc-group-title">Maximum total tuition</label>
+          <input
+            type="range"
+            id="course-max-fee"
+            className="uvc-range"
+            min={feeMin}
+            max={feeCeiling}
+            step={FEE_STEP}
+            value={sliderValue}
+            aria-valuetext={`Up to ${formatFee(sliderValue)}`}
+            onChange={(event) => updateParams({ maxFee: Number(event.target.value) >= feeCeiling ? null : event.target.value }, true)}
+            onMouseUp={trackFee}
+            onTouchEnd={trackFee}
+            onKeyUp={trackFee}
+          />
+          <div className="uvc-range-scale" aria-hidden="true"><span>{formatFee(feeMin)}</span><b>Up to {formatFee(sliderValue)}</b></div>
+        </div>
+        <button type="button" className="btn primary uvc-apply" onClick={() => { setMobileFiltersOpen(false); filterToggle.current?.focus(); }}>
           Show {filtered.length} results
         </button>
       </aside>
 
-      <div>
-        <div className="uv-course-toolbar" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8, gap: 12, flexWrap: "wrap" }}>
-          <input
-            className="uv-course-search"
-            value={query}
-            aria-label="Search courses"
-            maxLength={200}
-            onChange={(event) => updateFilters({q:event.target.value},true)}
-            onBlur={() => query.trim() && trackEvent("course_search", { result_count: filtered.length })}
-            placeholder="Search courses, universities or streams…"
-            style={{ height: 40, width: 280, maxWidth: "100%", padding: "0 14px", border: "1px solid #CFDAE6", borderRadius: 4, fontSize: 14, color: "#555", outlineColor: "#544CC8", background: "#fff" }}
-          />
-          <select className="uv-course-sort" aria-label="Sort courses" value={sort} onChange={(event) => updateFilters({sort:event.target.value==="relevance"?null:event.target.value})} style={{ height: 40, padding: "0 12px", border: "1px solid #CFDAE6", borderRadius: 4, fontSize: 13, color: "#555", background: "#fff" }}>
-            <option value="relevance">Sort: relevance</option>
-            <option value="feeAsc">Fee: low to high</option>
-            <option value="feeDesc">Fee: high to low</option>
-          </select>
-        </div>
-        <p role="status" aria-live="polite" style={{ fontSize: 13, color: "#555", marginBottom: 8 }}>
-          {filtered.length} of {initialCourses.length} programs
-        </p>
-        <p style={{fontSize:13,color:"#555",marginBottom:16}}>Tuition shown. Check each program for current fees and eligibility.</p>
-        {chips.length ? <div className="uv-filter-chips" aria-label="Active filters">{chips.map(chip=><button type="button" key={chip.label} onClick={chip.remove} aria-label={`Remove ${chip.label} filter`}>{chip.label}<span aria-hidden="true"> ×</span></button>)}</div> : null}
+      <p className="uvc-count">
+        <b role="status" aria-live="polite">{filtered.length} of {initialCourses.length} programs</b>
+        <span> · Tuition shown. Check each program for current fees and eligibility.{feeGroup !== "indian" && sort !== "relevance" ? " Fee sorting uses the listed Indian tuition." : ""}</span>
+      </p>
+      <FeeGroupSwitch id="course-fee-group" className="uvc-fee-group" />
 
-        <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-          {filtered.map((item) => (
-            <article
-              className="uv-course-list-card"
-              key={item.id}
-              style={{
-                background: "#fff",
-                border: "1px solid #CFDAE6",
-                borderRadius: 8,
-                padding: 20,
-                display: "grid",
-                gridTemplateColumns: "56px 1fr auto",
-                gap: 16,
-              }}
-            >
-              <div className="uv-course-card-logo" style={{ width: 56, height: 56, border: "1px solid #EAEAEA", borderRadius: 8, background: "#F7F8F9", display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden" }}>
-                <Image src={universityMedia[item.universityId].logo} alt={`${item.university.shortName} logo`} width={44} height={44} style={{ objectFit: "contain" }} />
-              </div>
-              <div>
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: 6 }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                    <span style={levelStyle(item.level)}>{item.level}</span>
-                    <span style={{ fontSize: 12, color: "#707070" }}>{item.stream}</span>
-                  </div>
-                  <SaveButton courseId={item.id} size={28} />
-                </div>
-                <Link href={`/courses/${item.slug}`} style={{ fontSize: 18, fontWeight: 700, color: "#363634" }}>
-                  {item.name} — {item.university.name}
-                </Link>
-                {/* Fee and duration first: what learners decide on. Rating last and quieter (unverified; owner deferral). */}
-                <div className="uv-course-card-facts" style={{ display: "flex", gap: 20, fontSize: 13, color: "#555", marginTop: 8, flexWrap: "wrap" }}>
-                  <span><b style={{ color: "#363634" }}>{formatFee(item.fee)}</b> total</span>
-                  <span>{item.duration}</span>
-                  <span>Financing: {item.emi}</span>
-                  <span style={{ color: "#707070" }}><span style={{ color: "#FDB515" }}>★</span> {item.rating} ({item.reviews.toLocaleString("en-IN")})</span>
-                </div>
-                <div className="uv-course-card-specs" style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 10 }}>
-                  {item.specializations.slice(0, 4).map((spec) => (
-                    <span style={{ fontSize: 11, color: "#696868", background: "#F5F5F5", borderRadius: 999, padding: "3px 9px" }} key={spec}>
-                      {spec}
-                    </span>
-                  ))}
-                </div>
-              </div>
-              <div className="uv-course-card-actions" style={{ display: "flex", flexDirection: "column", gap: 8, justifyContent: "center", minWidth: 150 }}>
-                <Link
-                  href={`/courses/${item.slug}`}
-                  data-track-event="course_card_click"
-                  data-track-params={JSON.stringify({ course_id: item.id, action: "view" })}
-                  style={{ textAlign: "center", height: 38, lineHeight: "38px", background: "#544CC8", color: "#fff", borderRadius: 4, fontSize: 13, fontWeight: 700 }}
-                >
-                  View details
-                </Link>
-                <Link href={`/lead?course=${item.id}&intent=enquire`} data-open-lead style={{ textAlign: "center", height: 38, lineHeight: "38px", background: "#fff", border: "1.5px solid #555", borderRadius: 4, fontSize: 13, fontWeight: 700, color: "#555" }}>
-                  Apply now
-                </Link>
-                <Link
-                  href={`/compare?add=${item.id}`}
-                  data-track-event="compare_course_added"
-                  data-track-params={JSON.stringify({ course_id: item.id })}
-                  style={{ textAlign: "center", fontSize: 12, fontWeight: 600 }}
-                >
-                  + Add to compare
-                </Link>
-              </div>
-            </article>
-          ))}
-        </div>
-        {!filtered.length ? (
-          <div className="illustrated-empty-state">
-            <Image className="state-illustration" src="/states/no-course-matches.webp" alt="" width={800} height={600} sizes="(max-width: 400px) 60vw, 240px" />
-            <p>No courses match this selection. Remove a filter above or start again.</p>
-            <button type="button" className="btn ghost" onClick={clearFilters}>Reset search and filters</button>
+      <section className="uvc-results" id="course-results" data-count={filtered.length} aria-labelledby="course-results-title">
+        <h2 id="course-results-title" className="sr-only">Programs</h2>
+        {chips.length ? <ul className="uvc-chips" aria-label="Active filters">
+          {chips.map((chip) => <li key={chip.label}>
+            <button type="button" onClick={chip.remove} aria-label={`Remove ${chip.label} filter`}>
+              <span>{chip.label}</span><X size={16} aria-hidden="true" />
+            </button>
+          </li>)}
+        </ul> : null}
+
+        {filtered.length ? <div className="uv-card-grid">
+          {filtered.map((item) => <CourseCard key={item.id} course={item} trackSource="courses_list" />)}
+        </div> : <div className="uv-empty">
+          <div className="uv-empty-art" aria-hidden="true"><span><SearchX size={28} /></span><i /><i /></div>
+          <h3>No programs match these filters</h3>
+          <p>Try raising the fee limit or removing a filter.</p>
+          <div className="uv-empty-actions">
+            <button type="button" className="btn primary" onClick={clearFilters}>Clear filters</button>
+            <Link href="/recommender" className="btn secondary">Find my course</Link>
           </div>
-        ) : null}
-      </div>
-      </div>
-    </>
+        </div>}
+      </section>
+    </div>
   );
 }

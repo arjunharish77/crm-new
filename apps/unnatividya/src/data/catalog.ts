@@ -67,7 +67,52 @@ export type CourseEnrichment = {
   credits?: string;
   applicationFee?: string;
   lastAdmissionDate?: string;
+  // Wave 2 (next-phase plan §3). Written by the prepared CMS loaders and published only after an
+  // administrator applies the revision.
+  categoryFees?: CategoryFees;
+  eligibilityRules?: import("@/lib/eligibility-rules").EligibilityRules;
+  feeReview?: SourceCheck;
+  eligibilityReview?: SourceCheck;
+  curriculumReview?: SourceCheck;
+  intakes?: Intake[];
+  recognition?: Recognition;
+  programDetails?: ProgramDetails;
 };
+
+export type SourcedProgramDetail = {
+  checkedAt: string;
+  sourceUrl: string;
+  scope: string;
+  points: string[];
+};
+export type ProgramDetails = Partial<Record<"study" | "assessment" | "additionalCharges" | "specialization", SourcedProgramDetail>>;
+
+// The program's place on the UGC-DEB online list for a session, copied as printed.
+export type Recognition = {
+  academicYear: string;
+  status: "listed" | "unclear";
+  listName: string;
+  sourceUrl: string;
+  checkedAt: string;
+  listedUnder: string;
+  listedProgramme: string;
+  note?: string;
+};
+
+// Where a published fact came from and when it was last compared with that source.
+export type SourceCheck = { status?: string; checkedAt: string; sourceUrl: string; notes?: string[] };
+
+// Base tuition per applicant category, in the university's own currency (never converted).
+export type CategoryFees = {
+  checkedAt: string;
+  sourceUrl: string;
+  sourceLabel: string;
+  rows: Array<{ category: string; currency: "INR" | "USD"; total: number; perSemester: number; semesters: number }>;
+  notes?: string[];
+};
+
+// A confirmed intake. It stops showing once its application deadline has passed.
+export type Intake = { label: string; applicationDeadline: string; sourceUrl: string; checkedAt: string };
 
 export const universities: University[] = [
   {

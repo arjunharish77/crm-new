@@ -1,5 +1,7 @@
 # Unnati Vidya: tools audit and new-tool proposals
 
+> **Historical snapshot (5 October 2026).** Data and tool states below predate local Waves 1–3. Use [current status](../CURRENT_STATUS_AND_RELEASE_PLAN.md) and the CMS publishing checklist to distinguish prepared fee/recognition proposals from published values; tool ideas remain proposals until implemented and validated.
+
 Reviewer role: product designer. Date: 5 October 2026. This was a read-only review; no repo files were changed.
 Inputs: `docs/WEBSITE_IMPROVEMENT_MASTER_PLAN.md` (§7, §14), `docs/DESIGN_AND_CONTENT_STANDARD.md`, `docs/IMPLEMENTATION_PROGRESS.md`, tool source, `src/data/catalog.ts`, evidence JSON in `docs/`, and a light check of competitor tools and search results (sources at the end).
 

@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet><script src="uv-data.js"></script><style>@keyframes uvShimmer{0%{background-position:100% 0}100%{background-position:-100% 0}}</style></helmet>
+<sc-if value="{{ loading }}" hint-placeholder-val="{{ true }}">
+  <div aria-busy="true" style="height:100%;min-height:290px;background:#fff;border:1px solid #EEECF6;border-radius:16px;padding:20px;display:flex;flex-direction:column;gap:14px">
+    <div style="display:flex;gap:12px;align-items:center"><div style="width:46px;height:46px;border-radius:12px;background:linear-gradient(90deg,#F1EFF8 25%,#F8F7FC 50%,#F1EFF8 75%);background-size:200% 100%;animation:uvShimmer 1.4s linear infinite"></div><div style="flex:1;display:flex;flex-direction:column;gap:8px"><div style="height:14px;width:60%;border-radius:6px;background:linear-gradient(90deg,#F1EFF8 25%,#F8F7FC 50%,#F1EFF8 75%);background-size:200% 100%;animation:uvShimmer 1.4s linear infinite"></div><div style="height:10px;width:40%;border-radius:6px;background:linear-gradient(90deg,#F1EFF8 25%,#F8F7FC 50%,#F1EFF8 75%);background-size:200% 100%;animation:uvShimmer 1.4s linear infinite"></div></div></div>
+    <div style="display:flex;gap:6px"><div style="height:20px;width:40px;border-radius:6px;background:#F3F1F9"></div><div style="height:20px;width:90px;border-radius:6px;background:#F3F1F9"></div></div>
+    <div style="height:64px;border-radius:12px;margin-top:auto;background:linear-gradient(90deg,#F1EFF8 25%,#F8F7FC 50%,#F1EFF8 75%);background-size:200% 100%;animation:uvShimmer 1.4s linear infinite"></div>
+    <div style="display:flex;gap:8px"><div style="flex:1;height:42px;border-radius:10px;background:#ECE9FE"></div><div style="flex:1;height:42px;border-radius:10px;background:#F3F1F9"></div></div>
+  </div>
+</sc-if>
+<sc-if value="{{ ready }}">
+<div style="height:100%;background:#fff;border:1px solid #E8E6F3;border-radius:16px;padding:20px;display:flex;flex-direction:column;gap:14px;font-family:'Plus Jakarta Sans',system-ui,sans-serif;transition:box-shadow .2s,border-color .2s" style-hover="border-color:#CFC9FA;box-shadow:0 18px 40px -24px rgba(60,45,170,0.4)">
+  <div style="display:flex;gap:12px;align-items:flex-start">
+    <span style="width:46px;height:46px;border-radius:12px;background:#F1EEFF;color:#5B4CF0;display:flex;align-items:center;justify-content:center;font-family:'Material Symbols Rounded';font-size:24px;flex:none">{{ c.icon }}</span>
+    <div style="flex:1;min-width:0">
+      <a href="{{ c.href }}" style="font-size:17px;font-weight:800;color:#16133F;letter-spacing:-0.01em;text-decoration:none">{{ c.title }}</a>
+      <div style="display:flex;align-items:center;gap:6px;margin-top:4px;font-size:13px;color:#6F6D8C"><img src="{{ c.logo }}" alt="" style="width:16px;height:16px;object-fit:contain">{{ c.uniName }}</div>
+    </div>
+    <div onClick="{{ save }}" title="Shortlist" style="cursor:pointer;width:36px;height:36px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-family:'Material Symbols Rounded';font-size:22px;flex:none;color:#5B4CF0;background:{{ saveBg }}">{{ saveIcon }}</div>
+  </div>
+  <div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center">
+    <span style="font-size:11px;font-weight:800;padding:3px 8px;border-radius:6px;background:#ECE9FE;color:#5B4CF0">{{ c.lvl }}</span>
+    <span style="font-size:12px;font-weight:600;padding:3px 8px;border-radius:6px;background:#E7F6EE;color:#12784B">UGC-entitled</span>
+    <span style="font-size:12px;font-weight:700;color:#16133F">★ {{ c.rating }}</span><span style="font-size:12px;color:#8E8CA8">({{ c.reviews }})</span>
+  </div>
+  <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;padding:12px;border-radius:12px;background:#F8F7FD;margin-top:auto">
+    <div><div style="font-size:11px;color:#6F6D8C;font-weight:600">Duration</div><div style="font-size:14px;font-weight:800;margin-top:2px;color:#16133F">{{ c.months }} mo</div></div>
+    <div><div style="font-size:11px;color:#6F6D8C;font-weight:600">Total fee</div><div style="font-size:14px;font-weight:800;margin-top:2px;color:#16133F">{{ c.feeF }}</div></div>
+    <div><div style="font-size:11px;color:#6F6D8C;font-weight:600">EMI from</div><div style="font-size:14px;font-weight:800;margin-top:2px;color:#16133F">{{ c.emiF }}</div></div>
+  </div>
+  <div style="display:flex;justify-content:space-between;align-items:center;font-size:13px">
+    <a href="Specializations.dc.html" style="font-weight:700">{{ c.specCount }}</a>
+  </div>
+  <div style="display:flex;gap:8px">
+    <a href="{{ c.href }}" style="flex:1;text-align:center;padding:11px;border-radius:10px;background:#5B4CF0;color:#fff;font-weight:700;font-size:14px;text-decoration:none" style-hover="background:#4A3BDB;color:#fff;text-decoration:none">View details</a>
+    <div onClick="{{ cmp }}" style="cursor:pointer;flex:1;text-align:center;padding:10px;border-radius:10px;border:1px solid #D6D0FA;font-weight:700;font-size:14px;background:{{ cmpBg }};color:{{ cmpColor }}">{{ cmpLabel }}</div>
+  </div>
+</div>
+</sc-if>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:380,&quot;height&quot;:320},&quot;courseId&quot;:{&quot;editor&quot;:&quot;text&quot;,&quot;default&quot;:&quot;mba-muj&quot;,&quot;tsType&quot;:&quot;string&quot;}}">
+class Component extends DCLogic {
+  state = { t: 0 };
+  componentDidMount() { this._s = () => this.setState(s => ({ t: s.t + 1 })); window.addEventListener('uv-store', this._s); if (!window.UV) this._i = setInterval(() => { if (window.UV) { clearInterval(this._i); this._s(); } }, 50); }
+  componentWillUnmount() { window.removeEventListener('uv-store', this._s); clearInterval(this._i); }
+  renderVals() {
+    const UV = window.UV, raw = UV && this.props.courseId ? UV.byId(this.props.courseId) : null;
+    if (!raw) return { loading: true, ready: false, c: { logo: 'data:image/gif;base64,R0lGODlhAQABAAAAACw=' } };
+    const c = UV.card(raw), sv = UV.store.saved().includes(c.id), ic = UV.store.compare().includes(c.id);
+    return { loading: false, ready: true, c, save: () => UV.store.toggleSaved(c.id), saveIcon: sv ? 'bookmark_added' : 'bookmark', saveBg: sv ? '#ECE9FE' : '#F8F7FD',
+      cmp: () => UV.store.toggleCompare(c.id), cmpLabel: ic ? '✓ In compare' : '+ Compare', cmpBg: ic ? '#ECE9FE' : '#fff', cmpColor: '#5B4CF0' };
+  }
+}
+</script>
+</body>
+</html>

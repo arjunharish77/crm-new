@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { pool } from "@/lib/db";
 import { checkRateLimit, clientIp } from "@/lib/rate-limit";
 import { contactSchema, CONTACT_CONSENT_TEXT, CONTACT_CONSENT_VERSION, editToken, ownsLead, tokenHash, validOrigin } from "@/lib/lead-capture";
+import { MARKETING_CONSENT_TEXT, MARKETING_CONSENT_VERSION, requestSubscription } from "@/lib/newsletter";
 
 export async function POST(request: Request) {
   const token = editToken(request);
@@ -33,12 +34,20 @@ export async function POST(request: Request) {
     try { sourcePath = new URL(request.headers.get("referer") || "").pathname; } catch { /* no referrer */ }
     const created = await db.query(`insert into lead_capture
       (name,email,phone,source_path,source_page_type,consent_accepted,crm_sync_status,
-       submission_key,edit_token_hash,edit_expires_at,consent_version,consent_recorded_at)
-      values ($1,$2,$3,$4,$5,true,$6,$7,$8,now()+interval '24 hours',$9,now()) returning id`,
-      [lead.name,lead.email,lead.phone,sourcePath,lead.intent || "apply_now",syncStatus,lead.submissionKey,tokenHash(token),CONTACT_CONSENT_VERSION]);
+       submission_key,edit_token_hash,edit_expires_at,consent_version,consent_recorded_at,
+       marketing_consent,marketing_consent_version,marketing_consent_at)
+      values ($1,$2,$3,$4,$5,true,$6,$7,$8,now()+interval '24 hours',$9,now(),$10,$11,$12) returning id`,
+      [lead.name,lead.email,lead.phone,sourcePath,lead.intent || "apply_now",syncStatus,lead.submissionKey,tokenHash(token),CONTACT_CONSENT_VERSION,
+       lead.marketingConsent === true, lead.marketingConsent ? MARKETING_CONSENT_VERSION : null, lead.marketingConsent ? new Date() : null]);
     const leadId = created.rows[0].id;
     await db.query(`insert into lead_event (lead_capture_id,event_type,metadata) values ($1,'CONTACT_DETAILS_SAVED',$2)`,
       [leadId, { consentVersion: CONTACT_CONSENT_VERSION, consentText: CONTACT_CONSENT_TEXT, preferencesComplete: false }]);
+    if (lead.marketingConsent) {
+      await db.query(`insert into lead_event (lead_capture_id,event_type,metadata) values ($1,'MARKETING_CONSENT_GIVEN',$2)`,
+        [leadId, { consentVersion: MARKETING_CONSENT_VERSION, consentText: MARKETING_CONSENT_TEXT }]);
+      // Pending until the learner verifies this email with the OTP step, which confirms it.
+      await requestSubscription(db, { email: lead.email, source: "LEAD_FORM", sourcePath, leadId, consentVersion: MARKETING_CONSENT_VERSION });
+    }
     await db.query("commit");
     return NextResponse.json({ leadId, crmSyncStatus: syncStatus }, { status: 201, headers: { "Cache-Control": "no-store" } });
   } catch (error) { await db.query("rollback"); throw error; }

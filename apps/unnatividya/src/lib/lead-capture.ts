@@ -2,6 +2,7 @@ import { getPublishedCatalog } from "@/lib/catalog-snapshot-server";
 import { createHash, timingSafeEqual } from "crypto";
 import { z } from "zod";
 import { leadCourseOptions } from "@/lib/lead-course-options";
+import { publishedFeeCategory } from "@/lib/total-cost";
 
 export { CONTACT_CONSENT_VERSION, CONTACT_CONSENT_TEXT } from "@/lib/lead-consent";
 export const contactSchema = z.object({
@@ -10,11 +11,14 @@ export const contactSchema = z.object({
   email: z.string().trim().email().max(254).transform(value => value.toLowerCase()),
   phone: z.string().regex(/^\+[1-9]\d{5,14}$/),
   consent: z.literal(true),
+  // Optional and separate from contact consent (decision 9). Absent means "not given".
+  marketingConsent: z.boolean().optional(),
   intent: z.string().max(80).optional(),
 }).strict();
 export const preferencesSchema = z.object({
   coursePreference: z.string().min(1).max(150),
   university: z.string().max(100).default(""),
+  feeCategoryKey: z.string().regex(/^(?:row-\d{1,2})?$/).optional(),
 }).strict();
 
 export async function resolvePreferences(input: z.infer<typeof preferencesSchema>) {
@@ -23,7 +27,14 @@ export async function resolvePreferences(input: z.infer<typeof preferencesSchema
   if (!option) throw new Error("Choose an available course.");
   const university = input.university ? option.universities.find(item => item.id === input.university) : null;
   if (input.university && !university) throw new Error("Choose a university offering this course, or No preference.");
-  return { coursePreference: option.label, courseId: university?.courseId || null, universityId: university?.id || null };
+  let feeCategory: ReturnType<typeof publishedFeeCategory> = null;
+  if (input.feeCategoryKey) {
+    if (!university?.courseId) throw new Error("Choose a university for this fee category.");
+    const selectedCourse = catalog.courses.find(course => course.id === university.courseId);
+    feeCategory = selectedCourse ? publishedFeeCategory(catalog.courseWithUniversity(selectedCourse), input.feeCategoryKey) : null;
+    if (!feeCategory) throw new Error("This fee category is not published for the selected course.");
+  }
+  return { coursePreference: option.label, courseId: university?.courseId || null, universityId: university?.id || null, feeCategory };
 }
 export function editToken(request: Request) {
   const token = request.headers.get("authorization")?.replace(/^Bearer /, "") || "";

@@ -1,0 +1,159 @@
+[
+  {
+    "courseId": "mba-muj",
+    "rules": {
+      "checkedAt": "2026-10-09",
+      "sourceUrl": "https://www.onlinemanipal.com/online-mba-manipal-university-jaipur",
+      "sessionLabel": "Official online MBA page checked 9 October 2026; confirm the current admission intake",
+      "acceptedRoutes": ["bachelor10plus2plus3"],
+      "requiresBachelorDegree": true,
+      "academicCriteriaComplete": true,
+      "categories": {
+        "indian": { "minimum": 50, "reservedMinimum": 45 },
+        "nri": { "minimum": 50, "reservedMinimum": null },
+        "foreign": { "minimum": 50, "reservedMinimum": null }
+      },
+      "requiresAiuForEducationOutsideIndia": true,
+      "unresolvedAcademicConditions": [],
+      "notes": [
+        "Other degrees may be considered equivalent by the university or AIU; the checker returns Needs confirmation for unlisted routes.",
+        "The NRI and foreign section states a 50% graduation minimum and does not publish a separate reserved-category threshold.",
+        "Recognition, documents and current-intake admission are decided by the university."
+      ]
+    }
+  },
+  {
+    "courseId": "mba-smu",
+    "rules": {
+      "checkedAt": "2026-10-09",
+      "sourceUrl": "https://www.onlinemanipal.com/online-mba-degree-dual-specialization-smu",
+      "sessionLabel": "Official online MBA page checked 9 October 2026; confirm the current admission intake",
+      "acceptedRoutes": ["bachelor10plus2plus3", "bachelor10plus2plus4", "bachelor10plus3plus3"],
+      "requiresBachelorDegree": true,
+      "academicCriteriaComplete": true,
+      "categories": {
+        "indian": { "minimum": 50, "reservedMinimum": 45 },
+        "nri": { "minimum": 50, "reservedMinimum": 45 },
+        "foreign": { "minimum": 50, "reservedMinimum": 45 }
+      },
+      "requiresAiuForEducationOutsideIndia": true,
+      "unresolvedAcademicConditions": [],
+      "notes": [
+        "The official page repeats the 50% and 45% reserved-category thresholds for NRI and foreign applicants; the university must confirm category evidence.",
+        "Equivalent qualifications are considered by AIU or other competent bodies; the checker does not approve an unlisted route.",
+        "Recognition, documents and current-intake admission are decided by the university."
+      ]
+    }
+  },
+  {
+    "courseId": "bba-muj",
+    "rules": {
+      "checkedAt": "2026-10-09",
+      "sourceUrl": "https://www.onlinemanipal.com/online-bba-degree-muj",
+      "sessionLabel": "Official MUJ online BBA page checked 9 October 2026; confirm the current admission intake",
+      "acceptedRoutes": ["class12", "diploma10plus3"],
+      "requiresBachelorDegree": false,
+      "academicCriteriaComplete": true,
+      "categories": {
+        "indian": { "minimum": null, "reservedMinimum": null },
+        "nri": { "minimum": null, "reservedMinimum": null, "acceptedRoutes": ["class12"] },
+        "foreign": { "minimum": null, "reservedMinimum": null, "acceptedRoutes": ["class12"] }
+      },
+      "requiresAiuForEducationOutsideIndia": true,
+      "unresolvedAcademicConditions": [],
+      "notes": [
+        "The Indian section expressly accepts recognised 10+2 or a recognised 10+3 diploma; no minimum aggregate is stated.",
+        "The NRI/foreign section expressly lists 10+2 or AIU-recognised equivalent; a 10+3 diploma is not treated as an automatic match for those categories.",
+        "AIU equivalence is required for qualifying education completed outside India. University document review and current-intake decisions remain separate."
+      ]
+    }
+  },
+  {
+    "courseId": "bba-smu",
+    "rules": {
+      "checkedAt": "2026-10-09",
+      "sourceUrl": "https://www.onlinemanipal.com/online-bba-degree-smu",
+      "sessionLabel": "Official SMU online BBA page checked 9 October 2026; confirm the current admission intake",
+      "acceptedRoutes": ["class12", "diploma10plus3"],
+      "requiresBachelorDegree": false,
+      "academicCriteriaComplete": true,
+      "categories": {
+        "indian": { "minimum": null, "reservedMinimum": null }
+      },
+      "requiresAiuForEducationOutsideIndia": true,
+      "unresolvedAcademicConditions": [],
+      "notes": [
+        "The Indian section expressly accepts recognised 10+2, recognised 10+3 diploma or an AIU-recognised equivalent; no minimum aggregate is stated.",
+        "NRI/foreign requirements are held: the main eligibility block lists a 10+3 diploma but the program FAQ mentions only 10+2/equivalent. Those categories always return Needs university confirmation until reviewed.",
+        "Unlisted equivalent qualifications, recognition and current-intake admission remain university decisions."
+      ]
+    }
+  },
+  {
+    "courseId": "bcom-muj",
+    "rules": {
+      "checkedAt": "2026-10-09",
+      "sourceUrl": "https://www.onlinemanipal.com/online-bcom-degree-muj",
+      "sessionLabel": "Official MUJ online BCom page checked 9 October 2026; confirm the current admission intake",
+      "acceptedRoutes": ["class12", "diploma10plus3"],
+      "requiresBachelorDegree": false,
+      "academicCriteriaComplete": true,
+      "categories": {
+        "indian": { "minimum": null, "reservedMinimum": null },
+        "nri": { "minimum": null, "reservedMinimum": null, "acceptedRoutes": ["class12"] },
+        "foreign": { "minimum": null, "reservedMinimum": null, "acceptedRoutes": ["class12"] }
+      },
+      "requiresAiuForEducationOutsideIndia": true,
+      "unresolvedAcademicConditions": [],
+      "notes": [
+        "The Indian section expressly accepts recognised 10+2 or a recognised 10+3 diploma; no minimum percentage is stated.",
+        "The NRI/foreign section lists recognised 10+2 or AIU-recognised equivalent, so a 10+3 diploma is not an automatic match for those categories.",
+        "AIU equivalence is required for qualifying education completed outside India; documents and current-intake admission remain university decisions."
+      ]
+    }
+  },
+  {
+    "courseId": "bcom-smu",
+    "rules": {
+      "checkedAt": "2026-10-09",
+      "sourceUrl": "https://www.onlinemanipal.com/online-bcom-degree-smu",
+      "sessionLabel": "Official SMU online BCom page checked 9 October 2026; confirm the current admission intake",
+      "acceptedRoutes": ["class12", "diploma10plus3"],
+      "requiresBachelorDegree": false,
+      "academicCriteriaComplete": true,
+      "categories": {
+        "indian": { "minimum": null, "reservedMinimum": null },
+        "nri": { "minimum": null, "reservedMinimum": null, "acceptedRoutes": ["class12"] },
+        "foreign": { "minimum": null, "reservedMinimum": null, "acceptedRoutes": ["class12"] }
+      },
+      "requiresAiuForEducationOutsideIndia": true,
+      "unresolvedAcademicConditions": [],
+      "notes": [
+        "The Indian section expressly accepts recognised 10+2 or a recognised 10+3 diploma; no minimum percentage is stated.",
+        "The NRI/foreign section lists recognised 10+2 or AIU-recognised equivalent, so a 10+3 diploma needs university confirmation for those categories.",
+        "AIU equivalence is required for qualifying education completed outside India; documents and current-intake admission remain university decisions."
+      ]
+    }
+  },
+  {
+    "courseId": "ba-smu",
+    "rules": {
+      "checkedAt": "2026-10-09",
+      "sourceUrl": "https://www.onlinemanipal.com/online-ba-degree-smu",
+      "sessionLabel": "Official SMU online BA page and 2026–27 prospectus checked 9 October 2026; confirm the current admission intake",
+      "acceptedRoutes": ["class12"],
+      "requiresBachelorDegree": false,
+      "academicCriteriaComplete": true,
+      "categories": {
+        "indian": { "minimum": null, "reservedMinimum": null }
+      },
+      "requiresAiuForEducationOutsideIndia": true,
+      "unresolvedAcademicConditions": [],
+      "notes": [
+        "The current program page and 2026–27 prospectus both support recognised 10+2 or AIU-recognised equivalent; no minimum percentage is stated.",
+        "The program page also lists a domestic 10+3 diploma, but the 2026–27 prospectus does not expressly repeat it, so diploma applicants return Needs university confirmation.",
+        "NRI/foreign routes are held: an older 2025–26 international brochure states a conflicting bachelor's-degree requirement. Confirm the applicable current-session policy before adding those categories."
+      ]
+    }
+  }
+]

@@ -1,37 +1,26 @@
 "use client";
 
-import { Heart } from "lucide-react";
+import { Bookmark, BookmarkCheck } from "lucide-react";
 import { useShortlist } from "@/lib/use-shortlist";
 
-export function SaveButton({ courseId, size = 36 }: { courseId: string; size?: number }) {
+// Save toggle in the design's bookmark style (UI redesign Q4). 44px hit area; `size` is kept for
+// existing callers and only sets the outer box.
+export function SaveButton({ courseId, size = 44, label, variant = "tile", withText = false }: { courseId: string; size?: number; label?: string; variant?: "tile" | "outline"; withText?: boolean }) {
   const { isSaved, toggle } = useShortlist();
   const saved = isSaved(courseId);
-
+  const Icon = saved ? BookmarkCheck : Bookmark;
   return (
     <button
       type="button"
-      onClick={(event) => {
-        event.preventDefault();
-        event.stopPropagation();
-        toggle(courseId);
-      }}
-      aria-label={saved ? "Remove from shortlist" : "Save to shortlist"}
+      className={`uv-save uv-save-${variant}`}
+      data-saved={saved || undefined}
+      onClick={(event) => { event.preventDefault(); event.stopPropagation(); toggle(courseId); }}
+      aria-label={`${saved ? "Remove from saved courses" : "Save course"}${label ? `: ${label}` : ""}`}
       aria-pressed={saved}
-      style={{
-        display: "inline-flex",
-        alignItems: "center",
-        justifyContent: "center",
-        width: size,
-        height: size,
-        borderRadius: "50%",
-        border: `1.5px solid ${saved ? "#544CC8" : "#CFDAE6"}`,
-        background: saved ? "rgba(84,76,200,0.08)" : "#fff",
-        color: saved ? "#544CC8" : "#707070",
-        cursor: "pointer",
-        flexShrink: 0,
-      }}
+      style={withText ? { minHeight: Math.max(size, 44) } : { width: Math.max(size, 44), height: Math.max(size, 44) }}
     >
-      <Heart size={size * 0.45} strokeWidth={2} fill={saved ? "#544CC8" : "none"} aria-hidden="true" />
+      <Icon size={22} strokeWidth={2} aria-hidden="true" />
+      {withText ? <span aria-hidden="true">{saved ? "Saved" : "Save"}</span> : null}
     </button>
   );
 }

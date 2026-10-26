@@ -81,7 +81,7 @@ export default async function SourceImportDetailPage({ params }: { params: Promi
           <section className="card admin-detail-card">
             <h2>Review guidance</h2>
             <p>Use official provider rows for fees, eligibility, approvals, and admissions. College Vidya rows are reference-only for taxonomy and keyword validation.</p>
-            <p>Marking an item reviewed records a review decision. Attaching source notes stores evidence on a course or university record; it does not replace the public facts. Submit factual changes through catalog revisions for administrator review.</p>
+            <p>Marking an item reviewed records a review decision. Weekly evidence cannot be attached directly to a public catalog record. Open the official source and submit factual changes through catalog revisions for administrator review.</p>
           </section>
         </div>
 
@@ -90,19 +90,20 @@ export default async function SourceImportDetailPage({ params }: { params: Promi
           {itemsResult.rows.map((item, index) => {
             const parsed = (item.raw_data?.parsed || {}) as { title?: string; facts?: unknown };
             const referenceOnly = item.raw_data?.mode === "REFERENCE_TAXONOMY_ONLY" || item.entity_type === "reference_taxonomy";
-            const eligible = ["course", "university"].includes(item.entity_type) && !referenceOnly;
+            const weeklyEvidence = item.raw_data?.mode === "WEEKLY_EVIDENCE_ONLY";
+            const eligible = ["course", "university"].includes(item.entity_type) && !referenceOnly && !weeklyEvidence;
             const facts = parsed.facts && typeof parsed.facts === "object" && !Array.isArray(parsed.facts) ? Object.entries(parsed.facts) : [];
             return <article className="card admin-detail-card source-review-item" aria-labelledby={`source-item-${index}`} key={item.id}>
               <header className="source-review-item-head">
-                <div><h3 id={`source-item-${index}`}>{item.entity_key}</h3><p>{item.entity_type}{referenceOnly ? " · Reference only" : ""}</p></div>
+                <div><h3 id={`source-item-${index}`}>{item.entity_key}</h3><p>{item.entity_type}{referenceOnly ? " · Reference only" : weeklyEvidence ? " · Weekly evidence draft" : ""}</p></div>
                 <span className="admin-status">{item.review_status}</span>
               </header>
               <p><a className="text-link" href={item.source_url} target="_blank" rel="noreferrer">Open captured source (new tab)</a></p>
               <h4>{parsed.title || "No page title parsed"}</h4>
               {facts.length ? <dl className="source-review-facts">{facts.map(([key, value]) => <div key={key}><dt>{key.replace(/[_-]/g, " ")}</dt><dd>{typeof value === "string" ? value : JSON.stringify(value, null, 2)}</dd></div>)}</dl> : <p className="admin-muted">No structured facts were extracted. Inspect the captured data and source before marking this item reviewed.</p>}
               <details className="source-review-disclosure"><summary>Captured data and source hash</summary><p>Source hash: {item.source_hash || "Not available"}</p><pre className="admin-json">{JSON.stringify(item.raw_data, null, 2)}</pre></details>
-              <SourceImportItemActions itemId={item.id} canReview={session.role === "ADMIN" || session.role === "EDITOR"} canApply={session.role === "ADMIN" && eligible} referenceOnly={referenceOnly} />
-              {eligible && <Link className="text-link source-review-record" href={`/admin/catalog-revisions?type=${item.entity_type}&id=${encodeURIComponent(item.entity_key)}`}>Review {item.entity_type} content</Link>}
+              <SourceImportItemActions itemId={item.id} canReview={session.role === "ADMIN" || session.role === "EDITOR"} canApply={session.role === "ADMIN" && eligible} referenceOnly={referenceOnly} evidenceOnly={weeklyEvidence} />
+              {["course", "university"].includes(item.entity_type) && !referenceOnly && <Link className="text-link source-review-record" href={`/admin/catalog-revisions?type=${item.entity_type}&id=${encodeURIComponent(item.entity_key)}`}>Review {item.entity_type} content</Link>}
             </article>;
           })}
           {!itemsResult.rows.length && <p className="card admin-detail-card">No items were captured for this source.</p>}

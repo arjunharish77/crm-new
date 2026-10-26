@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { AdminState, statusTone } from "@/components/admin-state";
 
 export type QueueParams = Record<string, string | string[] | undefined>;
 export type QueueRecord = {
@@ -45,7 +46,7 @@ export function CatalogReviewQueue({ type, records, params, canCreate, universit
     <p role="status">{filtered.length ? `Showing ${(page - 1) * PAGE_SIZE + 1}–${Math.min(page * PAGE_SIZE, filtered.length)} of ${filtered.length} matching records` : "No matching records"}</p>
     <div className="quality-records">{visible.map(record => <article className="card quality-record" key={record.id}>
       <div>{record.universityName && <span className="admin-tag">{record.universityName}</span>}<h2>{record.name}</h2><p className="admin-muted">{record.id}</p></div>
-      <dl>{[...record.fields, { label: "Record status", value: record.status.replaceAll("_", " ") }, { label: "Published flag", value: record.published ? "Yes" : "No" }].map(field => <div key={field.label}><dt>{field.label}</dt><dd>{field.value}</dd></div>)}</dl>
+      <dl>{[...record.fields, { label: "Record status", value: record.status.replaceAll("_", " "), status: record.status }, { label: "Published flag", value: record.published ? "Yes" : "No" }].map((field: { label: string; value: string; status?: string }) => <div key={field.label}><dt>{field.label}</dt><dd>{field.status ? <AdminState tone={statusTone(field.status)}>{field.value}</AdminState> : field.value}</dd></div>)}</dl>
       {record.published !== (record.status === "PUBLISHED") && <p>Publication status and flag differ. Review this record before publishing.</p>}
       <div className="quality-record-actions"><Link className="btn secondary" href={`${base}/${encodeURIComponent(record.id)}`} aria-label={`Review record: ${record.name} (${record.id})`}>Review record</Link><Link className="text-link" href={`/admin/catalog-revisions?type=${type}&id=${encodeURIComponent(record.id)}`} aria-label={`View revisions: ${record.name} (${record.id})`}>View revisions</Link></div>
     </article>)}</div>

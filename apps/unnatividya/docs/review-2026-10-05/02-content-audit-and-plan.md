@@ -1,5 +1,7 @@
 # Unnati Vidya: content audit and content plan
 
+> **Historical snapshot (5 October 2026).** Several article corrections and the CMS article editor were implemented locally in increments 74–76. The owner's later decision is to **keep and differentiate all 26 articles**, so the merge/301 recommendations below are superseded unless the owner makes a new decision. Use [current status](../CURRENT_STATUS_AND_RELEASE_PLAN.md) for the active backlog.
+
 Prepared 5 October 2026 by a read-only review of `apps/unnatividya` (working tree on `main`), the live `/blog` listing and a small sample of public competitor and university pages. No repository files were changed.
 
 Rules applied throughout: the master plan §6, §8 and §14 and `DESIGN_AND_CONTENT_STANDARD.md`. That means the byline is exactly **Content Team, Unnati Vidya**; content is English only; only MUJ, SMU and Amity Online are covered; no invented facts, rankings, salaries, reviews or approvals; every material fact has an official source and a checked date; existing ratings and testimonials stay visible but are marked unverified; no padding; no doorway or city pages.

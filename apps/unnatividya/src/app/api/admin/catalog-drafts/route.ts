@@ -5,10 +5,12 @@ import { getAdminSession } from "@/lib/admin-auth";
 import { pool } from "@/lib/db";
 import { entityTypeSchema, revisionContent, revisionContentSchemas } from "@/lib/catalog-revisions";
 import type { CatalogWorkingDraft } from "@/lib/catalog-working-drafts";
+import { applyCatalogRevision, CATALOG_LOCK, DIRECT_PUBLISH_NOTE } from "@/lib/catalog-apply";
+import { catalogWriteFailure } from "@/lib/catalog-write";
 
 const schema = z.object({ entityType: entityTypeSchema, entityId: z.string().min(1).max(200),
   baseSnapshot: z.record(z.string(), z.unknown()), content: z.record(z.string(), z.unknown()),
-  reason: z.string().max(2000), version: z.number().int().positive().nullable() }).strict();
+  reason: z.string().max(2000), version: z.number().int().positive().nullable(), publish: z.boolean().optional() }).strict();
 
 async function write(request: Request, action: "SAVE" | "SUBMIT" | "DISCARD") {
   const submit = action === "SUBMIT";
@@ -18,11 +20,16 @@ async function write(request: Request, action: "SAVE" | "SUBMIT" | "DISCARD") {
   const parsed = schema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: "Invalid draft details." }, { status: 400 });
   const value = parsed.data;
+  // An administrator can publish a saved working draft in the same step as submitting it.
+  const publish = submit && value.publish === true;
+  if (value.publish && !publish) return NextResponse.json({ error: "Only a submitted draft can be published." }, { status: 400 });
+  if (publish && session.role !== "ADMIN") return NextResponse.json({ error: "Only administrators can publish directly." }, { status: 403 });
   const reviewed = submit ? revisionContentSchemas[value.entityType].safeParse(value.content) : null;
   if (submit && (!reviewed?.success || value.reason.trim().length < 5)) return NextResponse.json({ error: "Complete valid revision fields and a review reason of at least 5 characters before submitting." }, { status: 400 });
   const client = await pool.connect();
   try {
     await client.query("begin");
+    if (publish) await client.query("select pg_advisory_xact_lock($1)", [CATALOG_LOCK]);
     const draft = (await client.query<CatalogWorkingDraft>("select * from catalog_working_draft where created_by=$1 and entity_type=$2 and entity_id=$3 for update", [session.userId,value.entityType,value.entityId])).rows[0];
     const fail = async (error: string, status = 409) => { await client.query("rollback"); return NextResponse.json({ error }, { status }); };
     if ((draft?.version ?? null) !== value.version) return fail("This draft changed in another tab or was already submitted. Reload before editing; your current text has not been saved.");
@@ -43,8 +50,9 @@ async function write(request: Request, action: "SAVE" | "SUBMIT" | "DISCARD") {
       const saved = await client.query<{id:string}>("insert into catalog_revision(entity_type,entity_id,base_snapshot,proposed_content,reason,created_by) values($1,$2,$3,$4,$5,$6) returning id", [value.entityType,value.entityId,draft.base_snapshot,reviewed.data,value.reason.trim(),session.userId]);
       await client.query("delete from catalog_working_draft where id=$1", [draft.id]);
       await client.query("insert into cms_audit_log(user_id,action,entity_type,entity_id,metadata) values($1,'CATALOG_REVISION_PROPOSED','catalog_revision',$2,$3)", [session.userId,saved.rows[0].id,{entityType:value.entityType,entityId:value.entityId,workingDraftId:draft.id}]);
+      if (publish) await applyCatalogRevision(client, saved.rows[0].id, session.userId, DIRECT_PUBLISH_NOTE, { metadata: { direct: true } });
       await client.query("commit");
-      return NextResponse.json({id:saved.rows[0].id}, {status:201});
+      return NextResponse.json({id:saved.rows[0].id, status: publish ? "APPLIED" : "NEEDS_REVIEW"}, {status:201});
     }
     const saved = draft
       ? await client.query<CatalogWorkingDraft>("update catalog_working_draft set proposed_content=$1,reason=$2,version=version+1,updated_at=now() where id=$3 returning *", [value.content,value.reason,draft.id])
@@ -54,6 +62,7 @@ async function write(request: Request, action: "SAVE" | "SUBMIT" | "DISCARD") {
     return NextResponse.json({draft:saved.rows[0]});
   } catch (error) {
     await client.query("rollback");
+    const failure = publish ? catalogWriteFailure(error) : null; if (failure) return failure;
     if ((error as {code?:string}).code === "23505") return NextResponse.json({error:"Another tab saved this draft. Reload before saving again."},{status:409});
     throw error;
   } finally { client.release(); }

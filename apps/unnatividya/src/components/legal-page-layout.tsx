@@ -1,53 +1,57 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
+import { Mail } from "lucide-react";
 
-const RELATED_LINKS: Array<[string, string]> = [
-  ["/privacy", "Privacy Policy"],
-  ["/terms", "Terms of Use"],
-  ["/refund-policy", "Refund and Cancellation Policy"],
-  ["/how-we-verify", "How we verify our data"],
-  ["/online-degree-guides", "Guides & resources"],
-  ["/courses", "Browse all courses"],
-];
+// The three policies keep their own SEO URLs (UI redesign D §8); the design's tabs are links.
+const POLICY_TABS = [
+  { key: "privacy", href: "/privacy", label: "Privacy" },
+  { key: "terms", href: "/terms", label: "Terms" },
+  { key: "refund", href: "/refund-policy", label: "Refund policy" },
+] as const;
 
-export function LegalPageLayout({ crumb, title, lastUpdated, sections = [], children }: { crumb: string; title: string; lastUpdated: string; sections?: Array<{ id: string; title: string }>; children: ReactNode }) {
+export type PolicyKey = (typeof POLICY_TABS)[number]["key"];
+
+// Text-page shell (Legal.dc.html): hero band with breadcrumb, title, date and, for the policies, an
+// underline tab bar; then a section nav (sticky beside the text on wide screens, a collapsible
+// list on phones) and the reading column with a contact footer box.
+export function LegalPageLayout({ crumb, title, lastUpdated, sections = [], policy, children }: { crumb: string; title: string; lastUpdated: string; sections?: Array<{ id: string; title: string }>; policy?: PolicyKey; children: ReactNode }) {
+  const links = <ol>{sections.map((section) => <li key={section.id}><a href={`#${section.id}`}>{section.title}</a></li>)}</ol>;
   return (
-    <div className="container uv-2col policy-reading-layout" style={{ paddingTop: 32, paddingBottom: 64 }}>
-      <article className="policy-reading-main">
-        <nav aria-label="Breadcrumb" style={{ fontSize: 13, color: "#707070", marginBottom: 8 }}>
-          <Link href="/" style={{ color: "#707070" }}>Home</Link> <span aria-hidden="true">&gt;</span> <span aria-current="page">{crumb}</span>
-        </nav>
-        <h1 id="policy-start" tabIndex={-1}>{title}</h1>
-        <p className="policy-updated">Last updated {lastUpdated} · Unnati Vidya</p>
-        {sections.length > 0 && <nav aria-label="On this page" className="policy-contents">
-          <details>
-            <summary>On this page</summary>
-            <ol>{sections.map((section) => <li key={section.id}><a href={`#${section.id}`}>{section.title}</a></li>)}</ol>
-          </details>
-        </nav>}
-        {children}
-        {sections.length > 0 && <a href="#policy-start" className="policy-back">Back to top</a>}
-      </article>
+    <div className="uv-legal">
+      <header className="uv-legal-hero">
+        <div className="uv-legal-hero-inner">
+          <nav aria-label="Breadcrumb"><ol className="uv-breadcrumb"><li><Link href="/">Home</Link></li><li aria-current="page">{crumb}</li></ol></nav>
+          <h1 id="policy-start" tabIndex={-1} className="uv-legal-title">{title}</h1>
+          <p className="uv-legal-updated">Last updated {lastUpdated} · Unnati Vidya</p>
+          {policy ? <nav aria-label="Policies" className="uv-legal-tabs">
+            {POLICY_TABS.map(tab => <Link key={tab.key} href={tab.href} aria-current={tab.key === policy ? "page" : undefined}>{tab.label}</Link>)}
+          </nav> : null}
+        </div>
+      </header>
 
-      <aside className="uv-rail" style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-        <div style={{ border: "1px solid #CFDAE6", borderRadius: 8, padding: 20 }}>
-          <div style={{ fontSize: 15, fontWeight: 700, color: "#363634", marginBottom: 8 }}>Questions about any of this?</div>
-          <div style={{ fontSize: 13, color: "#555", lineHeight: 1.6, marginBottom: 14 }}>
-            Call <b style={{ color: "#363634" }}>1800-120-4050</b> (toll-free, 9 am – 9 pm)
-          </div>
-          <Link href="/lead?intent=request-callback" data-open-lead className="btn primary" style={{ width: "100%", minHeight: 44, fontSize: 14, display: "flex", alignItems: "center", justifyContent: "center" }}>
-            Apply now
-          </Link>
-        </div>
-        <div style={{ border: "1px solid #CFDAE6", borderRadius: 8, padding: 20 }}>
-          <div style={{ fontSize: 15, fontWeight: 700, color: "#363634", marginBottom: 10 }}>Related</div>
-          <nav aria-label="Policies and resources" style={{ display: "flex", flexDirection: "column", fontSize: 14 }}>
-            {RELATED_LINKS.map(([href, label]) => (
-              <Link href={href} key={href} style={{ color: "#544CC8", fontWeight: 600 }}>{label}</Link>
-            ))}
+      <div className={`uv-legal-body${sections.length ? "" : " is-single"}`}>
+        {sections.length > 0 && <>
+          <nav aria-label="On this page" className="uv-legal-toc">
+            <p className="uv-legal-toc-title">On this page</p>
+            {links}
           </nav>
-        </div>
-      </aside>
+          <nav aria-label="On this page" className="uv-legal-toc-mobile">
+            <details>
+              <summary>On this page</summary>
+              {links}
+            </details>
+          </nav>
+        </>}
+        <article className="uv-legal-content uv-company-prose">
+          {children}
+          <aside className="uv-legal-help" aria-label="Contact">
+            <Mail size={18} aria-hidden="true" />
+            {/* No phone number (owner decision); contact is email. */}
+            <p>Questions about {policy ? "this policy" : "this page"}? Email <a href="mailto:admin@unnatividya.com">admin@unnatividya.com</a>.</p>
+          </aside>
+          {sections.length > 0 && <a href="#policy-start" className="uv-legal-back">Back to top</a>}
+        </article>
+      </div>
     </div>
   );
 }

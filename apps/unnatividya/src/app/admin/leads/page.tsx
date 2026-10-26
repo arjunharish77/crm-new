@@ -69,7 +69,7 @@ export default async function AdminLeadsPage({ searchParams }: { searchParams: P
             <div><input id="lead-inbox-query" type="search" name="q" defaultValue={q} maxLength={200} /></div>
             <label className="lead-verification-label" htmlFor="lead-email-status">Email verification</label>
             <select id="lead-email-status" name="verified" defaultValue={verified}><option value="">All email statuses</option><option value="verified">Verified email</option><option value="pending">Pending verification</option></select>
-            <div style={{ marginTop: 16 }}><button className="btn primary" type="submit">Search leads</button>{(q || verified) && <Link className="text-link" href="/admin/leads">Clear filters</Link>}</div>
+            <div className="lead-inbox-submit"><button className="btn primary" type="submit">Search leads</button>{(q || verified) && <Link className="text-link" href="/admin/leads">Clear filters</Link>}</div>
           </form>
           <div><Link href="/api/admin/leads/export" prefetch={false} className="btn secondary">Export latest leads (CSV)</Link><p className="admin-muted">Up to 2,000 latest leads; search filters do not apply to this export.</p></div>
         </div>

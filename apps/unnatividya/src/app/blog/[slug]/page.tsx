@@ -1,33 +1,35 @@
 export const dynamic = "force-dynamic";
 import { PublishedCatalogBoundary } from "@/components/published-catalog-boundary";
 import type { Metadata } from "next";
-import Image from "next/image";
-import Link from "next/link";
 import { notFound } from "next/navigation";
 import { JsonLd } from "@/components/json-ld";
-import { blogPosts, getBlogPostBySlug, resolveBlogCover } from "@/data/blog";
+import { resolveBlogCover } from "@/data/blog";
+import { ArticleView } from "@/components/article-view";
+import { getPublishedArticle, getPublishedArticles } from "@/lib/articles-server";
 import { publicAssetExists } from "@/lib/asset-exists";
+import { fitTitle, withSocial } from "@/lib/page-metadata";
+import { SOCIAL_URLS } from "@/lib/social";
 
 
 
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
   const { slug } = await params;
-  const post = getBlogPostBySlug(slug);
+  const post = await getPublishedArticle(slug);
   if (!post) return {};
-  return {
-    title: post.title,
+  return withSocial({
+    // Editorial titles are kept whole; only the site suffix is dropped when it would overflow.
+    title: fitTitle(post.title),
     description: post.excerpt,
     alternates: { canonical: `/blog/${slug}` },
     openGraph: { title: post.title, description: post.excerpt, images: [resolveBlogCover(post, publicAssetExists)], type: "article" },
-  };
+  });
 }
 
 export default async function ArticlePage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
-  const post = getBlogPostBySlug(slug);
+  const post = await getPublishedArticle(slug);
   if (!post) notFound();
-  const related = blogPosts.filter((item) => item.slug !== post.slug).sort((a, b) => Number(b.category === post.category) - Number(a.category === post.category)).slice(0, 3);
-  const sections = post.body.flatMap((block, index) => block.type === "h2" ? [{ id: `article-section-${index}`, title: block.text }] : []);
+  const related = (await getPublishedArticles()).filter((item) => item.slug !== post.slug).sort((a, b) => Number(b.category === post.category) - Number(a.category === post.category)).slice(0, 3);
   const cover = resolveBlogCover(post, publicAssetExists);
   const siteUrl = process.env.NEXT_PUBLIC_UNNATIVIDYA_SITE_URL || "https://unnatividya.com";
   const articleJsonLd = {
@@ -36,8 +38,10 @@ export default async function ArticlePage({ params }: { params: Promise<{ slug: 
     headline: post.title,
     description: post.excerpt,
     url: `${siteUrl}/blog/${post.slug}`,
+    mainEntityOfPage: `${siteUrl}/blog/${post.slug}`,
+    image: [`${siteUrl}${cover}`],
     datePublished: post.publishedDate,
-    dateModified: post.publishedDate,
+    dateModified: post.updatedDate || post.publishedDate,
     author: {
       "@type": "Organization",
       name: "Content Team, Unnati Vidya",
@@ -46,9 +50,14 @@ export default async function ArticlePage({ params }: { params: Promise<{ slug: 
     publisher: {
       "@type": "Organization",
       name: "Unnati Vidya",
+      url: siteUrl,
+      sameAs: SOCIAL_URLS,
+      // A raster logo at least 112px wide; Google does not accept SVG here.
       logo: {
         "@type": "ImageObject",
-        url: `${siteUrl}/brand/unnatividya-logo-gradient.svg`,
+        url: `${siteUrl}/brand/android-chrome-512x512.png`,
+        width: 512,
+        height: 512,
       },
     },
   };
@@ -58,7 +67,7 @@ export default async function ArticlePage({ params }: { params: Promise<{ slug: 
     itemListElement: [
       { "@type": "ListItem", position: 1, name: "Home", item: siteUrl },
       { "@type": "ListItem", position: 2, name: "Blog", item: `${siteUrl}/blog` },
-      { "@type": "ListItem", position: 3, name: post.category, item: `${siteUrl}/blog/${post.slug}` },
+      { "@type": "ListItem", position: 3, name: post.title, item: `${siteUrl}/blog/${post.slug}` },
     ],
   };
   const faqJsonLd = {
@@ -70,121 +79,7 @@ export default async function ArticlePage({ params }: { params: Promise<{ slug: 
   return <PublishedCatalogBoundary>{(
     <>
       <JsonLd data={[articleJsonLd, breadcrumbJsonLd, faqJsonLd]} />
-      <div className="article-layout article-reading-layout">
-        <article className="article-main" id="article-top">
-        <div className="breadcrumb" style={{ marginBottom: 12 }}>
-          <Link href="/">Home</Link> &gt; <Link href="/blog">Blog</Link> &gt; {post.category}
-        </div>
-        <div className="course-meta" style={{ marginBottom: 12 }}>
-          <span style={{ fontSize: 11, fontWeight: 700, color: "#0F5BB8", background: "rgba(79,168,255,0.12)", borderRadius: 999, whiteSpace: "nowrap", padding: "3px 9px" }}>{post.category}</span>
-          <span style={{ color: "#707070", fontSize: 12 }}>
-            {post.read} · Published{" "}
-            <time dateTime={post.publishedDate}>{new Date(`${post.publishedDate}T00:00:00Z`).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" })}</time>
-          </span>
-        </div>
-        <h1 className="article-reading-title">{post.title}</h1>
-        <div className="author-row">
-          <div className="author-avatar" aria-hidden="true">UV</div>
-          <div>
-            <strong><Link href="/authors/content-team">Content Team, Unnati Vidya</Link></strong>
-            <span>Editorial team</span>
-          </div>
-        </div>
-        <p className="article-introduction">{post.excerpt}</p>
-        <details className="article-contents">
-          <summary>On this page</summary>
-          <nav aria-label="Article sections"><ul>{sections.map(section => <li key={section.id}><a href={`#${section.id}`}>{section.title}</a></li>)}{post.faqs.length > 0 && <li><a href="#article-faq">Frequently asked questions</a></li>}</ul></nav>
-        </details>
-        <div className="article-cover">
-          <Image
-            src={cover}
-            alt={post.title}
-            width={900}
-            height={480}
-            sizes="(max-width: 980px) 100vw, 760px"
-            priority
-          />
-        </div>
-
-        <div className="article-body">
-          {post.body.map((block, index) => {
-            if (block.type === "h2") return <h2 id={`article-section-${index}`} tabIndex={-1} key={index}>{block.text}</h2>;
-            if (block.type === "note") return (
-              <div className="note-box" key={index}>
-                <b>Unnati Vidya tip:</b> {block.text.replace(/^Unnati Vidya tip:\s*/i, "")}
-              </div>
-            );
-            if (block.type === "image") return (
-              <div style={{ height: 220, borderRadius: 8, overflow: "hidden", position: "relative" }} key={index}>
-                <Image src={block.src} alt={block.alt} fill sizes="(max-width: 980px) 100vw, 760px" style={{ objectFit: "cover" }} />
-              </div>
-            );
-            if (block.type === "links") return (
-              <div key={index} style={{ border: "1px solid #CFDAE6", borderRadius: 8, padding: 18, margin: "20px 0" }}>
-                <div style={{ fontSize: 13, fontWeight: 700, color: "#363634", marginBottom: 10 }}>{block.heading}</div>
-                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                  {block.items.map((item) => (
-                    <Link key={item.href} href={item.href} style={{ color: "#544CC8", fontWeight: 600, fontSize: 14 }}>{item.label} →</Link>
-                  ))}
-                </div>
-              </div>
-            );
-            return <p key={index}>{block.text}</p>;
-          })}
-        </div>
-
-        <section className="detail-section" id="article-faq" tabIndex={-1}>
-          <h2>Frequently asked questions</h2>
-          <div className="faq-list">
-            {post.faqs.map(([question, answer]) => (
-              <details className="faq-item" name="blog-faq" key={question}>
-                <summary>{question}</summary>
-                <p>{answer}</p>
-              </details>
-            ))}
-          </div>
-        </section>
-
-        <div className="newsletter-band article-cta">
-          <div>
-            <h2>Explore courses for your next step</h2>
-            <p>Browse course details or leave your enquiry for the team to follow up.</p>
-          </div>
-          <Link href="/lead?intent=article-help" className="btn primary" data-open-lead style={{ minHeight: 42, height: 42, padding: "0 22px" }}>Apply now</Link>
-        </div>
-        <a href="#article-top" className="article-back-top">Back to article start ↑</a>
-        </article>
-
-        <aside className="article-rail">
-          <div className="card course-card">
-            <h2>More from the blog</h2>
-            <div className="article-rail-links">
-              {related.map((item) => (
-                <Link href={`/blog/${item.slug}`} key={item.slug} style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                  <span style={{ position: "relative", width: 56, height: 44, borderRadius: 6, overflow: "hidden", flexShrink: 0 }}>
-                    <Image src={resolveBlogCover(item, publicAssetExists)} alt="" fill sizes="56px" style={{ objectFit: "cover" }} />
-                  </span>
-                  {item.title}
-                </Link>
-              ))}
-            </div>
-          </div>
-          <div className="card course-card article-rail-compare" style={{ background: "#F4F3FC" }}>
-            <h2>Compare course details</h2>
-            <p>Compare fees and approvals side by side.</p>
-            <Link href="/compare" className="btn primary" style={{ width: "100%", minHeight: 38, height: 38, fontSize: 13 }}>Open compare</Link>
-          </div>
-          <div className="card course-card">
-            <h2>Sources</h2>
-            <div style={{ display: "flex", flexDirection: "column", gap: 6, fontSize: 13 }}>
-              <a href="https://deb.ugc.ac.in/Uploads/Notices_Upload/UGC_20250909172155_1.pdf" target="_blank" rel="noopener noreferrer" style={{ color: "#544CC8" }}>
-                UGC-DEB entitlement notification (2025-26)
-              </a>
-              <Link href="/how-we-verify" style={{ color: "#544CC8", fontWeight: 600 }}>How we verify our data →</Link>
-            </div>
-          </div>
-        </aside>
-      </div>
+      <ArticleView post={post} related={related} />
     </>
   )}</PublishedCatalogBoundary>;
 }

@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,400,0..1,0&display=block" rel="stylesheet">
+<script src="uv-data.js"></script>
+<style>body{margin:0;font-family:'Plus Jakarta Sans',system-ui,sans-serif;color:#16133F;-webkit-font-smoothing:antialiased}*{box-sizing:border-box}a{color:#5B4CF0;text-decoration:none}a:hover{color:#4A3BDB;text-decoration:underline}select,input{font-family:inherit}</style>
+</helmet>
+<div data-screen-label="Compare" style="min-height:100vh;display:flex;flex-direction:column;background:#fff">
+<dc-import name="UVHeader" active="compare" hint-size="100%,68px" style="position:sticky;top:0;z-index:40;display:block"></dc-import>
+<section style="background:radial-gradient(520px 280px at 90% 0%,#E6E1FF 0%,rgba(230,225,255,0) 70%),linear-gradient(180deg,#F7F5FF,#FBFAFF);border-bottom:1px solid #EEECF8">
+  <div style="max-width:1240px;margin:0 auto;padding:22px clamp(16px,3vw,32px) 28px">
+    <div style="font-size:13px;color:#6F6D8C;display:flex;gap:6px;align-items:center"><a href="Home.dc.html">Home</a><span style="font-family:'Material Symbols Rounded';font-size:16px">chevron_right</span><a href="Compare.dc.html">Compare</a><span style="font-family:'Material Symbols Rounded';font-size:16px">chevron_right</span><span style="color:#16133F">{{ crumb }}</span></div>
+    <div style="display:flex;flex-wrap:wrap;justify-content:space-between;align-items:end;gap:16px;margin-top:12px">
+      <div><h1 style="margin:0;font-size:clamp(28px,4vw,44px);letter-spacing:-0.035em;font-weight:800;line-height:1.08">Compare <span style="color:#5B4CF0">{{ degreeLabel }}</span> Programs</h1><p style="margin:8px 0 0;color:#4A4867;font-size:16px">Compare fees, EMI, approvals, placements and more across top universities.</p></div>
+      <div style="display:flex;gap:8px"><div onClick="{{ share }}" style="cursor:pointer;display:flex;align-items:center;gap:6px;padding:10px 14px;border-radius:10px;background:#fff;border:1px solid #E4E1F3;font-weight:700;font-size:14px"><span style="font-family:'Material Symbols Rounded';font-size:18px">share</span>{{ shareLabel }}</div><div style="cursor:pointer;display:flex;align-items:center;gap:6px;padding:10px 14px;border-radius:10px;background:#fff;border:1px solid #E4E1F3;font-weight:700;font-size:14px"><span style="font-family:'Material Symbols Rounded';font-size:18px">download</span>Download PDF</div></div>
+    </div>
+    <div style="display:flex;gap:8px;margin-top:18px;align-items:center;overflow-x:auto;padding-bottom:2px">
+      <span style="font-size:12px;font-weight:700;letter-spacing:0.05em;color:#6F6D8C;white-space:nowrap">QUICK START</span>
+      <sc-for list="{{ quick }}" as="q" hint-placeholder-count="4"><div onClick="{{ q.go }}" style="cursor:pointer;white-space:nowrap;padding:7px 12px;border-radius:99px;background:#fff;border:1px solid #E4E1F3;font-size:13px;font-weight:600" style-hover="border-color:#5B4CF0;color:#5B4CF0">{{ q.label }}</div></sc-for>
+    </div>
+  </div>
+</section>
+<main style="flex:1;max-width:1240px;width:100%;margin:0 auto;padding:24px clamp(16px,3vw,32px) 0">
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr));gap:12px">
+    <sc-for list="{{ slots }}" as="c" hint-placeholder-count="0">
+      <div style="border:1px solid #E8E6F3;border-radius:16px;padding:12px;background:#fff;display:flex;gap:12px;align-items:center;min-height:104px">
+        <sc-if value="{{ c.filled }}">
+          <img src="{{ c.campus }}" alt="" style="width:88px;height:78px;object-fit:cover;border-radius:12px;background:#ECE9FE;flex:none">
+          <div style="flex:1;min-width:0"><div style="font-weight:800;font-size:15px">{{ c.uniName }}</div><div style="font-size:13px;color:#6F6D8C">{{ c.title }}</div>
+            <div style="display:flex;gap:6px;margin-top:8px;align-items:center">
+              <a href="{{ c.href }}" style="padding:6px 10px;border-radius:8px;border:1px solid #D6D0FA;font-size:12px;font-weight:700">View details →</a>
+              <label style="position:relative;padding:6px 10px;border-radius:8px;border:1px solid #E4E1F3;font-size:12px;font-weight:700;color:#4A4867;display:flex;align-items:center;gap:4px;cursor:pointer"><span style="font-family:'Material Symbols Rounded';font-size:15px">sync</span>Change<select onChange="{{ c.change }}" value="{{ c.id }}" style="position:absolute;inset:0;opacity:0;cursor:pointer"><sc-for list="{{ options }}" as="o" hint-placeholder-count="1"><option value="{{ o.id }}">{{ o.label }}</option></sc-for></select></label>
+              <span onClick="{{ c.remove }}" style="cursor:pointer;margin-left:auto;font-family:'Material Symbols Rounded';font-size:20px;color:#8E8CA8">close</span>
+            </div>
+          </div>
+        </sc-if>
+        <sc-if value="{{ c.empty }}">
+          <label style="position:relative;flex:1;align-self:stretch;border:1.5px dashed #D6D0FA;border-radius:12px;display:flex;align-items:center;justify-content:center;gap:8px;color:#5B4CF0;font-weight:700;cursor:pointer"><span style="font-family:'Material Symbols Rounded';font-size:22px">add_circle</span>Add a program<select onChange="{{ c.change }}" value="" style="position:absolute;inset:0;opacity:0;cursor:pointer"><option value="">Choose</option><sc-for list="{{ options }}" as="o" hint-placeholder-count="1"><option value="{{ o.id }}">{{ o.label }}</option></sc-for></select></label>
+        </sc-if>
+      </div>
+    </sc-for>
+  </div>
+
+  <sc-if value="{{ desktop }}" hint-placeholder-val="{{ true }}">
+    <div style="margin-top:20px;border:1px solid #E8E6F3;border-radius:18px;overflow:hidden;background:#fff">
+      <div style="display:grid;grid-template-columns:200px repeat(3,minmax(0,1fr));border-bottom:1px solid #E8E6F3;position:sticky;top:68px;background:#fff;z-index:5">
+        <div style="padding:18px 20px;font-weight:800;display:flex;align-items:center">Features</div>
+        <sc-for list="{{ heads }}" as="h" hint-placeholder-count="0">
+          <div style="padding:16px;border-left:1px solid #F0EEF8">
+            <sc-if value="{{ h.filled }}">
+              <div style="display:flex;gap:10px;align-items:center"><div style="width:44px;height:44px;border-radius:10px;border:1px solid #ECEAF6;padding:5px;display:flex;align-items:center;justify-content:center;flex:none"><img src="{{ h.logo }}" alt="" style="max-width:100%;max-height:100%"></div><div style="min-width:0"><div style="font-weight:800;font-size:14px">{{ h.uniName }}</div><div style="font-size:12px;color:#6F6D8C">{{ h.title }}</div></div></div>
+              <div style="display:flex;gap:6px;margin-top:10px"><a href="{{ h.href }}" style="flex:1;text-align:center;padding:9px;border-radius:9px;background:#5B4CF0;color:#fff;font-weight:700;font-size:13px;text-decoration:none">View program →</a><div onClick="{{ h.save }}" style="cursor:pointer;padding:8px 10px;border-radius:9px;border:1px solid #D6D0FA;color:#5B4CF0;font-weight:700;font-size:13px;display:flex;align-items:center;gap:4px"><span style="font-family:'Material Symbols Rounded';font-size:17px">{{ h.saveIcon }}</span>Shortlist</div></div>
+            </sc-if>
+          </div>
+        </sc-for>
+      </div>
+      <sc-for list="{{ rows }}" as="r" hint-placeholder-count="10">
+        <div style="display:grid;grid-template-columns:200px repeat(3,minmax(0,1fr));border-bottom:1px solid #F3F2F9">
+          <div style="padding:13px 20px;font-size:14px;font-weight:600;color:#4A4867">{{ r.label }}</div>
+          <sc-for list="{{ r.cells }}" as="x" hint-placeholder-count="3">
+            <div style="padding:13px 16px;border-left:1px solid #F3F2F9;font-size:15px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;background:{{ x.bg }};font-weight:{{ x.w }};color:{{ x.c }}">
+              <sc-if value="{{ x.icon }}"><span style="font-family:'Material Symbols Rounded';font-size:19px;color:{{ x.ic }}">{{ x.icon }}</span></sc-if>
+              <span>{{ x.t }}</span>
+              <sc-if value="{{ x.best }}"><span style="font-size:11px;font-weight:800;padding:3px 7px;border-radius:5px;background:#12925A;color:#fff">{{ x.bl }}</span></sc-if>
+            </div>
+          </sc-for>
+        </div>
+      </sc-for>
+      <div style="display:grid;grid-template-columns:200px repeat(3,minmax(0,1fr))">
+        <div style="padding:16px 20px;font-size:14px;font-weight:800">Key highlights</div>
+        <sc-for list="{{ highlights }}" as="h" hint-placeholder-count="3"><div style="padding:14px 16px;border-left:1px solid #F3F2F9;display:flex;flex-direction:column;gap:6px"><sc-for list="{{ h.items }}" as="t" hint-placeholder-count="3"><div style="display:flex;gap:8px;font-size:13px;color:#2B2950"><span style="width:6px;height:6px;border-radius:50%;background:#5B4CF0;margin-top:7px;flex:none"></span>{{ t }}</div></sc-for></div></sc-for>
+      </div>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{ mobile }}">
+    <div style="margin-top:16px;display:flex;flex-direction:column;gap:10px">
+      <sc-for list="{{ rows }}" as="r" hint-placeholder-count="0">
+        <div style="border:1px solid #E8E6F3;border-radius:14px;overflow:hidden">
+          <div style="padding:10px 14px;background:#F8F7FD;font-size:13px;font-weight:800;color:#4A4867">{{ r.label }}</div>
+          <sc-for list="{{ r.mcells }}" as="x" hint-placeholder-count="3">
+            <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;padding:11px 14px;border-top:1px solid #F3F2F9;background:{{ x.bg }}">
+              <span style="display:flex;align-items:center;gap:8px;font-size:13px;color:#4A4867"><img src="{{ x.logo }}" alt="" style="width:20px;height:20px;object-fit:contain">{{ x.who }}</span>
+              <span style="display:flex;align-items:center;gap:6px;font-size:14px;text-align:right;font-weight:{{ x.w }};color:{{ x.c }}">{{ x.t }}<sc-if value="{{ x.best }}"><span style="font-size:10px;font-weight:800;padding:2px 6px;border-radius:5px;background:#12925A;color:#fff">{{ x.bl }}</span></sc-if></span>
+            </div>
+          </sc-for>
+        </div>
+      </sc-for>
+    </div>
+  </sc-if>
+
+  <section style="margin-top:28px;border-radius:20px;background:linear-gradient(135deg,#F4F2FF,#EEEAFF);padding:clamp(20px,3vw,32px);display:flex;flex-wrap:wrap;gap:20px;align-items:center">
+    <span style="width:64px;height:64px;border-radius:50%;background:#fff;color:#5B4CF0;display:flex;align-items:center;justify-content:center;font-family:'Material Symbols Rounded';font-size:32px;flex:none">forward_to_inbox</span>
+    <div style="flex:1 1 300px"><div style="font-size:20px;font-weight:800">Get the detailed comparison report via email</div><div style="color:#4A4867;font-size:14px;margin-top:4px;line-height:1.55">We'll send a PDF comparison of these programs, including fees, approvals and placement data.</div></div>
+    <sc-if value="{{ notSent }}" hint-placeholder-val="{{ true }}">
+      <div style="flex:1 1 360px;display:flex;flex-direction:column;gap:6px"><div style="display:flex;gap:8px;flex-wrap:wrap"><input placeholder="Enter your email address" style="flex:1 1 200px;padding:13px 14px;border-radius:11px;border:1px solid #D6D0FA;font-size:14px;background:#fff"><div onClick="{{ send }}" style="cursor:pointer;padding:13px 18px;border-radius:11px;background:#5B4CF0;color:#fff;font-weight:700;font-size:14px;white-space:nowrap">Send report →</div></div><div style="font-size:12px;color:#6F6D8C;display:flex;align-items:center;gap:4px"><span style="font-family:'Material Symbols Rounded';font-size:14px">lock</span>We respect your privacy. No spam, ever.</div></div>
+    </sc-if>
+    <sc-if value="{{ sent }}"><div style="flex:1 1 360px;padding:14px 16px;border-radius:12px;background:#E7F6EE;color:#12784B;font-weight:700;display:flex;gap:8px;align-items:center"><span style="font-family:'Material Symbols Rounded'">check_circle</span>Report on its way — check your inbox.</div></sc-if>
+  </section>
+
+  <section style="margin-top:44px">
+    <h2 style="margin:0;font-size:clamp(22px,3vw,28px);letter-spacing:-0.025em;font-weight:800">Explore more options</h2>
+    <p style="margin:6px 0 18px;color:#4A4867">Discover more programs or explore by specialization.</p>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,240px),1fr));gap:12px">
+      <sc-for list="{{ more }}" as="m" hint-placeholder-count="4"><a href="{{ m.href }}" style="display:flex;gap:14px;padding:18px;border:1px solid #E8E6F3;border-radius:16px;color:#16133F" style-hover="border-color:#CFC9FA;text-decoration:none;color:#16133F"><span style="width:46px;height:46px;border-radius:12px;background:#F1EEFF;color:#5B4CF0;display:flex;align-items:center;justify-content:center;font-family:'Material Symbols Rounded';font-size:24px;flex:none">{{ m.i }}</span><div><div style="font-weight:800">{{ m.k }}</div><div style="font-size:13px;color:#6F6D8C;margin-top:4px;line-height:1.45">{{ m.v }}</div><div style="font-size:13px;color:#5B4CF0;font-weight:700;margin-top:8px">{{ m.cta }} →</div></div></a></sc-for>
+    </div>
+  </section>
+  <section style="margin-top:44px">
+    <div style="font-size:12px;font-weight:700;letter-spacing:0.06em;color:#6F6D8C;margin-bottom:12px">PUBLISHED COMPARISON PAGES</div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,220px),1fr));gap:8px"><sc-for list="{{ published }}" as="p" hint-placeholder-count="9"><div onClick="{{ p.go }}" style="cursor:pointer;padding:11px 14px;border:1px solid #EEECF6;border-radius:10px;font-size:14px;font-weight:600;display:flex;justify-content:space-between" style-hover="border-color:#5B4CF0;color:#5B4CF0">{{ p.label }}<span style="font-family:'Material Symbols Rounded';font-size:18px;color:#5B4CF0">chevron_right</span></div></sc-for></div>
+  </section>
+  <section style="margin-top:44px"><dc-import name="UVFaq" items="{{ faq }}" title="Frequently asked questions" subtitle="Get quick answers to common questions about comparing programs." hint-size="100%,260px"></dc-import></section>
+</main>
+<dc-import name="UVFooter" hint-size="100%,360px"></dc-import>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  state = { ok: !!window.UV, w: 1280, ids: null, sent: false, shared: false, t: 0 };
+  componentDidMount() {
+    this._r = () => this.setState({ w: window.innerWidth }); this._r(); window.addEventListener('resize', this._r);
+    this._s = () => this.setState(s => ({ t: s.t + 1 })); window.addEventListener('uv-store', this._s);
+    const init = () => {
+      const UV = window.UV, ids = UV.q('ids'), add = UV.q('add'), uni = UV.q('uni');
+      let list = ids ? ids.split(',') : UV.store.compare();
+      if (add) { const c = UV.byId(add); if (c) list = [add, ...UV.C.filter(x => x.short === c.short && x.id !== add).map(x => x.id)].slice(0, 3); }
+      if (uni) list = UV.C.filter(c => c.uni === uni && c.lvl === 'PG').slice(0, 3).map(c => c.id);
+      this.setIds(list.filter(id => UV.byId(id)).slice(0, 3));
+    };
+    if (window.UV) init(); else this._i = setInterval(() => { if (window.UV) { clearInterval(this._i); init(); } }, 50);
+  }
+  componentWillUnmount() { window.removeEventListener('resize', this._r); window.removeEventListener('uv-store', this._s); clearInterval(this._i); }
+  setIds(ids) { this.setState({ ids }); window.UV && window.UV.store.set('compare', ids); }
+  renderVals() {
+    const UV = window.UV, s = this.state, mobile = s.w < 860;
+    const base = { desktop: !mobile, mobile, notSent: !s.sent, sent: s.sent, send: () => this.setState({ sent: true }), shareLabel: s.shared ? 'Link copied' : 'Share comparison', share: () => { try { navigator.clipboard.writeText(location.href); } catch (e) {} this.setState({ shared: true }); } };
+    if (!UV || !s.ids) return { ...base, slots: [], heads: [], rows: [], highlights: [], options: [], quick: [], published: [], more: [], faq: [] };
+    const cols = s.ids.map(UV.byId).filter(Boolean), saved = UV.store.saved();
+    const degrees = [...new Set(cols.map(c => c.short))];
+    const change = i => e => { const v = e.target.value; if (!v) return; const a = [...s.ids]; a[i] = v; this.setIds([...new Set(a)]); };
+    const slots = [0, 1, 2].map(i => { const c = cols[i]; if (!c) return { filled: false, empty: true, change: change(i) }; return { ...UV.card(c), filled: true, empty: false, change: change(i), remove: () => this.setIds(s.ids.filter(x => x !== c.id)) }; });
+    const heads = [0, 1, 2].map(i => { const c = cols[i]; if (!c) return { filled: false }; const sv = saved.includes(c.id); return { ...UV.card(c), filled: true, save: () => UV.store.toggleSaved(c.id), saveIcon: sv ? 'bookmark_added' : 'bookmark' }; });
+    const row = (label, fn, mode, fmt, icon) => {
+      const vals = cols.map(fn); let b = null;
+      if (mode && cols.length > 1) { b = mode === 'min' ? Math.min(...vals) : Math.max(...vals); if (vals.every(v => v === b)) b = null; }
+      const cell = (v, i) => { if (v === undefined) return { t: '', bg: '#fff', w: 500, c: '#16133F' }; const best = b !== null && v === b; return { t: fmt ? fmt(v) : v, best, bl: mode === 'min' ? 'Lowest' : 'Best', bg: best ? '#F3FBF6' : '#fff', w: best ? 800 : 500, c: best ? '#12784B' : '#16133F', icon: icon || '', ic: icon === 'check_circle' ? '#12925A' : '#8E8CA8' }; };
+      return { label, cells: [0, 1, 2].map(i => cell(vals[i], i)), mcells: cols.map((c, i) => ({ ...cell(vals[i], i), who: UV.UNIS[c.uni].short + ' · ' + c.short, logo: UV.logo(c.uni) })) };
+    };
+    const rows = [
+      row('Total program fee', c => c.fee, 'min', UV.inr), row('EMI (approx.)', c => c.emi, 'min', v => UV.inr(v) + '/month'),
+      row('Program duration', c => c.months / 12, null, v => v + ' years', 'schedule'), row('UGC entitled', () => 'Yes', null, null, 'check_circle'),
+      row('NAAC accreditation', () => 'A+', null, null, 'check_circle'), row('Rating', c => c.rating, 'max', v => '★ ' + v),
+      row('Eligibility', c => c.lvl === 'PG' ? 'Graduation (any stream)' : '10+2 (any stream)', null, null, 'person'),
+      row('Specializations', c => c.specs[0] === 'General' ? 1 : c.specs.length, 'max', v => v === 1 ? 'General' : v + ' options', 'category'),
+      row('Learning mode', () => '100% Online', null, null, 'laptop_mac'), row('Placement assistance', c => UV.UNIS[c.uni].placement, 'max', v => v + '%', 'work'),
+      row('Average package', c => UV.UNIS[c.uni].avgN, 'max', v => '₹' + v + ' LPA')
+    ];
+    const hl = { muj: ['Industry-aligned curriculum', '320+ hiring partners', 'WES recognised', 'Flexible learning for working professionals'], smu: ['Lowest listed fees', 'Established 1995', 'AIU member', 'Dedicated student support'], amity: ['Widest range of programs', 'QS ranked', 'WES recognised', 'Career guidance & placement assistance'] };
+    const pub = [['MBA', 'mba-muj', 'mba-amity'], ['MBA', 'mba-muj', 'mba-smu'], ['MBA', 'mba-amity', 'mba-smu'], ['MCA', 'mca-muj', 'mca-amity'], ['MCA', 'mca-muj', 'mca-smu'], ['MCA', 'mca-amity', 'mca-smu'], ['BBA', 'bba-muj', 'bba-amity'], ['BBA', 'bba-muj', 'bba-smu'], ['BBA', 'bba-amity', 'bba-smu'], ['B.Com', 'bcom-muj', 'bcom-smu'], ['B.Com', 'bcom-muj', 'bcom-amity'], ['B.Com', 'bcom-amity', 'bcom-smu'], ['M.Com', 'mcom-muj', 'mcom-smu'], ['M.Com', 'mcom-amity', 'mcom-muj'], ['MA JMC', 'majmc-muj', 'majmc-amity'], ['BA', 'ba-amity', 'ba-smu'], ['BCA', 'bca-muj', 'bca-amity'], ['M.Com', 'mcom-amity', 'mcom-smu']];
+    return { ...base, slots, heads, rows,
+      crumb: degrees.length === 1 ? 'Online ' + degrees[0] : 'Programs', degreeLabel: degrees.length === 1 ? 'Online ' + degrees[0] : 'Online Degree',
+      highlights: [0, 1, 2].map(i => ({ items: cols[i] ? hl[cols[i].uni] : [] })),
+      options: UV.C.map(c => ({ id: c.id, label: c.title + ' — ' + UV.UNIS[c.uni].short })),
+      quick: [['MBA: all three', ['mba-muj', 'mba-smu', 'mba-amity']], ['MCA: all three', ['mca-muj', 'mca-smu', 'mca-amity']], ['BBA: all three', ['bba-muj', 'bba-smu', 'bba-amity']], ['B.Com: all three', ['bcom-muj', 'bcom-smu', 'bcom-amity']], ['BCA: MUJ vs Amity', ['bca-muj', 'bca-amity']]].map(([label, ids]) => ({ label, go: () => this.setIds(ids) })),
+      published: pub.map(([n, a, b]) => ({ label: `Online ${n}: ${UV.UNIS[UV.byId(a).uni].short} vs ${UV.UNIS[UV.byId(b).uni].short}`, go: () => { this.setIds([a, b]); window.scrollTo({ top: 0, behavior: 'smooth' }); } })),
+      more: [{ i: 'school', k: 'View all programs', v: 'Explore all 30 programs from top universities.', cta: 'View all programs', href: 'Courses.dc.html' }, { i: 'add_chart', k: 'Compare more programs', v: 'Add up to three programs side by side.', cta: 'Start comparing', href: 'Courses.dc.html' }, { i: 'explore', k: 'Explore specializations', v: 'Find the right specialization for your goals.', cta: 'View specializations', href: 'Specializations.dc.html' }, { i: 'support_agent', k: 'Apply now', v: 'Get free guidance from our counselling team.', cta: 'Apply now', href: 'Apply.dc.html' }],
+      faq: [['Are these online programs UGC entitled?', 'Yes. Every program we list is checked against the UGC-DEB entitlement list each admission cycle.'], ['How do I choose the right program?', 'Start with total fee and EMI, then check eligibility, specialisations and placement support. A counsellor can help you weigh them.'], ['What is the total fee structure for each program?', 'The table shows listed total tuition. Semester-wise and full-payment plans are on each program page.'], ['Do these programs have live classes?', 'Programs combine live sessions with recorded lectures. Confirm the schedule for your batch.'], ['Can I get an EMI option?', 'Yes — no-cost EMI is available through loan partners, subject to approval.'], ['Is there any difference in the degree value?', 'No. UGC-entitled online degrees are equivalent to on-campus degrees.']] };
+  }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,400,0..1,0&display=block" rel="stylesheet">
+<style>body{margin:0;font-family:'Plus Jakarta Sans',system-ui,sans-serif;color:#16133F;-webkit-font-smoothing:antialiased}*{box-sizing:border-box}a{color:#5B4CF0;text-decoration:none}a:hover{color:#4A3BDB;text-decoration:underline}</style>
+</helmet>
+<div data-screen-label="How we verify" style="min-height:100vh;display:flex;flex-direction:column;background:#fff">
+<dc-import name="UVHeader" active="" hint-size="100%,68px" style="position:sticky;top:0;z-index:40;display:block"></dc-import>
+<section style="background:radial-gradient(600px 320px at 85% 0%,#E6E1FF 0%,rgba(230,225,255,0) 70%),linear-gradient(180deg,#F7F5FF,#FBFAFF);border-bottom:1px solid #EEECF8">
+  <div style="max-width:980px;margin:0 auto;padding:clamp(28px,5vw,56px) clamp(16px,3vw,32px) 40px">
+    <div style="font-size:13px;color:#6F6D8C;display:flex;gap:6px;align-items:center"><a href="Home.dc.html">Home</a><span style="font-family:'Material Symbols Rounded';font-size:16px">chevron_right</span><span style="color:#16133F">How we verify our data</span></div>
+    <h1 style="margin:16px 0 0;font-size:clamp(32px,4.6vw,50px);letter-spacing:-0.04em;font-weight:800;line-height:1.06">How we verify our data</h1>
+    <p style="margin:14px 0 0;color:#4A4867;font-size:17px;line-height:1.6;max-width:680px">We check every fee, approval and admission date against the university's own published pages each admission cycle, and flag anything we can't independently confirm.</p>
+  </div>
+</section>
+<main style="flex:1;max-width:980px;width:100%;margin:0 auto;padding:40px clamp(16px,3vw,32px) 0;display:flex;flex-direction:column;gap:44px">
+  <section>
+    <h2 style="margin:0 0 18px;font-size:24px;font-weight:800;letter-spacing:-0.02em">Our process</h2>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,210px),1fr));gap:12px">
+      <div style="padding:20px;border-radius:16px;background:#F8F7FD"><span style="font-family:'Material Symbols Rounded';font-size:28px;color:#5B4CF0">travel_explore</span><div style="font-weight:800;margin-top:10px">1. Collect</div><div style="font-size:14px;color:#4A4867;margin-top:4px;line-height:1.55">Fees, eligibility and approvals from official university pages.</div></div>
+      <div style="padding:20px;border-radius:16px;background:#F8F7FD"><span style="font-family:'Material Symbols Rounded';font-size:28px;color:#5B4CF0">rule</span><div style="font-weight:800;margin-top:10px">2. Cross-check</div><div style="font-size:14px;color:#4A4867;margin-top:4px;line-height:1.55">Every program against the UGC-DEB entitlement list.</div></div>
+      <div style="padding:20px;border-radius:16px;background:#F8F7FD"><span style="font-family:'Material Symbols Rounded';font-size:28px;color:#5B4CF0">flag</span><div style="font-weight:800;margin-top:10px">3. Flag</div><div style="font-size:14px;color:#4A4867;margin-top:4px;line-height:1.55">Anything we can't confirm is labelled on the page.</div></div>
+      <div style="padding:20px;border-radius:16px;background:#F8F7FD"><span style="font-family:'Material Symbols Rounded';font-size:28px;color:#5B4CF0">update</span><div style="font-weight:800;margin-top:10px">4. Re-check</div><div style="font-size:14px;color:#4A4867;margin-top:4px;line-height:1.55">Every admission cycle, and whenever a university updates its pages.</div></div>
+    </div>
+  </section>
+  <section>
+    <h2 style="margin:0 0 14px;font-size:24px;font-weight:800;letter-spacing:-0.02em">What the labels mean</h2>
+    <div style="border:1px solid #E8E6F3;border-radius:16px;overflow:hidden">
+      <div style="display:flex;gap:14px;align-items:flex-start;padding:16px 18px;border-bottom:1px solid #F3F2F9"><span style="font-size:11px;font-weight:800;letter-spacing:0.05em;padding:4px 8px;border-radius:6px;background:#E7F6EE;color:#12784B;white-space:nowrap">SOURCE VERIFIED</span><span style="font-size:14px;color:#2B2950;line-height:1.55">Matches the university's current official page for this admission cycle.</span></div>
+      <div style="display:flex;gap:14px;align-items:flex-start;padding:16px 18px;border-bottom:1px solid #F3F2F9"><span style="font-size:11px;font-weight:800;letter-spacing:0.05em;padding:4px 8px;border-radius:6px;background:#FFF4E5;color:#A35A0B;white-space:nowrap">CONFIRM WITH COUNSELLOR</span><span style="font-size:14px;color:#2B2950;line-height:1.55">Published, but varies by case or session — confirm before applying.</span></div>
+      <div style="display:flex;gap:14px;align-items:flex-start;padding:16px 18px"><span style="font-size:11px;font-weight:800;letter-spacing:0.05em;padding:4px 8px;border-radius:6px;background:#ECE9FE;color:#5B4CF0;white-space:nowrap">BEING RE-CHECKED</span><span style="font-size:14px;color:#2B2950;line-height:1.55">We're reviewing this for the upcoming cycle. Older data shown until confirmed.</span></div>
+    </div>
+  </section>
+  <section>
+    <h2 style="margin:0 0 14px;font-size:24px;font-weight:800;letter-spacing:-0.02em">Sources we use</h2>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,260px),1fr));gap:10px">
+      <a href="https://www.onlinemanipal.com/all-courses" style="display:flex;justify-content:space-between;align-items:center;padding:14px 16px;border:1px solid #E8E6F3;border-radius:12px;font-weight:700;color:#16133F">onlinemanipal.com<span style="font-family:'Material Symbols Rounded';color:#5B4CF0">open_in_new</span></a>
+      <a href="https://deb.ugc.ac.in" style="display:flex;justify-content:space-between;align-items:center;padding:14px 16px;border:1px solid #E8E6F3;border-radius:12px;font-weight:700;color:#16133F">UGC-DEB entitlement list<span style="font-family:'Material Symbols Rounded';color:#5B4CF0">open_in_new</span></a>
+      <a href="https://amityonline.com" style="display:flex;justify-content:space-between;align-items:center;padding:14px 16px;border:1px solid #E8E6F3;border-radius:12px;font-weight:700;color:#16133F">amityonline.com<span style="font-family:'Material Symbols Rounded';color:#5B4CF0">open_in_new</span></a>
+    </div>
+  </section>
+  <section style="border-radius:18px;background:linear-gradient(135deg,#F4F2FF,#EEEAFF);padding:24px;display:flex;flex-wrap:wrap;gap:16px;align-items:center;justify-content:space-between">
+    <div><div style="font-size:18px;font-weight:800">Spotted something out of date?</div><div style="font-size:14px;color:#4A4867;margin-top:4px">Tell us and we'll re-check it against the source.</div></div>
+    <a href="Apply.dc.html" style="padding:12px 18px;border-radius:11px;background:#5B4CF0;color:#fff;font-weight:700;text-decoration:none">Report an error</a>
+  </section>
+</main>
+<dc-import name="UVFooter" hint-size="100%,360px"></dc-import>
+</div>
+</x-dc>
+</body>
+</html>

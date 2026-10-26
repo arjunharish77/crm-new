@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { Course, CourseEnrichment, University, UniversityEnrichment } from "@/data/catalog";
+import { eligibilityRulesSchema } from "@/lib/eligibility-rules";
 
 const text = z.string().trim().min(1);
 const slug = text.regex(/^[a-z0-9-]+$/);
@@ -29,11 +30,30 @@ const courseSchema = z.object({
   eligibility:text, careerRoles:z.array(text),
   dataQuality:z.object({eligibility:quality,specializations:quality,careerRoles:quality,curriculum:quality,faqs:quality,lastAdmissionDate:quality}).optional(),
 });
+const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Use a YYYY-MM-DD date");
+const httpUrl = z.string().url().refine(value => /^https?:\/\//.test(value), "Use an HTTP(S) source URL");
+const sourceCheck = z.object({ status:z.string().optional(), checkedAt:isoDate, sourceUrl:httpUrl, notes:z.array(z.string()).optional() });
+const categoryFees = z.object({
+  checkedAt:isoDate, sourceUrl:httpUrl, sourceLabel:text,
+  rows:z.array(z.object({ category:text, currency:z.enum(["INR","USD"]), total:z.number().int().positive(), perSemester:z.number().int().positive(), semesters:z.number().int().positive() })).min(1),
+  notes:z.array(text).optional(),
+});
+const recognition = z.object({ academicYear:z.string().regex(/^\d{4}-\d{2}$/), status:z.enum(["listed","unclear"]), listName:text, sourceUrl:httpUrl, checkedAt:isoDate, listedUnder:text, listedProgramme:text, note:text.optional() });
+const intake = z.object({ label:text, applicationDeadline:isoDate, sourceUrl:httpUrl, checkedAt:isoDate });
+const sourcedProgramDetail = z.object({ checkedAt:isoDate, sourceUrl:httpUrl, scope:text, points:z.array(text.max(500)).min(1).max(8) }).strict();
+const programDetails = z.object({
+  study:sourcedProgramDetail.optional(), assessment:sourcedProgramDetail.optional(),
+  additionalCharges:sourcedProgramDetail.optional(), specialization:sourcedProgramDetail.optional(),
+}).strict();
 const courseEnrichmentSchema = z.object({
   overview:text.optional(), highlights:z.array(pair).optional(), sourceUrls:sources.optional(),
   feePlans:z.array(triple).optional(), curriculum:z.array(z.object({term:text,subjects:z.array(text)})).optional(),
   scholarships:z.array(triple).optional(), faqs:z.array(pair).optional(), weeklyHours:text.optional(),
   credits:text.optional(), applicationFee:text.optional(), lastAdmissionDate:text.optional(),
+  // Review stamps are display-only: a malformed one is dropped rather than failing the catalog.
+  categoryFees:categoryFees.optional(), eligibilityRules:eligibilityRulesSchema.optional(), feeReview:sourceCheck.optional().catch(undefined), eligibilityReview:sourceCheck.optional().catch(undefined),
+  curriculumReview:sourceCheck.optional().catch(undefined), intakes:z.array(intake).optional(), recognition:recognition.optional(),
+  programDetails:programDetails.optional(),
 });
 export type CatalogRow = Record<string, unknown>;
 export type CatalogIssue = { entityType:"course"|"university"|"catalog"; entityId:string; field:string; message:string };
@@ -94,6 +114,8 @@ export function buildCatalogSnapshot(universityRows:CatalogRow[], courseRows:Cat
       for(const [index,plan] of (enrichment.feePlans||[]).entries()) {
         if(["Semester-wise","No-cost EMI"].includes(plan[0]) && rupees(plan[1])!==null && rupees(plan[1])!==course.fee) report("course",id,`data.feePlans.${index}`,"Fee plan total differs from the course fee. Review and update or remove stale payment plans.");
       }
+      const domestic=enrichment.categoryFees?.rows.find(row=>row.currency==="INR");
+      if(domestic && domestic.total!==course.fee) report("course",id,"data.categoryFees","The INR category fee differs from the course fee. Review both before publishing.");
       for(const [index,highlight] of (enrichment.highlights||[]).entries()) {
         if(highlight[0]==="Total fee" && rupees(highlight[1])!==null && rupees(highlight[1])!==course.fee) report("course",id,`data.highlights.${index}`,"Total-fee highlight differs from the course fee.");
       }

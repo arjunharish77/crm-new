@@ -45,7 +45,7 @@ export default async function RedirectsPage() {
           <RedirectCreateForm />
         </section>
 
-        <section aria-labelledby="configured-redirects" style={{ marginTop: 24 }}>
+        <section aria-labelledby="configured-redirects" className="admin-section-gap">
           <h2 id="configured-redirects">Configured redirects</h2>
           <div className="quality-records">{redirects.rows.map(redirect => <article className="card quality-record" key={redirect.id}>
             <div><span className={redirect.is_active ? "admin-status good" : "admin-status"}>{redirect.is_active ? "Active" : "Inactive"}</span><h3>{redirect.from_path}</h3></div>

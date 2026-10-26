@@ -4,6 +4,7 @@ import { useCatalog } from "@/components/catalog-provider";
 
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { X } from "lucide-react";
 import { trackEvent } from "@/components/analytics";
 import { LeadFormLoader, type LeadFormContext } from "@/components/lead-form-loader";
 
@@ -12,11 +13,24 @@ import { LeadFormLoader, type LeadFormContext } from "@/components/lead-form-loa
 // instead of always falling back to the fully generic title.
 const INTENT_LABELS: Record<string, string> = {
   "emi-calculator": "your EMI plan",
+  "total-cost": "your fee plan",
   "fee-guide": "fees",
   "eligibility-guide": "eligibility",
+  "admissions-guide": "your application",
+  "mode-helper": "choosing a study mode",
+  "study-planner": "fitting study into your week",
+  "specialization-finder": "choosing a specialization",
+  "exam-check": "online exams",
+  "international-guide": "applying from outside India",
+  "computing-guide": "computing and data degrees",
+  "commerce-humanities-guide": "commerce and humanities degrees",
+  "online-learning-guide": "how online study works",
   "career-scope-guide": "career scope",
   "ugc-approval-guide": "UGC approval",
   recommender: "your shortlist",
+  shortlist: "your saved courses",
+  "recognition-check": "this program's recognition",
+  "document-checklist": "your admission documents",
   comparison: "your comparison",
   "compare-unlock": "your comparison",
   specialization: "this specialization",
@@ -52,6 +66,7 @@ export function LeadWizardModal() {
       openerRef.current = target;
       const href = target.getAttribute("href");
       const params = href ? new URL(href, window.location.origin).searchParams : new URLSearchParams();
+      const category = params.get("category") || "";
       trackEvent("lead_cta_click", {
         intent: params.get("intent") || undefined,
         course_id: params.get("course") || undefined,
@@ -62,6 +77,7 @@ export function LeadWizardModal() {
         university: params.get("university") || undefined,
         intent: params.get("intent") || undefined,
         goal: params.get("goal") || undefined,
+        feeCategoryKey: /^row-\d{1,2}$/.test(category) ? category : undefined,
       });
       setOpen(true);
     }
@@ -115,21 +131,20 @@ export function LeadWizardModal() {
 
   if (!open) return null;
 
+  const label = contextLabel(catalog, context);
   return createPortal(
-    <div className="lead-modal-backdrop" role="presentation">
-      <div ref={dialog} className="lead-modal" role="dialog" aria-modal="true" aria-labelledby="lead-modal-title" aria-describedby="lead-modal-description" onClick={(event) => event.stopPropagation()}>
-        <div className="lead-modal-head">
+    <div className="uv-lead-dialog-backdrop" role="presentation">
+      <div ref={dialog} className="uv-lead-dialog" role="dialog" aria-modal="true" aria-labelledby="lead-modal-title" aria-describedby="lead-modal-description" onClick={(event) => event.stopPropagation()}>
+        <div className="uv-lead-dialog-head">
           <div>
-            <h2 id="lead-modal-title">
-              {contextLabel(catalog, context) ? `Apply now — ${contextLabel(catalog, context)}` : "Apply now"}
-            </h2>
+            <h2 id="lead-modal-title">{label ? <>Apply now <span className="uv-lead-dialog-context">— {label}</span></> : "Apply now"}</h2>
             <p id="lead-modal-description">Start with your details. Choose your course next.</p>
           </div>
           <button type="button" aria-label="Close" onClick={() => setOpen(false)}>
-            ✕
+            <X size={20} aria-hidden="true" />
           </button>
         </div>
-        <div className="lead-modal-body">
+        <div className="uv-lead-dialog-body">
           <LeadFormLoader context={context} />
         </div>
       </div>

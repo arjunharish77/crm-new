@@ -4,15 +4,16 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { JsonLd } from "@/components/json-ld";
 import { EmiCalculator } from "@/components/emi-calculator";
-import { StickyMobileBar } from "@/components/sticky-mobile-bar";
+import { FaqAccordion } from "@/components/faq-accordion";
+import { withSocial } from "@/lib/page-metadata";
 
 const SITE_URL = process.env.NEXT_PUBLIC_UNNATIVIDYA_SITE_URL || "https://unnatividya.com";
 
-export const metadata: Metadata = {
+export const metadata: Metadata = withSocial({
   title: "Online Degree EMI Calculator",
   description: "Estimate monthly repayments, interest and overall payment for an online degree using your fee, down payment, repayment period and annual interest rate.",
   alternates: { canonical: "/tools/emi-calculator" },
-};
+});
 
 const FAQS: Array<[string, string]> = [
   [
@@ -37,7 +38,11 @@ const FAQS: Array<[string, string]> = [
   ],
   [
     "Does picking a program from the dropdown auto-fill the correct fee?",
-    "Selecting a program fills its listed tuition without changing your repayment period. It is not a live university quote; confirm current tuition and any additional charges. Editing the fee switches back to manual entry.",
+    "Selecting a program fills its listed INR tuition or a published INR applicant-category amount without changing your repayment period. It is not a live university quote; confirm current tuition and any additional charges. Editing the fee switches back to manual entry.",
+  ],
+  [
+    "Can I use an NRI or international fee in US dollars here?",
+    "No. This calculator estimates INR loan repayments and never converts a USD university fee to rupees. Use the total cost planner to view the published amount in its original currency, then ask a lender for a separate INR quote if needed.",
   ],
 ];
 
@@ -59,35 +64,23 @@ export default function EmiCalculatorPage() {
   return <PublishedCatalogBoundary>{(
     <>
       <JsonLd data={[breadcrumbJsonLd, faqJsonLd]} />
-      <div style={{ background: "#F7F8F9" }}>
-        <div style={{ background: "#fff", borderBottom: "1px solid #EAEAEA" }}>
-          <div className="container" style={{ paddingTop: 28, paddingBottom: 28 }}>
-            <div className="breadcrumb" style={{ marginBottom: 8 }}>
-              <Link href="/">Home</Link> &gt; EMI Calculator
-            </div>
-            <h1 style={{ color: "#363634", fontSize: 28, fontWeight: 700, margin: 0 }}>Online degree EMI calculator</h1>
-            <div style={{ color: "#696868", fontSize: 14, marginTop: 6 }}>
-              Choose a listed program or enter your own fee. See monthly repayments, interest and the overall payment including your down payment.
-            </div>
-          </div>
+      <section className="uv-page-hero uvt-page-hero" aria-labelledby="emi-title">
+        <div className="uv-page-hero-inner">
+          <ol className="uv-breadcrumb" aria-label="Breadcrumb">
+            <li><Link href="/">Home</Link></li>
+            <li><span>Tools</span></li>
+            <li><span aria-current="page">EMI calculator</span></li>
+          </ol>
+          <h1 id="emi-title" className="uv-h1">Online degree EMI calculator</h1>
+          <p className="uv-lede">Choose a listed program or enter your own fee. See monthly repayments, interest and the overall payment including your down payment.</p>
         </div>
-
+      </section>
+      <div className="uv-shell uvt-page">
         <EmiCalculator />
-        <div className="container" style={{ paddingBottom: 56 }}>
-          <section className="detail-section" style={{ marginTop: 8 }}>
-            <h2>Frequently asked questions</h2>
-            <div className="faq-list">
-              {FAQS.map(([question, answer]) => (
-                <details className="faq-item" name="emi-faq" key={question}>
-                  <summary>{question}</summary>
-                  <p>{answer}</p>
-                </details>
-              ))}
-            </div>
-          </section>
+        <div className="uvt-faq">
+          <FaqAccordion items={FAQS} name="emi-faq" title="EMI questions" subtitle="How the estimate works and what to confirm with your lender." id="sec-faq" />
         </div>
       </div>
-      <StickyMobileBar primary={{ label: "Apply now", href: "/lead?intent=emi-calculator", openLead: true }} />
     </>
   )}</PublishedCatalogBoundary>;
 }

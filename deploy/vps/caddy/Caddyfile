@@ -33,16 +33,29 @@
 	reverse_proxy web:3000
 }
 
-{$UNNATIVIDYA_DOMAIN}, www.{$UNNATIVIDYA_DOMAIN} {
+# www serves nothing of its own: one permanent redirect to the apex keeps a single indexed copy
+# of the site (Unnatividya technical SEO review H3). Path and query are preserved.
+www.{$UNNATIVIDYA_DOMAIN} {
+	redir https://{$UNNATIVIDYA_DOMAIN}{uri} permanent
+}
+
+{$UNNATIVIDYA_DOMAIN} {
 	encode zstd gzip
 
 	header {
 		Strict-Transport-Security "max-age=31536000; includeSubDomains"
 		X-Content-Type-Options "nosniff"
 		Referrer-Policy "strict-origin-when-cross-origin"
-		Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=(), usb=(), interest-cohort=()"
-		Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' https://www.googletagmanager.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; connect-src 'self' https://api.zeptomail.in https://www.googletagmanager.com https://www.google-analytics.com https://*.google-analytics.com https://*.analytics.google.com; base-uri 'self'; form-action 'self'; object-src 'none'; frame-ancestors 'none'"
+		Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' https://www.googletagmanager.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; connect-src 'self' https://api.zeptomail.in https://www.googletagmanager.com https://www.google-analytics.com https://*.google-analytics.com https://analytics.google.com https://*.analytics.google.com https://stats.g.doubleclick.net; base-uri 'self'; form-action 'self'; object-src 'none'; frame-ancestors 'none'"
 	}
+
+	# Decision V10 (Wave 5 B1): camera and microphone stay blocked everywhere except the exam
+	# device check, which may ask for them for this origin only. Two exclusive matchers, so the
+	# order Caddy applies them in doesn't matter.
+	@examCheck path /tools/exam-check
+	header @examCheck Permissions-Policy "camera=(self), microphone=(self), geolocation=(), payment=(), usb=(), interest-cohort=()"
+	@notExamCheck not path /tools/exam-check
+	header @notExamCheck Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=(), usb=(), interest-cohort=()"
 
 	@private path /admin* /api* /lead
 	header @private X-Robots-Tag "noindex, nofollow, noarchive"

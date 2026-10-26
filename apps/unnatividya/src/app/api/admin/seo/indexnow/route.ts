@@ -16,17 +16,18 @@ import {
   universitySitemapUrls,
 } from "@/lib/sitemap";
 import { indexNowConfig, siteUrl } from "@/lib/seo-config";
+import { getPublishedArticles } from "@/lib/articles-server";
 
 const schema = z.object({
   urls: z.array(z.string().url()).max(10000).optional(),
 });
 
-function defaultUrls(catalog: CatalogReader) {
+async function defaultUrls(catalog: CatalogReader) {
   return [
     ...staticSitemapUrls(),
     ...courseSitemapUrls(catalog),
     ...universitySitemapUrls(catalog),
-    ...blogSitemapUrls(),
+    ...blogSitemapUrls(await getPublishedArticles()),
     ...feeGuideSitemapUrls(catalog),
     ...eligibilityGuideSitemapUrls(),
     ...careerScopeGuideSitemapUrls(),
@@ -57,7 +58,7 @@ export async function POST(request: Request) {
   }
 
   const host = new URL(siteUrl()).hostname;
-  const urlList = parsed.data.urls?.length ? parsed.data.urls : defaultUrls(catalog);
+  const urlList = parsed.data.urls?.length ? parsed.data.urls : await defaultUrls(catalog);
   const response = await fetch("https://api.indexnow.org/indexnow", {
     method: "POST",
     headers: { "Content-Type": "application/json; charset=utf-8" },

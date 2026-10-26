@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,400,0..1,0&display=block" rel="stylesheet">
+<script src="uv-data.js"></script>
+<style>body{margin:0;font-family:'Plus Jakarta Sans',system-ui,sans-serif;color:#16133F;-webkit-font-smoothing:antialiased}*{box-sizing:border-box}a{color:#5B4CF0;text-decoration:none}a:hover{color:#4A3BDB;text-decoration:underline}</style>
+</helmet>
+<div data-screen-label="Shortlist" style="min-height:100vh;display:flex;flex-direction:column;background:#fff">
+<dc-import name="UVHeader" active="" hint-size="100%,68px" style="position:sticky;top:0;z-index:40;display:block"></dc-import>
+<section style="background:radial-gradient(520px 280px at 90% 0%,#E6E1FF 0%,rgba(230,225,255,0) 70%),linear-gradient(180deg,#F7F5FF,#FBFAFF);border-bottom:1px solid #EEECF8">
+  <div style="max-width:1240px;margin:0 auto;padding:22px clamp(16px,3vw,32px) 28px;display:flex;flex-wrap:wrap;justify-content:space-between;align-items:end;gap:16px">
+    <div>
+      <div style="font-size:13px;color:#6F6D8C;display:flex;gap:6px;align-items:center"><a href="Home.dc.html">Home</a><span style="font-family:'Material Symbols Rounded';font-size:16px">chevron_right</span><span style="color:#16133F">My shortlist</span></div>
+      <h1 style="margin:14px 0 0;font-size:clamp(30px,4.2vw,46px);letter-spacing:-0.035em;font-weight:800">My shortlist</h1>
+      <p style="margin:8px 0 0;color:#4A4867;font-size:16px">{{ sub }}</p>
+    </div>
+    <sc-if value="{{ has }}"><div style="display:flex;gap:8px;flex-wrap:wrap"><a href="{{ compareHref }}" style="padding:12px 18px;border-radius:11px;background:#5B4CF0;color:#fff;font-weight:700;text-decoration:none;display:flex;align-items:center;gap:6px"><span style="font-family:'Material Symbols Rounded';font-size:20px">compare_arrows</span>Compare {{ cmpN }}</a><div onClick="{{ clear }}" style="cursor:pointer;padding:11px 16px;border-radius:11px;border:1px solid #E4E1F3;font-weight:700;color:#4A4867;background:#fff">Clear all</div></div></sc-if>
+  </div>
+</section>
+<main style="flex:1;max-width:1240px;width:100%;margin:0 auto;padding:28px clamp(16px,3vw,32px) 0;display:flex;flex-direction:column;gap:32px">
+  <sc-if value="{{ has }}">
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,300px),1fr));gap:14px"><sc-for list="{{ ids }}" as="id" hint-placeholder-count="3"><dc-import name="UVCard" course-id="{{ id }}" hint-size="100%,300px"></dc-import></sc-for></div>
+    <div style="border-radius:18px;background:linear-gradient(135deg,#F4F2FF,#EEEAFF);padding:22px;display:flex;flex-wrap:wrap;gap:16px;align-items:center;justify-content:space-between">
+      <div style="display:flex;gap:14px;align-items:center"><span style="width:52px;height:52px;border-radius:50%;background:#fff;color:#5B4CF0;display:flex;align-items:center;justify-content:center;font-family:'Material Symbols Rounded';font-size:26px">support_agent</span><div><div style="font-weight:800;font-size:17px">Get a second opinion on your shortlist</div><div style="font-size:14px;color:#4A4867">A counsellor will review it against your career plan — free.</div></div></div>
+      <a href="Apply.dc.html" style="padding:12px 18px;border-radius:11px;background:#5B4CF0;color:#fff;font-weight:700;text-decoration:none">Apply now</a>
+    </div>
+  </sc-if>
+  <sc-if value="{{ empty }}">
+    <div style="padding:clamp(32px,6vw,64px) 20px;text-align:center;border:1.5px dashed #D6D0FA;border-radius:20px;display:flex;flex-direction:column;align-items:center;gap:12px">
+      <div style="position:relative;width:180px;height:130px;margin:0 auto"><div style="position:absolute;left:18px;top:22px;width:120px;height:84px;border-radius:16px;background:#ECE9FE;transform:rotate(-8deg)"></div><div style="position:absolute;left:44px;top:14px;width:120px;height:84px;border-radius:16px;background:#fff;border:1px solid #E4E1F3;box-shadow:0 14px 30px -18px rgba(60,45,170,0.45);transform:rotate(6deg);padding:14px;display:flex;flex-direction:column;gap:8px"><div style="height:8px;width:60%;border-radius:4px;background:#ECE9FE"></div><div style="height:8px;width:85%;border-radius:4px;background:#F3F1F9"></div><div style="height:8px;width:45%;border-radius:4px;background:#F3F1F9"></div></div><div style="position:absolute;left:62px;top:64px;width:56px;height:56px;border-radius:50%;background:#5B4CF0;color:#fff;display:flex;align-items:center;justify-content:center;font-family:'Material Symbols Rounded';font-size:28px;box-shadow:0 10px 24px -8px rgba(91,76,240,0.6)">bookmark</div><div style="position:absolute;right:4px;top:6px;width:10px;height:10px;border-radius:50%;background:#F0A30A"></div><div style="position:absolute;left:6px;bottom:10px;width:8px;height:8px;border-radius:50%;background:#12A35C"></div></div>
+      <div style="font-size:22px;font-weight:800">Your shortlist is empty</div>
+      <div style="color:#4A4867;max-width:420px">Tap the bookmark on any program to save it here. Your shortlist stays on this device.</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:center;margin-top:8px"><a href="Courses.dc.html" style="padding:12px 18px;border-radius:11px;background:#5B4CF0;color:#fff;font-weight:700;text-decoration:none">Browse programs</a><a href="Recommender.dc.html" style="padding:11px 18px;border-radius:11px;border:1px solid #D6D0FA;font-weight:700">Find my fit</a></div>
+    </div>
+    <section><h2 style="margin:0 0 16px;font-size:clamp(22px,3vw,28px);letter-spacing:-0.025em;font-weight:800">Popular with learners</h2><div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,300px),1fr));gap:14px"><sc-for list="{{ suggest }}" as="id" hint-placeholder-count="3"><dc-import name="UVCard" course-id="{{ id }}" hint-size="100%,300px"></dc-import></sc-for></div></section>
+  </sc-if>
+</main>
+<dc-import name="UVFooter" hint-size="100%,360px"></dc-import>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  state = { t: 0 };
+  componentDidMount() { this._s = () => this.setState(s => ({ t: s.t + 1 })); window.addEventListener('uv-store', this._s); if (!window.UV) this._i = setInterval(() => { if (window.UV) { clearInterval(this._i); this._s(); } }, 50); }
+  componentWillUnmount() { window.removeEventListener('uv-store', this._s); clearInterval(this._i); }
+  renderVals() {
+    const UV = window.UV; const ids = UV ? UV.store.saved().filter(id => UV.byId(id)) : [];
+    return { ids, has: ids.length > 0, empty: !ids.length, sub: ids.length ? ids.length + ' saved program' + (ids.length > 1 ? 's' : '') + ' · saved on this device' : 'Save programs to compare and revisit later.',
+      cmpN: Math.min(3, ids.length), compareHref: 'Compare.dc.html?ids=' + ids.slice(0, 3).join(','), clear: () => UV && UV.store.set('saved', []), suggest: ['mba-muj', 'mca-smu', 'bca-muj'] };
+  }
+}
+</script>
+</body>
+</html>

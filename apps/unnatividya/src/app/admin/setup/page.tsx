@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
+import Image from "next/image";
 import { query } from "@/lib/db";
 import { SetupForm } from "@/components/setup-form";
 
@@ -17,11 +18,12 @@ export default async function AdminSetupPage() {
   }
 
   return (
-    <section className="admin-shell">
+    <section className="admin-shell admin-auth">
       <div className="container">
         <div className="card admin-card">
+          <Image src="/brand/unnatividya-logo-gradient.svg" alt="Unnati Vidya" width={172} height={28} className="admin-auth-logo" priority />
           <span className="eyebrow">One-time setup</span>
-          <h1 className="section-title" style={{ fontSize: 32 }}>
+          <h1 className="admin-auth-title">
             Create CMS admin
           </h1>
           <p>

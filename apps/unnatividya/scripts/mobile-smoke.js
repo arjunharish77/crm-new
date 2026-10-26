@@ -2,7 +2,10 @@ const fs = require("fs");
 const path = require("path");
 
 const root = path.join(__dirname, "..");
-const css = fs.readFileSync(path.join(root, "src", "styles", "globals.css"), "utf8");
+// The legacy sheet plus the UI-redesign sheets (src/styles/ui/*.css), all loaded by the root layout.
+const uiDir = path.join(root, "src", "styles", "ui");
+const css = [fs.readFileSync(path.join(root, "src", "styles", "globals.css"), "utf8"),
+  ...fs.readdirSync(uiDir).filter((file) => file.endsWith(".css")).map((file) => fs.readFileSync(path.join(uiDir, file), "utf8"))].join("\n");
 const leadPage = fs.readFileSync(path.join(root, "src", "app", "lead", "page.tsx"), "utf8");
 const loader = fs.readFileSync(path.join(root, "src", "components", "lead-form-loader.tsx"), "utf8");
 
@@ -11,15 +14,16 @@ function assert(condition, message) {
 }
 
 assert(css.includes("@media (max-width: 900px)"), "Missing primary mobile breakpoint");
-assert(css.includes(".grid.three") && css.includes("grid-template-columns: 1fr"), "Grid collapse rule is missing");
-assert(css.includes(".search-panel") && css.includes("flex-direction: column"), "Search panel mobile stacking is missing");
-assert(css.includes(".article-layout") && css.includes("grid-template-columns: 1fr"), "Article layout mobile stacking is missing");
+// UI redesign: card grids are fluid (one column on phones without a breakpoint); page layouts are
+// checked for horizontal overflow at 320–1440px by the browser suites.
+assert(/\.uv-card-grid \{[^}]*minmax\(min\(100%, /.test(css), "Fluid card grid rule is missing");
 assert(css.includes(".admin-grid") && css.includes("grid-template-columns: 1fr"), "Admin grid mobile stacking is missing");
-assert(
-  css.includes(".sticky-ctas") && css.includes("right: 12px") && css.includes("bottom: 12px") && css.includes("left: auto"),
-  "Sticky CTA mobile positioning is missing"
-);
-assert(css.includes(".callback-pill") && css.includes("width: 58px"), "Floating callback button sizing is missing");
+// UI redesign: the header switches to the menu below 1080px; the sticky mobile bar (Home and course
+// pages only, Q16) appears below 860px and reserves space at the end of the page.
+assert(css.includes("@media (max-width: 1079px)") && css.includes(".uvh-mobile-only"), "Header mobile breakpoint is missing");
+assert(css.includes("@media (max-width: 859px)") && css.includes(".uv-mobile-bar") && css.includes("body:has(.uv-mobile-bar)"), "Mobile action bar rule is missing");
+assert(/@media \(prefers-reduced-motion: reduce\)[\s\S]*animation-duration: 0\.01ms !important/.test(css), "Global reduced-motion rule is missing");
+assert(css.includes("@media print") && css.includes(".uv-reveal { animation: none !important"), "Entrance motion must be disabled for print");
 // Viewport units are allowed only inside clamp() with fixed limits, which still scales with browser zoom.
 assert(!/font-size:[ \t]*(?![ \t]|clamp\()[^;]*(vw|vh)/.test(css), "Viewport-scaled font-size found outside clamp()");
 // The application page was rebuilt in increment 41 (form beside its explanation); its layout is covered

@@ -1,71 +1,69 @@
 import Link from "next/link";
 import Image from "next/image";
+import { approvalIconWidth } from "@/lib/approval-icons";
+import { NewsletterSignup } from "@/components/newsletter-signup";
+import { SocialLinks } from "@/components/social-links";
+
+// Footer from the design handoff (UVFooter) with the owner's required items: newsletter sign-up,
+// all tools, Articles at /blog, email instead of a phone (§11 #16) and "How we verify" beside
+// the institution badges (UI redesign Q12).
+const columns: Array<{ title: string; label: string; links: Array<[string, string]> }> = [
+  { title: "Explore", label: "Explore the website", links: [
+    ["/courses", "All courses"], ["/universities", "Universities"], ["/compare", "Compare programs"],
+    ["/recommender", "Find my course"], ["/specializations", "Specializations"], ["/shortlist", "Saved courses"],
+  ] },
+  { title: "Popular degrees", label: "Popular degrees", links: [
+    ["/courses/online-mba-manipal-university-jaipur", "Online MBA"], ["/courses/online-bca-manipal-university-jaipur", "Online BCA"],
+    ["/courses/online-mca-manipal-university-jaipur", "Online MCA"], ["/courses/online-bcom-manipal-university-jaipur", "Online B.Com"],
+    ["/courses/online-msc-data-science-amity-online", "Online MSc Data Science"],
+  ] },
+  // Tools in the header menu's order: choose, afford, apply, study.
+  { title: "Tools", label: "Learner tools", links: [
+    ["/tools/mode-helper", "Mode helper"], ["/tools/specialization-finder", "Specialization finder"], ["/tools/eligibility-checker", "Eligibility checker"],
+    ["/tools/emi-calculator", "EMI calculator"], ["/tools/total-cost", "Total cost planner"],
+    ["/tools/recognition-check", "Recognition check"], ["/tools/document-checklist", "Document checklist"],
+    ["/tools/study-planner", "Study-time planner"], ["/tools/exam-check", "Exams and device check"],
+  ] },
+  { title: "Resources", label: "Guides and articles", links: [
+    ["/online-degree-guides", "Degree guides"], ["/online-degree-guides/fees", "Fees and EMI"], ["/online-degree-guides/admissions", "Admissions"],
+    ["/online-degree-guides/international", "Applying from outside India"], ["/blog", "Articles"],
+  ] },
+  { title: "Company", label: "About and support", links: [
+    ["/about", "About us"], ["/how-we-verify", "How we verify our data"],
+  ] },
+];
 
 export function SiteFooter() {
-  return (
-    <footer className="site-footer" style={{ background: "#263238", color: "#B8C4CA", marginTop: "auto" }}>
-      <div className="uv-footer-grid" style={{ maxWidth: 1200, margin: "0 auto", padding: "48px 24px 32px", display: "grid", gridTemplateColumns: "1.4fr 1fr 1fr 1fr", gap: 32 }}>
-          <div>
-            <Image
-              src="/brand/unnatividya-logo-white.svg"
-              alt="Unnati Vidya"
-              width={174}
-              height={32}
-              style={{ height: 24, width: "auto", display: "block" }}
-            />
-            <p style={{ fontSize: 13, lineHeight: 1.6, marginTop: 12, maxWidth: 280 }}>
-              India&apos;s unbiased marketplace for UGC-entitled online degrees. Compare, get
-              counselled, enrol — all free.
-            </p>
-            <div style={{ display: "flex", gap: 10, marginTop: 16, flexWrap: "wrap" }}>
-              {[
-                { src: "/approvals/ugc.svg", label: "UGC" },
-                { src: "/approvals/naac.svg", label: "NAAC" },
-                { src: "/approvals/aicte.svg", label: "AICTE" },
-              ].map((badge) => (
-                <span key={badge.src} style={{ background: "#fff", borderRadius: 4, height: 30, width: 56, padding: "4px 8px", display: "inline-flex", alignItems: "center", justifyContent: "center", position: "relative" }}>
-                  <Image src={badge.src} alt={badge.label} fill sizes="56px" style={{ objectFit: "contain", padding: 4 }} />
-                </span>
-              ))}
-            </div>
-          </div>
-          <nav aria-label="Explore the website" className="footer-links">
-            <h2>Explore</h2>
-            <Link href="/courses" style={{ color: "#B8C4CA" }}>All courses</Link>
-            <Link href="/universities" style={{ color: "#B8C4CA" }}>Universities</Link>
-            <Link href="/compare" style={{ color: "#B8C4CA" }}>Compare programs</Link>
-            <Link href="/recommender" style={{ color: "#B8C4CA" }}>Find my course</Link>
-            <Link href="/online-degree-guides" style={{ color: "#B8C4CA" }}>Degree guides</Link>
-            <Link href="/specializations" style={{ color: "#B8C4CA" }}>Specializations</Link>
-            <Link href="/tools/emi-calculator" style={{ color: "#B8C4CA" }}>EMI calculator</Link>
-          </nav>
-          <nav aria-label="Featured courses" className="footer-links">
-            <h2>Courses</h2>
-            <Link href="/courses/online-mba-manipal-university-jaipur" style={{ color: "#B8C4CA" }}>Online MBA</Link>
-            <Link href="/courses/online-bca-manipal-university-jaipur" style={{ color: "#B8C4CA" }}>Online BCA</Link>
-            <Link href="/courses/online-mca-manipal-university-jaipur" style={{ color: "#B8C4CA" }}>Online MCA</Link>
-            <Link href="/courses/online-bcom-manipal-university-jaipur" style={{ color: "#B8C4CA" }}>Online B.Com</Link>
-            <Link href="/courses/online-msc-data-science-amity-online" style={{ color: "#B8C4CA" }}>Online MSc Data Science</Link>
-          </nav>
-          <nav aria-label="About and support" className="footer-links">
-            <h2>Company</h2>
-            <Link href="/blog" style={{ color: "#B8C4CA" }}>Articles</Link>
-            <Link href="/about" style={{ color: "#B8C4CA" }}>About us</Link>
-            <Link href="/how-we-verify" style={{ color: "#B8C4CA" }}>How we verify our data</Link>
-            <Link href="/shortlist" style={{ color: "#B8C4CA" }}>My shortlist</Link>
-            <Link href="/lead?intent=footer" data-open-lead className="btn primary footer-apply">Apply now</Link>
-            <a href="tel:18001204050" style={{ color: "#B8C4CA" }}>Call 1800-120-4050</a>
-          </nav>
-      </div>
-      <div style={{ borderTop: "1px solid rgba(255,255,255,0.10)" }}>
-        <div style={{ maxWidth: 1200, margin: "0 auto", padding: "16px 24px", fontSize: 12, display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
-          <span>© 2026 Unnati Vidya</span>
-          <nav aria-label="Legal policies" className="footer-policies">
-            <Link href="/privacy" style={{ color: "#B8C4CA" }}>Privacy</Link> <Link href="/terms" style={{ color: "#B8C4CA" }}>Terms</Link>{" "}
-            <Link href="/refund-policy" style={{ color: "#B8C4CA" }}>Refund policy</Link>
-          </nav>
+  return <footer className="uvf">
+    <div className="uvf-grid">
+      <div className="uvf-brand">
+        <Image src="/brand/unnatividya-logo-white.svg" alt="Unnati Vidya" width={197} height={32} className="uvf-logo" />
+        <p>India&apos;s unbiased marketplace for online degrees from UGC-entitled universities. Compare, get counselled, enrol — all free.</p>
+        <div className="uvf-badges">
+          {[["ugc", "UGC"], ["naac", "NAAC"], ["aicte", "AICTE"]].map(([slug, label]) => (
+            <span key={slug} className="uvf-badge"><Image src={`/approvals/${slug}.svg`} alt={label} width={approvalIconWidth(`/approvals/${slug}.svg`, 26)} height={26} /></span>
+          ))}
+          <Link href="/how-we-verify" className="uvf-verify">How we verify →</Link>
         </div>
+        <SocialLinks />
       </div>
-    </footer>
-  );
+      {columns.map(column => <nav key={column.title} className="uvf-col" aria-label={column.label}>
+        <h2>{column.title}</h2>
+        {column.links.map(([href, label]) => <Link key={href} href={href}>{label}</Link>)}
+        {column.title === "Company" ? <>
+          <Link href="/lead?intent=footer" rel="nofollow" data-open-lead>Apply now</Link>
+          <a href="mailto:admin@unnatividya.com" className="uvf-contact">admin@unnatividya.com</a>
+        </> : null}
+      </nav>)}
+    </div>
+    <div className="uvf-news"><NewsletterSignup /></div>
+    <div className="uvf-bottom">
+      <span>© 2026 Unnati Vidya. All rights reserved.</span>
+      <nav aria-label="Legal policies">
+        <Link href="/privacy">Privacy</Link>
+        <Link href="/terms">Terms</Link>
+        <Link href="/refund-policy">Refund policy</Link>
+      </nav>
+    </div>
+  </footer>;
 }

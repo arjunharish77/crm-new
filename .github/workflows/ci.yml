@@ -1,9 +1,11 @@
 # Round-2 plan O6, T1 and O4. Every push and pull request: lockfile and settings checks, type
 # check, lint, unit tests, migrations on a fresh database, every database smoke test, the
 # production build, the API regression against that build, secret and dependency scans, and the
-# Docker image with an image scan. Publishing to GitHub Container Registry (sha-<short commit> and
-# latest, deployed with deploy/vps/scripts/deploy.sh) is off until the repository variable
-# PUBLISH_IMAGE is set to true (Settings › Secrets and variables › Actions › Variables).
+# Docker image with an image scan. The website (apps/unnatividya) has its own job: lint, types,
+# a fresh database, the production build and every website smoke suite. Publishing to GitHub
+# Container Registry (sha-<short commit> and latest, deployed with deploy/vps/scripts/deploy.sh)
+# is off until the repository variable PUBLISH_IMAGE is set to true (Settings › Secrets and
+# variables › Actions › Variables).
 name: CI
 
 on:
@@ -126,6 +128,86 @@ jobs:
         run: |
           tail -200 server.log || true
           tail -200 worker.log || true
+
+  website:
+    # Unnatividya website (apps/unnatividya, next-phase plan §8): its own lint and type check,
+    # migrations on a fresh database, the catalog seeded and published, the production build run
+    # the way the Docker image runs it (standalone server.js with the full node_modules), then
+    # every website smoke suite, browser suites included, against that server. No real email or
+    # CRM delivery: ZeptoMail and CRM sync are not configured here.
+    name: Website (lint, types, build, smoke suites)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: unnatividya_app
+          POSTGRES_PASSWORD: unnatividya_app
+          POSTGRES_DB: unnatividya
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd pg_isready --health-interval 10s --health-timeout 5s --health-retries 5
+    env:
+      UNNATIVIDYA_DATABASE_URL: postgresql://unnatividya_app:unnatividya_app@localhost:5432/unnatividya
+      UNNATIVIDYA_SESSION_SECRET: ci-website-session-secret-do-not-use-0123456789
+      NEXT_PUBLIC_UNNATIVIDYA_SITE_URL: http://localhost:3100
+      UV_TEST_URL: http://localhost:3100
+      SMOKE_BASE_URL: http://localhost:3100
+      UV_BROWSER_SMOKE: "1"
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - name: Install (frozen lockfile)
+        run: npm ci
+      - name: Lint
+        run: npx eslint apps/unnatividya/src
+      - name: Catalog export and validator
+        run: npm run unnatividya:export-catalog
+      - name: Type check
+        run: npx tsc --noEmit -p apps/unnatividya
+      - name: Migrations, catalog, article and guide seed, publication
+        run: |
+          node apps/unnatividya/scripts/db-migrate-local.js
+          node apps/unnatividya/scripts/sync-catalog-to-db.js
+          node apps/unnatividya/scripts/sync-articles-to-db.js
+          node apps/unnatividya/scripts/sync-guides-to-db.js
+          # The seed creates unpublished drafts; publish them for the public-page suites.
+          node -e 'const {Client}=require("pg");const c=new Client({connectionString:process.env.UNNATIVIDYA_DATABASE_URL});c.connect().then(()=>c.query("update university set status=$1, is_published=true",["PUBLISHED"])).then(()=>c.query("update course set status=$1, is_published=true",["PUBLISHED"])).then(()=>c.end())'
+          node apps/unnatividya/scripts/check-catalog-ready.js
+      - name: Production build
+        run: npm run unnatividya:build
+      - name: Browser for the UI suites
+        run: |
+          npm install --no-save playwright@1.62.1
+          npx playwright install --with-deps chromium
+      - name: Start the standalone server (as in the Docker image)
+        run: |
+          mkdir -p "$RUNNER_TEMP/uv"
+          cp -R apps/unnatividya/.next/standalone/. "$RUNNER_TEMP/uv/"
+          rm -rf "$RUNNER_TEMP/uv/node_modules"
+          ln -s "$GITHUB_WORKSPACE/node_modules" "$RUNNER_TEMP/uv/node_modules"
+          mkdir -p "$RUNNER_TEMP/uv/.next"
+          cp -R apps/unnatividya/.next/static "$RUNNER_TEMP/uv/.next/static"
+          cp -R apps/unnatividya/public "$RUNNER_TEMP/uv/public"
+          (cd "$RUNNER_TEMP/uv" && NODE_ENV=production PORT=3100 HOSTNAME=0.0.0.0 nohup node server.js > "$RUNNER_TEMP/uv-server.log" 2>&1 &)
+          for i in $(seq 1 60); do curl -sf -o /dev/null http://localhost:3100/ && exit 0; sleep 1; done
+          cat "$RUNNER_TEMP/uv-server.log"; exit 1
+      - name: Website smoke suites
+        run: |
+          failed=0
+          for f in apps/unnatividya/scripts/*-smoke.cjs apps/unnatividya/scripts/*-smoke.js; do
+            echo "::group::$f"
+            if ! node "$f"; then failed=$((failed+1)); echo "::error file=$f::smoke suite failed"; fi
+            echo "::endgroup::"
+          done
+          test "$failed" -eq 0
+      - name: Server log
+        if: always()
+        run: tail -n 200 "$RUNNER_TEMP/uv-server.log" || true
 
   security:
     name: Secret and dependency scans

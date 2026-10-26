@@ -1,8 +1,10 @@
 # Unnati Vidya: technical SEO audit
 
+> **Historical live crawl (5 October 2026), not a current production certification.** Local Waves 1–3 addressed several findings; the latest code has not been pushed to the VPS. Use [current status](../CURRENT_STATUS_AND_RELEASE_PLAN.md) and re-crawl after release. The `seo-crawl.json`, `lh/`, `html/` and `text/` artifacts cited below are **not present in this repository**; the aggregate measurements cannot be independently reproduced from this folder. Preserve/export those artifacts if available, or treat the reported figures as audit observations with that limitation. Later owner decision 17 chose **GA4-only**, superseding this report's GTM option.
+
 **Date:** 5 October 2026 · **Site:** https://unnatividya.com · **Source:** `crm/apps/unnatividya` (Next.js 16.1.6, React 19.2.3, Caddy in front)
 **Method:** I crawled every sitemap URL once, one request at a time, with a desktop Chrome user agent and a 0.35 s delay between requests. About 310 HTML requests went to the site in total, plus 6 Lighthouse page loads. I also parsed JSON-LD, compared page shingles and built an internal-link graph from the crawl. I made no repo changes and submitted no forms.
-**Raw data:** `seo-crawl.json` (in this folder) holds per-page records, the link graph, duplicate clusters, the Lighthouse summary, redirect checks and external-link checks. The `lh/` folder has the full Lighthouse JSON. The `html/` and `text/` folders have raw HTML and extracted text.
+**Raw data:** The audit originally referenced `seo-crawl.json`, `lh/`, `html/` and `text/`, but none is present in this repository. The measurements below are retained as a dated report, without its raw crawl files.
 
 ---
 

@@ -51,7 +51,7 @@ export function ManualCrmPushButton({ leadId }: { leadId: string }) {
   return (
     <div className="manual-push-box" aria-busy={status === "previewing" || status === "queueing"}>
       <p>Preview the mapped data or queue a delivery attempt to the configured CRM.</p>
-      <div className="course-actions" style={{ marginTop: 0 }}>
+      <div className="course-actions">
         <button className="btn ghost" type="button" onClick={previewPayload} disabled={status === "previewing" || status === "queueing"}>
           {status === "previewing" ? "Previewing..." : "Preview payload"}
         </button>

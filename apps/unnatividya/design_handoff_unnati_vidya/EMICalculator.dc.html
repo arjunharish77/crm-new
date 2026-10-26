@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,400,0..1,0&display=block" rel="stylesheet">
+<script src="uv-data.js"></script>
+<style>body{margin:0;font-family:'Plus Jakarta Sans',system-ui,sans-serif;color:#16133F;-webkit-font-smoothing:antialiased}*{box-sizing:border-box}a{color:#5B4CF0;text-decoration:none}a:hover{color:#4A3BDB;text-decoration:underline}select,input{font-family:inherit}</style>
+</helmet>
+<div data-screen-label="EMI calculator" style="min-height:100vh;display:flex;flex-direction:column;background:#fff">
+<dc-import name="UVHeader" active="tools" hint-size="100%,68px" style="position:sticky;top:0;z-index:40;display:block"></dc-import>
+<section style="background:radial-gradient(520px 280px at 90% 0%,#E6E1FF 0%,rgba(230,225,255,0) 70%),linear-gradient(180deg,#F7F5FF,#FBFAFF);border-bottom:1px solid #EEECF8">
+  <div style="max-width:1240px;margin:0 auto;padding:22px clamp(16px,3vw,32px) 28px">
+    <div style="font-size:13px;color:#6F6D8C;display:flex;gap:6px;align-items:center"><a href="Home.dc.html">Home</a><span style="font-family:'Material Symbols Rounded';font-size:16px">chevron_right</span><span>Tools</span><span style="font-family:'Material Symbols Rounded';font-size:16px">chevron_right</span><span style="color:#16133F">EMI calculator</span></div>
+    <h1 style="margin:14px 0 0;font-size:clamp(30px,4.2vw,46px);letter-spacing:-0.035em;font-weight:800">EMI calculator</h1>
+    <p style="margin:8px 0 0;color:#4A4867;font-size:16px">Estimate your monthly payment for any program before you speak to the university.</p>
+  </div>
+</section>
+<main style="flex:1;max-width:1240px;width:100%;margin:0 auto;padding:28px clamp(16px,3vw,32px) 0;display:flex;flex-direction:column;gap:32px">
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,400px),1fr));gap:20px;align-items:start">
+    <div style="border:1px solid #E8E6F3;border-radius:18px;padding:24px;display:flex;flex-direction:column;gap:24px">
+      <label style="display:flex;flex-direction:column;gap:8px"><span style="font-size:14px;font-weight:800">Program</span>
+        <select onChange="{{ setId }}" value="{{ id }}" style="padding:13px 14px;border-radius:12px;border:1px solid #E4E1F3;font-size:15px;font-weight:600;background:#fff"><sc-for list="{{ options }}" as="o" hint-placeholder-count="1"><option value="{{ o.id }}">{{ o.label }}</option></sc-for></select>
+      </label>
+      <div><div style="display:flex;justify-content:space-between;font-size:14px;font-weight:800"><span>Down payment</span><span style="color:#5B4CF0">{{ downF }}</span></div><input type="range" min="0" max="{{ downMax }}" step="5000" value="{{ down }}" onChange="{{ setDown }}" style="width:100%;accent-color:#5B4CF0;margin-top:10px"><div style="display:flex;justify-content:space-between;font-size:12px;color:#6F6D8C"><span>₹0</span><span>{{ downMaxF }}</span></div></div>
+      <div><div style="font-size:14px;font-weight:800;margin-bottom:10px">Tenure</div><div style="display:grid;grid-template-columns:repeat(5,1fr);gap:6px"><sc-for list="{{ tenures }}" as="t" hint-placeholder-count="5"><div onClick="{{ t.pick }}" style="cursor:pointer;text-align:center;padding:11px 4px;border-radius:10px;font-size:14px;font-weight:700;border:1px solid {{ t.bd }};background:{{ t.bg }};color:{{ t.c }}">{{ t.label }}</div></sc-for></div></div>
+      <div><div style="display:flex;justify-content:space-between;font-size:14px;font-weight:800"><span>Interest rate (p.a.)</span><span style="color:#5B4CF0">{{ rateLabel }}</span></div><input type="range" min="0" max="18" step="0.5" value="{{ rate }}" onChange="{{ setRate }}" style="width:100%;accent-color:#5B4CF0;margin-top:10px"><div style="font-size:12px;color:#6F6D8C;margin-top:2px">0% = no-cost EMI through university loan partners.</div></div>
+    </div>
+    <div style="border-radius:18px;padding:28px;background:#16133F;color:#fff;display:flex;flex-direction:column;gap:20px">
+      <div><div style="font-size:14px;color:#B7B3E6;font-weight:600">Your monthly EMI</div><div style="font-size:clamp(40px,6vw,56px);font-weight:800;letter-spacing:-0.03em;margin-top:4px">{{ emiF }}</div><div style="font-size:14px;color:#B7B3E6">for {{ n }} months · {{ c.title }}, {{ c.uniShort }}</div></div>
+      <div style="height:12px;border-radius:6px;background:rgba(255,255,255,0.12);display:flex;overflow:hidden"><div style="width:{{ downPct }};background:#8B7CFF"></div><div style="width:{{ principalPct }};background:#fff"></div><div style="width:{{ interestPct }};background:#F0A30A"></div></div>
+      <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:14px">
+        <div><div style="display:flex;gap:6px;align-items:center;font-size:12px;color:#B7B3E6"><span style="width:10px;height:10px;border-radius:3px;background:#8B7CFF"></span>Down payment</div><div style="font-weight:800;font-size:18px;margin-top:2px">{{ downF }}</div></div>
+        <div><div style="display:flex;gap:6px;align-items:center;font-size:12px;color:#B7B3E6"><span style="width:10px;height:10px;border-radius:3px;background:#fff"></span>Loan amount</div><div style="font-weight:800;font-size:18px;margin-top:2px">{{ loanF }}</div></div>
+        <div><div style="display:flex;gap:6px;align-items:center;font-size:12px;color:#B7B3E6"><span style="width:10px;height:10px;border-radius:3px;background:#F0A30A"></span>Total interest</div><div style="font-weight:800;font-size:18px;margin-top:2px">{{ interestF }}</div></div>
+        <div><div style="font-size:12px;color:#B7B3E6">Total payable</div><div style="font-weight:800;font-size:18px;margin-top:2px">{{ totalF }}</div></div>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:auto"><a href="{{ c.applyHref }}" style="flex:1 1 160px;text-align:center;padding:13px;border-radius:11px;background:#fff;color:#16133F;font-weight:800;text-decoration:none">Check loan eligibility</a><a href="{{ c.href }}" style="flex:1 1 160px;text-align:center;padding:12px;border-radius:11px;border:1px solid rgba(255,255,255,0.3);color:#fff;font-weight:700;text-decoration:none">View program</a></div>
+      <div style="font-size:12px;color:#9C98CC">Estimate only. Final EMI depends on lender approval and current university terms.</div>
+    </div>
+  </div>
+  <section>
+    <h2 style="margin:0 0 14px;font-size:clamp(20px,2.6vw,26px);letter-spacing:-0.02em;font-weight:800">Same plan, other universities</h2>
+    <div style="border:1px solid #E8E6F3;border-radius:16px;overflow-x:auto"><div style="min-width:520px">
+      <div style="display:grid;grid-template-columns:2fr 1fr 1fr 1fr;background:#F8F7FD;border-bottom:1px solid #E8E6F3;font-size:13px;font-weight:800;color:#4A4867"><div style="padding:12px 16px">Program</div><div style="padding:12px 16px">Total fee</div><div style="padding:12px 16px">Your EMI</div><div style="padding:12px 16px"></div></div>
+      <sc-for list="{{ peers }}" as="p" hint-placeholder-count="0"><div style="display:grid;grid-template-columns:2fr 1fr 1fr 1fr;border-bottom:1px solid #F3F2F9;align-items:center;background:{{ p.bg }}"><div style="padding:12px 16px;display:flex;gap:10px;align-items:center;font-weight:700;font-size:14px"><img src="{{ p.logo }}" alt="" style="width:24px;height:24px;object-fit:contain">{{ p.title }} — {{ p.uniShort }}</div><div style="padding:12px 16px;font-size:14px">{{ p.feeF }}</div><div style="padding:12px 16px;font-size:14px;font-weight:800">{{ p.myEmi }}</div><div style="padding:12px 16px"><span onClick="{{ p.pick }}" style="cursor:pointer;font-size:13px;font-weight:700;color:#5B4CF0">Use this →</span></div></div></sc-for>
+    </div></div>
+  </section>
+  <section><dc-import name="UVFaq" items="{{ faq }}" title="EMI questions" subtitle="How financing works for online degrees." hint-size="100%,220px"></dc-import></section>
+</main>
+<dc-import name="UVFooter" hint-size="100%,360px"></dc-import>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  state = { ok: !!window.UV, id: 'mba-muj', down: 0, n: 24, rate: 0 };
+  componentDidMount() {
+    const init = () => { const id = window.UV.q('id'); if (id && window.UV.byId(id)) this.setState({ id, n: window.UV.byId(id).months }); else this.setState({ ok: true }); };
+    if (window.UV) init(); else this._i = setInterval(() => { if (window.UV) { clearInterval(this._i); init(); } }, 50);
+  }
+  componentWillUnmount() { clearInterval(this._i); }
+  calc(fee, down, n, rate) { const P = Math.max(0, fee - down), r = rate / 1200; const e = r ? P * r * Math.pow(1 + r, n) / (Math.pow(1 + r, n) - 1) : P / n; return { P, e, interest: e * n - P }; }
+  renderVals() {
+    const UV = window.UV, s = this.state; if (!UV) return { c: {}, options: [], tenures: [], peers: [], faq: [] };
+    const c = UV.card(UV.byId(s.id)), down = Math.min(s.down, c.fee * 0.5), { P, e, interest } = this.calc(c.fee, down, s.n, s.rate), total = down + P + interest;
+    const pct = v => (total ? v / total * 100 : 0).toFixed(1) + '%';
+    return { c, id: s.id, n: s.n, rate: s.rate, down,
+      options: UV.C.map(x => ({ id: x.id, label: x.title + ' — ' + UV.UNIS[x.uni].short + ' (' + UV.inr(x.fee) + ')' })),
+      setId: ev => this.setState({ id: ev.target.value, down: 0 }), setDown: ev => this.setState({ down: +ev.target.value }), setRate: ev => this.setState({ rate: +ev.target.value }),
+      downF: UV.inr(down), downMax: Math.round(c.fee * 0.5 / 5000) * 5000, downMaxF: UV.inr(c.fee * 0.5), rateLabel: s.rate === 0 ? 'No-cost' : s.rate + '%',
+      tenures: [6, 12, 18, 24, 36].map(t => ({ label: t + 'm', pick: () => this.setState({ n: t }), bg: s.n === t ? '#5B4CF0' : '#fff', c: s.n === t ? '#fff' : '#2B2950', bd: s.n === t ? '#5B4CF0' : '#E4E1F3' })),
+      emiF: UV.inr(e), loanF: UV.inr(P), interestF: UV.inr(interest), totalF: UV.inr(total), downPct: pct(down), principalPct: pct(P), interestPct: pct(interest),
+      peers: UV.C.filter(x => x.short === c.short).map(x => ({ ...UV.card(x), myEmi: UV.inr(this.calc(x.fee, Math.min(down, x.fee * 0.5), s.n, s.rate).e) + '/mo', bg: x.id === c.id ? '#F4F2FF' : '#fff', pick: () => this.setState({ id: x.id }) })),
+      faq: [['What is no-cost EMI?', 'The interest is absorbed by the university or lender, so you pay only the program fee split into monthly instalments.'], ['Can I pay semester-wise instead?', 'Yes — every listed program offers semester-wise payment as well as full payment.'], ['Do I need a co-applicant?', 'This depends on the lender. A counsellor can check your eligibility.'], ['Is there a processing fee?', 'Some lenders charge one. Confirm the total payable and financing charges before applying.']] };
+  }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,401 @@
+{
+  "checkedAt": "2026-10-05",
+  "sources": [
+    {
+      "title": "List of HEIs entitled to start full-fledged Online Programmes from academic year 2026-27, session August, 2026",
+      "url": "https://deb.ugc.ac.in/pdf/HomePageRecognitionDetail/140/140_upload_RecognitionDetails_20260922125253.pdf",
+      "academicYear": "2026-27",
+      "issuedDate": null,
+      "accessed": true,
+      "notes": "Title is the link text on the DEB portal (deb.ugc.ac.in/Recognition, OL > Entitled, Year 2026-27; returned by https://deb.ugc.ac.in/Recognition/SelectDetails?Year=2026-27&RecognitionType=OLE). PDF metadata title 'Entitled Online 2026-27'; 49 pages; table only. No cover letter, F.No., date, signature or conditions are printed in the PDF. The file name timestamp 20260922 suggests a 22 Sep 2026 upload, but that comes from the file name, not a printed date. Text extracted with pdftotext; key pages (30, 32, 33, 41, 42) checked visually as rendered images. The page carries a diagonal 'UNIVERSITY GRANTS COMMISSION' watermark."
+    },
+    {
+      "title": "List of HEIs recognized to offer Online programmes for academic year 2026-27, session August, 2026",
+      "url": "https://deb.ugc.ac.in/pdf/HomePageRecognitionDetail/140/140_upload_RecognitionDetails_20260922125223.pdf",
+      "academicYear": "2026-27",
+      "issuedDate": null,
+      "accessed": true,
+      "notes": "DEB portal OL > Recognised, Year 2026-27 (RecognitionType=OL). PDF metadata title 'Online Eligible 2026-27'; 8 pages; table with a 'PERIOD OF RECOGNITION' column. No printed date or cover letter. File name timestamp 20260922. This list is separate from the 'entitled' list: it covers HEIs recognized under UGC's recognition route, as opposed to HEIs entitled under regulation 3(B)(a). Contains Amity University (Uttar Pradesh) only. No Manipal and no Amity Rajasthan entry."
+    },
+    {
+      "title": "List of HEIs entitled to start full-fledged Online Programmes from academic year 2025-26, session July-August, 2025",
+      "url": "https://deb.ugc.ac.in/pdf/HomePageRecognitionDetail/140/140_upload_RecognitionDetails_20251006094928.pdf",
+      "academicYear": "2025-26",
+      "issuedDate": "03 October, 2025",
+      "accessed": true,
+      "notes": "F.No. 1-10/2025(DEB-SR), signed Prof. Manish R. Joshi, Secretary. Cover letter with conditions: (iii) entitlement lasts only while the HEI meets the NAAC/NIRF requirements; (vi) no franchise arrangements; (viii) HEIs must write 'UGC entitled as per ... Regulations, 2020 and its amendments' instead of 'UGC recognized'. Used only for 2025-26 cross-reference notes."
+    },
+    {
+      "title": "List of HEIs entitled to start full-fledged Online programmes from academic year 2025-26, session January-February, 2026",
+      "url": "https://deb.ugc.ac.in/pdf/HomePageRecognitionDetail/140/140_upload_RecognitionDetails_20260413125255.pdf",
+      "academicYear": "2025-26",
+      "issuedDate": "10 April, 2026",
+      "accessed": true,
+      "notes": "F.No. 1-10/2025(DEB-SR). Used only for cross-reference (MUJ MSc Mathematics)."
+    },
+    {
+      "title": "List of HEIs recognized to offer Online programmes for academic year 2025-26, session July-August, 2025",
+      "url": "https://deb.ugc.ac.in/pdf/HomePageRecognitionDetail/140/140_upload_RecognitionDetails_20251006094629.pdf",
+      "academicYear": "2025-26",
+      "issuedDate": null,
+      "accessed": true,
+      "notes": "Used for cross-reference only. Amity University (UP) S.No. 9 lists the same 6 programmes as the 2026-27 recognized list. I did not check this cover letter's printed date."
+    },
+    {
+      "title": "Caller-supplied: UGC_20250909172155_1.pdf",
+      "url": "https://deb.ugc.ac.in/Uploads/Notices_Upload/UGC_20250909172155_1.pdf",
+      "academicYear": "2025-26",
+      "issuedDate": null,
+      "accessed": true,
+      "notes": "Downloaded. It is an entitled-online table beginning with Andhra University (12 programmes), with no cover page in the extracted text. I did not use it for the results; I used the DEB portal's current 2025-26 and 2026-27 lists instead. I did not establish how this file relates to those lists."
+    },
+    {
+      "title": "Caller-supplied: UGC_20251006094230_1.pdf",
+      "url": "https://deb.ugc.ac.in/Uploads/Notices_Upload/UGC_20251006094230_1.pdf",
+      "academicYear": "2025-26",
+      "issuedDate": "03 October, 2025 (OCR of printed date; garbled in text extraction)",
+      "accessed": true,
+      "notes": "This is the ODL (Open and Distance Learning) recognized list for 2025-26, not the Online list, so it does not apply to these online programmes. I did not use it."
+    },
+    {
+      "title": "DEB Notices page / Notice Board",
+      "url": "https://deb.ugc.ac.in/Notices",
+      "academicYear": null,
+      "issuedDate": null,
+      "accessed": true,
+      "notes": "The page's static HTML holds no notice links (it loads them dynamically). I located the 2026-27 lists through the Recognition page's AJAX endpoint (/Recognition/SelectDetails) instead. I did not access https://deb.ugc.ac.in/Home/HEI_Prog_List."
+    }
+  ],
+  "programs": [
+    {
+      "courseId": "mba-muj",
+      "status": "listed",
+      "academicYear": "2026-27",
+      "listedInstitution": "MANIPAL UNIVERSITY (State: RAJASTHAN; Type of HEI: PRIVATE UNIVERSITY)",
+      "listedProgramme": "MASTER OF BUSINESS ADMINISTRATION",
+      "mode": "Online",
+      "sourceUrl": "https://deb.ugc.ac.in/pdf/HomePageRecognitionDetail/140/140_upload_RecognitionDetails_20260922125253.pdf",
+      "location": "Entitled list 2026-27, PDF page 30, S.No. 74, programme item 8)",
+      "notes": "Printed HEI name is 'MANIPAL UNIVERSITY' under RAJASTHAN / PRIVATE UNIVERSITY, not 'Manipal University Jaipur'. Identification relies on the state column. This is not Manipal Academy of Higher Education, which is a separate entry at S.No. 37 under KARNATAKA / DEEMED TO BE UNIVERSITY. MUJ section has 9 programmes, all seen. 2026-27 PDF prints no conditions or date. Also listed in the 2025-26 July-August 2025 entitled list (03 Oct 2025), S.No. 66."
+    },
+    {
+      "courseId": "bba-muj",
+      "status": "listed",
+      "academicYear": "2026-27",
+      "listedInstitution": "MANIPAL UNIVERSITY (State: RAJASTHAN; Type of HEI: PRIVATE UNIVERSITY)",
+      "listedProgramme": "BACHELOR OF BUSINESS ADMINISTRATION",
+      "mode": "Online",
+      "sourceUrl": "https://deb.ugc.ac.in/pdf/HomePageRecognitionDetail/140/140_upload_RecognitionDetails_20260922125253.pdf",
+      "location": "Entitled list 2026-27, PDF page 30, S.No. 74, programme item 2)",
+      "notes": "Printed HEI name is 'MANIPAL UNIVERSITY' under RAJASTHAN / PRIVATE UNIVERSITY, not 'Manipal University Jaipur'. Identification relies on the state column. This is not Manipal Academy of Higher Education, which is a separate entry at S.No. 37 under KARNATAKA / DEEMED TO BE UNIVERSITY. MUJ section has 9 programmes, all seen. 2026-27 PDF prints no conditions or date. Also listed in the 2025-26 July-August 2025 entitled list (03 Oct 2025), S.No. 66."
+    },
+    {
+      "courseId": "bca-muj",
+      "status": "listed",
+      "academicYear": "2026-27",
+      "listedInstitution": "MANIPAL UNIVERSITY (State: RAJASTHAN; Type of HEI: PRIVATE UNIVERSITY)",
+      "listedProgramme": "BACHELOR OF COMPUTER APPLICATIONS",
+      "mode": "Online",
+      "sourceUrl": "https://deb.ugc.ac.in/pdf/HomePageRecognitionDetail/140/140_upload_RecognitionDetails_20260922125253.pdf",
+      "location": "Entitled list 2026-27, PDF page 30, S.No. 74, programme item 1)",
+      "notes": "Printed HEI name is 'MANIPAL UNIVERSITY' under RAJASTHAN / PRIVATE UNIVERSITY, not 'Manipal University Jaipur'. Identification relies on the state column. This is not Manipal Academy of Higher Education, which is a separate entry at S.No. 37 under KARNATAKA / DEEMED TO BE UNIVERSITY. MUJ section has 9 programmes, all seen. 2026-27 PDF prints no conditions or date. Also listed in the 2025-26 July-August 2025 entitled list (03 Oct 2025), S.No. 66."
+    },
+    {
+      "courseId": "mca-muj",
+      "status": "listed",
+      "academicYear": "2026-27",
+      "listedInstitution": "MANIPAL UNIVERSITY (State: RAJASTHAN; Type of HEI: PRIVATE UNIVERSITY)",
+      "listedProgramme": "MASTER OF COMPUTER APPLICATIONS",
+      "mode": "Online",
+      "sourceUrl": "https://deb.ugc.ac.in/pdf/HomePageRecognitionDetail/140/140_upload_RecognitionDetails_20260922125253.pdf",
+      "location": "Entitled list 2026-27, PDF page 30, S.No. 74, programme item 5)",
+      "notes": "Printed HEI name is 'MANIPAL UNIVERSITY' under RAJASTHAN / PRIVATE UNIVERSITY, not 'Manipal University Jaipur'. Identification relies on the state column. This is not Manipal Academy of Higher Education, which is a separate entry at S.No. 37 under KARNATAKA / DEEMED TO BE UNIVERSITY. MUJ section has 9 programmes, all seen. 2026-27 PDF prints no conditions or date. Also listed in the 2025-26 July-August 2025 entitled list (03 Oct 2025), S.No. 66."
+    },
+    {
+      "courseId": "bcom-muj",
+      "status": "listed",
+      "academicYear": "2026-27",
+      "listedInstitution": "MANIPAL UNIVERSITY (State: RAJASTHAN; Type of HEI: PRIVATE UNIVERSITY)",
+      "listedProgramme": "BACHELOR OF COMMERCE (GENERAL)",
+      "mode": "Online",
+      "sourceUrl": "https://deb.ugc.ac.in/pdf/HomePageRecognitionDetail/140/140_upload_RecognitionDetails_20260922125253.pdf",
+      "location": "Entitled list 2026-27, PDF page 30, S.No. 74, programme item 3)",
+      "notes": "Printed HEI name is 'MANIPAL UNIVERSITY' under RAJASTHAN / PRIVATE UNIVERSITY, not 'Manipal University Jaipur'. Identification relies on the state column. This is not Manipal Academy of Higher Education, which is a separate entry at S.No. 37 under KARNATAKA / DEEMED TO BE UNIVERSITY. MUJ section has 9 programmes, all seen. 2026-27 PDF prints no conditions or date. Also listed in the 2025-26 July-August 2025 entitled list (03 Oct 2025), S.No. 66."
+    },
+    {
+      "courseId": "mcom-muj",
+      "status": "listed",
+      "academicYear": "2026-27",
+      "listedInstitution": "MANIPAL UNIVERSITY (State: RAJASTHAN; Type of HEI: PRIVATE UNIVERSITY)",
+      "listedProgramme": "MASTER OF COMMERCE (GENERAL)",
+      "mode": "Online",
+      "sourceUrl": "https://deb.ugc.ac.in/pdf/HomePageRecognitionDetail/140/140_upload_RecognitionDetails_20260922125253.pdf",
+      "location": "Entitled list 2026-27, PDF page 30, S.No. 74, programme item 6)",
+      "notes": "Printed HEI name is 'MANIPAL UNIVERSITY' under RAJASTHAN / PRIVATE UNIVERSITY, not 'Manipal University Jaipur'. Identification relies on the state column. This is not Manipal Academy of Higher Education, which is a separate entry at S.No. 37 under KARNATAKA / DEEMED TO BE UNIVERSITY. MUJ section has 9 programmes, all seen. 2026-27 PDF prints no conditions or date. Also listed in the 2025-26 July-August 2025 entitled list (03 Oct 2025), S.No. 66."
+    },
+    {
+      "courseId": "ma-economics-muj",
+      "status": "listed",
+      "academicYear": "2026-27",
+      "listedInstitution": "MANIPAL UNIVERSITY (State: RAJASTHAN; Type of HEI: PRIVATE UNIVERSITY)",
+      "listedProgramme": "MASTER OF ARTS (ECONOMICS)",
+      "mode": "Online",
+      "sourceUrl": "https://deb.ugc.ac.in/pdf/HomePageRecognitionDetail/140/140_upload_RecognitionDetails_20260922125253.pdf",
+      "location": "Entitled list 2026-27, PDF page 30, S.No. 74, programme item 4)",
+      "notes": "Printed HEI name is 'MANIPAL UNIVERSITY' under RAJASTHAN / PRIVATE UNIVERSITY, not 'Manipal University Jaipur'. Identification relies on the state column. This is not Manipal Academy of Higher Education, which is a separate entry at S.No. 37 under KARNATAKA / DEEMED TO BE UNIVERSITY. MUJ section has 9 programmes, all seen. 2026-27 PDF prints no conditions or date. Also listed in the 2025-26 July-August 2025 entitled list (03 Oct 2025), S.No. 66."
+    },
+    {
+      "courseId": "majmc-muj",
+      "status": "listed",
+      "academicYear": "2026-27",
+      "listedInstitution": "MANIPAL UNIVERSITY (State: RAJASTHAN; Type of HEI: PRIVATE UNIVERSITY)",
+      "listedProgramme": "MASTER OF ARTS (JOURNALISM & MASS COMMUNICATION)",
+      "mode": "Online",
+      "sourceUrl": "https://deb.ugc.ac.in/pdf/HomePageRecognitionDetail/140/140_upload_RecognitionDetails_20260922125253.pdf",
+      "location": "Entitled list 2026-27, PDF page 30, S.No. 74, programme item 7)",
+      "notes": "Printed HEI name is 'MANIPAL UNIVERSITY' under RAJASTHAN / PRIVATE UNIVERSITY, not 'Manipal University Jaipur'. Identification relies on the state column. This is not Manipal Academy of Higher Education, which is a separate entry at S.No. 37 under KARNATAKA / DEEMED TO BE UNIVERSITY. MUJ section has 9 programmes, all seen. 2026-27 PDF prints no conditions or date. Also listed in the 2025-26 July-August 2025 entitled list (03 Oct 2025), S.No. 66."
+    },
+    {
+      "courseId": "msc-mathematics-muj",
+      "status": "listed",
+      "academicYear": "2026-27",
+      "listedInstitution": "MANIPAL UNIVERSITY (State: RAJASTHAN; Type of HEI: PRIVATE UNIVERSITY)",
+      "listedProgramme": "MASTER OF SCIENCE (MATHEMATICS)",
+      "mode": "Online",
+      "sourceUrl": "https://deb.ugc.ac.in/pdf/HomePageRecognitionDetail/140/140_upload_RecognitionDetails_20260922125253.pdf",
+      "location": "Entitled list 2026-27, PDF page 30, S.No. 74, programme item 9)",
+      "notes": "Printed HEI name is 'MANIPAL UNIVERSITY' under RAJASTHAN / PRIVATE UNIVERSITY, not 'Manipal University Jaipur'. Identification relies on the state column. This is not Manipal Academy of Higher Education, which is a separate entry at S.No. 37 under KARNATAKA / DEEMED TO BE UNIVERSITY. MUJ section has 9 programmes, all seen. 2026-27 PDF prints no conditions or date. Not in the 2025-26 July-August 2025 entitled list (S.No. 66 there had 8 programmes). It first appears in the 2025-26 January-February 2026 entitled list (10 Apr 2026, S.No. 70, item 9)."
+    },
+    {
+      "courseId": "mba-smu",
+      "status": "listed",
+      "academicYear": "2026-27",
+      "listedInstitution": "SIKKIM MANIPAL UNIVERSITY (State: SIKKIM; Type of HEI: PRIVATE UNIVERSITY)",
+      "listedProgramme": "MASTER OF BUSINESS ADMINISTRATION",
+      "mode": "Online",
+      "sourceUrl": "https://deb.ugc.ac.in/pdf/HomePageRecognitionDetail/140/140_upload_RecognitionDetails_20260922125253.pdf",
+      "location": "Entitled list 2026-27, S.No. 80 (entry starts on PDF page 32, continues on page 33); this item is on page 33, programme item 5)",
+      "notes": "SMU section has 9 programmes, all seen. Also listed in the 2025-26 July-August 2025 entitled list (03 Oct 2025), S.No. 72. 2026-27 PDF prints no conditions or date."
+    },
+    {
+      "courseId": "bba-smu",
+      "status": "listed",
+      "academicYear": "2026-27",
+      "listedInstitution": "SIKKIM MANIPAL UNIVERSITY (State: SIKKIM; Type of HEI: PRIVATE UNIVERSITY)",
+      "listedProgramme": "BACHELOR OF BUSINESS ADMINISTRATION",
+      "mode": "Online",
+      "sourceUrl": "https://deb.ugc.ac.in/pdf/HomePageRecognitionDetail/140/140_upload_RecognitionDetails_20260922125253.pdf",
+      "location": "Entitled list 2026-27, S.No. 80 (entry starts on PDF page 32, continues on page 33); this item is on page 33, programme item 3)",
+      "notes": "SMU section has 9 programmes, all seen. Also listed in the 2025-26 July-August 2025 entitled list (03 Oct 2025), S.No. 72. 2026-27 PDF prints no conditions or date."
+    },
+    {
+      "courseId": "bcom-smu",
+      "status": "listed",
+      "academicYear": "2026-27",
+      "listedInstitution": "SIKKIM MANIPAL UNIVERSITY (State: SIKKIM; Type of HEI: PRIVATE UNIVERSITY)",
+      "listedProgramme": "BACHELOR OF COMMERCE (GENERAL)",
+      "mode": "Online",
+      "sourceUrl": "https://deb.ugc.ac.in/pdf/HomePageRecognitionDetail/140/140_upload_RecognitionDetails_20260922125253.pdf",
+      "location": "Entitled list 2026-27, S.No. 80 (entry starts on PDF page 32, continues on page 33); this item is on page 32, programme item 2)",
+      "notes": "SMU section has 9 programmes, all seen. Also listed in the 2025-26 July-August 2025 entitled list (03 Oct 2025), S.No. 72. 2026-27 PDF prints no conditions or date."
+    },
+    {
+      "courseId": "ba-smu",
+      "status": "listed",
+      "academicYear": "2026-27",
+      "listedInstitution": "SIKKIM MANIPAL UNIVERSITY (State: SIKKIM; Type of HEI: PRIVATE UNIVERSITY)",
+      "listedProgramme": "BACHELOR OF ARTS (COMBINATION OF 3 SUBJECTS)-ENGLISH, POLITICAL SCIENCE AND SOCIOLOGY",
+      "mode": "Online",
+      "sourceUrl": "https://deb.ugc.ac.in/pdf/HomePageRecognitionDetail/140/140_upload_RecognitionDetails_20260922125253.pdf",
+      "location": "Entitled list 2026-27, S.No. 80 (entry starts on PDF page 32, continues on page 33); this item is on page 32, programme item 1)",
+      "notes": "SMU section has 9 programmes, all seen. Also listed in the 2025-26 July-August 2025 entitled list (03 Oct 2025), S.No. 72. 2026-27 PDF prints no conditions or date. The BA is listed only with the fixed subject combination English, Political Science and Sociology."
+    },
+    {
+      "courseId": "mca-smu",
+      "status": "listed",
+      "academicYear": "2026-27",
+      "listedInstitution": "SIKKIM MANIPAL UNIVERSITY (State: SIKKIM; Type of HEI: PRIVATE UNIVERSITY)",
+      "listedProgramme": "MASTER OF COMPUTER APPLICATIONS",
+      "mode": "Online",
+      "sourceUrl": "https://deb.ugc.ac.in/pdf/HomePageRecognitionDetail/140/140_upload_RecognitionDetails_20260922125253.pdf",
+      "location": "Entitled list 2026-27, S.No. 80 (entry starts on PDF page 32, continues on page 33); this item is on page 33, programme item 4)",
+      "notes": "SMU section has 9 programmes, all seen. Also listed in the 2025-26 July-August 2025 entitled list (03 Oct 2025), S.No. 72. 2026-27 PDF prints no conditions or date."
+    },
+    {
+      "courseId": "mcom-smu",
+      "status": "listed",
+      "academicYear": "2026-27",
+      "listedInstitution": "SIKKIM MANIPAL UNIVERSITY (State: SIKKIM; Type of HEI: PRIVATE UNIVERSITY)",
+      "listedProgramme": "MASTER OF COMMERCE (GENERAL)",
+      "mode": "Online",
+      "sourceUrl": "https://deb.ugc.ac.in/pdf/HomePageRecognitionDetail/140/140_upload_RecognitionDetails_20260922125253.pdf",
+      "location": "Entitled list 2026-27, S.No. 80 (entry starts on PDF page 32, continues on page 33); this item is on page 33, programme item 7)",
+      "notes": "SMU section has 9 programmes, all seen. Also listed in the 2025-26 July-August 2025 entitled list (03 Oct 2025), S.No. 72. 2026-27 PDF prints no conditions or date."
+    },
+    {
+      "courseId": "ma-english-smu",
+      "status": "listed",
+      "academicYear": "2026-27",
+      "listedInstitution": "SIKKIM MANIPAL UNIVERSITY (State: SIKKIM; Type of HEI: PRIVATE UNIVERSITY)",
+      "listedProgramme": "MASTER OF ARTS (ENGLISH)",
+      "mode": "Online",
+      "sourceUrl": "https://deb.ugc.ac.in/pdf/HomePageRecognitionDetail/140/140_upload_RecognitionDetails_20260922125253.pdf",
+      "location": "Entitled list 2026-27, S.No. 80 (entry starts on PDF page 32, continues on page 33); this item is on page 33, programme item 8)",
+      "notes": "SMU section has 9 programmes, all seen. Also listed in the 2025-26 July-August 2025 entitled list (03 Oct 2025), S.No. 72. 2026-27 PDF prints no conditions or date."
+    },
+    {
+      "courseId": "ma-political-science-smu",
+      "status": "listed",
+      "academicYear": "2026-27",
+      "listedInstitution": "SIKKIM MANIPAL UNIVERSITY (State: SIKKIM; Type of HEI: PRIVATE UNIVERSITY)",
+      "listedProgramme": "MASTER OF ARTS (POLITICAL SCIENCE)",
+      "mode": "Online",
+      "sourceUrl": "https://deb.ugc.ac.in/pdf/HomePageRecognitionDetail/140/140_upload_RecognitionDetails_20260922125253.pdf",
+      "location": "Entitled list 2026-27, S.No. 80 (entry starts on PDF page 32, continues on page 33); this item is on page 33, programme item 6)",
+      "notes": "SMU section has 9 programmes, all seen. Also listed in the 2025-26 July-August 2025 entitled list (03 Oct 2025), S.No. 72. 2026-27 PDF prints no conditions or date."
+    },
+    {
+      "courseId": "ma-sociology-smu",
+      "status": "listed",
+      "academicYear": "2026-27",
+      "listedInstitution": "SIKKIM MANIPAL UNIVERSITY (State: SIKKIM; Type of HEI: PRIVATE UNIVERSITY)",
+      "listedProgramme": "MASTER OF ARTS (SOCIOLOGY)",
+      "mode": "Online",
+      "sourceUrl": "https://deb.ugc.ac.in/pdf/HomePageRecognitionDetail/140/140_upload_RecognitionDetails_20260922125253.pdf",
+      "location": "Entitled list 2026-27, S.No. 80 (entry starts on PDF page 32, continues on page 33); this item is on page 33, programme item 9)",
+      "notes": "SMU section has 9 programmes, all seen. Also listed in the 2025-26 July-August 2025 entitled list (03 Oct 2025), S.No. 72. 2026-27 PDF prints no conditions or date."
+    },
+    {
+      "courseId": "mba-amity",
+      "status": "listed",
+      "academicYear": "2026-27",
+      "listedInstitution": "AMITY UNIVERSITY (State: RAJASTHAN; Type of HEI: PRIVATE UNIVERSITY) | AMITY UNIVERSITY (State: UTTAR PRADESH; Type of HEI: PRIVATE UNIVERSITY)",
+      "listedProgramme": "MASTER OF BUSINESS ADMINISTRATION (Rajasthan item 8) | MASTER OF BUSINESS ADMINISTRATION (UP item 8)",
+      "mode": "Online",
+      "sourceUrl": "https://deb.ugc.ac.in/pdf/HomePageRecognitionDetail/140/140_upload_RecognitionDetails_20260922125253.pdf",
+      "location": "Entitled list 2026-27: Rajasthan S.No. 78, page 32, item 8; UP S.No. 108, page 42, item 8",
+      "notes": "Listed under BOTH Amity entities in the 2026-27 entitled list. Both are printed only as 'AMITY UNIVERSITY'; they are told apart by the State column (Rajasthan S.No. 78, 9 programmes, page 32; Uttar Pradesh S.No. 108, 12 programmes, pages 41-42). A human should confirm which entity awards the amityonline.com degree."
+    },
+    {
+      "courseId": "bba-amity",
+      "status": "listed",
+      "academicYear": "2026-27",
+      "listedInstitution": "AMITY UNIVERSITY (State: RAJASTHAN; Type of HEI: PRIVATE UNIVERSITY) | AMITY UNIVERSITY (State: UTTAR PRADESH; Type of HEI: PRIVATE UNIVERSITY)",
+      "listedProgramme": "BACHELOR OF BUSINESS ADMINISTRATION (Rajasthan item 2) | BACHELOR OF BUSINESS ADMINISTRATION (GENERAL) (UP item 2)",
+      "mode": "Online",
+      "sourceUrl": "https://deb.ugc.ac.in/pdf/HomePageRecognitionDetail/140/140_upload_RecognitionDetails_20260922125253.pdf",
+      "location": "Entitled list 2026-27: Rajasthan S.No. 78, page 32, item 2; UP S.No. 108, page 41, item 2",
+      "notes": "Listed under BOTH Amity entities in the 2026-27 entitled list. Both are printed only as 'AMITY UNIVERSITY'; they are told apart by the State column (Rajasthan S.No. 78, 9 programmes, page 32; Uttar Pradesh S.No. 108, 12 programmes, pages 41-42). A human should confirm which entity awards the amityonline.com degree."
+    },
+    {
+      "courseId": "bca-amity",
+      "status": "listed",
+      "academicYear": "2026-27",
+      "listedInstitution": "AMITY UNIVERSITY (State: RAJASTHAN; Type of HEI: PRIVATE UNIVERSITY) | AMITY UNIVERSITY (State: UTTAR PRADESH; Type of HEI: PRIVATE UNIVERSITY)",
+      "listedProgramme": "BACHELOR OF COMPUTER APPLICATION (Rajasthan item 3, singular as printed) | BACHELOR OF COMPUTER APPLICATIONS (GENERAL) (UP item 1)",
+      "mode": "Online",
+      "sourceUrl": "https://deb.ugc.ac.in/pdf/HomePageRecognitionDetail/140/140_upload_RecognitionDetails_20260922125253.pdf",
+      "location": "Entitled list 2026-27: Rajasthan S.No. 78, page 32, item 3; UP S.No. 108, page 41, item 1",
+      "notes": "Listed under BOTH Amity entities in the 2026-27 entitled list. Both are printed only as 'AMITY UNIVERSITY'; they are told apart by the State column (Rajasthan S.No. 78, 9 programmes, page 32; Uttar Pradesh S.No. 108, 12 programmes, pages 41-42). A human should confirm which entity awards the amityonline.com degree."
+    },
+    {
+      "courseId": "mca-amity",
+      "status": "listed",
+      "academicYear": "2026-27",
+      "listedInstitution": "AMITY UNIVERSITY (State: RAJASTHAN; Type of HEI: PRIVATE UNIVERSITY) | AMITY UNIVERSITY (State: UTTAR PRADESH; Type of HEI: PRIVATE UNIVERSITY)",
+      "listedProgramme": "MASTER OF COMPUTER APPLICATIONS (Rajasthan item 9) | MASTER OF COMPUTER APPLICATIONS (UP item 7)",
+      "mode": "Online",
+      "sourceUrl": "https://deb.ugc.ac.in/pdf/HomePageRecognitionDetail/140/140_upload_RecognitionDetails_20260922125253.pdf",
+      "location": "Entitled list 2026-27: Rajasthan S.No. 78, page 32, item 9; UP S.No. 108, page 42, item 7",
+      "notes": "Listed under BOTH Amity entities in the 2026-27 entitled list. Both are printed only as 'AMITY UNIVERSITY'; they are told apart by the State column (Rajasthan S.No. 78, 9 programmes, page 32; Uttar Pradesh S.No. 108, 12 programmes, pages 41-42). A human should confirm which entity awards the amityonline.com degree."
+    },
+    {
+      "courseId": "bcom-amity",
+      "status": "unclear",
+      "academicYear": "2026-27",
+      "listedInstitution": "AMITY UNIVERSITY (PRIVATE UNIVERSITY), State: UTTAR PRADESH",
+      "listedProgramme": "BACHELOR OF COMMERCE (GENERAL)",
+      "mode": "Online",
+      "sourceUrl": "https://deb.ugc.ac.in/pdf/HomePageRecognitionDetail/140/140_upload_RecognitionDetails_20260922125223.pdf",
+      "location": "Recognized list 2026-27, PDF page 7, S.No. 19, item 2)",
+      "notes": "Found ONLY under Amity University UTTAR PRADESH (2026-27 recognized list S.No. 19), not under Amity University Rajasthan (S.No. 78, all 9 programmes read). If amityonline.com awards this programme through Amity University Rajasthan, the listing does NOT cover it. A human needs to check which Amity entity awards it before claiming UGC entitlement or recognition. Amity Rajasthan lists only 'BACHELOR OF COMMERCE (HONS)', and Amity UP's entitled section (S.No. 108) has no B.Com. Source is the separate 2026-27 RECOGNIZED online list (not the entitled list). Period of Recognition as printed: '2022-23, academic session beginning September, 2022 (revised from July-August, 2022) and onwards to 2026–27 (upto January, 2027 only)'. Validity ends with the January 2027 session as printed. The same entry (S.No. 9) appears in the 2025-26 recognized list."
+    },
+    {
+      "courseId": "bcom-honours-amity",
+      "status": "listed",
+      "academicYear": "2026-27",
+      "listedInstitution": "AMITY UNIVERSITY (State: RAJASTHAN; Type of HEI: PRIVATE UNIVERSITY)",
+      "listedProgramme": "BACHELOR OF COMMERCE (HONS)",
+      "mode": "Online",
+      "sourceUrl": "https://deb.ugc.ac.in/pdf/HomePageRecognitionDetail/140/140_upload_RecognitionDetails_20260922125253.pdf",
+      "location": "Entitled list 2026-27, PDF page 32, S.No. 78, item 1)",
+      "notes": "Listed only under Amity University RAJASTHAN (S.No. 78), which matches the belief that amityonline.com programmes are awarded by Amity University Rajasthan. It is not in the Amity UP entitled section (S.No. 108) or the Amity UP recognized-list entry (S.No. 19). Also in the 2025-26 July-August 2025 entitled list, Rajasthan S.No. 70."
+    },
+    {
+      "courseId": "mcom-amity",
+      "status": "unclear",
+      "academicYear": "2026-27",
+      "listedInstitution": "AMITY UNIVERSITY (State: UTTAR PRADESH; Type of HEI: PRIVATE UNIVERSITY)",
+      "listedProgramme": "MASTER OF COMMERCE (FINANCIAL MANAGEMENT/ FINANCIAL TECHNOLOGY)",
+      "mode": "Online",
+      "sourceUrl": "https://deb.ugc.ac.in/pdf/HomePageRecognitionDetail/140/140_upload_RecognitionDetails_20260922125253.pdf",
+      "location": "Entitled list 2026-27, PDF page 41, S.No. 108, item 5)",
+      "notes": "Found ONLY under Amity University UTTAR PRADESH (entitled list S.No. 108), not under Amity University Rajasthan (S.No. 78, all 9 programmes read). If amityonline.com awards this programme through Amity University Rajasthan, the listing does NOT cover it. A human needs to check which Amity entity awards it before claiming UGC entitlement or recognition. The programme is printed as one combined entry, 'FINANCIAL MANAGEMENT/ FINANCIAL TECHNOLOGY'; Financial Technology is not listed separately and there is no plain or General M.Com entry. Also in the 2025-26 July-August 2025 entitled list, UP S.No. 98."
+    },
+    {
+      "courseId": "ba-amity",
+      "status": "unclear",
+      "academicYear": "2026-27",
+      "listedInstitution": "AMITY UNIVERSITY (State: UTTAR PRADESH; Type of HEI: PRIVATE UNIVERSITY)",
+      "listedProgramme": "BACHELOR OF ARTS (POLITICAL SCIENCE, ECONOMICS, ENGLISH, SOCIOLOGY)",
+      "mode": "Online",
+      "sourceUrl": "https://deb.ugc.ac.in/pdf/HomePageRecognitionDetail/140/140_upload_RecognitionDetails_20260922125253.pdf",
+      "location": "Entitled list 2026-27, PDF page 41, S.No. 108, item 3)",
+      "notes": "Found ONLY under Amity University UTTAR PRADESH (entitled list S.No. 108), not under Amity University Rajasthan (S.No. 78, all 9 programmes read). If amityonline.com awards this programme through Amity University Rajasthan, the listing does NOT cover it. A human needs to check which Amity entity awards it before claiming UGC entitlement or recognition. Also in the 2025-26 July-August 2025 entitled list, UP S.No. 98."
+    },
+    {
+      "courseId": "bajmc-amity",
+      "status": "unclear",
+      "academicYear": "2026-27",
+      "listedInstitution": "AMITY UNIVERSITY (PRIVATE UNIVERSITY), State: UTTAR PRADESH",
+      "listedProgramme": "BACHELOR OF ARTS (JOURNALISM AND MASS COMMUNICATION",
+      "mode": "Online",
+      "sourceUrl": "https://deb.ugc.ac.in/pdf/HomePageRecognitionDetail/140/140_upload_RecognitionDetails_20260922125223.pdf",
+      "location": "Recognized list 2026-27, PDF page 7, S.No. 19, item 3)",
+      "notes": "Found ONLY under Amity University UTTAR PRADESH (2026-27 recognized list S.No. 19), not under Amity University Rajasthan (S.No. 78, all 9 programmes read). If amityonline.com awards this programme through Amity University Rajasthan, the listing does NOT cover it. A human needs to check which Amity entity awards it before claiming UGC entitlement or recognition. Programme name copied as printed; the closing parenthesis is missing in the PDF. Source is the separate 2026-27 RECOGNIZED online list (not the entitled list). Period of Recognition as printed: '2022-23, academic session beginning September, 2022 (revised from July-August, 2022) and onwards to 2026–27 (upto January, 2027 only)'. Validity ends with the January 2027 session as printed. The same entry (S.No. 9) appears in the 2025-26 recognized list."
+    },
+    {
+      "courseId": "majmc-amity",
+      "status": "listed",
+      "academicYear": "2026-27",
+      "listedInstitution": "AMITY UNIVERSITY (State: RAJASTHAN; Type of HEI: PRIVATE UNIVERSITY) | AMITY UNIVERSITY (State: UTTAR PRADESH; Type of HEI: PRIVATE UNIVERSITY)",
+      "listedProgramme": "MASTER OF ARTS (JOURNALISM & MASS COMMUNICATION) (Rajasthan item 5) | MASTER OF ARTS (JOURNALISM & MASS COMMUNICATION) (UP item 4)",
+      "mode": "Online",
+      "sourceUrl": "https://deb.ugc.ac.in/pdf/HomePageRecognitionDetail/140/140_upload_RecognitionDetails_20260922125253.pdf",
+      "location": "Entitled list 2026-27: Rajasthan S.No. 78, page 32, item 5; UP S.No. 108, page 41, item 4",
+      "notes": "Listed under BOTH Amity entities in the 2026-27 entitled list. Both are printed only as 'AMITY UNIVERSITY'; they are told apart by the State column (Rajasthan S.No. 78, 9 programmes, page 32; Uttar Pradesh S.No. 108, 12 programmes, pages 41-42). A human should confirm which entity awards the amityonline.com degree."
+    },
+    {
+      "courseId": "msc-data-science-amity",
+      "status": "listed",
+      "academicYear": "2026-27",
+      "listedInstitution": "AMITY UNIVERSITY (State: RAJASTHAN; Type of HEI: PRIVATE UNIVERSITY)",
+      "listedProgramme": "MASTER OF SCIENCE (DATA SCIENCE)",
+      "mode": "Online",
+      "sourceUrl": "https://deb.ugc.ac.in/pdf/HomePageRecognitionDetail/140/140_upload_RecognitionDetails_20260922125253.pdf",
+      "location": "Entitled list 2026-27, PDF page 32, S.No. 78, item 7)",
+      "notes": "Listed only under Amity University RAJASTHAN (S.No. 78), which matches the belief that amityonline.com programmes are awarded by Amity University Rajasthan. It is not in the Amity UP entitled section (S.No. 108) or the Amity UP recognized-list entry (S.No. 19). Amity UP lists only 'POST GRADUATE DIPLOMA (DATA SCIENCE)', which is a different programme. Also in the 2025-26 July-August 2025 entitled list, Rajasthan S.No. 70."
+    },
+    {
+      "courseId": "ma-public-policy-governance-amity",
+      "status": "unclear",
+      "academicYear": "2026-27",
+      "listedInstitution": "AMITY UNIVERSITY (PRIVATE UNIVERSITY), State: UTTAR PRADESH",
+      "listedProgramme": "MASTER OF ARTS PUBLIC POLICY & GOVERNANCE",
+      "mode": "Online",
+      "sourceUrl": "https://deb.ugc.ac.in/pdf/HomePageRecognitionDetail/140/140_upload_RecognitionDetails_20260922125223.pdf",
+      "location": "Recognized list 2026-27, PDF page 7, S.No. 19, item 4)",
+      "notes": "Found ONLY under Amity University UTTAR PRADESH (2026-27 recognized list S.No. 19), not under Amity University Rajasthan (S.No. 78, all 9 programmes read). If amityonline.com awards this programme through Amity University Rajasthan, the listing does NOT cover it. A human needs to check which Amity entity awards it before claiming UGC entitlement or recognition. Source is the separate 2026-27 RECOGNIZED online list (not the entitled list). Period of Recognition as printed: '2022-23, academic session beginning September, 2022 (revised from July-August, 2022) and onwards to 2026–27 (upto January, 2027 only)'. Validity ends with the January 2027 session as printed. The same entry (S.No. 9) appears in the 2025-26 recognized list."
+    }
+  ]
+}

@@ -2,7 +2,9 @@ import type { courseWithUniversity } from "@/data/catalog";
 
 import type { CatalogReader } from "@/lib/catalog-snapshot";
 import { formatFee } from "@/lib/catalog-format";
+import { CONFIRM_WITH_UNIVERSITY, programApplicationFee, programFeePlans } from "@/lib/program-facts";
 import { courseKey, courseLabel } from "@/lib/programmatic-seo";
+import { formatCheckedDate, publicSourceUrls } from "@/lib/source-checks";
 
 export type FeeGuideCourse = ReturnType<typeof courseWithUniversity>;
 
@@ -56,12 +58,46 @@ export function feeGuideSlugForCourseName(courseName: string) {
 
 export function feeGuideIntro(guide: FeeGuide): string {
   if (guide.isComparison) {
-    const cheapest = guide.courses[0];
-    const priciest = guide.courses[guide.courses.length - 1];
-    return `${guide.label} is offered by ${guide.courses.length} UGC-entitled universities listed on Unnati Vidya, with total program fees ranging from ${formatFee(guide.lowestFee)} at ${cheapest.university.shortName} to ${formatFee(guide.highestFee)} at ${priciest.university.shortName} — a difference of ${formatFee(guide.feeSpread)}. Below is the exact fee, EMI, and duration for each program, verified against its individual program page.`;
+    const lowest = guide.courses[0];
+    const highest = guide.courses[guide.courses.length - 1];
+    return `${guide.label} is offered by ${guide.courses.length} universities listed on Unnati Vidya. Listed total tuition for Indian applicants runs from ${formatFee(guide.lowestFee)} at ${lowest.university.shortName} to ${formatFee(guide.highestFee)} at ${highest.university.shortName}, a difference of ${formatFee(guide.feeSpread)}. The amounts below come from our published catalog, with the date each fee was last checked where we have one.`;
   }
   const [only] = guide.courses;
-  return `${guide.label} is currently listed on Unnati Vidya through ${only.university.name}, with a total program fee of ${formatFee(only.fee)} for the full ${only.duration} program. Here is exactly how that fee breaks down, and what scholarship and EMI options are available.`;
+  return `${guide.label} is listed on Unnati Vidya through ${only.university.name}, with listed total tuition of ${formatFee(only.fee)} for Indian applicants over ${only.duration}. Below is what we hold on its fee, payment and scholarships, and what to confirm with the university.`;
+}
+
+// Fee facts with a source behind them (Wave 4, hub C2). The seeded payment plans were computed from
+// the total, so they show only once a reviewed fee correction is published (it records feeReview).
+export function feeCheck(course: FeeGuideCourse) {
+  const check = course.feeReview || course.categoryFees;
+  return check ? { checkedAt: check.checkedAt, date: formatCheckedDate(check.checkedAt), sourceUrl: check.sourceUrl } : null;
+}
+
+export function sourcedFeePlans(course: FeeGuideCourse) {
+  return course.feeReview ? programFeePlans(course) : [];
+}
+
+// The Indian-applicant semester payment from a published category-fee block.
+export function indianSemesterPayment(course: FeeGuideCourse) {
+  const row = course.categoryFees?.rows.find(item => item.currency === "INR" && item.total === course.fee);
+  return row ? { amount: row.perSemester, semesters: row.semesters } : null;
+}
+
+export function outsideIndiaFees(course: FeeGuideCourse) {
+  return course.categoryFees?.rows.some(row => row.currency !== "INR") ? course.categoryFees : null;
+}
+
+// Official pages behind a guide's fee figures, one entry per program.
+// A program with no public page of its own falls back to its university's public pages.
+export function feeGuideSources(catalog: CatalogReader, guide: FeeGuide) {
+  const pages = (urls: string[] | undefined) => publicSourceUrls(urls)
+    .filter(url => /^https:\/\//.test(url) && !/deb\.ugc\.ac\.in\/Uploads\/Notices_Upload\//.test(url));
+  return guide.courses.map(course => {
+    const check = feeCheck(course);
+    const own = pages([...(check ? [check.sourceUrl] : []), ...(course.categoryFees ? [course.categoryFees.sourceUrl] : []), ...(course.sourceUrls || [])]);
+    const urls = [...new Set(own.length ? own : pages(catalog.universityEnrichmentById[course.universityId]?.sourceUrls))];
+    return { course, urls, check };
+  });
 }
 
 function durationMonths(duration: string): number {
@@ -70,69 +106,67 @@ function durationMonths(duration: string): number {
 }
 
 export function feeGuideFaqs(guide: FeeGuide): Array<[string, string]> {
-  const cheapest = guide.courses[0];
-  const priciest = guide.courses[guide.courses.length - 1];
+  const lowest = guide.courses[0];
+  const highest = guide.courses[guide.courses.length - 1];
+  const applicationFees = guide.courses.map(course => `${course.university.shortName}: ${programApplicationFee(course)}`).join("; ");
+  const checked = guide.courses.filter(course => feeCheck(course));
+  const freshness: [string, string] = [
+    `How current are these ${guide.label} fees?`,
+    checked.length
+      ? `${checked.map(course => `${course.university.shortName}'s fee was last checked on ${feeCheck(course)!.date}`).join("; ")}. Amounts change when a university publishes a new fee, so confirm the current amount before you pay.`
+      : "They are the listed amounts in our published catalog. Universities can change fees between batches, so confirm the current amount with the university before you pay.",
+  ];
+  const extraCosts: [string, string] = [
+    "Are there costs beyond the listed tuition?",
+    `Application fee: ${applicationFees}. Ask the university for every other charge that applies to you, such as exam or re-registration fees, before you pay. The total cost planner lets you add these to your own estimate.`,
+  ];
   if (guide.isComparison) {
     const shortest = [...guide.courses].sort((a, b) => durationMonths(a.duration) - durationMonths(b.duration))[0];
     return [
       [
-        `Which university offers the cheapest ${guide.label}?`,
-        `${cheapest.university.name} currently lists the lowest total fee for ${guide.label} at ${formatFee(cheapest.fee)}, compared to ${formatFee(priciest.fee)} at ${priciest.university.name} — a difference of ${formatFee(guide.feeSpread)}.`,
+        `Which university lists the lowest tuition for ${guide.label}?`,
+        `${lowest.university.name} lists ${formatFee(lowest.fee)} for Indian applicants, compared with ${formatFee(highest.fee)} at ${highest.university.name}, a difference of ${formatFee(guide.feeSpread)}. Applicant category, discounts and other charges can change what you pay.`,
       ],
       [
         "Does a higher fee mean a better degree?",
-        "No. All universities listed here offer UGC-entitled online degrees with equal degree validity. Fee differences usually reflect university brand, placement support scale, and included learner services — compare the placement rate and average package alongside the fee before deciding.",
+        "Not by itself. Degree validity depends on the program's UGC-DEB entitlement for your admission session, not on its fee. Compare the curriculum, eligibility and support alongside the fee.",
       ],
       [
         "Can I pay in EMI?",
-        `Yes. Every university listed offers no-cost EMI, starting from ${cheapest.emi} per month depending on the program and lender approval.`,
+        `Yes. Every university listed offers no-cost EMI, from ${lowest.emi} depending on the program. Approval and terms come from the lender, so check the full terms before you sign.`,
       ],
+      extraCosts,
       [
-        "Are there hidden costs beyond the listed program fee?",
-        "A separate application fee applies at most universities, and exam or re-evaluation fees can apply in specific cases. Confirm the full cost breakdown with a counsellor before you pay.",
+        `Which university lists the shortest ${guide.label}?`,
+        `${shortest.university.name} lists ${shortest.duration}. A shorter duration isn't automatically better, so check the curriculum and your own pace before choosing on duration alone.`,
       ],
-      [
-        `Which university offers the shortest ${guide.label} program?`,
-        `${shortest.university.name} lists the shortest duration at ${shortest.duration}. A shorter duration isn't automatically better — check the curriculum and your own pace before choosing on duration alone.`,
-      ],
-      [
-        "Does choosing a specialization change the total fee?",
-        "No. The total fee is for the base program regardless of which specialization you pick within it — specializations change the curriculum focus, not the price.",
-      ],
+      freshness,
     ];
   }
   const [only] = guide.courses;
+  const plans = sourcedFeePlans(only);
   return [
     [
-      `What does the ${guide.label} fee include?`,
-      `The ${formatFee(only.fee)} total fee at ${only.university.name} covers tuition, LMS access, and online proctored exams for the full ${only.duration} program. Application fee and any re-exam fee are charged separately.`,
+      `What does the ${guide.label} fee cover?`,
+      `${formatFee(only.fee)} is the listed total tuition for Indian applicants for the full ${only.duration}. The application fee is separate (${programApplicationFee(only)}). Ask ${only.university.shortName} which other charges apply to you.`,
     ],
     [
       `Can I pay ${guide.label} fees in installments?`,
-      `Yes. ${only.university.name} offers full payment, semester-wise payment, and no-cost EMI from ${only.emi} per month, subject to lender approval.`,
+      plans.length
+        ? `${only.university.name} lists these options: ${plans.map(([label, amount, note]) => `${label} ${amount}${note ? ` (${note})` : ""}`).join("; ")}. EMI approval and terms come from the lender.`
+        : `${only.university.name} offers no-cost EMI from ${only.emi}. Approval and terms come from the lender, and the payment schedule for your batch is confirmed at admission.`,
     ],
     [
       `Are scholarships available for ${guide.label}?`,
       only.scholarships?.length
-        ? `Yes. ${only.university.name} lists ${only.scholarships.length} scholarship categories for this program, including ${only.scholarships[0][0].toLowerCase()}. Exact eligibility and proof requirements are confirmed during admission.`
-        : `${only.university.name} may offer scholarships depending on the admission cycle — a counsellor can confirm current eligibility.`,
+        ? `${only.university.name} lists ${only.scholarships.length} scholarship categories at university level, including ${only.scholarships[0][0].toLowerCase()}. Whether one applies to this program, and the proof needed, is confirmed at admission.`
+        : `${only.university.name} may offer scholarships depending on the admission cycle. ${CONFIRM_WITH_UNIVERSITY}.`,
     ],
     [
       `Is the ${guide.label} fee refundable if I discontinue?`,
-      "Refund eligibility follows the university's published refund policy and admission-cycle rules. See our refund policy summary or ask a counsellor before you pay.",
+      "Refunds follow the university's published refund policy and admission-cycle rules. See our refund policy summary, and ask the university before you pay.",
     ],
-    [
-      `How many specializations can I choose from in ${guide.label}?`,
-      only.specializations.length
-        ? `${only.university.name} offers ${only.specializations.length} specialization${only.specializations.length > 1 ? "s" : ""} within this program, including ${only.specializations.slice(0, 2).join(" and ")}. Choosing one doesn't change the total fee.`
-        : `${only.university.name} runs this as a general program without separate specialization tracks.`,
-    ],
-    [
-      `What career roles does ${guide.label} prepare me for?`,
-      only.careerRoles.length
-        ? `Graduates commonly move into roles such as ${only.careerRoles.slice(0, 3).join(", ")}, per ${only.university.name}'s own program pages — actual outcomes depend on your experience and specialization.`
-        : `${only.university.name}'s program page outlines the career paths this degree supports — a counsellor can walk you through them.`,
-    ],
+    freshness,
   ];
 }
 

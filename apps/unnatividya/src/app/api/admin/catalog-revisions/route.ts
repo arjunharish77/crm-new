@@ -4,10 +4,15 @@ import { z } from "zod";
 import { getAdminSession } from "@/lib/admin-auth";
 import { pool } from "@/lib/db";
 import { entityTypeSchema, revisionContent, revisionContentSchemas } from "@/lib/catalog-revisions";
+import { applyCatalogRevision, CATALOG_LOCK, DIRECT_PUBLISH_NOTE } from "@/lib/catalog-apply";
+import { catalogWriteFailure } from "@/lib/catalog-write";
 
 const schema = z.object({ entityType: entityTypeSchema, entityId: z.string().min(1).max(200),
   baseSnapshot: z.record(z.string(), z.unknown()), content: z.record(z.string(), z.unknown()),
-  reason: z.string().trim().min(5).max(2000) }).strict();
+  reason: z.string().trim().min(5).max(2000), publish: z.boolean().optional() }).strict();
+// Editors submit proposals for review. An administrator can also publish in the same step
+// ("Save and publish"): the proposal is recorded and applied in one transaction, with the same
+// checks, history and rollback as a reviewed revision.
 export async function POST(request: Request) {
   const session = await getAdminSession();
   if (!session) return NextResponse.json({ error: "CMS login required" }, { status: 401 });
@@ -15,11 +20,13 @@ export async function POST(request: Request) {
   const parsed = schema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: "Provide valid content and a review reason (at least 5 characters)." }, { status: 400 });
   const value = parsed.data;
+  if (value.publish && session.role !== "ADMIN") return NextResponse.json({ error: "Only administrators can publish directly." }, { status: 403 });
   const content = revisionContentSchemas[value.entityType].safeParse(value.content);
   if (!content.success) return NextResponse.json({ error: "Invalid content fields. Identity and publication status cannot be changed in a revision." }, { status: 400 });
   const client = await pool.connect();
   try {
     await client.query("begin");
+    if (value.publish) await client.query("select pg_advisory_xact_lock($1)", [CATALOG_LOCK]);
     const result = await client.query<{ snapshot: Record<string, unknown> }>(`select to_jsonb(t) as snapshot from ${value.entityType} t where id=$1 for update`, [value.entityId]);
     const current = result.rows[0]?.snapshot;
     if (!current) { await client.query("rollback"); return NextResponse.json({ error: "Catalog record not found" }, { status: 404 }); }
@@ -27,7 +34,12 @@ export async function POST(request: Request) {
     if (isDeepStrictEqual(revisionContent(value.entityType, current), content.data)) { await client.query("rollback"); return NextResponse.json({ error: "No content changes to review." }, { status: 400 }); }
     const saved = await client.query<{ id: string }>(`insert into catalog_revision(entity_type,entity_id,base_snapshot,proposed_content,reason,created_by) values($1,$2,$3,$4,$5,$6) returning id`, [value.entityType,value.entityId,current,content.data,value.reason,session.userId]);
     await client.query(`insert into cms_audit_log(user_id,action,entity_type,entity_id,metadata) values($1,'CATALOG_REVISION_PROPOSED','catalog_revision',$2,$3)`, [session.userId,saved.rows[0].id,{ entityType:value.entityType,entityId:value.entityId }]);
+    if (value.publish) await applyCatalogRevision(client, saved.rows[0].id, session.userId, DIRECT_PUBLISH_NOTE, { metadata: { direct: true } });
     await client.query("commit");
-    return NextResponse.json({ id: saved.rows[0].id }, { status: 201 });
-  } catch (error) { await client.query("rollback"); throw error; } finally { client.release(); }
+    return NextResponse.json({ id: saved.rows[0].id, status: value.publish ? "APPLIED" : "NEEDS_REVIEW" }, { status: 201 });
+  } catch (error) {
+    await client.query("rollback");
+    const failure = catalogWriteFailure(error); if (failure) return failure;
+    throw error;
+  } finally { client.release(); }
 }

@@ -1,6 +1,6 @@
 # Unnati Vidya implementation progress
 
-30 September 2026. Owner approved phased implementation. This is a working-tree update, not a production deployment.
+Started 30 September 2026; updated through increment 76 on 5 October. This is an **implementation history**, so earlier increment paragraphs describe what was true at that stage, not the current release state. The owner confirms the latest code has **not** been pushed to the VPS. Increment 73 records Wave 0 as deployed, but the present VPS commit has not been independently checked for this update. Use [CURRENT_STATUS_AND_RELEASE_PLAN.md](CURRENT_STATUS_AND_RELEASE_PLAN.md) for current status and [CMS_PUBLISHING_DEPLOYMENT.md](CMS_PUBLISHING_DEPLOYMENT.md) for the next upgrade.
 
 ## First increment: contact-first Apply now flow
 
@@ -908,13 +908,792 @@ Validation:
 
 No migration or environment change beyond the pending `0004`–`0007`.
 
-## Remaining approved work
+## Seventy-fourth increment: trust fixes (wave 1)
+
+Implemented on 5 October 2026 (next-phase plan wave 1, items T1–T8; owner decisions 3–7). Wave 0 (increment 73) is deployed.
+
+- **T1, rating markup:** `AggregateRating` was removed from the course and university structured data, and the stars stay visible (decision 4). The course `Offer` now points to the course page instead of `/lead`, which `robots.txt` blocks.
+- **T2, per-program values only** (decision 5, `src/lib/program-facts.ts`): the CMS records still hold the old template values, so the pages filter them.
+  - Credits, exam format and the application fee show "Confirm with the university" unless the record holds a program-specific value.
+  - ₹500 is shown only for MUJ and SMU, as "non-refundable (Indian applicants)", per the 3 October fee evidence.
+  - The "Full payment (2% off)" plan is dropped.
+  - The overview and structured data no longer call every program "UGC-entitled".
+  - The two named reviews were the same on all 30 courses and can't be tied to a program, so they moved to the claims register; the Reviews section and its tab are gone.
+  - Salary bands carry "indicative industry ranges, not verified for this program or university", and placement figures are labelled university-wide.
+- **T3, comparisons:**
+  - The rows no longer carry "best" flags.
+  - The placement, package and partner rows are labelled "(university-wide)".
+  - The "Yes, both UGC-entitled" and "equal degree validity" answers now give the dated 2026-27 re-check status. The same change applies to the course FAQ, fee guides and one article tip.
+  - Both comparison tables have a CSS-only "Show differences only" toggle, which also works on the server-rendered editorial pages.
+- **T5, homepage and About** (decisions 3, 11 and 12):
+  - "10k+ learners guided" is added to the catalog summary.
+  - "Unbiased by design / Every university pays us the same" became "No hidden charges".
+  - "Approvals verified … re-checked every admission cycle" became "Approvals you can check". Wave 2 adds the per-program UGC-DEB link and the last-checked date that this promises.
+  - The lowest-fee guarantee and the no-cost EMI wording stay as owner-stated claims.
+  - About has a "Contact us" section with the owner's details (name, Noida address, admin@unnatividya.com; no phone yet). The site-wide Organization structured data carries the same address and email.
+- **T6, articles** (report 02 §c):
+  - #7: MCA eligibility corrected per university from the verified catalog (Amity: BCA, a degree with Mathematics, or a CS B.Tech/BE; SMU prefers CA/CS/IT).
+  - #11: "widest fee gap" removed.
+  - #8, #17 and #18: "verified directly / confirmed with the universities" replaced with the dated re-check status and general guidance.
+  - #21: the unsourced ₹6-12 LPA removed. #24: Amity blog salaries removed. #22: the "10% discount" promotion removed and the eligibility wording hedged.
+  - #15: "no B.Com needed" corrected, because the catalog lists commerce or a related discipline for all three.
+- **T7:** the no-cost EMI wording stays (decision 3); fee guides are rebuilt from evidence in wave 2. The fee-guide "equal degree validity" answer was corrected under T3.
+- **T8, specialization pages** (decision 6, all 101 stay indexable):
+  - The grammar is fixed ("with the Accounting specialization", not "with a Accounting").
+  - Titles fit in 60 characters: 99 of 101 do. Two MA Public Policy names are longer than 60 on their own and are kept whole.
+  - Descriptions are built from each page's own fee, duration and EMI.
+  - A new "Other specializations" section links each university's sibling specializations in the same program.
+- **Claims register:** new `docs/CLAIMS_REGISTER.md` lists every retained, deferred, parked and pending claim with its location, source and status.
+
+- **Test maintenance:**
+  - The course section picker has 9 entries (Reviews removed).
+  - The specialization nav expects the extra "Other specializations" link when that section exists.
+  - The interactive comparison suite waits for the table after the mocked access check instead of racing it; it had failed 1 run in 3.
+
+Validation:
+- Production build, TypeScript and source lint passed.
+- All 55 smoke suites passed against the standalone server started as in the Docker image.
+- Desktop and mobile screenshots were reviewed: course facts, fees, careers, the comparison differences toggle, specialization siblings and the homepage trust strip. There is no mobile horizontal overflow.
+
+There are no migrations or environment changes. The catalog data in the database is unchanged: the template values are filtered at render time, so an administrator can still enter real per-program values in the CMS.
+
+## Seventy-fifth increment: publish the data we have (wave 2)
+
+Implemented on 5 October 2026 (next-phase plan §3). Publishing stays admin-reviewed. Every new fact reaches the public pages only after an administrator applies a revision. Nothing in the database changed.
+
+- **2026-27 recognition check.** All 30 programs were researched against the UGC-DEB 2026-27 online lists (evidence: `docs/UGC_DEB_RECOGNITION_2026-27_2026-10-05.md` / `.json`). The research file records 25 direct listed matches and five Amity records as `unclear` on the awarding entity; the prepared proposals mark those five `listed` based on the owner's UP attribution.
+  - MUJ 9/9 and SMU 9/9 are listed.
+  - For Amity, seven are directly matched to the catalog's existing institution context. Five (B.Com, BA, BA JMC, M.Com, MA Public Policy) appear only under Amity University Uttar Pradesh, which the owner states awards them (plan §11 #15). That owner statement is the basis for the prepared `listed` result, not independent regulator proof of the awarding link. The three on UP's "recognized" list show its printed "valid up to January 2027" period and need a later-intake check.
+  - Without an applied result, a page keeps the dated "being re-checked" status. A result with the "unclear" status would show "confirm the awarding university".
+  - The site's earlier citations were an undated table and the ODL (distance) list; neither is cited any more.
+- **New optional course fields** (`categoryFees`, `recognition`, `intakes`, plus the `feeReview` / `eligibilityReview` / `curriculumReview` source stamps the loaders already wrote). The snapshot now keeps them.
+  - A malformed review stamp is dropped rather than failing the catalog.
+  - An INR category fee that differs from the course fee is a validation issue, so it blocks the write like any other.
+- **Prepared proposals:**
+  - `src/data/prepared-category-fees.json` holds 18 MUJ/SMU programs from the 3 October prospectus evidence. Fees are in their own currency, never converted. SMU has no NRI row.
+  - `src/data/prepared-recognition.json` holds all 30 programs.
+  - Both have **Load** panels in Catalog revisions, next to the existing eligibility, curriculum and fee-correction panels.
+- **Course page:**
+  - A Domestic / NRI / Foreign (MUJ) or Indian / International (SMU) fee selector, built on native radios with 44px targets.
+  - Source and checked-date lines under fees, eligibility and the verified curriculum.
+  - A new Recognition section (list, entry as printed, official PDF and checked date), and the header chip now shows the published result.
+  - "Next intake": only confirmed intakes, hidden the day after their deadline (India time), otherwise "Not yet announced". Intakes are edited in the CMS.
+- **Comparisons and guides:**
+  - A "Fee outside India" row and a recognition FAQ built from each program's result.
+  - Fee guides show the outside-India fees with their source.
+  - The 17 UGC-approval guides now read each program's published result instead of hard-coded "Yes" answers and "confirmed with the university" notes. The university-level NAAC/AICTE notes are kept.
+- **Publishing checklist** (`/admin/publishing-checklist`, in the CMS sidebar): every prepared item per course is shown as applied, waiting for review, to load or on hold, with a link to that course's revisions.
+- **Tests:**
+  - New `wave2-publishing-smoke.cjs`. It loads the prepared items in the editor with every write blocked. It then writes the values into three local records, checks the public pages and the fee selector, and restores the records exactly (data and `updated_at`).
+  - The comparison table now has 13 rows and the course picker 10 entries.
+  - The editorial comparison now has 12 rows. About has 5 sections and was last updated on 5 October.
+- **Also:** the Amity NAAC guide note no longer says Amity University Rajasthan awards every amityonline.com program. The old UGC-guide `faqs`/`note` text is marked as no longer rendered.
+
+Validation:
+- Production build, TypeScript and source lint passed.
+- The readiness check passed (3 universities, 30 courses).
+- All 56 smoke suites passed against the standalone server.
+- Applied-state screenshots were reviewed (course fees and recognition, Amity UP note, UGC guide, mobile fee selector, CMS checklist and editor panel). There is no mobile horizontal overflow.
+- Local records changed for testing were restored exactly, and the disposable CMS users were deleted.
+
+No migration or environment change. After the deploy, an editor works through **Publishing checklist** (about 107 items across 30 courses), and an administrator applies each proposal.
+
+## Seventy-sixth increment: measurement and foundations (wave 3)
+
+Implemented on 5 October 2026 (next-phase plan §6–§8; owner decisions 8, 9 and §11 #16–18).
+
+- **Analytics (decision 17: GA4 tag only).** GTM is removed, so gtag.js no longer loads twice and page views are no longer double-counted.
+  - `gtag` is a queue from the first call, with `config` queued first, so events fired before the lazy library loads are kept, not dropped.
+  - `NEXT_PUBLIC_GTM_ID` is no longer passed by Docker or compose.
+  - The Caddy CSP now allows `analytics.google.com` and `stats.g.doubleclick.net` (some GA hits were blocked).
+- **Technical SEO (report 04):**
+  - www → apex permanent redirect (Caddyfile, H3).
+  - Every page sets its own canonical and `og:url`, site name, type and image via `withSocial()`. The layout no longer leaks `canonical: "/"` to `/lead`, `/shortlist` and 404s (H4/H5).
+  - Titles: `fitTitle()` patterns for course, fee, eligibility, career, UGC and blog pages. Titles over 60 characters went from 148 to 10: 8 editorial blog titles, kept whole for the content work, and 2 long specialization names.
+  - Guide descriptions name only the universities that offer the program.
+  - The 23 robots-blocked `/lead?…` links carry `rel="nofollow"` (M3).
+  - Article markup gains the image, `mainEntityOfPage`, a real `dateModified` (from the new `updatedDate`, set on the 11 posts whose facts changed) and a PNG publisher logo. The breadcrumb names the post. The sitemap `lastmod` follows `updatedDate` (M4/M8).
+  - `/courses` uses the course-list `ListItem` format.
+  - The broken `api-otp.amityonline.com` source is hidden from public source lists (M9).
+- **Last-good snapshot (§8).** The public catalog and article reads keep the last valid result in the server process for up to 24 hours and serve it on a database error or an invalid record, logging it. Admin preview still reads live. New `catalog-last-good-smoke.cjs`.
+- **Marketing consent and newsletter (decisions 9 and 18; migration `0008`).**
+  - Apply now has an optional, unticked box: "Send me Unnati Vidya's newsletter and WhatsApp updates…". It is stored separately from the contact consent, with its wording version and time, in the lead events and the lead export.
+  - Footer and article sign-up use double opt-in. The confirmation email has a POST confirm button, so link scanners can't subscribe anyone. Apply now consents are confirmed by the OTP email check instead.
+  - One-click unsubscribe uses HMAC links and RFC 8058, and withdraws marketing consent on the enquiry too.
+  - CMS **Newsletter** page, plus an ADMIN-only CSV export with a per-subscriber unsubscribe URL. Exports neutralise spreadsheet formulas without altering phone numbers.
+  - The privacy policy has a new "Newsletter and WhatsApp updates" section.
+  - New `marketing-consent-smoke.cjs`. It sends no email.
+- **Phone number (§11 #16):** "Call 1800-120-4050 (toll-free, 9 am – 9 pm)" was removed from the footer and policy pages and replaced by admin@unnatividya.com until the owner gives a number.
+- **CMS article editor (decision 8; migration `0009`).**
+  - `article` holds what is live; `article_revision` holds drafts and proposals.
+  - Editors keep one open draft per article, edit with labelled fields (title, category, summary, cover, dates, a block editor for paragraphs, headings, tip boxes, images and link boxes, FAQs, sources with checked dates) and submit with a reason.
+  - Administrators preview, publish or send back with a note. Publishing is refused if the article changed after the draft began.
+  - History can restore any published version as a new draft, and administrators can unpublish and republish. Audit-logged.
+  - The strict schema blocks unsafe links and non-local images.
+  - The blog, articles, sitemap and IndexNow read published CMS articles. Reading time is computed from the words: the old fixed "5–8 min" overstated 1–2 minute posts.
+  - Sources show per post; the default is the 2026-27 UGC-DEB list, not the undated table.
+  - The 26 posts are migrated by `sync-articles-to-db.js` (built into `scripts/articles-export.json`; safe to re-run).
+  - New `article-cms-smoke.cjs`. It restores the edited article exactly.
+- **Website CI.** A new `website` job in `.github/workflows/ci.yml`: lint, catalog export, types, a fresh database with migrations, catalog and article seed, the production build run like the Docker image, Playwright, and every website smoke suite. It was rehearsed locally on a throwaway database with no `.env`, and its first GitHub run is still to come.
+- **Test fixes:**
+  - The specialization search waits for its debounced URL update.
+  - The policy pages reflect the new About and Privacy sections.
+  - The Apply now dialog test ticks the contact consent by name and checks that the marketing box stays unticked.
+
+Validation:
+- Production build, TypeScript and source lint passed.
+- All 59 smoke suites passed twice: against the standalone server on the local database, and against a CI-like server on a fresh throwaway database with no `.env`.
+- GA4 was checked with a throwaway build using a fake ID: only `gtag/js` loads, and the queue is `js`, `config`, then events.
+- Titles over 60 characters were re-measured across all 261 sitemap URLs: 10 remain.
+- Screenshots were reviewed (newsletter sign-up, the two Apply now boxes, the CMS article list and block editor, the newsletter page). There is no mobile horizontal overflow.
+- Every test record and disposable CMS identity was deleted, and the edited article was restored exactly.
+
+Migrations `0008` and `0009` are needed, plus `sync-articles-to-db.js` before the new image takes traffic (see `CMS_PUBLISHING_DEPLOYMENT.md`). There is no new environment variable.
+
+
+## Seventy-seventh increment: learner-page decision guidance
+
+Implemented locally on 8 October 2026 under the [content and UI expansion plan](CONTENT_AND_UI_EXPANSION_PLAN.md). This is a presentation and question-guidance pass; it does not publish new university facts.
+
+- Course pages now lead into four practical checks: eligibility, applicant-category cost, study arrangements and current-session recognition. A compact seven-item section picker replaces ten top-level choices; the secondary content remains on the page.
+- The study section has a clear list of class and assessment questions where program-specific rules are not yet verified. The fee section identifies the selected applicant-category tuition where available and prompts for additional mandatory charges rather than treating tuition as the complete payable amount.
+- University pages group published programs by undergraduate and postgraduate level, show the lowest listed **total tuition** as such, and explain the difference between institutional badges and program recognition. The right-rail claim list has been replaced with a short verification path. Owner-deferred placement figures remain visible in their own section with scope and verification caveats.
+- New card hover motion is limited to a 2px lift and 160ms transition. Reduced-motion preferences also suppress shared card, button, pill, fade and skeleton effects.
+
+Validation: the website TypeScript check, targeted page lint and optimized production build passed; the built MUJ MBA route returned HTTP 200 with the new sections. Browser interaction and responsive screenshot checks remain to be rerun: the local Playwright package is absent, and Chrome headless did not produce a screenshot in this sandbox. No CMS record, migration, environment variable or VPS deployment was changed by this increment.
+
+## Seventy-eighth increment: one-click publishing for submitted CMS content
+
+Implemented locally on 8 October 2026. The prior course/university layout and wording changes are code and become public with deployment; they were never stored as CMS drafts.
+
+- **Publishing checklist** now separates submitted, ready-to-publish revisions from unfinished working drafts and prepared source files. An administrator can inspect the exact ready list and publish all ready course, university and article revisions with one button.
+- The action rechecks the list under the catalog and article write locks, then applies the entire batch in one transaction. A stale record, conflicting revision, unpublished catalog record, archived article or invalid payload stays out of the batch with a visible reason. If validation fails during publishing, the entire batch rolls back. Each applied revision and the batch are audit-logged.
+- No migration or environment variable was added. Prepared fee, eligibility, curriculum and recognition files still require loading, source review and submission before the button includes them.
+
+Validation: TypeScript, targeted lint and the optimized production build passed. A disposable local database/HTTP integration check passed 13 assertions covering admin permission, list drift, atomic application of one course plus one article, applied statuses and repeat-click rejection. The test course, article and CMS users were removed and verified absent. The action has not been used on real content or on the VPS.
+
+## Seventy-ninth increment: source-linked online MBA learning pilot
+
+Implemented locally on 8 October 2026 under the content and UI expansion plan.
+
+- Added four optional, validated CMS blocks for program-specific study format, assessment/exams, charges beyond tuition and specialization timing. Each stores its own official source URL, scope and checked date. The course page renders a block only if it has been published in the catalog; unanswered topics remain practical questions rather than inferred facts.
+- Prepared sourced facts for MUJ and SMU online MBA across all four blocks. Prepared Amity online MBA study-format facts only; its exam split, extra-charge schedule, international/domestic fee applicability and awarding-entity questions remain unresolved. The three preparations are available in labelled Catalog revisions controls and the Publishing checklist. Loading them does not submit or publish them.
+- Added [MBA evidence and held questions](MBA_PROGRAM_DETAILS_EVIDENCE.md). No published CMS course record, migration, environment variable or VPS deployment changed.
+
+Validation: TypeScript, targeted lint and optimized production build passed. A disposable published course demonstrated that the public page shows sourced learning, assessment, charge and specialization cards only after the corresponding database content is present (8 HTTP/content assertions); it was then deleted. Responsive browser screenshots and administrator source review remain pending.
+
+## Eightieth increment: sourced NIRF results and simpler Apply now form
+
+Implemented locally on 8 October 2026.
+
+- The three university profiles show the official 2025 NIRF **University** result with a direct Ministry of Education source link and the exact ranked institution. MUJ is rank 58; SMU is shown correctly as the 151–200 **band**; Amity's rank 22 is identified as belonging to Amity University, Gautam Budh Nagar, not every Amity Online awarding entity. The card explains that an institution's NIRF result does not rank its online courses. Source evidence and the update rule are in [NIRF_UNIVERSITY_RANKINGS_2025.md](NIRF_UNIVERSITY_RANKINGS_2025.md).
+- Removed the optional newsletter/WhatsApp marketing checkbox from the one shared Apply now form used by modal and direct `/lead` entries. The form no longer sends `marketingConsent`; existing API records and historical subscribers remain supported. Newsletter opt-in remains on its separate footer/article sign-up. Privacy and newsletter-admin copy now match.
+- The owner approved one required, initially unchecked consent for enquiry follow-up by email, SMS, WhatsApp and voice call. Its wording identifies Unnati Vidya and authorised counselling associates and explains withdrawal. The owner then removed the unfinished-form/email-verification clause from the learner-facing copy; the resulting evidence version is `application-follow-up-2026-10-08-v2`. The form omits the proposed blanket DND/NDNC override. The official [DPDP Act](https://www.meity.gov.in/static/uploads/2024/02/Digital-Personal-Data-Protection-Act-2023-1.pdf) requires a clear affirmative action for consent, and [TRAI's sender advice](https://www.trai.gov.in/advice-to-senders) describes additional requirements for commercial messages; a website checkbox alone must not be represented as a blanket DND override.
+- When an older enquiry's contact details are edited under the new wording, the API records the newly accepted version and exact text as a separate event. Omitting the retired marketing field on a same-email edit preserves an earlier opt-in; changing the email cannot transfer that opt-in to the new address.
+
+Validation: TypeScript, targeted lint and optimized production build passed after the shortened consent update. The rebuilt `/lead` route returned HTTP 200 and rendered exactly one unchecked checkbox with the new channels, withdrawal wording and no unfinished-form, newsletter or DND-override copy. The contact-first smoke passed 28 local HTTP/database checks, including the stored consent version, text and re-acceptance path; the legacy marketing/newsletter smoke passed 37 checks, including same-email opt-in preservation and no transfer to a changed email. Both used disposable records and no external email or CRM delivery. All three university routes returned HTTP 200 locally and rendered the expected result and institutional caveat. No migration, environment variable or VPS deployment was changed. Local interactive browser verification remains pending because a Playwright installation is unavailable in this workspace.
+
+## Remaining approved work (updated 8 October 2026)
 
 - Full field-level verification across all three universities, including international/NRI fees and regulator evidence; review and publication of corrected catalog facts.
-- Publishing follow-up: extend friendly editing to remaining content forms, rendered previews, scheduled publication and persistent last-good snapshots/performance caching. Core CMS public reads, role-restricted revision application and reviewed rollback controls are implemented.
-- Manual plus weekly scheduled official-source checks creating drafts only.
-- Groq-backed, source-grounded free recommender (credentials/model configuration pending); current matching uses deterministic catalog filters; the scripted chat has been removed.
-- Broader discovery/navigation, performance/runtime upgrade, SEO/Search Console validation and tools from the agreed phases.
+- Publishing follow-up: extend friendly editing to remaining content forms, **guides in the CMS**, rendered previews, scheduled publication and persistent last-good snapshots/performance caching. Core CMS public reads, blog article editing, role-restricted revision application, reviewed rollback, the process-local last-good fallback and website CI are implemented in the local code. They still require the intended release to reach the VPS.
+- The draft-only weekly official-source checker is implemented locally in increment 85; first production run, host cron installation and admin review of captured changes remain.
+- A reviewed structured eligibility-rule schema and checker. The existing free-text eligibility paragraphs are not sufficient for a program-level admission verdict.
+- Publication of reviewed applicant-category fee blocks; the total cost planner is implemented but cannot display international/NRI amounts from private prepared files.
+- Groq recommender VPS configuration and production verification. The local integration, bounded follow-up chat and standard fallback are implemented in increment 81 below.
+- Broader discovery/navigation, a tested move off end-of-life Node 20, SEO/Search Console validation and tools from the agreed phases. GA4-only is implemented locally; the older GTM recommendation is superseded.
 - Configured external CRM create/update delivery and real email-provider end-to-end checks using dedicated test credentials/recipients.
 
 Appointment booking is excluded. English-only, three-university scope, public editorial comparisons and gated interactive comparison remain unchanged.
+
+## Eighty-first increment: Groq course recommender and scoped follow-up
+
+Implemented locally on 8 October 2026. The five-question tool first excludes courses outside the learner's published-catalog level, qualification, subject and maximum listed tuition choices. Groq may order up to three remaining courses and select pre-approved reason keys; server validation rejects invented IDs, reason keys and malformed output. The results remain free without contact details, and Apply now remains a separate lead form.
+
+The follow-up chat passes only the selected shortlist, current question and previous topic/course context to Groq. It accepts only a structured topic and selected course ID, then composes the visible answer from server-side published facts. Off-topic prompts are declined; email/phone text is rejected before any provider call. Missing international/NRI fees, program-level recognition and study details are explicitly described as unverified until a reviewed CMS revision is published. Provider errors, timeouts and rate limits use standard course matching and answer templates; the tool never creates a lead or sends a message.
+
+Server-only `GROQ_API_KEY` and `GROQ_MODEL` were added to the VPS Compose environment and examples. Local live calls with the configured `openai/gpt-oss-20b` key passed strict JSON-schema ranking and follow-up classification. A rebuilt local HTTP server returned `mode: ai` and three MBA course IDs; contextual fee questions about the second then first option returned the corresponding published amounts and source links. Off-topic, contact-detail and forged-shortlist requests were declined or rejected. TypeScript, targeted lint, smoke assertions, production build and rendered page check passed. The browser interaction script was updated but could not run without Playwright. No VPS deployment or CMS publication occurred.
+
+## Eighty-second increment: category-aware total cost planner
+
+Implemented locally on 8 October 2026. `/tools/total-cost` lets a learner view up to three published programs, select each university's own applicant-category label, see the original-currency tuition and semester schedule where published, add a personal allowance for unknown charges, and print the resulting planning view. It does not convert currencies, treat a domestic INR fee as an NRI fee, or call an incomplete subtotal a university quote. A direct numeric comparison is enabled only when the selected programs have the same published category label and currency; otherwise the tool shows separate cards and an explanation.
+
+Course fee sections prefill the planner and carry a published category selection. The existing EMI calculator now shows the selected fee category and accepts only a published/listed INR amount; USD or unavailable categories do not produce an INR loan estimate. A published category choice follows Apply now into the existing contact-first form's second step and is validated against the selected course before being recorded in `PREFERENCES_SAVED` event metadata. The current external CRM mapping does not yet forward that event field. The tool is linked from site navigation, footer, course pages and sitemap. There is no lead capture in the tool; Apply now remains a separate enquiry.
+
+At implementation, a read-only query found 30 published courses and **zero published category-fee blocks** in the local website database. The tool therefore shows listed INR tuition with an unconfirmed applicant category and explicitly unavailable international/NRI fees until reviewed CMS proposals are applied. The prepared MUJ/SMU research files were not published by this increment. No migration, new environment variable, VPS deployment or customer communication was made.
+
+Validation: TypeScript, targeted lint, the optimized production build and `total-cost-smoke.mts` passed. The local planner, EMI and MUJ MBA pages and static sitemap all returned HTTP 200 with the intended links and content. Headless Chrome with true 320, 390, 768 and 1280 px emulation found no document-width overflow; at 390 px, switching to the unpublished applicant category removed the subtotal, and adding a second course showed the comparison warning without overflow. Apply now opened the contact-first mobile modal with name, email and phone before course selection. The disposable contact-first regression passed 31 HTTP/database assertions, including rejection of a forged fee-category key and clearing that context; it deleted its test lead and made no external delivery. Published USD and semester-schedule interactions remain untestable against the live local catalog until an administrator publishes reviewed category-fee blocks; synthetic data tests cover their arithmetic and isolation.
+
+## Eighty-third increment: batch review of prepared category fees
+
+Implemented locally on 9 October 2026. The CMS publishing checklist shows all 18 MUJ/SMU prepared courses, each official prospectus and program fee link, category labels and a reason for any excluded course. An administrator can affirm source review and submit all currently eligible fees as private catalog revisions in one transaction. The endpoint compares the exact reviewed course list again while holding course rows; changed base fees, existing category blocks, pending revisions and working drafts block individual courses. Repeated or stale submissions are rejected. The existing separate admin publish action remains the only step that changes public catalog facts.
+
+The current official 2026–27 MUJ and SMU prospectus PDF checksums matched the 3 October evidence exactly on 9 October. The prepared data's 45 tuition schedules matched all stored program observations and reconciled with their semester counts. A read-only local CMS query found the 18 courses published with no category-fee blocks or pending revisions. The database smoke check staged all 18 proposals inside a transaction, verified that public course rows did not change, rejected a repeat submission and rolled back. The cost planner and EMI choice list also show an explicit unavailable NRI option whenever published fee rows do not identify an NRI rate, so SMU's international price cannot silently stand in for it. TypeScript, targeted lint, production build and anonymous endpoint checks passed. No CMS fees were published, no migration or `.env` key was added, and no VPS change was made. SMU NRI applicability, Amity international/NRI rates, and charge inclusions remain open for explicit review.
+
+## Eighty-fourth increment: source-bounded eligibility checker pilot
+
+Implemented locally on 9 October 2026. `/tools/eligibility-checker` asks for applicant category, completed qualification route, institution recognition, graduation marks or CGPA unknown, reserved status, education outside India and AIU equivalence where relevant. It shows **Matches published academic criteria**, **Needs university confirmation**, or **Does not meet the selected published criteria**, with the specific reasons, official source and check date when a rule exists. No sign-up is required, answers stay in browser memory, and Apply now is a separate lead action. The selected result is prominent; other programs are grouped compactly so 30 unknown states do not flood the page. Course pages and eligibility guides link to the tool.
+
+Only `eligibilityRules` applied through the CMS are executable. The new labelled admin editor records source/date, applicant categories, degree routes, thresholds, AIU requirements and unresolved conditions; manual rules default to incomplete. Changing the free-text eligibility paragraph removes an older rule from that proposal. MUJ and SMU online MBA rules are prepared from their official pages in [pilot evidence](ELIGIBILITY_CHECKER_PILOT_2026-10-09.md); none was applied to the local catalog. Amity MBA was held because the current source could not be reliably rechecked as a complete rendered rule, and MUJ MSc Mathematics remains disputed. All 30 local programs therefore return **Needs university confirmation** today. The route is noindex and omitted from both sitemaps until at least one complete reviewed rule is published.
+
+Validation: the rule smoke covered the two sourced MBA pilots, Indian/NRI/foreign thresholds, reserved cases, unlisted bachelor routes, 12th-only applicants, missing marks, uncertain awarding institution, AIU equivalence and invalidation after text edits. TypeScript, targeted lint and the optimized build passed. HTTP returned 200 for the tool and linked course page; the dynamic static sitemap omitted the unready tool. Headless Chrome at 320, 390, 768 and 1280 px found no horizontal overflow; the 390 px form produced the expected confirmation result, and its mobile screenshot was inspected. No CMS publication, migration, environment variable, VPS deployment or external message was made.
+
+## Eighty-fifth increment: weekly official-source evidence checks
+
+Implemented locally on 9 October 2026. A separate CLI reads published CMS source URLs, including structured fee, eligibility and recognition sources. It accepts only selected official HTTPS hosts, compares normalized HTML or PDF hashes with the previous capture, and creates a private Source imports item only for a first capture or changed page. Unchanged and failed checks stay visible in history. A database advisory lock prevents overlapping runs; the VPS wrapper and example Monday 09:30 IST cron command are in [the operator guide](WEEKLY_SOURCE_CHECKS_2026-10-09.md). The checker does not run until an operator deploys and installs that schedule.
+
+Weekly evidence cannot be attached directly to the public catalog through the Source imports action, including via the API. An editor reviews it, then proposes real fact changes using Catalog revisions; an administrator applies those separately. The legacy mutating source importer is not used. The smoke test covered allowed and rejected hosts, source selection, script/style normalization, baseline/change decisions, private evidence insertion and redirect failure without a catalog write. A rollback-only local database capture created a private evidence item and left the published course row unchanged. The local catalog currently yields 51 monitored entries across 29 courses and all three universities; Amity BBA needs a reviewed accessible official source URL. Targeted lint, TypeScript and the production build passed; HTTP health returned 200 and anonymous CMS source access redirected to login. No new migration, environment variable, CMS publication or VPS change was made.
+
+## Eighty-sixth increment: BBA eligibility-rule pilot and clearer learner form
+
+Prepared MUJ and SMU BBA structured rules from their official course pages on 9 October 2026. MUJ Indian applicants can use a recognised Class 12 or 10+3 diploma route; its NRI/foreign published wording expressly names Class 12 or AIU-recognised equivalent, so the rule uses category-specific routes and sends NRI/foreign diploma cases to university confirmation. SMU's Indian route is prepared for Class 12 or 10+3 diploma. Its main eligibility block and FAQ differ on the NRI/foreign diploma route, so those categories are intentionally absent and always return confirmation. Neither source states a minimum marks threshold for these BBA programs. The prepared records remain private until an administrator checks the current intake, submits and applies a CMS revision.
+
+The public checker now says “qualification route for this application,” labels Class 12/diploma marks correctly, and hides the percentage field when the selected published rule has no threshold. The admin rule editor exposes category-specific routes. The eligibility smoke test passed new BBA route, category and AIU cases; targeted lint, TypeScript and the production build passed. A rendered browser check at 320, 390, 768 and 1280 px found no horizontal overflow; mobile submission and the expanded other-program list worked. The local published catalog still has zero structured rules, so current public results remain “Needs university confirmation” and the tool remains noindex. No migration, environment change or VPS deployment was made.
+
+## Eighty-seventh increment: BCom and BA eligibility review
+
+Prepared category-specific structured rules for MUJ and SMU BCom from their current official program pages. Both list recognised Class 12 or 10+3 diploma for Indian applicants and Class 12 or AIU-recognised equivalent for NRI/foreign applicants, without a published minimum marks percentage. NRI/foreign diploma cases stay at university confirmation. These are private CMS proposals and require current-intake administrator review before publication.
+
+The SMU BA source review found a material mismatch: the current page lists an Indian 10+3 diploma, while the official 2026–27 BA prospectus expressly lists Class 12 or equivalent and omits the diploma. An older 2025–26 international BA brochure unexpectedly states a bachelor's-degree requirement. The prepared BA checker rule therefore covers only the consistent Indian Class 12 route. Diploma and NRI/foreign routes return confirmation. The CMS free-text BA proposal now carries a source-linked evidence warning and a dated note so it is not submitted casually. Seven of the 30 course rules are now prepared, none is published; the remaining 23 need course-specific review. The seven-rule smoke, JSON validation, targeted lint, TypeScript, production build, and authenticated local CMS rendering for the BA revision and publishing checklist passed. No migration, environment change or VPS deployment was made.
+
+## Eighty-eighth increment: UI redesign from the Claude Design handoff
+
+Implemented locally on 10–11 October 2026 from the approved [UI redesign plan](UI_REDESIGN_PLAN_2026-10.md). The plan's owner decisions are in its §10 (Q1–Q16). The approval added two things: pages missing from the designs also get the new format, and the admin panel is restyled too. This is a UI-only change: routes, URLs, data reads, JSON-LD and metadata, analytics events, the contact-first lead flow, the compare OTP gate and CMS behaviour are unchanged except where a §10 decision says otherwise.
+
+**Design system:**
+- Plus Jakarta Sans, self-hosted through `next/font`.
+- Design tokens on `:root` in `globals.css`, plus shared CSS in `src/styles/ui/shell.css` and one stylesheet per area: home, courses, compare, universities, guides, tools, company and admin.
+- Subtle CSS-only entrance motion, which is turned off under reduced motion and when printing.
+
+**Shared components:**
+- New site header: flat links plus Guides and Tools dropdowns, search, "Saved courses" with a bookmark count, and Apply now.
+- New footer with UGC/NAAC/AICTE badges and an email-only contact.
+- One `CourseCard`, plus `SaveButton`, `CompareToggle`, `FaqAccordion` and `SectionTabs`.
+- A compare list (`uv_compare`, at most 3, starts empty) with a tray that opens the still-gated `/compare?add=`.
+- Mobile action bars only on Home and course pages (Q16).
+
+**Pages:**
+- Home, the courses list and course detail, compare (selection slots, a locked preview, the unlocked table, Share and Print) and the editorial comparisons, and saved courses.
+- Universities, university detail, specializations and specialization detail.
+- Both guide hubs, guide and article reading pages, and the author page.
+- Find my course (new quiz and results, with match percentages from the learner's answers only; see `recommender-match-score.ts` and its smoke test), the EMI calculator, the total cost planner and the eligibility checker.
+- Apply now (/lead and the dialog), About, How we verify, the legal pages, the newsletter pages, 404 and the error pages.
+- The CMS admin shell and pages.
+
+**Owner rules kept over the design:**
+- no phone number;
+- no Best/Lowest or winner highlighting;
+- placement and package figures labelled university-wide;
+- per-program recognition only;
+- no unconfirmed perks, reviews or "Who it suits" copy;
+- ratings shown but never used for ranking;
+- byline "Content Team, Unnati Vidya";
+- the CTA is exactly "Apply now".
+
+**Clean-up:**
+- About 950 rules in `globals.css` that nothing references any more were removed (4,806 → 1,753 lines). Every removed selector contains a class that no source, migration or public file mentions. Every kept rule is byte-identical to the original.
+- The now-unused `approval-badge`, `section-pill-nav`, `sticky-ctas` and `sticky-mobile-bar` components were deleted.
+- Smoke suites were updated for the new markup without dropping checks. New checks cover the design rules: no `tel:` links, the unticked single consent, the locked compare preview with no values in the DOM, list sync, and the match-score weights.
+
+**Owner follow-ups, 11 October 2026:**
+- **Q17:** the About H1 keeps "unbiased".
+- **Q18:** the /lead eyebrow keeps "No obligation".
+- **Q19:** "Online learners" is removed from the university Key highlights.
+- **Q20:** the university detail page drops the two-column pairs. Rankings & recognition is now a NIRF banner (rank block plus explanation) with equal approval tiles. Admission process moved above Placements and shows as a horizontal stepper on wide screens. Placements, Scholarships and "Before choosing" (now including Sources) are full-width panels using the shared icon tiles, and the section tabs follow the new order.
+
+**Validation (11 October 2026, final code including Q17–Q20):**
+- TypeScript passes. ESLint on `src` has no errors; its 4 warnings are the existing admin `location.assign` calls.
+- The production build passes, and the static mobile CSS check passes.
+- The match-score, recommender, total-cost and eligibility-rules library suites pass. `category-fee-batch-smoke.mts` was not run: it needs a local CMS administrator, and CI doesn't run it.
+- All 62 website smoke suites (browser suites included) pass against the standalone production server in two setups:
+  - with local data (port 3100);
+  - in the CI rehearsal: a fresh `unnatividya_ci` database and no `.env`, on port 3200.
+- Disposable CMS users created by the suites were removed.
+- Screenshots were reviewed at 320, 390, 768, 1280 and 1440 px with no horizontal overflow.
+
+**Bugs QA found and fixed:**
+- A reduced-motion rule using `transition-duration: 0.01ms` on every element made every layout change transition briefly. It is now `transition: none`.
+- At 320 px the header was 13 px too wide. The logo and gap are now fluid, with no breakpoint.
+- The Home hero selects were named "Degree level Any level", because a select inside its label adds its chosen option to the name. They now use `aria-labelledby`.
+- The CMS "Close menu" toggle overflowed by 1 px at 320 px.
+- "UnnatiVidya" now has its space. Logo `width`/`height` attributes now match each SVG. The article top no longer lands under the header. Section-tab focus is now synchronous.
+
+No commit, push, migration, environment change or VPS deployment was made.
+
+**Owner follow-ups, 12 October 2026 (Q21–Q29):**
+- **Q21:** the course sidebar no longer shows learner counts, so they appear on no public page.
+- **Q22:** the red "does not meet" tint is kept as the `--uv-error-bg` token.
+- **Q23:** Find my course writes its five answers to the URL; a shared link reopens the results, and "Start again" or "Edit" clears them.
+- **Q24:** course pages open the EMI calculator with `?course=` pre-selected. Unknown ids are ignored.
+- **Q25 and Q26:** the three budget bands and the "Name" and "Phone" labels stay.
+- **Q27:** the Apply now form shows inline field messages linked with `aria-describedby`. They appear on blur for filled fields and on submit for all fields, and submit focuses the first field that needs attention. Empty fields are not flagged on blur, because the message would shift the form under the pointer.
+- **Q28:** the duplicate article newsletter styling was removed from company.css.
+- **Q29:** the per-area stylesheets were pruned (admin.css lost 8 lines, universities.css lost 1). The shared `shell.css` primitives were kept. The pruning script now treats `:is()` and `:where()` groups as alive if any alternative is used. A re-check of the earlier globals.css pruning found no rule removed wrongly.
+- New checks cover these: the URL round trip and restart in course-matcher-smoke, the `?course=` prefill in emi-ui-smoke, and the inline messages in application-accessibility-smoke.
+
+
+**Validation of Q21–Q29 (12 October 2026):**
+- TypeScript, ESLint and the production build pass.
+- **CI rehearsal (port 3200):** all 62 website smoke suites pass in one uninterrupted run.
+- **Local data (port 3100):** 56 suites passed in the full run. The other 6 hit timeouts while the machine was under heavy load (load average up to 63, memory swapping). All 6 pass when rerun one at a time on a quiet machine: course-discovery, crm-config-ui, crm-history-ui, lead-detail-ui, mobile-actions and redirect-ui.
+- Earlier failures in this session were also environmental. One AVIF encode in the image optimizer got stuck inside a server process; after a restart the same image encodes in 0.13 s. Two suites ran concurrently against the same database. Each affected suite passes when run alone.
+- **Uninterrupted local run on a quiet machine (port 3100):** 61 of 62 suites passed. course-matcher timed out once, waiting for network idle on the restored shared-link page. It passed in two immediate reruns, and no request was left open when the same URL was probed.
+- **Watch item:** twice in this session, a request to the standalone server's image optimizer (`/_next/image`) stayed open until the server process restarted. Both times it was one image and size, with AVIF requested. This was seen only on the local macOS machine under heavy load, and it has not been reproduced on demand. After the VPS deploy, check that pages with images reach network idle.
+
+## Eighty-ninth increment: Wave 4 learner tools (A1–A5)
+
+Implemented locally on 12 October 2026 from the approved [Wave 4 plan](WAVE_4_PLAN_2026-10.md) (decisions W1–W4).
+
+- **A5, Saved courses:**
+  - Copy link (`/shortlist?ids=…`). A visitor opening it sees "Shared with you" and saves nothing until they choose to.
+  - A private note per saved program, kept only in this browser (`uv_shortlist_notes`, up to 500 characters).
+  - A print view that includes the notes.
+- **A3, Find my course:** each result shows the program's listed eligibility, plus either the eligibility checker (when a complete reviewed rule is published) or "Confirm with the university" with the course's entry details. The quiz never claims a personal verdict.
+- **A4, EMI calculator:**
+  - An optional lender processing fee counts in the total payable; it is not borrowed.
+  - A "Loan or semester payments" section compares the plan with the published INR semester schedule, as a difference only. When no schedule is published, it says so (true for every program today).
+  - `semesterComparison()` is unit-tested.
+- **A2, Recognition check** (`/tools/recognition-check`, decision W2):
+  - Shows each program's published 2026-27 UGC-DEB result, with list, institution, programme as printed, checked date and source.
+  - Includes a four-step "check it yourself" guide and an all-programs table.
+  - Shows only published CMS status. All 30 programs read "being re-checked" until an administrator applies the prepared proposals.
+  - The page is noindex and outside the sitemap until one result is published.
+- **A1, Admission document checklist** (`/tools/document-checklist`, decision W3):
+  - Lists documents by program level and applicant category, from official pages only, read on 12 October 2026:
+    - Online Manipal's online MBA admission page, for MUJ and SMU;
+    - the MUJ Admission Manual for Online Programmes (version 5, 2022), for upload rules and special cases;
+    - Amity University Online's FAQs and its January 2026 "How to apply" guide.
+  - Ticks stay in this browser, and the page has a print view. Where a source has no list for a category (SMU NRI/foreign, Amity NRI), the page says "Confirm with the university".
+- **Navigation and smoke checks:** both tools are in the header Tools menu and the footer, and the lead dialog has labels for their intents. A new `learner-tools-wave4-smoke.cjs` covers them. Shortlist, course-matcher, EMI and total-cost suites were extended.
+
+**Source conflicts found (not changed, for owner review):**
+- The 2022 MUJ manual says MBA applicants need CAT/MAT/GMAT (above the 40th percentile) or the Manipal Management Aptitude Test. The current Online Manipal MBA admission page and our catalog list no entrance test. The checklist leaves the test out; confirm with MUJ.
+- The Online Manipal MBA admission page (read 12 October 2026) shows the MUJ online MBA full fee as ₹1,84,000; the published catalog has ₹1,80,000. The weekly source check and an administrator fee review should confirm the current figure before any change.
+
+## Ninetieth increment: Next.js 16.4.0 (stuck image fix)
+
+Implemented locally on 12 October 2026, with owner approval to upgrade the website and the CRM together.
+
+**The bug.** In Next.js 16.3.8, the image optimizer fetches a local source image through a mocked request that reuses the visitor's socket. If the visitor disconnects while that image size is being optimized for the first time, the internal fetch never finishes. The response cache funnels every later request for the same image and size onto that one fetch, so the image stays pending for all visitors until the server restarts. Locally, 32 of 40 image sizes stayed stuck after cancelled AVIF requests and 1 of 40 after WebP ones. This also explains the intermittent page-load timeouts in increments 88–89. Next.js 16.4.0 fixes it: the mocked response no longer references the requester's socket. After the upgrade, 0 of 40 sizes were stuck, both for warm images and for 40 never-requested sizes.
+
+**Changes:**
+- `next` and `eslint-config-next` go from 16.3.8 to 16.4.0 in the CRM root `package.json`, and `next` in `apps/unnatividya/package.json`.
+- Both lock files were regenerated with npm 10, which CI uses. They change only the Next.js packages (12 entries in the root lock, 10 in the website lock), and `npm ci` accepts them.
+
+**Validation:**
+- CRM: `check-lockfile.js`, TypeScript, CRM lint, 2,155 unit tests in 177 files, and the production build pass.
+- Website: TypeScript, lint and the production build pass; the smoke suites are recorded below.
+- The CRM database smoke tests and the API regression run were not repeated locally.
+- No migration or `.env` change.
+
+**Local environment note.** The folder above `crm/` is an npm workspace root that lists `crm`. Running `npm install` inside `crm/` therefore installs into that outer workspace and rewrites its lock file. It also hoisted most packages out of `crm/node_modules`, which broke the standalone copies (`pg` not found). `crm/node_modules` was rebuilt with `npm ci` (npm 10) in an isolated copy. The previous folder is kept in the session scratchpad. The outer project's `package-lock.json`, which already had uncommitted changes before this session, now also reflects the upgrade; every dependency of its own workspaces still resolves.
+
+**Follow-up fixes found while validating 16.4.0:**
+- **Filters reflected a frame late.** On 16.4.0, `useSearchParams` picks up a `history.pushState` change about one frame later, so pills, Reset and compare slots showed the old state on the next read. The new `src/lib/use-live-search-params.ts`:
+  - `writeUrl` records each written query, and `useLiveSearchParams` shows it until Next's own value catches up. Next's value remains the source of truth for first render, Link navigations and back/forward.
+  - The course, blog, guide, specialization and compare explorers use it instead of calling `history.pushState` directly.
+- **Fast typing dropped characters.** Fast typing in the course, blog, specialization and guide search boxes dropped characters ("online" became "onlne") because each box took its value from the lagging URL. `useUrlSearchText` keeps the box's own text, writes every keystroke to the URL, ignores late echoes of what it wrote, and still accepts outside changes (Reset, back/forward, links). Article- and course-discovery suites now type at full speed and assert the exact text.
+- **Generated catalog validator broke.** `scripts/generated/catalog-snapshot.js` now imports the eligibility rules (since increment 84). The generator compiled each file alone, leaving `require("@/lib/eligibility-rules")` unresolved, so `check-catalog-ready.js` would crash in CI and in the VPS upgrade sequence. `export-catalog.ts` now also generates `eligibility-rules.js`, rewrites `@/lib/…` requires to sibling files, and fails the export if an unknown `@/` import remains. `check-catalog-ready.js` reports ready again (3 universities, 30 courses).
+- Three discovery suites wait for a filter's pressed state before asserting it, and the comparison suite waits for the third slot.
+
+**Validation of increments 89–90 (12 October 2026, run on a quiet machine):**
+- **Builds and unit checks.** TypeScript and lint pass, and so does the production build on Next.js 16.4.0. The library suites (total-cost, match-score, recommender, eligibility rules) pass, as does `prepared-article-drafts-smoke.mts` (4 drafts).
+- **Smoke suites.** All 63 website smoke suites pass both against local data (port 3100) and in the CI rehearsal (port 3200). The 63 include the new learner-tools suite.
+- **CRM.** Lock check, TypeScript, lint, 2,155 unit tests and the production build pass.
+- **C1 import, on the CI database:**
+  - The first run queued 4 drafts and a re-run queued 0.
+  - The new article stayed private (404) and the published hub kept its old text.
+  - A disposable administrator opened CMS → Articles and applied two revisions through the normal review API. The new article and the rewritten hub then appeared publicly.
+  - The CI database was then restored (no C1 rows, no disposable user).
+
+## Ninety-first increment: new-batch fee re-check (12 October 2026)
+
+The owner reported that fees changed for the new batch. All 30 programs were re-read from their official program pages; see the [summary](FEE_RECHECK_2026-10-12.md) and the [structured evidence](FEE_RECHECK_2026-10-12.json).
+
+**What changed:**
+- Six MUJ Indian-applicant fees rose:
+  - MBA ₹1,80,000 → ₹1,84,000
+  - BBA ₹1,39,500 → ₹1,44,000
+  - BCA ₹1,39,500 → ₹1,44,000
+  - MCA ₹1,58,000 → ₹1,64,000
+  - B.Com ₹99,000 → ₹1,05,000
+  - MSc Mathematics ₹80,000 → ₹84,000
+- Everything else is unchanged:
+  - MUJ M.Com, MA Economics and MA JMC; all SMU programs; every NRI/foreign USD schedule;
+  - all Amity programs, apart from the MA JMC correction already pending since 3 October.
+- The MUJ 2026-27 prospectus PDF is unchanged and still prints the older Indian fees, so the updated drafts cite the program pages.
+
+**How the change is prepared.** Owner decision: prepared CMS corrections only; nothing is written to the code seed or published.
+- Six coordinated fee corrections were added to `prepared-fee-corrections.json`. They carry the new fee, and their semester, annual and full-payment plans come from the official page with no discounts.
+- The "No-cost EMI" row (an owner-stated claim) and "EMI from" follow the site's convention of fee ÷ program months: MBA ₹7,667, BBA and BCA ₹4,000, MCA ₹6,833, B.Com ₹2,917, MSc ₹3,500 per month. Scholarships are kept.
+- `loadPreparedFeeCorrection` gained optional `emi`, `feePlans`, `highlights` and `keepScholarships`. Without them it keeps its cautious defaults, which the Amity MA JMC correction still uses.
+- The six MUJ applicant-category drafts now expect the new fee. The administrator loads the fee correction first, then the category fees. Until the corrections are published, the category-fee batch holds those six back with "Current Indian fee differs from the prepared amount".
+- The editor's source link and the generated review note no longer say "prospectus" when the source is the program page.
+
+**Tests.** `category-fee-batch-smoke.mts` checks each draft against the evidence it cites and against today's pages, and checks every correction against the re-check. It passes in the CI rehearsal (45 schedules; 12 ready, 6 held). `wave2-publishing-smoke.cjs` now loads the coordinated fee correction before the category fees and publishes the fee with its plans and highlights. It passes on both servers (31 checks), with records restored; `catalog-editor-smoke.cjs` passes on both.
+
+## Ninety-second increment: hub C5 and enriched comparisons (13 October 2026)
+
+**Hub C5 (online MBA), prepared as CMS drafts.** Four revisions of published posts were added to `scripts/prepared-article-drafts.json`, which now holds both Wave 4 batches (eight items, each tagged with its batch). The [review note](content-batches/C5_ONLINE_MBA_REVIEW_2026-10-13.md) lists every claim and its source.
+- `online-mba-guide` is rewritten as the hub at the same URL (decision W5).
+- `best-online-mba-working-professionals` is retitled "Online MBA while working: what MUJ, SMU and Amity ask for", without the superlative.
+- `mca-vs-mba-it-careers` is retitled "MBA or MCA if you work in IT: how to decide".
+- `manipal-university-jaipur-vs-amity-online-mba` gets the new fee difference (₹41,000).
+
+The posts quote the new-batch fees as "listed on the official page, 12 October 2026" and link to the course pages (W6). The current MUJ page lists a CAT/GMAT/MAT score and a work-experience certificate as optional documents, which settles the 2022 manual's entrance-test wording. Placement figures, weekly hours and "weekend classes" are left out because they are unsourced. `prepared-article-drafts-smoke.mts` now also checks every `/courses/<slug>` link against the exported catalog.
+
+**Enriched comparisons (Wave 4 part C).** Every editorial comparison page (`/compare/<course>/<pair>`) gains three sections and matching tabs. Nothing on these pages ranks the programs.
+- **At a glance:** listed tuition and the difference, duration, specialisation counts and the 2026-27 recognition status, all from the published catalog. A note says the page doesn't rank the programs. When both programs share a status, it is stated once.
+- **Specialisations side by side:** two columns with each university's listed options.
+- **Sources:** each program's public source pages, opening in a new tab. Machine endpoints (`publicSourceUrls`) and the older UGC-DEB notice tables are left out. A program with no page of its own falls back to its university's public pages, and the fee-check date shows when the CMS has one.
+
+The existing table already covers eligibility and the outside-India fee. `editorial-comparison-smoke.cjs` now checks the summary labels and ranking words, both specialisation columns, and that source links are https, open in a new tab and avoid machine endpoints. It also checks the three new tab targets.
+
+**Deploy.** [CMS_PUBLISHING_DEPLOYMENT.md](CMS_PUBLISHING_DEPLOYMENT.md) now gives the order after restart: publish the six MUJ fee corrections, run `import-article-drafts.js` once, then review C1 and apply C5 last. No migration or `.env` key is needed.
+
+## Ninety-third increment: hub C2, cost and financing (13 October 2026)
+
+Owner decision W7: the C2 hub is a catalog page, not a CMS article, so its fee table always matches the course pages. The [review note](content-batches/C2_COST_AND_FINANCING_REVIEW_2026-10-13.md) lists every claim and source.
+
+**The fees hub.** `/online-degree-guides/fees`, "Online degree fees 2026-27 at MUJ, SMU and Amity":
+- It lists all 30 programs, grouped by degree, with a jump list. Each row links to the course page and shows listed tuition, duration and the fee-check date where one exists.
+- An Indian semester payment appears only from a published applicant-category block. The seeded plans were computed from the total; Amity's ₹56,250 differs from the official ₹56,300.
+- It also has "At a glance" (counts, tuition range, application fee by university, checks), "What the listed fee leaves out", "Paying in parts", four FAQs, the Content Team byline and FAQ structured data.
+- Within a degree, rows are ordered by listed tuition, and a note says this is not a ranking.
+- It is in the guides sitemap. The guides hub links to it from a card above the explorer and keeps its Q11 layout.
+
+**Fee guides rebuilt (all 17, one template).**
+- New "Application fee" column (via `programApplicationFee`), a "Per semester" column when a reviewed schedule exists, and fee-check dates.
+- A "Payment options" table appears only after a fee correction is published (`feeReview`). It omits the template "2% off" plan.
+- A "Plan the full cost" section links to the total cost planner with the whole degree preselected. For MBA, that is the MBA total-cost comparison.
+- A per-program sources list. Machine endpoints are hidden, and a program with no public page of its own falls back to its university's public pages, as on the comparison pages.
+- The intro and FAQs no longer say "verified against its individual program page", "covers tuition, LMS access, and online proctored exams" or that a specialisation never changes the fee. They now give the application fee and a dated "How current are these fees?" answer.
+
+**Total cost planner.** `?course=` accepts up to three comma-separated programs; unknown and repeated ids are dropped, and the category preset still applies to a single program only. The planner no longer cites the older UGC-DEB notice PDF as a fee source (it did for Amity's MBA).
+
+**C2 article draft.** "No-cost EMI for an online degree: how it works and what to check" (`no-cost-emi-online-degree`) was added to `prepared-article-drafts.json` (now nine drafts, batch C2). It quotes two RBI circulars:
+- RBI/2013-14/292 of 17 September 2013, on zero percent EMI schemes;
+- RBI/2024-25/18 of 15 April 2024, on the Key Facts Statement: APR including all charges, no charges outside the KFS without consent, three working days' validity, and credit card receivables exempt.
+
+It also repeats the owner-stated no-cost EMI claim, listed in the claims register. `prepared-article-drafts-smoke.mts` accepts `rbi.org.in` as an official source.
+
+**Tests.** The new `fees-hub-smoke.cjs` (33 checks) covers:
+- the hub link, the 30 unique course rows, the degree jump links, the glance labels, ranking words, the byline, FAQ data and overflow from 320 to 1280 px;
+- the MBA guide's columns, sources for all three universities (https only, new tab, no machine endpoints), the three-program planner link and the removed FAQ claims;
+- the planner prefill, its fee sources, and invalid or repeated ids.
+
+`guide-reading-smoke.cjs` (131) and `guide-discovery-smoke.cjs` (53) pass unchanged.
+
+**Validation of increments 92–93 (13 October 2026):**
+- TypeScript, lint and the production build pass.
+- The library suites (total-cost, recommender, match score, eligibility rules) pass, as does `prepared-article-drafts-smoke.mts` (9 drafts). `recommender-groq-live.mts` needs the Groq key and was not run.
+- With part C built, all 63 website smoke suites passed both locally (port 3100) and in the CI rehearsal (port 3200). With C2 built, all 64 passed on both, including the new fees-hub suite.
+- **Import, on the CI database:**
+  - The first run queued 9 items (two new articles, seven revisions) and a re-run queued 0.
+  - Both new articles stayed private (404), and `online-mba-guide` kept its published title.
+  - The database was restored afterwards: 26 applied revisions, 26 articles, no disposable rows.
+
+## Ninety-fourth increment: hub C3, admissions and eligibility (13 October 2026)
+
+Owner decisions W8–W10 (see the [review note](content-batches/C3_ADMISSIONS_REVIEW_2026-10-13.md)):
+- **W8:** the hub is a catalog page.
+- **W9:** no intake calendar. The official pages show only rolling, conflicting promotional deadlines.
+- **W10:** the eligibility guides read published CMS eligibility.
+
+**Admissions hub.** `/online-degree-guides/admissions` has five sections:
+- **The order to follow:** eligibility checker → recognition check → ABC ID and DEB-ID (citing UGC's 19 August 2024 notice) → document checklist → apply, with the application fee by university.
+- **Eligibility by degree:** links to every eligibility guide for a degree in the catalog.
+- **Documents:** a checklist link plus its four official sources with checked dates.
+- **Admission steps by university:** from the published `admissionSteps`.
+- **Four FAQs**, the Content Team byline and FAQ structured data.
+
+The hub is in the eligibility-guides sitemap. The guides hub now shows two link cards (fees and admissions) above the explorer. The lead wizard labels the new `admissions-guide` intent "your application".
+
+**Eligibility guides.**
+- **The switch:** a university card shows the course's published eligibility, split by applicant category, once its prepared correction is applied. The correction records `eligibilityReview`, and the card adds "From the course record: source, checked date". The source joins the guide's sources, and a caption says these cards take precedence over the hand-written notes.
+- **Until then:** cards keep the hand-written fact. Every eligibility guide also links to the admissions hub.
+
+**Tests.** The new `admissions-hub-smoke.cjs` (29 checks) covers:
+- the guides hub cards, the five ordered steps and their tool links, the UGC notice link, eligibility guide links and source links;
+- three university step lists, no intake dates, FAQ data and overflow from 320 to 1280 px;
+- the W10 path: it writes the prepared SMU MCA correction into the local record as the CMS loader would, checks the category labels, the dated source (44 px), the precedence caption and the sources list, then restores the record (data and `updated_at`).
+
+**Validation of increment 94 (13 October 2026):**
+- TypeScript, lint and the production build pass.
+- **Smoke suites (65 in total):**
+  - Locally (port 3100), 64 passed on the first run. The fees-hub suite's guides-hub locator matched both new link cards; it now targets the fees card and passes on both servers (34 checks).
+  - In the CI rehearsal (port 3200), 56 passed. Eight of the nine failures were timeouts while machine load rose to 25–67 (browser launch, page load).
+  - `catalog-queue-ui` failed at a different line on each of two loaded runs.
+  - Rerun one at a time with load below 8, all nine passed, with the corrected fees-hub suite.
+- `admissions-hub-smoke.cjs` passes on both servers (29 checks), and its SMU MCA record is restored each time.
+- The CI database has no disposable users or queued revisions left (26 applied revisions).
+
+## Ninety-fifth increment: Wave 4 follow-up drafts (13 October 2026)
+
+The three optional follow-ups from the C1, C5 and C3 notes are now five CMS drafts in `prepared-article-drafts.json` (14 drafts in total). The [review note](content-batches/FOLLOW_UPS_REVIEW_2026-10-13.md) has every claim and source. Owner decision: "online vs distance vs regular" is a new article, and the two related posts get small revisions.
+
+- **New:** `online-vs-distance-vs-regular-degree`. It is sourced from the UGC 2020 regulations, which were read in full on 13 October:
+  - the definitions in regulation 2(f), (u) and (v);
+  - the evaluation rules in regulation 15(A)–(C);
+  - the equivalence clause, regulation 22.
+  None of the three amendments changes these.
+- **Revisions:**
+  - `online-mba-vs-distance-mba-difference`: mode differences, the 5 October list result and sources.
+  - `online-degree-vs-regular-degree-employers`: cites regulation 22 and drops the unsourced "all follow from entitlement" sentence.
+  - `online-mba-vs-online-mca-which-is-better`: MCA eligibility from the current pages; SMU no longer "prefers" a computing degree.
+  - `online-admission-documents-checklist`: rebuilt from the checklist tool's four official sources and UGC's DEB-ID notice. The unsourced loan-document list and "common rejection reasons" are removed.
+
+**Tests.**
+- `prepared-article-drafts-smoke.mts` passes with all 14 drafts.
+- On the CI database:
+  - the import queued 14 items;
+  - applying the new article and the documents revision through the review API published both, with their sources;
+  - the database was then restored exactly, as a script compared article, revision, user and audit counts before and after.
+- The claims register's "Removed from the pages" table now lists the claims dropped in C2 (three fee-guide claims) and in these follow-ups (three article claims).
+- No site code changed in this increment, so the increment 94 build and suite results still apply.
+
+## Ninety-sixth increment: Node 24 for the CRM and the website (Wave 5 A1, 14 October 2026)
+
+[Wave 5 plan](WAVE_5_PLAN_2026-10.md) approved on 14 October 2026 (decisions V1–V9). Node 20 reached end-of-life on 30 April 2026. Decision V5: one shared Node 24 LTS for both apps.
+
+**What changed.**
+- The shared `.nvmrc` is now 24. Both Dockerfiles use `node:24-bookworm-slim`.
+- Both `engines` fields now read `node >=24 <25` and `npm >=11 <12`, and `@types/node` is `^24`.
+- The outer repository's CI uses Node 24.
+- `scripts/update-lockfile.sh` now uses npm 11.19.1, the version bundled with Node 24.22.0.
+
+**Lockfiles.** Both `package-lock.json` files were regenerated in isolated copies with npm 11.19.1. A second and a third pass changed nothing, and a fresh `npm ci` from each lock succeeds (857 and 45 packages). The only content changes:
+- `@types/node` 24.19.2 (and its `undici-types`);
+- `ajv`, `fast-uri` and `json-schema-traverse` are no longer hoisted; eslint keeps its own `ajv`.
+
+**npm 11 install scripts.** Node 24's npm skips dependency install scripts that aren't approved in `allowScripts`. Four packages are affected: esbuild, fsevents, msgpackr-extract and unrs-resolver. No approval was added, because everything below passes without their scripts and blocking is the safer default.
+
+**Verification on Node 24.22.0.** The official macOS build was checksum-verified and run from the scratchpad, on an isolated copy of the repository.
+- **CRM:** the lockfile check, settings documentation, TypeScript, lint (0 errors; the 2 existing `window.location` warnings), 2,155 unit tests in 177 files, and the production build all pass.
+- **Website:** lint, TypeScript and the production build pass, and both standalone servers ran on Node 24.
+  - All 65 smoke suites pass locally and in the CI rehearsal. In the first run, `catalog-editor-smoke` lacked the git-ignored generated validator; after `unnatividya:export-catalog`, it passes on both servers (233 checks).
+  - The library suites pass (Groq live test not run).
+- **Not checked:** the Linux images, because Docker isn't available locally. The deploy doc now builds and restarts all four Node images and says to stop on any build failure.
+- **Local development:** `crm/node_modules` was not swapped, because another session's dev server on port 3001 uses it. It still has `@types/node` 20 until it is reinstalled.
+
+## Ninety-seventh increment: five Wave 5 learner tools (14 October 2026)
+
+Tools B1–B5 from the [Wave 5 plan](WAVE_5_PLAN_2026-10.md) (decisions V3, V9, V10). Each is free and needs no sign-up. Answers stay in the page (nothing stored or sent), every fact carries its source and date, and every tool ends with Apply now. None ranks programs.
+
+- **B2 Mode helper** (`/tools/mode-helper`). Four questions: in-person attendance, studying around work, reaching an exam centre, and how you prefer to learn.
+  - Regular, ODL and online are grouped as "Fits your answers", "Possible" or "Less likely to fit", each with the reasons in the learner's terms.
+  - Each mode cites the UGC 2020 regulations: 2(f), (u) and (v); 15(A)(3), (B)(1) and (C); and 22 for equivalence (`src/lib/study-modes.ts`).
+- **B3 Study-time planner** (`/tools/study-planner`). The learner's own weekly hours for work, travel, sleep, family and everything else, plus a study goal and a day-by-day plan. It shows committed, free and planned hours and the gap to the goal, with a print view.
+  - It flags weeks over 168 hours and days over 24 hours, and never states a university's expected hours: the learner is told to ask.
+- **B5 Specialization finder** (`/tools/specialization-finder`). 11 career areas, filterable by level, match the specializations and listed career roles by their own names. Medium-of-instruction options and "General" are excluded.
+  - Every one of the 85 specializations and 67 roles falls into at least one area, and links go to the specialization and course pages.
+- **B4 EMI v2** (in `/tools/emi-calculator`). "Loan or semester payments" becomes "Ways to pay: upfront, each semester or a loan".
+  - **Upfront:** the published "Full payment" amount once a reviewed fee correction is live, otherwise the listed tuition, less only a one-time discount the learner enters.
+  - **Comparison:** the semester schedule (when published) and the loan plan, with their differences as numbers, the timing of each route and a pointer to the lender's Key Facts Statement.
+  - **Fixed during testing:** an invalid discount used to hide the whole section, including the field that needed correcting.
+- **B1 Exams and device check** (`/tools/exam-check`).
+  - **What each university says:** how it holds exams, what your computer needs and the rules, from the official pages: Online Manipal's exam-process page (updated 3 November 2025) for MUJ and SMU, and Amity's exam page (updated 14 September 2026). Amity's unstated figures are left out.
+  - **Device check:** compares what the browser reports (device type, operating system, browser, screen size, memory, connection estimate) with that university's figures. Anything the browser can't report (processor, Windows version) shows "Check yourself".
+  - **Camera and microphone:** start on click, with an on-screen preview and level meter. Both stop on Stop or when the page closes.
+- **Camera and microphone policy (V10).** `/tools/exam-check` is the only page whose Permissions-Policy allows them, for this origin only. This is set in `next.config.ts` and in Caddy, where two exclusive path matchers replace the single site-wide value. Every other page still blocks them.
+- **Tools menu (V9).** The header Tools menu has labelled sections (Choose, Afford, Apply, Study) in two columns on desktop and a list on mobile.
+  - **Fixed during testing:** the sectioned panel's `display: grid` overrode the `hidden` attribute, which left the menu showing when closed.
+  - The footer, the sitemap and the lead wizard's intent labels list the four new pages.
+
+**Tests.**
+- The new `learner-tools-wave5-smoke.cjs` (115 checks) covers:
+  - the menu: sections, every link returns 200, it stays on screen and closes on Escape;
+  - the mode helper's fit groups for three answer sets;
+  - planner totals and validation;
+  - finder matching, the level filter and its links;
+  - EMI upfront, discount, differences and validation;
+  - the exam check: facts and sources per university, which checks appear, the camera allowed only on this page (`document.featurePolicy`), and the fake camera and microphone tracks live after start and ended after Stop;
+  - no ranking words, and no overflow from 320 to 1280 px.
+- `emi-ui-smoke.cjs` was updated for the new section name.
+
+## Ninety-eighth increment: CMS scheduling and guides (Wave 5 C1–C3, 14 October 2026)
+
+**C1 Article previews** already existed (Wave 3): any revision opens at `/admin/articles/<id>/preview?revision=` in the public article view, noindex, with a banner. `article-cms-smoke.cjs` covers it. No change was needed.
+
+**C2 Scheduled publishing** (decision V7; migration `0010_article_schedule.sql`).
+- An administrator can schedule a submitted article revision for a date and time entered in India time, with a review note. Scheduling runs the same checks as publishing now (valid content, article unchanged since the draft started) and must be 5 minutes to a year ahead.
+- The revision stays "Waiting for review", so it can still be published now, sent back, rescheduled or cancelled. The page shows "Scheduled to go live on … (India time)", and the article list counts scheduled items.
+- `scripts/publish-scheduled.js` applies due revisions through the same `reviewRevision` path, as the scheduling administrator, under the article lock and in one transaction. It reuses the app's code, compiled into `scripts/generated` by the catalog export. A refused schedule (for example, a stale base) is recorded on the revision and shown to admins, and isn't retried.
+- `deploy/vps/scripts/publish-scheduled-articles.sh` runs it inside the running container. The deploy doc gives the 5-minute cron line with `flock`. No `.env` key was added.
+
+**C3 Guides in the CMS** (decision V6; migration `0011_guides.sql`).
+- **What's editable:** the text of the 17 eligibility and 17 career-scope guides (per-university facts or roles and industries, the note, FAQs, sources, "last reviewed") is edited at **CMS → Guides**, with draft → submit → publish or send back, history and restore. It mirrors articles, with a separate lock, `guide_*` audit actions and a stale-base guard.
+- **What stays in code:** which guides exist and their URLs and labels. An edit keeps one entry per covered university; sources must be https.
+- **Public pages:** the published text shows through `publishedGuide()`. With no row, an invalid row or a database error, the built-in text shows instead.
+- **Preview:** CMS users can preview any revision on the guide's own URL with `?preview=<revision>`. It is noindex, carries a banner, and anyone else sees the live guide.
+- **One-time import:** `scripts/sync-guides-to-db.js` imports the text from `guides-export.json`, which the catalog export writes and validates (34 guides) and which is now git-ignored. The first run created 34 on the local and CI databases, and a rerun kept 34.
+
+**Tests.**
+- **`article-schedule-smoke.cjs` (37 checks):** who may schedule, time-window and format validation, the stored instant, the audit row, admin page and list labels, the publisher before and after the due time, the applied revision's reviewer and note, the live title, a stale schedule refused and not retried, and unscheduling.
+- **`guide-cms-smoke.cjs` (28 checks):** roles, validation (universities, https, FAQs, unknown keys), draft and submit, preview for CMS users only (noindex, banner), the cross-guide preview ignored, admin-only publishing, the live change, a stale revision refused, and restore as a draft.
+- Both restore their rows exactly (content and timestamps checked by hash) and remove their disposable users.
+- `public-navigation-smoke.cjs` now closes the Tools menu by clicking the bottom-left of the page, because the wider sectioned panel covers the heading it used to click.
+
+## Ninety-ninth increment: dependency security fixes (24 October 2026)
+
+When restarted, `next dev` reported a security advisory for Next.js 16.4.0, and `npm audit` confirmed it. Your decision: fix all now.
+- **Next.js 16.4.0 (critical):** HTTP request smuggling in rewrites, a null-origin bypass of the Server Actions CSRF check, and unbounded `next/image` cache and postponed-resume growth. Fixed in 16.4.3.
+- **12 high-severity advisories** in production dependencies, including zod, sharp, postcss, fast-uri, js-cookie, serialize-javascript, js-yaml, minimatch, picomatch, brace-expansion, browserslist and source-map-js.
+
+**Changes.**
+- **CRM:** `next` and `eslint-config-next` 16.4.3, `zod` ^4.6.7 and `js-cookie` ^3.0.8.
+- **Website app:** `next` 16.4.3 and `zod` ^4.6.7.
+- **Both lockfiles** were regenerated in isolated copies with Node 24's npm 11.19.1, plus `npm audit fix --package-lock-only` for transitive packages. They were stable on the next pass and pass `check-lockfile.js` and a fresh `npm ci` (857 packages).
+
+**Result.**
+- The website lock audits clean.
+- The CRM lock has no critical or high advisory left. Two moderate ones remain: `uuid` <11.1.1 inside `exceljs`, about v3/v5/v6 buffer bounds. npm's only fix is downgrading `exceljs` to 3.4.0, so they're left and recorded; nothing in the code imports `uuid`.
+- The local `crm/node_modules` was replaced with a fresh install from the new lock. The old tree is kept in the scratchpad, and the other session's port-3001 server is no longer running.
+
+## Hundredth increment: fees by visitor location (Wave 5 E1–E3, 24 October 2026)
+
+Your request: show Indian fees to visitors in India and international fees elsewhere; your team will enter Amity's international fees in the CMS. Decisions V11–V13: detect by browser time zone, apply everywhere fees appear except the EMI calculator, and show the NRI fee first outside India.
+
+**E1, category fees entered by hand.** Catalog revisions → course → Fees and admission has a "Student-category fees" form:
+- a source link, source label and checked date;
+- rows of applicant category, currency (INR or USD), total, per-semester amount and number of semesters.
+
+Removing every row removes the block. The catalog validator still applies (an INR row must equal the course fee), and amounts are never converted between currencies. Amity's international fees can be entered this way and published through the normal review.
+
+**E2, the visitor's fee group** (`src/lib/fee-group.ts`, `src/components/fee-group.tsx`).
+- **Default:** India's time zone means Indian applicants; anywhere else means NRI applicants.
+- **Override:** a "Showing fees for" switch (Indian / NRI / Foreign national), remembered in the browser. A saved choice beats the time zone. Nothing is sent anywhere.
+- **Row matching:** Indian uses the INR row. NRI uses an NRI row, else the single international row. Foreign national uses a foreign-national row, else the single international row.
+- **No published fee:** the page says "Confirm the fee for international applicants with the university" (on cards: "Ask for the international fee"). EMI figures show only for Indian applicants.
+- **Rendering:** the server always renders the Indian fee and the browser switches after hydration (`useSyncExternalStore`), so no page depends on location. Metadata, structured data, budget filters and fee sorting keep the listed Indian tuition.
+
+**E3, where it applies.**
+- **Course pages:** the headline stat, enquiry card, mobile bar and fee section (with a switch). The category selector starts on the visitor's group, and choosing a category updates the group everywhere. Notes appear when no international fee is published, and to say the payment plans are for Indian applicants.
+- **Fee guides and the fees hub:** tuition, per-semester and EMI cells.
+- **Listings and comparisons:** course cards (course list, saved courses, specialization pages, recommender, similar programs), the homepage teaser table, university program lists, editorial comparison program lists and the compare picker. Each has a switch.
+- **Total cost planner:** each program starts on the group's published category, or "fee not published".
+- **Labelled, not switched:** "Listed tuition from …" minimums across several programs, now marked "(Indian applicants)". The comparison table already shows both "Total fee" and "Fee outside India".
+
+**Fixed along the way:** on reading pages, a fee table's screen-reader text (absolutely positioned) escaped its scrolling region and widened the page at 390 px whenever the outside-India column appeared. `.uv-read-table` is now `position: relative`.
+
+**Tests.**
+- **`fee-group-smoke.cjs` (29 checks):** server HTML stays Indian; India and London time zones; no rupee figure is passed off as international; the course-page selector and its site-wide effect; the fee guide (MUJ NRI and foreign, SMU international, Amity "confirm"); the fees hub, homepage, university page, compare picker and planner defaults; the EMI calculator stays INR; a saved choice beats the time zone; phone widths. It sets temporary category fees on two local courses and restores them exactly.
+- **`category-fee-editor-smoke.cjs` (8 checks):** fills the form for Amity's MBA with every write blocked and checks the unsaved proposal.
+
+## Hundred-and-first increment: content clusters D1–D4 (Wave 5, 24 October 2026)
+
+There are four new catalog-page hubs, linked from the guides hub (decision V4; review note [WAVE_5_CLUSTERS_REVIEW_2026-10-24.md](content-batches/WAVE_5_CLUSTERS_REVIEW_2026-10-24.md)).
+- **D4, `/online-degree-guides/international`:** NRI and foreign-national fees by degree (published category rows only, never converted; "Confirm with the university" otherwise), the extra documents for NRI and foreign applicants from the checklist's official sources, exams from outside India (UGC regulation 15(C)(2) and the universities' exam pages) and the DEB-ID rule (UGC notice of 19 August 2024). The document checklist now accepts `?category=nri|foreign`.
+- **D2, `/online-degree-guides/computing`, and D3, `/online-degree-guides/commerce-humanities`:** a shared `DegreeFamilyHub` lists each degree by entry level, with each university's fee for the visitor's group, its specialisation count, its entry requirement (published eligibility guide text) and the roles it names (published career guide text). Each degree links to its fee, eligibility and career guides and its comparison pages. BBA is in D3.
+- **D1, `/online-degree-guides/online-learning`:** UGC's rules (delivery, 75% participation, 30/70 assessment, exams, equivalence), each program's published class and assessment details where they exist, each university's exams, and planning your time with the study-time planner.
+
+**Supporting drafts** (decisions V14–V16): six revisions, now 20 prepared drafts (3 new, 17 revisions). They cover WES evaluation, BCA after 12th, BCA vs BSc CS, MSc Data Science careers, B.Com vs B.Com Honours at Amity, and studying while working. Each was re-read from the official pages on 24 October, and unsourced generalisations are removed. `prepared-article-drafts-smoke.mts` now validates comparison links against the catalog and accepts `wes.org` and `canada.ca` as official sources.
+
+**Tests.** The new `cluster-hubs-smoke.cjs` (198 checks) covers, for each hub:
+- sections, degrees present, no ranking words, FAQ data and the byline;
+- every internal link returns 200, and no overflow at 320 and 390 px;
+- the guides-hub cards.
+
+For the international hub it also checks "Confirm" with no fees published, NRI and foreign USD amounts once a temporary block is published (restored exactly), and that the checklist opens on the linked category. `admissions-hub-smoke.cjs` expects the six hub cards.
+
+**Wave 5 final validation (25 October 2026, increments 96–101 together).** Run on Node 24.22.1 with Next.js 16.4.3, from a fresh copy of the working tree:
+- **Website:** lint (0 errors), TypeScript and the production build passed.
+- **Suites:** all 71 browser and database suites passed on both standalone servers: one on the local database and one on the CI database, seeded as CI seeds it, including `sync-guides-to-db.js`.
+- **CRM:** the lockfile check, env check, TypeScript, lint (0 errors), 2,155 unit tests and the build passed on Node 24 with 16.4.3.
+- **Draft import:** all 20 prepared drafts were imported into the CI database. They were queued for review, and a second import queued none. While queued, the three new posts returned 404 and weren't on the blog list or in the sitemap. The drafts were then removed.
+- **Cleanup:** every record a suite changed was restored. MUJ MBA matches its earlier checksum, no test data or temporary CMS users remain, and the article, revision and guide-revision counts are unchanged.
+
+## Hundred-and-second increment: layout fixes and a full review pass (25 October 2026)
+
+Your request: the courses page looked broken on desktop after the "Showing fees for" selector was added. Fix that, then do a full pass for bugs, gaps and enhancements, and ask questions one at a time.
+
+**The courses page.** The filter panel was set to `grid-row: 1 / span 2`, which was right while the grid had two rows. The fee selector added a third row, so the empty fee row stretched to the panel's full height and the program list started about 1,150 px down. The panel now spans every row (`grid-row: 1 / -1`).
+
+**Found and fixed in the pass.**
+- **Homepage:** the same kind of bug. In the "Stuck between two universities?" panel, the fee selector took the right-hand column and pushed the MBA table below the copy. The selector and table now share one column.
+- **Course page:**
+  - with no international fee published, the "Confirm the fee…" sentence showed at the 32 px figure size in the enquiry card; it now uses body size;
+  - the top stats showed the rupee EMI to visitors outside India; they now use the visitor's fee group;
+  - the status chip started with a lowercase "program".
+- **Compare page:** with two programs chosen it still said "Choose at least two to compare". It now says so only when fewer than two are chosen.
+- **University pages:** "Annual fee from" was hand-entered, had no source and didn't match the catalog for any university, so it's removed from Key highlights. The listed tuition range is labelled "(Indian applicants)", as are the homepage's lowest-MBA figure and the specialization page's EMI figure.
+- **Copy against the owner rules** (claims register updated):
+  - the specialization FAQs said "Which university offers the cheapest …" and made an unsourced role claim; they now list each university's listed tuition for Indian applicants and the roles it names;
+  - the MSc Mathematics career guide said MUJ links certain electives to "higher-paying roles", which MUJ's page doesn't say; it now matches the page.
+  - Guide text is copied into the CMS on the first `sync-guides-to-db.js` run, so production picks up the corrected FAQ. Local databases that were already synced keep the old copy.
+- **Footer:** now five columns, Explore, Popular degrees, Tools, Resources and Company. Resources gains the fees, admissions and international hubs, and Saved courses moves to Explore. Before, one column had 14 links and the right third of the footer was empty.
+- **404 page:** has its own title ("Page not found") instead of the homepage's.
+
+**Your decisions.**
+- **Tools landing page:** not added. Tools stay in the header menu and footer.
+- **Guides menu:** now sectioned like Tools. "Browse" has Degree guides, Articles and How we verify. "Topics" has Fees and EMI, Admissions, Applying from outside India and How online learning works. "Degrees" has Computing and data, and Commerce and humanities. Within a menu, only the most specific matching link is marked as the current page.
+- **"Best online MBA…" article title:** prepared draft 20 (Wave 4 C5) already retitles it "Online MBA while working: what MUJ, SMU and Amity ask for". Its eligibility facts were re-read against the MUJ, SMU and Amity pages on 25 October, so no new draft was needed.
+
+**Crawl.** All 277 sitemap and extra pages were crawled at 1280 and 390 px: no page errors, no console errors, no horizontal overflow, one H1 on each page and no broken internal links (701 checked). The only empty-looking links were hidden-until-opened menus.
+
+**Tests.**
+- `fee-group-smoke.cjs` now checks the courses-page grid (the switch and results sit right under the count) and the homepage panel (the switch sits above the table, beside the copy).
+- `public-navigation-smoke.cjs` checks the six hubs in the Guides menu and the single current-page link on a hub.
+
+## Hundred-and-third increment: administrators edit and publish directly (25 October 2026)
+
+Your request: in the CMS, an administrator can do everything, including editing content and publishing it directly, and bulk publishing, not only the editorial team.
+
+**What was already in place.** Administrators were allowed on every edit route and could apply any submitted revision. Publishing their own change still took three steps: save a draft, submit it, then apply it from the review panel. Bulk publish covered catalog and article revisions only.
+
+**What changed.**
+- **Save and publish (administrators only).** The catalog record editor, the article editor ("Create and publish" for a new article) and the guide editor each have a one-step publish. After a confirmation, the change is saved, recorded as a revision and applied in one transaction. It goes through the same apply code as a reviewed revision, so:
+  - validation, the stale-edit guard and the whole-catalog check still apply;
+  - nothing is published if any check fails;
+  - the revision shows in history and the audit log, reviewed by the administrator, with the note "Published directly by an administrator.", and can be rolled back.
+  - Editors and viewers see no change; the server refuses their publish requests with 403.
+- **Shared catalog apply** (`src/lib/catalog-apply.ts`). The administrator review, direct publish and bulk publish now share one apply function, so they can't drift apart.
+- **Bulk publish** (Publishing checklist):
+  - now includes guide revisions, with the same checks as articles (one per guide, valid content, guide unchanged since the draft), and takes the guide lock;
+  - leaves scheduled article revisions to their schedule, with the scheduled time shown as the reason. Before, a scheduled revision could be published early by bulk publish.
+- **New routes:** `POST /api/admin/articles/[id]/draft/publish` and `POST /api/admin/guides/[id]/draft/publish`. `POST /api/admin/catalog-revisions` and `POST /api/admin/catalog-drafts` accept `publish: true` from administrators.
+- No migration or `.env` change.
+
+**Tests.**
+- New `admin-direct-publish-smoke.cjs` (41 checks). It covers:
+  - the buttons appear only for administrators;
+  - catalog publish straight away and from a working draft;
+  - refusal of a stale snapshot, and of an invalid category fee with nothing recorded;
+  - a new article created and published, an existing one edited and published, editors refused;
+  - a guide published directly;
+  - bulk publish with a guide revision while a scheduled article is held back;
+  - two real browser clicks through the confirmation dialog (article and catalog).
+- `bulk-publish-smoke`, `guide-cms-smoke`, `article-schedule-smoke` and `article-cms-smoke` still pass.
+- `learner-tools-wave5-smoke` now scopes its Tools-menu headings, since the Guides menu has sections too.
+
+## Hundred-and-fourth increment: social channels (26 October 2026)
+
+Your request: add the social channels before pushing. YouTube (`@Unnati_Vidya`), Instagram (`unnati_vidya`) and Facebook (`unnatividya`) were each opened on 26 October and show the Unnati Vidya profile.
+
+**Your choice of placements:**
+- **Footer:** a row of three logo links on every page, under "How we verify".
+- **Search data:** `sameAs` on the site-wide Organization and on each article's publisher, so search engines can connect the profiles to the site.
+- **About page:** "Follow Unnati Vidya" under Contact us.
+- **Content Team author page:** a "Follow Unnati Vidya" section, also listed in its contents.
+- **Each article:** "Follow Unnati Vidya" under the newsletter box.
+
+Not used: the header, the step after applying, embedded feeds and a WhatsApp number link.
+
+**How it's built:**
+- One list in `src/lib/social.ts` feeds every placement, so adding a channel is a one-line change.
+- `SocialLinks` renders plain links: new tab, `rel="noopener noreferrer me"`, 44 px targets and accessible names. There are no embeds or tracking scripts, so the privacy policy doesn't need updating.
+
+**Checked:** all placements at 1280 and 390 px, with no overflow or page errors. `public-navigation-smoke.cjs` now checks the footer links and the Organization `sameAs`.
+
+**Test harness:** `cluster-hubs-smoke.cjs` now launches its browser inside `try`. Before, a failed launch left the database connection open and the suite never exited, which stalled a full run. It hadn't changed any data.
+
+**Validation (26 October 2026, increments 102–104 together).** Everything was rebuilt on Node 24.22.1 with Next.js 16.4.3: lint (0 errors), TypeScript and the production build passed. The full run covered all 72 suites on both standalone servers, one on the local database and one on the CI database.
+- 70 passed outright on each server.
+- `article-reading-smoke` expected 3 links in the author page's contents; the new "Follow Unnati Vidya" section makes it 4. The test now expects 4 and passes on both.
+- `catalog-queue-ui-smoke` (CI only) found a fourth university. It was a draft fixture left by an earlier `catalog-editor-smoke` run that timed out under heavy load, and my first cleanup missed it. It was removed, and the suite passes.
+
+Both databases are back to their baseline:
+- **Local:** 2 real admin users, no open drafts or revisions, and MUJ MBA matches its earlier checksum.
+- **CI:** 3 universities, 30 courses, no test users and no catalog revisions.
+
+The local runner (scratchpad, not in the repository) now waits for load below 8 before each suite and limits each suite to 15 minutes.

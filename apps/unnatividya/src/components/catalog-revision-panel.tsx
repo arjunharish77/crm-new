@@ -4,7 +4,11 @@ import type { CatalogWorkingDraft } from "@/lib/catalog-working-drafts";
 import { EligibilityReviewNotice, type EligibilityReviewIssue } from "@/components/eligibility-review-notice";
 import type { PreparedEligibility } from "@/lib/prepared-eligibility";
 import type { PreparedFeeCorrection } from "@/lib/prepared-fee-correction";
+import type { PreparedCategoryFees } from "@/lib/prepared-category-fees";
+import type { PreparedEligibilityRules } from "@/lib/prepared-eligibility-rules";
+import type { PreparedRecognition } from "@/lib/prepared-recognition";
 import type { PreparedCurriculumDraft } from "@/lib/prepared-curriculum";
+import type { PreparedProgramDetails } from "@/lib/prepared-program-details";
 import { CatalogContentEditor } from "@/components/catalog-content-editor";
 import { normalizeEditorialContent, editorialChanges, editorialDisplay } from "@/lib/catalog-editor";
 import { useState, type FormEvent, type ReactNode } from "react";
@@ -17,29 +21,30 @@ function submittedData(event: FormEvent<HTMLFormElement>) {
   return new FormData(event.currentTarget, (event.nativeEvent as SubmitEvent).submitter);
 }
 
-export function CatalogRevisionPanel({ historyControls, historyPagination, role, entityType, entityId, snapshot, revisions, curriculumDraft, feeCorrection, eligibilityDraft, eligibilityIssue, workingDraft }: {
+export function CatalogRevisionPanel({ historyControls, historyPagination, role, entityType, entityId, snapshot, revisions, curriculumDraft, programDetailsDraft, feeCorrection, categoryFeeDraft, recognitionDraft, eligibilityDraft, eligibilityRuleDraft, eligibilityIssue, workingDraft }: {
   historyControls?: ReactNode; historyPagination?: ReactNode;
   role: CatalogRole; entityType?: CatalogEntityType; entityId?: string;
-  snapshot?: Record<string, unknown>; revisions: CatalogRevision[]; curriculumDraft?: PreparedCurriculumDraft; feeCorrection?: PreparedFeeCorrection; eligibilityDraft?: PreparedEligibility; eligibilityIssue?: EligibilityReviewIssue; workingDraft?: CatalogWorkingDraft;
+  snapshot?: Record<string, unknown>; revisions: CatalogRevision[]; curriculumDraft?: PreparedCurriculumDraft; programDetailsDraft?: PreparedProgramDetails; feeCorrection?: PreparedFeeCorrection; categoryFeeDraft?: PreparedCategoryFees; recognitionDraft?: PreparedRecognition; eligibilityDraft?: PreparedEligibility; eligibilityRuleDraft?: PreparedEligibilityRules; eligibilityIssue?: EligibilityReviewIssue; workingDraft?: CatalogWorkingDraft;
 }) {
   const router = useRouter();
   const [content, setContent] = useState(JSON.stringify(workingDraft?.proposed_content ?? (snapshot && entityType ? revisionContent(entityType, snapshot) : {}), null, 2));
   const [draftVersion, setDraftVersion] = useState<number | null>(workingDraft?.version ?? null);
   const [baseSnapshot, setBaseSnapshot] = useState(workingDraft?.base_snapshot ?? snapshot);
   const [reason, setReason] = useState(workingDraft?.reason ?? "");
-  async function saveWorkingDraft(action: "SAVE" | "SUBMIT" | "DISCARD") {
+  const published = "Published. Changes to a published record are live on the next page load; a draft record stays private.";
+  async function saveWorkingDraft(action: "SAVE" | "SUBMIT" | "DISCARD", publish = false) {
     let value: Record<string,unknown>;
     try { value = action === "DISCARD" ? {} : JSON.parse(content); } catch { setFailed(true); setMessage("Content JSON is invalid. Repair it before saving."); return; }
     setBusy(true); setMessage(""); setFailed(false);
     try {
-      const response = await fetch("/api/admin/catalog-drafts", { method: action === "SAVE" ? "PUT" : action === "SUBMIT" ? "POST" : "DELETE", headers: { "Content-Type":"application/json" }, body: JSON.stringify({entityType,entityId,baseSnapshot,content:normalizeEditorialContent(value),reason,version:draftVersion}) });
+      const response = await fetch("/api/admin/catalog-drafts", { method: action === "SAVE" ? "PUT" : action === "SUBMIT" ? "POST" : "DELETE", headers: { "Content-Type":"application/json" }, body: JSON.stringify({entityType,entityId,baseSnapshot,content:normalizeEditorialContent(value),reason,version:draftVersion,...(publish ? {publish:true} : {})}) });
       const result = await response.json();
       if (!response.ok) throw Error(result.error || "Could not save your draft.");
       if (action === "SAVE") { setDraftVersion(result.draft.version); setMessage("Working draft saved privately. You can return to this record to continue; it has not been submitted for review."); }
       else {
         setDraftVersion(null); setBaseSnapshot(snapshot); setReason("");
         setContent(JSON.stringify(snapshot && entityType ? revisionContent(entityType,snapshot) : {},null,2));
-        setMessage(action === "SUBMIT" ? "Draft submitted for administrator review. Catalog unchanged." : "Saved draft discarded. The form now shows the catalog snapshot from this page; reload if the catalog changed again.");
+        setMessage(action === "SUBMIT" ? (publish ? published : "Draft submitted for administrator review. Catalog unchanged.") : "Saved draft discarded. The form now shows the catalog snapshot from this page; reload if the catalog changed again.");
       }
       router.refresh();
     } catch (error) { setFailed(true); setMessage(error instanceof TypeError ? "Connection interrupted. Your text is retained; check the saved draft before retrying." : error instanceof Error ? error.message : "Could not save the draft. Your text is retained."); }
@@ -48,39 +53,45 @@ export function CatalogRevisionPanel({ historyControls, historyPagination, role,
   const [failed, setFailed] = useState(false);
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
-  async function request(url: string, method: string, body: unknown) {
+  async function request(url: string, method: string, body: unknown, success?: string) {
     setBusy(true); setMessage(""); setFailed(false);
     try {
       const response = await fetch(url, { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
       const result = await response.json();
       if (!response.ok) throw new Error([result.error || "Request failed.", ...(result.issues || []).slice(0, 5).map((issue: {entityId:string;field:string;message:string}) => `${issue.entityId} · ${issue.field}: ${issue.message}`)].join(" "));
-      setMessage(url.endsWith("/rollback") ? "Rollback proposal prepared. Review the before/proposed changes, then apply it to restore earlier content." : method === "POST" ? "Revision submitted for administrator review. Catalog unchanged." : method === "PATCH" && (body as {action?: string}).action === "REJECT" ? "Revision rejected. Catalog unchanged." : "Review saved. Changes to published records are available on the next page load.");
+      setMessage(success ? success : url.endsWith("/rollback") ? "Rollback proposal prepared. Review the before/proposed changes, then apply it to restore earlier content." : method === "POST" ? "Revision submitted for administrator review. Catalog unchanged." : method === "PATCH" && (body as {action?: string}).action === "REJECT" ? "Revision rejected. Catalog unchanged." : "Review saved. Changes to published records are available on the next page load.");
       router.refresh();
     } catch (error) { setFailed(true); setMessage(error instanceof TypeError ? "Connection interrupted. Your note is retained. Check revision status before retrying; the request may have completed." : error instanceof Error ? error.message : "Could not complete the request. Your note is retained."); }
     finally { setBusy(false); }
   }
   return <div className="catalog-revisions">
-    <p className="admin-notice">Proposals stay private until an administrator applies them. Applying a revision to a published record updates public pages; applying to a draft keeps it private. Review all affected fees and content before applying.</p>
-    {eligibilityIssue ? <EligibilityReviewNotice issue={eligibilityIssue}/> : null}
+    <p className="admin-notice">Proposals stay private until an administrator applies or publishes them. Applying a revision to a published record updates public pages; applying to a draft keeps it private. Review all affected fees and content before applying.</p>
+    {eligibilityIssue ? <EligibilityReviewNotice issue={eligibilityIssue} hasPreparedCorrection={Boolean(eligibilityDraft)}/> : null}
     {snapshot && entityType && entityId && role !== "VIEWER" ? <section className="card admin-detail-card">
       <h2>{draftVersion ? "Continue your working draft" : "Propose a content revision"}</h2>
       {draftVersion ? <p className="admin-notice">Your private saved draft is loaded. Saving does not submit it for review. If the catalog has changed, submission will stop so you can compare it with the current record below.</p> : null}
-      <p>Edit the labelled fields below, explain the changes and include supporting official links. This submits a separate proposal; the current catalog record stays unchanged.</p>
+      <p>Edit the labelled fields below, explain the changes and include supporting official links. Submitting creates a separate proposal and leaves the current record unchanged.{role === "ADMIN" ? " As an administrator you can also save and publish in one step; it is recorded in the revision history like a reviewed change." : ""}</p>
       <form className="admin-form-grid" action={async form => {
         if (form.get("intent") === "SAVE") { await saveWorkingDraft("SAVE"); return; }
-        if (draftVersion !== null) { await saveWorkingDraft("SUBMIT"); return; }
+        // Administrators can publish in the same step; the server records and applies the revision together.
+        const publish = form.get("intent") === "PUBLISH";
+        if (publish && !window.confirm(snapshot?.is_published ? "Publish these changes now? The live pages update straight away." : "Apply these changes now? This record isn't published, so it stays private.")) return;
+        if (draftVersion !== null) { await saveWorkingDraft("SUBMIT", publish); return; }
         let value: unknown;
         try { value = JSON.parse(content); } catch { setFailed(true); setMessage("Content JSON is invalid."); return; }
-        await request("/api/admin/catalog-revisions", "POST", { entityType, entityId, baseSnapshot, content: normalizeEditorialContent(value as Record<string,unknown>), reason: String(form.get("reason") || "") });
+        await request("/api/admin/catalog-revisions", "POST", { entityType, entityId, baseSnapshot, content: normalizeEditorialContent(value as Record<string,unknown>), reason: String(form.get("reason") || ""), ...(publish ? { publish: true } : {}) }, publish ? published : undefined);
       }}>
-        <CatalogContentEditor eligibilityDraft={eligibilityDraft} feeCorrection={feeCorrection} curriculumDraft={curriculumDraft} entityType={entityType} value={content} onChange={setContent} disabled={busy}/>
+        <CatalogContentEditor eligibilityDraft={eligibilityDraft} eligibilityRuleDraft={eligibilityRuleDraft} feeCorrection={feeCorrection} categoryFeeDraft={categoryFeeDraft} recognitionDraft={recognitionDraft} curriculumDraft={curriculumDraft} programDetailsDraft={programDetailsDraft} entityType={entityType} value={content} onChange={setContent} disabled={busy}/>
         <div className="field admin-span-2"><label htmlFor="revision-reason">What changed and why?</label><textarea id="revision-reason" name="reason" minLength={5} maxLength={2000} required disabled={busy} value={reason} onChange={event=>setReason(event.target.value)} /></div>
-        <button className="btn ghost" name="intent" value="SAVE" formNoValidate disabled={busy}>Save working draft</button>
-        <button className="btn primary" name="intent" value="SUBMIT" disabled={busy}>Submit for review</button>
+        <div className="admin-span-2 article-editor-actions">
+          <button className="btn ghost" name="intent" value="SAVE" formNoValidate disabled={busy}>Save working draft</button>
+          {role === "ADMIN" ? <button className="btn primary" name="intent" value="PUBLISH" disabled={busy}>Save and publish</button> : null}
+          <button className={role === "ADMIN" ? "btn secondary" : "btn primary"} name="intent" value="SUBMIT" disabled={busy}>Submit for review</button>
+        </div>
       </form>
       {draftVersion ? <details><summary>Compare or discard your working draft</summary>
         <p>The current catalog snapshot is below. Copy any draft text you need before discarding; discarding removes your saved draft and resets this form.</p>
-        <pre style={{whiteSpace:"pre-wrap",overflowWrap:"anywhere"}}>{JSON.stringify(snapshot && entityType ? revisionContent(entityType,snapshot) : {},null,2)}</pre>
+        <pre className="admin-json revision-snapshot">{JSON.stringify(snapshot && entityType ? revisionContent(entityType,snapshot) : {},null,2)}</pre>
         <button type="button" className="btn ghost" disabled={busy} onClick={()=>saveWorkingDraft("DISCARD")}>Discard my working draft</button>
       </details> : null}
     </section> : null}

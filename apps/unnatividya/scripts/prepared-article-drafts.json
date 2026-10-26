@@ -1,0 +1,3253 @@
+{
+  "batch": "Wave 4 hub drafts (C1, C5, C2), follow-ups, and Wave 5 cluster drafts",
+  "preparedOn": "2026-10-13",
+  "note": "Prepared drafts for review. Import with scripts/import-article-drafts.js; nothing is published until an administrator applies each revision in CMS → Articles.",
+  "drafts": [
+    {
+      "slug": "ugc-approved-online-degree-guide",
+      "kind": "revision",
+      "reason": "Wave 4 C1 hub: rewritten into the recognition and validity hub with the 2026-27 UGC-DEB findings and sources (prepared draft, review the claims and sources before applying).",
+      "basedOn": {
+        "title": "Are online degrees valid for government jobs in 2026?",
+        "category": "Validity",
+        "excerpt": "The UGC entitlement rules, what equivalent to on-campus legally means, and the one document to check before enrolling.",
+        "cover": "/blog/ugc-approved-online-degree-guide.webp",
+        "publishedDate": "2026-07-14",
+        "body": [
+          {
+            "type": "p",
+            "text": "Short answer: yes, if the degree is UGC-entitled for that program and academic year. Before applying, verify the university, program, fees, refund policy, and delivery model from official source pages."
+          },
+          {
+            "type": "h2",
+            "text": "The one check that matters"
+          },
+          {
+            "type": "p",
+            "text": "Confirm the university is entitled to offer the specific program online for the current admission cycle. Entitlement is per-program, so a university can be approved for one program and not another."
+          },
+          {
+            "type": "note",
+            "text": "Unnati Vidya tip: compare approval, fees, eligibility, specialisations, and refund rules together before choosing a program."
+          },
+          {
+            "type": "image",
+            "src": "/blog/ugc-approved-online-degree-guide.webp",
+            "alt": "Online class"
+          },
+          {
+            "type": "h2",
+            "text": "What to compare before admission"
+          },
+          {
+            "type": "p",
+            "text": "Compare total fee, semester-wise payment, EMI options, eligibility, specialisations, LMS support, exam mode, placement assistance, and refund rules. A low headline fee is useful only when all mandatory charges are visible."
+          },
+          {
+            "type": "h2",
+            "text": "Where learners get stuck"
+          },
+          {
+            "type": "p",
+            "text": "Most confusion comes from expired approvals, unclear fee breakup, missing specialisation details, and counsellors pushing one university without comparing alternatives."
+          }
+        ],
+        "faqs": [
+          [
+            "Are online degrees valid for government jobs in 2026?",
+            "Yes, if the degree is UGC-entitled for that specific program and academic year — entitlement is per-program, so a university can be approved for one program and not another."
+          ],
+          [
+            "What's the one thing I should check before enrolling in an online degree?",
+            "Confirm the university is entitled to offer the specific program online for the current admission cycle — this is the single check that matters most for validity."
+          ],
+          [
+            "What should I compare across universities before applying?",
+            "Total fee, semester-wise payment, EMI options, eligibility, specialisations, LMS support, exam mode, placement assistance, and refund rules — a low headline fee only matters once all mandatory charges are visible."
+          ]
+        ]
+      },
+      "content": {
+        "cover": "/blog/ugc-approved-online-degree-guide.webp",
+        "publishedDate": "2026-07-14",
+        "title": "Is an online degree valid in India? How to check a program's UGC-DEB entitlement (2026-27)",
+        "category": "Validity",
+        "excerpt": "An online degree is valid when UGC-DEB has entitled that exact program for your session. Here is what that means, where the official lists are, and what we found for MUJ, SMU and Amity Online in 2026-27.",
+        "updatedDate": "2026-10-12",
+        "body": [
+          {
+            "type": "p",
+            "text": "Short answer: an online degree is valid when the UGC Distance Education Bureau (UGC-DEB) has entitled the university to offer that exact program online for the session you join. Entitlement is granted per program and per academic session, so check the program, not just the university."
+          },
+          {
+            "type": "h2",
+            "text": "What the rules say"
+          },
+          {
+            "type": "p",
+            "text": "Online programs are governed by the UGC (Open and Distance Learning Programmes and Online Programmes) Regulations, 2020. UGC-DEB publishes the year-wise list of institutions recognised or entitled to offer programs in online mode at deb.ugc.ac.in. A degree from an entitled online program is treated the same as an on-campus degree under those regulations."
+          },
+          {
+            "type": "h2",
+            "text": "The 2026-27 lists"
+          },
+          {
+            "type": "p",
+            "text": "For the August 2026 session, UGC-DEB published two PDF lists for online programs: institutions entitled to offer online programmes, and a shorter list of institutions recognised to offer them, which also prints a period of recognition. Both are linked from the Recognition section of deb.ugc.ac.in."
+          },
+          {
+            "type": "h2",
+            "text": "What we found for MUJ, SMU and Amity Online"
+          },
+          {
+            "type": "p",
+            "text": "We checked all 30 programs in our catalog against both lists on 5 October 2026. MUJ's nine programs appear on the entitled list under Manipal University, Rajasthan (S.No. 74), and SMU's nine under Sikkim Manipal University, Sikkim (S.No. 80)."
+          },
+          {
+            "type": "p",
+            "text": "Amity Online's programs are printed under two institutions: Amity University Rajasthan and Amity University Uttar Pradesh. Five appear only under Amity University Uttar Pradesh, and for three of those the recognised list prints the recognition as valid up to January 2027. Ask Amity which institution awards your program and what that period means for your batch."
+          },
+          {
+            "type": "note",
+            "text": "Our recognition check shows each program's published result, with the name exactly as printed, the source and the date we checked it."
+          },
+          {
+            "type": "h2",
+            "text": "Before you enrol"
+          },
+          {
+            "type": "p",
+            "text": "From academic year 2024-25, Indian learners need a DEB-ID to enrol in an online or distance program. You create it on the UGC-DEB portal with your Academic Bank of Credits (ABC) ID. UGC introduced it so that learners enrol only in recognised institutions."
+          },
+          {
+            "type": "links",
+            "heading": "Check and prepare",
+            "items": [
+              {
+                "href": "/tools/recognition-check",
+                "label": "Check a program's 2026-27 status"
+              },
+              {
+                "href": "/blog/how-to-verify-ugc-approved-degree",
+                "label": "How to check the UGC-DEB list yourself, step by step"
+              },
+              {
+                "href": "/blog/abc-id-and-deb-id-guide",
+                "label": "ABC ID and DEB-ID: what you need before admission"
+              },
+              {
+                "href": "/blog/naac-ugc-deb-aicte-explained",
+                "label": "What NAAC, NIRF, UGC-DEB, AICTE, AIU and WES mean"
+              },
+              {
+                "href": "/blog/is-online-mba-valid-for-government-jobs",
+                "label": "Online degrees and government jobs"
+              }
+            ]
+          }
+        ],
+        "faqs": [
+          [
+            "Is an online degree valid in India?",
+            "Yes, when UGC-DEB has entitled the university to offer that program online for your session. Under the UGC (Open and Distance Learning Programmes and Online Programmes) Regulations, 2020, such a degree is treated the same as an on-campus degree."
+          ],
+          [
+            "Is a university's 'UGC approved' badge enough?",
+            "No. Entitlement is per program and per session. Check the program on the UGC-DEB list for the session you are joining."
+          ],
+          [
+            "Where are the official lists?",
+            "On deb.ugc.ac.in, in the Recognition section for online programmes. For 2026-27 there is an entitled list and a recognised list."
+          ],
+          [
+            "Do I need a DEB-ID?",
+            "Indian learners enrolling in an online or distance program from 2024-25 onwards need a DEB-ID, created with an ABC ID. UGC's notice says the mechanism for foreign learners is yet to be implemented."
+          ]
+        ],
+        "sources": [
+          {
+            "label": "UGC-DEB: HEIs entitled to offer online programmes, 2026-27",
+            "url": "https://deb.ugc.ac.in/pdf/HomePageRecognitionDetail/140/140_upload_RecognitionDetails_20260922125253.pdf",
+            "checkedAt": "2026-10-05"
+          },
+          {
+            "label": "UGC-DEB: HEIs recognised to offer online programmes, 2026-27",
+            "url": "https://deb.ugc.ac.in/pdf/HomePageRecognitionDetail/140/140_upload_RecognitionDetails_20260922125223.pdf",
+            "checkedAt": "2026-10-05"
+          },
+          {
+            "label": "UGC public notice on the enrolment procedure for ODL and online programmes, 19 August 2024",
+            "url": "https://www.ugc.gov.in/pdfnews/8295117_Public-Notice-prodedure-for-students-enrolling-in-ODL.pdf",
+            "checkedAt": "2026-10-12"
+          },
+          {
+            "label": "UGC-DEB: DEB-ID frequently asked questions",
+            "url": "https://deb.ugc.ac.in/StudentDEBId/FAQ",
+            "checkedAt": "2026-10-12"
+          }
+        ]
+      },
+      "batch": "C1 · Recognition and validity"
+    },
+    {
+      "slug": "abc-id-and-deb-id-guide",
+      "kind": "new",
+      "reason": "Wave 4 C1: new explainer on the ABC ID and DEB-ID requirement, from UGC's 19 August 2024 notice and the UGC-DEB FAQ (prepared draft, review before applying).",
+      "content": {
+        "title": "ABC ID and DEB-ID: what you need before an online degree admission",
+        "category": "Admissions",
+        "excerpt": "From 2024-25, Indian learners need a DEB-ID, created with an ABC ID, to enrol in an online or distance program. Here is what each ID is and the order to create them.",
+        "cover": "/blog/online-admission-documents-checklist.webp",
+        "publishedDate": "2026-10-12",
+        "body": [
+          {
+            "type": "p",
+            "text": "Short answer: create your Academic Bank of Credits (ABC) ID first, then use it to create a DEB-ID on the UGC-DEB portal, and give that DEB-ID to the university when you apply. You cannot enrol in an online or distance program without a valid DEB-ID."
+          },
+          {
+            "type": "h2",
+            "text": "What the DEB-ID is"
+          },
+          {
+            "type": "p",
+            "text": "UGC-DEB describes the DEB-ID as a unique ID that a learner must create before taking admission in an open and distance learning (ODL) or online program. Its purpose is to make sure learners enrol only in programs of institutions recognised by UGC."
+          },
+          {
+            "type": "h2",
+            "text": "Who needs one"
+          },
+          {
+            "type": "p",
+            "text": "UGC's public notice of 19 August 2024 made the DEB-ID a requirement for every student, except foreign learners, enrolling in ODL or online programs from academic year 2024-25 onwards. The notice says the mechanism for foreign learners is yet to be implemented."
+          },
+          {
+            "type": "h2",
+            "text": "The order to follow"
+          },
+          {
+            "type": "p",
+            "text": "1. Create your ABC ID. UGC-DEB says you can create it through your DigiLocker account."
+          },
+          {
+            "type": "p",
+            "text": "2. Create your DEB-ID by registering on the UGC-DEB portal (deb.ugc.ac.in) with your ABC ID. A DEB-ID cannot be created without an ABC ID."
+          },
+          {
+            "type": "p",
+            "text": "3. Choose a university that UGC-DEB recognises, select your program and check that the program is on the list for your session."
+          },
+          {
+            "type": "p",
+            "text": "4. Complete the admission on the university's portal using your DEB-ID."
+          },
+          {
+            "type": "h2",
+            "text": "How long it lasts"
+          },
+          {
+            "type": "p",
+            "text": "Once created, the DEB-ID stays valid for your lifelong ODL and online learning, so you do not need a new one for a later program. UGC-DEB's FAQ adds that you can be admitted to two academic programs at the same time, in line with UGC's regulations."
+          },
+          {
+            "type": "note",
+            "text": "Keep your ABC ID and DEB-ID with your admission documents. If you are applying as a foreign learner, ask the university how it handles enrolment while the foreign-learner mechanism is pending."
+          },
+          {
+            "type": "links",
+            "heading": "Get ready to apply",
+            "items": [
+              {
+                "href": "/tools/document-checklist",
+                "label": "Admission document checklist"
+              },
+              {
+                "href": "/tools/recognition-check",
+                "label": "Check a program's 2026-27 status"
+              },
+              {
+                "href": "/blog/ugc-approved-online-degree-guide",
+                "label": "Is an online degree valid in India?"
+              }
+            ]
+          }
+        ],
+        "faqs": [
+          [
+            "Is a DEB-ID mandatory for online degree admission?",
+            "Yes, for Indian learners enrolling in ODL or online programs from academic year 2024-25 onwards. UGC-DEB's FAQ says students cannot enrol in any ODL or online program without a valid DEB-ID."
+          ],
+          [
+            "Can I create a DEB-ID without an ABC ID?",
+            "No. The DEB-ID is created on the UGC-DEB portal using your ABC ID."
+          ],
+          [
+            "How do I create an ABC ID?",
+            "UGC-DEB says you can create it through your DigiLocker account."
+          ],
+          [
+            "Do I need a new DEB-ID for every program?",
+            "No. It stays valid across your ODL and online learning."
+          ]
+        ],
+        "sources": [
+          {
+            "label": "UGC public notice on the enrolment procedure for ODL and online programmes, 19 August 2024",
+            "url": "https://www.ugc.gov.in/pdfnews/8295117_Public-Notice-prodedure-for-students-enrolling-in-ODL.pdf",
+            "checkedAt": "2026-10-12"
+          },
+          {
+            "label": "UGC-DEB: DEB-ID frequently asked questions",
+            "url": "https://deb.ugc.ac.in/StudentDEBId/FAQ",
+            "checkedAt": "2026-10-12"
+          },
+          {
+            "label": "UGC-DEB: steps to follow for admission in ODL/online programmes",
+            "url": "https://deb.ugc.ac.in/pdf/StepsDEBID.pdf",
+            "checkedAt": "2026-10-12"
+          }
+        ]
+      },
+      "batch": "C1 · Recognition and validity"
+    },
+    {
+      "slug": "how-to-verify-ugc-approved-degree",
+      "kind": "revision",
+      "reason": "Wave 4 C1: step-by-step UGC-DEB check for the 2026-27 lists, with legal-name examples (prepared draft, review before applying).",
+      "basedOn": {
+        "title": "UGC-approved online degrees: how to verify before you enrol",
+        "category": "Validity",
+        "excerpt": "A university's own \"UGC approved\" badge isn't proof — here's the actual government source to check, and a real example of why it matters.",
+        "cover": "/blog/how-to-verify-ugc-approved-degree.webp",
+        "publishedDate": "2026-08-20",
+        "updatedDate": "2026-10-05",
+        "body": [
+          {
+            "type": "p",
+            "text": "The single most reliable check for any online degree's validity is the UGC-DEB's own published \"Entitled Online\" list at deb.ugc.ac.in — not a university's own \"UGC approved\" badge, which is a marketing claim, not independent proof."
+          },
+          {
+            "type": "h2",
+            "text": "Why the badge isn't enough"
+          },
+          {
+            "type": "p",
+            "text": "Entitlement is granted per program and per session. A university's site can describe a program as UGC-entitled even when that exact program name doesn't appear on the list for your session, or appears under a differently named legal entity. The list, not the badge, is what counts."
+          },
+          {
+            "type": "h2",
+            "text": "How to check a program yourself"
+          },
+          {
+            "type": "p",
+            "text": "Look up the university's exact legal name on the UGC-DEB list (large universities sometimes have more than one legally distinct entity), then confirm your specific program is named exactly — not just that the university appears somewhere on the list."
+          },
+          {
+            "type": "note",
+            "text": "Unnati Vidya tip: if you can't find your exact program name on the current list, that's not necessarily a red flag — ask the university directly for their entitlement documentation."
+          },
+          {
+            "type": "links",
+            "heading": "See our verification approach",
+            "items": [
+              {
+                "href": "/how-we-verify",
+                "label": "How we verify our data"
+              },
+              {
+                "href": "/online-degree-guides",
+                "label": "Browse all eligibility, career-scope, and UGC-approval guides"
+              }
+            ]
+          }
+        ],
+        "faqs": [
+          [
+            "Is a university's own 'UGC approved' badge proof enough of validity?",
+            "No — the single most reliable check is the UGC-DEB's own published 'Entitled Online' list at deb.ugc.ac.in. A university's own badge is a marketing claim, not independent proof."
+          ],
+          [
+            "How do I check if my specific program is UGC-DEB entitled?",
+            "Look up the university's exact legal name on the UGC-DEB list (large universities sometimes have more than one legally distinct entity), then confirm your specific program is named exactly — not just that the university appears somewhere on the list."
+          ],
+          [
+            "What if I can't find my exact program name on the current UGC-DEB list?",
+            "Ask the university for its entitlement documentation and check the program's exact name and the session it covers. If the program still isn't on the list for your session, treat that as unresolved until the university shows otherwise."
+          ]
+        ]
+      },
+      "content": {
+        "title": "UGC-approved online degrees: how to verify before you enrol",
+        "category": "Validity",
+        "cover": "/blog/how-to-verify-ugc-approved-degree.webp",
+        "publishedDate": "2026-08-20",
+        "excerpt": "A university's own \"UGC approved\" badge isn't proof. Here is how to check a program on the UGC-DEB list yourself, step by step, for the 2026-27 session.",
+        "updatedDate": "2026-10-12",
+        "body": [
+          {
+            "type": "p",
+            "text": "The most reliable check for an online degree is UGC-DEB's own published list at deb.ugc.ac.in, not a university's \"UGC approved\" badge. Entitlement is granted per program and per session, and the list is what counts."
+          },
+          {
+            "type": "h2",
+            "text": "Step 1: Open the online program lists"
+          },
+          {
+            "type": "p",
+            "text": "On deb.ugc.ac.in, open the Recognition section for online programmes and choose your academic year. For 2026-27 there are two PDF tables: institutions entitled to offer online programmes, and institutions recognised to offer them, which also prints a period of recognition."
+          },
+          {
+            "type": "h2",
+            "text": "Step 2: Find the university by its legal name"
+          },
+          {
+            "type": "p",
+            "text": "Lists use legal names, which can differ from brand names. MUJ appears as Manipal University (Rajasthan), which is a different institution from the Manipal University listed for Karnataka. Amity Online's programs appear under Amity University Rajasthan and Amity University Uttar Pradesh. Make sure you are looking at the institution that awards your degree."
+          },
+          {
+            "type": "h2",
+            "text": "Step 3: Find your exact program and session"
+          },
+          {
+            "type": "p",
+            "text": "Check that your program is printed under that institution for the session you are joining. Printed names can be longer than marketing names: SMU's BA, for example, is printed as Bachelor of Arts (combination of 3 subjects) with its subjects."
+          },
+          {
+            "type": "h2",
+            "text": "Step 4: Check the period and keep a record"
+          },
+          {
+            "type": "p",
+            "text": "If the program is on the recognised list, read its period of recognition. Save the PDF or a dated screenshot, and confirm with the university before you pay any fee."
+          },
+          {
+            "type": "note",
+            "text": "Unnati Vidya tip: if you can't find your exact program on the current list, ask the university for its entitlement documentation and treat the question as unresolved until you see it."
+          },
+          {
+            "type": "links",
+            "heading": "Related",
+            "items": [
+              {
+                "href": "/tools/recognition-check",
+                "label": "Our recognition check for all 30 programs"
+              },
+              {
+                "href": "/blog/ugc-approved-online-degree-guide",
+                "label": "Is an online degree valid in India?"
+              },
+              {
+                "href": "/blog/abc-id-and-deb-id-guide",
+                "label": "ABC ID and DEB-ID: what you need before admission"
+              },
+              {
+                "href": "/how-we-verify",
+                "label": "How we verify our data"
+              }
+            ]
+          }
+        ],
+        "faqs": [
+          [
+            "Is a university's own 'UGC approved' badge proof enough of validity?",
+            "No. The reliable check is the UGC-DEB list for online programmes at deb.ugc.ac.in, for the session you are joining."
+          ],
+          [
+            "How do I check if my specific program is UGC-DEB entitled?",
+            "Find the awarding university by its legal name on the online programme list for your session, then confirm your exact program is printed under it."
+          ],
+          [
+            "What if I can't find my exact program name on the current UGC-DEB list?",
+            "Ask the university for its entitlement documentation and check the program's exact name and session. If it still isn't on the list for your session, treat that as unresolved until the university shows otherwise."
+          ]
+        ],
+        "sources": [
+          {
+            "label": "UGC-DEB: HEIs entitled to offer online programmes, 2026-27",
+            "url": "https://deb.ugc.ac.in/pdf/HomePageRecognitionDetail/140/140_upload_RecognitionDetails_20260922125253.pdf",
+            "checkedAt": "2026-10-05"
+          },
+          {
+            "label": "UGC-DEB: HEIs recognised to offer online programmes, 2026-27",
+            "url": "https://deb.ugc.ac.in/pdf/HomePageRecognitionDetail/140/140_upload_RecognitionDetails_20260922125223.pdf",
+            "checkedAt": "2026-10-05"
+          },
+          {
+            "label": "UGC-DEB: DEB-ID frequently asked questions",
+            "url": "https://deb.ugc.ac.in/StudentDEBId/FAQ",
+            "checkedAt": "2026-10-12"
+          }
+        ]
+      },
+      "batch": "C1 · Recognition and validity"
+    },
+    {
+      "slug": "naac-ugc-deb-aicte-explained",
+      "kind": "revision",
+      "reason": "Wave 4 C1: adds NIRF, AIU and WES; replaces the unsourced claim that BBA and BCA are not AICTE-regulated with a confirm-with-the-university note (prepared draft, review before applying).",
+      "basedOn": {
+        "title": "NAAC, UGC-DEB, and AICTE: what do these approvals actually mean?",
+        "category": "Validity",
+        "excerpt": "Three different approvals, three different things they actually certify — with real examples of where they do and don't apply.",
+        "cover": "/blog/naac-ugc-deb-aicte-explained.webp",
+        "publishedDate": "2026-08-22",
+        "body": [
+          {
+            "type": "p",
+            "text": "These three approvals are often quoted together as if they're one signal — they're not. Each certifies something different, and a program can hold one without the others."
+          },
+          {
+            "type": "h2",
+            "text": "UGC-DEB entitlement: the one that matters most for validity"
+          },
+          {
+            "type": "p",
+            "text": "This is the specific government approval that makes an online degree valid for that program, at that university, for that academic year. It's checked against a published list, not just claimed."
+          },
+          {
+            "type": "h2",
+            "text": "NAAC: institutional quality, not per-program"
+          },
+          {
+            "type": "p",
+            "text": "NAAC grades the university as a whole, not any specific program. It's a real quality signal, but it doesn't substitute for program-specific UGC-DEB entitlement — and large universities can have multiple separately-graded legal entities, so the grade you see quoted may not be the exact entity granting your specific degree."
+          },
+          {
+            "type": "h2",
+            "text": "AICTE: only relevant to certain technical/management programs"
+          },
+          {
+            "type": "p",
+            "text": "AICTE approval matters for programs like MBA and MCA. It's not relevant to categories like BCA or BBA, which aren't AICTE-regulated at all — so don't expect (or require) it there."
+          },
+          {
+            "type": "note",
+            "text": "Unnati Vidya tip: when comparing programs, ask which specific approval applies to your exact program, not just whether the university \"has approvals\" in general."
+          },
+          {
+            "type": "links",
+            "heading": "See real examples",
+            "items": [
+              {
+                "href": "/online-degree-guides/mba-ugc-approval",
+                "label": "Is Online MBA UGC approved?"
+              },
+              {
+                "href": "/online-degree-guides/bca-ugc-approval",
+                "label": "Is Online BCA UGC approved?"
+              }
+            ]
+          }
+        ],
+        "faqs": [
+          [
+            "Are NAAC, UGC-DEB, and AICTE the same kind of approval?",
+            "No — each certifies something different, and a program can hold one without the others. UGC-DEB entitlement is program-and-year-specific; NAAC grades the whole institution; AICTE only applies to certain technical/management programs."
+          ],
+          [
+            "Does a good NAAC grade mean my specific online program is UGC approved?",
+            "No — NAAC grades the university as a whole, not any specific program, and doesn't substitute for program-specific UGC-DEB entitlement. Large universities can also have multiple separately-graded legal entities."
+          ],
+          [
+            "Do all online degrees need AICTE approval?",
+            "No — AICTE only matters for programs like MBA and MCA. It's not relevant to categories like BCA or BBA, which aren't AICTE-regulated at all."
+          ]
+        ]
+      },
+      "content": {
+        "category": "Validity",
+        "cover": "/blog/naac-ugc-deb-aicte-explained.webp",
+        "publishedDate": "2026-08-22",
+        "title": "NAAC, NIRF, UGC-DEB, AICTE, AIU and WES: what each one means",
+        "excerpt": "These names are often quoted together as if they were one signal. Each covers something different, and only one decides whether a specific online program is entitled.",
+        "updatedDate": "2026-10-12",
+        "body": [
+          {
+            "type": "p",
+            "text": "These names are often quoted together, but each covers something different. For an online degree, the one that decides whether your specific program is entitled is UGC-DEB."
+          },
+          {
+            "type": "h2",
+            "text": "UGC-DEB: the program's entitlement"
+          },
+          {
+            "type": "p",
+            "text": "UGC-DEB publishes the year-wise lists of institutions entitled or recognised to offer online programs, and the programs under each. It is program-specific and session-specific: a university can be entitled for one program and not another."
+          },
+          {
+            "type": "h2",
+            "text": "NAAC: the institution's accreditation"
+          },
+          {
+            "type": "p",
+            "text": "NAAC accredits the university as a whole, not a specific program. UGC-DEB's 2025-26 entitlement letter ties entitlement to conditions that include NAAC and NIRF, so it matters, but a NAAC grade is not proof that your program is entitled."
+          },
+          {
+            "type": "h2",
+            "text": "NIRF: a national ranking of institutions"
+          },
+          {
+            "type": "p",
+            "text": "NIRF is the Ministry of Education's annual ranking framework. It ranks institutions, not their online programs or mode of delivery, and a large university may have more than one legal entity with different results."
+          },
+          {
+            "type": "h2",
+            "text": "AICTE: technical and management education"
+          },
+          {
+            "type": "p",
+            "text": "AICTE regulates technical and management education. Whether AICTE approval applies to a particular online program depends on the program and AICTE's current rules, so check the program page and ask the university to confirm."
+          },
+          {
+            "type": "h2",
+            "text": "AIU: equivalence of qualifications from outside India"
+          },
+          {
+            "type": "p",
+            "text": "The Association of Indian Universities issues equivalence certificates for qualifications earned outside India. A university can ask for one when your previous degree is from a foreign university; MUJ's admission manual, for example, asks for an AIU equivalence certificate in that case."
+          },
+          {
+            "type": "h2",
+            "text": "WES: credential evaluation abroad"
+          },
+          {
+            "type": "p",
+            "text": "World Education Services evaluates qualifications for people applying to study or work abroad. It is not an Indian approval; see our WES guide for what it involves."
+          },
+          {
+            "type": "note",
+            "text": "Unnati Vidya tip: when comparing programs, ask which approval applies to your exact program, not whether the university \"has approvals\" in general."
+          },
+          {
+            "type": "links",
+            "heading": "Related",
+            "items": [
+              {
+                "href": "/tools/recognition-check",
+                "label": "Check a program's 2026-27 UGC-DEB status"
+              },
+              {
+                "href": "/blog/wes-evaluation-online-degrees",
+                "label": "WES evaluation for online degrees"
+              },
+              {
+                "href": "/online-degree-guides/mba-ugc-approval",
+                "label": "Is Online MBA UGC approved?"
+              },
+              {
+                "href": "/online-degree-guides/bca-ugc-approval",
+                "label": "Is Online BCA UGC approved?"
+              }
+            ]
+          }
+        ],
+        "faqs": [
+          [
+            "Are NAAC, NIRF, UGC-DEB and AICTE the same kind of approval?",
+            "No. UGC-DEB entitlement is per program and per session; NAAC accredits the whole institution; NIRF ranks institutions; AICTE regulates technical and management education."
+          ],
+          [
+            "Does a good NAAC grade or NIRF rank mean my online program is entitled?",
+            "No. Both describe the institution. Check your program on the UGC-DEB list for your session."
+          ],
+          [
+            "Does my online program need AICTE approval?",
+            "It depends on the program and AICTE's current rules. Check the program page and ask the university to confirm."
+          ],
+          [
+            "When would I need an AIU equivalence certificate?",
+            "When your previous qualification is from outside India and the university asks for it."
+          ]
+        ],
+        "sources": [
+          {
+            "label": "UGC-DEB: HEIs entitled to offer online programmes, 2026-27",
+            "url": "https://deb.ugc.ac.in/pdf/HomePageRecognitionDetail/140/140_upload_RecognitionDetails_20260922125253.pdf",
+            "checkedAt": "2026-10-05"
+          },
+          {
+            "label": "UGC-DEB: entitled list 2025-26 with its covering letter",
+            "url": "https://deb.ugc.ac.in/pdf/HomePageRecognitionDetail/140/140_upload_RecognitionDetails_20251006094928.pdf",
+            "checkedAt": "2026-10-05"
+          },
+          {
+            "label": "NIRF India Rankings 2025: University",
+            "url": "https://www.nirfindia.org/Rankings/2025/UniversityRanking.html",
+            "checkedAt": "2026-10-05"
+          },
+          {
+            "label": "MUJ Admission Manual for Online Programmes (version 5, 2022)",
+            "url": "https://www.onlinemanipal.com/wp-content/uploads/2022/01/MUJ-Admission-Manual-Online-Programmes-V5.pdf",
+            "checkedAt": "2026-10-12"
+          }
+        ]
+      },
+      "batch": "C1 · Recognition and validity"
+    },
+    {
+      "slug": "online-mba-guide",
+      "kind": "revision",
+      "reason": "Wave 4 C5 hub: rewritten into the Online MBA hub with new-batch fees, eligibility and specializations from the official pages (prepared draft, review before applying; publish after the MUJ fee corrections).",
+      "basedOn": {
+        "title": "Affordable online MBA: comparing fees beyond the headline price",
+        "category": "Fees & EMI",
+        "excerpt": "Online MBA fees in our catalog start at ₹1,20,000. What the total fee includes, and when paying more can be worth it.",
+        "cover": "/blog/online-mba-guide.webp",
+        "publishedDate": "2026-07-14",
+        "updatedDate": "2026-10-05",
+        "body": [
+          {
+            "type": "p",
+            "text": "A low headline fee only tells part of the story. Before picking the cheapest online MBA, check what the total fee actually includes: application charges, exam fees, specialisation electives, and whether the semester-wise or EMI plan carries any processing cost."
+          },
+          {
+            "type": "h2",
+            "text": "What actually varies between universities"
+          },
+          {
+            "type": "p",
+            "text": "Beyond the total fee, look at accreditation (NAAC, AICTE), placement assistance rate, average and highest package, hiring partner count, and how many specialisation tracks are genuinely available rather than listed but rarely offered."
+          },
+          {
+            "type": "note",
+            "text": "Unnati Vidya tip: use the compare tool to place fee, EMI, placement rate, and specialisations for up to three MBA programs side by side before you decide."
+          },
+          {
+            "type": "h2",
+            "text": "When paying more is worth it"
+          },
+          {
+            "type": "p",
+            "text": "A higher fee can pay back faster when it comes with a materially stronger placement network, a specialisation directly aligned to your target role, or international recognition (like WES evaluation) that a cheaper option doesn't carry."
+          },
+          {
+            "type": "h2",
+            "text": "Before you enrol"
+          },
+          {
+            "type": "p",
+            "text": "Get the current fee, EMI terms, and scholarship eligibility confirmed directly with a counsellor — fee structures and scholarship rules can change by admission cycle."
+          }
+        ],
+        "faqs": [
+          [
+            "Does a lower headline fee always mean a better deal for an online MBA?",
+            "No — check what the total fee actually includes: application charges, exam fees, specialisation electives, and any EMI processing cost, before comparing on fee alone."
+          ],
+          [
+            "When is paying more for an online MBA actually worth it?",
+            "When the higher fee comes with a materially stronger placement network, a specialisation directly aligned to your target role, or international recognition like WES evaluation that a cheaper option doesn't carry."
+          ],
+          [
+            "What besides fee should I compare between MBA universities?",
+            "Accreditation (NAAC, AICTE), placement assistance rate, average and highest package, hiring partner count, and how many specialisation tracks are genuinely available rather than just listed."
+          ]
+        ]
+      },
+      "content": {
+        "title": "Online MBA at MUJ, SMU and Amity: fees, eligibility, specializations and how to choose",
+        "category": "Fees & EMI",
+        "excerpt": "The three online MBAs side by side: new-batch fees from the official pages, who can apply, how specializations work, and the questions to settle before you choose.",
+        "cover": "/blog/online-mba-guide.webp",
+        "publishedDate": "2026-07-14",
+        "updatedDate": "2026-10-13",
+        "body": [
+          {
+            "type": "p",
+            "text": "Short answer: Manipal University Jaipur (MUJ), Sikkim Manipal University (SMU) and Amity University Online each offer a two-year online MBA. They differ most in listed tuition, minimum marks and how specializations are chosen. Check each program's UGC-DEB entitlement for your session before anything else."
+          },
+          {
+            "type": "h2",
+            "text": "Fees for the new batch"
+          },
+          {
+            "type": "p",
+            "text": "Listed on the official program pages on 12 October 2026, before any promotional discount: MUJ ₹1,84,000 (four semester payments of ₹46,000), SMU ₹1,20,000 (four of ₹30,000) and Amity ₹2,25,000 (four semester payments of ₹56,300). MUJ and SMU also list a non-refundable application fee of ₹500."
+          },
+          {
+            "type": "note",
+            "text": "These are Indian-applicant amounts. NRI and international fees are separate schedules in US dollars; see each course page or the total cost planner."
+          },
+          {
+            "type": "h2",
+            "text": "Who can apply"
+          },
+          {
+            "type": "p",
+            "text": "MUJ asks for a 10+2+3 bachelor's degree with at least 50% marks in aggregate (45% for reserved categories). SMU accepts a 10+2+3, 10+2+4 or 10+3+3 bachelor's degree in any discipline with the same 50% (45%) minimum. Amity asks for graduation in any discipline with at least 40%, and an admission test below 40%."
+          },
+          {
+            "type": "p",
+            "text": "None of the three lists an entrance exam or work experience as a requirement on its current page. MUJ lists a CAT, GMAT or MAT score and a work-experience certificate as optional documents."
+          },
+          {
+            "type": "h2",
+            "text": "How specializations work"
+          },
+          {
+            "type": "p",
+            "text": "MUJ offers 13 electives, such as Finance, Analytics and Data Science, BFSI and Digital Marketing, and in the third semester you choose one for a super specialization or two for a dual specialization. SMU's MBA is a dual specialization: you pick two of Marketing, Finance, Human Resources, Systems, Operations & Supply Chain Management and Healthcare. Amity lists options including a dual specialization, General Management, Business Analytics, Data Science, Digital Marketing Management, International Finance, and Hospital and Healthcare Management."
+          },
+          {
+            "type": "h2",
+            "text": "Recognition"
+          },
+          {
+            "type": "p",
+            "text": "All three MBAs appeared on the UGC-DEB list of institutions entitled to offer online programmes for 2026-27 when we checked on 5 October 2026: MUJ and SMU under their own names, and Amity's MBA under both Amity University Rajasthan and Amity University Uttar Pradesh. Ask Amity which institution awards your degree."
+          },
+          {
+            "type": "h2",
+            "text": "How to choose"
+          },
+          {
+            "type": "p",
+            "text": "Settle four things in order: whether the program is entitled for your session, whether you meet the marks requirement comfortably, which specialization fits the role you want, and the full amount you will pay, including how payments are spaced. The cheapest option is not automatically the right one, and the most expensive is not automatically better."
+          },
+          {
+            "type": "links",
+            "heading": "Compare and check",
+            "items": [
+              {
+                "href": "/courses/online-mba-manipal-university-jaipur",
+                "label": "Online MBA, Manipal University Jaipur"
+              },
+              {
+                "href": "/courses/online-mba-sikkim-manipal-university",
+                "label": "Online MBA, Sikkim Manipal University"
+              },
+              {
+                "href": "/courses/online-mba-amity-online",
+                "label": "Online MBA, Amity University Online"
+              },
+              {
+                "href": "/compare?add=mba-muj,mba-smu,mba-amity",
+                "label": "Compare all three side by side"
+              },
+              {
+                "href": "/tools/total-cost",
+                "label": "Total cost planner"
+              },
+              {
+                "href": "/blog/best-online-mba-working-professionals",
+                "label": "Doing an online MBA while working"
+              },
+              {
+                "href": "/blog/mca-vs-mba-it-careers",
+                "label": "MBA or MCA if you work in IT"
+              }
+            ]
+          }
+        ],
+        "faqs": [
+          [
+            "What does an online MBA cost at MUJ, SMU and Amity?",
+            "For the new batch the official pages list ₹1,84,000 at MUJ, ₹1,20,000 at SMU and ₹2,25,000 at Amity for Indian applicants, before promotional discounts (checked 12 October 2026)."
+          ],
+          [
+            "Do I need an entrance exam or work experience?",
+            "None of the three lists either as a requirement on its current page. MUJ lists a CAT, GMAT or MAT score and a work-experience certificate as optional documents."
+          ],
+          [
+            "What are the minimum marks?",
+            "50% in graduation (45% for reserved categories) at MUJ and SMU; 40% at Amity, which offers an admission test below 40%."
+          ],
+          [
+            "Can I choose two specializations?",
+            "Yes at all three, in different ways: MUJ offers super or dual specialization from 13 electives, SMU's MBA is a dual specialization from six areas, and Amity lists a dual-specialization option."
+          ]
+        ],
+        "sources": [
+          {
+            "label": "Online Manipal: MUJ online MBA (fees and eligibility)",
+            "url": "https://www.onlinemanipal.com/online-mba-manipal-university-jaipur",
+            "checkedAt": "2026-10-12"
+          },
+          {
+            "label": "Online Manipal: SMU online MBA (fees and eligibility)",
+            "url": "https://www.onlinemanipal.com/online-mba-degree-dual-specialization-smu",
+            "checkedAt": "2026-10-12"
+          },
+          {
+            "label": "Amity University Online: MBA (fees and eligibility)",
+            "url": "https://amityonline.com/master-of-business-administration-online",
+            "checkedAt": "2026-10-13"
+          },
+          {
+            "label": "UGC-DEB: HEIs entitled to offer online programmes, 2026-27",
+            "url": "https://deb.ugc.ac.in/pdf/HomePageRecognitionDetail/140/140_upload_RecognitionDetails_20260922125253.pdf",
+            "checkedAt": "2026-10-05"
+          }
+        ]
+      },
+      "batch": "C5 · Online MBA"
+    },
+    {
+      "slug": "best-online-mba-working-professionals",
+      "kind": "revision",
+      "reason": "Wave 4 C5: MBA while working, rewritten with current eligibility, optional documents and new-batch semester payments; drops the superlative title (prepared draft, review before applying).",
+      "basedOn": {
+        "title": "Best online MBA for working professionals in India",
+        "category": "Careers",
+        "excerpt": "None of MUJ, SMU, or Amity require work experience — here's how to actually choose if you're already employed.",
+        "cover": "/blog/best-online-mba-working-professionals.webp",
+        "publishedDate": "2026-08-14",
+        "body": [
+          {
+            "type": "p",
+            "text": "A genuinely useful fact for working professionals: none of MUJ, SMU, or Amity require prior work experience or an entrance exam for their online MBA. Admission is based on your bachelor's degree percentage alone."
+          },
+          {
+            "type": "h2",
+            "text": "What actually matters if you're employed"
+          },
+          {
+            "type": "p",
+            "text": "Since none of the three gates on experience, the real decision points are fee, specialization fit with your current role, and how the weekend/recorded-lecture schedule fits your work hours — not whether you \"qualify.\""
+          },
+          {
+            "type": "h2",
+            "text": "Matching specialization to your role"
+          },
+          {
+            "type": "p",
+            "text": "If you're already in a functional area (finance, marketing, operations, HR, IT), an MBA specialization in that same area tends to compound your existing experience rather than starting you over in a new field."
+          },
+          {
+            "type": "note",
+            "text": "Unnati Vidya tip: ask a counsellor to map your current role and the specializations actually offered before you commit — not every university lists the same set."
+          },
+          {
+            "type": "links",
+            "heading": "Check real eligibility and specializations",
+            "items": [
+              {
+                "href": "/online-degree-guides/mba-eligibility",
+                "label": "Online MBA eligibility across universities"
+              },
+              {
+                "href": "/online-degree-guides/mba-career-scope",
+                "label": "Online MBA career scope, roles, and salary"
+              }
+            ]
+          }
+        ],
+        "faqs": [
+          [
+            "Do MUJ, SMU, or Amity require work experience for their online MBA?",
+            "No — none of the three require prior work experience or an entrance exam. Admission is based on your bachelor's degree percentage alone."
+          ],
+          [
+            "What should working professionals actually focus on when choosing an online MBA?",
+            "Fee, specialization fit with your current role, and how the weekend/recorded-lecture schedule fits your work hours — not whether you 'qualify,' since none of the three universities gate on experience."
+          ],
+          [
+            "Should I pick an MBA specialization outside my current field?",
+            "If you're already in a functional area (finance, marketing, operations, HR, IT), a specialization in that same area tends to compound your existing experience rather than starting you over in a new field."
+          ]
+        ]
+      },
+      "content": {
+        "title": "Online MBA while working: what MUJ, SMU and Amity ask for",
+        "category": "Careers",
+        "excerpt": "You don't need work experience or an entrance exam for these online MBAs. Here is what they do ask for, what it costs for the new batch, and how to plan the two years around a job.",
+        "cover": "/blog/best-online-mba-working-professionals.webp",
+        "publishedDate": "2026-08-14",
+        "updatedDate": "2026-10-13",
+        "body": [
+          {
+            "type": "p",
+            "text": "Short answer: you can apply to the online MBAs at MUJ, SMU and Amity on your bachelor's degree alone. None of them lists work experience or an entrance exam as a requirement on its current page; admission depends on your degree and marks."
+          },
+          {
+            "type": "h2",
+            "text": "What they ask for"
+          },
+          {
+            "type": "p",
+            "text": "MUJ and SMU need at least 50% in graduation (45% for reserved categories). Amity needs 40%, with an admission test below that. MUJ lists a work-experience certificate and a CAT, GMAT or MAT score as optional documents, so experience can support your application without being required."
+          },
+          {
+            "type": "h2",
+            "text": "Matching the specialization to your job"
+          },
+          {
+            "type": "p",
+            "text": "If you already work in finance, marketing, operations, HR or technology, a specialization in the same area builds on what you do every day. MUJ lets you take one elective in depth or two in the third semester; SMU's MBA always combines two of its six areas; Amity also lists a dual-specialization option."
+          },
+          {
+            "type": "h2",
+            "text": "Planning the money"
+          },
+          {
+            "type": "p",
+            "text": "All three spread fees over semesters. For the new batch the official pages list four semester payments of ₹46,000 at MUJ, ₹30,000 at SMU and ₹56,300 at Amity (Indian applicants, 12 October 2026). If your employer reimburses study costs, check whether it pays per semester or on completion."
+          },
+          {
+            "type": "note",
+            "text": "Before you enrol, ask the university how live sessions, assignments and exams are scheduled for your batch, and block that time in your calendar from the first week."
+          },
+          {
+            "type": "links",
+            "heading": "Next steps",
+            "items": [
+              {
+                "href": "/blog/online-mba-guide",
+                "label": "Online MBA at MUJ, SMU and Amity: the full comparison"
+              },
+              {
+                "href": "/blog/studying-while-working-fulltime",
+                "label": "Studying while working full-time: a realistic schedule"
+              },
+              {
+                "href": "/tools/emi-calculator",
+                "label": "EMI calculator"
+              },
+              {
+                "href": "/tools/eligibility-checker",
+                "label": "Eligibility checker"
+              }
+            ]
+          }
+        ],
+        "faqs": [
+          [
+            "Do I need work experience for an online MBA at MUJ, SMU or Amity?",
+            "No. None lists it as a requirement on its current page. MUJ lists a work-experience certificate as an optional document."
+          ],
+          [
+            "Is there an entrance exam?",
+            "None of the three lists one as a requirement. MUJ lists a CAT, GMAT or MAT score as optional; Amity uses its own admission test only for applicants below 40%."
+          ],
+          [
+            "How are fees paid?",
+            "In semester instalments at all three; full and annual payment options are also listed. See each course page for the current amounts."
+          ]
+        ],
+        "sources": [
+          {
+            "label": "Online Manipal: MUJ online MBA (fees and eligibility)",
+            "url": "https://www.onlinemanipal.com/online-mba-manipal-university-jaipur",
+            "checkedAt": "2026-10-12"
+          },
+          {
+            "label": "Online Manipal: SMU online MBA (fees and eligibility)",
+            "url": "https://www.onlinemanipal.com/online-mba-degree-dual-specialization-smu",
+            "checkedAt": "2026-10-12"
+          },
+          {
+            "label": "Amity University Online: MBA (fees and eligibility)",
+            "url": "https://amityonline.com/master-of-business-administration-online",
+            "checkedAt": "2026-10-13"
+          }
+        ]
+      },
+      "batch": "C5 · Online MBA"
+    },
+    {
+      "slug": "mca-vs-mba-it-careers",
+      "kind": "revision",
+      "reason": "Wave 4 C5: MBA vs MCA for IT professionals, with current MCA bridge-course rules and new-batch fees from the official pages (prepared draft, review before applying).",
+      "basedOn": {
+        "title": "MCA vs MBA in IT: which switch pays better?",
+        "category": "Careers",
+        "excerpt": "How recruiters read each degree, typical role trajectories, and how to decide based on where you already are.",
+        "cover": "/blog/mca-vs-mba-it-careers.webp",
+        "publishedDate": "2026-07-14",
+        "body": [
+          {
+            "type": "p",
+            "text": "If you're already working in or adjacent to IT, the choice between an online MCA and an online MBA usually comes down to whether you want to go deeper technically or move toward management."
+          },
+          {
+            "type": "h2",
+            "text": "Online MCA: go deeper technical"
+          },
+          {
+            "type": "p",
+            "text": "An MCA strengthens your standing for developer, data, cloud, and systems-analyst roles, and is the more direct path if your goal is a technical specialisation like full-stack development, data science, or cybersecurity."
+          },
+          {
+            "type": "h2",
+            "text": "Online MBA: move toward management"
+          },
+          {
+            "type": "p",
+            "text": "An MBA (especially with a technology or analytics specialisation) is the stronger fit if your goal is to move from an individual contributor role into product, business analysis, or people-management tracks within a tech organisation."
+          },
+          {
+            "type": "note",
+            "text": "Unnati Vidya tip: your counsellor can map your current role and target role against both degrees before you commit to either."
+          },
+          {
+            "type": "h2",
+            "text": "A simple way to decide"
+          },
+          {
+            "type": "p",
+            "text": "If you enjoy building and want to keep building, MCA. If you enjoy building but want to eventually decide what gets built and for whom, MBA."
+          }
+        ],
+        "faqs": [
+          [
+            "Should I choose online MCA or online MBA if I'm already working in IT?",
+            "It depends on direction: MCA strengthens your standing for developer, data, cloud, and systems-analyst roles; MBA (especially with a tech/analytics specialisation) suits moving from an individual contributor role into product, business analysis, or people-management tracks."
+          ],
+          [
+            "What's a simple way to decide between the two?",
+            "If you enjoy building and want to keep building, choose MCA. If you enjoy building but want to eventually decide what gets built and for whom, choose MBA."
+          ]
+        ]
+      },
+      "content": {
+        "title": "MBA or MCA if you work in IT: how to decide",
+        "category": "Careers",
+        "excerpt": "Choosing between an online MBA and an online MCA as an IT professional: what each degree builds, who can apply at MUJ, SMU and Amity, and what each costs for the new batch.",
+        "cover": "/blog/mca-vs-mba-it-careers.webp",
+        "publishedDate": "2026-07-14",
+        "updatedDate": "2026-10-13",
+        "body": [
+          {
+            "type": "p",
+            "text": "If you already work in or near IT, the choice between an online MCA and an online MBA usually comes down to whether you want to go deeper technically or move toward managing people, products or business decisions."
+          },
+          {
+            "type": "h2",
+            "text": "Online MCA: go deeper technically"
+          },
+          {
+            "type": "p",
+            "text": "An MCA strengthens a technical career: development, data, cloud or systems roles. MUJ and SMU accept a computing degree directly; graduates from other streams can join with compulsory bridge courses in computing (and in mathematics if they didn't study it), both with at least 50% marks (45% for reserved categories). Amity prefers a BCA or equivalent and accepts science, commerce or arts graduates with mathematics at 10+2; others can apply after a bridge course."
+          },
+          {
+            "type": "h2",
+            "text": "Online MBA: move toward management"
+          },
+          {
+            "type": "p",
+            "text": "An MBA, especially with an analytics, IT or digital specialization, suits a move into product, business analysis or people management. It is open to a bachelor's degree in any discipline at all three universities (50% at MUJ and SMU, 40% at Amity)."
+          },
+          {
+            "type": "h2",
+            "text": "What each costs for the new batch"
+          },
+          {
+            "type": "p",
+            "text": "Listed on the official pages on 12 October 2026 for Indian applicants, before discounts. MCA: ₹1,64,000 at MUJ, ₹1,10,000 at SMU and ₹1,99,000 at Amity. MBA: ₹1,84,000 at MUJ, ₹1,20,000 at SMU and ₹2,25,000 at Amity."
+          },
+          {
+            "type": "note",
+            "text": "A simple test: if you enjoy building and want to keep building, look at the MCA. If you enjoy building but want to decide what gets built and for whom, look at the MBA."
+          },
+          {
+            "type": "links",
+            "heading": "Compare the programs",
+            "items": [
+              {
+                "href": "/blog/online-mba-guide",
+                "label": "Online MBA at MUJ, SMU and Amity"
+              },
+              {
+                "href": "/courses/online-mca-manipal-university-jaipur",
+                "label": "Online MCA, Manipal University Jaipur"
+              },
+              {
+                "href": "/courses/online-mca-sikkim-manipal-university",
+                "label": "Online MCA, Sikkim Manipal University"
+              },
+              {
+                "href": "/courses/online-mca-amity-online",
+                "label": "Online MCA, Amity University Online"
+              },
+              {
+                "href": "/blog/online-mba-vs-online-mca-which-is-better",
+                "label": "Online MBA vs online MCA: eligibility in detail"
+              }
+            ]
+          }
+        ],
+        "faqs": [
+          [
+            "Can I do an online MCA without a computing degree?",
+            "Yes at MUJ and SMU, with compulsory bridge courses in Semester 1; at Amity, with mathematics at 10+2, or after a bridge course if you didn't study it."
+          ],
+          [
+            "Which is cheaper, an online MBA or MCA?",
+            "At MUJ and SMU the MCA is listed below the MBA for the new batch; at Amity the MCA is listed at ₹1,99,000 and the MBA at ₹2,25,000."
+          ]
+        ],
+        "sources": [
+          {
+            "label": "Online Manipal: MUJ online MCA",
+            "url": "https://www.onlinemanipal.com/online-mca-degree-muj",
+            "checkedAt": "2026-10-12"
+          },
+          {
+            "label": "Online Manipal: SMU online MCA",
+            "url": "https://www.onlinemanipal.com/online-mca-degree-smu",
+            "checkedAt": "2026-10-12"
+          },
+          {
+            "label": "Amity University Online: MCA",
+            "url": "https://amityonline.com/master-of-computer-applications-online",
+            "checkedAt": "2026-10-13"
+          },
+          {
+            "label": "Online Manipal: MUJ online MBA (fees and eligibility)",
+            "url": "https://www.onlinemanipal.com/online-mba-manipal-university-jaipur",
+            "checkedAt": "2026-10-12"
+          },
+          {
+            "label": "Online Manipal: SMU online MBA (fees and eligibility)",
+            "url": "https://www.onlinemanipal.com/online-mba-degree-dual-specialization-smu",
+            "checkedAt": "2026-10-12"
+          },
+          {
+            "label": "Amity University Online: MBA (fees and eligibility)",
+            "url": "https://amityonline.com/master-of-business-administration-online",
+            "checkedAt": "2026-10-13"
+          }
+        ]
+      },
+      "batch": "C5 · Online MBA"
+    },
+    {
+      "slug": "manipal-university-jaipur-vs-amity-online-mba",
+      "kind": "revision",
+      "reason": "Wave 4 C5: updates the MUJ fee to the new batch (₹1,84,000) and the specialization and payment details from the official pages (prepared draft, review before applying).",
+      "basedOn": {
+        "title": "Manipal University Jaipur vs Amity Online: Online MBA compared",
+        "category": "Fees & EMI",
+        "excerpt": "₹1.8L vs ₹2.25L, 50% vs 40% minimum marks, and 13 vs 14 specializations — the real numbers side by side.",
+        "cover": "/blog/manipal-university-jaipur-vs-amity-online-mba.webp",
+        "publishedDate": "2026-08-12",
+        "updatedDate": "2026-10-05",
+        "body": [
+          {
+            "type": "p",
+            "text": "MUJ's online MBA costs ₹1,80,000 total; Amity's costs ₹2,25,000 — a ₹45,000 difference. Before deciding on fee alone, here's what else genuinely differs."
+          },
+          {
+            "type": "h2",
+            "text": "Eligibility: Amity's bar is lower"
+          },
+          {
+            "type": "p",
+            "text": "MUJ requires a minimum of 50% marks (45% reserved categories); Amity's requirement is lower, at 40%, with an internal eligibility test available below that. Neither requires work experience or an entrance exam."
+          },
+          {
+            "type": "h2",
+            "text": "Specializations: both are genuinely broad"
+          },
+          {
+            "type": "p",
+            "text": "MUJ lists 13 real specializations including Finance, Analytics & Data Science, and BFSI. Amity lists 14, including an ACCA-linked International Finance track not available at MUJ."
+          },
+          {
+            "type": "note",
+            "text": "Unnati Vidya tip: a higher fee doesn't by itself mean a better degree. Validity depends on each program's UGC-DEB entitlement for your session, so check that first, then compare curriculum, eligibility and support alongside the fee."
+          },
+          {
+            "type": "links",
+            "heading": "See the full comparison",
+            "items": [
+              {
+                "href": "/compare/mba/amity-online-vs-manipal-university-jaipur",
+                "label": "Online MBA: MUJ vs Amity, side by side"
+              },
+              {
+                "href": "/online-degree-guides/mba-fees",
+                "label": "Online MBA fees across all universities"
+              }
+            ]
+          }
+        ],
+        "faqs": [
+          [
+            "How much cheaper is MUJ's online MBA compared to Amity's?",
+            "MUJ costs ₹1,80,000 total versus Amity's ₹2,25,000 — a ₹45,000 difference."
+          ],
+          [
+            "Which has a lower minimum-marks eligibility bar for online MBA, MUJ or Amity?",
+            "Amity, at 40% (with an internal test available below that), compared to MUJ's 50% (45% for reserved categories)."
+          ],
+          [
+            "Does Amity's online MBA offer any specialization MUJ doesn't?",
+            "Yes — Amity lists 14 specializations including an ACCA-linked International Finance track not available at MUJ, which lists 13."
+          ]
+        ]
+      },
+      "content": {
+        "title": "Manipal University Jaipur vs Amity Online: Online MBA compared",
+        "category": "Fees & EMI",
+        "cover": "/blog/manipal-university-jaipur-vs-amity-online-mba.webp",
+        "publishedDate": "2026-08-12",
+        "excerpt": "MUJ's online MBA is listed at ₹1,84,000 for the new batch and Amity's at ₹2,25,000. Here is what else differs: eligibility, specializations and recognition.",
+        "updatedDate": "2026-10-13",
+        "body": [
+          {
+            "type": "p",
+            "text": "For the new batch, MUJ's online MBA is listed at ₹1,84,000 and Amity's at ₹2,25,000, a difference of ₹41,000 (Indian applicants, before discounts, official pages checked 12 October 2026). Here is what else differs before you decide on fee alone."
+          },
+          {
+            "type": "h2",
+            "text": "Eligibility: Amity's minimum is lower"
+          },
+          {
+            "type": "p",
+            "text": "MUJ requires at least 50% marks in graduation (45% for reserved categories). Amity requires 40%, with an admission test for applicants below that. Neither lists work experience or an entrance exam as a requirement."
+          },
+          {
+            "type": "h2",
+            "text": "Specializations: both are broad"
+          },
+          {
+            "type": "p",
+            "text": "MUJ offers 13 electives, including Finance, Analytics and Data Science and BFSI, taken as one super specialization or two in a dual specialization. Amity's options include General Management, Business Analytics, Data Science, Digital Marketing Management, International Finance, and Hospital and Healthcare Management, plus a dual-specialization route."
+          },
+          {
+            "type": "h2",
+            "text": "Payments"
+          },
+          {
+            "type": "p",
+            "text": "MUJ lists four semester payments of ₹46,000; Amity lists four of ₹56,300. Both also list full and annual payment options; check the current offers on each course page."
+          },
+          {
+            "type": "note",
+            "text": "Unnati Vidya tip: a higher fee doesn't by itself mean a better degree. Check each program's UGC-DEB entitlement for your session first, then compare curriculum, eligibility and support alongside the fee."
+          },
+          {
+            "type": "links",
+            "heading": "Go further",
+            "items": [
+              {
+                "href": "/compare?add=mba-muj,mba-amity",
+                "label": "Compare MUJ and Amity MBA side by side"
+              },
+              {
+                "href": "/blog/online-mba-guide",
+                "label": "All three online MBAs compared"
+              },
+              {
+                "href": "/tools/recognition-check",
+                "label": "Check 2026-27 recognition"
+              }
+            ]
+          }
+        ],
+        "faqs": [
+          [
+            "How much do the MUJ and Amity online MBAs cost?",
+            "For the new batch, ₹1,84,000 at MUJ and ₹2,25,000 at Amity for Indian applicants, before discounts (official pages, 12 October 2026)."
+          ],
+          [
+            "Which has the lower eligibility requirement?",
+            "Amity: 40% in graduation, with an admission test below that. MUJ asks for 50% (45% for reserved categories)."
+          ]
+        ],
+        "sources": [
+          {
+            "label": "Online Manipal: MUJ online MBA (fees and eligibility)",
+            "url": "https://www.onlinemanipal.com/online-mba-manipal-university-jaipur",
+            "checkedAt": "2026-10-12"
+          },
+          {
+            "label": "Amity University Online: MBA (fees and eligibility)",
+            "url": "https://amityonline.com/master-of-business-administration-online",
+            "checkedAt": "2026-10-13"
+          },
+          {
+            "label": "UGC-DEB: HEIs entitled to offer online programmes, 2026-27",
+            "url": "https://deb.ugc.ac.in/pdf/HomePageRecognitionDetail/140/140_upload_RecognitionDetails_20260922125253.pdf",
+            "checkedAt": "2026-10-05"
+          }
+        ]
+      },
+      "batch": "C5 · Online MBA"
+    },
+    {
+      "slug": "no-cost-emi-online-degree",
+      "kind": "new",
+      "batch": "C2 · Cost and financing",
+      "reason": "Wave 4 C2: new explainer on no-cost EMI for online degree fees, from the RBI's 17 September 2013 circular on zero percent EMI schemes and its 15 April 2024 Key Facts Statement circular (prepared draft, review before applying).",
+      "content": {
+        "title": "No-cost EMI for an online degree: how it works and what to check",
+        "category": "Fees & EMI",
+        "excerpt": "No-cost EMI spreads a degree fee into monthly payments, but it is still a loan. Here is what the RBI says about zero percent schemes, and what to check before you sign.",
+        "cover": "/blog/online-mba-guide.webp",
+        "publishedDate": "2026-10-13",
+        "body": [
+          {
+            "type": "p",
+            "text": "Short answer: a no-cost EMI is a loan. A lender pays the fee and you repay it in monthly instalments that are meant to add up to the fee. Before you sign, ask the lender for its Key Facts Statement and check the total you will repay, including any processing fee."
+          },
+          {
+            "type": "h2",
+            "text": "It is still a loan"
+          },
+          {
+            "type": "p",
+            "text": "With a no-cost EMI, a bank or finance company lends you the fee and you repay that lender each month. Whether you are approved, and on what terms, is the lender's decision, not the university's. The loan is a separate contract from your admission."
+          },
+          {
+            "type": "h2",
+            "text": "What the RBI has said about zero percent schemes"
+          },
+          {
+            "type": "p",
+            "text": "In a circular to banks dated 17 September 2013, the Reserve Bank of India said that in zero percent EMI schemes on credit card outstandings, \"the interest element is often camouflaged and passed on to customer in the form of processing fee\". It added that \"the very concept of zero percent interest is non-existent\". So look at the charges, not the label."
+          },
+          {
+            "type": "h2",
+            "text": "Ask for the Key Facts Statement"
+          },
+          {
+            "type": "p",
+            "text": "For new retail and MSME term loans sanctioned on or after 1 October 2024, banks and NBFCs must give you a Key Facts Statement (KFS) before you sign. It includes the annual percentage rate (APR), which covers the interest rate and all other charges the lender levies, and a repayment schedule for the whole loan."
+          },
+          {
+            "type": "p",
+            "text": "A fee or charge that is not in the KFS cannot be charged later without your explicit consent. For loans of seven days or more, the KFS stays valid for at least three working days, so you have time to read and compare it. The lender asks you to confirm that you have understood it."
+          },
+          {
+            "type": "p",
+            "text": "The KFS rules do not cover credit card receivables. If the EMI runs on your credit card, ask the card issuer for every charge in writing before you choose it."
+          },
+          {
+            "type": "h2",
+            "text": "What to check before you sign"
+          },
+          {
+            "type": "p",
+            "text": "1. The total you will repay. Add up every instalment and any processing fee, and compare it with the fee the university lists for your applicant category."
+          },
+          {
+            "type": "p",
+            "text": "2. The APR on the KFS. If it is not zero, ask the lender which charges make it up."
+          },
+          {
+            "type": "p",
+            "text": "3. Who the lender is, and how and when you pay each month."
+          },
+          {
+            "type": "p",
+            "text": "4. When the first instalment is due, compared with the university's semester payment dates."
+          },
+          {
+            "type": "p",
+            "text": "5. Charges for a late payment or for closing the loan early."
+          },
+          {
+            "type": "p",
+            "text": "6. What happens if you leave the program. The university's refund policy and your loan are separate, so ask both whether a refund closes the loan."
+          },
+          {
+            "type": "h2",
+            "text": "EMI at MUJ, SMU and Amity"
+          },
+          {
+            "type": "p",
+            "text": "Every university we list offers no-cost EMI. The monthly amount on our course pages is the listed tuition divided by the program's months, as a guide. The lender confirms your actual instalment and terms."
+          },
+          {
+            "type": "note",
+            "text": "No-cost EMI changes how you pay, not what the program costs. Compare programs on the listed fee and what you get first, then decide how to pay."
+          },
+          {
+            "type": "links",
+            "heading": "Plan your payments",
+            "items": [
+              {
+                "href": "/online-degree-guides/fees",
+                "label": "Online degree fees 2026-27: all programs"
+              },
+              {
+                "href": "/tools/total-cost",
+                "label": "Total cost planner"
+              },
+              {
+                "href": "/tools/emi-calculator",
+                "label": "EMI calculator"
+              }
+            ]
+          }
+        ],
+        "faqs": [
+          [
+            "Is no-cost EMI really free?",
+            "Not always. The RBI has said that the concept of zero percent interest is non-existent, and that interest can be passed on as a processing fee. Check the total you will repay and the APR on the lender's Key Facts Statement."
+          ],
+          [
+            "What is a Key Facts Statement?",
+            "A standard summary that banks and NBFCs must give before a new retail or MSME term loan sanctioned on or after 1 October 2024. It shows the APR, which includes the interest rate and all other charges the lender levies, and the repayment schedule."
+          ],
+          [
+            "Is the EMI amount on Unnati Vidya the amount I will pay?",
+            "It is a guide: the listed tuition divided by the program's months. The lender confirms your actual instalment, charges and schedule."
+          ],
+          [
+            "What happens to my EMI if I leave the program?",
+            "Your loan is a separate contract with the lender, and refunds follow the university's own policy. Ask both, before you sign, whether a refund closes the loan."
+          ]
+        ],
+        "sources": [
+          {
+            "label": "RBI circular RBI/2013-14/292, \"Pernicious practices of select banks deterring customer protection and accounting integrity\", 17 September 2013",
+            "url": "https://www.rbi.org.in/scripts/NotificationUser.aspx?Id=8461&Mode=0",
+            "checkedAt": "2026-10-13"
+          },
+          {
+            "label": "RBI circular RBI/2024-25/18, \"Key Facts Statement (KFS) for Loans & Advances\", 15 April 2024",
+            "url": "https://www.rbi.org.in/Scripts/NotificationUser.aspx?Id=12663&Mode=0",
+            "checkedAt": "2026-10-13"
+          }
+        ]
+      }
+    },
+    {
+      "slug": "online-vs-distance-vs-regular-degree",
+      "kind": "new",
+      "batch": "C1 · Recognition and validity",
+      "reason": "Wave 4 C1 follow-up: new explainer on regular (conventional), open and distance learning and online modes, from the definitions, evaluation rules and equivalence clause of the UGC 2020 regulations (prepared draft, review before applying).",
+      "content": {
+        "title": "Online, distance or regular: what each mode means for your degree",
+        "category": "Validity",
+        "excerpt": "UGC defines three ways to study for a degree: regular, open and distance learning, and online. Here is how they differ in teaching, exams and recognition, and how to check which one you are joining.",
+        "cover": "/blog/online-mba-vs-distance-mba-difference.webp",
+        "publishedDate": "2026-10-13",
+        "body": [
+          {
+            "type": "p",
+            "text": "Short answer: all three can lead to an equivalent degree. Under UGC's 2020 regulations, a degree earned in open and distance learning (ODL) or online mode from an institution recognised under those regulations is treated as equivalent to the same degree in regular (conventional) mode. What differs is how you are taught and examined, and the mode the university must be recognised for."
+          },
+          {
+            "type": "h2",
+            "text": "How UGC defines the three modes"
+          },
+          {
+            "type": "p",
+            "text": "Regular (conventional) mode: learning through \"face to face interaction between the teacher and learner in regular class room environment\", which can be supplemented with online instruction."
+          },
+          {
+            "type": "p",
+            "text": "Open and distance learning (ODL): learning through \"a variety of media, including print, electronic, online and occasional interactive face-to-face meetings\" with learners, or through learner support services."
+          },
+          {
+            "type": "p",
+            "text": "Online mode: learning through the internet and e-learning materials, with \"full-fledged programme delivery through the internet\"."
+          },
+          {
+            "type": "h2",
+            "text": "How you are assessed"
+          },
+          {
+            "type": "p",
+            "text": "For both ODL and online programs, continuous assessment during the semester counts for at most 30% of the marks and the end-semester exam for at least 70%. To sit the end-semester exam, an online learner needs at least 75% participation in the program's online activities, and an ODL learner needs 75% attendance in its personal contact sessions."
+          },
+          {
+            "type": "p",
+            "text": "ODL end-semester exams are proctored in examination centres within the university's territorial jurisdiction. Online programs can hold exams as technology-enabled online tests with security arrangements, or as proctored exams, and the territorial restriction does not apply to online learning."
+          },
+          {
+            "type": "h2",
+            "text": "Recognition is for a mode, a program and a session"
+          },
+          {
+            "type": "p",
+            "text": "The regulations set separate conditions for offering ODL and online programs, and UGC-DEB publishes separate lists for each, year by year. Check that your program is listed in the mode you are joining, for your session."
+          },
+          {
+            "type": "p",
+            "text": "The programs we list at MUJ, SMU and Amity Online are offered in online mode. On 5 October 2026 we found all 30 on UGC-DEB's 2026-27 list of institutions entitled to offer online programmes."
+          },
+          {
+            "type": "note",
+            "text": "A \"UGC approved\" badge on a program page is not enough on its own. Check the mode and the session on deb.ugc.ac.in, or use our recognition check."
+          },
+          {
+            "type": "h2",
+            "text": "Choosing between them"
+          },
+          {
+            "type": "p",
+            "text": "Regular mode suits you if you can attend classes in person. Online and ODL let you study around work or from a distance: an online program is delivered entirely over the internet, while ODL can also use printed material and occasional face-to-face sessions. Whichever you choose, the equivalence applies only if the institution is recognised for that mode and program."
+          },
+          {
+            "type": "links",
+            "heading": "Check your program",
+            "items": [
+              {
+                "href": "/tools/recognition-check",
+                "label": "Check a program's 2026-27 status"
+              },
+              {
+                "href": "/blog/ugc-approved-online-degree-guide",
+                "label": "Is an online degree valid in India?"
+              },
+              {
+                "href": "/blog/online-mba-vs-distance-mba-difference",
+                "label": "Online MBA vs distance MBA"
+              },
+              {
+                "href": "/blog/online-degree-vs-regular-degree-employers",
+                "label": "Online degree vs regular degree: what employers think"
+              }
+            ]
+          }
+        ],
+        "faqs": [
+          [
+            "Is an online degree equal to a regular degree?",
+            "Yes, if the institution is recognised for that program in online mode. Regulation 22 of UGC's 2020 regulations treats degrees awarded in ODL or online mode by recognised institutions as equivalent to the same degrees in conventional mode."
+          ],
+          [
+            "What is the difference between online and distance learning?",
+            "Online mode delivers the whole program over the internet. ODL can use print, electronic and online media with occasional face-to-face meetings. They are recognised separately, so check the mode your program is listed under."
+          ],
+          [
+            "How are online exams conducted?",
+            "The regulations let online programs use technology-enabled online tests with security arrangements, or proctored exams. ODL end-semester exams are proctored at examination centres."
+          ],
+          [
+            "Can I study an online program from another state?",
+            "The regulations say the territorial restriction does not apply to online learning. Check with the university that it enrols learners from where you live."
+          ]
+        ],
+        "sources": [
+          {
+            "label": "UGC (Open and Distance Learning Programmes and Online Programmes) Regulations, 2020, as published in the Gazette of India",
+            "url": "https://deb.ugc.ac.in/pdf/20200906.pdf",
+            "checkedAt": "2026-10-13"
+          },
+          {
+            "label": "UGC-DEB: ODL regulations and their 2021, 2022 and 2024 amendments (none changes the definitions or regulation 22)",
+            "url": "https://deb.ugc.ac.in/Regulations",
+            "checkedAt": "2026-10-13"
+          },
+          {
+            "label": "UGC-DEB: HEIs entitled to offer online programmes, 2026-27",
+            "url": "https://deb.ugc.ac.in/pdf/HomePageRecognitionDetail/140/140_upload_RecognitionDetails_20260922125253.pdf",
+            "checkedAt": "2026-10-05"
+          }
+        ]
+      }
+    },
+    {
+      "slug": "online-mba-vs-distance-mba-difference",
+      "kind": "revision",
+      "batch": "C1 · Recognition and validity",
+      "basedOn": {
+        "title": "Online MBA vs Distance MBA: what's actually different?",
+        "category": "Validity",
+        "excerpt": "\"Online\" and \"distance\" are two separate regulatory categories under UGC, not marketing labels — here's why that matters before you enrol.",
+        "cover": "/blog/online-mba-vs-distance-mba-difference.webp",
+        "publishedDate": "2026-08-10",
+        "updatedDate": "2026-10-05",
+        "body": [
+          {
+            "type": "p",
+            "text": "\"Online\" and \"distance\" (ODL) aren't interchangeable marketing words — they're two separate approval categories under UGC, and a university's entitlement for one doesn't automatically cover the other."
+          },
+          {
+            "type": "h2",
+            "text": "Why the distinction matters to you"
+          },
+          {
+            "type": "p",
+            "text": "The MBA programs listed on this site (MUJ, SMU, Amity) are offered in online mode, which UGC-DEB lists under its \"Online\" category, not the separate ODL (distance) category. We are re-checking each program against the 2026-27 entitlement list; until that is published here, look up your program under the Online category at deb.ugc.ac.in."
+          },
+          {
+            "type": "h2",
+            "text": "What to actually check"
+          },
+          {
+            "type": "p",
+            "text": "Before enrolling anywhere, confirm which specific category (Online vs ODL) a program is entitled under, and for which academic year — entitlement is renewed and re-published periodically, and a university can be entitled for one mode and not the other."
+          },
+          {
+            "type": "note",
+            "text": "Unnati Vidya tip: don't take a program page's \"UGC approved\" badge at face value — check the specific mode (Online vs ODL) and academic year against deb.ugc.ac.in directly."
+          },
+          {
+            "type": "links",
+            "heading": "See how we verify this",
+            "items": [
+              {
+                "href": "/how-we-verify",
+                "label": "How we verify our data"
+              },
+              {
+                "href": "/online-degree-guides/mba-ugc-approval",
+                "label": "Is Online MBA UGC approved? Validity explained"
+              }
+            ]
+          }
+        ],
+        "faqs": [
+          [
+            "Are 'online' and 'distance' MBA the same thing under UGC rules?",
+            "No — they're two separate approval categories under UGC. A university's entitlement for one doesn't automatically cover the other."
+          ],
+          [
+            "Which UGC-DEB category are the MBA programs on this site entitled under?",
+            "They are offered in online mode, which UGC-DEB lists under its 'Online' category, not the ODL (distance) category. Our 2026-27 re-check is in progress, so look up your program under the Online category at deb.ugc.ac.in before you enrol."
+          ],
+          [
+            "What should I check before enrolling, given this distinction?",
+            "Confirm which specific category (Online vs ODL) a program is entitled under, and for which academic year — don't take a program page's 'UGC approved' badge at face value."
+          ]
+        ]
+      },
+      "reason": "Wave 4 C1 follow-up: adds UGC's definitions of online and distance (ODL) mode from the 2020 regulations, the 5 October 2026 check of the 2026-27 online list, sources, and a link to the new modes explainer.",
+      "content": {
+        "title": "Online MBA vs Distance MBA: what's actually different?",
+        "category": "Validity",
+        "excerpt": "\"Online\" and \"distance\" are two separate modes under UGC's 2020 regulations, recognised separately. Here is what that means for an MBA, and what to check before you enrol.",
+        "cover": "/blog/online-mba-vs-distance-mba-difference.webp",
+        "publishedDate": "2026-08-10",
+        "updatedDate": "2026-10-05",
+        "body": [
+          {
+            "type": "p",
+            "text": "\"Online\" and \"distance\" (open and distance learning, ODL) are not interchangeable marketing words. They are two separate modes under UGC's 2020 regulations, and recognition for one does not cover the other."
+          },
+          {
+            "type": "h2",
+            "text": "How the two modes differ"
+          },
+          {
+            "type": "p",
+            "text": "An online MBA is delivered entirely over the internet. A distance MBA can also use printed material and occasional face-to-face sessions. Online exams can be technology-enabled online tests or proctored exams; ODL end-semester exams are proctored at examination centres within the university's territorial jurisdiction."
+          },
+          {
+            "type": "h2",
+            "text": "Why the distinction matters to you"
+          },
+          {
+            "type": "p",
+            "text": "The MBA programs listed on this site (MUJ, SMU and Amity Online) are offered in online mode. On 5 October 2026 we found all three on UGC-DEB's 2026-27 list of institutions entitled to offer online programmes."
+          },
+          {
+            "type": "h2",
+            "text": "What to check"
+          },
+          {
+            "type": "p",
+            "text": "Before you enrol anywhere, confirm the mode (online or ODL) your program is listed under, and for which academic session. Lists are published year by year, and a university can be recognised for one mode and not the other."
+          },
+          {
+            "type": "note",
+            "text": "Don't rely on a program page's \"UGC approved\" badge alone. Check the mode and the session on deb.ugc.ac.in, or use our recognition check."
+          },
+          {
+            "type": "links",
+            "heading": "Check it yourself",
+            "items": [
+              {
+                "href": "/tools/recognition-check",
+                "label": "Check a program's 2026-27 status"
+              },
+              {
+                "href": "/blog/online-vs-distance-vs-regular-degree",
+                "label": "Online, distance or regular: what each mode means"
+              },
+              {
+                "href": "/online-degree-guides/mba-ugc-approval",
+                "label": "Is Online MBA UGC approved?"
+              },
+              {
+                "href": "/how-we-verify",
+                "label": "How we verify our data"
+              }
+            ]
+          }
+        ],
+        "faqs": [
+          [
+            "Are online and distance MBAs the same under UGC rules?",
+            "No. They are separate modes under UGC's 2020 regulations, and a university's recognition for one does not cover the other."
+          ],
+          [
+            "Which mode are the MBA programs on this site offered in?",
+            "Online mode. On 5 October 2026 we found all three on UGC-DEB's 2026-27 list of institutions entitled to offer online programmes. Check your program again on deb.ugc.ac.in before you enrol."
+          ],
+          [
+            "What should I check before enrolling?",
+            "The mode (online or ODL) and the academic session your program is listed for. Don't rely on a \"UGC approved\" badge alone."
+          ]
+        ],
+        "sources": [
+          {
+            "label": "UGC (Open and Distance Learning Programmes and Online Programmes) Regulations, 2020, as published in the Gazette of India",
+            "url": "https://deb.ugc.ac.in/pdf/20200906.pdf",
+            "checkedAt": "2026-10-13"
+          },
+          {
+            "label": "UGC-DEB: HEIs entitled to offer online programmes, 2026-27",
+            "url": "https://deb.ugc.ac.in/pdf/HomePageRecognitionDetail/140/140_upload_RecognitionDetails_20260922125253.pdf",
+            "checkedAt": "2026-10-05"
+          }
+        ]
+      }
+    },
+    {
+      "slug": "online-degree-vs-regular-degree-employers",
+      "kind": "revision",
+      "batch": "C1 · Recognition and validity",
+      "basedOn": {
+        "title": "Online degree vs regular degree: what employers actually think",
+        "category": "Validity",
+        "excerpt": "UGC treats a properly entitled online degree as equivalent to an on-campus one — here's what that does and doesn't guarantee.",
+        "cover": "/blog/online-degree-vs-regular-degree-employers.webp",
+        "publishedDate": "2026-08-21",
+        "body": [
+          {
+            "type": "p",
+            "text": "A UGC-DEB entitled online degree is formally treated as equivalent to an on-campus degree from the same university for higher education and employment purposes. That's a regulatory fact, not a marketing claim."
+          },
+          {
+            "type": "h2",
+            "text": "What this does guarantee"
+          },
+          {
+            "type": "p",
+            "text": "Eligibility for further studies, government job applications requiring \"a recognised degree,\" and formal credential recognition all follow from entitlement status, not from the delivery mode."
+          },
+          {
+            "type": "h2",
+            "text": "What it doesn't guarantee"
+          },
+          {
+            "type": "p",
+            "text": "Individual employers and specific roles can still have their own preferences — this is genuinely employer-specific and not something a UGC circular can settle. None of the universities we cover publish an independently verified, program-specific placement percentage, so treat any specific hiring claim with the same scrutiny you'd apply to any employment marketing."
+          },
+          {
+            "type": "note",
+            "text": "Unnati Vidya tip: for roles where you're unsure, ask the specific employer directly rather than relying on a general claim either way."
+          },
+          {
+            "type": "links",
+            "heading": "Related reading",
+            "items": [
+              {
+                "href": "/how-we-verify",
+                "label": "How we verify our data"
+              },
+              {
+                "href": "/online-degree-guides/mba-career-scope",
+                "label": "Online MBA career scope, roles, and salary"
+              }
+            ]
+          }
+        ],
+        "faqs": [
+          [
+            "Is a UGC-entitled online degree treated the same as an on-campus degree?",
+            "Yes — formally, it's treated as equivalent for higher education and employment purposes. That's a regulatory fact, not a marketing claim."
+          ],
+          [
+            "Does UGC entitlement guarantee that any specific employer will accept my online degree the same way?",
+            "Not necessarily — individual employers and specific roles can still have their own preferences, which is genuinely employer-specific and not something a UGC circular can settle."
+          ],
+          [
+            "Do universities publish verified placement percentages for their online degrees?",
+            "No — none of the universities covered on this site publish an independently verified, program-specific placement percentage, so treat any specific hiring claim with the same scrutiny you'd apply to any employment marketing."
+          ]
+        ]
+      },
+      "reason": "Wave 4 C1 follow-up: cites regulation 22 of the UGC 2020 regulations for equivalence, replaces the unsourced list of what equivalence \"guarantees\" with what the regulation says, adds sources and links the new modes explainer.",
+      "content": {
+        "title": "Online degree vs regular degree: what employers actually think",
+        "category": "Validity",
+        "excerpt": "UGC's 2020 regulations treat a degree from a recognised online program as equivalent to the same degree on campus. Here is what that settles, and what it leaves to employers.",
+        "cover": "/blog/online-degree-vs-regular-degree-employers.webp",
+        "publishedDate": "2026-08-21",
+        "body": [
+          {
+            "type": "p",
+            "text": "Regulation 22 of UGC's 2020 regulations says that degrees awarded in online or distance mode by institutions recognised under those regulations are treated as equivalent to the same degrees in conventional (regular) mode. That is a rule, not a marketing claim."
+          },
+          {
+            "type": "h2",
+            "text": "What equivalence settles"
+          },
+          {
+            "type": "p",
+            "text": "Your degree is the same award as the on-campus version, provided the university was recognised for that program in online mode for your session. That is why the program's listing for your session matters more than how it was taught."
+          },
+          {
+            "type": "h2",
+            "text": "What it doesn't settle"
+          },
+          {
+            "type": "p",
+            "text": "Individual employers and specific roles can still have their own preferences, and no UGC rule decides those. If a job notification or a further-study admission asks for a particular kind of degree, read its wording and ask the recruiter or institution if you are unsure. None of the universities we cover publish an independently verified, program-specific placement percentage, so treat any specific hiring claim with care."
+          },
+          {
+            "type": "note",
+            "text": "For a role where you're unsure, ask the employer directly rather than relying on a general claim either way."
+          },
+          {
+            "type": "links",
+            "heading": "Related reading",
+            "items": [
+              {
+                "href": "/blog/online-vs-distance-vs-regular-degree",
+                "label": "Online, distance or regular: what each mode means"
+              },
+              {
+                "href": "/tools/recognition-check",
+                "label": "Check a program's 2026-27 status"
+              },
+              {
+                "href": "/online-degree-guides/mba-career-scope",
+                "label": "Online MBA career scope"
+              },
+              {
+                "href": "/how-we-verify",
+                "label": "How we verify our data"
+              }
+            ]
+          }
+        ],
+        "faqs": [
+          [
+            "Is a UGC-recognised online degree treated the same as an on-campus degree?",
+            "Yes. Regulation 22 of UGC's 2020 regulations treats degrees awarded in online mode by recognised institutions as equivalent to the same degrees in conventional mode."
+          ],
+          [
+            "Does that mean every employer will treat it the same way?",
+            "Not necessarily. Employers and specific roles can have their own preferences, and no UGC rule decides those. Read the job notification and ask if you are unsure."
+          ],
+          [
+            "Do universities publish verified placement percentages for their online degrees?",
+            "None of the universities covered on this site publish an independently verified, program-specific placement percentage, so treat any specific hiring claim with care."
+          ]
+        ],
+        "sources": [
+          {
+            "label": "UGC (Open and Distance Learning Programmes and Online Programmes) Regulations, 2020, as published in the Gazette of India",
+            "url": "https://deb.ugc.ac.in/pdf/20200906.pdf",
+            "checkedAt": "2026-10-13"
+          },
+          {
+            "label": "UGC-DEB: ODL regulations and their 2021, 2022 and 2024 amendments (none changes the definitions or regulation 22)",
+            "url": "https://deb.ugc.ac.in/Regulations",
+            "checkedAt": "2026-10-13"
+          }
+        ]
+      }
+    },
+    {
+      "slug": "online-mba-vs-online-mca-which-is-better",
+      "kind": "revision",
+      "batch": "C5 · Online MBA",
+      "basedOn": {
+        "title": "Online MBA vs Online MCA: which is better for your career?",
+        "category": "Careers",
+        "excerpt": "MUJ, SMU, and Amity's real eligibility rules for both degrees, and how to decide based on where you want your career to go.",
+        "cover": "/blog/online-mba-vs-online-mca-which-is-better.webp",
+        "publishedDate": "2026-08-09",
+        "updatedDate": "2026-10-05",
+        "body": [
+          {
+            "type": "p",
+            "text": "The online MBA is open to a bachelor's degree in any discipline at MUJ, SMU, and Amity. The online MCA is not the same at all three: MUJ accepts any discipline, SMU prefers a Computer Applications, CS or IT background, and Amity asks for a BCA, a bachelor's degree with Mathematics, or a CS-related B.Tech/BE. Check the MCA rule before you choose on career direction."
+          },
+          {
+            "type": "h2",
+            "text": "Online MBA: broader, management-track"
+          },
+          {
+            "type": "p",
+            "text": "MUJ and SMU require a minimum of 50% marks (45% for reserved categories) for their MBA; Amity's bar is lower, at 40%, with an internal test available below that. No work experience or entrance exam is required at any of the three."
+          },
+          {
+            "type": "h2",
+            "text": "Online MCA: technical, with a real catch for non-CS backgrounds"
+          },
+          {
+            "type": "p",
+            "text": "MUJ accepts a bachelor's degree in any discipline (50% marks, 45% for reserved categories) and adds a compulsory mathematics or computing bridge course in Semester 1 if you haven't studied them at 10+2 or graduation. SMU prefers a Computer Applications, CS or IT degree and applies a computing-fundamentals bridge course otherwise. Amity lists BCA, a Science, Commerce or Arts degree with Mathematics, or a CS-related B.Tech/BE, with a qualifying bridge course if Mathematics wasn't studied at 10+2 or graduation."
+          },
+          {
+            "type": "note",
+            "text": "Unnati Vidya tip: if you're deciding between the two, think about role, not difficulty — MBA skews toward management and cross-functional roles, MCA toward hands-on technical and engineering roles."
+          },
+          {
+            "type": "links",
+            "heading": "Compare the real numbers",
+            "items": [
+              {
+                "href": "/online-degree-guides/mba-eligibility",
+                "label": "Online MBA eligibility across universities"
+              },
+              {
+                "href": "/online-degree-guides/mca-eligibility",
+                "label": "Online MCA eligibility across universities"
+              },
+              {
+                "href": "/compare",
+                "label": "Compare fees and placements side by side"
+              }
+            ]
+          }
+        ],
+        "faqs": [
+          [
+            "Do I need a specific undergraduate degree for online MBA or MCA?",
+            "Not for the MBA: MUJ, SMU and Amity accept a bachelor's degree in any discipline. For the MCA it depends on the university: MUJ accepts any discipline, SMU prefers a Computer Applications, CS or IT degree, and Amity lists BCA, a bachelor's degree with Mathematics, or a CS-related B.Tech/BE."
+          ],
+          [
+            "What happens if I don't have a Math/computing background and want an online MCA?",
+            "MUJ and SMU add a bridge course in mathematics or computing fundamentals. Amity applies a qualifying bridge course if Mathematics wasn't studied at 10+2 or graduation, but its main eligibility list asks for BCA, a degree with Mathematics or a CS-related B.Tech/BE, so confirm your case with the university."
+          ],
+          [
+            "How should I decide between online MBA and MCA?",
+            "Think about role, not difficulty — MBA skews toward management and cross-functional roles, while MCA skews toward hands-on technical and engineering roles."
+          ]
+        ]
+      },
+      "reason": "Wave 4 C5 follow-up: the MCA eligibility is updated from the current official pages. SMU now uses the same bridge-course wording as MUJ (it no longer \"prefers\" a computing degree), and Amity's current page is quoted. Adds sources and links to the course pages.",
+      "content": {
+        "title": "Online MBA vs Online MCA: which is better for your career?",
+        "category": "Careers",
+        "excerpt": "What MUJ, SMU and Amity ask for in their online MBA and MCA, from their current pages, and how to decide based on where you want your career to go.",
+        "cover": "/blog/online-mba-vs-online-mca-which-is-better.webp",
+        "publishedDate": "2026-08-09",
+        "updatedDate": "2026-10-05",
+        "body": [
+          {
+            "type": "p",
+            "text": "The online MBA is open to a bachelor's degree in any discipline at MUJ, SMU and Amity. The online MCA is open to graduates from other streams too, but with bridge courses or a mathematics requirement, so check the MCA rule before you choose on career direction."
+          },
+          {
+            "type": "h2",
+            "text": "Online MBA: broader, management-track"
+          },
+          {
+            "type": "p",
+            "text": "MUJ and SMU ask for 50% marks in your bachelor's degree (45% for reserved categories). Amity asks for 40%, with an admission test for candidates below that. None of the three requires work experience or an entrance exam; MUJ lists a CAT, GMAT or MAT score and a work-experience certificate as optional documents."
+          },
+          {
+            "type": "h2",
+            "text": "Online MCA: technical, with bridge courses for other backgrounds"
+          },
+          {
+            "type": "p",
+            "text": "MUJ and SMU accept a computing degree directly. Graduates from other streams can join with a compulsory bridge course in computing, plus one in mathematics if they didn't study it at 10+2 or degree level. Both ask for 50% marks (45% for reserved categories)."
+          },
+          {
+            "type": "p",
+            "text": "Amity prefers a BCA or equivalent and accepts science, commerce or arts graduates who studied mathematics at 10+2. Others can apply after a bridge course. Its current MCA page does not show a minimum-marks figure, so confirm it with Amity."
+          },
+          {
+            "type": "note",
+            "text": "If you're deciding between the two, think about role, not difficulty: the MBA leans toward management and cross-functional roles, the MCA toward hands-on technical and engineering roles."
+          },
+          {
+            "type": "links",
+            "heading": "Check the details",
+            "items": [
+              {
+                "href": "/online-degree-guides/mca-eligibility",
+                "label": "Online MCA eligibility across universities"
+              },
+              {
+                "href": "/online-degree-guides/mba-eligibility",
+                "label": "Online MBA eligibility across universities"
+              },
+              {
+                "href": "/blog/mca-vs-mba-it-careers",
+                "label": "MBA or MCA if you work in IT"
+              },
+              {
+                "href": "/courses/online-mca-manipal-university-jaipur",
+                "label": "Online MCA, Manipal University Jaipur"
+              },
+              {
+                "href": "/courses/online-mca-sikkim-manipal-university",
+                "label": "Online MCA, Sikkim Manipal University"
+              },
+              {
+                "href": "/courses/online-mca-amity-online",
+                "label": "Online MCA, Amity University Online"
+              }
+            ]
+          }
+        ],
+        "faqs": [
+          [
+            "Do I need a specific undergraduate degree for an online MBA or MCA?",
+            "Not for the MBA: all three accept a bachelor's degree in any discipline. For the MCA, MUJ and SMU accept other streams with compulsory bridge courses, and Amity accepts science, commerce or arts graduates with mathematics at 10+2, or others after a bridge course."
+          ],
+          [
+            "What if I didn't study mathematics and want an online MCA?",
+            "MUJ and SMU add a mathematics bridge course. Amity lets you apply after a bridge course. Confirm your case with the university before you apply."
+          ],
+          [
+            "How should I decide between an online MBA and MCA?",
+            "Think about the role you want: the MBA leans toward management and cross-functional roles, the MCA toward hands-on technical and engineering roles."
+          ]
+        ],
+        "sources": [
+          {
+            "label": "Online Manipal: MUJ online MCA",
+            "url": "https://www.onlinemanipal.com/online-mca-degree-muj",
+            "checkedAt": "2026-10-12"
+          },
+          {
+            "label": "Online Manipal: SMU online MCA",
+            "url": "https://www.onlinemanipal.com/online-mca-degree-smu",
+            "checkedAt": "2026-10-12"
+          },
+          {
+            "label": "Amity University Online: MCA",
+            "url": "https://amityonline.com/master-of-computer-applications-online",
+            "checkedAt": "2026-10-13"
+          },
+          {
+            "label": "Online Manipal: MUJ online MBA (fees and eligibility)",
+            "url": "https://www.onlinemanipal.com/online-mba-manipal-university-jaipur",
+            "checkedAt": "2026-10-12"
+          },
+          {
+            "label": "Online Manipal: SMU online MBA (fees and eligibility)",
+            "url": "https://www.onlinemanipal.com/online-mba-degree-dual-specialization-smu",
+            "checkedAt": "2026-10-12"
+          },
+          {
+            "label": "Amity University Online: MBA (fees and eligibility)",
+            "url": "https://amityonline.com/master-of-business-administration-online",
+            "checkedAt": "2026-10-13"
+          }
+        ]
+      }
+    },
+    {
+      "slug": "online-admission-documents-checklist",
+      "kind": "revision",
+      "batch": "C3 · Admissions",
+      "basedOn": {
+        "title": "Documents checklist for online university admission",
+        "category": "Admissions",
+        "excerpt": "Everything from mark sheets to bank statements for education loans — with common rejection reasons.",
+        "cover": "/blog/online-admission-documents-checklist.webp",
+        "publishedDate": "2026-07-14",
+        "body": [
+          {
+            "type": "p",
+            "text": "Most admission delays come down to incomplete or unclear documents, not eligibility problems. Keep clear scanned copies of everything below before you start your application."
+          },
+          {
+            "type": "h2",
+            "text": "Core documents"
+          },
+          {
+            "type": "p",
+            "text": "Mark sheets and certificates for your qualifying degree, a government photo ID, a passport-size photo, and proof of any category (defence, differently-abled, alumni) you intend to claim a scholarship against."
+          },
+          {
+            "type": "h2",
+            "text": "If you're financing with a loan"
+          },
+          {
+            "type": "p",
+            "text": "Education loan applications typically need recent salary slips or income proof, bank statements, and PAN details. Getting these ready early avoids delays right before a semester's fee deadline."
+          },
+          {
+            "type": "note",
+            "text": "Unnati Vidya tip: send your documents to a counsellor for a free pre-check — most rejections come from blurry scans, name mismatches across documents, or missing category proof."
+          },
+          {
+            "type": "h2",
+            "text": "Common rejection reasons"
+          },
+          {
+            "type": "p",
+            "text": "Name or date-of-birth mismatches between your ID and academic certificates, illegible scans, and missing final-year mark sheets are the most common reasons an application gets sent back for correction."
+          }
+        ],
+        "faqs": [
+          [
+            "What documents do I need for online university admission?",
+            "Mark sheets and certificates for your qualifying degree, a government photo ID, a passport-size photo, and proof of any category (defence, differently-abled, alumni) you intend to claim a scholarship against."
+          ],
+          [
+            "What extra documents are needed if I'm financing with an education loan?",
+            "Recent salary slips or income proof, bank statements, and PAN details — getting these ready early avoids delays right before a semester's fee deadline."
+          ],
+          [
+            "What are the most common reasons an online admission application gets rejected?",
+            "Name or date-of-birth mismatches between your ID and academic certificates, illegible scans, and missing final-year mark sheets."
+          ]
+        ]
+      },
+      "reason": "Wave 4 C3 follow-up: rebuilt from the official document lists behind the document checklist tool (Online Manipal, MUJ's admission manual, Amity's FAQs and how-to-apply guide) plus the DEB-ID requirement. Removes the unsourced education-loan document list and \"most common rejection reasons\".",
+      "content": {
+        "title": "Documents for online degree admission at MUJ, SMU and Amity",
+        "category": "Admissions",
+        "excerpt": "What MUJ, SMU and Amity Online ask for, by level and applicant category, from their own pages, plus the DEB-ID you need before you apply.",
+        "cover": "/blog/online-admission-documents-checklist.webp",
+        "publishedDate": "2026-07-14",
+        "body": [
+          {
+            "type": "p",
+            "text": "Short answer: keep clear scans of your marksheets, an ID and address proof, a photo and any category or scholarship proof, and create your ABC ID and DEB-ID before you apply. The exact list depends on the university, the level (UG or PG) and your applicant category. Our document checklist builds it for you, with a source for each item."
+          },
+          {
+            "type": "h2",
+            "text": "MUJ and SMU"
+          },
+          {
+            "type": "p",
+            "text": "The Online Manipal admission page lists: Class 10 and Class 12 marksheets; your graduation marksheet for a PG program; Aadhaar as proof of identity (mandatory for Indian citizens); and proof of address, such as Aadhaar, passport, voter's ID, a gas bill, a bank statement or a post-paid mobile statement."
+          },
+          {
+            "type": "p",
+            "text": "Where they apply, it also lists your graduation degree certificate, scholarship documents, a defence service certificate, a Divyaang certificate, a reserved category certificate and a government ID card."
+          },
+          {
+            "type": "h2",
+            "text": "Extra rules in MUJ's admission manual"
+          },
+          {
+            "type": "p",
+            "text": "MUJ's manual (version 5, uploaded January 2022) adds a passport-size colour photo and a specimen signature, and a passport for non-Indians and Indians living outside India. For a PG program without a degree certificate yet, it asks for all your marksheets with the provisional pass certificate, and an AIU equivalence certificate for a degree from a foreign university."
+          },
+          {
+            "type": "p",
+            "text": "If your name differs, even slightly, across your marksheets and certificates, the manual asks for a notarised affidavit in English. Uploads are JPG, JPEG or PDF up to 2 MB each, with the photo, signature and ID proof as JPG. The manual is older, so confirm these rules for your session."
+          },
+          {
+            "type": "h2",
+            "text": "Amity Online"
+          },
+          {
+            "type": "p",
+            "text": "For Indian applicants, Amity lists Class 10 and 12 marksheets and certificates, a government-issued ID (such as Aadhaar, PAN or passport) and a recent passport-size photo. For a PG program it adds your graduation certificate and consolidated marksheets, proof of date of birth and a resume."
+          },
+          {
+            "type": "p",
+            "text": "For international applicants, Amity lists O Level and A Level certificates or equivalent, a passport copy, your bachelor's degree certificate and marksheets for a PG program, an AIU equivalence certificate if your qualification needs one, and a visa for PG applicants. Its pages don't give a separate list for NRI applicants, so ask Amity which one applies to you. Scans go in as PDF or JPEG."
+          },
+          {
+            "type": "h2",
+            "text": "Before you apply: the DEB-ID"
+          },
+          {
+            "type": "p",
+            "text": "Indian learners need a DEB-ID, created with an ABC ID, to enrol in an online program (UGC public notice, 19 August 2024). Create both before you start the application."
+          },
+          {
+            "type": "note",
+            "text": "Check that your name and date of birth match across every document before you upload them, and ask the university what it needs if they don't."
+          },
+          {
+            "type": "links",
+            "heading": "Get ready to apply",
+            "items": [
+              {
+                "href": "/tools/document-checklist",
+                "label": "Build your document checklist"
+              },
+              {
+                "href": "/online-degree-guides/admissions",
+                "label": "How to apply: eligibility, documents and steps"
+              },
+              {
+                "href": "/blog/abc-id-and-deb-id-guide",
+                "label": "ABC ID and DEB-ID: what you need before admission"
+              }
+            ]
+          }
+        ],
+        "faqs": [
+          [
+            "What documents do I need for online degree admission?",
+            "Marksheets for your qualifying exams, an ID and address proof, a photo and any category or scholarship proof. The exact list depends on the university, the level and your applicant category; our document checklist builds it with a source for each item."
+          ],
+          [
+            "What if my name is spelt differently on my documents?",
+            "MUJ's admission manual asks for a notarised affidavit in English if your name differs, even slightly, across your marksheets and certificates. Ask the other universities what they need."
+          ],
+          [
+            "Do I need anything before I start the application?",
+            "Yes. Indian learners need a DEB-ID, created with an ABC ID, to enrol in an online program, under UGC's public notice of 19 August 2024."
+          ]
+        ],
+        "sources": [
+          {
+            "label": "Online Manipal: online MBA admission page, documents required (MUJ, SMU and MAHE)",
+            "url": "https://www.onlinemanipal.com/online-mba-courses/admission-fee-eligibility-details",
+            "checkedAt": "2026-10-12"
+          },
+          {
+            "label": "MUJ Admission Manual for Online Programmes (version 5, uploaded January 2022)",
+            "url": "https://www.onlinemanipal.com/wp-content/uploads/2022/01/MUJ-Admission-Manual-Online-Programmes-V5.pdf",
+            "checkedAt": "2026-10-12"
+          },
+          {
+            "label": "Amity University Online FAQs: documents required for admission",
+            "url": "https://amityonline.com/faq-hub",
+            "checkedAt": "2026-10-12"
+          },
+          {
+            "label": "Amity University Online: \"How to apply\" guide (updated 16 January 2026)",
+            "url": "https://amityonline.com/blog/fill-out-application-form-for-amity-online-bcom-hons",
+            "checkedAt": "2026-10-12"
+          },
+          {
+            "label": "UGC public notice on the enrolment procedure for ODL and online programmes, 19 August 2024",
+            "url": "https://www.ugc.gov.in/pdfnews/8295117_Public-Notice-prodedure-for-students-enrolling-in-ODL.pdf",
+            "checkedAt": "2026-10-12"
+          }
+        ]
+      }
+    },
+    {
+      "slug": "wes-evaluation-online-degrees",
+      "kind": "revision",
+      "batch": "D4 · NRI and international",
+      "basedOn": {
+        "title": "WES evaluation of Indian online degrees, explained",
+        "category": "Validity",
+        "excerpt": "How Manipal and Amity online degrees are assessed for jobs and masters programs abroad.",
+        "cover": "/blog/wes-evaluation-online-degrees.webp",
+        "publishedDate": "2026-07-14",
+        "body": [
+          {
+            "type": "p",
+            "text": "World Education Services (WES) is a credential evaluation body used by employers, universities, and immigration authorities in countries like Canada and the US to assess whether a foreign degree is comparable to a local one."
+          },
+          {
+            "type": "h2",
+            "text": "Why WES recognition matters for online degrees"
+          },
+          {
+            "type": "p",
+            "text": "For an online degree, WES recognition signals that the credential is evaluated on the same basis as an on-campus degree from that university — useful if you're planning to study or work abroad after graduating."
+          },
+          {
+            "type": "h2",
+            "text": "What to check before you rely on it"
+          },
+          {
+            "type": "p",
+            "text": "WES recognition is usually granted at the university level, but the exact evaluation outcome can still depend on the specific program and admission cycle. Always confirm current WES status for your exact program before making an abroad-study or immigration decision around it."
+          },
+          {
+            "type": "note",
+            "text": "Unnati Vidya tip: ask your counsellor for the university's current WES status documentation before you rely on it for an abroad application."
+          },
+          {
+            "type": "h2",
+            "text": "Bottom line"
+          },
+          {
+            "type": "p",
+            "text": "WES recognition is a genuine credibility signal, but treat it as a starting point to verify — not a substitute for checking your specific program's current status."
+          }
+        ],
+        "faqs": [
+          [
+            "What is WES, and why does it matter for online degrees?",
+            "World Education Services (WES) is a credential evaluation body used by employers, universities, and immigration authorities in countries like Canada and the US to assess whether a foreign degree is comparable to a local one — useful if you plan to study or work abroad."
+          ],
+          [
+            "Is WES recognition granted per-program or per-university?",
+            "Usually at the university level, but the exact evaluation outcome can still depend on the specific program and admission cycle — always confirm current WES status for your exact program."
+          ]
+        ]
+      },
+      "reason": "Wave 5 D4 (decision V14): rebuilt from WES's India document requirements (20 May 2026) and IRCC's Express Entry credential-assessment page (16 October 2026). Removes the unsourced claim that WES 'recognition is usually granted at the university level': WES evaluates each applicant's credentials.",
+      "content": {
+        "title": "WES evaluation of an Indian online degree: what it is and what to send",
+        "category": "Validity",
+        "excerpt": "What a WES credential evaluation is, who asks for one, and what WES asks for from Indian degrees, from WES's and IRCC's own pages.",
+        "cover": "/blog/wes-evaluation-online-degrees.webp",
+        "publishedDate": "2026-07-14",
+        "body": [
+          {
+            "type": "p",
+            "text": "Short answer: World Education Services (WES) evaluates your own credentials and reports how they compare with qualifications in the country you are applying to. You request the evaluation; your university sends your academic records to WES."
+          },
+          {
+            "type": "h2",
+            "text": "Who asks for a WES evaluation"
+          },
+          {
+            "type": "p",
+            "text": "Canada's immigration department (IRCC) lists WES as one of five organizations designated to issue educational credential assessments (ECAs) for Express Entry. If you studied outside Canada, you need an ECA to qualify as a principal applicant under the Federal Skilled Workers Program or to earn points for education obtained abroad, and the ECA must be less than five years old when you complete your profile and when you apply."
+          },
+          {
+            "type": "p",
+            "text": "Employers, universities and licensing bodies elsewhere may ask for WES or for another evaluator. Check which evaluations the organization you are applying to accepts."
+          },
+          {
+            "type": "h2",
+            "text": "What WES asks for from Indian degrees"
+          },
+          {
+            "type": "p",
+            "text": "WES accepts consolidated transcripts or yearly mark sheets, provided they are issued by the degree-granting institution and sent in a sealed envelope. The institution sends them directly to WES; if it won't, WES says you may be able to send the sealed envelope yourself. Institutions with a digital partnership can send records electronically, and you can also upload documents to an NSDC digital wallet, which verifies and passes them to WES."
+          },
+          {
+            "type": "p",
+            "text": "Include a copy of your degree or provisional certificate and the mark sheets for all years. For most master's degrees, WES also needs your bachelor's documents. Your WES account's required-documents list is the final word for your case."
+          },
+          {
+            "type": "h2",
+            "text": "If your degree was earned online"
+          },
+          {
+            "type": "p",
+            "text": "WES's India requirements page doesn't say anything specific about online or distance degrees. Ask your university how it issues records for online programs, and check your WES account's required documents before you send anything. In India, UGC's 2020 regulations treat an online degree from a recognised institution as equivalent to the regular degree; how another country evaluates it is decided by that country's evaluator."
+          },
+          {
+            "type": "note",
+            "text": "A university page that calls its degrees \"WES recognised\" is describing them in its own words. What counts for your application is your own WES evaluation report."
+          },
+          {
+            "type": "links",
+            "heading": "Planning to study or work abroad",
+            "items": [
+              {
+                "href": "/online-degree-guides/international",
+                "label": "Online degrees for NRIs and international learners"
+              },
+              {
+                "href": "/tools/recognition-check",
+                "label": "Check a program's 2026-27 UGC-DEB status"
+              },
+              {
+                "href": "/blog/online-degree-vs-regular-degree-employers",
+                "label": "Online degree vs regular degree: what employers think"
+              }
+            ]
+          }
+        ],
+        "faqs": [
+          [
+            "What does WES do?",
+            "WES evaluates an individual's academic credentials and reports how they compare with qualifications in the destination country. It evaluates your documents, not universities as a whole."
+          ],
+          [
+            "Does Canada accept a WES evaluation?",
+            "IRCC lists WES as one of five organizations designated to issue educational credential assessments for Express Entry. The assessment must be less than five years old when you complete your profile and when you apply."
+          ],
+          [
+            "Who sends my documents to WES?",
+            "The degree-granting institution, in a sealed envelope or through a WES digital partner. WES says that if your institution won't send them, you may be able to send the sealed envelope yourself. Check your WES account's required-documents list."
+          ],
+          [
+            "Do I need my bachelor's documents for a master's degree?",
+            "For most master's degrees from India, yes. WES lists the master's degrees for which bachelor's documents aren't needed."
+          ]
+        ],
+        "sources": [
+          {
+            "label": "WES: Credential Evaluation and Document Requirements for India (20 May 2026)",
+            "url": "https://www.wes.org/resource-library/blog/credential-advice/wes-indian-credential-evaluations/",
+            "checkedAt": "2026-10-24"
+          },
+          {
+            "label": "IRCC: Educational credential assessment for Express Entry (page updated 16 October 2026)",
+            "url": "https://www.canada.ca/en/immigration-refugees-citizenship/services/immigrate-canada/express-entry/documents/education-assessment.html",
+            "checkedAt": "2026-10-24"
+          },
+          {
+            "label": "UGC (Open and Distance Learning Programmes and Online Programmes) Regulations, 2020",
+            "url": "https://deb.ugc.ac.in/pdf/20200906.pdf",
+            "checkedAt": "2026-10-13"
+          }
+        ]
+      }
+    },
+    {
+      "slug": "online-bca-after-12th-guide",
+      "kind": "revision",
+      "batch": "D2 · Computing and data",
+      "basedOn": {
+        "title": "Online BCA after 12th: full guide",
+        "category": "Admissions",
+        "excerpt": "Real eligibility rules from MUJ and Amity's own pages — including the Mathematics requirement most people assume exists but doesn't.",
+        "cover": "/blog/online-bca-after-12th-guide.webp",
+        "publishedDate": "2026-08-15",
+        "body": [
+          {
+            "type": "p",
+            "text": "If you've just finished 12th and are considering an online BCA, the two universities offering it here — MUJ and Amity — both accept any 10+2 stream, not just Science with Mathematics."
+          },
+          {
+            "type": "h2",
+            "text": "The Mathematics myth"
+          },
+          {
+            "type": "p",
+            "text": "Amity explicitly states Science, Commerce, and Arts students can all apply, naming Math/Computer Science/Informatics Practices as \"preferred,\" not mandatory. MUJ's eligibility page doesn't mention Mathematics as a requirement at all."
+          },
+          {
+            "type": "h2",
+            "text": "What you'll actually need"
+          },
+          {
+            "type": "p",
+            "text": "Your 10th and 12th mark sheets, a government ID, and a passport-size photo cover the basics. Neither university states a fixed minimum percentage on its own eligibility page."
+          },
+          {
+            "type": "note",
+            "text": "Unnati Vidya tip: if a counsellor or aggregator tells you online BCA needs Mathematics or a fixed cutoff percentage, ask them to point to the specific university page — our own research found neither claim holds up against MUJ's or Amity's actual pages."
+          },
+          {
+            "type": "links",
+            "heading": "Check real eligibility and specializations",
+            "items": [
+              {
+                "href": "/online-degree-guides/bca-eligibility",
+                "label": "Online BCA eligibility across universities"
+              },
+              {
+                "href": "/online-degree-guides/bca-fees",
+                "label": "Online BCA fees across universities"
+              }
+            ]
+          }
+        ],
+        "faqs": [
+          [
+            "Can I apply for online BCA right after 12th if I studied Commerce or Arts?",
+            "Yes — both MUJ and Amity accept any 10+2 stream, not just Science with Mathematics."
+          ],
+          [
+            "Do I need to have studied Mathematics at 12th for online BCA?",
+            "No — Amity states Math/Computer Science/Informatics Practices are only 'preferred,' not mandatory, and MUJ's eligibility page doesn't mention Mathematics as a requirement at all."
+          ],
+          [
+            "What documents do I need to apply for online BCA after 12th?",
+            "Your 10th and 12th mark sheets, a government ID, and a passport-size photo cover the basics — neither university states a fixed minimum percentage on its own eligibility page."
+          ]
+        ]
+      },
+      "reason": "Wave 5 D2 (decision V15): entry rules, fees and specializations re-read from MUJ's and Amity's current BCA pages on 24 October 2026. Amity's page no longer names preferred 12th subjects; MUJ now lists six electives; new-batch fees.",
+      "content": {
+        "title": "Online BCA after 12th: entry, fees and specializations at MUJ and Amity",
+        "category": "Admissions",
+        "excerpt": "What MUJ and Amity Online ask for to join an online BCA after Class 12, what it costs and the specializations each lists, from their current pages.",
+        "cover": "/blog/online-bca-after-12th-guide.webp",
+        "publishedDate": "2026-08-15",
+        "body": [
+          {
+            "type": "p",
+            "text": "Short answer: both universities ask for Class 12 (10+2). Neither BCA page states a required subject or a minimum percentage for Indian students today, so check your case with the university before you apply."
+          },
+          {
+            "type": "h2",
+            "text": "Who can join"
+          },
+          {
+            "type": "p",
+            "text": "MUJ's BCA page lists the eligibility as 10+2. Amity's page asks Indian students for a Class 10 certificate and a Class 12 certificate (12 years of formal schooling). For foreign students, Amity asks for secondary and senior secondary certificates (diplomas not accepted) and an AIU certificate of equivalence."
+          },
+          {
+            "type": "p",
+            "text": "MUJ's first semester includes Fundamentals of Mathematics (functions, limits, differentiation and integration), so expect some mathematics whichever subjects you took in Class 12."
+          },
+          {
+            "type": "h2",
+            "text": "What it costs"
+          },
+          {
+            "type": "p",
+            "text": "MUJ lists ₹1,44,000 in total, ₹24,000 per semester over six semesters. Amity lists ₹1,75,000, or ₹29,200 per semester, with a lower effective fee for paying annually or in one go. These are listed fees for Indian applicants; confirm the current amount and any discount before you pay."
+          },
+          {
+            "type": "h2",
+            "text": "Specializations"
+          },
+          {
+            "type": "p",
+            "text": "MUJ lists six electives: Agentic AI & Intelligent Systems, Cyber Security, Cloud Computing, Data Science & Analytics, Generative AI & Intelligent Systems, and Full Stack Software Development. Amity lists specializations including Cloud and Security, Data Analytics, Fintech & AI, Data Science, Data Engineering and Software Engineering, plus pathway options."
+          },
+          {
+            "type": "note",
+            "text": "If someone tells you an online BCA needs a particular 12th stream or a fixed percentage, ask them to show you the university's current page."
+          },
+          {
+            "type": "links",
+            "heading": "Check the details",
+            "items": [
+              {
+                "href": "/online-degree-guides/bca-eligibility",
+                "label": "Online BCA eligibility across universities"
+              },
+              {
+                "href": "/online-degree-guides/bca-fees",
+                "label": "Online BCA fees"
+              },
+              {
+                "href": "/online-degree-guides/computing",
+                "label": "Computing, data and mathematics degrees"
+              }
+            ]
+          }
+        ],
+        "faqs": [
+          [
+            "Can I join an online BCA after 12th in Commerce or Arts?",
+            "MUJ lists 10+2 as the eligibility and Amity asks for Class 10 and 12 certificates; neither page names a required stream today. Confirm your case with the university."
+          ],
+          [
+            "Is there a minimum percentage for online BCA?",
+            "Neither MUJ's nor Amity's current BCA page states one for Indian students. Ask the university to confirm for your session."
+          ],
+          [
+            "Will there be mathematics in the course?",
+            "Yes at MUJ: its first semester includes Fundamentals of Mathematics. Check the curriculum on each university's page."
+          ]
+        ],
+        "sources": [
+          {
+            "label": "Online Manipal: MUJ online BCA (fees, eligibility, electives, curriculum)",
+            "url": "https://www.onlinemanipal.com/online-bca-degree-muj",
+            "checkedAt": "2026-10-24"
+          },
+          {
+            "label": "Amity University Online: BCA (fees, eligibility, specializations)",
+            "url": "https://amityonline.com/bachelor-of-computer-applications-online",
+            "checkedAt": "2026-10-24"
+          }
+        ]
+      }
+    },
+    {
+      "slug": "online-bca-vs-bsc-computer-science",
+      "kind": "revision",
+      "batch": "D2 · Computing and data",
+      "basedOn": {
+        "title": "Online BCA vs Online BSc Computer Science: which should you choose?",
+        "category": "Careers",
+        "excerpt": "BCA is more application-focused; here's what MUJ and Amity's own eligibility pages actually require — and what surprised us.",
+        "cover": "/blog/online-bca-vs-bsc-computer-science.webp",
+        "publishedDate": "2026-08-11",
+        "body": [
+          {
+            "type": "p",
+            "text": "BCA leans toward applied programming and software development; a BSc in Computer Science tends to go deeper into theory (algorithms, computation theory) before applications. Among the universities we cover, only BCA is currently offered — MUJ and Amity, not SMU."
+          },
+          {
+            "type": "h2",
+            "text": "A real finding worth knowing: Maths isn't mandatory"
+          },
+          {
+            "type": "p",
+            "text": "Contrary to the common assumption for a computing degree, neither MUJ nor Amity makes Mathematics compulsory for their online BCA. Amity explicitly states Science, Commerce, and Arts students can all apply, with Math/CS/Informatics Practices only \"preferred.\" MUJ's own eligibility page doesn't gate on Mathematics at all."
+          },
+          {
+            "type": "h2",
+            "text": "What actually differs between MUJ and Amity's BCA"
+          },
+          {
+            "type": "p",
+            "text": "The real differentiator is specializations, not eligibility: MUJ's BCA offers Data Science & Analytics, Cloud Computing, and Cybersecurity tracks; Amity's offers a wider spread including Fintech & AI and Data Engineering."
+          },
+          {
+            "type": "note",
+            "text": "Unnati Vidya tip: if you're coming from a Commerce or Arts background, online BCA is a genuinely open door — don't rule it out assuming you need a Math-heavy 12th."
+          },
+          {
+            "type": "links",
+            "heading": "Check the real eligibility and specializations",
+            "items": [
+              {
+                "href": "/online-degree-guides/bca-eligibility",
+                "label": "Online BCA eligibility across universities"
+              },
+              {
+                "href": "/specializations",
+                "label": "Browse real specialization tracks"
+              }
+            ]
+          }
+        ],
+        "faqs": [
+          [
+            "What's the real difference between online BCA and BSc Computer Science?",
+            "BCA leans toward applied programming and software development; a BSc in Computer Science tends to go deeper into theory (algorithms, computation theory) before applications."
+          ],
+          [
+            "Do I need Mathematics to apply for online BCA?",
+            "No — contrary to common assumption, neither MUJ nor Amity makes Mathematics compulsory for online BCA. Amity explicitly states Science, Commerce, and Arts students can all apply."
+          ],
+          [
+            "What actually differs between MUJ and Amity's online BCA?",
+            "Specializations, not eligibility — MUJ offers Data Science & Analytics, Cloud Computing, and Cybersecurity tracks, while Amity offers a wider spread including Fintech & AI and Data Engineering."
+          ]
+        ]
+      },
+      "reason": "Wave 5 D2 (decision V15): removes the unsourced generalisation about how BCA and BSc CS curricula differ, and updates MUJ's and Amity's BCA entry rules and specializations from their pages (24 October 2026).",
+      "content": {
+        "title": "Online BCA vs Online BSc Computer Science: which should you choose?",
+        "category": "Careers",
+        "excerpt": "Only the BCA is offered online among the universities we list. Here's what MUJ and Amity ask for and teach, from their current pages, and how to compare it with a BSc.",
+        "cover": "/blog/online-bca-vs-bsc-computer-science.webp",
+        "publishedDate": "2026-08-11",
+        "body": [
+          {
+            "type": "p",
+            "text": "Among the universities we list, MUJ and Amity offer an online BCA; none offers an online BSc Computer Science. If you are comparing the two degree types, compare the semester-wise subjects of the specific programs rather than relying on the name, because curricula differ by university."
+          },
+          {
+            "type": "h2",
+            "text": "Entry: no stated subject requirement"
+          },
+          {
+            "type": "p",
+            "text": "MUJ's BCA page lists 10+2 as the eligibility, and Amity's asks Indian students for Class 10 and 12 certificates. Neither page states a required subject or a minimum percentage today."
+          },
+          {
+            "type": "h2",
+            "text": "What MUJ and Amity teach"
+          },
+          {
+            "type": "p",
+            "text": "MUJ's first semester includes Fundamentals of Mathematics and Technical Communication, and it lists six electives: Agentic AI & Intelligent Systems, Cyber Security, Cloud Computing, Data Science & Analytics, Generative AI & Intelligent Systems, and Full Stack Software Development. Amity lists specializations including Cloud and Security, Data Analytics, Fintech & AI, Data Science, Data Engineering and Software Engineering."
+          },
+          {
+            "type": "note",
+            "text": "Open the curriculum on each program page and compare the subjects you'd study semester by semester."
+          },
+          {
+            "type": "links",
+            "heading": "Compare in detail",
+            "items": [
+              {
+                "href": "/compare/bca/amity-online-vs-manipal-university-jaipur",
+                "label": "Online BCA: Amity vs MUJ"
+              },
+              {
+                "href": "/online-degree-guides/bca-eligibility",
+                "label": "Online BCA eligibility"
+              },
+              {
+                "href": "/tools/specialization-finder",
+                "label": "Find a specialisation by career goal"
+              }
+            ]
+          }
+        ],
+        "faqs": [
+          [
+            "Do MUJ or Amity offer an online BSc Computer Science?",
+            "Not among the programs we list. Both offer an online BCA."
+          ],
+          [
+            "Do I need mathematics in Class 12 for online BCA?",
+            "Neither MUJ's nor Amity's current BCA page states a required subject. MUJ's first semester does include Fundamentals of Mathematics."
+          ],
+          [
+            "What differs between MUJ's and Amity's BCA?",
+            "Mainly the specializations and fees. MUJ lists six electives and ₹1,44,000; Amity lists its own set of specializations and ₹1,75,000. Compare the curricula on each page."
+          ]
+        ],
+        "sources": [
+          {
+            "label": "Online Manipal: MUJ online BCA (fees, eligibility, electives, curriculum)",
+            "url": "https://www.onlinemanipal.com/online-bca-degree-muj",
+            "checkedAt": "2026-10-24"
+          },
+          {
+            "label": "Amity University Online: BCA (fees, eligibility, specializations)",
+            "url": "https://amityonline.com/bachelor-of-computer-applications-online",
+            "checkedAt": "2026-10-24"
+          }
+        ]
+      }
+    },
+    {
+      "slug": "online-msc-data-science-career-scope",
+      "kind": "revision",
+      "batch": "D2 · Computing and data",
+      "basedOn": {
+        "title": "Online MSc Data Science: career scope and who it's for",
+        "category": "Careers",
+        "excerpt": "Amity's real eligibility only requires a Science background — not CS, math, or statistics specifically, contrary to common assumption.",
+        "cover": "/blog/online-msc-data-science-career-scope.webp",
+        "publishedDate": "2026-08-23",
+        "updatedDate": "2026-10-05",
+        "body": [
+          {
+            "type": "p",
+            "text": "A genuinely useful, verified fact: Amity's online MSc Data Science requires only a bachelor's degree in any Science discipline — not computer science, mathematics, or statistics specifically, as the common assumption for a data science program would suggest."
+          },
+          {
+            "type": "h2",
+            "text": "Who this actually fits"
+          },
+          {
+            "type": "p",
+            "text": "If your undergraduate degree was in a Science discipline outside CS/math/stats — biology, physics, chemistry — this program's eligibility genuinely doesn't exclude you, though you should honestly assess your own comfort with the technical coursework once enrolled."
+          },
+          {
+            "type": "h2",
+            "text": "Career path"
+          },
+          {
+            "type": "p",
+            "text": "Amity's own page shows a real progression: Data Analyst and Junior Data Scientist roles at entry, moving toward Data Scientist and Machine Learning Engineer, and eventually Senior Data Scientist or Data Science Manager."
+          },
+          {
+            "type": "note",
+            "text": "Unnati Vidya tip: there is no official, program-specific salary figure for this program, so we don't quote one. Outcomes depend on your experience, skills and the roles you target."
+          },
+          {
+            "type": "links",
+            "heading": "See the full picture",
+            "items": [
+              {
+                "href": "/online-degree-guides/msc-data-science-eligibility",
+                "label": "Online MSc Data Science eligibility"
+              },
+              {
+                "href": "/online-degree-guides/msc-data-science-career-scope",
+                "label": "Online MSc Data Science career scope"
+              }
+            ]
+          }
+        ],
+        "faqs": [
+          [
+            "Do I need a computer science or statistics background for online MSc Data Science at Amity?",
+            "No — Amity's own eligibility page requires only a bachelor's degree in any Science discipline, not CS, mathematics, or statistics specifically."
+          ],
+          [
+            "What career progression does Amity show for this program?",
+            "Data Analyst and Junior Data Scientist roles at entry, moving toward Data Scientist and Machine Learning Engineer, and eventually Senior Data Scientist or Data Science Manager."
+          ],
+          [
+            "Is there a verified salary figure for online MSc Data Science?",
+            "No. There is no official, program-specific salary figure, so we don't quote one. Outcomes depend on your experience, skills and the roles you target."
+          ]
+        ]
+      },
+      "reason": "Wave 5 D2 (decision V15): entry rule, fees and Amity's listed job roles re-read from its MSc Data Science page (24 October 2026); the role ladder now matches the page exactly.",
+      "content": {
+        "title": "Online MSc Data Science: career scope and who it's for",
+        "category": "Careers",
+        "excerpt": "Who can join Amity's online MSc Data Science, what it costs and the job roles Amity lists by level, from its current page.",
+        "cover": "/blog/online-msc-data-science-career-scope.webp",
+        "publishedDate": "2026-08-23",
+        "updatedDate": "2026-10-05",
+        "body": [
+          {
+            "type": "p",
+            "text": "Amity's online MSc Data Science asks Indian students for a bachelor's degree in any Science discipline, not specifically computer science, mathematics or statistics. Foreign students need graduation from a recognised university and an AIU certificate of equivalence."
+          },
+          {
+            "type": "h2",
+            "text": "Who it fits"
+          },
+          {
+            "type": "p",
+            "text": "If your first degree is in a Science subject outside computing, mathematics or statistics, the stated eligibility doesn't exclude you. Look at the semester-wise curriculum on Amity's page to judge the programming and mathematics involved."
+          },
+          {
+            "type": "h2",
+            "text": "Roles Amity lists"
+          },
+          {
+            "type": "p",
+            "text": "Entry level: Data Analyst, Junior Data Scientist, Data Engineer, Business Intelligence Analyst and Research Assistant. Mid level: Data Scientist, Data Mining Specialist, Machine Learning Engineer, Database Administrator and Statistical Analyst. Advanced level: Senior Data Scientist, Data Science Manager, Chief Data Officer, Data Science Consultant and Director of Data Science."
+          },
+          {
+            "type": "h2",
+            "text": "Recognition"
+          },
+          {
+            "type": "p",
+            "text": "When we checked UGC-DEB's 2026-27 list of institutions entitled to offer online programmes on 5 October 2026, the MSc Data Science appeared under Amity University Rajasthan. Check the list again for your session before you enrol."
+          },
+          {
+            "type": "h2",
+            "text": "What it costs"
+          },
+          {
+            "type": "p",
+            "text": "Amity lists ₹2,75,000 in total, or ₹68,800 per semester, with a lower effective fee for paying annually or in one go. Confirm the current amount before you pay."
+          },
+          {
+            "type": "note",
+            "text": "There is no official, program-specific salary figure for this program, so we don't quote one. Outcomes depend on your experience, skills and the roles you target."
+          },
+          {
+            "type": "links",
+            "heading": "See the full picture",
+            "items": [
+              {
+                "href": "/online-degree-guides/msc-data-science-eligibility",
+                "label": "Online MSc Data Science eligibility"
+              },
+              {
+                "href": "/online-degree-guides/msc-data-science-career-scope",
+                "label": "Online MSc Data Science career scope"
+              },
+              {
+                "href": "/online-degree-guides/computing",
+                "label": "Computing, data and mathematics degrees"
+              }
+            ]
+          }
+        ],
+        "faqs": [
+          [
+            "Do I need a computer science or statistics degree?",
+            "No. Amity's page asks Indian students for a bachelor's degree in any Science discipline."
+          ],
+          [
+            "Which roles does Amity list?",
+            "It lists roles by level, from Data Analyst and Junior Data Scientist at entry to Data Scientist and Machine Learning Engineer mid-career, and Senior Data Scientist or Data Science Manager at advanced level."
+          ],
+          [
+            "Is there a verified salary figure?",
+            "No. There is no official, program-specific salary figure, so we don't quote one."
+          ]
+        ],
+        "sources": [
+          {
+            "label": "Amity University Online: MSc Data Science (fees, eligibility, job roles)",
+            "url": "https://amityonline.com/msc-in-data-science",
+            "checkedAt": "2026-10-24"
+          },
+          {
+            "label": "UGC-DEB: HEIs entitled to offer online programmes, 2026-27",
+            "url": "https://deb.ugc.ac.in/pdf/HomePageRecognitionDetail/140/140_upload_RecognitionDetails_20260922125253.pdf",
+            "checkedAt": "2026-10-05"
+          }
+        ]
+      }
+    },
+    {
+      "slug": "online-bcom-vs-bcom-honours-amity",
+      "kind": "revision",
+      "batch": "D3 · Commerce and humanities",
+      "basedOn": {
+        "title": "Online B.Com vs B.Com Honours at Amity: what's the real difference?",
+        "category": "Fees & EMI",
+        "excerpt": "How Amity Online's B.Com and B.Com Honours differ on eligibility, curriculum and fees, and what to confirm before applying.",
+        "cover": "/blog/online-bcom-vs-bcom-honours-amity.webp",
+        "publishedDate": "2026-08-27",
+        "body": [
+          {
+            "type": "p",
+            "text": "Amity offers two distinct online commerce undergraduate programs, not one program with an optional \"Honours\" label. They have different eligibility, different curriculum, and a real fee gap."
+          },
+          {
+            "type": "h2",
+            "text": "Eligibility: a real, specific difference"
+          },
+          {
+            "type": "p",
+            "text": "The standard B.Com states no minimum percentage on Amity's own page. B.Com Honours explicitly requires 55% marks at 10+2 — a genuinely higher, more specific bar."
+          },
+          {
+            "type": "h2",
+            "text": "Fee and curriculum"
+          },
+          {
+            "type": "p",
+            "text": "B.Com Honours costs ₹1,75,000 total versus ₹1,15,000 for the standard B.Com, and adds Strategic Business Leadership modules, Data Analytics & Statistical Methods, and an optional ACCA track not available on the standard program."
+          },
+          {
+            "type": "h2",
+            "text": "A content mix-up worth flagging"
+          },
+          {
+            "type": "p",
+            "text": "During our research, we found Amity's own official B.Com Honours page currently lists career roles copy-pasted from its unrelated BA JMC page (Journalist, Editor, PR Specialist) — none of which are commerce-relevant. Our own career-scope guide for this program lists genuinely commerce-relevant roles instead, tied to its actual ACCA-track curriculum."
+          },
+          {
+            "type": "note",
+            "text": "Unnati Vidya tip: if you're choosing based on career page content alone, double-check against the actual curriculum — Amity's own B.Com Honours career listing doesn't currently reflect the program correctly."
+          },
+          {
+            "type": "links",
+            "heading": "See the real numbers",
+            "items": [
+              {
+                "href": "/online-degree-guides/b-com-fees",
+                "label": "Online B.Com fees across universities"
+              },
+              {
+                "href": "/online-degree-guides/b-com-honours-eligibility",
+                "label": "Online B.Com Honours eligibility"
+              },
+              {
+                "href": "/online-degree-guides/b-com-honours-career-scope",
+                "label": "Online B.Com Honours career scope (corrected)"
+              }
+            ]
+          }
+        ],
+        "faqs": [
+          [
+            "What's the eligibility difference between Amity's B.Com and B.Com Honours?",
+            "The standard B.Com states no minimum percentage; B.Com Honours explicitly requires 55% marks at 10+2 — a genuinely higher, more specific bar."
+          ],
+          [
+            "How much more does B.Com Honours cost than the standard B.Com at Amity?",
+            "₹1,75,000 total versus ₹1,15,000 — a ₹60,000 difference, alongside additional modules like Strategic Business Leadership and an optional ACCA track."
+          ],
+          [
+            "Is the career-role information on Amity's own B.Com Honours page accurate?",
+            "No — Amity's own page currently lists career roles copy-pasted from its unrelated BA JMC page (Journalist, Editor, PR Specialist), none of which are commerce-relevant. This site's own career-scope guide lists genuinely commerce-relevant roles instead."
+          ]
+        ]
+      },
+      "reason": "Wave 5 D3 (decision V15): eligibility, fees and the ACCA wording re-read from Amity's B.Com and B.Com Honours pages (24 October 2026). The module list could not be confirmed (the curriculum is collapsed on the page) and is removed; the 'copy-pasted roles' claim is replaced by what both pages show today.",
+      "content": {
+        "title": "Online B.Com vs B.Com Honours at Amity: entry, fees and what to check",
+        "category": "Fees & EMI",
+        "excerpt": "Amity's B.Com and B.Com Honours differ in entry marks and fees. Here's what its current pages say, and what to ask before you choose.",
+        "cover": "/blog/online-bcom-vs-bcom-honours-amity.webp",
+        "publishedDate": "2026-08-27",
+        "body": [
+          {
+            "type": "p",
+            "text": "Amity offers two separate online commerce degrees: the B.Com and the B.Com Honours. They differ in entry requirements and fees."
+          },
+          {
+            "type": "h2",
+            "text": "Entry requirements"
+          },
+          {
+            "type": "p",
+            "text": "For Indian students, Amity's B.Com page asks for Class 10 and Class 12 certificates and states no minimum percentage. The B.Com Honours page asks for completion of 10+2 with a minimum of 55% marks. Both ask foreign students for O and A Level certificates (diplomas not accepted) and an AIU certificate of equivalence."
+          },
+          {
+            "type": "h2",
+            "text": "Fees"
+          },
+          {
+            "type": "p",
+            "text": "Amity lists ₹1,15,000 for the B.Com (₹19,200 per semester) and ₹1,75,000 for the B.Com Honours (₹29,200 per semester), a difference of ₹60,000, with lower effective fees for paying annually or in one go."
+          },
+          {
+            "type": "h2",
+            "text": "What else to check"
+          },
+          {
+            "type": "p",
+            "text": "Amity's B.Com page says its B.Com Honours \"comes with an ACCA accreditation\". Ask Amity exactly what that gives you, for example which ACCA papers it covers. Both pages currently list the same job roles, mostly in communications and administration, so ask Amity about commerce-specific career support and compare the semester-wise curricula."
+          },
+          {
+            "type": "note",
+            "text": "Choose on the curriculum and entry requirement that fit you, then confirm the current fee for your session."
+          },
+          {
+            "type": "links",
+            "heading": "See the numbers",
+            "items": [
+              {
+                "href": "/online-degree-guides/b-com-fees",
+                "label": "Online B.Com fees"
+              },
+              {
+                "href": "/online-degree-guides/b-com-honours-eligibility",
+                "label": "Online B.Com Honours eligibility"
+              },
+              {
+                "href": "/online-degree-guides/commerce-humanities",
+                "label": "Commerce, humanities and media degrees"
+              }
+            ]
+          }
+        ],
+        "faqs": [
+          [
+            "What's the eligibility difference?",
+            "The B.Com page asks Indian students for Class 10 and 12 certificates with no stated minimum; the B.Com Honours page asks for 10+2 with at least 55% marks."
+          ],
+          [
+            "How much more does the B.Com Honours cost?",
+            "Amity lists ₹1,75,000 against ₹1,15,000 for the B.Com, a ₹60,000 difference, before any discount for paying annually or in one go."
+          ],
+          [
+            "Does the B.Com Honours include ACCA?",
+            "Amity's B.Com page says the B.Com Honours \"comes with an ACCA accreditation\". Ask Amity what that covers before you rely on it."
+          ]
+        ],
+        "sources": [
+          {
+            "label": "Amity University Online: B.Com (fees, eligibility, FAQs)",
+            "url": "https://amityonline.com/bachelor-of-commerce-online",
+            "checkedAt": "2026-10-24"
+          },
+          {
+            "label": "Amity University Online: B.Com Honours (fees, eligibility)",
+            "url": "https://amityonline.com/bachelor-of-commerce-honours",
+            "checkedAt": "2026-10-24"
+          }
+        ]
+      }
+    },
+    {
+      "slug": "studying-while-working-fulltime",
+      "kind": "revision",
+      "batch": "D1 · How online learning works",
+      "basedOn": {
+        "title": "Studying while working full-time: a realistic schedule",
+        "category": "Careers",
+        "excerpt": "A week-by-week approach to finishing an online PG degree without taking a career break.",
+        "cover": "/blog/studying-while-working-fulltime.webp",
+        "publishedDate": "2026-07-14",
+        "body": [
+          {
+            "type": "p",
+            "text": "Online PG programs are built around working professionals — live sessions are typically on weekends, with recorded lectures available anytime for the rest of the week."
+          },
+          {
+            "type": "h2",
+            "text": "A realistic weekly rhythm"
+          },
+          {
+            "type": "p",
+            "text": "Most learners block 1-2 hours on 3-4 weekday evenings for recorded lectures and assignments, and reserve weekend live sessions for doubt-clearing and group work. Treating it like a recurring calendar commitment, not an occasional catch-up task, is what makes it sustainable over 2-3 years."
+          },
+          {
+            "type": "h2",
+            "text": "What trips people up"
+          },
+          {
+            "type": "p",
+            "text": "Falling behind in the first month is the most common failure pattern — recorded content stacks up quickly. Starting each week's material within a day or two of it being posted keeps the workload manageable."
+          },
+          {
+            "type": "note",
+            "text": "Unnati Vidya tip: ask your counsellor about the exact weekly time commitment and exam-week workload for your shortlisted program before you enrol."
+          },
+          {
+            "type": "h2",
+            "text": "Talking to your employer"
+          },
+          {
+            "type": "p",
+            "text": "Many learners find it helpful to flag exam weeks to their manager in advance, since most online PG programs cluster assessments into short, predictable windows rather than spreading them evenly."
+          }
+        ],
+        "faqs": [
+          [
+            "How much weekly time should I budget for an online PG degree while working full-time?",
+            "Most learners block 1-2 hours on 3-4 weekday evenings for recorded lectures and assignments, reserving weekend live sessions for doubt-clearing and group work."
+          ],
+          [
+            "What's the most common reason people fall behind in an online PG program?",
+            "Falling behind in the first month — recorded content stacks up quickly. Starting each week's material within a day or two of it being posted keeps the workload manageable."
+          ],
+          [
+            "Should I tell my employer about my exam schedule?",
+            "Many learners find it helpful to flag exam weeks to their manager in advance, since most online PG programs cluster assessments into short, predictable windows."
+          ]
+        ]
+      },
+      "reason": "Wave 5 D1 (decision V16): removes unsourced generalisations (weekend live sessions, '1-2 hours on 3-4 evenings', the 'most common failure pattern', assessments clustered in windows). Rebuilt on UGC's participation and assessment rules, Online Manipal's exam slot booking and MUJ's stated weekly hours for its BCA, with the rest framed as questions to ask.",
+      "content": {
+        "title": "Studying an online degree while working full time: what to plan for",
+        "category": "Careers",
+        "excerpt": "What the rules and the universities say about participation, assessment, exams and weekly hours, and how to plan an online degree around a full-time job.",
+        "cover": "/blog/studying-while-working-fulltime.webp",
+        "publishedDate": "2026-07-14",
+        "body": [
+          {
+            "type": "p",
+            "text": "Short answer: plan for steady weekly study rather than catch-up bursts. UGC's rules expect you to take part in the online activities through the semester, and most of the marks come from the end-semester exam."
+          },
+          {
+            "type": "h2",
+            "text": "What the rules expect"
+          },
+          {
+            "type": "p",
+            "text": "Under UGC's 2020 regulations, you need at least 75% participation in an online program's activities before you can sit each end-semester exam. Continuous assessment during the semester counts for at most 30% of the marks, and the end-semester exam for at least 70%."
+          },
+          {
+            "type": "h2",
+            "text": "How much time"
+          },
+          {
+            "type": "p",
+            "text": "Weekly hours differ by program, and the universities don't publish one figure for all of them. For example, MUJ's online BCA page states 15–20 hours per week. Ask the university what your program expects, then add up your own week with our study-time planner to see whether it fits."
+          },
+          {
+            "type": "h2",
+            "text": "Exams around your job"
+          },
+          {
+            "type": "p",
+            "text": "For MUJ and SMU, Online Manipal says you get the exam schedule by email or SMS in advance and book an exam slot on its OBES portal, then take the exam online from home. Ask your university how far ahead exam dates are announced, so you can plan leave if you need it."
+          },
+          {
+            "type": "note",
+            "text": "Before you enrol, ask: which sessions are live and when, whether recordings are available, how participation is counted, and how much time the program expects each week."
+          },
+          {
+            "type": "h2",
+            "text": "Talking to your employer"
+          },
+          {
+            "type": "p",
+            "text": "If exam slots or live sessions fall in working hours, it can help to agree time off with your manager early. Some employers also support further study; ask your HR team what applies to you."
+          },
+          {
+            "type": "links",
+            "heading": "Plan it",
+            "items": [
+              {
+                "href": "/tools/study-planner",
+                "label": "Weekly study-time planner"
+              },
+              {
+                "href": "/online-degree-guides/online-learning",
+                "label": "How online learning works"
+              },
+              {
+                "href": "/tools/exam-check",
+                "label": "Online exams and device check"
+              }
+            ]
+          }
+        ],
+        "faqs": [
+          [
+            "How much time does an online degree take each week?",
+            "It depends on the program. MUJ's online BCA page, for example, states 15–20 hours per week. Ask the university for your program, and use the study-time planner to check it against your week."
+          ],
+          [
+            "Do I have to attend online sessions?",
+            "UGC's 2020 regulations require at least 75% participation in an online program's activities before you can sit each end-semester exam. Ask the university how it counts participation."
+          ],
+          [
+            "Can I choose when to take exams?",
+            "For MUJ and SMU, Online Manipal says you book an exam slot on its OBES portal after the schedule is announced. Ask your university how its exam slots work."
+          ]
+        ],
+        "sources": [
+          {
+            "label": "UGC (Open and Distance Learning Programmes and Online Programmes) Regulations, 2020",
+            "url": "https://deb.ugc.ac.in/pdf/20200906.pdf",
+            "checkedAt": "2026-10-13"
+          },
+          {
+            "label": "Online Manipal: \"What is the examination process for online degree students?\" (updated 3 November 2025)",
+            "url": "https://www.onlinemanipal.com/blogs/what-is-the-examination-process-for-online-degree-students",
+            "checkedAt": "2026-10-14"
+          },
+          {
+            "label": "Online Manipal: MUJ online BCA (hours per week, curriculum)",
+            "url": "https://www.onlinemanipal.com/online-bca-degree-muj",
+            "checkedAt": "2026-10-24"
+          }
+        ]
+      }
+    }
+  ]
+}

@@ -77,8 +77,8 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   }
 
   const mode = String(item.raw_data?.mode || "");
-  if (mode === "REFERENCE_TAXONOMY_ONLY" || item.entity_type === "reference_taxonomy") {
-    return NextResponse.json({ error: "Reference-only source rows cannot be applied to catalog." }, { status: 400 });
+  if (mode === "REFERENCE_TAXONOMY_ONLY" || mode === "WEEKLY_EVIDENCE_ONLY" || item.entity_type === "reference_taxonomy") {
+    return NextResponse.json({ error: "This evidence item cannot be applied directly to the catalog. Submit a reviewed catalog revision instead." }, { status: 400 });
   }
 
   const payload = sourceReviewPayload(item);

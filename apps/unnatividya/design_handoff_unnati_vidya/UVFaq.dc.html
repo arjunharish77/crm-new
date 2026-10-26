@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<section style="font-family:'Plus Jakarta Sans',system-ui,sans-serif">
+  <div style="display:flex;flex-wrap:wrap;justify-content:space-between;align-items:end;gap:12px;margin-bottom:20px">
+    <div>
+      <h2 style="margin:0;font-size:clamp(24px,3vw,30px);letter-spacing:-0.025em;font-weight:800;color:#16133F">{{ title }}</h2>
+      <p style="margin:6px 0 0;color:#4A4867;font-size:15px">{{ subtitle }}</p>
+    </div>
+    <a href="Guides.dc.html" style="font-weight:700;font-size:14px;display:flex;align-items:center;gap:4px">View all FAQs <span style="font-family:'Material Symbols Rounded';font-size:18px">arrow_forward</span></a>
+  </div>
+  <div style="display:flex;flex-wrap:wrap;gap:12px">
+    <sc-for list="{{ cols }}" as="col" hint-placeholder-count="2">
+      <div style="flex:1 1 380px;min-width:0;display:flex;flex-direction:column;gap:10px">
+        <sc-for list="{{ col.items }}" as="f" hint-placeholder-count="3">
+          <div style="border:1px solid #E8E6F3;border-radius:12px;background:#fff;border-color:{{ f.border }}">
+            <div onClick="{{ f.toggle }}" style="cursor:pointer;display:flex;align-items:center;gap:12px;padding:14px 16px;min-height:52px">
+              <span style="font-family:'Material Symbols Rounded';font-size:20px;color:#5B4CF0;flex:none">help</span>
+              <span style="flex:1;font-size:15px;font-weight:600;color:#16133F">{{ f.q }}</span>
+              <span style="font-family:'Material Symbols Rounded';font-size:22px;color:#5B4CF0;flex:none">{{ f.icon }}</span>
+            </div>
+            <sc-if value="{{ f.open }}"><p style="margin:0;padding:0 16px 16px 48px;color:#4A4867;font-size:14px;line-height:1.65">{{ f.a }}</p></sc-if>
+          </div>
+        </sc-for>
+      </div>
+    </sc-for>
+  </div>
+</section>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1000,&quot;height&quot;:400},&quot;title&quot;:{&quot;editor&quot;:&quot;text&quot;,&quot;default&quot;:&quot;Frequently asked questions&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;subtitle&quot;:{&quot;editor&quot;:&quot;text&quot;,&quot;default&quot;:&quot;Get quick answers to common questions about online degrees.&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;items&quot;:{&quot;editor&quot;:null,&quot;tsType&quot;:&quot;[string,string][]&quot;}}">
+class Component extends DCLogic {
+  state = { open: -1 };
+  renderVals() {
+    const items = this.props.items || [];
+    const mk = (f, i) => { const open = this.state.open === i; return { q: f[0], a: f[1], open, icon: open ? 'remove' : 'add', border: open ? '#CFC9FA' : '#E8E6F3', toggle: () => this.setState({ open: open ? -1 : i }) }; };
+    const all = items.map(mk), h = Math.ceil(all.length / 2);
+    return { title: this.props.title ?? 'Frequently asked questions', subtitle: this.props.subtitle ?? 'Get quick answers to common questions about online degrees.', cols: [{ items: all.slice(0, h) }, { items: all.slice(h) }] };
+  }
+}
+</script>
+</body>
+</html>

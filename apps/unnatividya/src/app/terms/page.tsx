@@ -2,12 +2,13 @@ export const dynamic = "force-dynamic";
 import { PublishedCatalogBoundary } from "@/components/published-catalog-boundary";
 import type { Metadata } from "next";
 import { LegalPageLayout } from "@/components/legal-page-layout";
+import { withSocial } from "@/lib/page-metadata";
 
-export const metadata: Metadata = {
+export const metadata: Metadata = withSocial({
   title: "Terms of Use",
   description: "Terms for using the Unnati Vidya online degree discovery and enquiry website.",
   alternates: { canonical: "/terms" },
-};
+});
 
 const sections = [
   {
@@ -39,15 +40,12 @@ const sections = [
 
 export default function TermsPage() {
   return <PublishedCatalogBoundary>{(
-    <LegalPageLayout crumb="Terms" title="Terms of Use" lastUpdated="12 August 2026" sections={sections.map((section, index) => ({ id: `policy-section-${index + 1}`, title: section.title }))}>
-      <p style={{ fontSize: 15, lineHeight: 1.7, margin: 0 }}>
-        These terms describe the basic rules for using the Unnati Vidya website and its
-        counselling and comparison services.
-      </p>
+    <LegalPageLayout policy="terms" crumb="Terms" title="Terms of Use" lastUpdated="12 August 2026" sections={sections.map((section, index) => ({ id: `policy-section-${index + 1}`, title: section.title }))}>
+      <p className="uv-legal-intro">These terms describe the basic rules for using the Unnati Vidya website and its counselling and comparison services.</p>
       {sections.map((section, index) => (
         <section key={section.title} aria-labelledby={`policy-section-${index + 1}`}>
-          <h2 id={`policy-section-${index + 1}`} tabIndex={-1} style={{ fontSize: 20, fontWeight: 700, color: "#363634", margin: "28px 0 8px" }}>{section.title}</h2>
-          <p style={{ fontSize: 15, lineHeight: 1.7, margin: 0 }}>{section.copy}</p>
+          <h2 id={`policy-section-${index + 1}`} tabIndex={-1}>{section.title}</h2>
+          <p>{section.copy}</p>
         </section>
       ))}
     </LegalPageLayout>

@@ -151,7 +151,7 @@ export default async function AdminLeadDetailPage({ params }: { params: Promise<
           </section>
         </div>
 
-        <div className="admin-detail-grid" style={{ marginTop: 18 }}>
+        <div className="admin-detail-grid admin-section-gap">
           <section className="card admin-detail-card">
             <h2>Compare & recommender context</h2>
             <p>Selections captured from comparison and course-matching tools.</p>

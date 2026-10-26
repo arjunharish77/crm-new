@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,400,0..1,0&display=block" rel="stylesheet">
+<script src="uv-data.js"></script>
+<style>body{margin:0;font-family:'Plus Jakarta Sans',system-ui,sans-serif;color:#16133F;-webkit-font-smoothing:antialiased}*{box-sizing:border-box}a{color:#5B4CF0;text-decoration:none}a:hover{color:#4A3BDB;text-decoration:underline}</style>
+</helmet>
+<div data-screen-label="Article" style="min-height:100vh;display:flex;flex-direction:column;background:#fff">
+<dc-import name="UVHeader" active="guides" hint-size="100%,68px" style="position:sticky;top:0;z-index:40;display:block"></dc-import>
+<section style="background:radial-gradient(520px 280px at 0% 0%,#ECE8FF 0%,rgba(236,232,255,0) 70%),linear-gradient(180deg,#F7F5FF,#FBFAFF);border-bottom:1px solid #EEECF8">
+  <div style="max-width:880px;margin:0 auto;padding:22px clamp(16px,3vw,32px) 36px">
+    <div style="font-size:13px;color:#6F6D8C;display:flex;gap:6px;align-items:center;flex-wrap:wrap"><a href="Home.dc.html">Home</a><span style="font-family:'Material Symbols Rounded';font-size:16px">chevron_right</span><a href="Guides.dc.html">Guides</a><span style="font-family:'Material Symbols Rounded';font-size:16px">chevron_right</span><span style="color:#16133F">{{ g.cat }}</span></div>
+    <span style="display:inline-block;margin-top:20px;font-size:12px;font-weight:800;padding:4px 9px;border-radius:6px;background:#ECE9FE;color:#5B4CF0">{{ g.cat }}</span>
+    <h1 style="margin:12px 0 0;font-size:clamp(30px,4.4vw,46px);letter-spacing:-0.035em;font-weight:800;line-height:1.1;text-wrap:balance">{{ g.title }}</h1>
+    <p style="margin:12px 0 0;color:#4A4867;font-size:17px;line-height:1.6">{{ g.desc }}</p>
+    <div style="display:flex;flex-wrap:wrap;gap:16px;margin-top:18px;font-size:13px;color:#6F6D8C;align-items:center">
+      <span style="display:flex;align-items:center;gap:6px"><span style="width:28px;height:28px;border-radius:50%;background:#5B4CF0;color:#fff;font-weight:800;font-size:11px;display:flex;align-items:center;justify-content:center">UV</span>Unnati Vidya research team</span>
+      <span>{{ g.read }} read</span><span>Updated October 2026</span>
+      <a href="HowWeVerify.dc.html" style="display:flex;align-items:center;gap:4px;font-weight:700;color:#12784B"><span style="font-family:'Material Symbols Rounded';font-size:16px">verified</span>Source-verified</a>
+    </div>
+  </div>
+</section>
+<main style="flex:1;max-width:880px;width:100%;margin:0 auto;padding:32px clamp(16px,3vw,32px) 0">
+  <div style="padding:16px 18px;border-radius:14px;background:#F8F7FD;border:1px solid #ECEAF6">
+    <div style="font-size:12px;font-weight:800;letter-spacing:0.05em;color:#6F6D8C">IN THIS GUIDE</div>
+    <div style="display:flex;flex-direction:column;gap:6px;margin-top:10px"><sc-for list="{{ toc }}" as="t" hint-placeholder-count="3"><div onClick="{{ t.go }}" style="cursor:pointer;font-size:14px;font-weight:700;color:#5B4CF0">{{ t.n }}. {{ t.h }}</div></sc-for></div>
+  </div>
+  <sc-for list="{{ sections }}" as="s" hint-placeholder-count="3">
+    <section id="{{ s.id }}" style="margin-top:36px">
+      <h2 style="margin:0;font-size:24px;font-weight:800;letter-spacing:-0.02em">{{ s.h }}</h2>
+      <sc-for list="{{ s.ps }}" as="p" hint-placeholder-count="1"><p style="margin:12px 0 0;font-size:16px;line-height:1.75;color:#2B2950;text-wrap:pretty">{{ p }}</p></sc-for>
+      <sc-if value="{{ s.hasTable }}">
+        <div style="margin-top:16px;border:1px solid #E8E6F3;border-radius:14px;overflow-x:auto">
+          <div style="min-width:520px">
+            <div style="display:grid;grid-template-columns:{{ s.cols }};background:#F8F7FD;border-bottom:1px solid #E8E6F3"><sc-for list="{{ s.head }}" as="h" hint-placeholder-count="4"><div style="padding:12px 14px;font-size:13px;font-weight:800;color:#4A4867">{{ h }}</div></sc-for></div>
+            <sc-for list="{{ s.rows }}" as="r" hint-placeholder-count="3"><div style="display:grid;grid-template-columns:{{ s.cols }};border-bottom:1px solid #F3F2F9"><sc-for list="{{ r }}" as="x" hint-placeholder-count="4"><div style="padding:12px 14px;font-size:14px">{{ x }}</div></sc-for></div></sc-for>
+          </div>
+        </div>
+      </sc-if>
+    </section>
+  </sc-for>
+  <div style="margin-top:40px;padding:22px;border-radius:18px;background:linear-gradient(135deg,#F4F2FF,#EEEAFF);display:flex;flex-wrap:wrap;gap:16px;align-items:center;justify-content:space-between">
+    <div><div style="font-size:18px;font-weight:800">See these programs side by side</div><div style="font-size:14px;color:#4A4867;margin-top:4px">Fees, EMI, approvals and placement data in one table.</div></div>
+    <a href="{{ compareHref }}" style="padding:12px 18px;border-radius:11px;background:#5B4CF0;color:#fff;font-weight:700;text-decoration:none">Compare {{ g.degree }} programs →</a>
+  </div>
+  <section style="margin-top:40px">
+    <h2 style="margin:0 0 14px;font-size:22px;font-weight:800">Related guides</h2>
+    <div style="display:flex;flex-direction:column;gap:10px"><sc-for list="{{ related }}" as="r" hint-placeholder-count="3"><a href="{{ r.href }}" style="display:flex;justify-content:space-between;align-items:center;gap:12px;padding:14px 16px;border:1px solid #E8E6F3;border-radius:12px;color:#16133F;font-weight:700" style-hover="border-color:#5B4CF0;text-decoration:none;color:#5B4CF0">{{ r.title }}<span style="font-family:'Material Symbols Rounded';color:#5B4CF0">arrow_forward</span></a></sc-for></div>
+  </section>
+</main>
+<dc-import name="UVFooter" hint-size="100%,360px"></dc-import>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  state = { ok: !!window.UV };
+  componentDidMount() { if (!window.UV) this._i = setInterval(() => { if (window.UV) { clearInterval(this._i); this.setState({ ok: true }); } }, 50); }
+  componentWillUnmount() { clearInterval(this._i); }
+  renderVals() {
+    const UV = window.UV; if (!UV) return { g: {}, sections: [], toc: [], related: [] };
+    const g = UV.GUIDES.find(x => x.slug === UV.q('slug')) || UV.GUIDES[0];
+    const cs = UV.C.filter(c => c.short === g.degree), U = c => UV.UNIS[c.uni];
+    const T = (h, ps, head, rows) => ({ h, ps, hasTable: !!head, head: head || [], rows: rows || [], cols: head ? `1.4fr repeat(${head.length - 1},1fr)` : '1fr' });
+    const cheapest = [...cs].sort((a, b) => a.fee - b.fee)[0];
+    let sections;
+    if (g.cat === 'Fees') sections = [
+      T('Fees at a glance', [`We list ${cs.length} Online ${g.degree} programs. Listed total tuition ranges from ${UV.inr(Math.min(...cs.map(c => c.fee)))} to ${UV.inr(Math.max(...cs.map(c => c.fee)))}. ${U(cheapest).name} has the lowest listed fee.`], ['University', 'Total fee', 'Per semester', 'EMI from'], cs.map(c => [U(c).name, UV.inr(c.fee), UV.inr(c.fee / (c.months / 6)), UV.inr(c.emi) + '/mo'])),
+      T('Payment options', ['Every listed program offers full payment, semester-wise payment and no-cost EMI through education loan partners. Some universities give a small discount for paying the full fee upfront.', 'Payment plans and scholarships depend on current university terms and eligibility. Confirm the total payable and financing charges before applying.']),
+      T('What else to compare', ['Fee is one row. Check specialisation depth, placement assistance rate and approvals before deciding — our comparison table puts all of these on one screen.'])];
+    else if (g.cat === 'Eligibility') sections = [
+      T('Minimum requirements', [g.degree === 'MBA' ? "For MUJ, the requirement is a bachelor's degree (10+2+3) in any discipline with a minimum of 50% marks (45% for reserved categories). No work experience or entrance test required." : 'Requirements vary by university. Confirm the exact percentage with a counsellor.'], ['University', 'Requirement', 'Entrance test'], cs.map(c => [U(c).name, c.lvl === 'PG' ? "Bachelor's degree" : '10+2', 'Not required'])),
+      T('Documents you need', ['Academic mark sheets and certificates, a government ID, a recent photograph, and category certificate if applicable. Universities may ask for additional records during document upload.'])];
+    else if (g.cat === 'Careers') sections = [
+      T('Placement support by university', ['Universities offer placement assistance — resume clinics, mock interviews, job boards and alumni networking. This is assistance, not a guaranteed offer.'], ['University', 'Placement rate', 'Avg package'], cs.map(c => [U(c).name, U(c).placement + '%', U(c).avg])),
+      T('Common roles', g.degree === 'MBA' ? ['Graduates commonly move into roles such as Business Manager (₹6-11 LPA), Marketing Manager (₹7-14 LPA), Finance Analyst (₹5-10 LPA) and Operations Lead (₹8-15 LPA), per MUJ’s own program pages. Actual outcomes depend on your experience and specialisation.'] : ['Outcomes depend on your experience and specialisation. Ask a counsellor for program-specific data.'])];
+    else sections = [
+      T('What UGC entitlement means', ['UGC-entitled online degrees are legally equivalent to on-campus degrees for government jobs, PSU recruitment and higher studies. The certificate carries no “online” marking.']),
+      T('Approval status by university', ['We check every program against the UGC-DEB entitlement list each admission cycle.'], ['University', 'UGC', 'Other approvals'], cs.map(c => [U(c).name, 'Entitled', U(c).approvals.slice(1).join(', ')])),
+      T('How to check it yourself', ['Search the UGC-DEB website for the university and program for your admission session. If a program is missing from the current list, do not enrol until it is confirmed.'])];
+    sections = sections.map((s, i) => ({ ...s, id: 'a' + i }));
+    return { g, sections, toc: sections.map((s, i) => ({ n: i + 1, h: s.h, go: () => { const el = document.getElementById(s.id); if (el) window.scrollTo({ top: el.getBoundingClientRect().top + window.scrollY - 90, behavior: 'smooth' }); } })),
+      compareHref: 'Compare.dc.html?ids=' + cs.map(c => c.id).join(','),
+      related: UV.GUIDES.filter(x => x.slug !== g.slug).slice(0, 4).map(x => ({ title: x.title, href: 'Article.dc.html?slug=' + x.slug })) };
+  }
+}
+</script>
+</body>
+</html>

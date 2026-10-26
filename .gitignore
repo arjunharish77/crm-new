@@ -33,6 +33,8 @@ ml-service/storage/
 # generated at build time from src/data/catalog.ts (see scripts/export-catalog.ts) -- never
 # committed, always regenerated fresh so it can't drift from the source it's exported from
 apps/unnatividya/scripts/catalog-export.json
+apps/unnatividya/scripts/articles-export.json
+apps/unnatividya/scripts/guides-export.json
 
 # misc
 .DS_Store

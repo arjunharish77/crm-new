@@ -6,6 +6,19 @@ type SendOtpEmailInput = {
 };
 
 export async function sendOtpEmail(input: SendOtpEmailInput) {
+  const subject =
+    input.purpose === "admin"
+      ? "Your Unnati Vidya admin login code"
+      : "Your Unnati Vidya verification code";
+  const htmlbody = `<div style="font-family:Arial,sans-serif;color:#16133f">
+    <p>Your OTP is <b style="font-size:22px">${input.otp}</b>.</p>
+    <p>This code is valid for 10 minutes.</p>
+  </div>`;
+  return sendEmail({ toEmail: input.toEmail, toName: input.toName, subject, htmlbody });
+}
+
+// One transactional email through ZeptoMail. Callers escape any user-supplied text in htmlbody.
+export async function sendEmail(input: { toEmail: string; toName?: string; subject: string; htmlbody: string }) {
   const apiUrl = process.env.ZEPTOMAIL_API_URL || "https://api.zeptomail.in/v1.1/email";
   const apiKey = process.env.ZEPTOMAIL_API_KEY;
   const fromEmail = process.env.ZEPTOMAIL_FROM_EMAIL || "info@unnatividya.com";
@@ -14,15 +27,7 @@ export async function sendOtpEmail(input: SendOtpEmailInput) {
   if (!apiKey) {
     return { ok: false, status: 0, body: { message: "ZeptoMail API key is not configured" } };
   }
-
-  const subject =
-    input.purpose === "admin"
-      ? "Your Unnati Vidya admin login code"
-      : "Your Unnati Vidya verification code";
-  const htmlbody = `<div style="font-family:Arial,sans-serif;color:#363634">
-    <p>Your OTP is <b style="font-size:22px">${input.otp}</b>.</p>
-    <p>This code is valid for 10 minutes.</p>
-  </div>`;
+  const { subject, htmlbody } = input;
 
   const response = await fetch(apiUrl, {
     method: "POST",

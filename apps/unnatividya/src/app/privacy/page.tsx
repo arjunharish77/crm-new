@@ -2,14 +2,15 @@ export const dynamic = "force-dynamic";
 import { PublishedCatalogBoundary } from "@/components/published-catalog-boundary";
 import type { Metadata } from "next";
 import { LegalPageLayout } from "@/components/legal-page-layout";
+import { withSocial } from "@/lib/page-metadata";
 
-export const metadata: Metadata = {
+export const metadata: Metadata = withSocial({
   title: "Privacy Policy",
   description: "How Unnati Vidya collects, uses, stores, and protects enquiry and counselling data.",
   alternates: { canonical: "/privacy" },
-};
+});
 
-const sections = [
+const sections: Array<{ id?: string; title: string; items: string[] }> = [
   {
     title: "Information we collect",
     items: [
@@ -23,9 +24,19 @@ const sections = [
     title: "How we use the information",
     items: [
       "To respond to enquiries and help learners compare online degree options.",
+      "If you give the required Apply now contact consent, Unnati Vidya and authorised counselling associates may follow up about your enquiry by email, SMS, WhatsApp, or voice call. This consent does not sign you up for newsletter or promotional broadcasts; request that enquiry contact stop by emailing admin@unnatividya.com.",
       "To verify contact details and reduce duplicate, inaccurate, or spam enquiries.",
       "To improve website content, course discovery, recommendations, and user experience.",
       "To push leads to an external CRM only when the website admin explicitly enables and configures that integration.",
+    ],
+  },
+  {
+    id: "marketing",
+    title: "Newsletter and WhatsApp updates",
+    items: [
+      "These are optional and separate from your enquiry. Sign up through the newsletter form and confirm your email if you want to receive them. The Apply now enquiry form does not subscribe you.",
+      "We record what you agreed to (the exact wording version) and when. A newsletter sign-up starts only after you confirm from the confirmation email.",
+      "You can stop them at any time: use the unsubscribe link in any email, or write to admin@unnatividya.com. Unsubscribing stops both the newsletter and WhatsApp updates. It doesn't cancel an enquiry you've made.",
     ],
   },
   {
@@ -49,15 +60,12 @@ const sections = [
 
 export default function PrivacyPage() {
   return <PublishedCatalogBoundary>{(
-    <LegalPageLayout crumb="Privacy policy" title="Privacy Policy" lastUpdated="12 August 2026" sections={sections.map((section, index) => ({ id: `policy-section-${index + 1}`, title: section.title }))}>
-      <p style={{ fontSize: 15, lineHeight: 1.7, margin: 0 }}>
-        This policy explains how Unnati Vidya collects, uses, stores, and protects information
-        submitted through this website.
-      </p>
+    <LegalPageLayout policy="privacy" crumb="Privacy policy" title="Privacy Policy" lastUpdated="8 October 2026" sections={sections.map((section, index) => ({ id: section.id || `policy-section-${index + 1}`, title: section.title }))}>
+      <p className="uv-legal-intro">This policy explains how Unnati Vidya collects, uses, stores, and protects information submitted through this website.</p>
       {sections.map((section, index) => (
-        <section key={section.title} aria-labelledby={`policy-section-${index + 1}`}>
-          <h2 id={`policy-section-${index + 1}`} tabIndex={-1} style={{ fontSize: 20, fontWeight: 700, color: "#363634", margin: "28px 0 8px" }}>{section.title}</h2>
-          <ul style={{ margin: 0, paddingLeft: 20, fontSize: 15, lineHeight: 1.7 }}>
+        <section key={section.title} aria-labelledby={section.id || `policy-section-${index + 1}`}>
+          <h2 id={section.id || `policy-section-${index + 1}`} tabIndex={-1}>{section.title}</h2>
+          <ul>
             {section.items.map((item) => <li key={item}>{item}</li>)}
           </ul>
         </section>
