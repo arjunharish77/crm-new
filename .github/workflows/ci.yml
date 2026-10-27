@@ -240,10 +240,12 @@ jobs:
       - uses: actions/checkout@v5
         with:
           fetch-depth: 0
+      # --verbose lists each finding (file, line, rule and the fingerprint for .gitleaksignore);
+      # --redact keeps the matched values out of the log.
       - name: Secret scan (gitleaks, whole history)
         run: |
           docker run --rm -v "$PWD:/repo" ghcr.io/gitleaks/gitleaks:v8.24.3 \
-            git /repo --config /repo/.gitleaks.toml --gitleaks-ignore-path /repo/.gitleaksignore --redact --no-banner --exit-code 1
+            git /repo --config /repo/.gitleaks.toml --gitleaks-ignore-path /repo/.gitleaksignore --redact --verbose --no-banner --exit-code 1
       - uses: actions/setup-node@v5
         with:
           node-version-file: .nvmrc

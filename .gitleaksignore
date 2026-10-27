@@ -3,3 +3,14 @@
 80bb5bd8487ba87ecc4bee4b1802a27c9fd71d90:docs/CRM_CREATE_API.md:generic-api-key:92
 80bb5bd8487ba87ecc4bee4b1802a27c9fd71d90:28_UI_IMPLEMENTATION_PROGRESS.md:generic-api-key:369
 26497f83a2fff5951526f74ec8c3234564b2da9d:scripts/api-regression-smoke.js:generic-api-key:8
+# Voice bots (reviewed 2026-10-27): made-up signing secrets for the CRM ⇄ bot service tests, dummy
+# provider keys in smoke tests, and the public SHA-256 of the speech model's tokenizer.json.
+2677b0d7854a3fb680a8ce0c100c01b6104b4619:scripts/voice-bot-triggers-smoke.ts:generic-api-key:62
+2677b0d7854a3fb680a8ce0c100c01b6104b4619:scripts/voice-bot-sessions-smoke.ts:generic-api-key:32
+2677b0d7854a3fb680a8ce0c100c01b6104b4619:scripts/voice-bot-sessions-smoke.ts:generic-api-key:108
+2677b0d7854a3fb680a8ce0c100c01b6104b4619:scripts/voice-bots-smoke.ts:generic-api-key:126
+2677b0d7854a3fb680a8ce0c100c01b6104b4619:tests/voice-bot-service.test.ts:generic-api-key:12
+2677b0d7854a3fb680a8ce0c100c01b6104b4619:voice-bot/app/fetch_model.py:generic-api-key:15
+2677b0d7854a3fb680a8ce0c100c01b6104b4619:voice-bot/tests/conftest.py:generic-api-key:4
+2677b0d7854a3fb680a8ce0c100c01b6104b4619:voice-bot/tests/test_knowledge.py:generic-api-key:23
+2677b0d7854a3fb680a8ce0c100c01b6104b4619:voice-bot/tests/test_e2e.py:generic-api-key:40
