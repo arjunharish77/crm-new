@@ -5,7 +5,7 @@ import { ExpressiveNode } from "@/components/automation/expressive-node";
 import { Button } from "@/components/ui/button";
 import { Select } from "@/components/ui/select";
 import { DropdownMenu, DropdownMenuCheckboxItem, DropdownMenuContent, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { Play, Zap, GitBranch, GitCompare, Clock, Hourglass, Split, Mail, Database, Webhook, User, MinusCircle, Square, Bell, Coins, Sparkles, Award, Tag, ListPlus, ListMinus, Star, Users, MessageSquare, Blocks, LifeBuoy, TrendingUp } from "lucide-react";
+import { AudioLines, Play, Zap, GitBranch, GitCompare, Clock, Hourglass, Split, Mail, Database, Webhook, User, MinusCircle, Square, Bell, Coins, Sparkles, Award, Tag, ListPlus, ListMinus, Star, Users, MessageSquare, Blocks, LifeBuoy, TrendingUp } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { triggerLabel } from "@/components/automations/trigger-types";
 
@@ -48,6 +48,7 @@ export const NODE_TYPES = [
     { type: 'notify_user', label: 'Notify User', icon: Bell },
     { type: 'stop', label: 'Stop Automation', icon: Square },
     { type: 'send_email', label: 'Send Email / Notify', icon: Mail },
+    { type: 'call_with_voice_bot', label: 'Call with Voice Bot', icon: AudioLines },
     { type: 'webhook', label: 'Webhook', icon: Webhook },
     { type: 'run_automation', label: 'Run Another Automation', icon: Zap },
     { type: 'call_app_action', label: 'Call App Action', icon: Blocks },
@@ -125,12 +126,32 @@ export const COMMUNICATION_FIELDS = [
 ];
 
 
+// How a "Call with voice bot" step's call went (set when the step waits for the outcome).
+export const VOICE_BOT_CALL_FIELDS = [
+    {
+        key: "voiceBotCall.outcome", label: "Voice Bot Call: Outcome", type: "SELECT",
+        options: [
+            { value: "interested", label: "Interested" }, { value: "not_interested", label: "Not interested" }, { value: "callback", label: "Callback booked" },
+            { value: "transferred", label: "Transferred" }, { value: "wrong_number", label: "Wrong number" }, { value: "do_not_call", label: "Asked for no bot calls" },
+            { value: "no_response", label: "No response" }, { value: "hung_up", label: "Caller hung up" }, { value: "other", label: "Completed (other)" },
+            { value: "NO_ANSWER", label: "Not answered" }, { value: "BUSY", label: "Busy" }, { value: "MACHINE", label: "Answering machine" },
+            { value: "FAILED", label: "Call failed" }, { value: "BLOCKED", label: "Not called (no phone, stopped number…)" }, { value: "CANCELLED", label: "Cancelled" },
+        ],
+    },
+    {
+        key: "voiceBotCall.status", label: "Voice Bot Call: Answered?", type: "SELECT",
+        options: [{ value: "COMPLETED", label: "Answered" }, { value: "NO_ANSWER", label: "Not answered" }, { value: "BUSY", label: "Busy" }, { value: "MACHINE", label: "Answering machine" }, { value: "BLOCKED", label: "Not called" }],
+    },
+];
+
 export const APP_EVENT_FIELDS = [
     { key: "eventName", label: "Event Name" },
 ];
 
 export const LEAD_NODE_TYPES = new Set([
     "update_lead",
+    // The lead's phone, or the opportunity's lead's (lead and opportunity triggers).
+    "call_with_voice_bot",
     "add_activity",
     "add_opportunity",
     "distribute_lead",

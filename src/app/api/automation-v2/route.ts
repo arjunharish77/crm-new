@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createAutomationForTenant, listAutomationsForTenant } from "@/lib/server/crm";
-import { badRequest, forbidden, serverError, unauthorized } from "@/lib/server/http";
+import { badRequest, forbidden, serverError, unauthorized, userMessage } from "@/lib/server/http";
 import { requireInternalUser } from "@/lib/server/auth";
 
 export async function GET(request: Request) {
@@ -29,6 +29,7 @@ export async function POST(request: Request) {
     if (error instanceof Error && error.message.startsWith("FEATURE_DISABLED")) {
       return badRequest("Automations is not enabled for this workspace");
     }
+    if (error instanceof Error && error.message === "AUTOMATION_STEP_UNSUPPORTED") return userMessage("The workflow has a step this version of the CRM doesn't know. Remove it and save again.");
     return serverError("Failed to create automation", error);
   }
 }

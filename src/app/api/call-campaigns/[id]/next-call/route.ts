@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireCurrentUser } from "@/lib/server/auth";
-import { getNextCampaignCallForAgent } from "@/lib/server/call-campaigns";
+import { getNextCampaignCallForAgent, CAMPAIGN_DIALLING_MESSAGES } from "@/lib/server/call-campaigns";
 import { badRequest, forbidden, serverError, unauthorized } from "@/lib/server/http";
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -15,6 +15,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     if (error instanceof Error && error.message === "FORBIDDEN") return forbidden("You don't have permission to work this campaign");
     if (error instanceof Error && error.message === "CALL_CAMPAIGN_NOT_FOUND") return badRequest("Call campaign not found");
     if (error instanceof Error && error.message === "CAMPAIGN_NOT_ACTIVE") return badRequest("This campaign isn't active");
+    if (error instanceof Error && CAMPAIGN_DIALLING_MESSAGES[error.message]) return badRequest(CAMPAIGN_DIALLING_MESSAGES[error.message]);
     return serverError("Failed to fetch next campaign call", error);
   }
 }

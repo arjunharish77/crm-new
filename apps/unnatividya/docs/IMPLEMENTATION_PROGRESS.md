@@ -1697,3 +1697,29 @@ Both databases are back to their baseline:
 - **CI:** 3 universities, 30 courses, no test users and no catalog revisions.
 
 The local runner (scratchpad, not in the repository) now waits for load below 8 before each suite and limits each suite to 15 minutes.
+
+## Deployed to the VPS (26 October 2026)
+
+**Releases.** Release commit `fa8ca07`, then `6178f61`, which runs the CI fee suites in India time, marks the intentional sign-in/out reloads and moves the GitHub Actions to Node 24. The VPS moved from `2811a1a` to `6178f61`. GitHub CI passed every job on `6178f61`.
+
+**Steps, run one at a time:**
+1. Built all four images on Node 24 (`unnatividya-web`, the shared `unnatify-crm:local` for `web`/`worker`, and `unnatividya-crm-worker`).
+2. Ran the website migrations: `0001`–`0007` skipped, `0008`–`0011` applied.
+3. Imported the articles (26 migrated) and the guides (34 migrated). `check-catalog-ready` reported `ready: true`, with 3 universities and 30 courses.
+4. Restarted `unnatividya-web` on Next.js 16.4.3. `web` and `worker` are healthy on Node 24.
+5. Recreated Caddy, because the single-file bind mount was still serving the old Caddyfile.
+6. Checked from outside:
+   - every key page returns 200;
+   - camera and microphone are allowed only on `/tools/exam-check`;
+   - www returns a 301 to the main domain;
+   - the CRM domains respond;
+   - the CSP allows Google Analytics.
+7. Set up the timers. The scheduled-publish script ran clean once, and two crontab entries were added: publishing every 5 minutes, and the weekly source check on Monday at 04:00 UTC (09:30 IST).
+8. Ran the first source check: 39 MUJ/SMU baselines; the 12 Amity sources fail (see the deployment guide).
+9. Queued the 20 prepared article drafts for review; nothing was published.
+
+**Notes.**
+- The backup step was skipped (owner decision).
+- `unnatividya-crm-worker` was started once by mistake, looped because CRM sync is disabled, and was stopped. The guide now says not to start it.
+- `deploy/vps/*.log` is now git-ignored, so the cron logs don't show in `git status`.
+- The guide corrections and this entry are local, waiting for the next commit.

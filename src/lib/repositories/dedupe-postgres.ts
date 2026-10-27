@@ -315,9 +315,8 @@ export async function dismissDedupeMatchForTenant(user: TenantUser, matchId: str
 
 // The child tables repointed on merge, per entity type -- see migration 0057's header comment
 // for exactly which tables were deliberately left untouched (append-only ledgers, AuditLog,
-// AssignmentLog, AutomationExecution/Queue, and CustomFieldValue, whose live column names this
-// codebase's own defensive code -- inbuilt-reports.ts's listCustomFieldValuesForTenant, which
-// tries three different column-name variants -- shows are uncertain, not safe to blind-UPDATE).
+// AssignmentLog, AutomationExecution/Queue). CustomFieldValue is handled below, conflict-aware
+// (voice bot plan, custom fields on leads and opportunities, 2026-10-27).
 const REPOINT_TARGETS: Record<EntityType, Array<{ table: string; column: string; entityTypeColumn?: string; entityTypeValue?: string; cast?: string }>> = {
   CASE: [
     { table: "CaseComment", column: "caseId" },
@@ -407,6 +406,20 @@ async function repointChildRows(tenantId: string, entityType: EntityType, surviv
     [loserId, tenantId, entityType],
   );
   if (scoreDropped.length > 0) deleted.push({ table: "RecordScore", column: "recordId", ids: scoreDropped.map((r) => r.id) });
+
+  // Custom field values: the survivor keeps its own; a field only the merged-away record had a
+  // value for moves over (CustomFieldValue is unique per record and field). Recorded as
+  // repointed, so unmerging moves them back.
+  if (entityType === "LEAD" || entityType === "OPPORTUNITY") {
+    const valuesMoved = await query<{ id: string }>(
+      `update "CustomFieldValue" v set "recordId" = $1, "updatedAt" = now()
+       where v."tenantId" = $3 and v."recordId" = $2
+         and not exists (select 1 from "CustomFieldValue" x where x."tenantId" = $3 and x."recordId" = $1 and x."fieldDefinitionId" = v."fieldDefinitionId")
+       returning id`,
+      [survivorId, loserId, tenantId],
+    );
+    if (valuesMoved.length > 0) repointed.push({ table: "CustomFieldValue", column: "recordId", ids: valuesMoved.map((r) => r.id) });
+  }
 
   // RecordScoreHistory has no such uniqueness constraint -- every row just moves.
   const historyMoved = await query<{ id: string }>(

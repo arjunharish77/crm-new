@@ -14,6 +14,7 @@ export async function POST(request: Request) {
 
     const tenantId = body?.tenantId ? String(body.tenantId) : "";
     if (!tenantId) return badRequest("tenantId is required");
+    if (String(body?.provider ?? "").toLowerCase() === "plivo") return forbidden("Plivo events require the native signed callback endpoint");
 
     const auth = await verifyTelephonyWebhookRequest(tenantId, rawBody, {
       signature: request.headers.get("x-webhook-signature"),

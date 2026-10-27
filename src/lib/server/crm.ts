@@ -16,10 +16,13 @@ import { SmartViewTab } from "@/types/smart-views";
 import { formatExportDateValue, formatTenantDate, getTenantTimeZone } from "@/lib/server/date-format";
 import { getCurrentUserById } from "@/lib/repositories/auth-admin-postgres";
 import { enqueueImportJob } from "@/lib/server/job-queue";
+import { MAX_TRANSFER_ATTEMPTS, TRANSFER_LEASE_MS } from "@/lib/server/transfer-limits";
 import { assertSafeOutboundUrl } from "@/lib/server/outbound-request-guard";
 import { createUserNotification } from "@/lib/server/notifications";
 import { DatabaseError } from "@/lib/db/errors";
 import { applyRecordScopeClause, recordAccessLevel } from "@/lib/server/record-scope";
+import { fieldPermissionMap, maskFieldsForUser } from "@/lib/server/field-permissions";
+import { NO_REPORT_FILTERS, scopedRecordsSql, type ReportRecordKind } from "@/lib/server/report-scope";
 
 type TenantUser = {
   id: string;
@@ -187,47 +190,9 @@ function buildFieldDiff(before: Record<string, any> | null, after: Record<string
   return diff;
 }
 
-function fieldPermissionMap(user: TenantUser, module: "leads" | "opportunities" | "activities", typeId?: string | null) {
-  const role = user.role && typeof user.role === "object" ? user.role : null;
-  const legacy = role?.permissions?.fieldPermissions?.[module];
-  const next: Record<string, string> = legacy && typeof legacy === "object" ? { ...(legacy as Record<string, string>) } : {};
-  const baseScope = module === "leads" ? "lead" : module === "opportunities" ? "opportunity" : "activity";
-  const typeScope = typeId && module !== "leads" ? `${baseScope}:${typeId}` : null;
-  const templates = Array.isArray((user as any).permissionTemplates) ? (user as any).permissionTemplates : [];
-  for (const template of templates) {
-    const fieldPermissions = template?.permissions?.fieldPermissions;
-    if (!fieldPermissions || typeof fieldPermissions !== "object") continue;
-    const base = fieldPermissions[baseScope];
-    const typed = typeScope ? fieldPermissions[typeScope] : null;
-    if (base && typeof base === "object") Object.assign(next, base);
-    if (typed && typeof typed === "object") Object.assign(next, typed);
-  }
-  return next;
-}
-
-function maskFieldsForUser<T extends Record<string, any>>(user: TenantUser, module: "leads" | "opportunities" | "activities", record: T): T {
-  const permissions = fieldPermissionMap(user, module, record.opportunityTypeId ?? record.typeId ?? null);
-  const masked: Record<string, any> = { ...record };
-  for (const [field, access] of Object.entries(permissions)) {
-    if (access === "hidden" && field in masked) {
-      masked[field] = null;
-      masked[`${field}Hidden`] = true;
-    }
-  }
-  return masked as T;
-}
-
-function editablePayloadForUser(user: TenantUser, module: "leads" | "opportunities" | "activities", payload: Record<string, unknown>) {
-  const permissions = fieldPermissionMap(user, module, String(payload.opportunityTypeId ?? payload.typeId ?? ""));
-  const next = { ...payload };
-  for (const [field, access] of Object.entries(permissions)) {
-    if ((access === "hidden" || access === "readonly") && field in next) {
-      delete next[field];
-    }
-  }
-  return next;
-}
-
+// Field permissions (B10, wave 3): the shared module is the only implementation. Updates are
+// filtered inside the repositories (which also know the existing record's type); reads and
+// history use the same helpers.
 function normalizeEntityType(entityType: string) {
   return entityType.toUpperCase() as NoteEntityType;
 }
@@ -342,11 +307,6 @@ export async function getLeadStatusCountsForTenant(user: TenantUser) {
   return pgLeads.getLeadStatusCountsForTenant(user);
 }
 
-async function countLeadsForTenant(user: TenantUser, filters: LeadFilterInput[] | null = null) {
-  const result = await pgLeads.listLeadsForTenant(user, 1, 1, filters);
-  return result.meta.total;
-}
-
 export async function createLeadForTenant(user: TenantUser, payload: Record<string, unknown>, idempotencyKey?: string | null) {
   return pgLeads.createLeadForTenant(user, payload, idempotencyKey);
 }
@@ -360,7 +320,7 @@ export async function updateLeadForTenant(
   id: string,
   payload: Record<string, unknown>
 ) {
-  return pgLeads.updateLeadForTenant(user, id, editablePayloadForUser(user, "leads", payload));
+  return pgLeads.updateLeadForTenant(user, id, payload);
 }
 
 export async function deleteLeadsForTenant(user: TenantUser, ids: string[]) {
@@ -414,31 +374,9 @@ export async function listActivityTypesForTenant(user: TenantUser) {
   return pgActivities.listActivityTypesForTenant(user);
 }
 
-export async function ensureSystemActivityType(user: TenantUser, name: string, icon: string, color: string) {
-  const objectId = await getObjectId(user, "activity");
-  const existing = await queryOne<{ id: string }>(
-    `select id from "ActivityType" where name = $1 and ${user.tenantId ? '"tenantId" = $2' : '"tenantId" is null'} limit 1`,
-    user.tenantId ? [name, user.tenantId] : [name],
-  );
-  if (existing?.id) return existing.id;
-
-  // Round-2 plan B21: two requests creating the same type at once used to fail on the
-  // ("tenantId", name) unique key; the loser now reads the winner's row.
-  const now = new Date().toISOString();
-  const created = await queryOne<{ id: string }>(
-    `insert into "ActivityType" (id, "tenantId", "objectId", name, icon, color, "defaultOutcome", "defaultSLA", "order", "isActive", "createdAt", "updatedAt")
-     values ($1, $2, $3, $4, $5, $6, 'SUCCESS', null, 100, true, $7, $7)
-     on conflict ("tenantId", name) do nothing
-     returning id`,
-    [randomUUID(), user.tenantId, objectId, name, icon, color, now],
-  );
-  if (created?.id) return created.id;
-  const winner = await queryOne<{ id: string }>(
-    `select id from "ActivityType" where name = $1 and ${user.tenantId ? '"tenantId" = $2' : '"tenantId" is null'} limit 1`,
-    user.tenantId ? [name, user.tenantId] : [name],
-  );
-  if (!winner?.id) throw new Error("ACTIVITY_TYPE_INSERT_FAILED");
-  return winner.id;
+// System activity types (voice bot plan wave A): looked up by key, created on first use.
+export async function ensureSystemActivityType(user: TenantUser, key: pgActivities.SystemActivityKey) {
+  return pgActivities.ensureSystemActivityType(user, key);
 }
 
 export async function listActivitiesForTenant(
@@ -451,12 +389,12 @@ export async function listActivitiesForTenant(
   return pgActivities.listActivitiesForTenant(user, limit, filters, page, options);
 }
 
-export async function createActivityForTenant(user: TenantUser, payload: Record<string, unknown>) {
-  return pgActivities.createActivityForTenant(user, payload);
+export async function createActivityForTenant(user: TenantUser, payload: Record<string, unknown>, options: { system?: boolean } = {}) {
+  return pgActivities.createActivityForTenant(user, payload, options);
 }
 
 export async function updateActivityForTenant(user: TenantUser, id: string, payload: Record<string, unknown>) {
-  return pgActivities.updateActivityForTenant(user, id, editablePayloadForUser(user, "activities", payload));
+  return pgActivities.updateActivityForTenant(user, id, payload);
 }
 
 export async function getOpportunityStatsForTenant(user: TenantUser) {
@@ -491,7 +429,7 @@ export async function getGovernanceHistoryForTenant(
   // Fields hidden from this user by field permissions stay hidden in the history too.
   const historyModule = normalizedType === "LEAD" ? "leads" : normalizedType === "OPPORTUNITY" ? "opportunities" : null;
   const hiddenFields = historyModule
-    ? Object.entries(fieldPermissionMap(user as any, historyModule, historyTypeId)).filter(([, access]) => access === "hidden").map(([field]) => field)
+    ? Object.entries(fieldPermissionMap(user, historyModule, historyTypeId)).filter(([, access]) => access === "hidden").map(([field]) => field)
     : [];
   const stripHidden = (value: any) => {
     if (!hiddenFields.length || !value || typeof value !== "object" || Array.isArray(value)) return value;
@@ -500,7 +438,7 @@ export async function getGovernanceHistoryForTenant(
     return copy;
   };
   const data = await query<any>(
-    `select id, action, before, after, diff, "createdAt", "userId"
+    `select id, action, before, after, diff, "createdAt", "userId", metadata->'source' as source
      from "AuditLog"
      where "entityType" = $1 and "entityId" = $2 and ${user.tenantId ? '"tenantId" = $3' : '"tenantId" is null'}
      order by "createdAt" desc`,
@@ -530,6 +468,8 @@ export async function getGovernanceHistoryForTenant(
     action: item.action,
     createdAt: item.createdAt,
     user: userMap.get(item.userId) ?? { name: "Unknown User", email: "" },
+    // A change made on someone's behalf, such as a voice bot copying its answers (wave E).
+    source: item.source && typeof item.source === "object" ? { kind: String(item.source.kind ?? ""), label: String(item.source.label ?? "") } : null,
     valueLabels: {
       stages: Object.fromEntries(stageMap),
       opportunityTypes: Object.fromEntries(opportunityTypeMap),
@@ -870,29 +810,23 @@ export async function getDashboardWidgetDataForTenant(user: TenantUser, id: stri
 
   if (widget.type === "STAT") {
     if (moduleName === "LEADS") {
-      const leads = await listLeadsForTenant(user, 1, 500);
-      if (!activeFilter) return metric === "COUNT" ? leads.meta.total : leads.meta.total;
-      return leads.data.filter((item: any) => String((item as any)[activeFilter.field] ?? "Unknown") === activeFilter.value).length;
+      if (!activeFilter) return countWidgetRecords(user, "lead");
+      const field = leadWidgetField(user, activeFilter.field);
+      return countWidgetRecords(user, "lead", (bind) => `coalesce(${field}, 'Unknown') = ${bind(activeFilter.value)}`);
     }
 
     if (moduleName === "OPPORTUNITIES") {
-      const opportunities = await listOpportunitiesForTenant(user, 500);
-      return opportunities.data.filter((item: any) => {
-        const stage = item.stage;
-        const filters = (widget.config as any)?.filters?.stage;
-        if (filters) {
-          if (filters.isWon === false && stage?.isWon) return false;
-          if (filters.isLost === false && stage?.isClosed && !stage?.isWon) return false;
-        }
-        if (activeFilter && String(stage?.name ?? "Unassigned") !== activeFilter.value) return false;
-        return true;
-      }).length;
+      const stageFilters = (widget.config as any)?.filters?.stage;
+      return countWidgetRecords(user, "opportunity", (bind) => {
+        const conditions = ["true"];
+        if (stageFilters?.isWon === false) conditions.push(`not coalesce(sd."isWon", false)`);
+        if (stageFilters?.isLost === false) conditions.push(`not (coalesce(sd."isClosed", false) and not coalesce(sd."isWon", false))`);
+        if (activeFilter) conditions.push(`coalesce(sd.name, 'Unassigned') = ${bind(activeFilter.value)}`);
+        return conditions.join(" and ");
+      });
     }
 
-    if (moduleName === "ACTIVITIES") {
-      const activities = await listActivitiesForTenant(user, 500, null);
-      return activities.meta.total;
-    }
+    if (moduleName === "ACTIVITIES") return countWidgetRecords(user, "activity");
 
     return 0;
   }
@@ -910,23 +844,26 @@ export async function getDashboardWidgetDataForTenant(user: TenantUser, id: stri
   // decorated rows (`opportunity.lead`/`opportunity.stage` are joined in-memory there already),
   // the same source this widget's own BAR/FUNNEL siblings already read from.
   if (widget.type === "SANKEY") {
-    const opportunities = await listOpportunitiesForTenant(user, 500);
-    const sourceNames: string[] = [];
-    const stageNames: string[] = [];
-    const flowCounts = new Map<string, number>();
-    for (const item of opportunities.data as any[]) {
-      const source = item.lead?.source ?? "Unknown";
-      const stage = item.stage?.name ?? "Unassigned";
-      if (!sourceNames.includes(source)) sourceNames.push(source);
-      if (!stageNames.includes(stage)) stageNames.push(stage);
-      const key = `${source} ${stage}`;
-      flowCounts.set(key, (flowCounts.get(key) ?? 0) + 1);
-    }
+    // Counted in SQL over every visible opportunity (wave 3, B1); nodes keep their old order (most
+    // recent first).
+    const scoped = await scopedRecordsSql(user, "opportunity", NO_REPORT_FILTERS, `"leadId", "stageId", "createdAt"`);
+    const flows = await query<{ source: string; stage: string; value: number; lastAt: string }>(
+      `select coalesce(l.source, 'Unknown') as source, coalesce(sd.name, 'Unassigned') as stage, count(*)::int as value, max(o."createdAt") as "lastAt"
+       from (${scoped.sql}) o
+       left join "Lead" l on l.id = o."leadId"
+       left join "StageDefinition" sd on sd.id = o."stageId"
+       group by 1, 2`,
+      scoped.values,
+    );
+    const latestFirst = (key: "source" | "stage") => {
+      const latest = new Map<string, number>();
+      for (const flow of flows) latest.set(flow[key], Math.max(latest.get(flow[key]) ?? 0, new Date(flow.lastAt).getTime()));
+      return [...latest.entries()].sort((a, b) => b[1] - a[1]).map(([name]) => name);
+    };
+    const sourceNames = latestFirst("source");
+    const stageNames = latestFirst("stage");
     const nodes = [...sourceNames, ...stageNames].map((name) => ({ name }));
-    const links = [...flowCounts.entries()].map(([key, value]) => {
-      const [source, stage] = key.split(" ");
-      return { source: sourceNames.indexOf(source), target: sourceNames.length + stageNames.indexOf(stage), value };
-    });
+    const links = flows.map((flow) => ({ source: sourceNames.indexOf(flow.source), target: sourceNames.length + stageNames.indexOf(flow.stage), value: flow.value }));
     return { nodes, links };
   }
 
@@ -959,29 +896,22 @@ export async function getDashboardWidgetDataForTenant(user: TenantUser, id: stri
       return activityStats.trend.map((item) => ({ group: item.date, value: item.count }));
     }
 
-    const days = Array.from({ length: 7 }).map((_, index) => {
-      const current = new Date();
-      current.setDate(current.getDate() - (6 - index));
-      return formatTenantDate(current, timeZone);
-    });
+    // The last 7 days in the workspace's time zone (the server's local date arithmetic picked the
+    // days before), counted in SQL over every visible record (the newest 500 before).
+    const today = new Date(`${new Intl.DateTimeFormat("en-CA", { timeZone, year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date())}T12:00:00Z`);
+    const days = Array.from({ length: 7 }).map((_, index) => formatTenantDate(new Date(today.getTime() - (6 - index) * 86_400_000), "UTC"));
 
-    if (moduleName === "LEADS") {
-      const leads = await listLeadsForTenant(user, 1, 500);
-      const counts = new Map<string, number>();
-      leads.data.forEach((item: any) => {
-        const key = formatTenantDate(item.createdAt, timeZone);
-        counts.set(key, (counts.get(key) ?? 0) + 1);
-      });
-      return days.map((day) => ({ group: day, value: counts.get(day) ?? 0 }));
-    }
-
-    if (moduleName === "OPPORTUNITIES") {
-      const opportunities = await listOpportunitiesForTenant(user, 500);
-      const counts = new Map<string, number>();
-      opportunities.data.forEach((item: any) => {
-        const key = formatTenantDate(item.createdAt, timeZone);
-        counts.set(key, (counts.get(key) ?? 0) + 1);
-      });
+    if (moduleName === "LEADS" || moduleName === "OPPORTUNITIES") {
+      const scoped = await scopedRecordsSql(user, moduleName === "LEADS" ? "lead" : "opportunity", NO_REPORT_FILTERS, '"createdAt"');
+      const tz = scoped.values.length + 1;
+      const rows = await query<{ day: string; count: number }>(
+        `select to_char(("createdAt" at time zone $${tz})::date, 'DD/MM/YYYY') as day, count(*)::int as count
+         from (${scoped.sql}) r
+         where "createdAt" >= ((now() at time zone $${tz})::date - 6)::timestamp at time zone $${tz}
+         group by 1`,
+        [...scoped.values, timeZone],
+      );
+      const counts = new Map(rows.map((row) => [row.day, row.count]));
       return days.map((day) => ({ group: day, value: counts.get(day) ?? 0 }));
     }
   }
@@ -1016,33 +946,32 @@ export async function getDashboardWidgetDataForTenant(user: TenantUser, id: stri
 
   if (widget.type === "BAR") {
     if (moduleName === "LEADS") {
-      const leads = await listLeadsForTenant(user, 1, 500);
-      const groupBy = String((widget.config as any)?.groupBy ?? "status");
-      const rows = activeFilter ? leads.data.filter((item: any) => String((item as any)[activeFilter.field] ?? "Unknown") === activeFilter.value) : leads.data;
-      const counts = new Map<string, number>();
-      rows.forEach((item: any) => {
-        const key = groupBy === "source" ? item.source ?? "Unknown" : item.status ?? "Unknown";
-        counts.set(key, (counts.get(key) ?? 0) + 1);
-      });
-      return [...counts.entries()].map(([group, value]) => ({ group, value }));
+      // Counted in SQL over every visible lead (the newest 500 before), most recent group first.
+      const groupField = leadWidgetField(user, String((widget.config as any)?.groupBy ?? "status") === "source" ? "source" : "status");
+      const scoped = await scopedRecordsSql(user, "lead", NO_REPORT_FILTERS, `status, source, "createdAt"`);
+      const values = [...scoped.values];
+      const filter = activeFilter ? ` where coalesce(${leadWidgetField(user, activeFilter.field)}, 'Unknown') = $${values.push(activeFilter.value)}` : "";
+      return query<{ group: string; value: number }>(
+        `select coalesce(${groupField}, 'Unknown') as "group", count(*)::int as value from (${scoped.sql}) l${filter} group by 1 order by max("createdAt") desc`,
+        values,
+      );
     }
 
     if (moduleName === "OPPORTUNITIES") {
       // Computed inline (rather than delegating to getOpportunityStatsForTenant, which BAR used
       // before) so the active cross-filter can narrow the same raw rows STAT uses -- the result
       // is identical to before when no filter is active, since BAR only ever consumed `.count`.
-      const opportunities = await listOpportunitiesForTenant(user, 500);
-      const rows = activeFilter ? opportunities.data.filter((item: any) => String(item.stage?.name ?? "Unassigned") === activeFilter.value) : opportunities.data;
-      const counts = new Map<string, number>();
-      const order = new Map<string, number>();
-      rows.forEach((item: any) => {
-        const key = item.stage?.name ?? "Unassigned";
-        counts.set(key, (counts.get(key) ?? 0) + 1);
-        if (!order.has(key)) order.set(key, item.stage?.order ?? Number.MAX_SAFE_INTEGER);
-      });
-      return [...counts.entries()]
-        .sort((a, b) => (order.get(a[0]) ?? 0) - (order.get(b[0]) ?? 0))
-        .map(([group, value]) => ({ group, value }));
+      // Counted in SQL over every visible opportunity (the newest 500 before), in stage order.
+      const scoped = await scopedRecordsSql(user, "opportunity", NO_REPORT_FILTERS, '"stageId"');
+      const values = [...scoped.values];
+      const filter = activeFilter ? ` where coalesce(sd.name, 'Unassigned') = $${values.push(activeFilter.value)}` : "";
+      const rows = await query<{ group: string; value: number; order: number }>(
+        `select coalesce(sd.name, 'Unassigned') as "group", count(*)::int as value, min(coalesce(sd."order", ${Number.MAX_SAFE_INTEGER}))::float8 as "order"
+         from (${scoped.sql}) o left join "StageDefinition" sd on sd.id = o."stageId"${filter}
+         group by 1`,
+        values,
+      );
+      return rows.sort((a, b) => Number(a.order) - Number(b.order)).map(({ group, value }) => ({ group, value }));
     }
 
     if (moduleName === "ACTIVITIES") {
@@ -1182,13 +1111,39 @@ async function getReportBackedWidgetData(user: TenantUser, widget: any) {
   return widget.type === "STAT" ? 0 : [];
 }
 
+// --- Dashboard widgets counted in SQL (round-2 plan wave 3, B1) ---
+// Every record the viewer can see (record access, as the lists), not the newest 500. A field the
+// viewer's field permissions hide counts as empty ("Unknown"), the same as the masked list rows.
+const LEAD_WIDGET_FIELDS = new Set(["status", "source"]);
+
+function leadWidgetField(user: TenantUser, field: string) {
+  if (!LEAD_WIDGET_FIELDS.has(field) || fieldPermissionMap(user, "leads", null)[field] === "hidden") return "null::text";
+  return `"${field}"`;
+}
+
+async function countWidgetRecords(user: TenantUser, kind: ReportRecordKind, condition?: (bind: (value: unknown) => string) => string) {
+  const scoped = await scopedRecordsSql(user, kind, NO_REPORT_FILTERS, kind === "opportunity" ? '"stageId"' : "id");
+  const values = [...scoped.values];
+  const bind = (value: unknown) => `$${values.push(value)}`;
+  const where = condition ? ` where ${condition(bind)}` : "";
+  const join = kind === "opportunity" ? ' left join "StageDefinition" sd on sd.id = r."stageId"' : "";
+  const row = await queryOne<{ count: number }>(`select count(*)::int as count from (${scoped.sql}) r${join}${where}`, values);
+  return row?.count ?? 0;
+}
+
+async function visibleRecordScores(user: TenantUser, kind: "lead" | "opportunity") {
+  const scoped = await scopedRecordsSql(user, kind, NO_REPORT_FILTERS, "id");
+  const recordType = kind === "lead" ? "LEAD" : "OPPORTUNITY";
+  return query<any>(
+    `select rs."scoreBand", rs."fitScore", rs."stallRisk", rs."conversionProbability"
+     from (${scoped.sql}) r join "RecordScore" rs on rs."recordId" = r.id and rs."recordType" = '${recordType}' and rs."tenantId" ${user.tenantId ? `= $${scoped.values.length + 1}` : "is null"}`,
+    user.tenantId ? [...scoped.values, user.tenantId] : scoped.values,
+  );
+}
+
 async function getPredictiveScoringWidgetData(user: TenantUser, widgetType: string, metric: string) {
-  const [leads, opportunities] = await Promise.all([
-    listLeadsForTenant(user, 1, 5000),
-    listOpportunitiesForTenant(user, 5000),
-  ]);
-  const leadScores = leads.data.map((lead: any) => lead.predictiveScore).filter(Boolean);
-  const opportunityScores = opportunities.data.map((opportunity: any) => opportunity.predictiveScore).filter(Boolean);
+  // Every visible record's score (it asked for 5,000 records and got 1,000 before wave 3).
+  const [leadScores, opportunityScores] = await Promise.all([visibleRecordScores(user, "lead"), visibleRecordScores(user, "opportunity")]);
   const allScores = [...leadScores, ...opportunityScores];
 
   const countByBand = (scores: any[]) => {
@@ -1611,7 +1566,7 @@ export async function ingestWebsiteVisitForTenant(input: Record<string, unknown>
   if (!trackingUser) return { tracked: false, reason: "NO_ACTIVE_USER" };
   const user: TenantUser = trackingUser;
 
-  const typeId = await ensureSystemActivityType(user, "Page Visit", "Globe", "#0ea5e9");
+  const typeId = await ensureSystemActivityType(user, "PAGE_VISIT");
   const pageUrl = String(input.url ?? "");
   const title = input.title ? String(input.title) : "Website visit";
   const referrer = input.referrer ? `\nReferrer: ${input.referrer}` : "";
@@ -1621,7 +1576,7 @@ export async function ingestWebsiteVisitForTenant(input: Record<string, unknown>
     leadId: lead.id,
     outcome: "SUCCESS",
     notes,
-  });
+  }, { system: true });
 
   // The tracking script (src/app/api/tracking/script/route.ts) has always sent these,
   // but until now nothing here read them -- captured UTM params were silently dropped
@@ -1651,9 +1606,21 @@ function normalizeImportModule(module: string | undefined): ImportModule {
   throw new Error("UNSUPPORTED_IMPORT_MODULE");
 }
 
+// A column mapped to "customFields.<key>" fills that custom field (saved with the record).
+function nestCustomFieldTargets(mapped: Record<string, unknown>) {
+  const customFields: Record<string, unknown> = {};
+  for (const key of Object.keys(mapped)) {
+    if (!key.startsWith("customFields.")) continue;
+    customFields[key.slice("customFields.".length)] = mapped[key];
+    delete mapped[key];
+  }
+  if (Object.keys(customFields).length) mapped.customFields = customFields;
+  return mapped;
+}
+
 function mapImportRow(row: Record<string, unknown>, mappings: ImportMapping[] | undefined) {
   if (!Array.isArray(mappings) || mappings.length === 0) {
-    return Object.fromEntries(Object.entries(row).filter(([key, value]) => key.trim() && value !== ""));
+    return nestCustomFieldTargets(Object.fromEntries(Object.entries(row).filter(([key, value]) => key.trim() && value !== "")));
   }
 
   const mapped: Record<string, unknown> = {};
@@ -1662,7 +1629,7 @@ function mapImportRow(row: Record<string, unknown>, mappings: ImportMapping[] | 
     const value = row[mapping.source];
     if (value !== undefined && value !== "") mapped[mapping.target] = value;
   }
-  return mapped;
+  return nestCustomFieldTargets(mapped);
 }
 
 async function findDuplicateForImport(user: TenantUser, module: ImportModule, payload: Record<string, unknown>) {
@@ -1711,7 +1678,13 @@ async function updateImportedRecord(user: TenantUser, module: ImportModule, id: 
   const updatePayload = Object.fromEntries(
     Object.entries(payload).filter(([key, value]) => allowedFields.has(key) && value !== undefined)
   );
-  if (Object.keys(updatePayload).length === 0) return { id, updated: false };
+  const customFields = payload.customFields && typeof payload.customFields === "object" ? payload.customFields as Record<string, unknown> : null;
+  if (Object.keys(updatePayload).length === 0 && !customFields) return { id, updated: false };
+  if (Object.keys(updatePayload).length === 0) {
+    await saveImportedCustomFields(user, module, id, customFields);
+    await createAuditLog(user, "UPDATE", module, id, null, null, { customFields });
+    return { id, updated: true };
+  }
 
   const values: unknown[] = [];
   const assignments = Object.entries({ ...updatePayload, updatedAt: new Date().toISOString() }).map(([key, value]) => {
@@ -1729,12 +1702,28 @@ async function updateImportedRecord(user: TenantUser, module: ImportModule, id: 
     values,
   );
   if (!data) throw new Error("IMPORT_UPDATE_TARGET_NOT_FOUND");
-  await createAuditLog(user, "UPDATE", module, id, null, null, updatePayload);
+  await saveImportedCustomFields(user, module, id, customFields);
+  await createAuditLog(user, "UPDATE", module, id, null, null, customFields ? { ...updatePayload, customFields } : updatePayload);
   return { id: data.id, updated: true };
 }
 
+// An import that updates an existing record saves its custom field columns too (the record's own
+// type decides which type-specific fields apply). Hidden or read-only fields are skipped.
+async function saveImportedCustomFields(user: TenantUser, module: ImportModule, id: string, values: Record<string, unknown> | null) {
+  if (!values || !user.tenantId) return;
+  const { saveCustomFieldValues } = await import("@/lib/repositories/custom-field-values-postgres");
+  const { sanitizeWritePayload } = await import("@/lib/server/field-permissions");
+  const typeRow = module === "LEAD" ? null : await queryOne<{ typeId: string | null }>(
+    module === "OPPORTUNITY" ? `select "opportunityTypeId" as "typeId" from "Opportunity" where id = $1 and "tenantId" = $2` : `select "typeId" from "Activity" where id = $1 and "tenantId" = $2`,
+    [id, user.tenantId],
+  );
+  const permissionModule = module === "LEAD" ? "leads" : module === "OPPORTUNITY" ? "opportunities" : "activities";
+  const allowed = sanitizeWritePayload(user, permissionModule, values, typeRow?.typeId ?? null).sanitized;
+  await saveCustomFieldValues(user.tenantId, module, id, typeRow?.typeId ?? null, allowed);
+}
+
 async function createImportedRecord(user: TenantUser, module: ImportModule, payload: Record<string, unknown>) {
-  if (module === "LEAD") return createLeadForTenant(user, payload);
+  if (module === "LEAD") return createLeadForTenant({ ...user, bulkCreate: true } as TenantUser, payload);
   if (module === "OPPORTUNITY") return createOpportunityForTenant(user, payload);
   return createActivityForTenant(user, payload);
 }
@@ -1884,15 +1873,24 @@ export async function cancelImportJob(user: TenantUser, jobId: string) {
 // WP07 (F04): BACKGROUND_JOB, disposition B -- its one caller is the worker's own
 // "imports.process" dynamic job, with no ambient tenant context; the ImportJob row is claimed
 // by id alone, tenant unknown until the row resolves it.
+// Round-2 plan wave 3, B4: an import holds a lease while it runs and saves its progress every 25
+// rows. If the worker stops part-way, the lease runs out and transfers.recoverStale queues it
+// again; the next run picks up from the saved row instead of finding it "processing" and giving
+// up (which left it stuck forever). After MAX_TRANSFER_ATTEMPTS it is marked failed instead.
 export async function processImportJob(importJobId: string) {
   const claimed = await queryOneAsSystem<any>(
     `update "ImportJob"
-     set status = 'PROCESSING', "updatedAt" = $1
-     where id = $2 and status = 'QUEUED'
-     returning id, "tenantId", "userId", module, mapping, rows`,
-    [new Date().toISOString(), importJobId],
+     set status = 'PROCESSING', attempts = attempts + 1, "leaseExpiresAt" = now() + ($3 || ' milliseconds')::interval, "updatedAt" = $1
+     where id = $2 and (status = 'QUEUED' or (status = 'PROCESSING' and "leaseExpiresAt" < now()))
+     returning id, "tenantId", "userId", module, mapping, rows, progress, attempts`,
+    [new Date().toISOString(), importJobId, String(TRANSFER_LEASE_MS)],
   );
   if (!claimed) return null;
+  const attempt = Number(claimed.attempts);
+  if (attempt > MAX_TRANSFER_ATTEMPTS) {
+    await failStaleImportJob(importJobId, attempt);
+    return null;
+  }
 
   const requester = await getCurrentUserById(claimed.userId);
   const user: TenantUser = requester ? (requester as TenantUser) : { id: claimed.userId, tenantId: claimed.tenantId };
@@ -1901,16 +1899,33 @@ export async function processImportJob(importJobId: string) {
   const mappings: ImportMapping[] | undefined = claimed.mapping?.fields;
   const duplicateMode: "SKIP" | "UPDATE" | "CREATE" = claimed.mapping?.duplicateMode ?? "SKIP";
 
-  const rowErrors: Array<{ row: number; message: string }> = [];
-  let created = 0;
-  let updated = 0;
-  let skipped = 0;
+  // A resumed run continues from the saved row with the counts so far.
+  const saved = claimed.progress && typeof claimed.progress === "object" ? claimed.progress : {};
+  const startIndex = Math.max(0, Math.min(rows.length, Number(saved.next ?? 0) || 0));
+  const rowErrors: Array<{ row: number; message: string }> = Array.isArray(saved.errors) ? saved.errors : [];
+  let created = Number(saved.created ?? 0) || 0;
+  let updated = Number(saved.updated ?? 0) || 0;
+  let skipped = Number(saved.skipped ?? 0) || 0;
   let cancelled = false;
 
-  for (const [index, row] of rows.entries()) {
+  // Saves progress and renews the lease; false when another run has taken this job over.
+  const checkpoint = async (next: number) => {
+    const row = await queryOneAsSystem<{ cancelRequested: boolean }>(
+      `update "ImportJob"
+       set progress = $2, "leaseExpiresAt" = now() + ($4 || ' milliseconds')::interval, "updatedAt" = now()
+       where id = $1 and status = 'PROCESSING' and attempts = $3
+       returning "cancelRequested"`,
+      [importJobId, jsonbParam({ next, created, updated, skipped, errors: rowErrors }), attempt, String(TRANSFER_LEASE_MS)],
+    );
+    return row;
+  };
+
+  for (let index = startIndex; index < rows.length; index++) {
+    const row = rows[index];
     if (index % 25 === 0) {
-      const current = await queryOneAsSystem<{ cancelRequested: boolean }>(`select "cancelRequested" from "ImportJob" where id = $1`, [importJobId]);
-      if (current?.cancelRequested) {
+      const current = await checkpoint(index);
+      if (!current) return null; // lost the lease to a newer run
+      if (current.cancelRequested) {
         cancelled = true;
         break;
       }
@@ -1940,12 +1955,12 @@ export async function processImportJob(importJobId: string) {
 
   const data = await queryOne<any>(
     `update "ImportJob"
-     set status = $1, stats = $2, errors = $3, rows = null, "updatedAt" = $4
-     where id = $5
+     set status = $1, stats = $2, errors = $3, rows = null, progress = null, "leaseExpiresAt" = null, "updatedAt" = $4
+     where id = $5 and attempts = $6
      returning ${IMPORT_JOB_COLUMNS}`,
-    [finalStatus, jsonbParam(stats), jsonbParam(rowErrors), new Date().toISOString(), importJobId],
+    [finalStatus, jsonbParam(stats), jsonbParam(rowErrors), new Date().toISOString(), importJobId, attempt],
   );
-  if (!data) throw new Error("IMPORT_JOB_NOT_FOUND");
+  if (!data) return null; // a newer run took over and will finish it
   await createAuditLog(user, "UPDATE", "IMPORT_JOB", importJobId, null, data, stats);
   await createUserNotification({
     tenantId: claimed.tenantId,
@@ -1955,6 +1970,29 @@ export async function processImportJob(importJobId: string) {
     data: { type: "imports.process", importJobId, stats },
   }).catch(() => undefined);
   return data;
+}
+
+// An import that ran out of attempts: failed, with the counts it reached, and the requester told.
+export async function failStaleImportJob(importJobId: string, attempts: number) {
+  const job = await queryOneAsSystem<any>(
+    `update "ImportJob"
+     set status = 'FAILED', "leaseExpiresAt" = null, "updatedAt" = now(),
+         stats = jsonb_build_object('total', coalesce(jsonb_array_length(rows), 0), 'processed', coalesce((progress->>'next')::int, 0),
+                                    'created', coalesce((progress->>'created')::int, 0), 'updated', coalesce((progress->>'updated')::int, 0),
+                                    'skipped', coalesce((progress->>'skipped')::int, 0), 'failed', coalesce(jsonb_array_length(progress->'errors'), 0)),
+         errors = coalesce(progress->'errors', '[]'::jsonb) || jsonb_build_array(jsonb_build_object('row', 0, 'message', $2::text))
+     where id = $1 and status = 'PROCESSING'
+     returning "tenantId", "userId", module`,
+    [importJobId, `The import stopped ${attempts - 1} times part-way and was not finished. Rows before the stop were imported.`],
+  );
+  if (!job) return;
+  await createUserNotification({
+    tenantId: job.tenantId,
+    userId: job.userId,
+    title: "Import failed",
+    message: `${job.module} import stopped part-way and could not be finished. Check the import's results before running it again.`,
+    data: { type: "imports.process", importJobId, failed: true },
+  }).catch(() => undefined);
 }
 
 export async function listImportTemplatesForTenant(user: TenantUser) {
@@ -2113,8 +2151,39 @@ export async function saveTelephonySettingsForTenant(user: TenantUser, config: R
   // rotateTelephonyWebhookSecret -- always preserved here regardless of what the client sends,
   // so a general settings save (e.g. changing the Provider field) can never blow away the
   // live secret with a stale or absent value.
-  const mergedConfig = {
-    ...config,
+  const { plivoAuthToken, plivoAuthTokenEncrypted: _clientCiphertext, hasPlivoAuthToken: _clientFlag, ...safeConfig } = config;
+  const { encryptSecretAtRest } = await import("@/lib/server/secret-encryption");
+  const encryptedToken = typeof plivoAuthToken === "string" && plivoAuthToken.trim()
+    ? encryptSecretAtRest(plivoAuthToken.trim())
+    : existing.config?.plivoAuthTokenEncrypted ?? null;
+  if (String(safeConfig.provider ?? "").toLowerCase() === "plivo") {
+    // Plivo numbers are saved in E.164 (+91...), so what the settings show is what Plivo dials.
+    const { normalizePhone, plivoCountryCode } = await import("@/lib/server/plivo");
+    const countryCodeInput = String(safeConfig.plivoDefaultCountryCode ?? "").trim();
+    if (countryCodeInput && !/^\+?\d{1,3}$/.test(countryCodeInput)) throw new Error("PLIVO_COUNTRY_CODE_INVALID");
+    safeConfig.plivoDefaultCountryCode = plivoCountryCode({ plivoDefaultCountryCode: countryCodeInput });
+    const countryCode = String(safeConfig.plivoDefaultCountryCode);
+    for (const key of ["inboundNumber", "outboundCallerId", "defaultAgentNumber"] as const) {
+      const value = String(safeConfig[key] ?? "").trim();
+      if (!value) { safeConfig[key] = ""; continue; }
+      const normalized = normalizePhone(value, countryCode);
+      if (!normalized) throw new Error("PLIVO_PHONE_INVALID");
+      safeConfig[key] = normalized;
+    }
+    const ringTimeout = String(safeConfig.plivoRingTimeoutSeconds ?? "").trim();
+    if (ringTimeout && !(Number.isInteger(Number(ringTimeout)) && Number(ringTimeout) >= 10 && Number(ringTimeout) <= 120)) throw new Error("PLIVO_RING_TIMEOUT_INVALID");
+    safeConfig.plivoRingTimeoutSeconds = ringTimeout ? Number(ringTimeout) : 30;
+    safeConfig.plivoUnavailableMessage = String(safeConfig.plivoUnavailableMessage ?? "").trim().slice(0, 500);
+    if (Boolean(config.isActive)) {
+      if (!safeConfig.plivoAuthId || !encryptedToken) throw new Error("PLIVO_CREDENTIALS_MISSING");
+      if (!safeConfig.outboundCallerId && !safeConfig.inboundNumber) throw new Error("PLIVO_CALLER_ID_MISSING");
+      if (!safeConfig.defaultAgentNumber) throw new Error("PLIVO_DEFAULT_AGENT_MISSING");
+      if ([safeConfig.inboundNumber, safeConfig.outboundCallerId].includes(safeConfig.defaultAgentNumber)) throw new Error("PLIVO_AGENT_NUMBER_CANNOT_BE_PLIVO_NUMBER");
+    }
+  }
+  const mergedConfig: Record<string, unknown> = {
+    ...safeConfig,
+    plivoAuthTokenEncrypted: encryptedToken,
     webhookSecret: existing.config?.webhookSecret ?? null,
     previousWebhookSecret: existing.config?.previousWebhookSecret ?? null,
     previousWebhookSecretExpiresAt: existing.config?.previousWebhookSecretExpiresAt ?? null,
@@ -2137,7 +2206,7 @@ export async function saveTelephonySettingsForTenant(user: TenantUser, config: R
         [randomUUID(), user.tenantId, mergedConfig, Boolean(config.isActive), asUuidOrNull(user.id), now],
       );
   if (!data) throw new Error("TELEPHONY_SETTINGS_SAVE_FAILED");
-  await createAuditLog(user, "UPDATE", "INTEGRATION_SETTING", data.id, null, data, { type: "TELEPHONY" });
+  await createAuditLog(user, "UPDATE", "INTEGRATION_SETTING", data.id, null, { id: data.id, type: "TELEPHONY", isActive: data.isActive, provider: mergedConfig.provider }, { type: "TELEPHONY" });
   return data;
 }
 
@@ -2159,7 +2228,7 @@ export async function listTelephonyCallLogsForTenant(user: TenantUser, limit = 1
 export async function createTelephonyCallLogForTenant(user: TenantUser, input: Record<string, unknown>) {
   await assertTenantModule(user, "TELEPHONY");
   const now = new Date().toISOString();
-  const callTypeId = await ensureSystemActivityType(user, "Call", "Phone", "#3b82f6");
+  const callTypeId = await ensureSystemActivityType(user, "CALL");
   let activityId: string | null = null;
 
   if (input.leadId || input.opportunityId) {
@@ -2175,7 +2244,7 @@ export async function createTelephonyCallLogForTenant(user: TenantUser, input: R
         input.duration ? `Duration: ${input.duration}s` : null,
         input.recordingUrl ? `Recording: ${input.recordingUrl}` : null,
       ].filter(Boolean).join("\n"),
-    });
+    }, { system: true });
     activityId = activity.id;
   }
 
@@ -2268,6 +2337,8 @@ export async function buildClickToCallPayloadForTenant(user: TenantUser, input: 
   let providerResponse: Record<string, unknown> | null = null;
   let executed = false;
   let success = false;
+  let providerCallId: string | null = null;
+  let callLogId: string | null = null;
 
   // Compliance gate: DND suppression, per-record consent opt-out, and tenant-configured
   // quiet hours -- checked immediately before dialing, never after, so a blocked number never
@@ -2286,6 +2357,46 @@ export async function buildClickToCallPayloadForTenant(user: TenantUser, input: 
 
   if (complianceBlockReason) {
     providerResponse = { blocked: true, reason: complianceBlockReason };
+  } else if (String(config.provider).toLowerCase() === "plivo" && input.execute !== false) {
+    executed = true;
+    try {
+      if (!user.tenantId || !(settings as any)?.isActive) throw new Error("PLIVO_NOT_ACTIVE");
+      const tenantId = user.tenantId;
+      const plivo = await import("@/lib/server/plivo");
+      const { recordTelephonyCallEvent } = await import("@/lib/server/telephony-webhook");
+      const countryCode = plivo.plivoCountryCode(config);
+      // The caller's own phone (their User-Agent Mapping entry, else their profile phone), else
+      // the default agent phone.
+      const agentNumber = plivo.plivoAgentPhoneForUser(config, user.id, (user as any).phone) ?? plivo.plivoDefaultAgentTarget(config);
+      if (!agentNumber) throw new Error("PLIVO_AGENT_NUMBER_MISSING");
+      const customerNumber = plivo.normalizePhone(phoneNumber, countryCode);
+      if (!customerNumber) throw new Error("PLIVO_PHONE_INVALID");
+      // Logged before Plivo is asked to dial, so the callbacks (which can arrive within a
+      // second) always find the call. Plivo's URLs carry this ID, never the phone numbers.
+      const callId = randomUUID();
+      const log = await recordTelephonyCallEvent(tenantId, {
+        provider: "plivo", callId, direction: "OUTBOUND",
+        fromNumber: plivo.normalizePhone(config.outboundCallerId || config.inboundNumber, countryCode),
+        toNumber: customerNumber, status: "dialing", leadId, opportunityId, agentId: user.id,
+        metadata: { source: "click-to-call", triggeredBy: user.id, agentPhone: agentNumber },
+      }, user);
+      callLogId = log?.id ?? null;
+      try {
+        const result = await plivo.startPlivoCall(tenantId, config, agentNumber, customerNumber, callId);
+        providerCallId = result.requestUuid;
+        if (callLogId) await execute(`update "TelephonyCallLog" set metadata = coalesce(metadata, '{}'::jsonb) || $1::jsonb where id = $2 and "tenantId" = $3`, [{ requestUuid: result.requestUuid }, callLogId, tenantId]);
+      } catch (error: any) {
+        await recordTelephonyCallEvent(tenantId, {
+          provider: "plivo", callId, status: "failed", endedAt: new Date().toISOString(),
+          metadata: { outcomeReason: "PLIVO_REQUEST_FAILED", error: String(error?.message ?? "Plivo call failed").slice(0, 200) },
+        }, user).catch(() => undefined);
+        throw error;
+      }
+      providerResponse = { requestUuid: providerCallId };
+      success = true;
+    } catch (error: any) {
+      providerResponse = { error: error?.message ?? "Plivo call failed" };
+    }
   } else if (url && input.execute !== false) {
     executed = true;
     try {
@@ -2303,26 +2414,26 @@ export async function buildClickToCallPayloadForTenant(user: TenantUser, input: 
   // happening -- no TelephonyCallLog row, no Activity -- unless the provider's own webhook
   // later fired (and given how weak that webhook's auth was before this pass, a
   // misconfigured/absent webhook silently lost that history entirely). Every click-to-call
-  // invocation now logs a real attempt row immediately, regardless of whether the provider
+  // actual invocation now logs a real attempt row immediately, regardless of whether the provider
   // request itself succeeded, so "a rep tried to call this number at this time" is always
   // answerable. A later webhook event for the same callId (if the provider sends one) updates
   // this same row via recordTelephonyCallEvent's upsert instead of creating a second one.
-  let callLogId: string | null = null;
-  try {
+  // A Plivo call has already logged its own row above.
+  if (input.execute !== false && !callLogId) try {
     if (!user.tenantId) throw new Error("TENANT_REQUIRED");
     const { recordTelephonyCallEvent } = await import("@/lib/server/telephony-webhook");
     const log = await recordTelephonyCallEvent(
       user.tenantId,
       {
         provider: config.provider || "click-to-call",
-        callId: `manual-${randomUUID()}`,
+        callId: providerCallId ?? `manual-${randomUUID()}`,
         direction: "OUTBOUND",
         toNumber: phoneNumber,
         status: complianceBlockReason ? "blocked" : executed && success ? "dialing" : executed ? "failed" : "not-attempted",
         leadId,
         opportunityId,
         agentId: user.id,
-        metadata: { source: "click-to-call", triggeredBy: user.id },
+        metadata: { source: "click-to-call", triggeredBy: user.id, requestUuid: providerCallId, agentPhone: (user as any).phone ?? config.defaultAgentNumber ?? null },
       },
       user,
     );
@@ -2333,7 +2444,7 @@ export async function buildClickToCallPayloadForTenant(user: TenantUser, input: 
 
   return {
     provider: config.provider ?? "",
-    clickToCallUrl: url,
+    clickToCallUrl: String(config.provider).toLowerCase() === "plivo" ? "" : url,
     agentPopupUrl: config.agentPopupUrl ?? "",
     executed,
     success,
@@ -2341,7 +2452,7 @@ export async function buildClickToCallPayloadForTenant(user: TenantUser, input: 
     blockReason: complianceBlockReason,
     providerResponse,
     callLogId,
-    request: { method, headers, body },
+    request: String(config.provider).toLowerCase() === "plivo" ? { method: "POST", headers: {}, body: undefined } : { method, headers, body },
     payload: {
       agentId: input.agentId ?? user.id,
       phoneNumber,
@@ -2523,10 +2634,25 @@ export async function createActivityTypeForTenant(user: TenantUser, payload: Rec
   return data;
 }
 
+async function isSystemActivityType(user: TenantUser, id: string) {
+  const row = await queryOne<{ isSystem: boolean }>(
+    `select "isSystem" from "ActivityType" where id = $1 and ${user.tenantId ? '"tenantId" = $2' : '"tenantId" is null'}`,
+    user.tenantId ? [id, user.tenantId] : [id],
+  );
+  return !!row?.isSystem;
+}
+
 export async function updateActivityTypeForTenant(user: TenantUser, id: string, payload: Record<string, unknown>) {
   const updatePayload: Record<string, unknown> = {
     updatedAt: new Date().toISOString(),
   };
+  // A system type's name and on/off state are the CRM's (it finds and uses it by key); its
+  // icon, colour, default outcome, SLA and order can still be changed.
+  const system = await isSystemActivityType(user, id);
+  if (system && (("name" in payload) || payload.isActive === false)) {
+    const current = await queryOne<{ name: string }>(`select name from "ActivityType" where id = $1`, [id]);
+    if (payload.isActive === false || (("name" in payload) && String(payload.name ?? "").trim() !== current?.name)) throw new Error("ACTIVITY_TYPE_SYSTEM");
+  }
 
   for (const key of ["name", "icon", "color", "defaultOutcome"]) {
     if (key in payload) {
@@ -2559,7 +2685,7 @@ export async function updateActivityTypeForTenant(user: TenantUser, id: string, 
     `update "ActivityType"
      set ${assignments}
      where id = $${idIndex} and ${tenantClause}
-     returning id, name, icon, color, "defaultOutcome", "defaultSLA", "order", "isActive", "createdAt", "updatedAt"`,
+     returning id, name, icon, color, "defaultOutcome", "defaultSLA", "order", "isActive", "systemKey", "isSystem", "createdAt", "updatedAt"`,
     values,
   );
   if (!data) throw new Error("ACTIVITY_TYPE_NOT_FOUND");
@@ -2567,6 +2693,7 @@ export async function updateActivityTypeForTenant(user: TenantUser, id: string, 
 }
 
 export async function deleteActivityTypeForTenant(user: TenantUser, id: string) {
+  if (await isSystemActivityType(user, id)) throw new Error("ACTIVITY_TYPE_SYSTEM");
   await execute(
     `delete from "ActivityType" where id = $1 and ${user.tenantId ? '"tenantId" = $2' : '"tenantId" is null'}`,
     user.tenantId ? [id, user.tenantId] : [id],
@@ -2646,7 +2773,7 @@ export async function updateOpportunityForTenant(
   id: string,
   payload: Record<string, unknown>
 ) {
-  return pgOpportunities.updateOpportunityForTenant(user, id, editablePayloadForUser(user, "opportunities", payload));
+  return pgOpportunities.updateOpportunityForTenant(user, id, payload);
 }
 
 export async function deleteOpportunityForTenant(user: TenantUser, id: string) {

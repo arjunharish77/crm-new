@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireCurrentUser } from "@/lib/server/auth";
-import { listCallCampaignsForTenant, createCallCampaignForTenant, listMyCallCampaigns } from "@/lib/server/call-campaigns";
+import { listCallCampaignsForTenant, createCallCampaignForTenant, listMyCallCampaigns, CAMPAIGN_DIALLING_MESSAGES } from "@/lib/server/call-campaigns";
 import { badRequest, forbidden, serverError, unauthorized } from "@/lib/server/http";
 
 export async function GET(request: Request) {
@@ -29,6 +29,7 @@ export async function POST(request: Request) {
     if (error instanceof Error && error.message === "UNAUTHORIZED") return unauthorized();
     if (error instanceof Error && error.message === "FORBIDDEN") return forbidden("You don't have permission to manage call campaigns");
     if (error instanceof Error && error.message === "NAME_REQUIRED") return badRequest("Name is required");
+    if (error instanceof Error && CAMPAIGN_DIALLING_MESSAGES[error.message]) return badRequest(CAMPAIGN_DIALLING_MESSAGES[error.message]);
     return serverError("Failed to create call campaign", error);
   }
 }

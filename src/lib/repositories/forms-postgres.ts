@@ -1,5 +1,7 @@
+import { saveCustomFieldValues } from "@/lib/repositories/custom-field-values-postgres";
 import { randomUUID } from "crypto";
 import { execute, jsonbParam, query, queryAsSystem, queryOne, type Queryable } from "@/lib/db/query";
+import { queueEnquiryCall } from "@/lib/repositories/leads-postgres";
 import { withTransaction } from "@/lib/db/transaction";
 import { formatExportDateValue, getTenantTimeZone } from "@/lib/server/date-format";
 import { checkRateLimit } from "@/lib/server/rate-limit";
@@ -567,7 +569,9 @@ export async function recordFormProgressEvent(identifier: string, input: { sessi
 }
 
 export async function submitPublicForm(identifier: string, payload: Record<string, unknown>) {
-  return withTransaction({ id: "public-form", tenantId: null }, async (client) => {
+  // A new enquiry's voice bot call is queued once the lead is committed (the queue reads it).
+  const enquiry: { pending: { tenantId: string; lead: { id: string; source?: unknown } } | null } = { pending: null };
+  const submitted = await withTransaction({ id: "public-form", tenantId: null }, async (client) => {
     const formRow = await getPublicFormRow(identifier);
     if (!formRow) throw new Error("FORM_NOT_FOUND");
     const form = formatFormRecord(formRow, 0);
@@ -625,11 +629,14 @@ export async function submitPublicForm(identifier: string, payload: Record<strin
         updatedAt: now,
       }, 'id, name, email, phone, company, source, status, score, tags, "createdBy", "createdAt", "updatedAt", "ownerId"', client);
       leadId = createdLead.id;
+      // Answers mapped to the lead's custom fields ("lead.<key>").
+      await saveCustomFieldValues(tenantId, "LEAD", createdLead.id, null, moduleData.lead, client, { skipInvalid: true });
 
       await createFormAuditLog(tenantId, actorId, "CREATE", "LEAD", createdLead.id, createdLead, client);
       const leadDistribution = await distributeRecord(user, "LEAD", createdLead.id, createdLead).catch(() => null);
       const leadWithOwner = leadDistribution?.assignedUserId ? { ...createdLead, ownerId: leadDistribution.assignedUserId } : createdLead;
       await runAutomationsForEvent({ id: actorId ?? "public-form", tenantId }, "LEAD_CREATED", "LEAD", createdLead.id, leadWithOwner).catch(() => undefined);
+      enquiry.pending = { tenantId, lead: createdLead };
     } else if (form.config?.duplicateAction === "UPDATE") {
       const updatePayload: Record<string, unknown> = { updatedAt: now };
       for (const key of ["name", "email", "phone", "company", "source", "status"]) {
@@ -643,6 +650,7 @@ export async function submitPublicForm(identifier: string, payload: Record<strin
         else delete updatePayload.status;
       }
       await updateReturning("Lead", updatePayload, 'where "tenantId" = $1 and id = $2', [tenantId, leadId], "id", client);
+      await saveCustomFieldValues(tenantId, "LEAD", leadId, null, moduleData.lead, client, { skipInvalid: true });
     }
 
     // Unauthenticated public submit -- the only real enforcement boundary for a
@@ -722,6 +730,8 @@ export async function submitPublicForm(identifier: string, payload: Record<strin
 
     return { success: true, leadId, opportunityId, warnings };
   });
+  if (enquiry.pending) await queueEnquiryCall(enquiry.pending.tenantId, enquiry.pending.lead);
+  return submitted;
 }
 
 function splitFormPayloadByModule(form: any, payload: Record<string, unknown>) {
@@ -779,7 +789,8 @@ async function upsertOpportunityFromFormModule(input: {
     for (const key of ["title", "amount", "expectedCloseDate", "priority", "stageId", "opportunityTypeId"]) {
       if (input.data[key] !== undefined && input.data[key] !== "") updatePayload[key] = key === "amount" ? Number(input.data[key]) : input.data[key];
     }
-    await updateReturning("Opportunity", updatePayload, 'where "tenantId" = $1 and id = $2', [input.tenantId, input.opportunityId], "id", input.client);
+    const updatedOpportunity = await updateReturning<{ opportunityTypeId: string | null }>("Opportunity", updatePayload, 'where "tenantId" = $1 and id = $2', [input.tenantId, input.opportunityId], '"opportunityTypeId"', input.client);
+    await saveCustomFieldValues(input.tenantId, "OPPORTUNITY", input.opportunityId, updatedOpportunity.opportunityTypeId, input.data, input.client, { skipInvalid: true });
     return { id: input.opportunityId };
   }
 
@@ -824,6 +835,8 @@ async function upsertOpportunityFromFormModule(input: {
     createdAt: now,
     updatedAt: now,
   }, "*", input.client);
+  // Answers mapped to the opportunity's custom fields, including its type's own.
+  await saveCustomFieldValues(input.tenantId, "OPPORTUNITY", opportunity.id, selectedType.id, input.data, input.client, { skipInvalid: true });
 
   await createFormAuditLog(input.tenantId, input.actorId, "CREATE", "OPPORTUNITY", opportunity.id, opportunity, input.client);
   const distribution = await distributeRecord(user, "OPPORTUNITY", opportunity.id, opportunity).catch(() => null);
@@ -849,20 +862,30 @@ async function upsertActivityFromFormModule(input: {
       const value = key === "opportunityId" ? input.opportunityId : input.data[key];
       if (value !== undefined && value !== "") updatePayload[key] = value;
     }
-    await updateReturning("Activity", updatePayload, 'where "tenantId" = $1 and id = $2', [input.tenantId, input.activityId], "id", input.client);
+    // A form can't change a system activity (a call or sent message), or turn one into one; the
+    // submission is still saved, with a warning.
+    const updated = await updateReturning("Activity", updatePayload,
+      `where "tenantId" = $1 and id = $2
+         and not exists (select 1 from "ActivityType" t where t.id = "Activity"."typeId" and t."isSystem")
+         and ($3::text is null or not exists (select 1 from "ActivityType" t where t.id = $3 and t."isSystem"))`,
+      [input.tenantId, input.activityId, updatePayload.typeId ? String(updatePayload.typeId) : null], "id", input.client)
+      .catch((error) => { if (error instanceof Error && error.message === "ACTIVITY_NOT_FOUND") return null; throw error; });
+    if (!updated) return { id: null, warning: "The activity wasn't updated: it doesn't exist or was logged by the CRM itself." };
     return { id: input.activityId };
   }
 
   const user = { id: "public-form", tenantId: input.tenantId };
   const objectId = await getObjectId(user, "activity", input.client);
-  const type = input.data.typeId
-    ? { id: String(input.data.typeId) }
-    : await queryOne<any>(
-        'select id from "ActivityType" where "tenantId" = $1 and "isActive" = true order by "order" asc limit 1',
-        [input.tenantId],
-        input.client,
-      );
-  if (!type?.id) return { id: null };
+  // System activity types (calls, sent messages, voice bots) are logged by the CRM only, so a
+  // form can't create one; the default is the first active type a person could pick.
+  const type = await queryOne<any>(
+    input.data.typeId
+      ? 'select id from "ActivityType" where "tenantId" = $1 and id = $2 and "isSystem" = false'
+      : 'select id from "ActivityType" where "tenantId" = $1 and "isActive" = true and "isSystem" = false order by "order" asc limit 1',
+    input.data.typeId ? [input.tenantId, String(input.data.typeId)] : [input.tenantId],
+    input.client,
+  );
+  if (!type?.id) return { id: null, warning: input.data.typeId ? "This form's activity type is logged by the CRM itself and can't be used by a form; no activity was created." : undefined };
 
   // "Activity"."createdBy" is NOT NULL with a foreign key to a real "User" row -- unlike
   // Lead/Opportunity/Task, it cannot be left null for a public submission with no resolvable
@@ -892,6 +915,7 @@ async function upsertActivityFromFormModule(input: {
     createdAt: now,
     updatedAt: now,
   }, "*", input.client);
+  await saveCustomFieldValues(input.tenantId, "ACTIVITY", activity.id, type.id, input.data, input.client, { skipInvalid: true });
 
   await createFormAuditLog(input.tenantId, input.actorId, "CREATE", "ACTIVITY", activity.id, activity, input.client);
   const automationUser = { id: input.actorId, tenantId: input.tenantId };

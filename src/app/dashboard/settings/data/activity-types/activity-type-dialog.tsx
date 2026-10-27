@@ -43,6 +43,7 @@ interface ActivityType {
     defaultOutcome?: string | null;
     order: number;
     isActive: boolean;
+    isSystem?: boolean;
 }
 
 interface ActivityTypeDialogProps {
@@ -201,7 +202,12 @@ export function ActivityTypeDialog({
                                 {...field}
                                 placeholder="Phone Call"
                                 aria-invalid={!!errors.name}
+                                disabled={!!activityType?.isSystem}
+                                aria-describedby={activityType?.isSystem ? "activity-type-system-note" : undefined}
                             />
+                            {activityType?.isSystem && (
+                                <p id="activity-type-system-note" className="text-xs text-muted-foreground">The CRM logs this type itself, so its name and on/off state are fixed. Icon, colour and defaults can be changed.</p>
+                            )}
                             {errors.name && (
                                 <p className="text-xs text-destructive">{errors.name.message as string}</p>
                             )}
@@ -323,7 +329,7 @@ export function ActivityTypeDialog({
                     control={control}
                     render={({ field }) => (
                         <div className="flex items-center gap-2">
-                            <Switch id="activity-type-active" checked={field.value} onCheckedChange={field.onChange} />
+                            <Switch id="activity-type-active" checked={field.value} onCheckedChange={field.onChange} disabled={!!activityType?.isSystem} />
                             <Label htmlFor="activity-type-active">Active (visible in forms)</Label>
                         </div>
                     )}

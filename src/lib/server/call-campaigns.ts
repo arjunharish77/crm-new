@@ -16,7 +16,48 @@ type TenantUser = {
   role?: { permissions?: any } | string | null;
 };
 
-const CAMPAIGN_COLUMNS = `id, name, description, module, "audienceType", "audienceConfig", "callScriptId", "dispositionGroupId", "assignedTeamId", "retryPolicy", "callbackPolicy", status, "createdAt", "updatedAt"`;
+const CAMPAIGN_COLUMNS = `id, name, description, module, "audienceType", "audienceConfig", "callScriptId", "dispositionGroupId", "assignedTeamId", "retryPolicy", "callbackPolicy", status, "dialledBy", "voiceBotId", "createdAt", "updatedAt"`;
+
+export const CAMPAIGN_DIALLING_MESSAGES: Record<string, string> = {
+  CAMPAIGN_DIALLER_LOCKED: "Pause the campaign to change who dials it.",
+  CAMPAIGN_VOICE_BOT_OFF: "Voice bots aren't switched on for this workspace.",
+  CAMPAIGN_BOT_REQUIRED: "Choose the voice bot that dials this campaign.",
+  CAMPAIGN_BOT_NOT_LIVE: "The chosen voice bot isn't live. Make it live first, then start the campaign.",
+  CAMPAIGN_DIALLED_BY_BOT: "A voice bot dials this campaign, so there are no calls to take here.",
+};
+
+// Who dials a campaign (voice bot plan wave F): people pull calls from the Call center, or a
+// voice bot calls the members itself (voice-bot-calls.ts feeds them to its queue).
+async function resolveDialling(tenantId: string, input: Record<string, unknown>, existing: { dialledBy: string; voiceBotId: string | null; status: string } | null, nextStatus: string) {
+  const dialledBy = "dialledBy" in input ? (input.dialledBy === "BOT" ? "BOT" : "PEOPLE") : existing?.dialledBy ?? "PEOPLE";
+  const voiceBotId = dialledBy === "BOT" ? String(("voiceBotId" in input ? input.voiceBotId : existing?.voiceBotId) ?? "") || null : null;
+  if (existing && existing.status === "ACTIVE" && (dialledBy !== existing.dialledBy || voiceBotId !== (existing.voiceBotId ?? null))) throw new Error("CAMPAIGN_DIALLER_LOCKED");
+  if (dialledBy === "BOT") {
+    const { isModuleEnabledForTenant } = await import("@/lib/server/module-entitlements");
+    if (!(await isModuleEnabledForTenant(tenantId, "VOICE_BOT"))) throw new Error("CAMPAIGN_VOICE_BOT_OFF");
+    if (!voiceBotId) throw new Error("CAMPAIGN_BOT_REQUIRED");
+    const bot = await queryOne<{ status: string }>(`select status from "VoiceBot" where "tenantId" = $1 and id = $2 and "archivedAt" is null`, [tenantId, voiceBotId]);
+    if (!bot) throw new Error("CAMPAIGN_BOT_REQUIRED");
+    if (nextStatus === "ACTIVE" && bot.status !== "LIVE") throw new Error("CAMPAIGN_BOT_NOT_LIVE");
+  }
+  return { dialledBy, voiceBotId };
+}
+
+// A bot-dialled campaign paused, completed or deleted: its calls still waiting are withdrawn and
+// those members go back to pending, so resuming carries on where it stopped.
+async function withdrawBotCampaignCalls(tenantId: string, campaignId: string) {
+  const { executeAsSystem } = await import("@/lib/db/query");
+  await executeAsSystem(
+    `with withdrawn as (
+       update "VoiceBotCall" c set status = 'CANCELLED', "blockedReason" = 'CAMPAIGN_STOPPED', "updatedAt" = now()
+       from "CallCampaignMember" m
+       where m."tenantId" = $1 and m."campaignId" = $2 and c."campaignMemberId" = m.id and c.status = 'QUEUED'
+       returning m.id
+     )
+     update "CallCampaignMember" set status = 'PENDING', "updatedAt" = now() where id in (select id from withdrawn)`,
+    [tenantId, campaignId],
+  );
+}
 
 function hasCallCampaignAdminAccess(user: TenantUser) {
   const rolePermissions = typeof user.role === "object" && user.role ? (user.role as any).permissions : null;
@@ -76,7 +117,7 @@ export async function listMyCallCampaigns(user: TenantUser) {
                 and (m.status = 'PENDING' or (m.status = 'QUEUED' and m."nextEligibleAt" <= now()))) as "dueNow"
      from "CallCampaign" c
      left join "Team" t on t."tenantId"::text = c."tenantId" and t.id::text = c."assignedTeamId"::text
-     where c."tenantId" = $1 and c.status = 'ACTIVE'
+     where c."tenantId" = $1 and c.status = 'ACTIVE' and c."dialledBy" = 'PEOPLE'
      order by c.name`,
     [tenantId],
   );
@@ -105,11 +146,12 @@ export async function createCallCampaignForTenant(user: TenantUser, input: Recor
   if (!name) throw new Error("NAME_REQUIRED");
   const campaignModule = input.module === "OPPORTUNITY" ? "OPPORTUNITY" : "LEAD";
   const audienceType = ["MANUAL", "LEAD_LIST", "SAVED_VIEW"].includes(String(input.audienceType)) ? String(input.audienceType) : "MANUAL";
+  const dialling = await resolveDialling(tenantId, input, null, "DRAFT");
   const now = new Date().toISOString();
   const row = await queryOne<any>(
     `insert into "CallCampaign"
-      (id, "tenantId", name, description, module, "audienceType", "audienceConfig", "callScriptId", "dispositionGroupId", "assignedTeamId", "retryPolicy", "callbackPolicy", status, "createdBy", "createdAt", "updatedAt")
-     values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, 'DRAFT', $13, $14, $14)
+      (id, "tenantId", name, description, module, "audienceType", "audienceConfig", "callScriptId", "dispositionGroupId", "assignedTeamId", "retryPolicy", "callbackPolicy", status, "createdBy", "createdAt", "updatedAt", "dialledBy", "voiceBotId")
+     values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, 'DRAFT', $13, $14, $14, $15, $16)
      returning ${CAMPAIGN_COLUMNS}`,
     [
       randomUUID(),
@@ -126,6 +168,8 @@ export async function createCallCampaignForTenant(user: TenantUser, input: Recor
       input.callbackPolicy ?? { pauseUntilCallback: true },
       user.id,
       now,
+      dialling.dialledBy,
+      dialling.voiceBotId,
     ],
   );
   await createAuditLog(user, "CREATE", "CALL_CAMPAIGN", row!.id, null, row, null).catch(() => undefined);
@@ -142,12 +186,14 @@ export async function updateCallCampaignForTenant(user: TenantUser, id: string, 
   if ("status" in input && !["DRAFT", "ACTIVE", "PAUSED", "COMPLETED"].includes(String(input.status))) {
     throw new Error("INVALID_STATUS");
   }
+  const nextStatus = "status" in input ? String(input.status) : existing.status;
+  const dialling = await resolveDialling(tenantId, input, existing, nextStatus);
 
   const now = new Date().toISOString();
   const row = await queryOne<any>(
     `update "CallCampaign"
      set name = $1, description = $2, "callScriptId" = $3, "dispositionGroupId" = $4, "assignedTeamId" = $5,
-         "retryPolicy" = $6, "callbackPolicy" = $7, status = $8, "updatedAt" = $9
+         "retryPolicy" = $6, "callbackPolicy" = $7, status = $8, "updatedAt" = $9, "dialledBy" = $12, "voiceBotId" = $13
      where "tenantId" = $10 and id = $11
      returning ${CAMPAIGN_COLUMNS}`,
     [
@@ -162,8 +208,11 @@ export async function updateCallCampaignForTenant(user: TenantUser, id: string, 
       now,
       tenantId,
       id,
+      dialling.dialledBy,
+      dialling.voiceBotId,
     ],
   );
+  if (existing.dialledBy === "BOT" && existing.status === "ACTIVE" && nextStatus !== "ACTIVE") await withdrawBotCampaignCalls(tenantId, id);
   await createAuditLog(user, "UPDATE", "CALL_CAMPAIGN", id, existing, row, null).catch(() => undefined);
   return row;
 }
@@ -172,6 +221,7 @@ export async function deleteCallCampaignForTenant(user: TenantUser, id: string) 
   await assertTenantModule(user, "TELEPHONY");
   const tenantId = requireTenantId(user);
   if (!hasCallCampaignAdminAccess(user)) throw new Error("FORBIDDEN");
+  await withdrawBotCampaignCalls(tenantId, id);
   await execute(`delete from "CallCampaign" where "tenantId" = $1 and id = $2`, [tenantId, id]);
   await createAuditLog(user, "DELETE", "CALL_CAMPAIGN", id, null, null, null).catch(() => undefined);
 }
@@ -269,6 +319,7 @@ export async function getNextCampaignCallForAgent(user: TenantUser, campaignId: 
   const campaign = await queryOne<any>(`select ${CAMPAIGN_COLUMNS} from "CallCampaign" where "tenantId" = $1 and id = $2`, [tenantId, campaignId]);
   if (!campaign) throw new Error("CALL_CAMPAIGN_NOT_FOUND");
   if (campaign.status !== "ACTIVE") throw new Error("CAMPAIGN_NOT_ACTIVE");
+  if (campaign.dialledBy === "BOT") throw new Error("CAMPAIGN_DIALLED_BY_BOT");
 
   if (campaign.assignedTeamId) {
     const team = await getTeamForTenant(tenantId, campaign.assignedTeamId);

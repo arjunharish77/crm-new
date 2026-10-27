@@ -558,6 +558,8 @@ For each provider:
 
 | Provider | Credentials |
 |---|---|
+| **Plivo (native CRM connector)** | Auth ID, Auth Token, voice-enabled inbound number, outbound caller ID, and agent phone numbers (10-digit Indian numbers are fine; they're saved as +91…). Indian numbers need Plivo KYC. Follow the complete [Plivo setup guide](PLIVO_CONNECTOR_SETUP.md) for the tenant-specific Application URLs, signed callbacks, VPS storage and recording switch. |
+| **Voice bots (on top of Plivo)** | A free Groq account (CRM only); a Google Cloud project with Text-to-Speech, billing and a ₹1 budget alert; an Azure Speech F0 resource in Central India; Claude credits and a workspace spend limit if any bot uses Claude; one `VOICE_BOT_SERVICE_SECRET` on the VPS. Keys go only in **Voice bots → Providers**. Follow [VOICE_BOT_SETUP.md](VOICE_BOT_SETUP.md). |
 | **Exotel** | API key, API token, Account SID, subdomain. Calls: **Exophones** (virtual numbers) plus an **app/flow (Passthru)** for incoming calls. |
 | **Knowlarity (SuperReceptionist)** | API key and authorization token from the SR dashboard; caller ID number |
 | **Ozonetel (CloudAgent)** | API key, username, campaign name; agents set up in CloudAgent |

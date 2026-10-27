@@ -1,10 +1,11 @@
 "use client";
 
+import { CustomFieldList } from "@/components/common/custom-field-list";
 import React, { useCallback, useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { toast } from "sonner";
-import { ClipboardList, LifeBuoy, ListPlus, Mail, MoreHorizontal, NotebookPen, Pencil, Phone, PhoneCall, Plus, Share2, Star, Users } from "lucide-react";
+import { AudioLines, ClipboardList, LifeBuoy, ListPlus, Mail, MoreHorizontal, NotebookPen, Pencil, Phone, PhoneCall, Plus, Share2, Star, Users } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import { Opportunity, OpportunityStageHistory, StageDefinition } from "@/types/opportunities";
 import { CreateActivityDialog } from "@/app/dashboard/activities/create-activity-dialog";
@@ -30,6 +31,7 @@ import { AiAssistantPanel } from "@/components/ai/ai-assistant-panel";
 import { OpportunityStageHistoryList } from "@/components/opportunities/opportunity-stage-history";
 import { StagePath } from "@/components/opportunities/stage-path";
 import { DetailPageHeader, type DetailMenuItem } from "@/components/detail-shell/detail-page-header";
+import { CallWithVoiceBotDialog, useVoiceBotCalling } from "@/components/voice-bots/call-with-voice-bot";
 import { WorkspaceTabs } from "@/components/detail-shell/workspace-tabs";
 import { RecordAddDialog, type ComposerMode } from "@/components/detail-shell/record-composer";
 import { RecordActivityFeed } from "@/components/detail-shell/record-activity-feed";
@@ -76,6 +78,7 @@ export default function OpportunityDetailPage() {
     const opportunityId = params.id as string;
     const serviceDeskEnabled = useModuleEnabled("SERVICE_DESK");
     const telephonyEnabled = useModuleEnabled("TELEPHONY");
+    const voiceBotCalling = useVoiceBotCalling();
     const dataPlatformEnabled = useModuleEnabled("DATA_PLATFORM");
     const { call: placeClickToCall } = useClickToCall();
 
@@ -99,6 +102,7 @@ export default function OpportunityDetailPage() {
     const [showLogOutcomeDialog, setShowLogOutcomeDialog] = useState(false);
     const [showPlaybookDialog, setShowPlaybookDialog] = useState(false);
     const [showShareDialog, setShowShareDialog] = useState(false);
+    const [showVoiceBotDialog, setShowVoiceBotDialog] = useState(false);
 
     const loadData = useCallback(async () => {
         setLoadError(null);
@@ -204,6 +208,7 @@ export default function OpportunityDetailPage() {
     const menuItems: DetailMenuItem[] = [
         { label: "Edit opportunity", icon: <Pencil className="size-4" />, onSelect: () => setShowEditDialog(true) },
         { label: "Log other activity", icon: <Plus className="size-4" />, onSelect: () => setShowActivityDialog(true), hidden: !telephonyEnabled },
+        { label: "Call with voice bot", icon: <AudioLines className="size-4" />, onSelect: () => setShowVoiceBotDialog(true), hidden: !voiceBotCalling.canCall || !lead?.phone },
         { label: "Create case", icon: <LifeBuoy className="size-4" />, onSelect: () => setShowCaseDialog(true), hidden: !serviceDeskEnabled },
         { label: "Apply task playbook", icon: <ClipboardList className="size-4" />, onSelect: () => setShowPlaybookDialog(true) },
         { label: "Share", icon: <Users className="size-4" />, onSelect: () => setShowShareDialog(true), hidden: !canManageSharing(user, opportunity), separatorBefore: true },
@@ -326,6 +331,7 @@ export default function OpportunityDetailPage() {
                                         { label: "Created", value: formatWorkspaceDateTime(opportunity.createdAt) },
                                         { label: "Updated", value: formatWorkspaceDateTime(opportunity.updatedAt) },
                                     ]} />
+                                    <CustomFieldList objectType="OPPORTUNITY" typeId={opportunity.opportunityTypeId} values={(opportunity as any).customFields} className="md:col-span-2" />
                                     <div className="md:col-span-2"><Button variant="outline" size="sm" className="mt-3" onClick={() => setShowEditDialog(true)}><Pencil className="size-4" />Edit opportunity</Button></div>
                                 </div>
                             )}
@@ -382,6 +388,7 @@ export default function OpportunityDetailPage() {
             {serviceDeskEnabled ? <CreateCaseButton open={showCaseDialog} onOpenChange={setShowCaseDialog} relatedOpportunityId={opportunity.id} relatedLeadId={opportunity.leadId || undefined} /> : null}
             <ExternalPushDialog open={showPushDialog} onClose={() => setShowPushDialog(false)} leadId={opportunity.leadId} opportunityId={opportunity.id} onPushed={() => setPushRefreshKey((key) => key + 1)} />
             {telephonyEnabled && <LogCallOutcomeDialog open={showLogOutcomeDialog} onClose={() => setShowLogOutcomeDialog(false)} leadId={opportunity.leadId} opportunityId={opportunity.id} onLogged={() => { setFeedKey((key) => key + 1); loadData(); }} />}
+            <CallWithVoiceBotDialog open={showVoiceBotDialog} onClose={() => setShowVoiceBotDialog(false)} count={1} noun={["opportunity", "opportunities"]} recordName={opportunity.title} resolveTargets={async () => [{ opportunityId: opportunity.id }]} />
             <RecordShareDialog open={showShareDialog} onClose={() => setShowShareDialog(false)} recordType="opportunities" recordId={opportunity.id} recordLabel={opportunity.title} />
             <ApplyPlaybookDialog open={showPlaybookDialog} onClose={() => setShowPlaybookDialog(false)} leadId={opportunity.leadId} opportunityId={opportunity.id} targetModule="OPPORTUNITY" onApplied={() => setTasksRefreshKey((key) => key + 1)} />
         </div>

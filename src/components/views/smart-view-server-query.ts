@@ -80,7 +80,9 @@ export function toServerQuery(module: SmartViewModule, filters: FilterConfig | n
             conditions.push({ field: ownerField, operator: mine ? "equals" : "not_equals_or_empty", value: token });
             continue;
         }
-        if (!fields.has(condition.field)) return { ok: false, field: condition.field };
+        // Lead and opportunity custom fields are filtered on the server too.
+        const customField = (module === "LEADS" || module === "OPPORTUNITIES") && condition.field.startsWith("customFields.");
+        if (!fields.has(condition.field) && !customField) return { ok: false, field: condition.field };
         conditions.push({ field: condition.field, operator, value: mapValue(condition.value) });
     }
     return { ok: true, group: conditions.length ? { logic: filters?.logic === "OR" ? "OR" : "AND", conditions } : null };

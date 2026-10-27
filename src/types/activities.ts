@@ -8,6 +8,9 @@ export interface ActivityType {
     defaultOutcome?: string | null;
     isDefault?: boolean;
     isActive?: boolean;
+    // Logged by the CRM itself (calls, sent messages, page visits, voice bots): not pickable by hand.
+    isSystem?: boolean;
+    systemKey?: string | null;
     createdAt: string;
     updatedAt: string;
 }

@@ -1,10 +1,11 @@
 'use client';
 
+import { buildCustomFieldColumns, customFieldColumnsHidden, customFieldFilterFields, useCustomFieldDefinitions } from "@/components/common/custom-field-columns";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { Eye, Filter as FilterIcon, ListPlus, MoreHorizontal, Pencil, Phone, Tag, Trash2, UserCog } from "lucide-react";
+import { AudioLines, Eye, Filter as FilterIcon, ListPlus, MoreHorizontal, Pencil, Phone, Tag, Trash2, UserCog } from "lucide-react";
 import { Lead } from "@/types/leads";
 import { PaginatedResponse } from "@/types/common";
 import { apiFetch } from "@/lib/api";
@@ -36,6 +37,7 @@ import { fetchMatchingIds, plural, reassignOwnersInBatches, showBulkResult } fro
 import { formatCount } from "@/lib/display/format";
 import { formatWorkspaceRelativeTime } from "@/lib/date-format";
 import { useRecordsChanged } from "@/lib/records-events";
+import { CallWithVoiceBotDialog, useVoiceBotCalling } from "@/components/voice-bots/call-with-voice-bot";
 import { CreateLeadDialog } from "./create-lead-dialog";
 import { EditLeadDialog } from "./edit-lead-dialog";
 import { buildLeadColumns, LEAD_DEFAULT_HIDDEN } from "./columns";
@@ -220,6 +222,10 @@ export default function LeadsPage() {
     const columns = useMemo(() => buildLeadColumns({ onStatusChange: (lead, status) => statusChangeRef.current(lead, status) }),
         // eslint-disable-next-line react-hooks/exhaustive-deps
         [display]);
+    // Custom fields as list columns, hidden until turned on in the column picker.
+    const customFieldDefinitions = useCustomFieldDefinitions("LEAD");
+    const allColumns = useMemo(() => [...columns, ...buildCustomFieldColumns<Lead>(customFieldDefinitions)], [columns, customFieldDefinitions]);
+    const columnDefaults = useMemo(() => ({ ...LEAD_DEFAULT_HIDDEN, ...customFieldColumnsHidden(customFieldDefinitions) }), [customFieldDefinitions]);
 
     const handleSelectAllFiltered = () => {
         setSelectedRows(data.map((lead) => lead.id));
@@ -230,6 +236,8 @@ export default function LeadsPage() {
         setIsAllSelected(false);
     };
     const selectedCount = isAllSelected ? totalItems : selectedRows.length;
+    const voiceBotCalling = useVoiceBotCalling();
+    const [voiceBotOpen, setVoiceBotOpen] = useState(false);
 
     useRegisterShortcut({ id: "leads-refresh", combo: { key: "r" }, description: "Refresh this list", group: "Leads", handler: () => fetchData() });
     useRegisterShortcut({ id: "leads-select-all", combo: { key: "a" }, description: "Select all matching leads", group: "Leads", handler: () => handleSelectAllFiltered() });
@@ -387,6 +395,7 @@ export default function LeadsPage() {
                     { label: 'Score confidence', key: 'predictiveConfidence', type: 'number' },
                     { label: 'Likelihood to convert', key: 'predictiveConversionProbability', type: 'number' },
                     { label: 'Stall risk', key: 'predictiveStallRisk', type: 'number' },
+                    ...customFieldFilterFields(customFieldDefinitions),
                 ]}
                 onApply={applyFilterGroups}
             />
@@ -394,8 +403,8 @@ export default function LeadsPage() {
             <DataTable
                 storageKey="leads-table"
                 data={data}
-                columns={columns}
-                defaultColumnVisibility={LEAD_DEFAULT_HIDDEN}
+                columns={allColumns}
+                defaultColumnVisibility={columnDefaults}
                 loading={loading}
                 error={fetchError}
                 onRetry={fetchData}
@@ -482,8 +491,21 @@ export default function LeadsPage() {
                     { label: "Change status", icon: <Tag className="size-4" />, onClick: () => { setBulkStatus(""); setBulkStatusOpen(true); } },
                     { label: "Assign", icon: <UserCog className="size-4" />, onClick: () => { setBulkAssignUserId(null); setBulkAssignReason(""); setBulkAssignOpen(true); } },
                     { label: "Add to list", icon: <ListPlus className="size-4" />, onClick: () => setAddToListOpen(true) },
+                    ...(voiceBotCalling.canBulkCall || (voiceBotCalling.canCall && selectedCount === 1)
+                        ? [{ label: "Call with voice bot", icon: <AudioLines className="size-4" />, onClick: () => setVoiceBotOpen(true) }]
+                        : []),
                     { label: "Delete", icon: <Trash2 className="size-4" />, onClick: handleDelete, destructive: true },
                 ]}
+            />
+
+            <CallWithVoiceBotDialog
+                open={voiceBotOpen}
+                onClose={() => setVoiceBotOpen(false)}
+                count={selectedCount}
+                noun={["lead", "leads"]}
+                recordName={selectedCount === 1 && !isAllSelected ? data.find((lead) => String(lead.id) === String(selectedRows[0]))?.name ?? null : null}
+                resolveTargets={async () => (await getSelectedLeadIds()).map((leadId) => ({ leadId }))}
+                onQueued={clearSelection}
             />
 
             <StandardDialog

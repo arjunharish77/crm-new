@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm } from "fs/promises";
+import { mkdtemp, readFile, readdir, rm } from "fs/promises";
 import os from "os";
 import path from "path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -34,6 +34,23 @@ describe("private file storage", () => {
     });
     expect(result.checksum).toHaveLength(64);
     await expect(readFile(resolveLocalStoragePath(result.storageKey), "utf8")).resolves.toBe("pdf-data");
+  });
+
+  it("streams a large private file to an atomic final path without leaving temp files", async () => {
+    const { writePrivateFileStream, resolveLocalStoragePath } = await import("@/lib/storage/file-storage");
+    const source = new ReadableStream<Uint8Array>({ start(controller) { controller.enqueue(Buffer.from("ID")); controller.enqueue(Buffer.from("3-audio")); controller.close(); } });
+    const result = await writePrivateFileStream("telephony/tenant/call.mp3", source, { maxBytes: 100, contentType: "audio/mpeg" });
+    expect(result.byteSize).toBe(9);
+    expect(result.prefix.toString()).toBe("ID3-audio");
+    expect(await readFile(resolveLocalStoragePath(result.storageKey), "utf8")).toBe("ID3-audio");
+    expect(await readdir(path.dirname(resolveLocalStoragePath(result.storageKey)))).toEqual(["call.mp3"]);
+  });
+
+  it("removes the temporary file when a streamed upload exceeds its limit", async () => {
+    const { writePrivateFileStream, resolveLocalStoragePath } = await import("@/lib/storage/file-storage");
+    const source = new ReadableStream<Uint8Array>({ start(controller) { controller.enqueue(Buffer.from("oversized")); controller.close(); } });
+    await expect(writePrivateFileStream("telephony/tenant/call.mp3", source, { maxBytes: 3 })).rejects.toThrow("PRIVATE_FILE_TOO_LARGE");
+    expect(await readdir(path.dirname(resolveLocalStoragePath("telephony/tenant/call.mp3")))).toEqual([]);
   });
 
   it("rejects path traversal", async () => {

@@ -8,6 +8,7 @@ import { processDueReportRollupRefreshes, processPendingReportRefreshJobs } from
 import { processDueReportSchedules, retryFailedReportSchedules } from "@/lib/server/report-schedules";
 import { processCommunicationOutbox } from "@/lib/server/communications";
 import { processExportRequest, processExpiredExportFiles } from "@/lib/server/exports";
+import { recoverStaleTransfers } from "@/lib/server/transfer-recovery";
 import { recomputeLeadScoresForTenant } from "@/lib/server/admin-modules";
 import { processDueScheduledScoringRetraining, recomputeSelfLearningScoresForTenant } from "@/lib/server/self-learning-scoring";
 import { createUserNotification } from "@/lib/server/notifications";
@@ -32,6 +33,8 @@ import { computeDueMetricGrainSnapshots } from "@/lib/server/metrics";
 import { dispatchCaseSurveys } from "@/lib/repositories/case-survey-postgres";
 import { refreshCaseAnalyticsSnapshots } from "@/lib/server/inbuilt-reports";
 import { runHousekeeping } from "@/lib/server/housekeeping";
+import { refreshDueKnowledge } from "@/lib/server/voice-bot-knowledge";
+import { dispatchVoiceBotCalls } from "@/lib/server/voice-bot-calls";
 import { enforceSettingsAtStartup } from "@/lib/server/settings-check";
 import * as Sentry from "@sentry/node";
 import { writeFileSync } from "fs";
@@ -95,6 +98,9 @@ const RECURRING_PROCESSORS: Record<string, () => Promise<unknown>> = {
   // days, then removed.
   "archive.purge": async () => ({ automations: await purgeArchivedAutomations(200), forms: await purgeArchivedForms(200), ...(await purgeArchivedItems(200)) }),
   "housekeeping.run": () => runHousekeeping(5000),
+  "voiceBots.refreshKnowledge": () => refreshDueKnowledge(50),
+  "voiceBots.dispatchCalls": () => dispatchVoiceBotCalls(),
+  "transfers.recoverStale": () => recoverStaleTransfers(50),
   "communications.processSuppressionExpiry": () => processDueSuppressionExpiry(100),
   "cases.processSlaEscalations": () => processCaseSlaEscalations(200),
   "modules.processTrials": () => processModuleTrials(),

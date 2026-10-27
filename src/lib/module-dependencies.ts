@@ -3,6 +3,7 @@
 //   * Journey Orchestration runs on the Automations engine and sends through Marketing
 //     Communications (marketing-journeys.ts).
 //   * Payouts are calculated and paid per partner (commission.ts, payouts.ts).
+//   * Voice bots place and answer calls through the phone system (voice bot plan wave B).
 // Applications only optionally link to an Opportunity, so Product Catalog has no hard dependency.
 //
 // Policy (confirmed 2026-09-29): a change that would break a dependency is refused with an
@@ -10,6 +11,7 @@
 export const MODULE_DEPENDENCIES: Record<string, readonly string[]> = {
   JOURNEY_ORCHESTRATION: ["AUTOMATIONS", "MARKETING"],
   PAYOUTS: ["PARTNERS"],
+  VOICE_BOT: ["TELEPHONY"],
 };
 
 /**

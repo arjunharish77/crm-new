@@ -177,7 +177,7 @@ export function Timeline({ activities, notes = [], context, emptyMessage = "Call
                                 { label: "Logged", value: formatWorkspaceDateTime(item.at) },
                                 { label: "Updated", value: formatWorkspaceDateTime(activity.updatedAt) },
                                 { label: "Repeats", value: activity.isRecurring ? activity.recurrenceRule || "Yes" : null },
-                                ...customFieldEntries.map(([key, value]) => ({ label: key, value: formatActivityValue(value) })),
+                                ...customFieldEntries.map(([key, value]) => ({ label: (activity as any).customFieldLabels?.[key] ?? key, value: formatActivityValue(value) })),
                             ].filter((field) => field.value !== null && field.value !== undefined && field.value !== "");
                             const auditEvents = (activity.auditEvents ?? []).filter((event) => event.action === "UPDATE" && activityChangedFields(event).length > 0);
                             return (

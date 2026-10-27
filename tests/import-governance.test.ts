@@ -119,10 +119,12 @@ describe("import governance", () => {
             module: "LEAD",
             mapping: { fields: [{ source: "email", target: "email" }], duplicateMode: "SKIP" },
             rows: [{ email: "new@example.com" }],
+            progress: null,
+            attempts: 1,
           };
         }
         if (text.includes('from "Lead"')) return null; // no duplicate
-        if (text.includes('"cancelRequested" from "ImportJob"')) return { cancelRequested: false };
+        if (text.includes("set progress = $2")) return { cancelRequested: false }; // checkpoint renews the lease
         if (text.includes('set status = $1, stats = $2')) {
           return { id: "job-1", module: "LEAD", status: "COMPLETED", stats: { created: 1 } };
         }
@@ -138,6 +140,77 @@ describe("import governance", () => {
       expect(notificationMocks.createUserNotification).toHaveBeenCalledWith(
         expect.objectContaining({ tenantId: "tenant-a", userId: "user-1", title: "Import completed" }),
       );
+    });
+  });
+
+  // Round-2 plan wave 3, B4: leases, saved progress and recovery.
+  describe("processImportJob recovery", () => {
+    const claimedJob = (overrides: Record<string, unknown> = {}) => ({
+      id: "job-1",
+      tenantId: "tenant-a",
+      userId: "user-1",
+      module: "LEAD",
+      mapping: { fields: [{ source: "email", target: "email" }], duplicateMode: "CREATE" },
+      rows: [{ email: "a@example.com" }, { email: "b@example.com" }, { email: "c@example.com" }],
+      progress: null,
+      attempts: 1,
+      ...overrides,
+    });
+
+    it("claims a stale PROCESSING job (lease run out) as well as a QUEUED one", async () => {
+      dbMocks.queryOne.mockResolvedValueOnce(null);
+      await processImportJob("job-1");
+      const claimSql = String(dbMocks.queryOne.mock.calls[0][0]);
+      expect(claimSql).toContain(`(status = 'QUEUED' or (status = 'PROCESSING' and "leaseExpiresAt" < now()))`);
+      expect(claimSql).toContain("attempts = attempts + 1");
+    });
+
+    it("resumes from the saved row with the saved counts", async () => {
+      const finalParams: unknown[][] = [];
+      dbMocks.queryOne.mockImplementation(async (sql: string, params: unknown[]) => {
+        const text = String(sql);
+        if (text.includes("set status = 'PROCESSING'")) return claimedJob({ attempts: 2, progress: { next: 2, created: 2, updated: 0, skipped: 0, errors: [] } });
+        if (text.includes("set progress = $2")) return { cancelRequested: false };
+        if (text.includes("set status = $1, stats = $2")) {
+          finalParams.push(params);
+          return { id: "job-1", status: "COMPLETED" };
+        }
+        return null;
+      });
+      authAdminMocks.getCurrentUserById.mockResolvedValueOnce({ id: "user-1", tenantId: "tenant-a" });
+      leadsRepoMocks.createLeadForTenant.mockResolvedValue({ id: "lead-new" });
+
+      await processImportJob("job-1");
+
+      expect(leadsRepoMocks.createLeadForTenant).toHaveBeenCalledTimes(1); // only row 3
+      expect(finalParams[0][1]).toMatchObject({ total: 3, created: 3, processed: 3 });
+      expect(finalParams[0][5]).toBe(2); // finishes only as the run that holds the claim
+    });
+
+    it("stops without finishing when a newer run has taken the job over", async () => {
+      dbMocks.queryOne.mockImplementation(async (sql: string) => {
+        const text = String(sql);
+        if (text.includes("set status = 'PROCESSING'")) return claimedJob();
+        return null; // the checkpoint finds the job claimed by a newer attempt
+      });
+      authAdminMocks.getCurrentUserById.mockResolvedValueOnce({ id: "user-1", tenantId: "tenant-a" });
+
+      expect(await processImportJob("job-1")).toBeNull();
+      expect(leadsRepoMocks.createLeadForTenant).not.toHaveBeenCalled();
+      expect(notificationMocks.createUserNotification).not.toHaveBeenCalled();
+    });
+
+    it("marks the job failed and tells the requester after three interrupted runs", async () => {
+      dbMocks.queryOne.mockImplementation(async (sql: string) => {
+        const text = String(sql);
+        if (text.includes("set status = 'PROCESSING'")) return claimedJob({ attempts: 4 });
+        if (text.includes("set status = 'FAILED'")) return { tenantId: "tenant-a", userId: "user-1", module: "LEAD" };
+        return null;
+      });
+
+      expect(await processImportJob("job-1")).toBeNull();
+      expect(leadsRepoMocks.createLeadForTenant).not.toHaveBeenCalled();
+      expect(notificationMocks.createUserNotification).toHaveBeenCalledWith(expect.objectContaining({ userId: "user-1", title: "Import failed" }));
     });
   });
 

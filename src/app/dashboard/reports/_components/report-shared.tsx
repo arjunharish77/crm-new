@@ -8,8 +8,18 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { RotateCcw } from "lucide-react";
 import { toast } from "sonner";
 import { StandardDialog } from "@/components/common/standard-dialog";
+import { useModuleEnabled } from "@/components/auth/feature-gate";
+import { useAuth } from "@/providers/auth-provider";
+import { voiceBotAccess } from "@/lib/voice-bot-access-level";
 
 export type ReportRoot = "lead" | "opportunity" | "activity";
+
+// Voice Bot Performance is listed only with the Voice bots module and a Voice bots level.
+export function useVoiceBotReports() {
+    const { user } = useAuth();
+    const voiceBotsOn = useModuleEnabled("VOICE_BOT");
+    return voiceBotsOn && voiceBotAccess(user as any) !== "none";
+}
 
 
 export const ROOT_OPTIONS: Array<{ value: ReportRoot; label: string }> = [
@@ -179,6 +189,13 @@ export const INBUILT_REPORT_OPTIONS = [
         category: "Activity",
         endpoint: "/reports/inbuilt/telephony-call-performance",
         description: "Answer rate, talk time, and per-agent call performance sourced from real telephony call logs.",
+    },
+    {
+        value: "voice_bot_performance",
+        label: "Voice Bot Performance",
+        category: "Activity",
+        endpoint: "/reports/inbuilt/voice-bot-performance",
+        description: "Per voice bot: calls placed, answer rate, incoming calls, results (interested, callbacks, handed over), call length and quality review.",
     },
     {
         value: "commission_payout_summary",

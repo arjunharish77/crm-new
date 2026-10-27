@@ -1,9 +1,9 @@
 import type { CreateUnitOfWork } from "./create-unit-of-work";
 import type { TransactionClient } from "@/lib/db/transaction";
 import { randomUUID } from "crypto";
-import { execute, query, queryOne } from "@/lib/db/query";
+import { execute, query, queryOne, type Queryable } from "@/lib/db/query";
 import { withTransaction } from "@/lib/db/transaction";
-import { buildLeadWhere } from "@/lib/repositories/leads-postgres";
+import { appendWhere, buildLeadWhere } from "@/lib/repositories/leads-postgres";
 import { runAutomationsForEvent } from "@/lib/repositories/automations-postgres";
 import { distributeRecord } from "@/lib/server/distribution-engine";
 import { refreshNextBestActionsForRecord } from "@/lib/server/next-best-action";
@@ -14,11 +14,15 @@ import { enqueueAppEvent } from "@/lib/server/marketplace-events";
 import { invalidateReportRollupsForTenant } from "@/lib/server/report-rollups";
 import { assertFilterGroupsSupported, buildGroupedFilterClause, normalizeFilterGroups, type FilterColumnEntry } from "@/lib/query-filters";
 import { substituteUserTokens } from "@/lib/server/user-token-filters";
-import { maskFieldsForUser, sanitizeWritePayload } from "@/lib/server/field-permissions";
+import { fieldPermissionMap, maskCustomFieldsForUser, maskFieldsForUser, sanitizeWritePayload } from "@/lib/server/field-permissions";
+import { customFieldFilterColumns, customFieldInputOf, customFieldsByRecord, saveCustomFieldValues } from "@/lib/repositories/custom-field-values-postgres";
 import { applyRecordScopeClause } from "@/lib/server/record-scope";
 
 type TenantUser = {
   apiKeyId?: string;
+  // Who really made a change done under this user, for the record's history (voice bot wave E:
+  // a bot's answers copied to the record are "set by voice bot").
+  changeSource?: { kind: "VOICE_BOT"; label: string; botId: string; callId?: string | null };
   id: string;
   tenantId: string | null;
   role?: { permissions?: any } | string | null;
@@ -79,7 +83,7 @@ function transactionContext(user: TenantUser) {
   return { id: user.id, tenantId: user.tenantId };
 }
 
-function buildWhere(user: TenantUser, filters: FilterInput[] | null, opportunityTypeId?: string | null) {
+export function buildWhere(user: TenantUser, filters: FilterInput[] | null, opportunityTypeId?: string | null, customColumns?: Map<string, FilterColumnEntry>) {
   const clauses: string[] = [];
   const values: unknown[] = [];
 
@@ -104,7 +108,8 @@ function buildWhere(user: TenantUser, filters: FilterInput[] | null, opportunity
     clauses.push(`"opportunityTypeId" = $${values.length}`);
   }
 
-  buildGroupedFilterClause(clauses, values, filters, OPPORTUNITY_FILTER_COLUMNS, undefined, user.tenantId);
+  const columns = customColumns?.size ? new Map([...OPPORTUNITY_FILTER_COLUMNS, ...customColumns]) : OPPORTUNITY_FILTER_COLUMNS;
+  buildGroupedFilterClause(clauses, values, filters, columns, undefined, user.tenantId);
 
   return { sql: clauses.length ? `where ${clauses.join(" and ")}` : "", values };
 }
@@ -202,15 +207,33 @@ async function getOwnerNames(ownerIds: string[]) {
   return new Map((rows ?? []).map((row) => [row.id, row.name || row.email]));
 }
 
+// Masks fields the user may not see, custom fields included (per opportunity type).
+function maskOpportunity<T extends Record<string, any>>(user: TenantUser, opportunity: T): T {
+  return maskCustomFieldsForUser(user, "opportunities", maskFieldsForUser(user, "opportunities", opportunity, opportunity.opportunityTypeId), opportunity.opportunityTypeId);
+}
+
+// Custom field values given with an opportunity, less any the user's permission template makes
+// hidden or read-only for that opportunity type.
+function opportunityCustomFieldInput(user: TenantUser, payload: Record<string, unknown>, typeId: string | null) {
+  const input = customFieldInputOf(payload);
+  return input ? sanitizeWritePayload(user, "opportunities", input, typeId).sanitized : null;
+}
+
+async function withOpportunityCustomFields<T extends { id: string }>(tenantId: string | null | undefined, opportunity: T, client?: Queryable) {
+  const values = (await customFieldsByRecord(tenantId, "OPPORTUNITY", [opportunity.id], client)).get(opportunity.id);
+  return { ...opportunity, customFields: values?.customFields ?? {}, customFieldLabels: values?.customFieldLabels ?? {} };
+}
+
 async function decorateOpportunities(user: TenantUser, opportunities: any[]) {
   const leadIds = [...new Set(opportunities.map((opportunity) => opportunity.leadId).filter(Boolean))] as string[];
   const ownerIds = [...new Set(opportunities.map((opportunity) => opportunity.ownerId).filter(Boolean))] as string[];
-  const [types, leads, scoreMap, nbaCountMap, owners] = await Promise.all([
+  const [types, leads, scoreMap, nbaCountMap, owners, customFields] = await Promise.all([
     listOpportunityTypesForTenant(user),
     getLinkedLeads(user, leadIds),
     getPredictiveScoreMap(user.tenantId, opportunities.map((opportunity) => opportunity.id)),
     getPendingNbaCountMap(user.tenantId, opportunities.map((opportunity) => opportunity.id)),
     getOwnerNames(ownerIds),
+    customFieldsByRecord(user.tenantId, "OPPORTUNITY", opportunities.map((opportunity) => opportunity.id)),
   ]);
   const stageMap = new Map(types.flatMap((type: any) => [...(type.stages ?? []), ...(type.archivedStages ?? [])].map((stage: any) => [stage.id, stage])));
   const typeMap = new Map(types.map((type: any) => [type.id, type]));
@@ -224,6 +247,8 @@ async function decorateOpportunities(user: TenantUser, opportunities: any[]) {
     stage: stageMap.get(opportunity.stageId),
     predictiveScore: scoreMap.get(opportunity.id) ?? null,
     pendingNbaCount: nbaCountMap.get(opportunity.id) ?? 0,
+    customFields: customFields.get(opportunity.id)?.customFields ?? {},
+    customFieldLabels: customFields.get(opportunity.id)?.customFieldLabels ?? {},
   }));
 }
 
@@ -232,7 +257,8 @@ async function decorateOpportunities(user: TenantUser, opportunities: any[]) {
 // At most `cap` ids; `truncated` says more match, and callers refuse rather than act on part.
 export async function listOpportunityIdsForTenant(user: TenantUser, filters: FilterInput[] | FilterInput | null, opportunityTypeId: string | null, cap = 5000, search?: string | null) {
   const resolvedFilters = await substituteUserTokens(normalizeFilterGroups(filters) as FilterInput[], user);
-  const where = applyOpportunitySearch(buildWhere(user, resolvedFilters, opportunityTypeId), search);
+  const customColumns = await customFieldFilterColumns(user.tenantId, "OPPORTUNITY", '"Opportunity"', resolvedFilters);
+  const where = applyOpportunitySearch(buildWhere(user, resolvedFilters, opportunityTypeId, customColumns), search);
   const rows = await query<{ id: string }>(
     `select id from "Opportunity" ${where.sql} order by "createdAt" desc limit $${where.values.length + 1}`,
     where.values.concat([cap + 1]),
@@ -241,7 +267,7 @@ export async function listOpportunityIdsForTenant(user: TenantUser, filters: Fil
 }
 
 // strictFilters: refuse a filter that can't be applied instead of skipping it (Smart Views).
-export type OpportunityListOptions = { search?: string | null; sort?: { id: string; desc: boolean } | null; strictFilters?: boolean };
+export type OpportunityListOptions = { search?: string | null; sort?: { id: string; desc: boolean } | null; strictFilters?: boolean; extraWhere?: { sql: string; values: unknown[] } | null };
 
 // Title or the lead's name, email, phone digits or company.
 function applyOpportunitySearch(where: { sql: string; values: unknown[] }, search?: string | null) {
@@ -293,8 +319,9 @@ export async function listOpportunitiesForTenantByType(
   // "Current user/team tokens" -- see the matching comment in leads-postgres.ts's own
   // listLeadsForTenant for why this resolves "@myteam" here rather than making buildWhere async.
   const resolvedFilters = await substituteUserTokens(normalizeFilterGroups(filters) as FilterInput[], user);
-  if (options.strictFilters) assertFilterGroupsSupported(resolvedFilters, OPPORTUNITY_FILTER_COLUMNS);
-  const where = applyOpportunitySearch(buildWhere(user, resolvedFilters, opportunityTypeId), options.search);
+  const customColumns = await customFieldFilterColumns(user.tenantId, "OPPORTUNITY", '"Opportunity"', resolvedFilters);
+  if (options.strictFilters) assertFilterGroupsSupported(resolvedFilters, new Map([...OPPORTUNITY_FILTER_COLUMNS, ...customColumns]));
+  const where = appendWhere(applyOpportunitySearch(buildWhere(user, resolvedFilters, opportunityTypeId, customColumns), options.search), options.extraWhere);
   const [countRow, opportunities] = await Promise.all([
     queryOne<{ count: number }>(`select count(*)::int as count from "Opportunity" ${where.sql}`, where.values),
     query<any>(
@@ -308,7 +335,7 @@ export async function listOpportunitiesForTenantByType(
   // rationale (same field-permissions.ts shared module).
   const decorated = await decorateOpportunities(user, opportunities);
   return {
-    data: decorated.map((opportunity) => maskFieldsForUser(user, "opportunities", opportunity, opportunity.opportunityTypeId)),
+    data: decorated.map((opportunity) => maskOpportunity(user, opportunity)),
     meta: {
       total,
       page: currentPage,
@@ -374,8 +401,9 @@ export async function getOpportunityStageCountsForTenant(user: TenantUser) {
 // metadata -- joining the raw, still-`buildWhere`-filtered "Opportunity" rows to "StageDefinition"
 // directly would make every unqualified column both tables share (tenantId, id, createdAt, ...)
 // ambiguous, since `buildWhere`'s own SQL text references those columns unqualified.
-export async function getFunnelByStageAggregateForTenant(user: TenantUser) {
-  const where = buildWhere(user, null, null);
+// `extraWhere`: the report filter bar's conditions (report-scope.ts), placeholders from $1.
+export async function getFunnelByStageAggregateForTenant(user: TenantUser, extraWhere: { sql: string; values: unknown[] } | null = null) {
+  const where = appendWhere(buildWhere(user, null, null), extraWhere);
   return query<{ stageId: string | null; stage: string; count: number; value: number; isWon: boolean; isClosed: boolean; order: number }>(
     `with scoped_opportunities as (
        select id, amount, "stageId" from "Opportunity" ${where.sql}
@@ -450,8 +478,10 @@ export async function getOpportunityPeriodMetricsForTenant(
 // `"leadId" = id` -- this reproduces exactly what the old JS version did (an opportunity only
 // counts against a source if its lead is itself in the caller's own visible/scoped lead set), just
 // as a real join instead of an in-memory Map lookup, and with no 1000-row cap on either side.
-export async function getLeadSourceRoiAggregateForTenant(user: TenantUser) {
-  const leadWhere = buildLeadWhere(user, null);
+// `leadExtraWhere`: the report filter bar's lead conditions (leads created in the range, owner,
+// team); opportunities count through their lead, as before.
+export async function getLeadSourceRoiAggregateForTenant(user: TenantUser, leadExtraWhere: { sql: string; values: unknown[] } | null = null) {
+  const leadWhere = appendWhere(buildLeadWhere(user, null), leadExtraWhere);
   const leadRows = await query<{ source: string | null; leads: number }>(
     `select source, count(*)::int as leads from "Lead" ${leadWhere.sql} group by source`,
     leadWhere.values,
@@ -488,21 +518,23 @@ export async function getLeadSourceRoiAggregateForTenant(user: TenantUser) {
 async function fetchRawOpportunity(user: TenantUser, id: string) {
   const where = buildWhere(user, null);
   const values = where.values.concat([id]);
-  return queryOne<any>(`select ${OPPORTUNITY_COLUMNS} from "Opportunity" ${where.sql} and id = $${values.length} limit 1`, values);
+  const opportunity = await queryOne<any>(`select ${OPPORTUNITY_COLUMNS} from "Opportunity" ${where.sql} and id = $${values.length} limit 1`, values);
+  return opportunity ? withOpportunityCustomFields(user.tenantId, opportunity) : null;
 }
 
 export async function getOpportunityForTenant(user: TenantUser, id: string) {
   const opportunity = await fetchRawOpportunity(user, id);
   if (!opportunity) return null;
   const decorated = (await decorateOpportunities(user, [opportunity]))[0] ?? null;
-  return decorated ? maskFieldsForUser(user, "opportunities", decorated, decorated.opportunityTypeId) : null;
+  return decorated ? maskOpportunity(user, decorated) : null;
 }
 
 async function createAuditLog(user: TenantUser, action: string, entityId: string, before: unknown, after: unknown, diff: unknown, tx?: TransactionClient) {
   await execute(
     `insert into "AuditLog" (id, "tenantId", "userId", action, "entityType", "entityId", before, after, diff, metadata, "createdAt")
      values ($1, $2, $3, $4, 'OPPORTUNITY', $5, $6, $7, $8, $10, $9)`,
-    [randomUUID(), user.tenantId, user.id, action, entityId, before, after, diff, new Date().toISOString(), user.apiKeyId ? {apiKeyId:user.apiKeyId} : null],
+    [randomUUID(), user.tenantId, user.id, action, entityId, before, after, diff, new Date().toISOString(),
+      user.apiKeyId || user.changeSource ? { ...(user.apiKeyId ? { apiKeyId: user.apiKeyId } : {}), ...(user.changeSource ? { source: user.changeSource } : {}) } : null],
     tx,
   );
 }
@@ -513,6 +545,13 @@ function fieldDiff(before: Record<string, any>, after: Record<string, any>) {
     if (JSON.stringify(before[key] ?? null) !== JSON.stringify(after[key] ?? null)) {
       diff[key] = { before: before[key] ?? null, after: after[key] ?? null };
     }
+  }
+  // Custom fields appear in the history by their key.
+  const customKeys = new Set([...Object.keys(before.customFields ?? {}), ...Object.keys(after.customFields ?? {})]);
+  for (const key of customKeys) {
+    const was = before.customFields?.[key] ?? null;
+    const now = after.customFields?.[key] ?? null;
+    if (JSON.stringify(was) !== JSON.stringify(now)) diff[`customFields.${key}`] = { before: was, after: now };
   }
   return diff;
 }
@@ -553,6 +592,10 @@ export async function createOpportunityForTenant(user: TenantUser, payload: Reco
       ],
     );
     created = result.rows[0];
+    if (user.tenantId) {
+      await saveCustomFieldValues(user.tenantId, "OPPORTUNITY", id, String(payload.opportunityTypeId), opportunityCustomFieldInput(user, payload, String(payload.opportunityTypeId)), tx);
+      created = await withOpportunityCustomFields(user.tenantId, created, tx);
+    }
     await tx.query(
       'insert into "OpportunityStageHistory" (id, "tenantId", "opportunityId", "fromStageId", "toStageId", "changedById", notes) values ($1, $2, $3, null, $4, $5, null)',
       [randomUUID(), user.tenantId, created.id, created.stageId, user.id],
@@ -582,9 +625,9 @@ export async function createOpportunityForTenant(user: TenantUser, payload: Reco
   }
   await invalidateReportRollupsForTenant(user.tenantId).catch(() => undefined);
   const decorated = (await decorateOpportunities(user, [createdWithOwner]))[0];
-  return { ...maskFieldsForUser(user, "opportunities", decorated, decorated.opportunityTypeId), distribution };
+  return { ...maskOpportunity(user, decorated), distribution };
   };
-  if (unit) { unit.afterCommit.push(complete); return maskFieldsForUser(user, "opportunities", created, created.opportunityTypeId); }
+  if (unit) { unit.afterCommit.push(complete); return maskOpportunity(user, created); }
   return complete();
 }
 
@@ -625,6 +668,11 @@ export async function updateOpportunityForTenant(user: TenantUser, id: string, p
       values,
     );
     updated = result.rows[0] ?? null;
+    if (updated && user.tenantId) {
+      // Saved against the opportunity's type after this change (its type-specific fields).
+      await saveCustomFieldValues(user.tenantId, "OPPORTUNITY", updated.id, updated.opportunityTypeId, opportunityCustomFieldInput(user, payload, updated.opportunityTypeId), tx);
+      updated = await withOpportunityCustomFields(user.tenantId, updated, tx);
+    }
     if (updated?.stageId && existing.stageId !== updated.stageId) {
       // The reason given when moving to Won or Lost (UI/UX plan §11.4) is kept on the stage history.
       const note = typeof payload.stageChangeNote === "string" && payload.stageChangeNote.trim() ? payload.stageChangeNote.trim().slice(0, 1000) : null;
@@ -660,7 +708,7 @@ export async function updateOpportunityForTenant(user: TenantUser, id: string, p
   await refreshNextBestActionsForRecord(user, "OPPORTUNITY", updated.id);
   await invalidateReportRollupsForTenant(user.tenantId).catch(() => undefined);
   const decoratedUpdated = (await decorateOpportunities(user, [updated]))[0] ?? updated;
-  return maskFieldsForUser(user, "opportunities", decoratedUpdated, decoratedUpdated.opportunityTypeId);
+  return maskOpportunity(user, decoratedUpdated);
 }
 
 export async function deleteOpportunityForTenant(user: TenantUser, id: string) {
@@ -679,8 +727,9 @@ export async function deleteOpportunityForTenant(user: TenantUser, id: string) {
 // listLeadAudiencePageForTenant.
 async function opportunityAudienceWhere(user: TenantUser, filters: FilterInput[] | null, strictFilters: boolean) {
   const resolvedFilters = await substituteUserTokens(normalizeFilterGroups(filters) as FilterInput[], user);
-  if (strictFilters) assertFilterGroupsSupported(resolvedFilters, OPPORTUNITY_FILTER_COLUMNS);
-  return buildWhere(user, resolvedFilters);
+  const customColumns = await customFieldFilterColumns(user.tenantId, "OPPORTUNITY", '"Opportunity"', resolvedFilters);
+  if (strictFilters) assertFilterGroupsSupported(resolvedFilters, new Map([...OPPORTUNITY_FILTER_COLUMNS, ...customColumns]));
+  return buildWhere(user, resolvedFilters, null, customColumns);
 }
 
 export async function countOpportunityAudienceForTenant(user: TenantUser, filters: FilterInput[] | null, strictFilters = true) {
@@ -762,16 +811,32 @@ export async function getOpportunityHistoryForTenant(user: TenantUser, opportuni
   }));
 }
 
+// Round-2 plan wave 3 (B1): counted in SQL over every opportunity the user can see (it summed
+// the newest 500 before). Grouped by stage name, as before, so same-named stages of different
+// opportunity types share a row; a hidden amount field (field permissions) counts as 0.
 export async function getOpportunityStatsForTenant(user: TenantUser) {
-  const opportunities = await listOpportunitiesForTenant(user, 500);
-  const summary = new Map<string, { stage: string; value: number; count: number; order: number }>();
-  for (const opportunity of opportunities.data) {
-    const stageName = opportunity.stage?.name ?? "Unassigned";
-    const current = summary.get(stageName) ?? { stage: stageName, value: 0, count: 0, order: opportunity.stage?.order ?? Number.MAX_SAFE_INTEGER };
-    current.value += Number(opportunity.amount ?? 0);
-    current.count += 1;
-    current.order = Math.min(current.order, opportunity.stage?.order ?? Number.MAX_SAFE_INTEGER);
-    summary.set(stageName, current);
-  }
-  return [...summary.values()].sort((a, b) => a.order - b.order).map(({ order, ...item }) => item);
+  const where = buildWhere(user, null, null);
+  const hiddenTypes = await amountHiddenTypeIds(user);
+  const hidden = where.values.length + 1;
+  const rows = await query<{ stage: string; value: number; count: number; order: number }>(
+    `with scoped_opportunities as (select amount, "stageId", "opportunityTypeId" from "Opportunity" ${where.sql})
+     select coalesce(sd.name, 'Unassigned') as stage,
+            coalesce(sum(case when o."opportunityTypeId" = any($${hidden}::text[]) then 0 else o.amount end), 0)::float8 as value,
+            count(*)::int as count,
+            min(coalesce(sd."order", ${Number.MAX_SAFE_INTEGER}))::float8 as "order"
+     from scoped_opportunities o left join "StageDefinition" sd on sd.id = o."stageId"
+     group by coalesce(sd.name, 'Unassigned')`,
+    [...where.values, hiddenTypes],
+  );
+  return rows.sort((a, b) => Number(a.order) - Number(b.order)).map(({ order, ...item }) => ({ ...item, value: Number(item.value) }));
+}
+
+// Opportunity types whose amount is hidden from this user by field permissions (the list masks it
+// per record by type); aggregate queries count those amounts as 0, the same as the masked rows.
+export async function amountHiddenTypeIds(user: TenantUser): Promise<string[]> {
+  const types = await query<{ id: string }>(
+    `select id from "OpportunityType" where ${user.tenantId ? '"tenantId" = $1' : '"tenantId" is null'}`,
+    user.tenantId ? [user.tenantId] : [],
+  );
+  return types.map((type) => type.id).filter((typeId) => fieldPermissionMap(user, "opportunities", typeId).amount === "hidden");
 }

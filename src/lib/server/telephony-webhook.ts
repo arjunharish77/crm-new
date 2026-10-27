@@ -211,6 +211,36 @@ async function handleNewInboundCall(actor: TenantUser, tenantId: string, config:
   }
 }
 
+async function queueMissedInboundCall(tenantId: string, config: any, callLog: Record<string, unknown>) {
+  const defaultQueueTeamId = config?.defaultCallQueueTeamId ? String(config.defaultCallQueueTeamId) : null;
+  if (!defaultQueueTeamId) return;
+  // An unknown caller was queued as INBOUND when the call arrived; nobody has picked it up, so it
+  // becomes a callback to make.
+  await execute(
+    `update "TelephonyCallLog" set "queueType" = 'MISSED_CALLBACK' where id = $1 and "tenantId" = $2 and "queueType" = 'INBOUND' and "claimedBy" is null`,
+    [String(callLog.id), tenantId],
+  );
+  await queueTelephonyCall(tenantId, String(callLog.id), { teamId: defaultQueueTeamId, queueType: "MISSED_CALLBACK" });
+}
+
+// A recording usually arrives after the call has ended (Plivo sends it once the file is ready),
+// so the RECORDING_AVAILABLE automation is fired when it is stored rather than with the outcome.
+export async function fireRecordingAvailableAutomation(tenantId: string, callLogId: string) {
+  await assertModuleEnabled(tenantId, "TELEPHONY");
+  const callLog = await queryOne<Record<string, unknown>>(
+    `select id, provider, "callId", direction, "fromNumber", "toNumber", status, duration, "recordingUrl", "agentId", "leadId", "opportunityId", "activityId", metadata, "startedAt", "endedAt"
+     from "TelephonyCallLog" where id = $1 and "tenantId" = $2`,
+    [callLogId, tenantId],
+  );
+  if (!callLog?.recordingUrl) return;
+  const entityType = callLog.leadId ? "LEAD" : callLog.opportunityId ? "OPPORTUNITY" : null;
+  const entityId = callLog.leadId ? String(callLog.leadId) : callLog.opportunityId ? String(callLog.opportunityId) : null;
+  if (!entityType || !entityId) return;
+  const setting = await getTelephonySetting(tenantId);
+  const actor = await resolveCallEventActor(tenantId, setting?.config, { agentId: callLog.agentId });
+  if (actor) await runAutomationsForEvent(actor, "RECORDING_AVAILABLE", entityType, entityId, callLog).catch(() => undefined);
+}
+
 async function resolveCallEventActor(tenantId: string, config: any, input: Record<string, unknown>) {
   const mappings = Array.isArray(config?.userAgentMappings) ? config.userAgentMappings : [];
   const agentKey = input.agentId != null ? String(input.agentId) : input.agent != null ? String(input.agent) : null;
@@ -242,7 +272,7 @@ async function resolveCallEventActor(tenantId: string, config: any, input: Recor
 // `actorOverride` is for authenticated call sites (e.g. click-to-call) that already know
 // exactly who's placing the call -- skips the agent-mapping/oldest-tenant-user inference
 // entirely, which only exists to attribute events from the unauthenticated provider webhook.
-export async function recordTelephonyCallEvent(tenantId: string, input: Record<string, unknown>, actorOverride?: TenantUser) {
+export async function recordTelephonyCallEvent(tenantId: string, input: Record<string, unknown>, actorOverride?: TenantUser, retried = false): Promise<any> {
   await assertModuleEnabled(tenantId, "TELEPHONY");
   const setting = await getTelephonySetting(tenantId);
   const actor = actorOverride ?? (await resolveCallEventActor(tenantId, setting?.config, input));
@@ -250,47 +280,79 @@ export async function recordTelephonyCallEvent(tenantId: string, input: Record<s
 
   const provider = input.provider ? String(input.provider) : "manual";
   const callId = input.callId ? String(input.callId) : randomUUID();
-  const status = input.status ? String(input.status) : "completed";
+  const requestedStatus = input.status ? String(input.status) : "completed";
   const now = new Date().toISOString();
 
-  const existing = await queryOne<{ id: string; status: string; activityId: string | null; startedAt: string; recordingUrl: string | null }>(
-    `select id, status, "activityId", "startedAt", "recordingUrl" from "TelephonyCallLog" where "tenantId" = $1 and provider = $2 and "callId" = $3 limit 1`,
+  const existing = await queryOne<{ id: string; status: string; activityId: string | null; startedAt: string; recordingUrl: string | null; duration: number | null; endedAt: string | null; leadId: string | null; opportunityId: string | null; agentId: string | null; direction: string; fromNumber: string | null; toNumber: string | null; metadata: Record<string, unknown> }>(
+    `select id, status, "activityId", "startedAt", "recordingUrl", duration, "endedAt", "leadId", "opportunityId", "agentId", direction, "fromNumber", "toNumber", metadata from "TelephonyCallLog" where "tenantId" = $1 and provider = $2 and "callId" = $3 limit 1`,
     [tenantId, provider, callId],
   );
+  const status = existing && provider === "plivo" && TERMINAL_STATUSES.has(existing.status) && !TERMINAL_STATUSES.has(requestedStatus)
+    ? existing.status : requestedStatus;
 
   const wasTerminalAlready = existing ? TERMINAL_STATUSES.has(existing.status) : false;
   const isTerminalNow = TERMINAL_STATUSES.has(status);
-  const shouldTouchActivity = !existing || (isTerminalNow && !wasTerminalAlready);
+  const shouldTouchActivity = !existing || (isTerminalNow && !wasTerminalAlready) || (provider === "plivo" && !!(input.leadId || input.opportunityId || existing?.leadId || existing?.opportunityId));
   // Same transition-into-terminal gate as the Activity side above, kept as its own flag since
   // it also needs to be true for a brand-new row that lands directly on a terminal status
   // (shouldTouchActivity is *always* true for a new row, even a non-terminal "dialing" one --
   // this one specifically means "a real call outcome just became known").
-  const shouldFireOutcomeAutomations = isTerminalNow && !wasTerminalAlready;
+  const newlyLinkedRecord = !!existing && existing.leadId === null && existing.opportunityId === null && !!(input.leadId || input.opportunityId);
+  const shouldFireOutcomeAutomations = isTerminalNow && (!wasTerminalAlready || newlyLinkedRecord);
 
   let activityId: string | null = existing?.activityId ?? null;
-  if (shouldTouchActivity && (input.leadId || input.opportunityId)) {
-    const activity = await createActivityForTenant(actor, {
-      typeId: await ensureSystemActivityType(actor, "Call", "Phone", "#3b82f6"),
-      leadId: input.leadId,
-      opportunityId: input.opportunityId,
-      outcome: status === "completed" ? "SUCCESS" : status,
-      notes: [
-        input.direction ? `Direction: ${input.direction}` : null,
-        input.fromNumber ? `From: ${input.fromNumber}` : null,
-        input.toNumber ? `To: ${input.toNumber}` : null,
-        input.duration ? `Duration: ${input.duration}s` : null,
-        input.recordingUrl ? `Recording: ${input.recordingUrl}` : null,
-      ].filter(Boolean).join("\n"),
-    });
-    activityId = activity.id;
-  }
+  // A new row's Activity is created after the row itself (below), and only by the callback that
+  // claims it, so two callbacks for the same call arriving together can't both create one.
+  // A voice bot's call gets the bot's own activity once the call is summarised (voice bot wave E),
+  // not a generic Call activity.
+  const isVoiceBotCall = !!((input.metadata as any)?.voiceBotCallId || existing?.metadata?.voiceBotCallId);
+  const syncCallActivity = async (callLogId: string) => {
+    if (!isVoiceBotCall && shouldTouchActivity && (input.leadId || input.opportunityId || existing?.leadId || existing?.opportunityId)) {
+      const notes = [
+        input.direction || existing?.direction ? `Direction: ${input.direction ?? existing?.direction}` : null,
+        `Provider call ID: ${callId}`,
+        input.fromNumber || existing?.fromNumber ? `From: ${input.fromNumber ?? existing?.fromNumber}` : null,
+        input.toNumber || existing?.toNumber ? `To: ${input.toNumber ?? existing?.toNumber}` : null,
+        input.agentId || existing?.agentId ? `Agent ID: ${input.agentId ?? existing?.agentId}` : null,
+        input.startedAt || existing?.startedAt ? `Started: ${input.startedAt ?? existing?.startedAt}` : null,
+        input.endedAt || existing?.endedAt ? `Ended: ${input.endedAt ?? existing?.endedAt}` : null,
+        input.duration || existing?.duration ? `Duration: ${input.duration ?? existing?.duration}s` : null,
+        (input.metadata as any)?.hangupCause || existing?.metadata?.hangupCause ? `Hangup cause: ${(input.metadata as any)?.hangupCause ?? existing?.metadata?.hangupCause}` : null,
+        (input.metadata as any)?.hangupSource || existing?.metadata?.hangupSource ? `Hangup source: ${(input.metadata as any)?.hangupSource ?? existing?.metadata?.hangupSource}` : null,
+        (input.metadata as any)?.dialBLegUuid || existing?.metadata?.dialBLegUuid ? `Plivo dial leg: ${(input.metadata as any)?.dialBLegUuid ?? existing?.metadata?.dialBLegUuid}` : null,
+        input.recordingUrl || existing?.recordingUrl ? `Recording available in CRM${(input.metadata as any)?.recordingId ?? existing?.metadata?.recordingId ? ` (Plivo ID: ${(input.metadata as any)?.recordingId ?? existing?.metadata?.recordingId})` : ""}` : null,
+      ].filter(Boolean).join("\n");
+      if (activityId) {
+        await execute(`update "Activity" set outcome = $1, notes = $2, "updatedAt" = now() where id = $3 and "tenantId" = $4`,
+          [status === "completed" ? "SUCCESS" : status, notes, activityId, tenantId]);
+      } else {
+        const claimed = await queryOne<{ id: string }>(
+          `update "TelephonyCallLog" set metadata = coalesce(metadata, '{}'::jsonb) || jsonb_build_object('activityClaimedAt', now())
+           where id = $1 and "tenantId" = $2 and "activityId" is null and not (coalesce(metadata, '{}'::jsonb) ? 'activityClaimedAt') returning id`,
+          [callLogId, tenantId],
+        );
+        if (!claimed) return;
+        const activity = await createActivityForTenant(actor, {
+          typeId: await ensureSystemActivityType(actor, "CALL"),
+          leadId: input.leadId ?? existing?.leadId,
+          opportunityId: input.opportunityId ?? existing?.opportunityId,
+          outcome: status === "completed" ? "SUCCESS" : status,
+          notes,
+        }, { system: true });
+        activityId = activity.id;
+        await execute(`update "TelephonyCallLog" set "activityId" = $1 where id = $2 and "tenantId" = $3`, [activityId, callLogId, tenantId]);
+      }
+    }
+  };
 
   if (existing) {
+    await syncCallActivity(existing.id);
     const updatedHasRecording = !!input.recordingUrl;
     const updatedRecordingExpiresAt = computeRecordingExpiresAt(setting?.config, updatedHasRecording, existing.startedAt);
     const updated = await queryOne<any>(
       `update "TelephonyCallLog"
-       set status = $1, duration = $2, "recordingUrl" = $3, "activityId" = coalesce($4, "activityId"), "endedAt" = $5, metadata = $6, "recordingExpiresAt" = $7
+       set status = $1, duration = coalesce($2, duration), "recordingUrl" = coalesce($3, "recordingUrl"), "activityId" = coalesce($4, "activityId"), "endedAt" = coalesce($5, "endedAt"), metadata = coalesce(metadata, '{}'::jsonb) || $6::jsonb, "recordingExpiresAt" = coalesce($7, "recordingExpiresAt"),
+           "leadId" = coalesce($9, "leadId"), "opportunityId" = coalesce($10, "opportunityId"), "agentId" = coalesce($11, "agentId"), "fromNumber" = coalesce($12, "fromNumber"), "toNumber" = coalesce($13, "toNumber")
        where id = $8
        returning id, provider, "callId", direction, "fromNumber", "toNumber", status, duration,
                  "recordingUrl", "agentId", "leadId", "opportunityId", "activityId", metadata,
@@ -304,20 +366,31 @@ export async function recordTelephonyCallEvent(tenantId: string, input: Record<s
         input.metadata ?? {},
         updatedRecordingExpiresAt,
         existing.id,
+        input.leadId ? String(input.leadId) : null,
+        input.opportunityId ? String(input.opportunityId) : null,
+        input.agentId ? String(input.agentId) : null,
+        input.fromNumber ? String(input.fromNumber) : null,
+        input.toNumber ? String(input.toNumber) : null,
       ],
     );
     await createAuditLog(actor, "UPDATE", "TELEPHONY_CALL_LOG", existing.id, null, updated, { status }).catch(() => undefined);
     if (shouldFireOutcomeAutomations) await fireCallOutcomeAutomations(actor, updated, status);
+    // An inbound call that rang first and was missed afterwards (Plivo reports the outcome after
+    // the first callback) goes to the missed-callback queue on that transition too.
+    if (existing.direction === "INBOUND" && MISSED_STATUSES.has(status) && !wasTerminalAlready) {
+      await queueMissedInboundCall(tenantId, setting?.config, updated).catch(() => undefined);
+    }
     return { ...updated, deduped: true };
   }
 
   const newStartedAt = input.startedAt ? String(input.startedAt) : now;
   const newRecordingExpiresAt = computeRecordingExpiresAt(setting?.config, !!input.recordingUrl, newStartedAt);
-  const created = await queryOne<any>(
+  const inserted = await queryOne<any>(
     `insert into "TelephonyCallLog" (
        id, "tenantId", provider, "callId", direction, "fromNumber", "toNumber", status, duration,
        "recordingUrl", "agentId", "leadId", "opportunityId", "activityId", metadata, "startedAt", "endedAt", "createdAt", "recordingExpiresAt"
      ) values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
+     on conflict ("tenantId", provider, "callId") do nothing
      returning id, provider, "callId", direction, "fromNumber", "toNumber", status, duration,
                "recordingUrl", "agentId", "leadId", "opportunityId", "activityId", metadata,
                "startedAt", "endedAt", "createdAt", "recordingExpiresAt", transcript`,
@@ -335,7 +408,7 @@ export async function recordTelephonyCallEvent(tenantId: string, input: Record<s
       input.agentId ? String(input.agentId) : actor.id,
       input.leadId ? String(input.leadId) : null,
       input.opportunityId ? String(input.opportunityId) : null,
-      activityId,
+      null,
       input.metadata ?? {},
       newStartedAt,
       input.endedAt ? String(input.endedAt) : null,
@@ -343,7 +416,13 @@ export async function recordTelephonyCallEvent(tenantId: string, input: Record<s
       newRecordingExpiresAt,
     ],
   );
-  if (!created) throw new Error("TELEPHONY_CALL_LOG_CREATE_FAILED");
+  if (!inserted) {
+    // Another callback for this call logged it a moment ago: apply this one as an update.
+    if (!retried) return recordTelephonyCallEvent(tenantId, input, actorOverride, true);
+    throw new Error("TELEPHONY_CALL_LOG_CREATE_FAILED");
+  }
+  await syncCallActivity(inserted.id);
+  const created = activityId ? { ...inserted, activityId } : inserted;
   await createAuditLog(actor, "CREATE", "TELEPHONY_CALL_LOG", created.id, null, created, null).catch(() => undefined);
   if (shouldFireOutcomeAutomations) await fireCallOutcomeAutomations(actor, created, status);
   await handleNewInboundCall(actor, tenantId, setting?.config, created, status).catch(() => undefined);

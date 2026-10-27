@@ -1,3 +1,6 @@
+import { formFieldType } from "@/lib/custom-field-types";
+import { listCustomFieldDefinitions } from "@/lib/repositories/custom-field-values-postgres";
+
 const BASE_GROUP = [{ id: "default", name: "General Information" }];
 
 export function getObjectMetadata(objectName: string) {
@@ -50,4 +53,23 @@ export function getObjectMetadata(objectName: string) {
   }
 
   return null;
+}
+
+// The record form's fields for a workspace: the built-in ones plus its custom fields for leads
+// and opportunities (the opportunity form adds its type's own fields when a type is picked;
+// activity forms load theirs by activity type).
+export async function getObjectMetadataForTenant(objectName: string, tenantId: string | null | undefined) {
+  const metadata = getObjectMetadata(objectName);
+  if (!metadata || !tenantId || (metadata.name !== "lead" && metadata.name !== "opportunity")) return metadata;
+  const definitions = await listCustomFieldDefinitions(tenantId, metadata.name === "lead" ? "LEAD" : "OPPORTUNITY", null);
+  const customFields = definitions.map((field) => ({
+    id: field.id,
+    key: field.key,
+    label: field.label,
+    type: formFieldType(field.type),
+    isRequired: !!field.isRequired,
+    isCustom: true,
+    options: Array.isArray(field.options) ? field.options : [],
+  }));
+  return { ...metadata, fields: [...metadata.fields, ...customFields] };
 }

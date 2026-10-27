@@ -83,6 +83,12 @@ async function main() {
     checks++;
 
     // 5. Telephony off: provider events are refused and nothing is recorded.
+    await rejectsWith(
+      setTenantModuleStatus(actor, tenant, "TELEPHONY", "DISABLED"),
+      /Voice bots depends on Telephony/,
+      "cannot switch Telephony off while Voice bots is on",
+    );
+    await setTenantModuleStatus(actor, tenant, "VOICE_BOT", "DISABLED", "smoke");
     await setTenantModuleStatus(actor, tenant, "TELEPHONY", "DISABLED", "smoke");
     await rejectsWith(recordTelephonyCallEvent(tenant, { callId: "smoke-call", direction: "INBOUND", fromNumber: "+919876543210", status: "ringing" }), /MODULE_DISABLED:TELEPHONY/, "telephony event refused");
     check((await q(`select count(*)::int as n from "TelephonyCallLog" where "tenantId" = $1`, [tenant])).rows[0].n === 0, "no call log written");

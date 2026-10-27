@@ -1,10 +1,11 @@
 "use client";
 
+import { CustomFieldList } from "@/components/common/custom-field-list";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { toast } from "sonner";
-import { ClipboardList, LifeBuoy, ListPlus, Mail, MessageCircle, MoreHorizontal, NotebookPen, Pencil, Phone, PhoneCall, Plus, Share2, Star, Users } from "lucide-react";
+import { AudioLines, ClipboardList, LifeBuoy, ListPlus, Mail, MessageCircle, MoreHorizontal, NotebookPen, Pencil, Phone, PhoneCall, Plus, Share2, Star, Users } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import { Lead } from "@/types/leads";
 import { Opportunity } from "@/types/opportunities";
@@ -31,6 +32,7 @@ import { NextBestActionPanel } from "@/components/next-best-action/nba-panel";
 import { CallScriptPanel } from "@/components/telephony/call-script-panel";
 import { AiAssistantPanel } from "@/components/ai/ai-assistant-panel";
 import { DetailPageHeader, type DetailMenuItem } from "@/components/detail-shell/detail-page-header";
+import { CallWithVoiceBotDialog, useVoiceBotCalling } from "@/components/voice-bots/call-with-voice-bot";
 import { WorkspaceTabs } from "@/components/detail-shell/workspace-tabs";
 import { RecordAddDialog, type ComposerMode } from "@/components/detail-shell/record-composer";
 import { RecordActivityFeed } from "@/components/detail-shell/record-activity-feed";
@@ -77,6 +79,7 @@ export default function LeadDetailPage() {
     const leadId = params.id as string;
     const serviceDeskEnabled = useModuleEnabled("SERVICE_DESK");
     const telephonyEnabled = useModuleEnabled("TELEPHONY");
+    const voiceBotCalling = useVoiceBotCalling();
     const dataPlatformEnabled = useModuleEnabled("DATA_PLATFORM");
     const { display, statuses } = useLeadStatuses();
 
@@ -101,6 +104,7 @@ export default function LeadDetailPage() {
     const [showLogOutcomeDialog, setShowLogOutcomeDialog] = useState(false);
     const [showPlaybookDialog, setShowPlaybookDialog] = useState(false);
     const [showShareDialog, setShowShareDialog] = useState(false);
+    const [showVoiceBotDialog, setShowVoiceBotDialog] = useState(false);
 
     const loadData = useCallback(async () => {
         setLoadError(null);
@@ -209,6 +213,7 @@ export default function LeadDetailPage() {
     const menuItems: DetailMenuItem[] = [
         { label: "Edit lead", icon: <Pencil className="size-4" />, onSelect: () => setShowEditDialog(true) },
         { label: telephonyEnabled ? "Log other activity" : "Log call outcome", icon: <Plus className="size-4" />, onSelect: () => (telephonyEnabled ? setShowActivityDialog(true) : setShowLogOutcomeDialog(true)), hidden: !telephonyEnabled },
+        { label: "Call with voice bot", icon: <AudioLines className="size-4" />, onSelect: () => setShowVoiceBotDialog(true), hidden: !voiceBotCalling.canCall || !lead.phone },
         { label: "Create opportunity", icon: <Plus className="size-4" />, onSelect: () => setShowOpportunityDialog(true) },
         { label: "Create case", icon: <LifeBuoy className="size-4" />, onSelect: () => setShowCaseDialog(true), hidden: !serviceDeskEnabled },
         { label: "Apply task playbook", icon: <ClipboardList className="size-4" />, onSelect: () => setShowPlaybookDialog(true) },
@@ -328,6 +333,7 @@ export default function LeadDetailPage() {
                                         { label: "Created", value: formatWorkspaceDateTime(lead.createdAt) },
                                         { label: "Updated", value: formatWorkspaceDateTime(lead.updatedAt) },
                                     ]} />
+                                    <CustomFieldList objectType="LEAD" values={(lead as any).customFields} className="md:col-span-2" />
                                     <div className="md:col-span-2"><Button variant="outline" size="sm" className="mt-3" onClick={() => setShowEditDialog(true)}><Pencil className="size-4" />Edit lead</Button></div>
                                 </div>
                             )}
@@ -409,6 +415,7 @@ export default function LeadDetailPage() {
             {serviceDeskEnabled ? <CreateCaseButton open={showCaseDialog} onOpenChange={setShowCaseDialog} relatedLeadId={lead.id} requesterName={lead.name} requesterEmail={lead.email} /> : null}
             <ExternalPushDialog open={showPushDialog} onClose={() => setShowPushDialog(false)} leadId={leadId} linkedOpportunities={opportunities} onPushed={() => setPushRefreshKey((key) => key + 1)} />
             {telephonyEnabled && <LogCallOutcomeDialog open={showLogOutcomeDialog} onClose={() => setShowLogOutcomeDialog(false)} leadId={leadId} onLogged={() => { setFeedKey((key) => key + 1); loadData(); }} />}
+            <CallWithVoiceBotDialog open={showVoiceBotDialog} onClose={() => setShowVoiceBotDialog(false)} count={1} noun={["lead", "leads"]} recordName={lead.name} resolveTargets={async () => [{ leadId: lead.id }]} />
             <RecordShareDialog open={showShareDialog} onClose={() => setShowShareDialog(false)} recordType="leads" recordId={leadId} recordLabel={lead.name} />
             <ApplyPlaybookDialog open={showPlaybookDialog} onClose={() => setShowPlaybookDialog(false)} leadId={leadId} targetModule="LEAD" onApplied={() => setTasksRefreshKey((key) => key + 1)} />
         </div>

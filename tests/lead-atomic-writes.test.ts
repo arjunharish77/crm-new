@@ -43,6 +43,15 @@ vi.mock("@/lib/server/report-rollups", () => rollupMocks);
 vi.mock("@/lib/repositories/lead-statuses-postgres", () => ({
   resolveLeadStatusForWrite: vi.fn(async (_tenantId: string, requested?: string, current?: string) => requested ?? current ?? "NEW"),
 }));
+// Custom field values are covered by custom-field-values tests and scripts/custom-fields-smoke.ts;
+// stubbed here so this file's scripted database replies stay in order.
+vi.mock("@/lib/repositories/custom-field-values-postgres", () => ({
+  customFieldInputOf: () => null,
+  customFieldsByRecord: vi.fn(async () => new Map()),
+  saveCustomFieldValues: vi.fn(async () => []),
+  customFieldFilterColumns: vi.fn(async () => new Map()),
+}));
+
 
 const user = { id: "user-1", tenantId: "tenant-a" };
 

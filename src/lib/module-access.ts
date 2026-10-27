@@ -14,7 +14,12 @@
 export type ModuleLevel = "none" | "read" | "write" | "full";
 export type ModuleNeed = "read" | "write" | "full";
 
-export type PermissionModule = { key: string; label: string; description: string; apiPrefixes: string[]; apiExceptions?: string[] };
+export type PermissionModule = {
+    key: string; label: string; description: string; apiPrefixes: string[]; apiExceptions?: string[];
+    // What each level means for this module, where the general wording doesn't fit, and what
+    // "not set" means (Voice bots: use, not manage).
+    levelLabels?: Partial<Record<ModuleLevel | "unset", { label: string; description: string }>>;
+};
 
 export const PERMISSION_MODULES: PermissionModule[] = [
     { key: "leads", label: "Leads", description: "Leads and lead lists", apiPrefixes: ["/api/leads", "/api/lead-lists"] },
@@ -30,6 +35,16 @@ export const PERMISSION_MODULES: PermissionModule[] = [
     { key: "partners", label: "Partners", description: "Partner management (partners' own portal is unaffected)", apiPrefixes: ["/api/partners"], apiExceptions: ["/api/partners/me"] },
     { key: "admin", label: "Admin & Settings", description: "Full makes the role a workspace admin", apiPrefixes: [] },
     { key: "integrations", label: "Integrations", description: "Full allows managing the phone system", apiPrefixes: [] },
+    {
+        key: "voiceBots", label: "Voice bots", description: "AI voice bots: starting bot calls, and building bots", apiPrefixes: ["/api/voice-bots"],
+        levelLabels: {
+            unset: { label: "Not set (use)", description: "Can start bot calls on records they can see, not build bots" },
+            none: { label: "No access", description: "No bot calls or bot settings" },
+            read: { label: "View bot calls", description: "Can see bot calls and results, not start them" },
+            write: { label: "Use", description: "Can start bot calls on records they can see" },
+            full: { label: "Manage", description: "Can also build bots, their knowledge, numbers and providers" },
+        },
+    },
 ];
 
 const RANK: Record<ModuleLevel, number> = { none: 0, read: 1, write: 2, full: 3 };

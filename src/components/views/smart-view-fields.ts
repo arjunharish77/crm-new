@@ -50,6 +50,8 @@ export type SmartViewReferenceOptions = {
     partners?: Array<{ label: string; value: string }>;
     partnerOrganizations?: Array<{ label: string; value: string }>;
     reports?: Array<{ label: string; value: string }>;
+    // The workspace's custom fields ("customFields.<key>"), offered as filters and columns.
+    customFields?: Partial<Record<"LEADS" | "OPPORTUNITIES", FilterField[]>>;
 };
 
 export function getSmartViewFields(module: SmartViewModule, references: SmartViewReferenceOptions = {}): FilterField[] {
@@ -74,6 +76,7 @@ export function getSmartViewFields(module: SmartViewModule, references: SmartVie
             { key: "teamSegment", label: "Team segment", type: "select", options: dynamicTeamOptions() },
             { key: "activitySegment", label: "Activity touch state", type: "select", options: touchStateOptions() },
             { key: "createdAt", label: "Created date", type: "date" },
+            ...(references.customFields?.LEADS ?? []),
         ];
     }
 
@@ -94,6 +97,7 @@ export function getSmartViewFields(module: SmartViewModule, references: SmartVie
             { key: "teamSegment", label: "Team segment", type: "select", options: dynamicTeamOptions() },
             { key: "expectedCloseDate", label: "Expected close", type: "date" },
             { key: "createdAt", label: "Created date", type: "date" },
+            ...(references.customFields?.OPPORTUNITIES ?? []),
         ];
     }
 

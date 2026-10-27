@@ -6,6 +6,7 @@ import {
   OPPORTUNITY_COMPARISON_DIMENSIONS,
   getSegmentComparisonReportForTenant,
 } from "@/lib/server/inbuilt-reports";
+import { parseReportFilters } from "@/lib/server/report-scope";
 
 function parseSegment(searchParams: URLSearchParams, suffix: "A" | "B"): { level: "LEAD" | "OPPORTUNITY"; dimension: string; value: string } | null {
   const level = searchParams.get(`level${suffix}`);
@@ -30,7 +31,7 @@ export async function GET(request: Request) {
         `LEAD dimensions: ${LEAD_COMPARISON_DIMENSIONS.join(", ")}. OPPORTUNITY dimensions: ${OPPORTUNITY_COMPARISON_DIMENSIONS.join(", ")}.`,
       );
     }
-    const report = await getSegmentComparisonReportForTenant(user, segmentA, segmentB);
+    const report = await getSegmentComparisonReportForTenant(user, segmentA, segmentB, parseReportFilters(new URL(request.url).searchParams, user.id));
     return NextResponse.json(report);
   } catch (error) {
     if (error instanceof Error && error.message === "UNAUTHORIZED") return unauthorized();

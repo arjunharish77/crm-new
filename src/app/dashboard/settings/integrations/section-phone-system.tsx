@@ -16,10 +16,14 @@ import { formatWorkspaceDateTime } from "@/lib/date-format";
 import { toast } from "sonner";
 import { ApiBox, FieldInput, FieldTextarea, Webhook } from "./integrations-shared";
 import type { IntegrationsSettings } from "./use-integrations-settings";
+import { useState } from "react";
+import { apiFetch } from "@/lib/api";
 
 // The "phone-system" section of Settings › Integrations, moved here from page.tsx unchanged.
 export function PhoneSystemSection({ s }: { s: IntegrationsSettings }) {
-    const { loading, sectionState, mappings, telephony, setTelephony, telephonySection, setTelephonySection, rotatingTelephonySecret, doNotCallList, teams, newDoNotCallNumber, setNewDoNotCallNumber, showTelephonySecret, setShowTelephonySecret, callLogs, testCall, setTestCall, fetchTelephony, copyToClipboard, handleSaveTelephony, handleRotateTelephonySecret, handleAddDoNotCallNumber, handleRemoveDoNotCallNumber, handleTestClickToCall } = s;
+    const [testingPlivo, setTestingPlivo] = useState(false);
+    const [plivoTestResult, setPlivoTestResult] = useState<string | null>(null);
+    const { loading, sectionState, mappings, telephony, setTelephony, telephonySection, setTelephonySection, plivoCallbackUrls, rotatingTelephonySecret, doNotCallList, teams, newDoNotCallNumber, setNewDoNotCallNumber, showTelephonySecret, setShowTelephonySecret, callLogs, testCall, setTestCall, fetchTelephony, copyToClipboard, handleSaveTelephony, handleRotateTelephonySecret, handleAddDoNotCallNumber, handleRemoveDoNotCallNumber, handleTestClickToCall } = s;
     return (
         <div className="min-w-0 space-y-4">{sectionState.telephony === 'loading' ? <p role="status" className="py-4 text-sm text-muted-foreground">Loading telephony…</p> : sectionState.telephony === 'error' ? <div role="alert" className="rounded-lg border p-4 text-sm">Unable to load telephony. <Button variant="outline" size="sm" onClick={fetchTelephony}>Retry</Button></div> : <>
                     <Card className="overflow-hidden py-0">
@@ -28,6 +32,7 @@ export function PhoneSystemSection({ s }: { s: IntegrationsSettings }) {
                                 Telephony section
                                 <select value={telephonySection} onChange={event => setTelephonySection(event.target.value)} className="h-10 w-full min-w-0 rounded-md border bg-background px-3">
                                     {[
+                                    ['plivo', 'Plivo native connector'],
                                     ['virtual', 'Virtual Numbers'],
                                     ['route', 'Call Route API'],
                                     ['agentPopup', 'Agent Popup API'],
@@ -46,9 +51,9 @@ export function PhoneSystemSection({ s }: { s: IntegrationsSettings }) {
                             <div className="p-4">
                                 <div className="mb-4 flex items-center justify-between gap-3">
                                     <div>
-                                        <h3 className="text-lg font-semibold">Universal Telephony Connector</h3>
+                                        <h3 className="text-lg font-semibold">Phone system connector</h3>
                                         <p className="text-sm text-muted-foreground">
-                                            Configure call routing, click-to-call, logs, popups, dispositions, and provider mappings.
+                                            Connect Plivo directly, or keep an existing universal telephony integration.
                                         </p>
                                     </div>
                                     <div className="flex min-w-0 flex-wrap items-center gap-2">
@@ -60,6 +65,43 @@ export function PhoneSystemSection({ s }: { s: IntegrationsSettings }) {
                                     </div>
                                 </div>
 
+                                {telephonySection === 'plivo' && (
+                                    <div className="space-y-5">
+                                        <div className="space-y-1.5">
+                                            <Label htmlFor="phone-connector-type">Connector</Label>
+                                            <Select value={telephony.provider === 'plivo' ? 'plivo' : 'universal'} onValueChange={(value) => setTelephony({ ...telephony, provider: value === 'plivo' ? 'plivo' : '' })}>
+                                                <SelectTrigger id="phone-connector-type" className="w-full max-w-sm"><SelectValue /></SelectTrigger>
+                                                <SelectContent><SelectItem value="plivo">Plivo (native)</SelectItem><SelectItem value="universal">Universal / other provider</SelectItem></SelectContent>
+                                            </Select>
+                                        </div>
+                                        {telephony.provider === 'plivo' && <>
+                                            <Alert variant="info"><Info /><AlertDescription>Click-to-call rings the agent’s phone first, then dials the customer. An incoming call rings the owner of the one lead with that number; unknown callers, or a number shared by several leads, ring the default agent phone. If the owner doesn’t answer, the default agent phone rings next; if nobody answers, the caller hears the message below and the call goes to the missed-call queue.</AlertDescription></Alert>
+                                            <div className="grid min-w-0 gap-4 md:grid-cols-2">
+                                                <FieldInput label="Plivo Auth ID" value={telephony.plivoAuthId} onChange={(value) => setTelephony({ ...telephony, plivoAuthId: value.trim() })} />
+                                                <div className="space-y-1.5"><FieldInput label="Plivo Auth Token" type="password" value={telephony.plivoAuthToken} onChange={(value) => setTelephony({ ...telephony, plivoAuthToken: value })} /><p className="text-xs text-muted-foreground">{telephony.hasPlivoAuthToken ? 'Token saved. Leave blank to keep it.' : 'Enter the token from Plivo Console.'}</p></div>
+                                                <FieldInput label="Plivo inbound number" value={telephony.inboundNumber} onChange={(value) => setTelephony({ ...telephony, inboundNumber: value })} />
+                                                <FieldInput label="Outbound caller ID (your Plivo number)" value={telephony.outboundCallerId} onChange={(value) => setTelephony({ ...telephony, outboundCallerId: value })} />
+                                                <FieldInput label="Default agent phone" value={telephony.defaultAgentNumber} onChange={(value) => setTelephony({ ...telephony, defaultAgentNumber: value })} />
+                                                <FieldInput label="Default country code" value={telephony.plivoDefaultCountryCode} onChange={(value) => setTelephony({ ...telephony, plivoDefaultCountryCode: value })} />
+                                                <FieldInput label="Ring time before a call counts as unanswered (seconds, 10–120)" type="number" value={String(telephony.plivoRingTimeoutSeconds ?? '')} onChange={(value) => setTelephony({ ...telephony, plivoRingTimeoutSeconds: value })} />
+                                            </div>
+                                            <p className="text-xs text-muted-foreground">Numbers are saved with their country code. A 10-digit number, or one starting with 0, gets the default country code: 98765 43210 is saved as +919876543210.</p>
+                                            <FieldTextarea label="Message for inbound callers when nobody answers (blank uses a standard message)" rows={2} value={telephony.plivoUnavailableMessage} onChange={(value) => setTelephony({ ...telephony, plivoUnavailableMessage: value })} />
+                                            <div className="flex flex-wrap items-center gap-3"><Button type="button" variant="outline" disabled={testingPlivo || !telephony.hasPlivoAuthToken} onClick={async () => { setTestingPlivo(true); setPlivoTestResult(null); try { const result = await apiFetch<{ connected: boolean; accountName: string | null }>("/integrations/telephony/plivo/test", { method: "POST" }); setPlivoTestResult(result.connected ? `Connected${result.accountName ? ` to ${result.accountName}` : ""}` : "Connection failed"); } catch (error: any) { setPlivoTestResult(error?.message || "Connection failed"); } finally { setTestingPlivo(false); } }}>{testingPlivo ? "Checking…" : "Test Plivo connection"}</Button><p role="status" className="text-sm text-muted-foreground">{plivoTestResult ?? "Save credentials first; this check does not place a call."}</p></div>
+                                            <div className="space-y-2 rounded-lg border p-4">
+                                                <div className="flex items-center gap-3"><Switch id="plivo-recording-toggle" checked={Boolean(telephony.plivoRecordingEnabled)} onCheckedChange={(checked) => setTelephony({ ...telephony, plivoRecordingEnabled: checked })} /><Label htmlFor="plivo-recording-toggle">Record calls and store audio on this VPS</Label></div>
+                                                <p className="text-xs text-muted-foreground">Off means Plivo is not instructed to record new calls. On saves completed MP3 recordings to the private app-storage volume; playback and download follow CRM record permissions. Follow your calling-consent policy.</p>
+                                            </div>
+                                            <div className="space-y-2 rounded-lg border p-4">
+                                                <p className="text-sm font-medium">Plivo Application URLs</p>
+                                                {plivoCallbackUrls ? <><div><p className="text-xs text-muted-foreground">Answer URL (POST)</p><ApiBox value={plivoCallbackUrls.answer} onCopy={copyToClipboard} /></div><div><p className="text-xs text-muted-foreground">Hangup URL (POST)</p><ApiBox value={plivoCallbackUrls.hangup} onCopy={copyToClipboard} /></div></> : <p className="text-xs text-muted-foreground">Set APP_URL on the server to generate public callback URLs.</p>}
+                                                <p className="text-xs text-muted-foreground">Create a Plivo Application with these URLs and assign it to your inbound number. Click-to-call sends its own URLs with each call, so outbound calls work without the Application. If APP_URL changes, update the Application.</p>
+                                            </div>
+                                            <p className="text-xs text-muted-foreground">Each user’s calls ring the phone on their CRM profile; a User-Agent Mapping entry with userId and phoneNumber overrides it. Agents see your Plivo number as the caller on both kinds of call. Recording retention is in Compliance & Consent.</p>
+                                        </>}
+                                    </div>
+                                )}
+
                                 {telephonySection === 'virtual' && (
                                     <div className="space-y-3">
                                         <div className="grid min-w-0 gap-3 2xl:grid-cols-2">
@@ -67,6 +109,7 @@ export function PhoneSystemSection({ s }: { s: IntegrationsSettings }) {
                                                 className="w-full"
                                                 label="Provider / Instance"
                                                 value={telephony.provider}
+                                                disabled={telephony.provider === 'plivo'}
                                                 onChange={(value) => setTelephony({ ...telephony, provider: value })}
                                             />
                                             <FieldInput
@@ -120,7 +163,7 @@ export function PhoneSystemSection({ s }: { s: IntegrationsSettings }) {
                                             </Button>
                                             <p className="text-xs text-muted-foreground">
                                                 Sign webhook requests with X-Webhook-Timestamp and X-Webhook-Signature (hex HMAC-SHA256 of timestamp.rawBody) using this secret.
-                                                A legacy shared-secret header is still accepted for backward compatibility but is deprecated.
+                                                This applies to the universal connector. Plivo callbacks use Plivo Signature V3 instead.
                                             </p>
                                         </div>
                                     </div>

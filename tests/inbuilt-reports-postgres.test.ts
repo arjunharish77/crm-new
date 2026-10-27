@@ -45,6 +45,21 @@ vi.mock("@/lib/server/crm", () => ({
   listOpportunityTypesForTenant: listOpportunityTypesMock,
 }));
 
+// Round-2 plan wave 3: reports read every matching record through report-scope.ts (not one capped
+// page from crm.ts); routed to the same list mocks so these tests keep exercising the report logic.
+vi.mock("@/lib/server/report-scope", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/server/report-scope")>()),
+  listAllLeadsForReport: vi.fn(async (user: unknown) => (await listLeadsMock(user))?.data ?? []),
+  listAllOpportunitiesForReport: vi.fn(async (user: unknown) => (await listOpportunitiesMock(user))?.data ?? []),
+  listAllActivitiesForReport: vi.fn(async (user: unknown) => (await listActivitiesMock(user))?.data ?? []),
+}));
+
+// A fixed workspace time zone, so the zone lookup doesn't use up a queryOne mock meant for a report query.
+vi.mock("@/lib/server/date-format", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/server/date-format")>()),
+  getTenantTimeZone: vi.fn(async () => "UTC"),
+}));
+
 describe("direct Postgres inbuilt report helper lookups", () => {
   beforeEach(() => {
     pgQueryMock.mockReset();

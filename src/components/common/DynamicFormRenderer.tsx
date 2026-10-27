@@ -93,7 +93,9 @@ export function DynamicFormRenderer({
             }
 
             shape[field.key] = fieldSchema;
-            defaults[field.key] = initialData?.[field.key] ?? field.defaultValue ?? (field.type === 'BOOLEAN' ? false : "");
+            // A record's custom field values come back under `customFields`.
+            const initialValue = field.isCustom ? initialData?.customFields?.[field.key] ?? initialData?.[field.key] : initialData?.[field.key];
+            defaults[field.key] = initialValue ?? field.defaultValue ?? (field.type === 'BOOLEAN' ? false : "");
         });
 
         return { schema: z.object(shape), defaultValues: defaults };

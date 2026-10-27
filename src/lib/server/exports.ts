@@ -16,6 +16,10 @@ import { assertAccountActiveForDownload } from "@/lib/server/file-download-guard
 import { generateSignedDownloadToken, verifySignedDownloadToken } from "@/lib/server/signed-urls";
 import { applyRecordScopeClause, applyTaskScopeClause } from "@/lib/server/record-scope";
 import { fieldPermissionMap } from "@/lib/server/field-permissions";
+import { loadCustomFieldValues } from "@/lib/repositories/custom-field-values-postgres";
+import { NO_REPORT_FILTERS, parseReportFilters, type ReportFilters } from "@/lib/server/report-scope";
+import { MAX_TRANSFER_ATTEMPTS, TRANSFER_LEASE_MS } from "@/lib/server/transfer-limits";
+import { createUserNotification } from "@/lib/server/notifications";
 
 // F03 fix (WP04): the export query results use friendly column headers ("Email", "Phone")
 // rather than the raw field keys field-permissions.ts's fieldPermissionMap is keyed by (per the
@@ -80,6 +84,8 @@ type ExportRequestRow = {
   startedAt: string | null;
   completedAt: string | null;
   updatedAt: string;
+  leaseExpiresAt?: string | null;
+  attempts?: number;
 };
 
 type ExportFilterCondition = {
@@ -139,24 +145,36 @@ function reportResultRows(report: Record<string, unknown>) {
   return flattenObjectToRows(report);
 }
 
-async function inbuiltReportRows(user: TenantUser, reportKey: string): Promise<Record<string, unknown>[]> {
+// `reportFilters`: the report filter bar's from/to/owner/team when the export was queued (round-2
+// plan wave 3, C9), so the file holds the rows the person was looking at.
+function exportReportFilters(user: TenantUser, value: unknown): ReportFilters {
+  if (!value || typeof value !== "object") return NO_REPORT_FILTERS;
+  const params = new URLSearchParams();
+  for (const key of ["from", "to", "owner", "team"]) {
+    const item = (value as Record<string, unknown>)[key];
+    if (typeof item === "string" && item) params.set(key, item);
+  }
+  return parseReportFilters(params, user.id);
+}
+
+async function inbuiltReportRows(user: TenantUser, reportKey: string, filters: ReportFilters = NO_REPORT_FILTERS): Promise<Record<string, unknown>[]> {
   let report: Record<string, unknown>;
-  if (reportKey === "funnel_conversion_by_stage") report = await inbuiltReports.getFunnelByStageReportForTenant(user as any);
-  else if (reportKey === "funnel_conversion_by_source_campaign") report = await inbuiltReports.getFunnelBySourceCampaignReportForTenant(user as any);
-  else if (reportKey === "rep_performance") report = await inbuiltReports.getRepPerformanceReportForTenant(user as any);
-  else if (reportKey === "sla_response_breaches") report = await inbuiltReports.getSlaResponseBreachReportForTenant(user as any, 24);
-  else if (reportKey === "lead_source_roi") report = await inbuiltReports.getLeadSourceRoiReportForTenant(user as any);
-  else if (reportKey === "reassignment_impact") report = await inbuiltReports.getReassignmentImpactReportForTenant(user as any, 24);
-  else if (reportKey === "activity_call_volume_trends") report = await inbuiltReports.getActivityCallVolumeTrendReportForTenant(user as any, "day", null, null);
+  if (reportKey === "funnel_conversion_by_stage") report = await inbuiltReports.getFunnelByStageReportForTenant(user as any, filters);
+  else if (reportKey === "funnel_conversion_by_source_campaign") report = await inbuiltReports.getFunnelBySourceCampaignReportForTenant(user as any, filters);
+  else if (reportKey === "rep_performance") report = await inbuiltReports.getRepPerformanceReportForTenant(user as any, filters);
+  else if (reportKey === "sla_response_breaches") report = await inbuiltReports.getSlaResponseBreachReportForTenant(user as any, 24, filters);
+  else if (reportKey === "lead_source_roi") report = await inbuiltReports.getLeadSourceRoiReportForTenant(user as any, filters);
+  else if (reportKey === "reassignment_impact") report = await inbuiltReports.getReassignmentImpactReportForTenant(user as any, 24, filters);
+  else if (reportKey === "activity_call_volume_trends") report = await inbuiltReports.getActivityCallVolumeTrendReportForTenant(user as any, "day", null, null, filters);
   else if (reportKey === "commission_payout_summary") report = await inbuiltReports.getCommissionPayoutSummaryReportForTenant(user as any);
-  else if (reportKey === "cohort_funnel_progression") report = await inbuiltReports.getCohortReportForTenant(user as any, "month");
-  else if (reportKey === "data_quality") report = await inbuiltReports.getDataQualityReportForTenant(user as any, 30);
+  else if (reportKey === "cohort_funnel_progression") report = await inbuiltReports.getCohortReportForTenant(user as any, "month", "CREATED_DATE", filters);
+  else if (reportKey === "data_quality") report = await inbuiltReports.getDataQualityReportForTenant(user as any, 30, filters);
   else throw new Error("INVALID_INBUILT_REPORT");
   return reportResultRows(report);
 }
 
-async function inbuiltReportCsv(user: TenantUser, reportKey: string, timeZone: string) {
-  return toCsv(await inbuiltReportRows(user, reportKey), timeZone);
+async function inbuiltReportCsv(user: TenantUser, reportKey: string, timeZone: string, filters: ReportFilters = NO_REPORT_FILTERS) {
+  return toCsv(await inbuiltReportRows(user, reportKey, filters), timeZone);
 }
 
 // Gap checklist Module 17, item 19 (scheduled extracts): XLSX export. exceljs is a genuinely
@@ -313,7 +331,41 @@ function applySelectedExportIds(
   clauses.push(`${alias}.id::text = any($${values.length}::text[])`);
 }
 
-async function fetchExportRows(user: TenantUser, moduleName: ExportModuleName, filters: Record<string, unknown> = {}) {
+// Custom fields as extra export columns, headed by their labels, after the built-in ones. Rows
+// carry their record id (and opportunity type) as "__id"/"__typeId" until here; values hidden
+// from this user by a permission template are left empty.
+async function appendCustomFieldColumns(user: TenantUser, object: "LEAD" | "OPPORTUNITY", rows: Record<string, unknown>[]) {
+  const strip = (row: Record<string, unknown>) => {
+    const { __id, __typeId, ...rest } = row;
+    void __id; void __typeId;
+    return rest;
+  };
+  if (!user.tenantId || !rows.length) return rows.map(strip);
+  const definitions = await query<{ key: string; label: string; entityTypeId: string | null }>(
+    `select fd.key, fd.label, fd."entityTypeId" from "FieldDefinition" fd join "ObjectDefinition" od on od.id = fd."objectId" and od."tenantId" = fd."tenantId"
+      where fd."tenantId" = $1 and od.name = $2 and fd."isCustom" = true and fd."isActive" = true and fd."deletedAt" is null
+      order by fd."order" asc, fd."createdAt" asc`,
+    [user.tenantId, object === "LEAD" ? "lead" : "opportunity"],
+  );
+  if (!definitions.length) return rows.map(strip);
+  const values = await loadCustomFieldValues(user.tenantId, object, rows.map((row) => String(row.__id)));
+  const existing = new Set(Object.keys(strip(rows[0])));
+  const header = (label: string) => (existing.has(label) ? `${label} (custom)` : label);
+  const permissionModule = object === "LEAD" ? "leads" : "opportunities";
+  return rows.map((row) => {
+    const permissions = fieldPermissionMap(user, permissionModule, row.__typeId ? String(row.__typeId) : null);
+    const own = values.get(String(row.__id)) ?? {};
+    const extra: Record<string, unknown> = {};
+    for (const field of definitions) {
+      const value = permissions[field.key] === "hidden" ? null : own[field.key];
+      extra[header(field.label)] = Array.isArray(value) ? value.join(", ") : value ?? null;
+    }
+    return { ...strip(row), ...extra };
+  });
+}
+
+// Exported for scripts/custom-fields-smoke.ts; the export job is the only other caller.
+export async function fetchExportRows(user: TenantUser, moduleName: ExportModuleName, filters: Record<string, unknown> = {}) {
   filters = normalizeExportObject(filters);
   const values: unknown[] = [];
   const own = ownerScoped(user);
@@ -356,7 +408,7 @@ async function fetchExportRows(user: TenantUser, moduleName: ExportModuleName, f
               rs.confidence as "Score Confidence", rs."stallRisk" as "Stall Risk",
               rs."expectedResponseLikelihood" as "Response Likelihood", rs."duplicateRisk" as "Duplicate Risk",
               rs."staleRisk" as "Stale Risk", rs."nextBestAction" as "Recommended Next Action",
-              l."createdAt" as "Created At"
+              l."createdAt" as "Created At", l.id as "__id"
        from "Lead" l
        left join "User" owner on owner.id = l."ownerId"
        left join "RecordScore" rs on rs."tenantId" = l."tenantId" and rs."recordType" = 'LEAD' and rs."recordId" = l.id
@@ -365,7 +417,7 @@ async function fetchExportRows(user: TenantUser, moduleName: ExportModuleName, f
        limit $${values.length}`,
       values,
     );
-    return maskExportRows(user, "leads", leadRows);
+    return maskExportRows(user, "leads", await appendCustomFieldColumns(user, "LEAD", leadRows));
   }
 
   if (moduleName === "OPPORTUNITIES") {
@@ -403,7 +455,8 @@ async function fetchExportRows(user: TenantUser, moduleName: ExportModuleName, f
               rs."scoreBand" as "Predictive Score Band", rs."winProbability" as "Win Probability",
               rs.confidence as "Score Confidence", rs."stallRisk" as "Stall Risk",
               rs."expectedCloseRisk" as "Expected Close Risk", rs."nextBestAction" as "Recommended Next Action",
-              rs."suggestedCloseDate" as "Suggested Close Date", o."createdAt" as "Created At"
+              rs."suggestedCloseDate" as "Suggested Close Date", o."createdAt" as "Created At",
+              o.id as "__id", o."opportunityTypeId" as "__typeId"
        from "Opportunity" o
        left join "Lead" l on l.id = o."leadId"
        left join "OpportunityType" ot on ot.id = o."opportunityTypeId"
@@ -415,7 +468,7 @@ async function fetchExportRows(user: TenantUser, moduleName: ExportModuleName, f
        limit $${values.length}`,
       values,
     );
-    return maskExportRows(user, "opportunities", opportunityRows);
+    return maskExportRows(user, "opportunities", await appendCustomFieldColumns(user, "OPPORTUNITY", opportunityRows));
   }
 
   if (moduleName === "ACTIVITIES") {
@@ -659,7 +712,7 @@ async function fetchExportContent(
     // every other export path below stays CSV-only, unchanged from before this.
     const exportType = String(metadata.exportType ?? "CSV").toUpperCase();
     if (exportType === "XLSX" || exportType === "PDF") {
-      const rows = await inbuiltReportRows(user, filters.reportKey);
+      const rows = await inbuiltReportRows(user, filters.reportKey, exportReportFilters(user, filters.reportFilters));
       if (exportType === "XLSX") {
         const buffer = await toXlsxBuffer(rows, timeZone);
         return {
@@ -674,7 +727,7 @@ async function fetchExportContent(
       const buffer = await renderReportTablePdf({ title: filters.reportKey, generatedAt: new Date().toISOString(), rows });
       return { buffer, contentType: "application/pdf", extension: "pdf", recordCount: rows.length, filenamePrefix };
     }
-    const csv = await inbuiltReportCsv(user, filters.reportKey, timeZone);
+    const csv = await inbuiltReportCsv(user, filters.reportKey, timeZone, exportReportFilters(user, filters.reportFilters));
     return { csv, recordCount: csvRowCount(csv), filenamePrefix };
   }
   if (moduleName === "FORMS" && filters.exportScope === "SUBMISSIONS" && typeof filters.formId === "string") {
@@ -936,7 +989,10 @@ export async function processExpiredExportFiles(limit = 50) {
 export async function processExportRequest(exportRequestId: string) {
   let request = await queryOneAsSystem<ExportRequestRow>(`select * from "ExportRequest" where id = $1 limit 1`, [exportRequestId]);
   if (!request) throw new Error("EXPORT_REQUEST_NOT_FOUND");
-  if (request.status === "COMPLETED" || request.status === "RUNNING") return request;
+  // A RUNNING export whose lease has run out (the worker stopped part-way) is taken over and run
+  // again from the start (round-2 plan wave 3, B4); a live one is left alone.
+  if (request.status === "COMPLETED") return request;
+  if (request.status === "RUNNING" && (!request.leaseExpiresAt || new Date(request.leaseExpiresAt).getTime() > Date.now())) return request;
 
   const requester = await getCurrentUserById(request.userId);
   if (!requester) throw new Error("EXPORT_REQUEST_USER_NOT_FOUND");
@@ -945,10 +1001,11 @@ export async function processExportRequest(exportRequestId: string) {
 
   const claimedRequest = await queryOneAsSystem<ExportRequestRow>(
     `update "ExportRequest"
-     set status = 'RUNNING', "startedAt" = $1, "updatedAt" = $1, error = null
-     where id = $2 and status not in ('COMPLETED', 'RUNNING')
+     set status = 'RUNNING', "startedAt" = $1, "updatedAt" = $1, error = null, attempts = attempts + 1,
+         "leaseExpiresAt" = now() + ($3 || ' milliseconds')::interval
+     where id = $2 and (status not in ('COMPLETED', 'RUNNING') or (status = 'RUNNING' and "leaseExpiresAt" < now()))
      returning *`,
-    [startedAt, exportRequestId],
+    [startedAt, exportRequestId, String(TRANSFER_LEASE_MS)],
   );
   if (!claimedRequest) {
     const latest = await queryOneAsSystem<ExportRequestRow>(`select * from "ExportRequest" where id = $1 limit 1`, [exportRequestId]);
@@ -956,6 +1013,18 @@ export async function processExportRequest(exportRequestId: string) {
     return latest;
   }
   request = claimedRequest;
+  const attempt = Number(request.attempts ?? 1);
+  if (attempt > MAX_TRANSFER_ATTEMPTS) {
+    await failStaleExportRequest(exportRequestId, attempt);
+    return queryOneAsSystem<ExportRequestRow>(`select * from "ExportRequest" where id = $1 limit 1`, [exportRequestId]);
+  }
+  // Keep the claim while the export is being built (it has no row-by-row checkpoints).
+  const leaseRenewal = setInterval(() => {
+    executeAsSystem(
+      `update "ExportRequest" set "leaseExpiresAt" = now() + ($3 || ' milliseconds')::interval where id = $1 and status = 'RUNNING' and attempts = $2`,
+      [exportRequestId, attempt, String(TRANSFER_LEASE_MS)],
+    ).catch(() => undefined);
+  }, 60_000);
 
   try {
     const content = await fetchExportContent(user, request.moduleName, request.filters ?? {}, request.metadata ?? {});
@@ -998,7 +1067,7 @@ export async function processExportRequest(exportRequestId: string) {
       const expiresAt = new Date(new Date(completedAt).getTime() + exportRetentionDays() * 24 * 60 * 60 * 1000).toISOString();
       await tx.query(
         `update "ExportRequest"
-         set status = 'COMPLETED', "recordCount" = $1, "fileObjectId" = $2, "completedAt" = $3, "updatedAt" = $3, "expiresAt" = $5
+         set status = 'COMPLETED', "recordCount" = $1, "fileObjectId" = $2, "completedAt" = $3, "updatedAt" = $3, "expiresAt" = $5, "leaseExpiresAt" = null
          where id = $4`,
         [content.recordCount, fileObjectId, completedAt, request.id, expiresAt],
       );
@@ -1020,13 +1089,34 @@ export async function processExportRequest(exportRequestId: string) {
     return queryOne<ExportRequestRow>(`select * from "ExportRequest" where id = $1`, [request.id]);
   } catch (error) {
     const failedAt = new Date().toISOString();
-    await execute(`update "ExportRequest" set status = 'FAILED', error = $1, "updatedAt" = $2 where id = $3`, [
+    await execute(`update "ExportRequest" set status = 'FAILED', error = $1, "updatedAt" = $2, "leaseExpiresAt" = null where id = $3`, [
       error instanceof Error ? error.message : "Export failed",
       failedAt,
       request.id,
     ]);
     throw error;
+  } finally {
+    clearInterval(leaseRenewal);
   }
+}
+
+// An export that stopped part-way on every attempt: failed, and the requester told.
+export async function failStaleExportRequest(exportRequestId: string, attempts: number) {
+  const request = await queryOneAsSystem<{ tenantId: string; userId: string; moduleName: string }>(
+    `update "ExportRequest"
+     set status = 'FAILED', error = $2, "leaseExpiresAt" = null, "updatedAt" = now()
+     where id = $1 and status = 'RUNNING'
+     returning "tenantId", "userId", "moduleName"`,
+    [exportRequestId, `The export stopped ${attempts - 1} times part-way and was not finished. Please request it again.`],
+  );
+  if (!request) return;
+  await createUserNotification({
+    tenantId: request.tenantId,
+    userId: request.userId,
+    title: "Export failed",
+    message: `${request.moduleName.toLowerCase()} export stopped part-way and could not be finished. Please request it again.`,
+    data: { type: "EXPORT_FAILED", exportRequestId },
+  }).catch(() => undefined);
 }
 
 export async function getExportDownloadForUser(user: TenantUser, exportRequestId: string) {

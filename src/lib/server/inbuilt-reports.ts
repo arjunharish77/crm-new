@@ -20,6 +20,19 @@ import {
 } from "@/lib/repositories/opportunities-postgres";
 import { randomUUID } from "crypto";
 import { DEFAULT_SERVER_TIME_ZONE } from "@/lib/timezone";
+import { getTenantTimeZone } from "@/lib/server/date-format";
+import { recordAccessLevel } from "@/lib/server/record-scope";
+import {
+  NO_REPORT_FILTERS,
+  listAllActivitiesForReport,
+  listAllLeadsForReport,
+  listAllOpportunitiesForReport,
+  andWhere,
+  dateRangeWhere,
+  reportFilterWhere,
+  scopedRecordsSql,
+  type ReportFilters,
+} from "@/lib/server/report-scope";
 
 type TenantUser = {
   id: string;
@@ -39,6 +52,12 @@ type TenantUser = {
 // summary. Everything else in this file has no per-metric gate beyond the existing binary
 // `advancedReporting` feature flag and normal tenant scoping.
 const SENSITIVE_REPORT_KEYS = new Set(["campaign_roi", "lead_source_roi"]);
+
+// Round-2 plan wave 3 (B1): every matching record, not a capped page, with the report filter bar's
+// date/owner/team applied in the query (report-scope.ts). Same row shape as the record lists.
+const leadsFor = async (user: TenantUser, filters: ReportFilters) => ({ data: await listAllLeadsForReport(user, filters) });
+const opportunitiesFor = async (user: TenantUser, filters: ReportFilters) => ({ data: await listAllOpportunitiesForReport(user, filters) });
+const activitiesFor = async (user: TenantUser, filters: ReportFilters) => ({ data: await listAllActivitiesForReport(user, filters) });
 
 function assertSensitiveReportAccess(user: TenantUser, reportKey: string) {
   if (!SENSITIVE_REPORT_KEYS.has(reportKey)) return;
@@ -428,9 +447,9 @@ export type DataQualityReport = {
 // (a correct pure function given a raw opportunity array, not itself the source of the bug) but
 // is no longer called from this wrapper; `buildFunnelByStageReportFromAggregateRows` is its
 // pre-aggregated-rows equivalent.
-export async function getFunnelByStageReportForTenant(user: TenantUser): Promise<FunnelByStageReport> {
+export async function getFunnelByStageReportForTenant(user: TenantUser, filters: ReportFilters = NO_REPORT_FILTERS): Promise<FunnelByStageReport> {
   await assertFeatureEnabled(user.tenantId, "advancedReporting", { isPlatformAdmin: user.isPlatformAdmin });
-  const stageRows = await getFunnelByStageAggregateForTenant(user);
+  const stageRows = await getFunnelByStageAggregateForTenant(user, await reportFilterWhere(user, "opportunity", filters));
   return buildFunnelByStageReportFromAggregateRows(stageRows, new Date());
 }
 
@@ -467,11 +486,11 @@ export function buildFunnelByStageReportFromAggregateRows(
   };
 }
 
-export async function getFunnelBySourceCampaignReportForTenant(user: TenantUser): Promise<FunnelBySourceCampaignReport> {
+export async function getFunnelBySourceCampaignReportForTenant(user: TenantUser, filters: ReportFilters = NO_REPORT_FILTERS): Promise<FunnelBySourceCampaignReport> {
   await assertFeatureEnabled(user.tenantId, "advancedReporting", { isPlatformAdmin: user.isPlatformAdmin });
   const [leads, opportunities, campaignLookup] = await Promise.all([
-    listLeadsForTenant(user, 1, 1000),
-    listOpportunitiesForTenant(user, 1000),
+    leadsFor(user, filters),
+    opportunitiesFor(user, filters),
     getLeadCampaignLookup(user),
   ]);
 
@@ -606,12 +625,13 @@ export function calculateFunnelExplorerReport(
 
 export async function getFunnelExplorerForTenant(
   user: TenantUser,
-  segmentDimension: FunnelExplorerSegmentDimension = "SOURCE"
+  segmentDimension: FunnelExplorerSegmentDimension = "SOURCE",
+  filters: ReportFilters = NO_REPORT_FILTERS,
 ): Promise<FunnelExplorerReport> {
   await assertFeatureEnabled(user.tenantId, "advancedReporting", { isPlatformAdmin: user.isPlatformAdmin });
   const [leads, opportunities, opportunityTypes, users] = await Promise.all([
-    listLeadsForTenant(user, 1, 1000),
-    listOpportunitiesForTenant(user, 1000),
+    leadsFor(user, filters),
+    opportunitiesFor(user, filters),
     listOpportunityTypesForTenant(user),
     listTenantUsers(user),
   ]);
@@ -834,11 +854,12 @@ export async function getSegmentComparisonReportForTenant(
   user: TenantUser,
   segmentA: ComparisonSegmentInput,
   segmentB: ComparisonSegmentInput,
+  filters: ReportFilters = NO_REPORT_FILTERS,
 ): Promise<SegmentComparisonReport> {
   await assertFeatureEnabled(user.tenantId, "advancedReporting", { isPlatformAdmin: user.isPlatformAdmin });
   const [leads, opportunities, opportunityTypes, users] = await Promise.all([
-    listLeadsForTenant(user, 1, 1000),
-    listOpportunitiesForTenant(user, 1000),
+    leadsFor(user, filters),
+    opportunitiesFor(user, filters),
     listOpportunityTypesForTenant(user),
     listTenantUsers(user),
   ]);
@@ -945,72 +966,102 @@ export function detectAnomalyFromDailySeries(domain: AnomalyDomain, series: Anom
 // the DB session's timezone (UTC in this setup), so UTC on both sides keeps them consistent --
 // not tenant-timezone-aware, same documented limitation every other date-bucketed report in
 // this file already carries.
-export function fillDailySeries(rows: Array<{ day: string; value: number | string }>, windowDays: number, now: Date): AnomalySeriesPoint[] {
+// Round-2 plan B19: callers now pass the workspace's time zone and bucket in SQL with the same
+// zone, so a day is the workspace's calendar day; UTC stays the default for direct callers.
+export function fillDailySeries(rows: Array<{ day: string; value: number | string }>, windowDays: number, now: Date, timeZone = "UTC"): AnomalySeriesPoint[] {
   const byDay = new Map(rows.map((row) => [String(row.day).slice(0, 10), Number(row.value)]));
-  const series: AnomalySeriesPoint[] = [];
-  for (let offset = windowDays - 1; offset >= 0; offset--) {
-    const day = new Date(now);
-    day.setUTCHours(0, 0, 0, 0);
-    day.setUTCDate(day.getUTCDate() - offset);
-    const key = day.toISOString().slice(0, 10);
-    series.push({ date: key, value: byDay.get(key) ?? 0 });
-  }
-  return series;
+  return dayKeysEndingToday(windowDays, now, timeZone).map((key) => ({ date: key, value: byDay.get(key) ?? 0 }));
 }
 
-export async function getAnomalyDetectionReportForTenant(user: TenantUser): Promise<AnomalyDetectionReport> {
+// `count` consecutive calendar days ending today in `timeZone`, as YYYY-MM-DD (oldest first).
+function dayKeysEndingToday(count: number, now: Date, timeZone: string) {
+  const today = new Intl.DateTimeFormat("en-CA", { timeZone, year: "numeric", month: "2-digit", day: "2-digit" }).format(now);
+  const base = new Date(`${today}T00:00:00Z`);
+  const keys: string[] = [];
+  for (let offset = count - 1; offset >= 0; offset--) {
+    const day = new Date(base);
+    day.setUTCDate(day.getUTCDate() - offset);
+    keys.push(day.toISOString().slice(0, 10));
+  }
+  return keys;
+}
+
+// Daily totals for a time series, bucketed by the workspace's calendar day (B19). `build` writes
+// the query, using `bind` for values and `scoped` to embed a record CTE that follows the
+// viewer's record access and the owner/team filters (report-scope.ts).
+async function dailySeries(
+  user: TenantUser,
+  filters: ReportFilters,
+  build: (helpers: {
+    bind: (value: unknown) => string;
+    scoped: (kind: "lead" | "opportunity" | "activity" | "task" | "case", columns: string) => Promise<string>;
+    day: (column: string) => string;
+  }) => Promise<string>,
+) {
+  const values: unknown[] = [];
+  const bind = (value: unknown) => {
+    values.push(value);
+    return `$${values.length}`;
+  };
+  const scopeFilters = { ...filters, from: null, to: null };
+  const scoped = async (kind: "lead" | "opportunity" | "activity" | "task" | "case", columns: string) => {
+    const part = await scopedRecordsSql(user, kind, scopeFilters, columns, { startIndex: values.length });
+    values.push(...part.values);
+    return part.sql;
+  };
+  const tz = bind(await getTenantTimeZone(user.tenantId));
+  const day = (column: string) => `to_char((${column} at time zone ${tz})::date, 'YYYY-MM-DD')`;
+  const sql = await build({ bind, scoped, day });
+  return pgQuery<{ day: string; value: string }>(sql, values);
+}
+
+export async function getAnomalyDetectionReportForTenant(user: TenantUser, filters: ReportFilters = NO_REPORT_FILTERS): Promise<AnomalyDetectionReport> {
   await assertFeatureEnabled(user.tenantId, "advancedReporting", { isPlatformAdmin: user.isPlatformAdmin });
   const now = new Date();
   const empty: AnomalyDetectionReport = { reportKey: "anomaly_detection", generatedAt: now.toISOString(), windowDays: ANOMALY_WINDOW_DAYS, domains: [] };
   if (!user.tenantId) return empty;
 
-  const windowStart = new Date(now);
-  windowStart.setUTCHours(0, 0, 0, 0);
-  windowStart.setUTCDate(windowStart.getUTCDate() - (ANOMALY_WINDOW_DAYS - 1));
+  // Round-2 plan wave 3 (decision 1): record series follow the viewer's record access and the
+  // owner/team filter; workspace-level series (payouts, marketing) appear only for all-access
+  // viewers with no owner/team filter. Days are the workspace's calendar days (B19).
+  const timeZone = await getTenantTimeZone(user.tenantId);
+  const firstDay = dayKeysEndingToday(ANOMALY_WINDOW_DAYS, now, timeZone)[0];
+  const workspaceWide = recordAccessLevel(user) === "ALL" && !filters.ownerIds && !filters.teamId;
+  const since = (column: string, bind: (value: unknown) => string, tz: string) => `${column} >= (${bind(firstDay)}::date::timestamp at time zone ${tz})`;
+  const tzOf = (bind: (value: unknown) => string) => bind(timeZone);
+  const noRows = Promise.resolve([] as Array<{ day: string; value: string }>);
 
   const [leadRows, wonRows, slaRows, payoutRows, campaignRows, scoreRows, caseCreatedRows, caseResolvedRows] = await Promise.all([
-    pgQuery<{ day: string; value: string }>(
-      `select date_trunc('day', "createdAt")::date::text as day, count(*)::int as value
-       from "Lead" where "tenantId" = $1 and "createdAt" >= $2 group by day`,
-      [user.tenantId, windowStart.toISOString()],
-    ),
-    pgQuery<{ day: string; value: string }>(
-      `select date_trunc('day', h."changedAt")::date::text as day, count(*)::int as value
-       from "OpportunityStageHistory" h
-       join "StageDefinition" s on s.id = h."toStageId"
-       where h."tenantId" = $1 and s."isWon" = true and h."changedAt" >= $2 group by day`,
-      [user.tenantId, windowStart.toISOString()],
-    ),
-    pgQuery<{ day: string; value: string }>(
-      `select date_trunc('day', "dueAt")::date::text as day, count(*)::int as value
-       from "Activity" where "tenantId" = $1 and "slaStatus" = 'BREACHED' and "dueAt" >= $2 group by day`,
-      [user.tenantId, windowStart.toISOString()],
-    ),
-    pgQuery<{ day: string; value: string }>(
-      `select date_trunc('day', "createdAt")::date::text as day, coalesce(sum("commissionAmount"), 0)::float as value
-       from "CommissionLedger" where "tenantId" = $1 and "entryType" = 'EARNED' and "createdAt" >= $2 group by day`,
-      [user.tenantId, windowStart.toISOString()],
-    ),
-    pgQuery<{ day: string; value: string }>(
-      `select date_trunc('day', "occurredAt")::date::text as day, count(*)::int as value
-       from "MarketingAttributionTouch" where "tenantId" = $1 and "touchType" = 'CONVERSION' and "occurredAt" >= $2 group by day`,
-      [user.tenantId, windowStart.toISOString()],
-    ),
-    pgQuery<{ day: string; value: string }>(
-      `select date_trunc('day', "calculatedAt")::date::text as day, coalesce(avg("conversionProbability"), 0)::float as value
-       from "RecordScore" where "tenantId" = $1 and "calculatedAt" >= $2 group by day`,
-      [user.tenantId, windowStart.toISOString()],
-    ),
-    pgQuery<{ day: string; value: string }>(
-      `select date_trunc('day', "createdAt")::date::text as day, count(*)::int as value
-       from "Case" where "tenantId" = $1 and "createdAt" >= $2 group by day`,
-      [user.tenantId, windowStart.toISOString()],
-    ),
-    pgQuery<{ day: string; value: string }>(
-      `select date_trunc('day', "resolvedAt")::date::text as day, count(*)::int as value
-       from "Case" where "tenantId" = $1 and "resolvedAt" is not null and "resolvedAt" >= $2 group by day`,
-      [user.tenantId, windowStart.toISOString()],
-    ),
+    dailySeries(user, filters, async ({ bind, scoped, day }) =>
+      `select ${day('"createdAt"')} as day, count(*)::int as value from (${await scoped("lead", '"createdAt"')}) l where ${since('"createdAt"', bind, tzOf(bind))} group by 1`),
+    dailySeries(user, filters, async ({ bind, scoped, day }) =>
+      `select ${day('h."changedAt"')} as day, count(*)::int as value
+       from "OpportunityStageHistory" h join "StageDefinition" s on s.id = h."toStageId"
+       where h."tenantId" = ${bind(user.tenantId)} and s."isWon" = true and ${since('h."changedAt"', bind, tzOf(bind))}
+         and h."opportunityId" in (select id from (${await scoped("opportunity", "id")}) o) group by 1`),
+    dailySeries(user, filters, async ({ bind, scoped, day }) =>
+      `select ${day('"dueAt"')} as day, count(*)::int as value from (${await scoped("activity", '"dueAt", "slaStatus"')}) a
+       where "slaStatus" = 'BREACHED' and ${since('"dueAt"', bind, tzOf(bind))} group by 1`),
+    workspaceWide
+      ? dailySeries(user, filters, async ({ bind, day }) =>
+          `select ${day('"createdAt"')} as day, coalesce(sum("commissionAmount"), 0)::float as value
+           from "CommissionLedger" where "tenantId" = ${bind(user.tenantId)} and "entryType" = 'EARNED' and ${since('"createdAt"', bind, tzOf(bind))} group by 1`)
+      : noRows,
+    workspaceWide
+      ? dailySeries(user, filters, async ({ bind, day }) =>
+          `select ${day('"occurredAt"')} as day, count(*)::int as value
+           from "MarketingAttributionTouch" where "tenantId" = ${bind(user.tenantId)} and "touchType" = 'CONVERSION' and ${since('"occurredAt"', bind, tzOf(bind))} group by 1`)
+      : noRows,
+    dailySeries(user, filters, async ({ bind, scoped, day }) =>
+      `select ${day('"calculatedAt"')} as day, coalesce(avg("conversionProbability"), 0)::float as value
+       from "RecordScore" where "tenantId" = ${bind(user.tenantId)} and ${since('"calculatedAt"', bind, tzOf(bind))}
+       ${workspaceWide ? "" : `and ("recordId" in (select id from (${await scoped("lead", "id")}) l) or "recordId" in (select id from (${await scoped("opportunity", "id")}) o))`}
+       group by 1`),
+    dailySeries(user, filters, async ({ bind, scoped, day }) =>
+      `select ${day('"createdAt"')} as day, count(*)::int as value from (${await scoped("case", '"createdAt"')}) c where ${since('"createdAt"', bind, tzOf(bind))} group by 1`),
+    dailySeries(user, filters, async ({ bind, scoped, day }) =>
+      `select ${day('"resolvedAt"')} as day, count(*)::int as value from (${await scoped("case", '"resolvedAt"')}) c
+       where "resolvedAt" is not null and ${since('"resolvedAt"', bind, tzOf(bind))} group by 1`),
   ]);
 
   // Service backlog growth = cases created minus cases resolved, per day -- a real proxy for
@@ -1028,14 +1079,16 @@ export async function getAnomalyDetectionReportForTenant(user: TenantUser): Prom
     value: (createdByDay.get(day) ?? 0) - (resolvedByDay.get(day) ?? 0),
   }));
 
+  const series = (rows: Array<{ day: string; value: number | string }>) => fillDailySeries(rows, ANOMALY_WINDOW_DAYS, now, timeZone);
   const domains: AnomalyDomainResult[] = [
-    detectAnomalyFromDailySeries("LEAD_VOLUME", fillDailySeries(leadRows, ANOMALY_WINDOW_DAYS, now)),
-    detectAnomalyFromDailySeries("CONVERSIONS", fillDailySeries(wonRows, ANOMALY_WINDOW_DAYS, now)),
-    detectAnomalyFromDailySeries("SLA_BREACHES", fillDailySeries(slaRows, ANOMALY_WINDOW_DAYS, now)),
-    detectAnomalyFromDailySeries("PAYOUT_AMOUNT", fillDailySeries(payoutRows, ANOMALY_WINDOW_DAYS, now)),
-    detectAnomalyFromDailySeries("CAMPAIGN_PERFORMANCE", fillDailySeries(campaignRows, ANOMALY_WINDOW_DAYS, now)),
-    detectAnomalyFromDailySeries("SCORING_DRIFT", fillDailySeries(scoreRows, ANOMALY_WINDOW_DAYS, now)),
-    detectAnomalyFromDailySeries("SERVICE_BACKLOG", fillDailySeries(backlogRows, ANOMALY_WINDOW_DAYS, now)),
+    detectAnomalyFromDailySeries("LEAD_VOLUME", series(leadRows)),
+    detectAnomalyFromDailySeries("CONVERSIONS", series(wonRows)),
+    detectAnomalyFromDailySeries("SLA_BREACHES", series(slaRows)),
+    ...(workspaceWide
+      ? [detectAnomalyFromDailySeries("PAYOUT_AMOUNT", series(payoutRows)), detectAnomalyFromDailySeries("CAMPAIGN_PERFORMANCE", series(campaignRows))]
+      : []),
+    detectAnomalyFromDailySeries("SCORING_DRIFT", series(scoreRows)),
+    detectAnomalyFromDailySeries("SERVICE_BACKLOG", series(backlogRows)),
   ];
 
   return { reportKey: "anomaly_detection", generatedAt: now.toISOString(), windowDays: ANOMALY_WINDOW_DAYS, domains };
@@ -1106,42 +1159,39 @@ function buildForecastDomain(domain: ForecastDomain, history: ForecastPoint[]): 
   return { domain, history, forecast, slope, intercept };
 }
 
-export async function getForecastReportForTenant(user: TenantUser): Promise<ForecastReport> {
+export async function getForecastReportForTenant(user: TenantUser, filters: ReportFilters = NO_REPORT_FILTERS): Promise<ForecastReport> {
   await assertFeatureEnabled(user.tenantId, "advancedReporting", { isPlatformAdmin: user.isPlatformAdmin });
   const now = new Date();
   const empty: ForecastReport = { reportKey: "forecast", generatedAt: now.toISOString(), historyDays: FORECAST_HISTORY_DAYS, horizonDays: FORECAST_HORIZON_DAYS, domains: [] };
   if (!user.tenantId) return empty;
 
-  const windowStart = new Date(now);
-  windowStart.setUTCHours(0, 0, 0, 0);
-  windowStart.setUTCDate(windowStart.getUTCDate() - (FORECAST_HISTORY_DAYS - 1));
+  // Same rules as anomaly detection: record series follow record access and the owner/team
+  // filter; campaign volume and partner payouts only for all-access viewers with no such filter.
+  const timeZone = await getTenantTimeZone(user.tenantId);
+  const firstDay = dayKeysEndingToday(FORECAST_HISTORY_DAYS, now, timeZone)[0];
+  const workspaceWide = recordAccessLevel(user) === "ALL" && !filters.ownerIds && !filters.teamId;
+  const since = (column: string, bind: (value: unknown) => string) => `${column} >= (${bind(firstDay)}::date::timestamp at time zone ${bind(timeZone)})`;
+  const noRows = Promise.resolve([] as Array<{ day: string; value: string }>);
 
   const [campaignRows, taskCreatedRows, taskCompletedRows, slaRows, payoutRows] = await Promise.all([
-    pgQuery<{ day: string; value: string }>(
-      `select date_trunc('day', "occurredAt")::date::text as day, count(*)::int as value
-       from "MarketingAttributionTouch" where "tenantId" = $1 and "touchType" = 'TOUCH' and "occurredAt" >= $2 group by day`,
-      [user.tenantId, windowStart.toISOString()],
-    ),
-    pgQuery<{ day: string; value: string }>(
-      `select date_trunc('day', "createdAt")::date::text as day, count(*)::int as value
-       from "Task" where "tenantId" = $1 and "createdAt" >= $2 group by day`,
-      [user.tenantId, windowStart.toISOString()],
-    ),
-    pgQuery<{ day: string; value: string }>(
-      `select date_trunc('day', "completedAt")::date::text as day, count(*)::int as value
-       from "Task" where "tenantId" = $1 and "completedAt" is not null and "completedAt" >= $2 group by day`,
-      [user.tenantId, windowStart.toISOString()],
-    ),
-    pgQuery<{ day: string; value: string }>(
-      `select date_trunc('day', "dueAt")::date::text as day, count(*)::int as value
-       from "Activity" where "tenantId" = $1 and "slaStatus" = 'BREACHED' and "dueAt" >= $2 group by day`,
-      [user.tenantId, windowStart.toISOString()],
-    ),
-    pgQuery<{ day: string; value: string }>(
-      `select date_trunc('day', "createdAt")::date::text as day, coalesce(sum("commissionAmount"), 0)::float as value
-       from "CommissionLedger" where "tenantId" = $1 and "entryType" = 'EARNED' and "createdAt" >= $2 group by day`,
-      [user.tenantId, windowStart.toISOString()],
-    ),
+    workspaceWide
+      ? dailySeries(user, filters, async ({ bind, day }) =>
+          `select ${day('"occurredAt"')} as day, count(*)::int as value
+           from "MarketingAttributionTouch" where "tenantId" = ${bind(user.tenantId)} and "touchType" = 'TOUCH' and ${since('"occurredAt"', bind)} group by 1`)
+      : noRows,
+    dailySeries(user, filters, async ({ bind, scoped, day }) =>
+      `select ${day('"createdAt"')} as day, count(*)::int as value from (${await scoped("task", '"createdAt"')}) t where ${since('"createdAt"', bind)} group by 1`),
+    dailySeries(user, filters, async ({ bind, scoped, day }) =>
+      `select ${day('"completedAt"')} as day, count(*)::int as value from (${await scoped("task", '"completedAt"')}) t
+       where "completedAt" is not null and ${since('"completedAt"', bind)} group by 1`),
+    dailySeries(user, filters, async ({ bind, scoped, day }) =>
+      `select ${day('"dueAt"')} as day, count(*)::int as value from (${await scoped("activity", '"dueAt", "slaStatus"')}) a
+       where "slaStatus" = 'BREACHED' and ${since('"dueAt"', bind)} group by 1`),
+    workspaceWide
+      ? dailySeries(user, filters, async ({ bind, day }) =>
+          `select ${day('"createdAt"')} as day, coalesce(sum("commissionAmount"), 0)::float as value
+           from "CommissionLedger" where "tenantId" = ${bind(user.tenantId)} and "entryType" = 'EARNED' and ${since('"createdAt"', bind)} group by 1`)
+      : noRows,
   ]);
 
   // Task backlog growth = created minus completed, per day -- same "growth, not snapshot" proxy
@@ -1154,11 +1204,12 @@ export async function getForecastReportForTenant(user: TenantUser): Promise<Fore
     value: (createdByDay.get(day) ?? 0) - (completedByDay.get(day) ?? 0),
   }));
 
+  const series = (rows: Array<{ day: string; value: number | string }>) => fillDailySeries(rows, FORECAST_HISTORY_DAYS, now, timeZone);
   const domains: ForecastDomainResult[] = [
-    buildForecastDomain("CAMPAIGN_VOLUME", fillDailySeries(campaignRows, FORECAST_HISTORY_DAYS, now)),
-    buildForecastDomain("TASK_BACKLOG", fillDailySeries(taskBacklogRows, FORECAST_HISTORY_DAYS, now)),
-    buildForecastDomain("SLA_BREACH_RISK", fillDailySeries(slaRows, FORECAST_HISTORY_DAYS, now)),
-    buildForecastDomain("PARTNER_PAYOUT_PROJECTION", fillDailySeries(payoutRows, FORECAST_HISTORY_DAYS, now)),
+    ...(workspaceWide ? [buildForecastDomain("CAMPAIGN_VOLUME", series(campaignRows))] : []),
+    buildForecastDomain("TASK_BACKLOG", series(taskBacklogRows)),
+    buildForecastDomain("SLA_BREACH_RISK", series(slaRows)),
+    ...(workspaceWide ? [buildForecastDomain("PARTNER_PAYOUT_PROJECTION", series(payoutRows))] : []),
   ];
 
   return { reportKey: "forecast", generatedAt: now.toISOString(), historyDays: FORECAST_HISTORY_DAYS, horizonDays: FORECAST_HORIZON_DAYS, domains };
@@ -1181,7 +1232,7 @@ export type ExecutiveScorecardReport = {
   sections: ExecutiveScorecardSection[];
 };
 
-export async function getExecutiveScorecardReportForTenant(user: TenantUser): Promise<ExecutiveScorecardReport> {
+export async function getExecutiveScorecardReportForTenant(user: TenantUser, filters: ReportFilters = NO_REPORT_FILTERS): Promise<ExecutiveScorecardReport> {
   await assertFeatureEnabled(user.tenantId, "advancedReporting", { isPlatformAdmin: user.isPlatformAdmin });
   assertSensitiveReportAccess(user, "campaign_roi");
   const now = new Date().toISOString();
@@ -1189,11 +1240,13 @@ export async function getExecutiveScorecardReportForTenant(user: TenantUser): Pr
 
   const [campaignRoi, repPerformance, payoutSummary, telephony, caseAnalytics, dataQuality] = await Promise.all([
     getCampaignRoiReportForTenant(user),
-    getRepPerformanceReportForTenant(user),
+    // The filter bar applies to the record-based sections; marketing ROI and payouts are
+    // workspace-level figures and stay whole.
+    getRepPerformanceReportForTenant(user, filters),
     getCommissionPayoutSummaryReportForTenant(user),
-    getTelephonyCallPerformanceReportForTenant(user),
-    getCaseAnalyticsReportForTenant(user),
-    getDataQualityReportForTenant(user),
+    getTelephonyCallPerformanceReportForTenant(user, filters),
+    getCaseAnalyticsReportForTenant(user, filters),
+    getDataQualityReportForTenant(user, 30, filters),
   ]);
   // Dynamic import, matching this function's own getScopeCostSummary/marketing-cost.ts pattern
   // right above -- avoids a static dependency on self-learning-scoring.ts just for this one call.
@@ -1449,12 +1502,12 @@ export async function getPeriodComparisonReportForTenant(
   };
 }
 
-export async function getRepPerformanceReportForTenant(user: TenantUser): Promise<RepPerformanceReport> {
+export async function getRepPerformanceReportForTenant(user: TenantUser, filters: ReportFilters = NO_REPORT_FILTERS): Promise<RepPerformanceReport> {
   await assertFeatureEnabled(user.tenantId, "advancedReporting", { isPlatformAdmin: user.isPlatformAdmin });
   const [leads, opportunities, activities, users] = await Promise.all([
-    listLeadsForTenant(user, 1, 1000),
-    listOpportunitiesForTenant(user, 1000),
-    listActivitiesForTenant(user, 1000, null),
+    leadsFor(user, filters),
+    opportunitiesFor(user, filters),
+    activitiesFor(user, filters),
     listTenantUsers(user),
   ]);
 
@@ -1465,8 +1518,8 @@ export async function getRepPerformanceReportForTenant(user: TenantUser): Promis
 // mini dashboards") -- reuses getRepPerformanceReportForTenant/calculateRepPerformanceReport
 // entirely unchanged (no second aggregation pipeline), simply filtering its tenant-wide
 // per-rep rows down to one team's own member set.
-export async function getTeamPerformanceForTenant(user: TenantUser, memberUserIds: string[]) {
-  const report = await getRepPerformanceReportForTenant(user);
+export async function getTeamPerformanceForTenant(user: TenantUser, memberUserIds: string[], filters: ReportFilters = NO_REPORT_FILTERS) {
+  const report = await getRepPerformanceReportForTenant(user, filters);
   const memberIdSet = new Set(memberUserIds);
   const rows = report.rows.filter((row) => memberIdSet.has(row.repId));
   const totals = rows.reduce(
@@ -1484,47 +1537,48 @@ export async function getTeamPerformanceForTenant(user: TenantUser, memberUserId
 
 export async function getSlaResponseBreachReportForTenant(
   user: TenantUser,
-  thresholdHours = 24
+  thresholdHours = 24,
+  filters: ReportFilters = NO_REPORT_FILTERS,
 ): Promise<SlaResponseBreachReport> {
   await assertFeatureEnabled(user.tenantId, "advancedReporting", { isPlatformAdmin: user.isPlatformAdmin });
   const [leads, activities, users] = await Promise.all([
-    listLeadsForTenant(user, 1, 1000),
-    listActivitiesForTenant(user, 1000, null),
+    leadsFor(user, filters),
+    activitiesFor(user, filters),
     listTenantUsers(user),
   ]);
 
   return calculateSlaResponseBreachReport(leads.data, activities.data, users, thresholdHours, new Date());
 }
 
-export async function getTaskSlaPerformanceReportForTenant(user: TenantUser): Promise<TaskSlaPerformanceReport> {
+export async function getTaskSlaPerformanceReportForTenant(user: TenantUser, filters: ReportFilters = NO_REPORT_FILTERS): Promise<TaskSlaPerformanceReport> {
   await assertFeatureEnabled(user.tenantId, "advancedReporting", { isPlatformAdmin: user.isPlatformAdmin });
   if (!user.tenantId) {
     return { reportKey: "task_sla_performance", generatedAt: new Date().toISOString(), totals: { totalTasks: 0, firstActionBreaches: 0, completionBreaches: 0, completionMet: 0 }, rows: [], byModule: [] };
   }
 
-  // Flat fetch + JS-side bucketing (this codebase's reporting convention -- see
-  // calculateSlaResponseBreachReport above) rather than SQL group by/join.
-  const [tasks, users] = await Promise.all([
-    pgQuery<any>(
-      `select "id", "ownerId", "priority", "status", "leadId", "opportunityId", "activityId",
-              "slaTarget", "firstActionSlaTarget", "firstActionAt", "slaStatus", "completedAt", "createdAt"
-       from "Task" where "tenantId" = $1 order by "createdAt" desc limit 1000`,
-      [user.tenantId],
-    ),
-    listTenantUsers(user),
-  ]);
+  // Round-2 plan wave 3: every task the viewer can see (own / team / all, as the task list) with
+  // the filter bar applied -- it read the newest 1,000 tasks of the whole workspace before.
+  const scopedTasks = await scopedRecordsSql(
+    user,
+    "task",
+    filters,
+    `"id", "ownerId", "priority", "status", "leadId", "opportunityId", "activityId",
+     "slaTarget", "firstActionSlaTarget", "firstActionAt", "slaStatus", "completedAt", "createdAt"`,
+  );
+  const [tasks, users] = await Promise.all([pgQuery<any>(scopedTasks.sql, scopedTasks.values), listTenantUsers(user)]);
 
   const teamIds = [...new Set(users.map((row: any) => row.teamId).filter(Boolean))];
   const teamNameById = new Map<string, string>();
   if (teamIds.length > 0) {
-    const teams = await pgQuery<any>('select id, name from "Team" where "tenantId" = $1 and id = any($2::text[])', [user.tenantId, teamIds]);
+    // Team.id is a uuid; comparing it with a text[] failed ("uuid = text"), so this report errored for everyone.
+    const teams = await pgQuery<any>('select id::text as id, name from "Team" where "tenantId" = $1 and id::text = any($2::text[])', [user.tenantId, teamIds]);
     teams.forEach((team: any) => teamNameById.set(team.id, team.name));
   }
 
   return calculateTaskSlaPerformanceReport(tasks, users, teamNameById, new Date());
 }
 
-export async function getAutomationPerformanceReportForTenant(user: TenantUser): Promise<AutomationPerformanceReport> {
+export async function getAutomationPerformanceReportForTenant(user: TenantUser, filters: ReportFilters = NO_REPORT_FILTERS): Promise<AutomationPerformanceReport> {
   await assertFeatureEnabled(user.tenantId, "advancedReporting", { isPlatformAdmin: user.isPlatformAdmin });
   if (!user.tenantId) {
     return { reportKey: "automation_performance", generatedAt: new Date().toISOString(), totals: { totalRuns: 0, completed: 0, failed: 0, waiting: 0 }, rows: [] };
@@ -1532,11 +1586,14 @@ export async function getAutomationPerformanceReportForTenant(user: TenantUser):
 
   // Flat fetch + JS-side bucketing (this codebase's reporting convention) rather than SQL
   // group by/join -- mirrors getTaskSlaPerformanceReportForTenant above.
+  // Every run in the filter bar's date range (by start); the newest 1,000 only, before wave 3.
+  const executionValues: unknown[] = [user.tenantId];
+  const executionDates = andWhere(executionValues, await dateRangeWhere(user, filters, '"startedAt"'));
   const [automations, executions] = await Promise.all([
     pgQuery<any>('select id, name, "isActive" from "AutomationV2" where "tenantId" = $1 and "deletedAt" is null', [user.tenantId]),
     pgQuery<any>(
-      'select id, "automationId", status, "startedAt", "completedAt" from "AutomationExecution" where "tenantId" = $1 order by "startedAt" desc limit 1000',
-      [user.tenantId],
+      `select id, "automationId", status, "startedAt", "completedAt" from "AutomationExecution" where "tenantId" = $1${executionDates}`,
+      executionValues,
     ),
   ]);
 
@@ -1546,17 +1603,20 @@ export async function getAutomationPerformanceReportForTenant(user: TenantUser):
 // Executions already record which split-test branch a run took (executionLog.steps[].result,
 // stamped by automationBranchLabelForNode at run time) -- this is a pure new report over
 // existing data, no new instrumentation needed.
-export async function getSplitTestPerformanceReportForTenant(user: TenantUser): Promise<SplitTestPerformanceReport> {
+export async function getSplitTestPerformanceReportForTenant(user: TenantUser, filters: ReportFilters = NO_REPORT_FILTERS): Promise<SplitTestPerformanceReport> {
   await assertFeatureEnabled(user.tenantId, "advancedReporting", { isPlatformAdmin: user.isPlatformAdmin });
   if (!user.tenantId) {
     return { reportKey: "split_test_performance", generatedAt: new Date().toISOString(), totals: { totalSplitNodes: 0, totalExecutions: 0 }, rows: [] };
   }
 
+  // Every run in the date range, not the newest 1,000 (only runs with a log can carry a split).
+  const executionValues: unknown[] = [user.tenantId];
+  const executionDates = andWhere(executionValues, await dateRangeWhere(user, filters, '"startedAt"'));
   const [automations, executions] = await Promise.all([
     pgQuery<any>('select id, name from "AutomationV2" where "tenantId" = $1 and "deletedAt" is null', [user.tenantId]),
     pgQuery<any>(
-      'select id, "automationId", status, "executionLog" from "AutomationExecution" where "tenantId" = $1 order by "startedAt" desc limit 1000',
-      [user.tenantId],
+      `select id, "automationId", status, "executionLog" from "AutomationExecution" where "tenantId" = $1 and "executionLog" is not null${executionDates}`,
+      executionValues,
     ),
   ]);
 
@@ -1567,19 +1627,21 @@ export async function getSplitTestPerformanceReportForTenant(user: TenantUser): 
 // no per-report parameter UI (every other inbuilt report takes zero or one fixed default
 // param), so this returns one row per (form, tab) instead of requiring a form picker --
 // still genuinely useful, and rows naturally group by formId/tabIndex when sorted.
-export async function getFormDropOffReportForTenant(user: TenantUser): Promise<FormDropOffReport> {
+export async function getFormDropOffReportForTenant(user: TenantUser, filters: ReportFilters = NO_REPORT_FILTERS): Promise<FormDropOffReport> {
   await assertFeatureEnabled(user.tenantId, "advancedReporting", { isPlatformAdmin: user.isPlatformAdmin });
   if (!user.tenantId) {
     return { reportKey: "form_drop_off", generatedAt: new Date().toISOString(), totals: { totalForms: 0, totalSessions: 0, totalSubmissions: 0 }, rows: [] };
   }
 
+  // Every progress event and submission in the date range (the newest 5,000 events only, before).
+  const eventValues: unknown[] = [user.tenantId];
+  const eventDates = andWhere(eventValues, await dateRangeWhere(user, filters, '"createdAt"'));
+  const submissionValues: unknown[] = [user.tenantId];
+  const submissionDates = andWhere(submissionValues, await dateRangeWhere(user, filters, '"createdAt"'));
   const [forms, events, submissionCounts] = await Promise.all([
     pgQuery<any>('select id, name, config from "Form" where "tenantId" = $1 and "deletedAt" is null', [user.tenantId]),
-    pgQuery<any>(
-      'select "formId", "sessionId", "tabId", "tabIndex" from "FormProgressEvent" where "tenantId" = $1 order by "createdAt" desc limit 5000',
-      [user.tenantId],
-    ),
-    pgQuery<any>('select "formId", count(*)::int as count from "FormSubmission" where "tenantId" = $1 group by "formId"', [user.tenantId]),
+    pgQuery<any>(`select "formId", "sessionId", "tabId", "tabIndex" from "FormProgressEvent" where "tenantId" = $1${eventDates}`, eventValues),
+    pgQuery<any>(`select "formId", count(*)::int as count from "FormSubmission" where "tenantId" = $1${submissionDates} group by "formId"`, submissionValues),
   ]);
 
   return calculateFormDropOffReport(forms, events, submissionCounts, new Date());
@@ -1593,10 +1655,10 @@ export async function getFormDropOffReportForTenant(user: TenantUser): Promise<F
 // still need the exact same "collapse null/blank source into Unknown" normalization the old JS
 // version applied per-lead, which is why the merge happens in JS (over a small, per-source row
 // count -- one row per distinct source, not one per record) rather than in SQL.
-export async function getLeadSourceRoiReportForTenant(user: TenantUser): Promise<LeadSourceRoiReport> {
+export async function getLeadSourceRoiReportForTenant(user: TenantUser, filters: ReportFilters = NO_REPORT_FILTERS): Promise<LeadSourceRoiReport> {
   await assertFeatureEnabled(user.tenantId, "advancedReporting", { isPlatformAdmin: user.isPlatformAdmin });
   assertSensitiveReportAccess(user, "lead_source_roi");
-  const { leadRows, oppRows } = await getLeadSourceRoiAggregateForTenant(user);
+  const { leadRows, oppRows } = await getLeadSourceRoiAggregateForTenant(user, await reportFilterWhere(user, "lead", filters));
   return buildLeadSourceRoiReportFromAggregates(leadRows, oppRows, new Date());
 }
 
@@ -1654,13 +1716,14 @@ export function buildLeadSourceRoiReportFromAggregates(
 
 export async function getReassignmentImpactReportForTenant(
   user: TenantUser,
-  thresholdHours = 24
+  thresholdHours = 24,
+  filters: ReportFilters = NO_REPORT_FILTERS,
 ): Promise<ReassignmentImpactReport> {
   await assertFeatureEnabled(user.tenantId, "advancedReporting", { isPlatformAdmin: user.isPlatformAdmin });
   const [leads, opportunities, activities, assignmentEvents] = await Promise.all([
-    listLeadsForTenant(user, 1, 1000),
-    listOpportunitiesForTenant(user, 1000),
-    listActivitiesForTenant(user, 1000, null),
+    leadsFor(user, filters),
+    opportunitiesFor(user, filters),
+    activitiesFor(user, filters),
     listAssignmentEventsForTenant(user),
   ]);
 
@@ -1693,11 +1756,13 @@ export async function getActivityCallVolumeTrendReportForTenant(
   user: TenantUser,
   grain: "day" | "week" | "month" = "day",
   startDate?: string | null,
-  endDate?: string | null
+  endDate?: string | null,
+  filters: ReportFilters = NO_REPORT_FILTERS,
 ): Promise<ActivityCallVolumeTrendReport> {
   await assertFeatureEnabled(user.tenantId, "advancedReporting", { isPlatformAdmin: user.isPlatformAdmin });
-  const activities = await listActivitiesForTenant(user, 1000, null);
-  return calculateActivityCallVolumeTrendReport(activities.data, grain, startDate, endDate, new Date());
+  // The filter bar's dates also set the chart's range; the older startDate/endDate parameters still work.
+  const activities = await activitiesFor(user, filters);
+  return calculateActivityCallVolumeTrendReport(activities.data, grain, startDate ?? filters.from, endDate ?? filters.to, new Date());
 }
 
 export async function getCommissionPayoutSummaryReportForTenant(
@@ -1719,12 +1784,13 @@ export async function getCommissionPayoutSummaryReportForTenant(
 export async function getCohortReportForTenant(
   user: TenantUser,
   grain: "week" | "month" = "month",
-  dimension: CohortDimension = "CREATED_DATE"
+  dimension: CohortDimension = "CREATED_DATE",
+  filters: ReportFilters = NO_REPORT_FILTERS,
 ): Promise<CohortReport> {
   await assertFeatureEnabled(user.tenantId, "advancedReporting", { isPlatformAdmin: user.isPlatformAdmin });
   const [leads, opportunities, opportunityTypes] = await Promise.all([
-    listLeadsForTenant(user, 1, 1000),
-    listOpportunitiesForTenant(user, 1000),
+    leadsFor(user, filters),
+    opportunitiesFor(user, filters),
     listOpportunityTypesForTenant(user),
   ]);
   const stageHistory = await listOpportunityStageHistoryForTenant(user, opportunities.data.map((opportunity: any) => opportunity.id));
@@ -1791,18 +1857,19 @@ export async function getCohortReportForTenant(
 
 export async function getDataQualityReportForTenant(
   user: TenantUser,
-  staleDays = 30
+  staleDays = 30,
+  filters: ReportFilters = NO_REPORT_FILTERS,
 ): Promise<DataQualityReport> {
   await assertFeatureEnabled(user.tenantId, "advancedReporting", { isPlatformAdmin: user.isPlatformAdmin });
   const [leads, activities, requiredFields, customFieldValues, attributionTouches, slaBreachCount, opportunities, opportunityTypes] =
     await Promise.all([
-      listLeadsForTenant(user, 1, 1000),
-      listActivitiesForTenant(user, 1000, null),
+      leadsFor(user, filters),
+      activitiesFor(user, filters),
       listRequiredLeadFieldsForTenant(user),
       listLeadCustomFieldValuesForTenant(user),
       listAttributionTouchesForTenant(user),
-      countBreachedTasksForTenant(user),
-      listOpportunitiesForTenant(user, 1000),
+      countBreachedTasksForTenant(user, filters),
+      opportunitiesFor(user, filters),
       listOpportunityTypesForTenant(user),
     ]);
 
@@ -1814,19 +1881,23 @@ export async function getDataQualityReportForTenant(
   });
 }
 
+// Touches carry only their source, medium and campaign here (checked for missing values), so all
+// of them are read; the newest 2,000 only, before wave 3.
 async function listAttributionTouchesForTenant(user: TenantUser) {
   if (!user.tenantId) return [];
   return pgQuery<any>(
-    `select id, source, medium, campaign from "MarketingAttributionTouch" where "tenantId" = $1 order by "occurredAt" desc limit 2000`,
+    `select id, source, medium, campaign from "MarketingAttributionTouch" where "tenantId" = $1`,
     [user.tenantId],
   );
 }
 
-async function countBreachedTasksForTenant(user: TenantUser) {
+// Open tasks past their SLA that the viewer can see (it counted the whole workspace before).
+async function countBreachedTasksForTenant(user: TenantUser, filters: ReportFilters = NO_REPORT_FILTERS) {
   if (!user.tenantId) return 0;
+  const tasks = await scopedRecordsSql(user, "task", filters, '"slaStatus", status');
   const row = await pgQueryOne<{ count: number }>(
-    `select count(*)::int as count from "Task" where "tenantId" = $1 and "slaStatus" = 'BREACHED' and status not in ('COMPLETED', 'CANCELLED')`,
-    [user.tenantId],
+    `select count(*)::int as count from (${tasks.sql}) t where "slaStatus" = 'BREACHED' and status not in ('COMPLETED', 'CANCELLED')`,
+    tasks.values,
   );
   return row?.count ?? 0;
 }
@@ -3549,7 +3620,7 @@ export type NextBestActionPerformanceReport = {
   responseImpact: { responded: { total: number; convertedOrWon: number; rate: number }; noResponse: { total: number; convertedOrWon: number; rate: number } };
 };
 
-export async function getNextBestActionPerformanceReportForTenant(user: TenantUser): Promise<NextBestActionPerformanceReport> {
+export async function getNextBestActionPerformanceReportForTenant(user: TenantUser, filters: ReportFilters = NO_REPORT_FILTERS): Promise<NextBestActionPerformanceReport> {
   await assertFeatureEnabled(user.tenantId, "advancedReporting", { isPlatformAdmin: user.isPlatformAdmin });
   const empty: NextBestActionPerformanceReport = {
     reportKey: "next_best_action_performance",
@@ -3568,18 +3639,37 @@ export async function getNextBestActionPerformanceReportForTenant(user: TenantUs
   };
   if (!user.tenantId) return empty;
 
+  // Round-2 plan wave 3 (decision 1): recommendations on records the viewer can see (and, with the
+  // owner/team filter, records with that owner); the date filter is when it was recommended. The
+  // suppression breakdown is workspace-level, so only for all-access viewers without that filter.
+  const workspaceWide = recordAccessLevel(user) === "ALL" && !filters.ownerIds && !filters.teamId;
+  const recommendationValues: unknown[] = [user.tenantId];
+  let recordCondition = "";
+  if (!workspaceWide) {
+    const recordFilters = { ...filters, from: null, to: null };
+    const leads = await scopedRecordsSql(user, "lead", recordFilters, "id", { startIndex: recommendationValues.length });
+    recommendationValues.push(...leads.values);
+    const opportunities = await scopedRecordsSql(user, "opportunity", recordFilters, "id", { startIndex: recommendationValues.length });
+    recommendationValues.push(...opportunities.values);
+    recordCondition = ` and (("recordType" = 'LEAD' and "recordId" in (select id from (${leads.sql}) l)) or ("recordType" = 'OPPORTUNITY' and "recordId" in (select id from (${opportunities.sql}) o)))`;
+  }
+  const recommendationDates = andWhere(recommendationValues, await dateRangeWhere(user, filters, '"createdAt"'));
   const recommendations = await pgQuery<any>(
-    `select "actionType", "recordType", "recordId", "ownerId", "ruleId", status from "NextBestActionRecommendation" where "tenantId" = $1`,
-    [user.tenantId],
+    `select "actionType", "recordType", "recordId", "ownerId", "ruleId", status from "NextBestActionRecommendation" where "tenantId" = $1${recordCondition}${recommendationDates}`,
+    recommendationValues,
   );
 
-  const suppressionRows = await pgQuery<{ suppressedReason: string; count: number }>(
-    `select "suppressedReason", count(*)::int as count from "NextBestActionCandidate"
-     where "tenantId" = $1 and "suppressedReason" is not null
-     group by "suppressedReason"
-     order by count desc`,
-    [user.tenantId],
-  );
+  const suppressionValues: unknown[] = [user.tenantId];
+  const suppressionDates = andWhere(suppressionValues, await dateRangeWhere(user, filters, '"createdAt"'));
+  const suppressionRows = workspaceWide
+    ? await pgQuery<{ suppressedReason: string; count: number }>(
+        `select "suppressedReason", count(*)::int as count from "NextBestActionCandidate"
+         where "tenantId" = $1 and "suppressedReason" is not null${suppressionDates}
+         group by "suppressedReason"
+         order by count desc`,
+        suppressionValues,
+      )
+    : [];
   const suppressionBreakdown = suppressionRows.map((row) => ({ reason: row.suppressedReason, count: row.count }));
 
   if (!recommendations.length) return { ...empty, suppressionBreakdown };
@@ -3590,7 +3680,7 @@ export async function getNextBestActionPerformanceReportForTenant(user: TenantUs
     : [];
   const teamIds = [...new Set(owners.map((owner) => owner.teamId).filter(Boolean))];
   const teams = teamIds.length
-    ? await pgQuery<any>('select id, name from "Team" where "tenantId" = $1 and id = any($2::text[])', [user.tenantId, teamIds])
+    ? await pgQuery<any>('select id::text as id, name from "Team" where "tenantId" = $1 and id::text = any($2::text[])', [user.tenantId, teamIds])
     : [];
 
   const ruleIds = [...new Set(recommendations.map((row) => row.ruleId).filter(Boolean))];
@@ -4102,19 +4192,32 @@ export function calculateTelephonyCallPerformanceReport(
   };
 }
 
-export async function getTelephonyCallPerformanceReportForTenant(user: TenantUser): Promise<TelephonyCallPerformanceReport> {
+async function telephonyCallLogs(user: TenantUser, filters: ReportFilters) {
+  const values: unknown[] = [user.tenantId];
+  let where = `"tenantId" = $1${andWhere(values, await dateRangeWhere(user, filters, '"startedAt"'))}`;
+  if (filters.ownerIds) {
+    values.push(filters.ownerIds);
+    where += ` and "agentId" = any($${values.length}::text[])`;
+  }
+  if (filters.teamId) {
+    values.push(filters.teamId);
+    where += ` and "agentId" in (select id from "User" where "tenantId" = $1 and "teamId"::text = $${values.length})`;
+  }
+  return pgQuery<any>(
+    `select id, provider, "callId", direction, status, duration, "agentId", "leadId", "opportunityId", "startedAt"
+     from "TelephonyCallLog" where ${where}`,
+    values,
+  );
+}
+
+export async function getTelephonyCallPerformanceReportForTenant(user: TenantUser, filters: ReportFilters = NO_REPORT_FILTERS): Promise<TelephonyCallPerformanceReport> {
   await assertFeatureEnabled(user.tenantId, "advancedReporting", { isPlatformAdmin: user.isPlatformAdmin });
   if (!user.tenantId) return calculateTelephonyCallPerformanceReport([], [], new Date());
   await assertTenantModule(user, "TELEPHONY");
   const [callLogs, users] = await Promise.all([
-    pgQuery<any>(
-      `select id, provider, "callId", direction, status, duration, "agentId", "leadId", "opportunityId", "startedAt"
-       from "TelephonyCallLog"
-       where "tenantId" = $1
-       order by "startedAt" desc
-       limit 5000`,
-      [user.tenantId],
-    ),
+    // Every call in range (the newest 5,000, before wave 3). The call log is workspace-wide in the
+    // app, so is this report; the owner and team filters match the agent.
+    telephonyCallLogs(user, filters),
     pgQuery<{ id: string; name: string | null; email: string | null }>(
       `select id, name, email from "User" where "tenantId" = $1`,
       [user.tenantId],
@@ -4282,19 +4385,22 @@ function weekStartIso(date: Date) {
   return clone.toISOString().slice(0, 10);
 }
 
-export async function getCaseAnalyticsReportForTenant(user: TenantUser): Promise<CaseAnalyticsReport> {
+export async function getCaseAnalyticsReportForTenant(user: TenantUser, filters: ReportFilters = NO_REPORT_FILTERS): Promise<CaseAnalyticsReport> {
   await assertFeatureEnabled(user.tenantId, "advancedReporting", { isPlatformAdmin: user.isPlatformAdmin });
   if (!user.tenantId) {
     return calculateCaseAnalyticsReport([], new Map(), [], [], new Date());
   }
 
   const [cases, inboundMessages, surveyResponses, users] = await Promise.all([
-    pgQuery<any>(
-      `select id, "typeId", "priorityId", "statusId", "queueId", "ownerId", "firstResponseDueAt", "firstRespondedAt",
-              "resolutionDueAt", "resolvedAt", "closedAt", "reopenedCount", "escalatedAt", "createdAt"
-       from "Case" where "tenantId" = $1 order by "createdAt" desc limit 5000`,
-      [user.tenantId],
-    ),
+    // Every case in range (the newest 5,000, before wave 3). Cases have no record-level access in
+    // the app (the case list shows the whole workspace); the filters narrow by date and owner.
+    scopedRecordsSql(
+      user,
+      "case",
+      filters,
+      `id, "typeId", "priorityId", "statusId", "queueId", "ownerId", "firstResponseDueAt", "firstRespondedAt",
+       "resolutionDueAt", "resolvedAt", "closedAt", "reopenedCount", "escalatedAt", "createdAt"`,
+    ).then((cases) => pgQuery<any>(cases.sql, cases.values)),
     pgQuery<{ caseId: string; channel: string }>(
       `select distinct on ("caseId") "caseId", channel from "CaseInboundMessage" where "tenantId" = $1 and "caseId" is not null order by "caseId", "createdAt" asc`,
       [user.tenantId],

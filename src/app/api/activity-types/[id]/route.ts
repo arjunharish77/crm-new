@@ -4,7 +4,9 @@ import {
   deleteActivityTypeForTenant,
   updateActivityTypeForTenant,
 } from "@/lib/server/crm";
-import { serverError, unauthorized, forbidden } from "@/lib/server/http";
+import { serverError, unauthorized, forbidden, userMessage } from "@/lib/server/http";
+
+const SYSTEM_TYPE_REFUSAL = "This is a system activity type the CRM uses itself, so it can't be renamed, switched off or deleted. Its icon, colour and defaults can be changed.";
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -18,6 +20,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       return unauthorized();
     }
     if (error instanceof Error && error.message === "FORBIDDEN") return forbidden("Only admins can do this");
+    if (error instanceof Error && error.message === "ACTIVITY_TYPE_SYSTEM") return userMessage(SYSTEM_TYPE_REFUSAL);
 
     return serverError("Failed to update activity type", error);
   }
@@ -34,6 +37,7 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
       return unauthorized();
     }
     if (error instanceof Error && error.message === "FORBIDDEN") return forbidden("Only admins can do this");
+    if (error instanceof Error && error.message === "ACTIVITY_TYPE_SYSTEM") return userMessage(SYSTEM_TYPE_REFUSAL);
 
     return serverError("Failed to delete activity type", error);
   }

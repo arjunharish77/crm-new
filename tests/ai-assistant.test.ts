@@ -218,7 +218,10 @@ describe("AI Assistant module", () => {
       enableProvider();
       const { upsertAiProviderSettingsForTenant } = await import("@/lib/server/ai-assistant");
       await upsertAiProviderSettingsForTenant(TENANT_USER, { enabled: true, providerMode: "EXTERNAL_API", endpointUrl: "https://ai.example.com/v1", secretConfig: { apiKey: "sk-new" } });
-      expect(state.settings.secretConfig).toEqual({ apiKey: "sk-new" });
+      // Stored encrypted (voice bot plan §10), not as the key itself.
+      expect(state.settings.secretConfig.apiKey).not.toContain("sk-new");
+      const { decryptSecretAtRest } = await import("@/lib/server/secret-encryption");
+      expect(decryptSecretAtRest(state.settings.secretConfig.apiKey)).toBe("sk-new");
     });
   });
 

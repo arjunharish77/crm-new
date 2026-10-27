@@ -9,6 +9,9 @@ export async function POST(request: Request) {
     const body = await request.json().catch(() => null);
     if (!body?.phoneNumber && !body?.toNumber) return badRequest("Phone number is required");
     const payload = await buildClickToCallPayloadForTenant(user, body);
+    if (payload.provider === "plivo" && payload.executed && !payload.success && !payload.blocked) {
+      return NextResponse.json({ error: (payload.providerResponse as any)?.error ?? "Plivo could not start the call", callLogId: payload.callLogId }, { status: 502 });
+    }
     return NextResponse.json(payload);
   } catch (error) {
     if (error instanceof Error && error.message === "UNAUTHORIZED") return unauthorized();

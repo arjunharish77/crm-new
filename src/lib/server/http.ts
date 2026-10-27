@@ -37,6 +37,12 @@ export function moduleDependencyConflict(message: string, status = 409) {
   return NextResponse.json({ code: "MODULE_DEPENDENCY", message }, { status });
 }
 
+// Any refusal written for the person using the app (e.g. "System activity types can't be picked
+// by hand"): apiFetch shows `message` as it is (code USER_MESSAGE) instead of its generic text.
+export function userMessage(message: string, status = 400) {
+  return NextResponse.json({ code: "USER_MESSAGE", message }, { status });
+}
+
 export function tooManyRequests(message = "Too many requests", retryAfterSeconds?: number) {
   const headers = retryAfterSeconds !== undefined ? { "Retry-After": String(retryAfterSeconds) } : undefined;
   return NextResponse.json({ message }, { status: 429, headers });

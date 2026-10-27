@@ -4,11 +4,13 @@ const dbMocks = vi.hoisted(() => ({ query: vi.fn(), queryOne: vi.fn(), execute: 
 const leadsRepoMocks = vi.hoisted(() => ({ getLeadForTenant: vi.fn(), createAuditLog: vi.fn().mockResolvedValue(undefined) }));
 const opportunitiesRepoMocks = vi.hoisted(() => ({ getOpportunityForTenant: vi.fn() }));
 const telephonyWebhookMocks = vi.hoisted(() => ({ recordTelephonyCallEvent: vi.fn(), checkTelephonyComplianceForCall: vi.fn() }));
+const plivoMocks = vi.hoisted(() => ({ startPlivoCall: vi.fn() }));
 
 vi.mock("@/lib/db/query", () => dbMocks);
 vi.mock("@/lib/repositories/leads-postgres", () => leadsRepoMocks);
 vi.mock("@/lib/repositories/opportunities-postgres", () => opportunitiesRepoMocks);
 vi.mock("@/lib/server/telephony-webhook", () => telephonyWebhookMocks);
+vi.mock("@/lib/server/plivo", async (importOriginal) => ({ ...(await importOriginal<typeof import("@/lib/server/plivo")>()), ...plivoMocks }));
 
 import { buildClickToCallPayloadForTenant } from "@/lib/server/crm";
 
@@ -33,6 +35,7 @@ describe("buildClickToCallPayloadForTenant", () => {
     opportunitiesRepoMocks.getOpportunityForTenant.mockReset();
     telephonyWebhookMocks.recordTelephonyCallEvent.mockReset().mockResolvedValue({ id: "log-1" });
     telephonyWebhookMocks.checkTelephonyComplianceForCall.mockReset().mockResolvedValue({ allowed: true });
+    plivoMocks.startPlivoCall.mockReset();
   });
 
   it("throws when no phone number is supplied", async () => {
@@ -95,6 +98,41 @@ describe("buildClickToCallPayloadForTenant", () => {
 
     const [, input] = telephonyWebhookMocks.recordTelephonyCallEvent.mock.calls[0];
     expect(input.status).toBe("not-attempted");
+  });
+
+  it("logs a native Plivo call under the CRM's own call ID before asking Plivo to dial", async () => {
+    dbMocks.queryOne.mockResolvedValueOnce({ isActive: true, config: { provider: "plivo", defaultAgentNumber: "+919999999999", outboundCallerId: "7777777777" } });
+    leadsRepoMocks.getLeadForTenant.mockResolvedValueOnce({ id: "lead-1", name: "Jane", phone: "8888888888" });
+    telephonyWebhookMocks.recordTelephonyCallEvent.mockResolvedValueOnce({ id: "log-1" });
+    plivoMocks.startPlivoCall.mockImplementationOnce(async () => {
+      // The call log already exists when Plivo is asked to dial.
+      expect(telephonyWebhookMocks.recordTelephonyCallEvent).toHaveBeenCalledTimes(1);
+      return { requestUuid: "request-uuid", fromNumber: "+917777777777" };
+    });
+
+    const result = await buildClickToCallPayloadForTenant(user, { phoneNumber: "8888888888", leadId: "lead-1", execute: true });
+
+    const [, input] = telephonyWebhookMocks.recordTelephonyCallEvent.mock.calls[0];
+    expect(input).toEqual(expect.objectContaining({ provider: "plivo", status: "dialing", leadId: "lead-1", toNumber: "+918888888888", fromNumber: "+917777777777" }));
+    expect(input.callId).toMatch(/^[0-9a-f-]{36}$/);
+    expect(plivoMocks.startPlivoCall).toHaveBeenCalledWith("tenant-a", expect.objectContaining({ provider: "plivo" }), "+919999999999", "+918888888888", input.callId);
+    expect(dbMocks.execute).toHaveBeenCalledWith(expect.stringContaining(`update "TelephonyCallLog" set metadata`), [{ requestUuid: "request-uuid" }, "log-1", "tenant-a"]);
+    expect(telephonyWebhookMocks.recordTelephonyCallEvent).toHaveBeenCalledTimes(1);
+    expect(result).toEqual(expect.objectContaining({ success: true, callLogId: "log-1" }));
+  });
+
+  it("marks the logged Plivo call failed when Plivo refuses it", async () => {
+    dbMocks.queryOne.mockResolvedValueOnce({ isActive: true, config: { provider: "plivo", defaultAgentNumber: "+919999999999", outboundCallerId: "+917777777777" } });
+    leadsRepoMocks.getLeadForTenant.mockResolvedValueOnce({ id: "lead-1", name: "Jane", phone: "8888888888" });
+    telephonyWebhookMocks.recordTelephonyCallEvent.mockResolvedValue({ id: "log-1" });
+    plivoMocks.startPlivoCall.mockRejectedValueOnce(new Error("PLIVO_CALL_FAILED:401"));
+
+    const result = await buildClickToCallPayloadForTenant(user, { phoneNumber: "8888888888", leadId: "lead-1", execute: true });
+
+    const calls = telephonyWebhookMocks.recordTelephonyCallEvent.mock.calls;
+    expect(calls).toHaveLength(2);
+    expect(calls[1][1]).toEqual(expect.objectContaining({ callId: calls[0][1].callId, status: "failed", metadata: expect.objectContaining({ outcomeReason: "PLIVO_REQUEST_FAILED" }) }));
+    expect(result).toEqual(expect.objectContaining({ success: false, executed: true, providerResponse: { error: "PLIVO_CALL_FAILED:401" } }));
   });
 
   describe("compliance gate", () => {

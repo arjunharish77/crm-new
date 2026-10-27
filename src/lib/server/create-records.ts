@@ -5,8 +5,10 @@ import { createLeadForTenant } from "@/lib/repositories/leads-postgres";
 import { createOpportunityForTenant } from "@/lib/repositories/opportunities-postgres";
 import type { CreateUnitOfWork } from "@/lib/repositories/create-unit-of-work";
 const optionalText = z.string().trim().max(500).nullable().optional();
-export const apiLeadCreate = z.object({name:z.string().trim().min(1).max(250),email:z.union([z.email(),z.literal("")]).nullable().optional(),phone:optionalText,company:optionalText,source:optionalText,status:z.enum(["NEW","CONTACTED","QUALIFIED","LOST","CONVERTED"]).optional()}).strict();
-export const apiOpportunityCreate = z.object({title:z.string().trim().min(1).max(250),leadId:z.string().min(1).max(100),opportunityTypeId:z.string().min(1).max(100),stageId:z.string().min(1).max(100).optional(),amount:z.number().finite().min(0).nullable().optional(),expectedCloseDate:z.iso.date().nullable().optional(),priority:z.enum(["LOW","MEDIUM","HIGH","URGENT"]).optional()}).strict();
+// Custom field values by field key (keys that aren't a custom field of the record are ignored).
+const customFieldValues = z.record(z.string().max(100), z.union([z.string().max(10000), z.number().finite(), z.boolean(), z.array(z.string().max(500)).max(100), z.null()])).optional();
+export const apiLeadCreate = z.object({name:z.string().trim().min(1).max(250),email:z.union([z.email(),z.literal("")]).nullable().optional(),phone:optionalText,company:optionalText,source:optionalText,status:z.enum(["NEW","CONTACTED","QUALIFIED","LOST","CONVERTED"]).optional(),customFields:customFieldValues}).strict();
+export const apiOpportunityCreate = z.object({title:z.string().trim().min(1).max(250),leadId:z.string().min(1).max(100),opportunityTypeId:z.string().min(1).max(100),stageId:z.string().min(1).max(100).optional(),amount:z.number().finite().min(0).nullable().optional(),expectedCloseDate:z.iso.date().nullable().optional(),priority:z.enum(["LOW","MEDIUM","HIGH","URGENT"]).optional(),customFields:customFieldValues}).strict();
 export const combinedCreate = z.object({lead:apiLeadCreate,opportunity:apiOpportunityCreate.omit({leadId:true})}).strict();
 export function validIdempotencyKey(key:string|null) { return key === null || (key.length >= 1 && key.length <= 200 && /^[\x21-\x7e]+$/.test(key)); }
 /** A canonical body makes JSON property ordering irrelevant to retry identity. */

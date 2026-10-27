@@ -1,8 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { getDashboardWidgetForTenantMock, listOpportunitiesForTenantMock, getMetricForTenantMock, executePivotQueryForTenantMock } = vi.hoisted(() => ({
+const { getDashboardWidgetForTenantMock, queryMock, getMetricForTenantMock, executePivotQueryForTenantMock } = vi.hoisted(() => ({
   getDashboardWidgetForTenantMock: vi.fn(),
-  listOpportunitiesForTenantMock: vi.fn(),
+  queryMock: vi.fn(),
   getMetricForTenantMock: vi.fn(),
   executePivotQueryForTenantMock: vi.fn(),
 }));
@@ -10,8 +10,10 @@ const { getDashboardWidgetForTenantMock, listOpportunitiesForTenantMock, getMetr
 vi.mock("@/lib/repositories/reports-dashboards-postgres", () => ({
   getDashboardWidgetForTenant: getDashboardWidgetForTenantMock,
 }));
-vi.mock("@/lib/repositories/opportunities-postgres", () => ({
-  listOpportunitiesForTenant: listOpportunitiesForTenantMock,
+// Round-2 plan wave 3 (B1): the sankey counts flows in SQL over every visible opportunity.
+vi.mock("@/lib/db/query", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/db/query")>()),
+  query: queryMock,
 }));
 vi.mock("@/lib/server/metrics", () => ({
   getMetricForTenant: getMetricForTenantMock,
@@ -28,7 +30,7 @@ const user = { id: "user-1", tenantId: "tenant-1" };
 describe("getDashboardWidgetDataForTenant -- SANKEY and PIVOT", () => {
   beforeEach(() => {
     getDashboardWidgetForTenantMock.mockReset();
-    listOpportunitiesForTenantMock.mockReset();
+    queryMock.mockReset();
     getMetricForTenantMock.mockReset();
     executePivotQueryForTenantMock.mockReset();
   });
@@ -36,14 +38,12 @@ describe("getDashboardWidgetDataForTenant -- SANKEY and PIVOT", () => {
   describe("SANKEY", () => {
     it("builds a source-node -> stage-node link graph from the opportunity pipeline's own lead-source/stage data", async () => {
       getDashboardWidgetForTenantMock.mockResolvedValue({ id: "w1", type: "SANKEY", config: {} });
-      listOpportunitiesForTenantMock.mockResolvedValue({
-        data: [
-          { id: "opp-1", lead: { source: "Website" }, stage: { name: "Application" } },
-          { id: "opp-2", lead: { source: "Website" }, stage: { name: "Application" } },
-          { id: "opp-3", lead: { source: "Website" }, stage: { name: "Enrolled" } },
-          { id: "opp-4", lead: { source: "Referral" }, stage: { name: "Application" } },
-        ],
-      });
+      // One row per (source, stage) flow with its newest opportunity; nodes are most recent first.
+      queryMock.mockResolvedValue([
+        { source: "Website", stage: "Application", value: 2, lastAt: "2026-10-20T10:00:00Z" },
+        { source: "Website", stage: "Enrolled", value: 1, lastAt: "2026-10-19T10:00:00Z" },
+        { source: "Referral", stage: "Application", value: 1, lastAt: "2026-10-18T10:00:00Z" },
+      ]);
 
       const result = await getDashboardWidgetDataForTenant(user, "w1");
 
@@ -58,9 +58,10 @@ describe("getDashboardWidgetDataForTenant -- SANKEY and PIVOT", () => {
 
     it("falls back to Unknown/Unassigned for opportunities with no resolvable lead source or stage", async () => {
       getDashboardWidgetForTenantMock.mockResolvedValue({ id: "w1", type: "SANKEY", config: {} });
-      listOpportunitiesForTenantMock.mockResolvedValue({ data: [{ id: "opp-1", lead: null, stage: null }] });
+      queryMock.mockResolvedValue([{ source: "Unknown", stage: "Unassigned", value: 1, lastAt: "2026-10-20T10:00:00Z" }]);
 
       const result = await getDashboardWidgetDataForTenant(user, "w1");
+      expect(String(queryMock.mock.calls[0][0])).toContain(`coalesce(l.source, 'Unknown') as source, coalesce(sd.name, 'Unassigned') as stage`);
       expect(result.nodes).toEqual([{ name: "Unknown" }, { name: "Unassigned" }]);
       expect(result.links).toEqual([{ source: 0, target: 1, value: 1 }]);
     });

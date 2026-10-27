@@ -849,9 +849,70 @@ No migrations in wave 0.
 
 **Before deploying wave 2:** the settings in setup guide section 1 must be in `deploy/vps/.env`, or the new version won't start (the deploy script would then put the old one back). Sentry (section 2) and GHCR (section 3) are optional for the deploy itself: without them errors stay in the logs, and you can keep building on the server.
 
+### 8.4 Wave 3: findings re-checked against the code (2026-10-26)
+
+The CRM moved to Next.js 16.4.3 and Node 24 on 24 October, and the release went live on 26 October. Before building wave 3, each of its findings was checked again against today's code.
+
+| Item | Status today | What the check found |
+|---|---|---|
+| B1 | **Still true, and wider** | **16 standard reports** add up a capped sample in code. The list helpers set the real cap, whatever the caller asks for: leads and opportunities 1,000, **activities 500**. So `activity_call_volume_trends`, which the review missed, rep performance and the SLA reports count at most 500 activities. Some reports ask for 5,000 rows (`form_drop_off`, telephony, case analytics). `executive_scorecard` inherits every cap. **9 dashboard widget paths** do the same: the opportunity number widget counts `.filter().length` over 500 rows, and funnel, sankey, trend and bar use 500, with activities at 1,000 in SQL. The predictive widget asks for 5,000 and gets 1,000. The SQL pattern to reuse is `getFunnelByStageAggregateForTenant` (`opportunities-postgres.ts`): the standard scope `buildWhere`, then `count`, `sum` and `group by`. |
+| B19 | **Still true** | The grouping is mixed. Anomaly, forecast and case analytics group by UTC day. Period comparison, call volume and cohort use the **server's** clock. The trend widgets use the workspace time zone, but their 7-day labels use the server's. The workspace zone is `TenantConfig.featureFlags.generalSettings.timezone`, read by `getTenantTimeZone()`, default Asia/Kolkata. A reusable SQL pattern is `TENANT_TIME_ZONE_CTES` in `inbuilt-reports.ts`. |
+| C9 | **Still true, and worse** | No report accepts owner or team. Only call volume accepts dates, and the screen never sends them, nor `grain`, `days`, the thresholds or the limit. Nothing is kept in the address or remembered. **"Set as default" is never applied**: the saved-filters menu (used only on the audit log) just shows the default in bold, and Smart Views opens the oldest view. Only dashboard tabs apply their default. |
+| C9, new | **Reports ignore record access in places** | Anomaly, forecast, task SLA, the data-quality task count, next-best-action and case analytics filter by workspace only, so a sales rep with "own records" access sees workspace-wide figures. Only `campaign_roi` and `lead_source_roi` are limited to admins. |
+| B10 | **Partly true** | The old field-permission copy in `crm.ts` (190–229) still exists. Lead, opportunity and activity updates through `crm.ts` are filtered by it and then by the shared copy (`field-permissions.ts`) inside the repository. The combined result is correct, but the old copy ignores the existing record's type, and for activities it can pick the wrong type. **New:** tasks and cases have no field-level permission check at all. |
+| B4 | **Still true** | If the worker dies mid-job, the BullMQ retry sees `PROCESSING` or `RUNNING` and returns normally. The job then counts as completed, so the 4 October fail-and-notify never runs, and the row stays stuck forever. Nothing sweeps stale jobs. Import rows are JSON in `ImportJob.rows`, there's no file, and progress isn't saved. Reusable patterns: the outbox lease with recovery (`communications.ts`), and the resumable checkpoint with lease renewal (`marketing-communications.ts`, `launchState`). |
+| B13 | **Mostly fixed** | The main lists (leads, opportunities, tasks, activities) now count with `count(*)` on the base table. Still true: the lead-lists page runs the full lead query once per list (`lead-lists-postgres.ts`), and `countLeadsForTenant` in `crm.ts` is dead code. Keyset paging exists only for marketing audiences. |
+
+Notes for the build:
+- Opportunities have no actual close or won date, only `expectedCloseDate`.
+- Activities have no owner (`createdBy`, scoped through the parent record).
+- Team membership exists twice: `User.teamId`, which scoping uses, and `TeamMember`.
+- Report rollups are cached per workspace (`scopeType: "ORG"`), so filtered results can't use them.
+
+**Wave 3 decisions (2026-10-26):**
+1. **Reports follow record access everywhere.** Own, team or all, as in the record lists, including the six reports that show workspace-wide figures today. Campaign ROI and lead-source ROI stay admin-only.
+2. **A shared filter bar** (date range, owner, team) opens on "Everyone I can see" for the last 30 days. Each person's choice is remembered per report and kept in the address, so a shared link opens the same view. Saved default views are applied on open: Smart Views and the saved-filters menu.
+3. **Won and lost deals count by their actual close date.** This is a stored close date on each opportunity, filled in for past deals from `OpportunityStageHistory` (the latest move into an `isClosed` stage) and kept up to date on every stage change. Open deals count by creation date.
+4. **Field-level permissions for tasks and cases** move to wave 4, with their screens.
+
+**Build order:**
+1. Remove the duplicate field-permission code (B10 part 1).
+2. Add the opportunity close date (migration).
+3. Shared report scope (record access, filters, time zone) in SQL.
+4. Move every capped report and widget to SQL counts (B1), with the time zone (B19).
+5. The report filter bar and saved defaults (C9).
+6. Recovery for stuck imports and exports (B4).
+7. Lead-list counts (B13).
+
+### 8.5 Wave 3: done (2026-10-26, uncommitted)
+
+| Item | What changed | Files | Checked |
+|---|---|---|---|
+| B1 | **Reports and widgets count every record.** A shared scope (`report-scope.ts`) gives reports the record lists' own rules: tenant, record access (own / team / all, record shares) and merged records. Per-record reports (stage ageing, cohorts, duplicates, reassignment, rep performance and the rest) read every matching record, 1,000 at a time, in the lists' own shape, field masking included. Their tested calculations are unchanged; before, they read one capped page (1,000 leads or opportunities, **500 activities**). Number, bar, trend, funnel and sankey widgets count in SQL; the predictive widget reads every visible record's score. The stage and activity statistics that also feed the stats pages count in SQL. Task SLA, automation, split tests, form drop-off, telephony, case analytics and the data-quality touch list lost their caps (1,000 to 5,000 rows). | `lib/server/report-scope.ts` (new), `inbuilt-reports.ts`, `crm.ts` (widgets), `opportunities-postgres.ts`, `activities-postgres.ts`, `leads-postgres.ts` | Every report and widget recorded before and after for four local users: identical below the caps; above them, the totals now equal the database counts (1,201 leads, 1,200 opportunities, 2,401 activities, where 1,000/1,000/500 were shown); `report-scope-smoke.ts` |
+| B19 | **Days are the workspace's calendar days.** Anomaly detection, the forecast and the trend widgets bucket in SQL in the workspace time zone (they used UTC or the server's clock), and the trend widget's last-7-days list uses that zone. The filter bar's dates are workspace days too. | `inbuilt-reports.ts` (`dailySeries`, `fillDailySeries`), `crm.ts`, `report-scope.ts` | Smoke: a lead at 20:00 UTC on 25 Oct counts on 26 Oct in India and not on 25 Oct |
+| C9 | **A filter bar for the standard reports**: dates (last 7/30/90 days, this/last month, this year, all time, custom), owner ("Everyone I can see", "My records", a person) and team. It opens on everyone visible for the last 30 days, is remembered per report and person, and is kept in the address. It appears only on reports that use it: 15 take all three, anomaly and forecast take owner/team, automation, form drop-off and split tests take dates. Exports of a filtered report carry its filters. **Saved defaults are applied**: Smart Views opens the view set as default for the person's persona (admin, manager, rep, partner), else the general default; the saved-filters menu applies its default on open. | `reports/_components/report-filter-bar.tsx` (new), `inbuilt-reports-section.tsx`, 21 report routes, `exports.ts`, `views/page.tsx`, `common/saved-filters-menu.tsx` | Smoke: owner, team and date filters; an owner filter can't widen a rep's access; type check, lint |
+| Decision 1 | **Reports follow record access everywhere.** Anomaly, forecast, task SLA, the data-quality task count and next-best-action now count only records the viewer can see. Workspace-level series (payouts, marketing) show only to all-access viewers with no owner/team filter. Cases and telephony stay workspace-wide, as the case list and call log are. | `inbuilt-reports.ts` | Smoke: a rep sees their own 3 leads, a team manager 5, an admin 1,005; a rep gets no payout series |
+| Decision 3 | **Won and lost deals count by when they closed.** Migration **0138** adds `Opportunity."closedAt"`, kept by a trigger (moving into a closed stage stamps it, back to open clears it) and filled for past deals from `OpportunityStageHistory`. Date filters count closed deals by it and open deals by creation date. | `migrations/0138_opportunity_closed_at.sql`, `report-scope.ts` | Locally all 198 closed deals stamped, no open one; trigger checked in a rolled-back transaction; smoke |
+| B10 (part 1) | The old field-permission copy in `crm.ts` is removed; lead, opportunity and activity updates use the shared module only (inside the repositories, with the record's real type). | `crm.ts` | Type check, unit tests |
+| B4 | **Imports and exports recover from a worker stop.** Migration **0139** adds a lease and attempt count to both (and saved progress to imports). A running import renews its lease and saves progress every 25 rows; an export renews it every minute. The new `transfers.recoverStale` job (every 5 minutes) queues a job whose lease ran out again under a new job id (an import resumes from its saved row, an export starts again), or after three runs marks it failed and notifies the requester. A run that lost its lease to a newer one stops without finishing. Jobs already stuck for over an hour are marked failed with the reason (no progress was saved for them). | `migrations/0139_transfer_leases.sql`, `crm.ts` (`processImportJob`), `exports.ts`, `transfer-recovery.ts`, `transfer-limits.ts` (new), `job-queue.ts`, `job-registry.ts`, `scripts/worker.ts` | Unit tests (resume, takeover, give up after three); smoke: a stale import resumes and imports only the remaining row; a live one is left alone |
+| B13 | Smart lead-list counts are a plain count with the list's filters and record access; they ran the whole lead-list query per list. The unused copy in `crm.ts` is removed. Keyset paging isn't needed now: the main lists already count with a lean `count(*)`. | `lead-lists-postgres.ts`, `leads-postgres.ts`, `crm.ts` | Type check, smoke |
+
+**Found and fixed along the way:**
+- **Three "uuid = text" errors.** `Team.id` and `TeamMember.teamId` are UUIDs compared with text lists. The **Task SLA report failed for everyone**; next-best-action and lead distribution (team working hours) failed once owners have teams; Smart Views shared with teams failed to resolve members.
+- **New Next.js lint rule.** Two more intentional sign-out reloads (session revoke, impersonation exit) are marked, as on the website.
+
+**Tests:**
+- unit tests updated for SQL widgets, the new readers, the registry (38 jobs) and import leases: **2,173 pass**;
+- new `scripts/report-scope-smoke.ts` (25 checks) on a temporary tenant with 1,005 leads;
+- **all 56 database smoke tests pass**.
+
+**Deploy (wave 3):**
+- Migrations **0138** and **0139** must run (`$DC run --rm --no-deps web node scripts/db-migrate-local.js --upgrade`). 0138 fills `closedAt` for past closed deals in one update; at today's sizes that takes seconds.
+- No settings change. The worker picks up `transfers.recoverStale` on restart.
+
 ## 9. Marketplace: ready-made connectors (proposal, 2026-10-04)
 
-**Status: proposal. Nothing is built until you approve it.** Which connectors to build is asked one question at a time; answers go in 9.6.
+**Status: proposal for the catalogue, except the native Plivo voice connector approved on 2026-10-26.** Which other connectors to build is asked one question at a time; answers go in 9.6.
 
 ### 9.1 Where it stands
 
@@ -929,7 +990,7 @@ Grouped by what enterprise CRMs, and Indian education CRMs in particular, usuall
 | **Email and calendar** | Google Workspace (Gmail, Calendar, Contacts), Microsoft 365 (Outlook mail, Calendar) | Log emails to records, two-way calendar sync for meetings, send from the rep's own mailbox, contact sync |
 | **Meetings** | Zoom, Google Meet, Microsoft Teams meetings, Calendly | Create meeting links on activities; booked slots become meetings on the lead |
 | **Team chat** | Slack, Microsoft Teams, Google Chat | Notifications (new hot lead, SLA breach, deal won) to channels; look up records from chat |
-| **Telephony (native)** | Exotel, Knowlarity, Ozonetel, MCube, MyOperator, Tata Tele (Smartflo), Twilio Voice | Click-to-call, incoming call pop-up, call logs and recordings directly from the provider's own callbacks (today a middleware layer is needed) |
+| **Telephony (native)** | **Plivo (implemented)**; Exotel, Knowlarity, Ozonetel, MCube, MyOperator, Tata Tele (Smartflo), Twilio Voice (planned) | Plivo uses the direct Call API, signed Voice V3 callbacks, incoming owner routing with default-agent fallback, call activity sync, and optional private VPS recording storage. Other providers still need adapters. |
 | **Automation platforms** | Zapier, Make, Pabbly Connect, n8n | A public app listing on each, with triggers (new lead, stage changed…) and actions (create lead, add note…) over the public API with per-install keys |
 | **Accounting and ERP** | Tally Prime, Zoho Books, QuickBooks, Xero | Push customers, invoices and receipts when fees are paid; pull payment status |
 | **E-signature** | Leegality, Digio, DocuSign, Zoho Sign | Send offer letters and agreements for signature; the signed copy is saved to the record |
@@ -970,3 +1031,26 @@ Step-by-step instructions for everything below, with a final checklist: [SETUP_R
 |---|---|---|
 | 15 | Which connector categories are in scope? | **All of them:** lead sources (ads, portals, forms); email, calendar and meetings; native telephony; team chat and automation platforms; accounting and e-sign; KYC, storage and data quality; conversions and audiences; SSO, BI, education systems and help desk. Every candidate in 9.3 is in scope. |
 | 16 | Which connectors first? | **Lead sources first** (Meta, Google and LinkedIn lead forms; IndiaMART, JustDial, Sulekha; education portals; form tools). The rest follow the order of 9.3. |
+
+### 9.7 Native Plivo connector (approved 2026-10-26)
+
+The Phone System section now has a **Plivo native connector** alongside the universal connector. Its setup surface is Phone System settings; a Marketplace catalogue card is a later UI task. A workspace admin enters Plivo Auth ID and Auth Token, inbound number, outbound caller ID, and a default agent phone. The Auth Token is encrypted at rest and never returned to the browser after save. **Enabled** controls calling and signed callback ingestion. The app uses Plivo Voice Signature V3 for its direct callbacks; the universal connector's HMAC secret is separate.
+
+Click-to-call first rings the CRM user's phone (or the default agent phone) and, when answered, dials the customer. Incoming calls route to the matched lead owner's mapped/user phone, falling back to the default agent phone. Plivo ring, dial, hangup and recording callbacks update one provider call log and its linked Call activity with direction, numbers, status, duration, timestamps, agent, cause and a secure recording indicator. The existing inbound popup and queue use that same log. Outbound calls are keyed by the CRM's own call ID (logged before Plivo is asked to dial); Plivo's request UUID is kept in the log's metadata.
+
+**Review and fixes (2026-10-26).** A review against Plivo's SDK and XML reference found the first version could not have worked live, and fixed it:
+
+| Severity | Problem | Fix |
+|---|---|---|
+| Critical | The V3 signature string was built wrongly (no `?`/`.` separators, query not sorted, nonce not joined with `.`), so every real Plivo callback would get 403. | The exact string Plivo's SDK signs; tested against a line-for-line port of `plivo-node`'s `v3Security.js`. |
+| High | No `<Dial action>`: an unanswered customer was logged `completed`, and "answered" was set when the agent's own leg answered. | `<Dial action>` (DialStatus) decides the outcome; Dial `callbackUrl` marks answered/hung up; a call only moves forward and keeps its first outcome. |
+| High | `<Record>` without `maxLength` stops at Plivo's default 60 seconds. | `maxLength="14400"` (4 hours). |
+| High | Indian 10-digit and 0-prefixed numbers became invalid E.164 (`+9876543210`). | `normalizePhone` with a default country code (91); settings saved in E.164. |
+| Medium | Inbound XML waited for logging; no ring timeout; no second try; replayable callbacks; two callbacks could create two logs/Activities; talk time included the agent leg's ringing; customer numbers in callback URLs. | XML first, logging after (`after()`); ring timeout setting; owner → default agent → message; nonce table (migration 0140, cleared after 2 days); conflict-safe insert and an Activity claim; talk time from `DialBLegDuration` only; opaque call IDs in URLs. |
+| Low | Different 403 texts revealed which workspaces use Plivo; a disabled module returned 500; body size checked after reading; `RECORDING_AVAILABLE` never fired (recordings arrive after the outcome); click-to-call ignored User-Agent Mappings; an INBOUND-queued call that was then missed stayed INBOUND. | One `403 Forbidden`; early size check; the automation fires when the recording is stored; mappings used for outbound; the missed call moves to MISSED_CALLBACK. |
+
+The CSRF proxy needed no change (it blocks only browser cross-site requests; Plivo sends no such header). Tests: `tests/plivo-connector.test.ts`, `tests/plivo-webhook-route.test.ts`, `scripts/plivo-smoke.ts` (real database, through the real route).
+
+**Record calls and store audio on this VPS** is off by default. On, the CRM instructs Plivo to record after the second leg answers (up to 4 hours), receives its recording-ready callback, downloads MP3 from Plivo, and stores it under `FILE_STORAGE_ROOT/telephony/<tenant>/<call>.mp3` in the persistent `app-storage` Docker volume. Playback/download require CRM record permissions and are audited. The existing retention-days setting removes expired local audio but keeps call history. Turning recording off stops new capture; it does not delete earlier recordings. A Plivo-hosted copy can remain under the Plivo account until removed there. The previously accepted no-off-server-backup decision in section 6 also applies to this audio.
+
+The setup, test sequence, VPS checks and provider-side steps are in [PLIVO_CONNECTOR_SETUP.md](PLIVO_CONNECTOR_SETUP.md). Before marking a workspace live, run an actual inbound and outbound call with Plivo credentials; unit tests cannot prove provider reachability or account calling permissions.

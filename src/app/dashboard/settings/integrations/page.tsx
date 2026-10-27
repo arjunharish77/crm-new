@@ -50,8 +50,8 @@ export default function IntegrationsSettingsPage() {
                 // Data Platform: outbound webhooks, inbound capture, external push. CSV imports,
                 // messaging and connector health stay available (see src/lib/module-dependencies.ts
                 // and 2026-09-29 scope decision in LEADSQUARED_GAP_CHECKLIST.md Module 21).
-                if (["0", "1", "5"].includes(section.id)) return dataPlatformEnabled;
-                if (section.id === "3") return telephonyEnabled;
+                if (["webhooks", "lead-capture", "external-push"].includes(section.id)) return dataPlatformEnabled;
+                if (section.id === "phone-system") return telephonyEnabled;
                 return true;
             })} />
             </div>
@@ -295,7 +295,7 @@ export default function IntegrationsSettingsPage() {
                                                     </SelectTrigger>
                                                     <SelectContent>
                                                         <SelectItem value={NONE_VALUE}>Do not import</SelectItem>
-                                                        {IMPORT_FIELDS[importModule].map((field) => (
+                                                        {s.importFields.map((field) => (
                                                             <SelectItem key={field.key} value={field.key}>
                                                                 {field.label}{field.required ? ' *' : ''}
                                                             </SelectItem>

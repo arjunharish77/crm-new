@@ -11,12 +11,18 @@ import { checkRateLimit } from "@/lib/server/rate-limit";
 import { invalidateReportRollupsForTenant } from "@/lib/server/report-rollups";
 import { applyFilterCondition, assertFilterGroupsSupported, buildGroupedFilterClause, normalizeFilterGroups, type FilterColumnEntry, type FilterValueKind } from "@/lib/query-filters";
 import { substituteUserTokens } from "@/lib/server/user-token-filters";
-import { maskFieldsForUser, sanitizeWritePayload } from "@/lib/server/field-permissions";
+import { maskCustomFieldsForUser, maskFieldsForUser, sanitizeWritePayload } from "@/lib/server/field-permissions";
+import { customFieldFilterColumns, customFieldInputOf, customFieldsByRecord, saveCustomFieldValues } from "@/lib/repositories/custom-field-values-postgres";
 import { applyRecordScopeClause, recordAccessLevel } from "@/lib/server/record-scope";
 import { resolveLeadStatusForWrite } from "@/lib/repositories/lead-statuses-postgres";
 
 type TenantUser = {
   apiKeyId?: string;
+  // Who really made a change done under this user, for the record's history (voice bot wave E:
+  // a bot's answers copied to the record are "set by voice bot").
+  changeSource?: { kind: "VOICE_BOT"; label: string; botId: string; callId?: string | null };
+  // Imports and demo data aren't new enquiries: no instant voice bot call (wave F).
+  bulkCreate?: boolean;
   id: string;
   tenantId: string | null;
   role?: { permissions?: any } | string | null;
@@ -90,7 +96,7 @@ function normalizeLeadFilters(filters: LeadFilterInput[] | LeadFilterInput | nul
 // duplicating or approximating this logic -- see the aggregate functions below and in
 // opportunities-postgres.ts for why. Still the single source of truth for Lead's own
 // tenant/soft-merge/record-scope filtering; nothing about its own logic changed.
-export function buildLeadWhere(user: TenantUser, filters: LeadFilterInput[] | null) {
+export function buildLeadWhere(user: TenantUser, filters: LeadFilterInput[] | null, customColumns?: Map<string, FilterColumnEntry>) {
   const clauses: string[] = [];
   const values: unknown[] = [];
 
@@ -120,7 +126,8 @@ export function buildLeadWhere(user: TenantUser, filters: LeadFilterInput[] | nu
   // buildGroupedFilterClause in query-filters.ts. Previously they were resolved into a record-id
   // list by a separate query and ANDed onto the whole where clause here, which silently turned a
   // top-level OR mixing a normal field and a score field into an intersection.
-  buildGroupedFilterClause(clauses, values, normalizeLeadFilters(filters), LEAD_FILTER_COLUMNS, undefined, user.tenantId);
+  const columns = customColumns?.size ? new Map([...LEAD_FILTER_COLUMNS, ...customColumns]) : LEAD_FILTER_COLUMNS;
+  buildGroupedFilterClause(clauses, values, normalizeLeadFilters(filters), columns, undefined, user.tenantId);
 
   return { sql: clauses.length ? `where ${clauses.join(" and ")}` : "", values };
 }
@@ -163,8 +170,24 @@ export async function getPendingNbaCountMap(tenantId: string | null, recordIds: 
 // template marks "hidden" for this user (e.g. phone/email for a role that shouldn't see them)
 // is masked before the record ever leaves the repository -- previously LEAD_COLUMNS always
 // included every column regardless of what the template configured.
+function maskLead<T extends Record<string, any>>(user: TenantUser, lead: T): T {
+  return maskCustomFieldsForUser(user, "leads", maskFieldsForUser(user, "leads", lead));
+}
+
+// Custom field values given with a lead (`customFields`, or `data` from the record form), less
+// any the user's permission template makes hidden or read-only.
+function leadCustomFieldInput(user: TenantUser, payload: Record<string, unknown>) {
+  const input = customFieldInputOf(payload);
+  return input ? sanitizeWritePayload(user, "leads", input).sanitized : null;
+}
+
+async function withLeadCustomFields<T extends { id: string }>(tenantId: string | null | undefined, lead: T, client?: Queryable) {
+  const values = (await customFieldsByRecord(tenantId, "LEAD", [lead.id], client)).get(lead.id);
+  return { ...lead, customFields: values?.customFields ?? {}, customFieldLabels: values?.customFieldLabels ?? {} };
+}
+
 function formatLead(user: TenantUser, lead: any, predictiveScore: any = null, pendingNbaCount = 0) {
-  return maskFieldsForUser(user, "leads", {
+  return maskLead(user, {
     ...lead,
     assignedUserId: lead.ownerId ?? null,
     predictiveScore,
@@ -212,7 +235,8 @@ export async function createAuditLog(
   // rolls back with the record change itself rather than as a separate, independently-fallible
   // write. flagAuditLogIfAnomalous's own update reads the just-inserted row by id, so it must
   // use the SAME client -- a different pooled connection wouldn't see an uncommitted insert.
-  const metadata = user.apiKeyId ? {apiKeyId:user.apiKeyId} : user.isImpersonating && user.impersonatedBy ? { impersonatedBy: user.impersonatedBy } : null;
+  const base = user.apiKeyId ? {apiKeyId:user.apiKeyId} : user.isImpersonating && user.impersonatedBy ? { impersonatedBy: user.impersonatedBy } : null;
+  const metadata = user.changeSource ? { ...(base ?? {}), source: user.changeSource } : base;
   const id = randomUUID();
   await execute(
     `insert into "AuditLog" (id, "tenantId", "userId", action, "entityType", "entityId", before, after, diff, metadata, "createdAt")
@@ -251,12 +275,37 @@ function fieldDiff(before: Record<string, any>, after: Record<string, any>) {
       diff[key] = { before: before[key] ?? null, after: after[key] ?? null };
     }
   }
+  // Custom fields appear in the history by their key.
+  const customKeys = new Set([...Object.keys(before.customFields ?? {}), ...Object.keys(after.customFields ?? {})]);
+  for (const key of customKeys) {
+    const was = before.customFields?.[key] ?? null;
+    const now = after.customFields?.[key] ?? null;
+    if (JSON.stringify(was) !== JSON.stringify(now)) diff[`customFields.${key}`] = { before: was, after: now };
+  }
   return diff;
 }
 
 // --- List search, sort and row details (UI/UX plan decision 5, Phase 2 Leads list) ---
 // strictFilters: refuse a filter that can't be applied instead of skipping it (Smart Views).
-export type LeadListOptions = { search?: string | null; sort?: { id: string; desc: boolean } | null; strictFilters?: boolean };
+// extraWhere: an extra condition (placeholders numbered from $1) ANDed onto the list's own scope --
+// the report filter bar's date/owner/team (report-scope.ts).
+// The number of leads matching `filters` that this user can see -- the same count listLeadsForTenant
+// reports, without loading a page of rows.
+export async function countLeadsMatchingForTenant(user: TenantUser, filters: LeadFilterInput[] | null = null) {
+  const resolvedFilters = await substituteUserTokens(normalizeLeadFilters(filters), user);
+  const where = buildLeadWhere(user, resolvedFilters, await customFieldFilterColumns(user.tenantId, "LEAD", '"Lead"', resolvedFilters));
+  const row = await queryOne<{ count: number }>(`select count(*)::int as count from "Lead" ${where.sql}`, where.values);
+  return row?.count ?? 0;
+}
+
+export type LeadListOptions = { search?: string | null; sort?: { id: string; desc: boolean } | null; strictFilters?: boolean; extraWhere?: { sql: string; values: unknown[] } | null };
+
+export function appendWhere(where: { sql: string; values: unknown[] }, extra?: { sql: string; values: unknown[] } | null) {
+  if (!extra?.sql) return where;
+  const offset = where.values.length;
+  const clause = extra.sql.replace(/\$(\d+)/g, (_, index) => `$${Number(index) + offset}`);
+  return { sql: where.sql ? `${where.sql} and (${clause})` : `where ${clause}`, values: [...where.values, ...extra.values] };
+}
 
 // Name, email, company, or the phone's digits (ignoring spaces, "+" and dashes).
 export function applyLeadSearch(where: { sql: string; values: unknown[] }, search?: string | null) {
@@ -339,8 +388,9 @@ export async function listLeadsForTenant(
   // buildLeadWhere runs, rather than making buildLeadWhere itself async (which would ripple
   // into its several other no-filter call sites below).
   const resolvedFilters = await substituteUserTokens(normalizeLeadFilters(filters), user);
-  if (options.strictFilters) assertFilterGroupsSupported(resolvedFilters, LEAD_FILTER_COLUMNS);
-  const where = applyLeadSearch(buildLeadWhere(user, resolvedFilters), options.search);
+  const customColumns = await customFieldFilterColumns(user.tenantId, "LEAD", '"Lead"', resolvedFilters);
+  if (options.strictFilters) assertFilterGroupsSupported(resolvedFilters, new Map([...LEAD_FILTER_COLUMNS, ...customColumns]));
+  const where = appendWhere(applyLeadSearch(buildLeadWhere(user, resolvedFilters, customColumns), options.search), options.extraWhere);
 
   const [countRow, data] = await Promise.all([
     queryOne<{ count: number }>(`select count(*)::int as count from "Lead" ${where.sql}`, where.values),
@@ -349,15 +399,16 @@ export async function listLeadsForTenant(
       where.values.concat([currentLimit, offset]),
     ),
   ]);
-  const [scoreMap, nbaCountMap, details] = await Promise.all([
+  const [scoreMap, nbaCountMap, details, customFields] = await Promise.all([
     getPredictiveScoreMap(user.tenantId, data.map((lead) => lead.id)),
     getPendingNbaCountMap(user.tenantId, data.map((lead) => lead.id)),
     getLeadRowDetails(user, data),
+    customFieldsByRecord(user.tenantId, "LEAD", data.map((lead) => lead.id)),
   ]);
 
   return {
     data: data.map((lead) => ({
-      ...formatLead(user, lead, scoreMap.get(lead.id) ?? null, nbaCountMap.get(lead.id) ?? 0),
+      ...formatLead(user, { ...lead, ...(customFields.get(lead.id) ?? {}) }, scoreMap.get(lead.id) ?? null, nbaCountMap.get(lead.id) ?? 0),
       ownerName: lead.ownerId ? details.owners.get(lead.ownerId) ?? null : null,
       lastActivityAt: details.lastActivity.get(lead.id) ?? null,
       nextTask: details.nextTask.get(lead.id) ?? null,
@@ -443,6 +494,13 @@ function hashIdempotentRequestBody(payload: Record<string, unknown>) {
 // without the lead itself being invalid; a lead created while distribution is down simply stays
 // unassigned (ownerId null) until the next successful distribution run for that record, rather
 // than blocking creation on it.
+// New enquiries from a voice bot's chosen lead sources get a bot call within about a minute
+// (voice bot plan wave F). Never fails the lead's creation.
+export async function queueEnquiryCall(tenantId: string, lead: { id: string; source?: unknown }) {
+  const { queueEnquiryVoiceBotCall } = await import("@/lib/server/voice-bot-calls");
+  await queueEnquiryVoiceBotCall(tenantId, lead).catch((error) => console.warn("Voice bot enquiry call not queued", error instanceof Error ? error.message : error));
+}
+
 export async function createLeadForTenant(user: TenantUser, payload: Record<string, unknown>, idempotencyKey?: string | null, unit?: CreateUnitOfWork) {
   const requestHash = idempotencyKey ? hashIdempotentRequestBody(payload) : null;
 
@@ -455,7 +513,7 @@ export async function createLeadForTenant(user: TenantUser, payload: Record<stri
     );
     if (existing) {
       if (existing.requestHash !== requestHash) throw new Error("IDEMPOTENCY_KEY_CONFLICT");
-      return maskFieldsForUser(user, "leads", existing.responseSnapshot);
+      return maskLead(user, existing.responseSnapshot);
     }
   }
 
@@ -488,16 +546,18 @@ export async function createLeadForTenant(user: TenantUser, payload: Record<stri
         client,
       );
       if (!lead) throw new Error("LEAD_INSERT_FAILED");
+      if (user.tenantId) await saveCustomFieldValues(user.tenantId, "LEAD", id, null, leadCustomFieldInput(user, payload), client);
+      const leadWithFields = await withLeadCustomFields(user.tenantId, lead, client);
       // Raw (unmasked) shape for audit/distribution/automations/webhooks/NBA -- see the comment
       // on updateLeadForTenant's equivalent rawUpdated: masking is a response-to-the-acting-user
       // policy, not a property of the record itself, so internal system consumers always get the
       // real values regardless of what this particular caller's permission template hides.
-      const rawLead = { ...lead, assignedUserId: lead.ownerId ?? null, predictiveScore: null, pendingNbaCount: 0 };
+      const rawLead = { ...leadWithFields, assignedUserId: lead.ownerId ?? null, predictiveScore: null, pendingNbaCount: 0 };
       await createAuditLog(user, "CREATE", "LEAD", rawLead.id, null, rawLead, null, client);
       await enqueueWebhookEvent(user.tenantId, "LEAD_CREATED", rawLead, client);
 
       if (idempotencyKey && user.tenantId) {
-        const masked = maskFieldsForUser(user, "leads", rawLead);
+        const masked = maskLead(user, rawLead);
         await execute(
           `insert into "RequestIdempotencyKey" (id, "tenantId", source, "idempotencyKey", "requestHash", "entityType", "entityId", "responseSnapshot", "createdAt")
            values ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
@@ -525,7 +585,7 @@ export async function createLeadForTenant(user: TenantUser, payload: Record<stri
       );
       if (existing) {
         if (existing.requestHash !== requestHash) throw new Error("IDEMPOTENCY_KEY_CONFLICT");
-        return maskFieldsForUser(user, "leads", existing.responseSnapshot);
+        return maskLead(user, existing.responseSnapshot);
       }
     }
     throw error;
@@ -535,12 +595,13 @@ export async function createLeadForTenant(user: TenantUser, payload: Record<stri
   const distribution = await distributeRecord(user, "LEAD", raw.id, raw).catch(() => null);
   const rawWithOwner = distribution?.assignedUserId ? { ...raw, ownerId: distribution.assignedUserId, assignedUserId: distribution.assignedUserId } : raw;
   await runAutomationsForEvent(user, "LEAD_CREATED", "LEAD", rawWithOwner.id, rawWithOwner).catch(() => undefined);
+  if (!user.bulkCreate && user.tenantId) await queueEnquiryCall(user.tenantId, rawWithOwner);
   await enqueueAppEvent(user.tenantId, "LEAD_CREATED", rawWithOwner).catch(() => undefined);
   await refreshNextBestActionsForRecord(user, "LEAD", rawWithOwner.id);
   await invalidateReportRollupsForTenant(user.tenantId).catch(() => undefined);
-  return maskFieldsForUser(user, "leads", rawWithOwner);
+  return maskLead(user, rawWithOwner);
   };
-  if (unit) { unit.afterCommit.push(complete); return maskFieldsForUser(user, "leads", raw); }
+  if (unit) { unit.afterCommit.push(complete); return maskLead(user, raw); }
   return complete();
 }
 
@@ -554,8 +615,8 @@ async function fetchRawLead(user: TenantUser, id: string) {
   const values = where.values.concat([id]);
   const lead = await queryOne<any>(`select ${LEAD_COLUMNS} from "Lead" ${where.sql} and id = $${values.length} limit 1`, values);
   if (!lead) return null;
-  const scoreMap = await getPredictiveScoreMap(user.tenantId, [lead.id]);
-  return { ...lead, assignedUserId: lead.ownerId ?? null, predictiveScore: scoreMap.get(lead.id) ?? null, pendingNbaCount: 0 };
+  const [scoreMap, withFields] = await Promise.all([getPredictiveScoreMap(user.tenantId, [lead.id]), withLeadCustomFields(user.tenantId, lead)]);
+  return { ...withFields, assignedUserId: lead.ownerId ?? null, predictiveScore: scoreMap.get(lead.id) ?? null, pendingNbaCount: 0 };
 }
 
 export async function getLeadForTenant(user: TenantUser, id: string) {
@@ -564,7 +625,7 @@ export async function getLeadForTenant(user: TenantUser, id: string) {
   // Owner name and last activity for the record header and summary (UI/UX plan §10.5).
   const details = await getLeadRowDetails(user, [raw]);
   return {
-    ...maskFieldsForUser(user, "leads", raw),
+    ...maskLead(user, raw),
     ownerName: raw.ownerId ? details.owners.get(raw.ownerId) ?? null : null,
     lastActivityAt: details.lastActivity.get(raw.id) ?? null,
   };
@@ -613,10 +674,12 @@ export async function updateLeadForTenant(user: TenantUser, id: string, payload:
       client,
     );
     if (!lead) return null;
+    if (user.tenantId) await saveCustomFieldValues(user.tenantId, "LEAD", id, null, leadCustomFieldInput(user, payload), client);
+    const leadWithFields = await withLeadCustomFields(user.tenantId, lead, client);
     // Raw (unmasked) shape for the audit trail and internal system consumers (automations,
     // webhooks, marketplace events, NBA refresh) -- masking is a policy for what the ACTING
     // user's own API response shows, not for what the record actually contains internally.
-    const updated = { ...lead, assignedUserId: lead.ownerId ?? null, predictiveScore: existing.predictiveScore, pendingNbaCount: existing.pendingNbaCount };
+    const updated = { ...leadWithFields, assignedUserId: lead.ownerId ?? null, predictiveScore: existing.predictiveScore, pendingNbaCount: existing.pendingNbaCount };
     const diff = fieldDiff(existing, updated);
     await createAuditLog(user, "UPDATE", "LEAD", updated.id, existing, updated, Object.keys(diff).length ? diff : null, client);
     await enqueueWebhookEvent(user.tenantId, "LEAD_UPDATED", updated, client);
@@ -627,7 +690,7 @@ export async function updateLeadForTenant(user: TenantUser, id: string, payload:
   await enqueueAppEvent(user.tenantId, "LEAD_UPDATED", rawUpdated).catch(() => undefined);
   await refreshNextBestActionsForRecord(user, "LEAD", rawUpdated.id);
   await invalidateReportRollupsForTenant(user.tenantId).catch(() => undefined);
-  return maskFieldsForUser(user, "leads", rawUpdated);
+  return maskLead(user, rawUpdated);
 }
 
 // "Select all N matching" (UI/UX plan B8): the ids of every record the list would show for these
@@ -635,7 +698,8 @@ export async function updateLeadForTenant(user: TenantUser, id: string, payload:
 // At most `cap` ids; `truncated` says more match, and callers refuse rather than act on part.
 export async function listLeadIdsForTenant(user: TenantUser, filters: LeadFilterInput[] | LeadFilterInput | null, cap = 5000, search?: string | null) {
   const resolvedFilters = await substituteUserTokens(normalizeLeadFilters(filters), user);
-  const where = applyLeadSearch(buildLeadWhere(user, resolvedFilters), search);
+  const customColumns = await customFieldFilterColumns(user.tenantId, "LEAD", '"Lead"', resolvedFilters);
+  const where = applyLeadSearch(buildLeadWhere(user, resolvedFilters, customColumns), search);
   const rows = await query<{ id: string }>(
     `select id from "Lead" ${where.sql} order by "createdAt" desc limit $${where.values.length + 1}`,
     where.values.concat([cap + 1]),
@@ -662,8 +726,9 @@ export type LeadAudienceQuery = { filters?: LeadFilterInput[] | null; strictFilt
 
 async function leadAudienceWhere(user: TenantUser, input: LeadAudienceQuery) {
   const resolvedFilters = await substituteUserTokens(normalizeLeadFilters(input.filters ?? null), user);
-  if (input.strictFilters) assertFilterGroupsSupported(resolvedFilters, LEAD_FILTER_COLUMNS);
-  const where = buildLeadWhere(user, resolvedFilters);
+  const customColumns = await customFieldFilterColumns(user.tenantId, "LEAD", '"Lead"', resolvedFilters);
+  if (input.strictFilters) assertFilterGroupsSupported(resolvedFilters, new Map([...LEAD_FILTER_COLUMNS, ...customColumns]));
+  const where = buildLeadWhere(user, resolvedFilters, customColumns);
   if (!input.staticListId) return where;
   const values = [...where.values, String(input.staticListId)];
   const listParam = values.length;

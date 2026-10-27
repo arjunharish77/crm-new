@@ -31,6 +31,7 @@ export function ImpersonationBanner() {
             router.push('/platform-admin/tenants');
         } catch (error: any) {
             toast.error(error?.message || 'Failed to exit impersonation');
+            // eslint-disable-next-line @next/next/no-location-assign-relative-destination -- Leaving impersonation failed: a full page load drops the cached pages of the impersonated session.
             window.location.href = '/login';
         } finally {
             setExiting(false);

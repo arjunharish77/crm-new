@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { requireCurrentUser } from "@/lib/server/auth";
 import { badRequest, serverError, unauthorized } from "@/lib/server/http";
 import { getCohortReportForTenant } from "@/lib/server/inbuilt-reports";
+import { parseReportFilters } from "@/lib/server/report-scope";
 
 const DIMENSIONS = ["CREATED_DATE", "SOURCE", "CAMPAIGN", "SCORE_BAND", "OWNER", "SALES_GROUP", "TEAM"];
 
@@ -13,7 +14,7 @@ export async function GET(request: Request) {
     const grain = grainParam === "week" ? "week" : "month";
     const dimension = (url.searchParams.get("dimension") ?? "CREATED_DATE").toUpperCase();
     if (!DIMENSIONS.includes(dimension)) return badRequest(`dimension must be one of ${DIMENSIONS.join(", ")}`);
-    const report = await getCohortReportForTenant(user, grain, dimension as any);
+    const report = await getCohortReportForTenant(user, grain, dimension as any, parseReportFilters(new URL(request.url).searchParams, user.id));
     return NextResponse.json(report);
   } catch (error) {
     if (error instanceof Error && error.message === "UNAUTHORIZED") return unauthorized();

@@ -15,7 +15,8 @@ import { useFeature } from "@/components/auth/feature-gate";
 import { TrendingUp, Play, Save, RefreshCw, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
 import { QueueExportButton } from "@/components/exports/queue-export-button";
-import { INBUILT_REPORT_OPTIONS, formatReportCell } from "./report-shared";
+import { INBUILT_REPORT_OPTIONS, formatReportCell, useVoiceBotReports } from "./report-shared";
+import { REPORT_FILTER_SUPPORT, ReportFilterBar, reportFilterParams, storedReportFilters, useReportFilters } from "./report-filter-bar";
 
 
 const ROLLUP_STATUS_STYLES: Record<string, string> = {
@@ -56,9 +57,10 @@ function RollupFreshnessBadge({ state }: { state: any | null }) {
 // list of reports beside it: the Library is where you choose one.
 export function InbuiltReportsSection({ reportKey }: { reportKey?: string } = {}) {
     const payoutsEnabled = useFeature("payoutsEnabled");
+    const voiceBotReports = useVoiceBotReports();
     const reportOptions = useMemo(
-        () => INBUILT_REPORT_OPTIONS.filter((option) => option.value !== "commission_payout_summary" || payoutsEnabled),
-        [payoutsEnabled],
+        () => INBUILT_REPORT_OPTIONS.filter((option) => (option.value !== "commission_payout_summary" || payoutsEnabled) && (option.value !== "voice_bot_performance" || voiceBotReports)),
+        [payoutsEnabled, voiceBotReports],
     );
     // ?report=<key> (scheduled-report emails) opens that report and runs it once.
     const [linkedKey] = useState(() => {
@@ -82,6 +84,11 @@ export function InbuiltReportsSection({ reportKey }: { reportKey?: string } = {}
     const previewRows = useMemo(() => inbuiltReportPreviewRows(report), [report]);
     const previewColumns = useMemo(() => previewRows.length ? Object.keys(previewRows[0]).slice(0, 8) : [], [previewRows]);
     const rollupState = refreshStates.find((state) => state.reportKey === selected.value && state.scopeType === "ORG" && !state.scopeId) ?? null;
+    // Round-2 plan wave 3 (C9): date / owner / team, remembered per report and kept in the link.
+    const filterSupport = REPORT_FILTER_SUPPORT[selected.value];
+    const [filterState, setFilterState] = useReportFilters(selected.value);
+    const filterParams = useMemo(() => reportFilterParams(filterState, filterSupport), [filterState, filterSupport]);
+    const lastRun = useRef("");
 
     const loadRefreshStates = async () => {
         try {
@@ -106,17 +113,23 @@ export function InbuiltReportsSection({ reportKey }: { reportKey?: string } = {}
             // Gap checklist Module 8, item 13: 8 attribution models total (up from 2) --
             // the model is passed as a query param rather than a dedicated report entry per
             // model, since the underlying report shape is identical across all of them.
-            const endpoint =
+            const params = new URLSearchParams(
                 option.value === "marketing_attribution_summary" || option.value === "attribution_explorer"
-                    ? `${option.endpoint}?model=${attributionModel}`
+                    ? { model: attributionModel }
                     : option.value === "period_comparison"
-                        ? `${option.endpoint}?preset=${periodPreset}`
+                        ? { preset: periodPreset }
                         : option.value === "cohort_funnel_progression"
-                            ? `${option.endpoint}?dimension=${cohortDimension}`
+                            ? { dimension: cohortDimension }
                             : option.value === "funnel_explorer"
-                                ? `${option.endpoint}?segment=${funnelSegment}`
-                                : option.endpoint;
-            const data = await apiFetch(endpoint);
+                                ? { segment: funnelSegment }
+                                : {},
+            );
+            // The report on screen uses the filter bar; another report opens with its remembered filters.
+            const optionFilters = option.value === selected.value ? filterParams : reportFilterParams(storedReportFilters(option.value), REPORT_FILTER_SUPPORT[option.value]);
+            for (const [key, value] of Object.entries(optionFilters)) params.set(key, value);
+            lastRun.current = `${option.value}|${JSON.stringify(optionFilters)}`;
+            const query = params.toString();
+            const data = await apiFetch(query ? `${option.endpoint}?${query}` : option.endpoint);
             setSelectedKey(option.value);
             setReport(data);
             toast.success(`${option.label} loaded`);
@@ -126,6 +139,14 @@ export function InbuiltReportsSection({ reportKey }: { reportKey?: string } = {}
             setRunning(false);
         }
     };
+
+    // A changed filter reruns the report on screen (not before it has been run once).
+    useEffect(() => {
+        if (!report || report.reportKey === undefined) return;
+        if (lastRun.current === `${selected.value}|${JSON.stringify(filterParams)}`) return;
+        runReport();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [filterParams]);
 
     const linkedRunDone = useRef(false);
     useEffect(() => {
@@ -196,7 +217,7 @@ export function InbuiltReportsSection({ reportKey }: { reportKey?: string } = {}
                         </Button>
                         <QueueExportButton
                             moduleName="REPORTS"
-                            filters={{ reportKind: "INBUILT", reportKey: selected.value }}
+                            filters={{ reportKind: "INBUILT", reportKey: selected.value, reportFilters: filterParams }}
                             disabled={!report}
                         />
                         <Button variant="outline" onClick={refreshRollup} disabled={refreshingRollup}>
@@ -227,6 +248,8 @@ export function InbuiltReportsSection({ reportKey }: { reportKey?: string } = {}
                         </Button>
                     </div>
                 </div>
+
+                {filterSupport ? <ReportFilterBar support={filterSupport} value={filterState} onChange={setFilterState} /> : null}
 
                 <div className={cn("grid gap-4", !reportKey && "@min-[1100px]/reports:grid-cols-[320px_minmax(0,1fr)]")}>
                     {reportKey ? null : <div className="min-w-0 space-y-2">

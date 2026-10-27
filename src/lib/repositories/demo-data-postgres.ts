@@ -54,7 +54,7 @@ export async function seedDemoDataForTenant(tenantId: string): Promise<SeedDemoD
 
   const createdLeads: any[] = [];
   for (const demoLead of DEMO_LEADS) {
-    const lead = await createLeadForTenant(user, demoLead);
+    const lead = await createLeadForTenant({ ...user, bulkCreate: true }, demoLead);
     await execute('update "Lead" set "isDemoData" = true where id = $1', [lead.id]);
     createdLeads.push(lead);
   }

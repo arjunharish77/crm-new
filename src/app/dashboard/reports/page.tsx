@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { useFeature } from "@/components/auth/feature-gate";
 import { QueueExportButton } from "@/components/exports/queue-export-button";
 import { CustomReportsSection, INBUILT_REPORT_OPTIONS } from "./_components/report-sections";
+import { useVoiceBotReports } from "./_components/report-shared";
 
 const TABS = [
     { value: "standard", label: "Standard reports" },
@@ -25,6 +26,7 @@ const EXTRA_STANDARD = [{ value: "compare", label: "Compare segments", category:
 export default function ReportsLibraryPage() {
     const router = useRouter();
     const payoutsEnabled = useFeature("payoutsEnabled");
+    const voiceBotReports = useVoiceBotReports();
     const [tab, setTab] = usePageTab(TABS, "standard");
     const [search, setSearch] = useState("");
 
@@ -42,7 +44,7 @@ export default function ReportsLibraryPage() {
 
     const standard = useMemo(() => {
         const options = [
-            ...INBUILT_REPORT_OPTIONS.filter((option) => option.value !== "commission_payout_summary" || payoutsEnabled).map((option) => ({ ...option, href: `/dashboard/reports/standard/${option.value}` })),
+            ...INBUILT_REPORT_OPTIONS.filter((option) => (option.value !== "commission_payout_summary" || payoutsEnabled) && (option.value !== "voice_bot_performance" || voiceBotReports)).map((option) => ({ ...option, href: `/dashboard/reports/standard/${option.value}` })),
             ...EXTRA_STANDARD,
         ];
         const needle = search.trim().toLowerCase();
@@ -50,7 +52,7 @@ export default function ReportsLibraryPage() {
         const groups = new Map<string, typeof matching>();
         for (const option of matching) groups.set(option.category, [...(groups.get(option.category) ?? []), option]);
         return [...groups.entries()].sort(([a], [b]) => a.localeCompare(b));
-    }, [payoutsEnabled, search]);
+    }, [payoutsEnabled, voiceBotReports, search]);
 
     return (
         <div className="@container/reports min-w-0 pb-8">

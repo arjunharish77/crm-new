@@ -894,6 +894,10 @@ export async function queueCommunicationForTenant(user: TenantUser, input: Outbo
     client,
   );
   if (!row) throw new Error("COMMUNICATION_OUTBOX_INSERT_FAILED");
+  await logMessageActivity(client, (activities, tx) => activities.createMessageActivity({
+    tenantId, outboxId: row.id, channel, entityType: row.entityType, entityId: row.entityId, recipient,
+    subject, body, status: row.status, sourceType: row.sourceType, createdBy: user.id,
+  }, tx));
   if (blocked) {
     await recordDeliveryEvent(
       tenantId,
@@ -1128,6 +1132,34 @@ async function sendSmtpEmail(provider: any, sender: any, message: any) {
   });
 }
 
+// Sent messages are logged as activities (decision 24). Logging must never stop or undo the
+// send itself, so inside the caller's transaction it runs under a savepoint and a failure only
+// rolls that back. Imported when used: the activities module reaches this one through automations.
+async function logMessageActivity(
+  client: Queryable | undefined,
+  work: (activities: typeof import("@/lib/repositories/activities-postgres"), client?: Queryable) => Promise<unknown>,
+) {
+  const activities = await import("@/lib/repositories/activities-postgres");
+  if (!client) {
+    await work(activities).catch((error) => console.error("Message activity failed", error instanceof Error ? error.message : error));
+    return;
+  }
+  try {
+    await client.query("savepoint message_activity");
+  } catch {
+    // Not inside a transaction: each statement stands alone, nothing to roll back.
+    await work(activities, client).catch((error) => console.error("Message activity failed", error instanceof Error ? error.message : error));
+    return;
+  }
+  try {
+    await work(activities, client);
+    await client.query("release savepoint message_activity");
+  } catch (error) {
+    await client.query("rollback to savepoint message_activity");
+    console.error("Message activity failed", error instanceof Error ? error.message : error);
+  }
+}
+
 async function recordDeliveryEvent(
   tenantId: string,
   outboxId: string | null,
@@ -1157,6 +1189,12 @@ async function recordDeliveryEvent(
     ],
     client,
   );
+  // Only messages to a lead or opportunity have an activity; a provider's webhook may not say
+  // which record it was, only the provider's message id.
+  const eventEntityType = String(event?.entityType ?? "").toUpperCase();
+  if (event && (eventEntityType === "LEAD" || eventEntityType === "OPPORTUNITY" || (!outboxId && event.providerMessageId))) {
+    await logMessageActivity(client, (activities, tx) => activities.updateMessageActivityForEvent(tenantId, outboxId, event.providerMessageId ?? null, eventType, tx));
+  }
   if (event?.entityType && event.entityId) {
     const systemUser = { id: "system", tenantId, name: "System", email: "system@local" };
     runAutomationsForEvent(

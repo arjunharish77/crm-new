@@ -193,7 +193,8 @@ describe("telephony webhook security", () => {
         if (text.includes("from \"IntegrationSetting\"")) return { id: "setting-1", config: {}, isActive: true };
         if (text.includes('from "User" where "tenantId" = $1 order by "createdAt"')) return { id: "owner-1", tenantId: TENANT_ID };
         if (text.includes('from "TelephonyCallLog" where "tenantId" = $1 and provider')) return null; // no existing row
-        if (text.includes('insert into "TelephonyCallLog"')) return { id: "log-1", status: "completed", activityId: "activity-1" };
+        if (text.includes('insert into "TelephonyCallLog"')) return { id: "log-1", status: "completed", activityId: null };
+        if (text.includes("activityClaimedAt")) return { id: "log-1" };
         return null;
       });
       crmMocks.createActivityForTenant.mockResolvedValueOnce({ id: "activity-1" });
@@ -201,7 +202,45 @@ describe("telephony webhook security", () => {
       const result = await recordTelephonyCallEvent(TENANT_ID, { provider: "twilio", callId: "call-123", status: "completed", leadId: "lead-1" });
 
       expect(result.deduped).toBe(false);
+      expect(result.activityId).toBe("activity-1");
       expect(crmMocks.createActivityForTenant).toHaveBeenCalledTimes(1);
+    });
+
+    it("leaves the Activity to the callback that claimed it when two arrive together", async () => {
+      dbMocks.queryOne.mockImplementation(async (sql: string) => {
+        const text = String(sql);
+        if (text.includes("from \"IntegrationSetting\"")) return { id: "setting-1", config: {}, isActive: true };
+        if (text.includes('from "User" where "tenantId" = $1 order by "createdAt"')) return { id: "owner-1", tenantId: TENANT_ID };
+        if (text.includes('from "TelephonyCallLog" where "tenantId" = $1 and provider')) return null;
+        if (text.includes('insert into "TelephonyCallLog"')) return { id: "log-1", status: "ringing", activityId: null };
+        if (text.includes("activityClaimedAt")) return null; // the other callback claimed it
+        return null;
+      });
+
+      await recordTelephonyCallEvent(TENANT_ID, { provider: "plivo", callId: "call-race", status: "ringing", leadId: "lead-1" });
+
+      expect(crmMocks.createActivityForTenant).not.toHaveBeenCalled();
+    });
+
+    it("applies a callback as an update when another one logged the call first", async () => {
+      let lookups = 0;
+      dbMocks.queryOne.mockImplementation(async (sql: string) => {
+        const text = String(sql);
+        if (text.includes("from \"IntegrationSetting\"")) return { id: "setting-1", config: {}, isActive: true };
+        if (text.includes('from "User" where "tenantId" = $1 order by "createdAt"')) return { id: "owner-1", tenantId: TENANT_ID };
+        if (text.includes('from "TelephonyCallLog" where "tenantId" = $1 and provider')) {
+          lookups++;
+          return lookups === 1 ? null : { id: "log-1", status: "ringing", activityId: "activity-1", startedAt: "2026-10-26T00:00:00Z", leadId: null, opportunityId: null, direction: "INBOUND", metadata: {} };
+        }
+        if (text.includes('insert into "TelephonyCallLog"')) return null; // on conflict do nothing
+        if (text.includes('update "TelephonyCallLog"')) return { id: "log-1", status: "answered" };
+        return null;
+      });
+
+      const result = await recordTelephonyCallEvent(TENANT_ID, { provider: "plivo", callId: "call-race", status: "answered" });
+
+      expect(result).toEqual(expect.objectContaining({ id: "log-1", deduped: true }));
+      expect(lookups).toBe(2);
     });
 
     it("computes recordingExpiresAt from the tenant's configured retention when a new call has a recording", async () => {

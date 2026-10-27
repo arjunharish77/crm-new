@@ -45,6 +45,7 @@ curl --fail-with-body -sS "$CRM_URL/api/v1/leads" -H "Authorization: Bearer $CRM
 | `email` | No | Valid email, empty string or null |
 | `phone`, `company`, `source` | No | Text up to 500 characters, or null; trimmed |
 | `status` | No | `NEW`, `CONTACTED`, `QUALIFIED`, `LOST`, `CONVERTED`; default `NEW` |
+| `customFields` | No | Custom field values by field key, e.g. `{"course_interest":"MBA","budget":250000}`. Keys come from **Settings → Objects & fields**; a key that isn't a lead custom field is ignored, and a value of the wrong kind (text in a number field) is refused. |
 
 Unknown fields are rejected. Owner assignment follows configured distribution rules; `ownerId`, tags and arbitrary custom fields are not accepted by this contract.
 
@@ -80,6 +81,7 @@ curl --fail-with-body -sS "$CRM_URL/api/v1/opportunities" -H "Authorization: Bea
 | `stageId` | No | Stage belonging to that type |
 | `amount` | No | Finite nonnegative number or null; zero is preserved |
 | `priority` | No | `LOW`, `MEDIUM`, `HIGH`, `URGENT`; default `MEDIUM` |
+| `customFields` | No | Custom field values by field key, including the opportunity type's own fields; same rules as for leads. |
 | `expectedCloseDate` | No | Valid `YYYY-MM-DD` date or null |
 
 Success: **201**, the Opportunity object directly, including `id`, `leadId`, type/stage IDs and `duplicateWarnings`. Unknown fields are rejected. The record, initial stage history, audit event and durable webhook event commit together.

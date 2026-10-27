@@ -51,6 +51,7 @@ async function main() {
     check(off.paused === 1, "switching Automations off pauses exactly the live automation");
     check((await one(`select "isActive" from "AutomationV2" where id = $1`, [autoLive])).isActive === false, "live automation paused");
     await setTenantModuleStatus(actor, tenant, "MARKETING", "SUSPENDED", "smoke");
+    await setTenantModuleStatus(actor, tenant, "VOICE_BOT", "DISABLED", "smoke"); // unblock Telephony
     await setTenantModuleStatus(actor, tenant, "TELEPHONY", "DISABLED", "smoke");
     check((await one(`select status from "CallCampaign" where id = $1`, [callCampaign])).status === "PAUSED", "call campaign paused");
     const modules = await listModulesForTenantAdmin(tenantAdmin);

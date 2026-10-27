@@ -15,6 +15,15 @@ vi.mock("@/lib/db/query", () => ({
 vi.mock("@/lib/db/transaction", () => ({
   withTransaction: (_user: unknown, fn: (client: unknown) => unknown) => fn({}),
 }));
+// Custom field values are covered by custom-field-values tests and scripts/custom-fields-smoke.ts;
+// stubbed here so this file's scripted database replies stay in order.
+vi.mock("@/lib/repositories/custom-field-values-postgres", () => ({
+  customFieldInputOf: () => null,
+  customFieldsByRecord: vi.fn(async () => new Map()),
+  saveCustomFieldValues: vi.fn(async () => []),
+  customFieldFilterColumns: vi.fn(async () => new Map()),
+}));
+
 
 const partnerUser = {
   id: "partner-1",

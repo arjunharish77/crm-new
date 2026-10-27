@@ -14,8 +14,22 @@
 		Strict-Transport-Security "max-age=31536000; includeSubDomains"
 		X-Content-Type-Options "nosniff"
 		Referrer-Policy "strict-origin-when-cross-origin"
-		Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=(), usb=(), interest-cohort=()"
 	}
+
+	# Voice bot test calls (wave C) use the microphone. Allowed for the CRM's own pages only (the
+	# browser still asks the user first); the embeddable form pages keep it off. It can't be
+	# limited to the voice bot pages: a page reached by in-app navigation keeps the policy of the
+	# page first loaded.
+	@formEmbeds path /f/* /public-form/* /api/public/forms/*
+	header @formEmbeds Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=(), usb=(), interest-cohort=()"
+	@crmPages not path /f/* /public-form/* /api/public/forms/*
+	header @crmPages Permissions-Policy "camera=(), microphone=(self), geolocation=(), payment=(), usb=(), interest-cohort=()"
+
+	# Voice bots: browser test calls and Plivo's call audio go to the bot service (WebSocket).
+	reverse_proxy /voice-bot/* voice-bot:8765
+
+	# The bot service calls the CRM's internal API over the private network only.
+	respond /api/internal/* 404
 
 	# The public form-embed feature intentionally lets a form be iframed on
 	# arbitrary third-party sites (src/components/forms/EmbedCodeDialog.tsx),

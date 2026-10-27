@@ -1,10 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { listDashboardTabsForTenantMock, listDashboardWidgetsForTenantMock, getDashboardWidgetForTenantMock, listLeadsForTenantMock } = vi.hoisted(() => ({
+const { listDashboardTabsForTenantMock, listDashboardWidgetsForTenantMock, getDashboardWidgetForTenantMock, queryOneMock } = vi.hoisted(() => ({
   listDashboardTabsForTenantMock: vi.fn(),
   listDashboardWidgetsForTenantMock: vi.fn(),
   getDashboardWidgetForTenantMock: vi.fn(),
-  listLeadsForTenantMock: vi.fn(),
+  queryOneMock: vi.fn(),
 }));
 
 vi.mock("@/lib/repositories/dashboard-tabs-postgres", () => ({
@@ -14,8 +14,10 @@ vi.mock("@/lib/repositories/reports-dashboards-postgres", () => ({
   listDashboardWidgetsForTenant: listDashboardWidgetsForTenantMock,
   getDashboardWidgetForTenant: getDashboardWidgetForTenantMock,
 }));
-vi.mock("@/lib/repositories/leads-postgres", () => ({
-  listLeadsForTenant: listLeadsForTenantMock,
+// Number widgets count in SQL (round-2 plan wave 3, B1).
+vi.mock("@/lib/db/query", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/db/query")>()),
+  queryOne: queryOneMock,
 }));
 
 import { exportDashboardTabPdfForTenant } from "@/lib/server/crm";
@@ -32,7 +34,7 @@ describe("exportDashboardTabPdfForTenant", () => {
     listDashboardTabsForTenantMock.mockReset();
     listDashboardWidgetsForTenantMock.mockReset();
     getDashboardWidgetForTenantMock.mockReset();
-    listLeadsForTenantMock.mockReset();
+    queryOneMock.mockReset();
   });
 
   it("throws for a tab that doesn't exist", async () => {
@@ -54,7 +56,7 @@ describe("exportDashboardTabPdfForTenant", () => {
     getDashboardWidgetForTenantMock.mockImplementation(async (_user: any, id: string) =>
       ({ id, type: "STAT", config: { module: "LEADS" } }),
     );
-    listLeadsForTenantMock.mockResolvedValue({ data: [{ id: "l1" }, { id: "l2" }], meta: { total: 2, page: 1, last_page: 1, limit: 500 } });
+    queryOneMock.mockResolvedValue({ count: 2 });
 
     const result = await exportDashboardTabPdfForTenant(user, "tab-1");
 

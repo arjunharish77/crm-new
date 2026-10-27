@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/server/auth";
 import { unauthorized, badRequest } from "@/lib/server/http";
-import { getObjectMetadata } from "@/lib/server/metadata";
+import { getObjectMetadataForTenant } from "@/lib/server/metadata";
 
 export async function GET(
   _request: Request,
@@ -13,7 +13,7 @@ export async function GET(
   }
 
   const { objectName } = await params;
-  const metadata = getObjectMetadata(objectName);
+  const metadata = await getObjectMetadataForTenant(objectName, user.tenantId);
 
   if (!metadata) {
     return badRequest(`Unsupported object: ${objectName}`);

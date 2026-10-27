@@ -123,7 +123,7 @@ export async function apiFetch<T = any>(endpoint: string, options: RequestInit =
 
             // Create error with user-friendly message. A server error carries a reference
             // (round-2 plan O5) that support can find in the logs, so it's shown with the message.
-            const friendly = ["DUPLICATE_RULE_BLOCK", "MODULE_DEPENDENCY", "MODULE_DISABLED", "USAGE_LIMIT_REACHED"].includes(errorData.code) ? errorMessage : getUserFriendlyError({
+            const friendly = ["DUPLICATE_RULE_BLOCK", "MODULE_DEPENDENCY", "MODULE_DISABLED", "USAGE_LIMIT_REACHED", "USER_MESSAGE"].includes(errorData.code) ? errorMessage : getUserFriendlyError({
                 message: errorMessage,
                 status: response.status,
                 statusText: response.statusText,

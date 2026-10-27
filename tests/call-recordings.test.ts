@@ -9,13 +9,15 @@ const dbMocks = vi.hoisted(() => {
 const crmMocks = vi.hoisted(() => ({ createAuditLog: vi.fn().mockResolvedValue(undefined) }));
 const leadsRepoMocks = vi.hoisted(() => ({ getLeadForTenant: vi.fn() }));
 const opportunitiesRepoMocks = vi.hoisted(() => ({ getOpportunityForTenant: vi.fn() }));
+const fileMocks = vi.hoisted(() => ({ readPrivateFile: vi.fn(), deletePrivateFile: vi.fn() }));
 
 vi.mock("@/lib/db/query", () => dbMocks);
 vi.mock("@/lib/server/crm", () => crmMocks);
 vi.mock("@/lib/repositories/leads-postgres", () => leadsRepoMocks);
 vi.mock("@/lib/repositories/opportunities-postgres", () => opportunitiesRepoMocks);
+vi.mock("@/lib/storage/file-storage", () => fileMocks);
 
-import { listCallRecordingsForTenant, getCallRecordingForTenant, expireCallRecordings } from "@/lib/server/call-recordings";
+import { listCallRecordingsForTenant, getCallRecordingForTenant, readCallRecordingForTenant, expireCallRecordings } from "@/lib/server/call-recordings";
 
 // Telephony business logic under test; the TELEPHONY module gate itself is covered by
 // tests/telephony-module-gate.test.ts.
@@ -37,6 +39,8 @@ describe("call recording governance", () => {
     crmMocks.createAuditLog.mockReset().mockResolvedValue(undefined);
     leadsRepoMocks.getLeadForTenant.mockReset();
     opportunitiesRepoMocks.getOpportunityForTenant.mockReset();
+    fileMocks.readPrivateFile.mockReset();
+    fileMocks.deletePrivateFile.mockReset().mockResolvedValue(undefined);
   });
 
   describe("listCallRecordingsForTenant", () => {
@@ -108,6 +112,20 @@ describe("call recording governance", () => {
       expect(result.recordingUrl).toBe("https://x/rec.mp3");
     });
 
+    it("serves a VPS recording only through the tenant-checked media endpoint", async () => {
+      const tenantId = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa";
+      const callId = "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb";
+      const localUser = { id: "agent", tenantId };
+      const storageKey = `telephony/${tenantId}/${callId}.mp3`;
+      dbMocks.queryOne.mockResolvedValueOnce({ id: callId, recordingUrl: `vps://${storageKey}`, agentId: "agent", leadId: null, opportunityId: null });
+      const access = await getCallRecordingForTenant(localUser, callId, "PLAY");
+      expect(access.recordingUrl).toBe(`/api/telephony/call-recordings/${callId}/media?action=PLAY`);
+      dbMocks.queryOne.mockResolvedValueOnce({ id: callId, recordingUrl: `vps://${storageKey}`, agentId: "agent", leadId: null, opportunityId: null });
+      fileMocks.readPrivateFile.mockResolvedValueOnce(Buffer.from("mp3"));
+      expect(await readCallRecordingForTenant(localUser, callId, "DOWNLOAD")).toEqual(Buffer.from("mp3"));
+      expect(fileMocks.readPrivateFile).toHaveBeenCalledWith(storageKey);
+    });
+
     it("allows a user with record access to the linked lead", async () => {
       dbMocks.queryOne.mockResolvedValueOnce({ id: "call-1", recordingUrl: "https://x/rec.mp3", agentId: "someone-else", leadId: "lead-1", opportunityId: null });
       leadsRepoMocks.getLeadForTenant.mockResolvedValueOnce({ id: "lead-1" });
@@ -168,6 +186,13 @@ describe("call recording governance", () => {
       const result = await expireCallRecordings(100);
       expect(result.processed).toBe(0);
       expect(dbMocks.execute).not.toHaveBeenCalled();
+    });
+
+    it("deletes expired VPS audio while retaining the call log row", async () => {
+      dbMocks.query.mockResolvedValueOnce([{ id: "call-1", recordingUrl: "vps://telephony/tenant/call-1.mp3" }]);
+      await expireCallRecordings(10);
+      expect(fileMocks.deletePrivateFile).toHaveBeenCalledWith("telephony/tenant/call-1.mp3");
+      expect(dbMocks.execute).toHaveBeenCalledWith(expect.stringContaining('set "recordingUrl" = null'), ["call-1"]);
     });
   });
 });

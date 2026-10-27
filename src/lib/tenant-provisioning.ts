@@ -48,6 +48,7 @@ export function effectiveTenantFeatures(features:Record<string,boolean>, statuse
 /** Operator-facing limits: catalog membership is not proof of complete feature delivery. */
 export const MODULE_COVERAGE_NOTES:Record<string,string>={
  TELEPHONY:'Off: call center, campaigns, scripts, dispositions, recordings, click-to-call and telephony reports are blocked, and provider call events are refused. Existing call activities stay on lead timelines.',
+ VOICE_BOT:'Off: voice bot settings, numbers, providers and bot calls are blocked. Bot activities already logged stay on lead timelines.',
  DATA_PLATFORM:'Off: outbound webhooks (pending deliveries are cancelled), inbound lead capture, external push and the dedupe & merge center are blocked. Imports, exports, audit logs and GDPR requests stay available.',
  COUNSELING:'Catalog entry for counseling workflows; the full workspace is not yet available.',
  QUALITY_MANAGEMENT:'Catalog entry for quality workflows; the full workspace is not yet available.',

@@ -48,6 +48,7 @@ interface ActivityType {
     color?: string;
     order: number;
     isActive: boolean;
+    isSystem?: boolean;
 }
 
 function SortableActivityTypeRow({ activityType, onEdit, onDelete, onManageFields }: {
@@ -75,7 +76,7 @@ function SortableActivityTypeRow({ activityType, onEdit, onDelete, onManageField
             ref={setNodeRef}
             style={style}
             className={cn(
-                "flex items-center gap-4 rounded-2xl border bg-card p-4 px-6 transition-all duration-200 hover:border-primary/30 hover:bg-primary/[0.02]",
+                "flex flex-wrap items-center gap-x-4 gap-y-2 rounded-2xl border bg-card p-4 transition-all duration-200 hover:border-primary/30 hover:bg-primary/[0.02] sm:px-6",
                 isDragging ? "border-primary shadow-md" : "hover:-translate-y-px hover:shadow-md"
             )}
         >
@@ -100,12 +101,18 @@ function SortableActivityTypeRow({ activityType, onEdit, onDelete, onManageField
                 <Workflow className="size-5" />
             </div>
 
-            <div className="flex-1">
+            <div className="min-w-0 flex-1 basis-40">
                 <p className="text-sm font-bold">{activityType.name}</p>
                 <p className="text-xs text-muted-foreground">
-                    {activityType.icon ? `Identifier: ${activityType.icon}` : 'Standard Interaction'}
+                    {activityType.isSystem ? "Logged by the CRM; can't be picked by hand" : activityType.icon ? `Identifier: ${activityType.icon}` : 'Standard Interaction'}
                 </p>
             </div>
+
+            {/* On a narrow screen the badges and buttons wrap onto their own line. */}
+            <div className="ml-auto flex shrink-0 flex-wrap items-center justify-end gap-2">
+            {activityType.isSystem && (
+                <Badge variant="outline" className="rounded-lg text-xs font-bold uppercase">System</Badge>
+            )}
 
             <Badge
                 variant="outline"
@@ -124,17 +131,26 @@ function SortableActivityTypeRow({ activityType, onEdit, onDelete, onManageField
                     <List className="size-3.5" />
                     Fields
                 </Button>
-                <Button variant="ghost" size="icon-sm" className="text-primary" onClick={onEdit}>
+                <Button variant="ghost" size="icon-sm" className="text-primary" onClick={onEdit} aria-label={`Edit ${activityType.name}`}>
                     <Pencil className="size-4" />
                 </Button>
-                <Button
-                    variant="ghost"
-                    size="icon-sm"
-                    className="text-destructive hover:bg-destructive/10 hover:text-destructive"
-                    onClick={onDelete}
-                >
-                    <Trash2 className="size-4" />
-                </Button>
+                {activityType.isSystem ? (
+                    // Same size as the delete button, so every row's buttons line up.
+                    <Button variant="ghost" size="icon-sm" className="invisible" aria-hidden="true" tabIndex={-1} disabled>
+                        <Trash2 className="size-4" />
+                    </Button>
+                ) : (
+                    <Button
+                        variant="ghost"
+                        size="icon-sm"
+                        className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+                        onClick={onDelete}
+                        aria-label={`Delete ${activityType.name}`}
+                    >
+                        <Trash2 className="size-4" />
+                    </Button>
+                )}
+            </div>
             </div>
         </div>
     );

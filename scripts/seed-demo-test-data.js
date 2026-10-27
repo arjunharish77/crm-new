@@ -440,9 +440,11 @@ async function seedUniversityPipelines(opportunityObjectId) {
 
 async function seedActivityTypes(activityObjectId) {
   const defs = [
-    ["demo-activity-call", "Call", "Phone", "#2563eb"],
-    ["demo-activity-whatsapp", "WhatsApp", "MessageCircle", "#16a34a"],
-    ["demo-activity-email", "Email", "Mail", "#9333ea"],
+    // Demo activities are logged by hand, so they use the "(logged manually)" types; Call, WhatsApp
+    // and Email themselves are system types the CRM fills in (migration 0141).
+    ["demo-activity-call", "Call (logged manually)", "Phone", "#2563eb"],
+    ["demo-activity-whatsapp", "WhatsApp (logged manually)", "MessageCircle", "#16a34a"],
+    ["demo-activity-email", "Email (logged manually)", "Mail", "#9333ea"],
     ["demo-activity-campus-visit", "Campus Visit", "MapPin", "#f59e0b"],
     ["demo-activity-counselling", "Counselling Session", "Users", "#0f766e"],
     ["demo-activity-document-review", "Document Review", "FileCheck", "#dc2626"],

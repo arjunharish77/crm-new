@@ -9,6 +9,9 @@ import { Lead, PredictiveRecordScore } from './leads';
  */
 export interface Opportunity {
     id: string;
+    // Custom field values by field key, and their labels.
+    customFields?: Record<string, unknown> | null;
+    customFieldLabels?: Record<string, string>;
     tenantId: string;
     objectId: string;
     leadId: string;

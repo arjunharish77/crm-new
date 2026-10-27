@@ -137,7 +137,7 @@ async function isQueueMember(user: TenantUser, teamId: string) {
 }
 
 // `today`: the workspace's today (getTenantTodayRange), needed for the "due today" filter.
-function buildWhere(user: TenantUser, filters: TaskFilters = {}, today?: { start: string; end: string }) {
+export function buildWhere(user: TenantUser, filters: TaskFilters = {}, today?: { start: string; end: string }) {
   const clauses: string[] = [];
   const values: unknown[] = [];
   if (!user.tenantId) clauses.push("false");

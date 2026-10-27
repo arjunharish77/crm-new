@@ -191,6 +191,12 @@ export async function runPrivacyDeleteForLead(user: TenantUser, leadId: string) 
 
     const deletedCounts: Record<string, number> = {};
     deletedCounts.tasks = await execute(`delete from "Task" where "tenantId" = $1 and ("leadId" = $2 or "opportunityId" = any($3::text[]))`, [tenantId, leadId, opportunityIds]);
+    // Custom field values of those activities, and of the lead and its opportunities, go too.
+    deletedCounts.customFieldValues = await execute(
+      `delete from "CustomFieldValue" where "tenantId" = $1 and ("recordId" = $2 or "recordId" = any($3::text[])
+         or "recordId" in (select id from "Activity" where "tenantId" = $1 and ("leadId" = $2 or "opportunityId" = any($3::text[]))))`,
+      [tenantId, leadId, opportunityIds],
+    );
     deletedCounts.activities = await execute(`delete from "Activity" where "tenantId" = $1 and ("leadId" = $2 or "opportunityId" = any($3::text[]))`, [tenantId, leadId, opportunityIds]);
     deletedCounts.notes =
       (await execute(`delete from "Note" where "tenantId" = $1 and "entityType" = 'LEAD' and "entityId" = $2`, [tenantId, leadId])) +

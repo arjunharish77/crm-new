@@ -357,6 +357,9 @@ async function executeAutomationAction(
   if (type === "create_activity" || type === "add_activity") {
     const typeId = nodeData.activityTypeId ?? nodeData.typeId;
     if (!typeId) return;
+    // System activity types (calls, sent messages, voice bots) are logged by the CRM only.
+    const activityType = await queryOne<{ isSystem: boolean }>(`select "isSystem" from "ActivityType" where id = $1 and "tenantId" = $2`, [typeId, user.tenantId], client);
+    if (activityType?.isSystem) throw new Error("ACTIVITY_TYPE_SYSTEM");
     const now = new Date().toISOString();
     await execute(
       `insert into "Activity"
@@ -926,13 +929,43 @@ async function scheduleAutomationResume(
   waitingNodeId: string,
   client?: Queryable,
 ) {
+  const id = randomUUID();
   await execute(
     `insert into "AutomationQueue"
       (id, "tenantId", "userId", "automationId", "entityType", "entityId", record, "resumeNodeIds", "waitingNodeId", status, "runAt", attempts, "lastError", "createdAt", "updatedAt")
      values ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'PENDING', $10, 0, null, $11, $11)`,
-    [randomUUID(), user.tenantId, user.id, automation.id, entityType, entityId, jsonbParam(record), jsonbParam(resumeNodeIds), waitingNodeId, runAt.toISOString(), new Date().toISOString()],
+    [id, user.tenantId, user.id, automation.id, entityType, entityId, jsonbParam(record), jsonbParam(resumeNodeIds), waitingNodeId, runAt.toISOString(), new Date().toISOString()],
     client,
   );
+  return id;
+}
+
+// "Call with voice bot" (voice bot plan wave F): queues a bot call to the record's phone. With
+// "wait for the outcome", the next steps run once the call and its retries are over (or after
+// the longest wait), and can branch on voiceBotCall.outcome; otherwise they run straight away.
+async function startVoiceBotCallStep(
+  user: TenantUser, automation: any, entityType: string, entityId: string, record: Record<string, unknown>,
+  nodeData: Record<string, unknown>, nextNodeIds: string[], nodeId: string, client?: Queryable,
+) {
+  const tenantId = user.tenantId as string;
+  const waitFor = nodeData.waitForOutcome === true && nextNodeIds.length > 0;
+  const days = Math.min(14, Math.max(1, Number(nodeData.maxWaitDays) || 3));
+  const queueId = waitFor ? await scheduleAutomationResume(user, automation, entityType, entityId, record, nextNodeIds, new Date(Date.now() + days * 86_400_000), nodeId, client) : null;
+  const opportunityId = entityType === "OPPORTUNITY" ? entityId : typeof record.opportunityId === "string" ? record.opportunityId : null;
+  const leadId = entityType === "LEAD" ? entityId : typeof record.leadId === "string" ? record.leadId : null;
+  const { queueVoiceBotCallAsSystem } = await import("@/lib/server/voice-bot-calls");
+  const result = await queueVoiceBotCallAsSystem(tenantId, String(nodeData.botId ?? ""), opportunityId ? { opportunityId } : { leadId }, {
+    trigger: "AUTOMATION", startedBy: user.id, automationQueueId: queueId,
+  });
+  // Not called at all: carry on now (the wait row may not be committed yet for the bot calls code to see).
+  if (result.reason && queueId) {
+    await execute(
+      `update "AutomationQueue" set "runAt" = now(), record = coalesce(record, '{}'::jsonb) || $2::jsonb, "updatedAt" = now() where id = $1`,
+      [queueId, JSON.stringify({ voiceBotCall: { id: result.callId, botId: nodeData.botId ?? null, status: "BLOCKED", outcome: "BLOCKED", blockedReason: result.reason } })],
+      client,
+    );
+  }
+  return { waiting: waitFor, reason: result.reason, callId: result.callId };
 }
 
 // "activity.<field>" (valueAtPath's existing entity-prefix convention) always means the
@@ -1048,6 +1081,21 @@ export async function executeAutomationWorkflow(
       } else if (mode === "TEST") {
         queue.push(...resumeNodeIds);
       }
+    } else if (nodeType === "call_with_voice_bot") {
+      const nextNodeIds = automationNextEdges(edges, node.id, record, nodeData).map((edge) => edge.target);
+      if (mode === "LIVE" && user.tenantId) {
+        const started = await startVoiceBotCallStep(user, automation, entityType, entityId, record, nodeData, nextNodeIds, node.id, options.client);
+        stepLog.result = started.reason ? `Not called (${started.reason})` : "Call queued";
+        if (started.waiting) {
+          stepLog.status = "WAITING";
+          stepLog.resumeNodeIds = nextNodeIds;
+        } else {
+          queue.push(...nextNodeIds);
+        }
+      } else {
+        stepLog.status = "TEST_WAIT_SKIPPED";
+        queue.push(...nextNodeIds);
+      }
     } else {
       if (mode === "LIVE") {
         await executeAutomationAction(user, entityType, entityId, record, nodeData, String((automation.trigger as Record<string, unknown> | undefined)?.type ?? "AUTOMATION"), options.client, visitedAutomationIds, automation.id ?? null);
@@ -1091,6 +1139,30 @@ export async function getAutomationForTenant(user: TenantUser, id: string) {
     `select ${AUTOMATION_COLUMNS} from "AutomationV2" where id = $1 and ${tenant.sql} limit 1`,
     [id, ...tenant.values],
   );
+}
+
+// Step types a workflow may contain (voice bot plan wave A): every step the builder offers plus
+// older names still found in saved workflows. A workflow with any other step can't be saved or
+// published; before, it was stored and the step silently did nothing.
+export const AUTOMATION_NODE_TYPES: ReadonlySet<string> = new Set([
+  "trigger", "condition", "if_else", "multi_if_else", "compare", "branch", "split_test", "wait", "delay", "wait_until_activity", "stop",
+  "update_lead", "update_opportunity", "update_activity", "update_field", "clear_field", "add_activity", "create_activity", "add_opportunity",
+  "distribute_lead", "distribute_opportunity", "assign_owner", "change_stage", "share_opportunity", "stop_share_opportunity",
+  "calculate_commission", "award_points", "evaluate_badges", "tag_lead", "remove_tag", "add_to_list", "remove_from_list", "star_lead",
+  "increment_score", "create_task", "apply_task_playbook", "update_task", "assign_task", "reschedule_task", "complete_task",
+  "notify_user", "send_email", "webhook", "run_automation", "call_app_action", "call_with_voice_bot",
+  "assign_case", "add_case_comment", "create_case", "update_case", "escalate_case", "send_case_acknowledgement", "send_case_response",
+  "pause_case_sla", "resume_case_sla", "apply_case_macro", "add_case_to_queue", "close_case", "reopen_case",
+]);
+
+export function assertWorkflowStepsSupported(workflow: unknown) {
+  const nodes = workflow && typeof workflow === "object" && Array.isArray((workflow as any).nodes) ? (workflow as any).nodes : [];
+  for (const node of nodes) {
+    const type = node?.data?.type;
+    // A node without a type is a plain step (the runner skips it), as older workflows have.
+    if (type === undefined || type === null || type === "") continue;
+    if (typeof type !== "string" || !AUTOMATION_NODE_TYPES.has(type)) throw new Error("AUTOMATION_STEP_UNSUPPORTED");
+  }
 }
 
 // Builder save model (decision 29): the live definition (name, description, trigger, workflow)
@@ -1137,6 +1209,7 @@ export async function createAutomationForTenant(user: TenantUser, payload: Recor
   return withTransaction(user, async (client) => {
     const now = new Date().toISOString();
     const definition = definitionOf(payload);
+    assertWorkflowStepsSupported(definition.workflow);
     const row = await queryOne<any>(
       `insert into "AutomationV2" (id, "tenantId", name, description, trigger, steps, workflow, "isActive", "createdAt", "updatedAt", draft, "draftUpdatedAt", "draftUpdatedBy", "publishedVersion", "publishedAt", "createdBy")
        values ($1, $2, $3, $4, $5, null, $6, $7, $8, $8, $9, $10, $11, $12, $13, $14)
@@ -1211,6 +1284,7 @@ export async function publishAutomationForTenant(user: TenantUser, id: string, n
     if (!definition.name) throw new Error("AUTOMATION_NAME_REQUIRED");
     if (typeof definition.trigger.type !== "string" || !definition.trigger.type) throw new Error("AUTOMATION_TRIGGER_REQUIRED");
     if (!Array.isArray((definition.workflow as any).nodes)) throw new Error("AUTOMATION_WORKFLOW_INVALID");
+    assertWorkflowStepsSupported(definition.workflow);
     const version = Number(existing.publishedVersion ?? 0) + 1;
     const row = await queryOne<any>(
       `update "AutomationV2"
@@ -1257,6 +1331,7 @@ export async function updateAutomationForTenant(user: TenantUser, id: string, pa
     if (!existing) throw new Error("AUTOMATION_NOT_FOUND");
     if (existing.deletedAt) throw new Error("AUTOMATION_ARCHIVED");
     if (payload.isActive === true && Number(existing.publishedVersion ?? 0) === 0) throw new Error("AUTOMATION_NOT_PUBLISHED");
+    if (payload.workflow !== undefined) assertWorkflowStepsSupported(payload.workflow);
     const patch = {
       name: payload.name,
       description: payload.description,

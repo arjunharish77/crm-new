@@ -1,5 +1,6 @@
 "use client";
 
+import { customFieldFilterFields } from "@/components/common/custom-field-columns";
 import { useEffect, useRef, useState } from "react";
 import { StandardDialog } from "@/components/common/standard-dialog";
 import { Badge } from "@/components/ui/badge";
@@ -219,7 +220,9 @@ export function SaveViewDialog({
             fetchCached("activity-types", () => apiFetch<any[]>("/activity-types")).catch(() => []),
             fetchCached("partners", () => apiFetch<any[]>("/partners")).catch(() => []),
             fetchCached("reports/custom", () => apiFetch<any[]>("/reports/custom")).catch(() => []),
-        ]).then(([leadData, opportunityData, opportunityTypeData, activityTypeData, partnerData, reportData]) => {
+            fetchCached("custom-fields:LEAD", () => apiFetch<any[]>("/custom-fields?objectType=LEAD")).catch(() => []),
+            fetchCached("custom-fields:OPPORTUNITY", () => apiFetch<any[]>("/custom-fields?objectType=OPPORTUNITY")).catch(() => []),
+        ]).then(([leadData, opportunityData, opportunityTypeData, activityTypeData, partnerData, reportData, leadCustomFields, opportunityCustomFields]) => {
             const leadList = Array.isArray(leadData) ? leadData : Array.isArray(leadData?.data) ? leadData.data : [];
             const opportunityList = Array.isArray(opportunityData) ? opportunityData : Array.isArray(opportunityData?.data) ? opportunityData.data : [];
             const opportunityTypes = Array.isArray(opportunityTypeData) ? opportunityTypeData : [];
@@ -230,7 +233,12 @@ export function SaveViewDialog({
                 .map((partner) => partner.organization || partner.partnerOrganization)
                 .filter(Boolean);
 
+            const activeOnly = (rows: unknown) => (Array.isArray(rows) ? rows : []).filter((field: any) => field.isActive !== false);
             setReferenceOptions({
+                customFields: {
+                    LEADS: customFieldFilterFields(activeOnly(leadCustomFields)),
+                    OPPORTUNITIES: customFieldFilterFields(activeOnly(opportunityCustomFields)),
+                },
                 leads: leadList.map((lead: any) => ({ label: lead.name || lead.email || lead.company || "Lead", value: lead.id })).filter((option: any) => option.value),
                 opportunities: opportunityList.map((opportunity: any) => ({ label: opportunity.title || opportunity.name || "Opportunity", value: opportunity.id })).filter((option: any) => option.value),
                 stages: opportunityTypes.flatMap((type: any) => (type.stages ?? []).map((stage: any) => ({ label: `${type.name}: ${stage.name}`, value: stage.id }))).filter((option: any) => option.value),

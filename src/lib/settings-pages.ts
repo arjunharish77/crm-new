@@ -1,6 +1,6 @@
 import type { LucideIcon } from "lucide-react";
 import {
-    Bot, Boxes, Briefcase, Building2, ClipboardCheck, Compass, Copy, FileText, Fingerprint, GitBranch, GraduationCap, Handshake,
+    AudioLines, Bot, Boxes, Briefcase, Building2, ClipboardCheck, Compass, Copy, FileText, Fingerprint, GitBranch, GraduationCap, Handshake,
     KeyRound, Layers, LifeBuoy, ListChecks, Megaphone, Palette, Percent, PhoneCall, PlugZap, ScrollText, ShieldAlert,
     ShieldCheck, Sparkles, Store, Headset, Gauge, TextQuote, MessagesSquare, StickyNote, BookOpen, FileLock, Table2, Tags, TimerReset, Trophy, UserCheck, UserCog, Users, UsersRound, Wallet,
 } from "lucide-react";
@@ -74,6 +74,7 @@ export const SETTINGS_PAGES: SettingsPage[] = [
     { group: "calling", title: "Call outcomes", href: `${base}/calling/outcomes`, icon: PhoneCall, description: "Outcomes and dispositions agents choose after a call.", keywords: ["dispositions"], gate: { module: "TELEPHONY" } },
     { group: "calling", title: "Call scripts", href: `${base}/calling/scripts`, icon: FileText, description: "Scripts shown to agents during a call.", gate: { module: "TELEPHONY" } },
     { group: "calling", title: "Call campaigns", href: `${base}/calling/campaigns`, icon: Megaphone, description: "Outbound calling campaigns and their lists.", gate: { module: "TELEPHONY" } },
+    { group: "calling", title: "Voice bots", href: "/dashboard/voice-bots", icon: AudioLines, description: "AI voice bots that call leads and answer calls: bots, numbers, holidays and AI/voice providers.", keywords: ["ai", "bot", "voice agent", "ivr", "claude", "groq"], gate: { module: "VOICE_BOT" } },
     { group: "calling", title: "Agent capacity", href: `${base}/calling/agent-capacity`, icon: UserCheck, description: "Availability and how many calls each agent takes.", keywords: ["availability"], gate: { module: "TELEPHONY" } },
 
     { group: "service", title: "Service desk", href: `${base}/service/desk`, icon: LifeBuoy, description: "Case types, statuses, queues, service levels, macros and the knowledge base.", keywords: ["cases", "queues", "macros", "knowledge base", "case sla"], gate: { module: "SERVICE_DESK" } },

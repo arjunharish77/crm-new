@@ -9,7 +9,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { ColumnDef } from "@tanstack/react-table";
-import { Plus, ArrowLeft, RefreshCw, Search, ExternalLink, SearchX, Trash2, X } from "lucide-react";
+import { ArrowLeft, AudioLines, ExternalLink, Plus, RefreshCw, Search, SearchX, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 import { apiFetch } from "@/lib/api";
 import { DataTable } from "@/components/ui/data-table";
@@ -22,6 +22,8 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { StandardDialog } from "@/components/common/standard-dialog";
 import { BulkActionsToolbar } from "@/components/bulk-actions/bulk-toolbar";
+import { CallWithVoiceBotDialog, useVoiceBotCalling } from "@/components/voice-bots/call-with-voice-bot";
+import { fetchMatchingIds } from "@/lib/bulk-selection";
 import { formatWorkspaceDate } from "@/lib/date-format";
 import { cn } from "@/lib/utils";
 import { useRecordTitle } from "@/components/app-states/page-title";
@@ -71,6 +73,8 @@ export default function LeadListDetailPage() {
     const [selectedToAdd, setSelectedToAdd] = useState<LeadRecord[]>([]);
     const [search, setSearch] = useState("");
     const [selectedRows, setSelectedRows] = useState<string[]>([]);
+    const voiceBotCalling = useVoiceBotCalling();
+    const [voiceBotOpen, setVoiceBotOpen] = useState(false);
     const [pagination, setPagination] = useState({ pageIndex: 0, pageSize: 25 });
 
     const debouncedSearch = useDebouncedValue(search.trim(), 250);
@@ -267,6 +271,9 @@ export default function LeadListDetailPage() {
 
     if (fetchError && !list) return <div><PageHeader title="Lead List" actions={<Button variant="outline" onClick={() => router.push("/dashboard/lists")}>Back to lists</Button>} /><ErrorState description={fetchError} onRetry={fetchList} /></div>;
 
+    // Everyone in the list this person can see (the bot calls them all, not just this page).
+    const visibleCount = Math.max(0, (list?.count ?? 0) - (list?.hiddenCount ?? 0));
+
     return (
         <div className="min-w-0">
             <div className="space-y-3">
@@ -293,6 +300,12 @@ export default function LeadListDetailPage() {
                             <RefreshCw className="size-4" />
                             Refresh
                         </Button>
+                        {voiceBotCalling.canBulkCall && visibleCount > 0 ? (
+                            <Button variant="outline" onClick={() => setVoiceBotOpen(true)}>
+                                <AudioLines className="size-4" />
+                                Call with voice bot
+                            </Button>
+                        ) : null}
                         {list?.type === "STATIC" ? (
                             <Button onClick={() => setAddOpen(true)}>
                                 <Plus className="size-4" />
@@ -346,6 +359,14 @@ export default function LeadListDetailPage() {
                     />
                 </Card>
             </div>
+
+            <CallWithVoiceBotDialog
+                open={voiceBotOpen}
+                onClose={() => setVoiceBotOpen(false)}
+                count={visibleCount}
+                noun={["lead", "leads"]}
+                resolveTargets={async () => (await fetchMatchingIds(`/lead-lists/${listId}`, "")).map((leadId) => ({ leadId }))}
+            />
 
             <BulkActionsToolbar
                 selectedCount={selectedRows.length}

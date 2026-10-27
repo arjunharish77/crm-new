@@ -5,7 +5,7 @@ import {
   getAutomationForTenant,
   updateAutomationForTenant,
 } from "@/lib/server/crm";
-import { badRequest, forbidden, notFound, serverError, unauthorized } from "@/lib/server/http";
+import { badRequest, forbidden, notFound, serverError, unauthorized, userMessage } from "@/lib/server/http";
 import { requireInternalUser } from "@/lib/server/auth";
 import { saveAutomationDraftForTenant } from "@/lib/repositories/automations-postgres";
 
@@ -47,6 +47,7 @@ export async function PATCH(
     if (error instanceof Error && error.message === "AUTOMATION_ARCHIVED") return NextResponse.json({ message: "This automation is archived. Restore it to make changes." }, { status: 409 });
     if (error instanceof Error && error.message === "AUTOMATION_NOT_PUBLISHED") return NextResponse.json({ message: "Publish this automation before turning it on." }, { status: 409 });
     if (error instanceof Error && error.message === "AUTOMATION_NOT_FOUND") return notFound("Automation not found");
+    if (error instanceof Error && error.message === "AUTOMATION_STEP_UNSUPPORTED") return userMessage("The workflow has a step this version of the CRM doesn't know. Remove it and save again.");
     return serverError("Failed to update automation", error);
   }
 }

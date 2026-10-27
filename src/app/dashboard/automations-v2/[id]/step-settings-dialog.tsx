@@ -16,7 +16,7 @@ import type { AutomationBuilder } from "./use-automation-builder";
 
 // The dialog that configures a step, moved here from page.tsx unchanged.
 export function StepSettingsDialog({ s }: { s: AutomationBuilder }) {
-    const { automationId, selectedNode, configDialogOpen, setConfigDialogOpen, description, triggerType, getAvailableTriggerTypes, activityTypes, opportunityTypes, users, teams, otherAutomations, taskPlaybooks, leadLists, availableAppActions, nodeConfig, setNodeConfig, updateNodeConfig, closeStepDialog, updateMultiBranch, addMultiBranch, removeMultiBranch, updateCondition, addCondition, removeCondition, updateFieldUpdate, addFieldUpdate, removeFieldUpdate, updateSplitVariant, addSplitVariant, removeSplitVariant, stageOptions, allConditionFields, defaultConditionField, fieldOptionsForValue, fieldOptionsForNode } = s;
+    const { automationId, selectedNode, configDialogOpen, setConfigDialogOpen, description, triggerType, getAvailableTriggerTypes, activityTypes, opportunityTypes, users, teams, otherAutomations, taskPlaybooks, leadLists, availableAppActions, voiceBots, nodeConfig, setNodeConfig, updateNodeConfig, closeStepDialog, updateMultiBranch, addMultiBranch, removeMultiBranch, updateCondition, addCondition, removeCondition, updateFieldUpdate, addFieldUpdate, removeFieldUpdate, updateSplitVariant, addSplitVariant, removeSplitVariant, stageOptions, allConditionFields, defaultConditionField, fieldOptionsForValue, fieldOptionsForNode } = s;
     return (
         <>
             <StandardDialog
@@ -311,8 +311,9 @@ export function StepSettingsDialog({ s }: { s: AutomationBuilder }) {
                                     <Label>Activity Type</Label>
                                     <Select value={nodeConfig.activityTypeId || ''} onValueChange={(value) => setNodeConfig({ ...nodeConfig, activityTypeId: value, typeId: value })}>
                                         <SelectTrigger><SelectValue placeholder="Select activity type" /></SelectTrigger>
-                                        <SelectContent>{activityTypes.map((type) => <SelectItem key={type.id} value={type.id}>{type.name}</SelectItem>)}</SelectContent>
+                                        <SelectContent>{activityTypes.filter((type: any) => !type.isSystem).map((type) => <SelectItem key={type.id} value={type.id}>{type.name}</SelectItem>)}</SelectContent>
                                     </Select>
+                                    <p className="text-xs text-muted-foreground">Calls, sent messages and voice-bot calls are logged by the CRM itself, so they aren&apos;t listed.</p>
                                 </div>
                                 <div className="space-y-2">
                                     <Label>Subject</Label>
@@ -864,6 +865,37 @@ export function StepSettingsDialog({ s }: { s: AutomationBuilder }) {
                                     {STEP_EXPLANATIONS[String(selectedNode.data?.type)] ?? "This step uses the matching module configuration when it runs. No extra fields are required on the node."}
                                 </AlertDescription>
                             </Alert>
+                        )}
+
+                        {selectedNode.data?.type === 'call_with_voice_bot' && (
+                            <div className="space-y-4 rounded-xl border bg-card p-4">
+                                <div className="space-y-2">
+                                    <Label htmlFor="step-voice-bot">Bot</Label>
+                                    <Select value={nodeConfig.botId || ''} onValueChange={(value) => setNodeConfig({ ...nodeConfig, botId: value })}>
+                                        <SelectTrigger id="step-voice-bot"><SelectValue placeholder={voiceBots.length ? "Choose a bot" : "No live bots yet"} /></SelectTrigger>
+                                        <SelectContent>
+                                            {voiceBots.map((bot) => <SelectItem key={bot.id} value={bot.id}>{bot.name}</SelectItem>)}
+                                            {nodeConfig.botId && !voiceBots.some((bot) => bot.id === nodeConfig.botId) ? <SelectItem value={nodeConfig.botId}>A bot that isn&apos;t live</SelectItem> : null}
+                                        </SelectContent>
+                                    </Select>
+                                    <p className="text-xs text-muted-foreground">Calls the lead&apos;s phone (for an opportunity, its lead&apos;s) within the bot&apos;s calling hours and daily limit, with the bot&apos;s own retries.</p>
+                                </div>
+                                <div className="flex items-start justify-between gap-3">
+                                    <div className="space-y-0.5">
+                                        <Label htmlFor="step-voice-bot-wait">Wait for the outcome</Label>
+                                        <p className="text-xs text-muted-foreground">The next steps run once the call and its retries are over, and can branch on &ldquo;Voice Bot Call: Outcome&rdquo;. Off: they run straight away.</p>
+                                    </div>
+                                    <Switch id="step-voice-bot-wait" checked={nodeConfig.waitForOutcome === true} onCheckedChange={(checked) => setNodeConfig({ ...nodeConfig, waitForOutcome: checked })} />
+                                </div>
+                                {nodeConfig.waitForOutcome === true ? (
+                                    <div className="space-y-2">
+                                        <Label htmlFor="step-voice-bot-days">Carry on anyway after (days)</Label>
+                                        <Input id="step-voice-bot-days" type="number" inputMode="numeric" min={1} max={14} className="max-w-32" value={nodeConfig.maxWaitDays ?? 3}
+                                            onChange={(e) => setNodeConfig({ ...nodeConfig, maxWaitDays: Math.min(14, Math.max(1, Number(e.target.value) || 1)) })} />
+                                        <p className="text-xs text-muted-foreground">If the call hasn&apos;t finished by then (waiting for calling hours or retries), the next steps run without an outcome.</p>
+                                    </div>
+                                ) : null}
+                            </div>
                         )}
 
                         {selectedNode.data?.type === 'run_automation' && (

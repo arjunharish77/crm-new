@@ -56,6 +56,22 @@ export function maskFieldsForUser<T extends Record<string, any>>(
   return masked as T;
 }
 
+// Custom field values travel as `customFields` ({ key: value }, with `customFieldLabels`), so the
+// top-level masking above doesn't reach them: a hidden custom field is left out of both.
+export function maskCustomFieldsForUser<T extends Record<string, any>>(
+  user: TenantUserLike,
+  module: FieldPermissionModule,
+  record: T,
+  typeId?: string | null,
+): T {
+  if (!record || typeof record.customFields !== "object" || record.customFields === null) return record;
+  const permissions = fieldPermissionMap(user, module, typeId);
+  const visible = (key: string) => permissions[key] !== "hidden";
+  const pick = (values: Record<string, unknown> | null | undefined) =>
+    Object.fromEntries(Object.entries(values ?? {}).filter(([key]) => visible(key)));
+  return { ...record, customFields: pick(record.customFields), ...(record.customFieldLabels ? { customFieldLabels: pick(record.customFieldLabels) } : {}) };
+}
+
 // Applied to a write payload before it reaches the database -- any key the caller supplied that
 // is configured "hidden" or "readonly" for this user is silently dropped rather than applied
 // (matches how the real edit UI behaves: the field is disabled/absent from the form), so a

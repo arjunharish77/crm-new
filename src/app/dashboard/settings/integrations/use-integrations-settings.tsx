@@ -60,6 +60,19 @@ export function useIntegrationsSettings() {
     const [loadingDeliveries, setLoadingDeliveries] = useState(false);
     const [isImportOpen, setIsImportOpen] = useState(false);
     const [importModule, setImportModule] = useState<'LEAD' | 'OPPORTUNITY' | 'ACTIVITY'>('LEAD');
+    // The import targets: built-in fields plus the module's custom fields ("customFields.<key>").
+    const [importCustomFields, setImportCustomFields] = useState<Array<{ key: string; label: string; required?: boolean }>>([]);
+    useEffect(() => {
+        let active = true;
+        apiFetch<any[]>(`/custom-fields?objectType=${importModule}`)
+            .then((rows) => {
+                if (!active) return;
+                setImportCustomFields((Array.isArray(rows) ? rows : []).filter((field) => field.isActive !== false).map((field) => ({ key: `customFields.${field.key}`, label: field.label })));
+            })
+            .catch(() => { if (active) setImportCustomFields([]); });
+        return () => { active = false; };
+    }, [importModule]);
+    const importFields: Array<{ key: string; label: string; required?: boolean }> = [...IMPORT_FIELDS[importModule], ...importCustomFields];
     const [duplicateMode, setDuplicateMode] = useState<'SKIP' | 'UPDATE' | 'CREATE'>('SKIP');
     const [csvHeaders, setCsvHeaders] = useState<string[]>([]);
     const [csvRows, setCsvRows] = useState<Record<string, string>[]>([]);
@@ -72,6 +85,13 @@ export function useIntegrationsSettings() {
     const [previewing, setPreviewing] = useState(false);
     const [telephony, setTelephony] = useState<any>({
         provider: '',
+        plivoAuthId: '',
+        plivoAuthToken: '',
+        hasPlivoAuthToken: false,
+        plivoRecordingEnabled: false,
+        plivoDefaultCountryCode: '91',
+        plivoRingTimeoutSeconds: '30',
+        plivoUnavailableMessage: '',
         agentPopupUrl: '',
         clickToCallUrl: '',
         clickToCallMethod: 'POST',
@@ -104,7 +124,8 @@ export function useIntegrationsSettings() {
         defaultCallQueueTeamId: '',
         isActive: false,
     });
-    const [telephonySection, setTelephonySection] = useState('click2call');
+    const [telephonySection, setTelephonySection] = useState('plivo');
+    const [plivoCallbackUrls, setPlivoCallbackUrls] = useState<{ answer: string; hangup: string } | null>(null);
     const [rotatingTelephonySecret, setRotatingTelephonySecret] = useState(false);
     const [doNotCallList, setDoNotCallList] = useState<Array<{ id: string; address: string; reason: string | null; createdAt: string }>>([]);
     const [teams, setTeams] = useState<Array<{ id: string; name: string }>>([]);
@@ -141,8 +162,15 @@ export function useIntegrationsSettings() {
     const fetchTelephony = () => {
         setSectionState(current => ({ ...current, telephony: 'loading' }));
         return apiFetch('/integrations/telephony')
-                .then((data) => setTelephony({
+                .then((data) => { setPlivoCallbackUrls(data?.plivoCallbackUrls ?? null); setTelephony({
                     provider: data?.config?.provider ?? '',
+                    plivoAuthId: data?.config?.plivoAuthId ?? '',
+                    plivoAuthToken: '',
+                    hasPlivoAuthToken: Boolean(data?.config?.hasPlivoAuthToken),
+                    plivoRecordingEnabled: Boolean(data?.config?.plivoRecordingEnabled),
+                    plivoDefaultCountryCode: data?.config?.plivoDefaultCountryCode ?? '91',
+                    plivoRingTimeoutSeconds: String(data?.config?.plivoRingTimeoutSeconds ?? '30'),
+                    plivoUnavailableMessage: data?.config?.plivoUnavailableMessage ?? '',
                     agentPopupUrl: data?.config?.agentPopupUrl ?? '',
                     clickToCallUrl: data?.config?.clickToCallUrl ?? '',
                     clickToCallMethod: data?.config?.clickToCallMethod ?? 'POST',
@@ -174,7 +202,7 @@ export function useIntegrationsSettings() {
                     recordingRetentionDays: data?.config?.recordingRetentionDays != null ? String(data.config.recordingRetentionDays) : '',
                     defaultCallQueueTeamId: data?.config?.defaultCallQueueTeamId ?? '',
                     isActive: Boolean(data?.isActive)
-                }))
+                }); })
                 .then(() => setSectionState(current => ({ ...current, telephony: 'ready' })))
                 .catch(() => setSectionState(current => ({ ...current, telephony: 'error' })));
     };
@@ -400,7 +428,7 @@ export function useIntegrationsSettings() {
         const autoMappings = Object.fromEntries(
             parsed.headers.map((header) => {
                 const normalized = header.toLowerCase().replace(/[^a-z0-9]/g, '');
-                const match = IMPORT_FIELDS[importModule].find((field) => field.key.toLowerCase() === normalized || field.label.toLowerCase().replace(/[^a-z0-9]/g, '') === normalized);
+                const match = importFields.find((field) => field.key.toLowerCase() === normalized || field.label.toLowerCase().replace(/[^a-z0-9]/g, '') === normalized);
                 return [header, match?.key ?? ''];
             })
         );
@@ -413,7 +441,7 @@ export function useIntegrationsSettings() {
 
     const validateImportMapping = () => {
         const mappedTargets = Object.values(mappings).filter((value) => typeof value === "string" && value.length > 0);
-        const missingRequired = IMPORT_FIELDS[importModule].filter((field) => field.required && !mappedTargets.includes(field.key));
+        const missingRequired = importFields.filter((field) => field.required && !mappedTargets.includes(field.key));
         if (missingRequired.length > 0) {
             toast.error(`Map required fields: ${missingRequired.map((field) => field.label).join(', ')}`);
             return false;
@@ -516,8 +544,8 @@ export function useIntegrationsSettings() {
     };
 
     const downloadTemplate = () => {
-        const headers = IMPORT_FIELDS[importModule].map((field) => field.key);
-        const sample = IMPORT_FIELDS[importModule].map((field) => field.required ? `sample_${field.key}` : '');
+        const headers = importFields.map((field) => field.key);
+        const sample = importFields.map((field) => field.required ? `sample_${field.key}` : '');
         const blob = new Blob([`${headers.join(',')}\n${sample.join(',')}\n`], { type: 'text/csv' });
         const url = URL.createObjectURL(blob);
         const link = document.createElement('a');
@@ -529,18 +557,41 @@ export function useIntegrationsSettings() {
 
     const handleSaveTelephony = async () => {
         try {
+            if (telephony.provider === 'plivo' && telephony.isActive && (!telephony.plivoAuthId || (!telephony.plivoAuthToken && !telephony.hasPlivoAuthToken) || !telephony.defaultAgentNumber || (!telephony.outboundCallerId && !telephony.inboundNumber))) {
+                toast.error('Enter Plivo Auth ID, Auth Token, caller ID or inbound number, and default agent phone before enabling.');
+                return;
+            }
+            const lastTen = (value: unknown) => String(value ?? '').replace(/\D/g, '').slice(-10);
+            if (telephony.provider === 'plivo' && telephony.isActive && [telephony.inboundNumber, telephony.outboundCallerId].some((number) => number && lastTen(number) === lastTen(telephony.defaultAgentNumber))) {
+                toast.error('Default agent phone must differ from the Plivo number to avoid a call loop.');
+                return;
+            }
             // webhookSecret/previousWebhookSecret* are managed exclusively via the dedicated
             // rotate endpoint below -- excluded here so a general settings save (e.g. changing
             // the Provider field) can never silently overwrite the live secret with whatever
             // stale value happens to be sitting in this form's local state.
-            const { webhookSecret, previousWebhookSecret, previousWebhookSecretExpiresAt, ...rest } = telephony;
-            await apiFetch('/integrations/telephony', {
+            const { webhookSecret, previousWebhookSecret, previousWebhookSecretExpiresAt, hasPlivoAuthToken, ...rest } = telephony;
+            const saved = await apiFetch<any>('/integrations/telephony', {
                 method: 'POST',
                 body: JSON.stringify(rest),
             });
+            // The server saves Plivo numbers with their country code; show what it saved.
+            const savedConfig = saved?.config ?? {};
+            setTelephony((current: any) => ({
+                ...current,
+                plivoAuthToken: '',
+                hasPlivoAuthToken: Boolean(current.plivoAuthToken || current.hasPlivoAuthToken),
+                ...(current.provider === 'plivo' ? {
+                    inboundNumber: savedConfig.inboundNumber ?? current.inboundNumber,
+                    outboundCallerId: savedConfig.outboundCallerId ?? current.outboundCallerId,
+                    defaultAgentNumber: savedConfig.defaultAgentNumber ?? current.defaultAgentNumber,
+                    plivoDefaultCountryCode: savedConfig.plivoDefaultCountryCode ?? current.plivoDefaultCountryCode,
+                    plivoRingTimeoutSeconds: String(savedConfig.plivoRingTimeoutSeconds ?? current.plivoRingTimeoutSeconds),
+                } : {}),
+            }));
             toast.success('Telephony settings saved');
-        } catch {
-            toast.error('Failed to save telephony settings');
+        } catch (error: any) {
+            toast.error(error?.message || 'Failed to save telephony settings');
         }
     };
 
@@ -598,7 +649,7 @@ export function useIntegrationsSettings() {
         try {
             const payload = await apiFetch('/integrations/telephony/click-to-call', {
                 method: 'POST',
-                body: JSON.stringify(testCall),
+                body: JSON.stringify({ ...testCall, execute: false }),
             });
             toast.success('Click-to-call payload generated');
             copyToClipboard(JSON.stringify(payload, null, 2));
@@ -743,6 +794,7 @@ export function useIntegrationsSettings() {
     };
 
     return {
+        importFields,
         confirm,
         templateArchiveToken,
         setTemplateArchiveToken,
@@ -818,6 +870,7 @@ export function useIntegrationsSettings() {
         setTelephony,
         telephonySection,
         setTelephonySection,
+        plivoCallbackUrls,
         rotatingTelephonySecret,
         setRotatingTelephonySecret,
         doNotCallList,

@@ -4,6 +4,7 @@ import { createAuditLog } from "@/lib/server/crm";
 import { getLeadForTenant } from "@/lib/repositories/leads-postgres";
 import { getOpportunityForTenant } from "@/lib/repositories/opportunities-postgres";
 import { requireTenantId } from "@/lib/server/tenant-guard";
+import { readPrivateFile, deletePrivateFile } from "@/lib/storage/file-storage";
 
 type TenantUser = {
   id: string;
@@ -78,7 +79,7 @@ export async function listCallRecordingsForTenant(
 // review their own calls, but never a blanket "any authenticated user in the tenant" the way
 // the pre-existing Telephony settings route exposed the webhook secret before this session's
 // earlier fix.
-export async function getCallRecordingForTenant(user: TenantUser, callLogId: string, action: "PLAY" | "DOWNLOAD") {
+async function authorizeCallRecording(user: TenantUser, callLogId: string, action: "PLAY" | "DOWNLOAD") {
   await assertTenantModule(user, "TELEPHONY");
   const tenantId = requireTenantId(user);
   const call = await queryOne<any>(
@@ -101,6 +102,26 @@ export async function getCallRecordingForTenant(user: TenantUser, callLogId: str
   return { recordingUrl: call.recordingUrl as string, transcript: call.transcript as string | null };
 }
 
+export async function getCallRecordingForTenant(user: TenantUser, callLogId: string, action: "PLAY" | "DOWNLOAD") {
+  await assertTenantModule(user, "TELEPHONY");
+  const call = await authorizeCallRecording(user, callLogId, action);
+  return {
+    recordingUrl: call.recordingUrl.startsWith("vps://")
+      ? `/api/telephony/call-recordings/${encodeURIComponent(callLogId)}/media?action=${action}`
+      : call.recordingUrl,
+    transcript: call.transcript,
+  };
+}
+
+export async function readCallRecordingForTenant(user: TenantUser, callLogId: string, action: "PLAY" | "DOWNLOAD") {
+  await assertTenantModule(user, "TELEPHONY");
+  const call = await authorizeCallRecording(user, callLogId, action);
+  if (!call.recordingUrl.startsWith("vps://telephony/")) throw new Error("RECORDING_NOT_LOCAL");
+  const storageKey = call.recordingUrl.slice("vps://".length);
+  if (!/^telephony\/[a-f0-9-]{36}\/[a-f0-9-]{36}\.mp3$/i.test(storageKey)) throw new Error("RECORDING_NOT_LOCAL");
+  return readPrivateFile(storageKey);
+}
+
 // Worker job (telephony.expireRecordings): clears recordingUrl for any call whose
 // recordingExpiresAt has passed, following the exact shape of processExpiredExportFiles
 // (src/lib/server/exports.ts) -- the row and its metadata (status/duration/transcript) stay,
@@ -109,10 +130,13 @@ export async function getCallRecordingForTenant(user: TenantUser, callLogId: str
 // recordings across every tenant at once.
 export async function expireCallRecordings(limit = 100) {
   const due = await queryAsSystem<{ id: string }>(
-    `select id from "TelephonyCallLog" where "recordingUrl" is not null and "recordingExpiresAt" is not null and "recordingExpiresAt" <= $1 limit $2`,
+    `select id, "recordingUrl" from "TelephonyCallLog" where "recordingUrl" is not null and "recordingExpiresAt" is not null and "recordingExpiresAt" <= $1 limit $2`,
     [new Date().toISOString(), limit],
   );
   for (const row of due) {
+    if (typeof (row as any).recordingUrl === "string" && (row as any).recordingUrl.startsWith("vps://telephony/")) {
+      await deletePrivateFile((row as any).recordingUrl.slice("vps://".length));
+    }
     await executeAsSystem(`update "TelephonyCallLog" set "recordingUrl" = null where id = $1`, [row.id]);
   }
   return { processed: due.length };

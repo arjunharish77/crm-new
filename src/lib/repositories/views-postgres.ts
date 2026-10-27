@@ -196,7 +196,7 @@ async function getSavedViewAccessProfile(user: TenantUser, client?: Queryable) {
 export async function resolveSavedViewShareTargets(tenantId: string, targets: SavedViewShareTargets) {
   const [teamMembers, groupMembers, roleMembers] = await Promise.all([
     targets.sharedTeamIds?.length
-      ? query<any>('select "userId" from "TeamMember" where "tenantId" = $1 and "teamId" = any($2::text[])', [tenantId, targets.sharedTeamIds])
+      ? query<any>('select "userId" from "TeamMember" where "tenantId" = $1 and "teamId"::text = any($2::text[])', [tenantId, targets.sharedTeamIds])
       : Promise.resolve([]),
     targets.sharedSalesGroupIds?.length
       ? query<any>('select "userId" from "SalesGroupMember" where "tenantId" = $1 and "groupId" = any($2::text[])', [tenantId, targets.sharedSalesGroupIds])

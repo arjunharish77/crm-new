@@ -15,9 +15,10 @@ import {
 // rather than silently drifting from scripts/worker.ts's own recurring-job arrays (which
 // assertRegistryConsistency() cross-checks against this registry at worker startup).
 describe("JOB_REGISTRY", () => {
-  it("classifies the six realtime jobs unchanged from the original WP10 split", () => {
+  it("classifies the seven realtime jobs", () => {
     expect(jobNamesForClass("realtime").sort()).toEqual(
       [
+        "voiceBots.dispatchCalls",
         "communications.processDue",
         "webhooks.processOutbox",
         "tasks.processReminders",
@@ -28,9 +29,10 @@ describe("JOB_REGISTRY", () => {
     );
   });
 
-  it("classifies the twenty-one operational-automation jobs", () => {
+  it("classifies the twenty-three operational-automation jobs", () => {
     expect(jobNamesForClass("operational").sort()).toEqual(
       [
+        "voiceBots.refreshKnowledge",
         "applications.documentReminders",
         "automation.processDue",
         "tasks.processOverdue",
@@ -44,6 +46,7 @@ describe("JOB_REGISTRY", () => {
         "retention.enforce",
         "archive.purge",
         "housekeeping.run",
+        "transfers.recoverStale",
         "communications.processSuppressionExpiry",
         "cases.processSlaEscalations",
         "modules.processTrials",
@@ -96,10 +99,10 @@ describe("JOB_REGISTRY", () => {
     expect(queueNames.size).toBe(4);
   });
 
-  it("totals 37 distinct job names across all four classes (33 recurring + 4 dynamic)", () => {
-    expect(Object.keys(JOB_REGISTRY)).toHaveLength(37);
+  it("totals 40 distinct job names across all four classes (36 recurring + 4 dynamic)", () => {
+    expect(Object.keys(JOB_REGISTRY)).toHaveLength(40);
     const recurringCount = Object.values(JOB_REGISTRY).filter((entry) => entry.isRecurring).length;
-    expect(recurringCount).toBe(33);
+    expect(recurringCount).toBe(36);
   });
 });
 

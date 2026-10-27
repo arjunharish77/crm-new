@@ -27,6 +27,7 @@ interface HistoryItem {
     action: string;
     createdAt: string;
     user: { name: string; email: string };
+    source?: { kind: string; label: string } | null;
     valueLabels?: {
         stages?: Record<string, string>;
         opportunityTypes?: Record<string, string>;
@@ -42,6 +43,8 @@ interface HistoryItem {
 const SKIP_FIELDS = new Set(['tenantId', 'objectId', 'createdAt', 'updatedAt', 'deletedAt', 'deletedBy', 'hash']);
 
 function labelForField(field: string) {
+    // Custom fields are recorded as "customFields.<key>": show the field, not the prefix.
+    if (field.startsWith("customFields.")) field = field.slice("customFields.".length);
     return field
         .replace(/Id$/, "")
         .replace(/([A-Z])/g, " $1")
@@ -206,7 +209,9 @@ export function RecordHistory({ entityType, entityId }: RecordHistoryProps) {
                     <div className="rounded-2xl border bg-card/75 p-3">
                         {(() => {
                             const fields = item.__filteredFields ?? changedFields(item);
-                            const actor = item.user?.name || item.user?.email || "Unknown User";
+                            const actor = item.source?.kind === "VOICE_BOT"
+                                ? `voice bot ${item.source.label}`
+                                : item.user?.name || item.user?.email || "Unknown User";
                             const actionLabel = item.action === 'CREATE'
                                 ? `Created by ${actor}`
                                 : item.action === 'UPDATE'
@@ -224,7 +229,9 @@ export function RecordHistory({ entityType, entityId }: RecordHistoryProps) {
                                     </div>
 
                                     <p className="mb-1 block text-xs text-muted-foreground">
-                                        by {item.user?.name || "Unknown user"} {item.user?.email ? `(${item.user.email})` : ""}
+                                        {item.source?.kind === "VOICE_BOT"
+                                            ? `Set by the voice bot from what the caller said, on behalf of ${item.user?.name || "the record owner"}`
+                                            : <>by {item.user?.name || "Unknown user"} {item.user?.email ? `(${item.user.email})` : ""}</>}
                                     </p>
 
                                     {item.action === 'UPDATE' && fields.length > 0 && (

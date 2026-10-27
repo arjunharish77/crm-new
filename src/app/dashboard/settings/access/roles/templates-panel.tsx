@@ -107,6 +107,8 @@ export function PermissionTemplatesPanel({ embedded }: { embedded?: boolean }) {
     const [templates, setTemplates] = useState<PermissionTemplate[]>([]);
     const [opportunityTypes, setOpportunityTypes] = useState<any[]>([]);
     const [activityTypes, setActivityTypes] = useState<any[]>([]);
+    // Custom fields can be hidden or made read-only per scope, like the built-in ones.
+    const [customFields, setCustomFields] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [loadError, setLoadError] = useState<string | null>(null);
     const [dialogOpen, setDialogOpen] = useState(false);
@@ -121,11 +123,13 @@ export function PermissionTemplatesPanel({ embedded }: { embedded?: boolean }) {
         setLoading(true);
         setLoadError(null);
         try {
-            const [templateData, oppTypeData, activityTypeData] = await Promise.all([
+            const [templateData, oppTypeData, activityTypeData, customFieldData] = await Promise.all([
                 apiFetch("/permission-templates"),
                 apiFetch("/opportunity-types"),
                 apiFetch("/activity-types"),
+                apiFetch("/custom-fields").catch(() => []),
             ]);
+            setCustomFields(Array.isArray(customFieldData) ? customFieldData.filter((field: any) => field.isActive !== false) : []);
             setTemplates(Array.isArray(templateData) ? templateData.map((template) => ({ ...template, permissions: normalizePermissions(template.permissions) })) : []);
             setOpportunityTypes(Array.isArray(oppTypeData) ? oppTypeData : []);
             setActivityTypes(Array.isArray(activityTypeData) ? activityTypeData : []);
@@ -140,21 +144,26 @@ export function PermissionTemplatesPanel({ embedded }: { embedded?: boolean }) {
         loadData();
     }, [loadData]);
 
-    const scopes = useMemo(() => [
-        { key: "lead", label: "Lead", subtitle: "Lead fields", fields: BASE_FIELDS.lead },
-        ...opportunityTypes.map((type) => ({
-            key: `opportunity:${type.id}`,
-            label: type.name,
-            subtitle: "Opportunity type",
-            fields: BASE_FIELDS.opportunity,
-        })),
-        ...activityTypes.map((type) => ({
-            key: `activity:${type.id}`,
-            label: type.name,
-            subtitle: "Activity type",
-            fields: BASE_FIELDS.activity,
-        })),
-    ], [activityTypes, opportunityTypes]);
+    const scopes = useMemo(() => {
+        const customFor = (objectType: string, typeId?: string): FieldDef[] => customFields
+            .filter((field) => field.objectType === objectType && (!field.entityTypeId || field.entityTypeId === typeId))
+            .map((field) => ({ key: field.key, label: field.label, type: `Custom (${String(field.fieldType ?? field.type ?? "text").toLowerCase()})` }));
+        return [
+            { key: "lead", label: "Lead", subtitle: "Lead fields", fields: [...BASE_FIELDS.lead, ...customFor("LEAD")] },
+            ...opportunityTypes.map((type) => ({
+                key: `opportunity:${type.id}`,
+                label: type.name,
+                subtitle: "Opportunity type",
+                fields: [...BASE_FIELDS.opportunity, ...customFor("OPPORTUNITY", type.id)],
+            })),
+            ...activityTypes.map((type) => ({
+                key: `activity:${type.id}`,
+                label: type.name,
+                subtitle: "Activity type",
+                fields: [...BASE_FIELDS.activity, ...customFor("ACTIVITY", type.id)],
+            })),
+        ];
+    }, [activityTypes, opportunityTypes, customFields]);
 
     const activeScope = scopes.find((scope) => scope.key === selectedScope) ?? scopes[0];
 

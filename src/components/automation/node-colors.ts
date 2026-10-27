@@ -26,7 +26,7 @@ const CATEGORY_BY_TYPE: Record<string, NodeCategory> = {
     update_task: "activity", reschedule_task: "activity", complete_task: "activity", create_case: "activity",
     distribute_lead: "assignment", distribute_opportunity: "assignment", assign_owner: "assignment", assign_task: "assignment",
     share_opportunity: "assignment", stop_share_opportunity: "assignment", assign_case: "assignment", add_case_to_queue: "assignment", escalate_case: "assignment",
-    send_email: "message", notify_user: "message", send_case_acknowledgement: "message", send_case_response: "message",
+    send_email: "message", call_with_voice_bot: "message", notify_user: "message", send_case_acknowledgement: "message", send_case_response: "message",
     calculate_commission: "rewards", award_points: "rewards", evaluate_badges: "rewards",
     webhook: "integration", run_automation: "integration", call_app_action: "integration",
     stop: "stop",

@@ -80,12 +80,29 @@ docker compose -f deploy/vps/docker-compose.yml --env-file deploy/vps/.env up -d
 Because the CRM images were rebuilt for Node 24, restart them too:
 
 ```bash
-docker compose -f deploy/vps/docker-compose.yml --env-file deploy/vps/.env up -d --no-deps web worker unnatividya-crm-worker
+docker compose -f deploy/vps/docker-compose.yml --env-file deploy/vps/.env up -d --no-deps web worker
 ```
+
+Don't start `unnatividya-crm-worker` here. It belongs to the optional `unnatividya-crm-sync` profile and exits at once while `UNNATIVIDYA_CRM_SYNC_WORKER_ENABLED` isn't `true`. Its `restart: unless-stopped` policy then makes it loop ("Restarting (0)"). Start it only once the external CRM connection is configured (26 October 2026 deployment).
 
 ```bash
 docker compose -f deploy/vps/docker-compose.yml --env-file deploy/vps/.env logs --tail=80 unnatividya-web
 ```
+
+The Caddyfile is a single-file bind mount. `git pull` replaces the file, but a running container keeps reading the old copy, so validating or reloading inside it checks the **old** configuration. First compare the container's copy with the pulled file:
+
+```bash
+docker compose -f deploy/vps/docker-compose.yml --env-file deploy/vps/.env exec caddy grep -c examCheck /etc/caddy/Caddyfile
+grep -c examCheck deploy/vps/caddy/Caddyfile
+```
+
+If the numbers differ, recreate Caddy so it mounts the new file. Certificates stay in the `caddy-data` volume. Expect a second or two of downtime for every site behind Caddy:
+
+```bash
+docker compose -f deploy/vps/docker-compose.yml --env-file deploy/vps/.env up -d --no-deps --force-recreate caddy
+```
+
+Then validate:
 
 ```bash
 docker compose -f deploy/vps/docker-compose.yml --env-file deploy/vps/.env exec caddy caddy validate --config /etc/caddy/Caddyfile
@@ -93,7 +110,7 @@ docker compose -f deploy/vps/docker-compose.yml --env-file deploy/vps/.env exec 
 
 This release also changes the website's Caddy block. The camera and microphone Permissions-Policy is now set by two path matchers: allowed for this origin on `/tools/exam-check` only (decision V10), and blocked everywhere else. After the reload, check with `curl -sI https://<domain>/tools/exam-check | grep -i permissions-policy` and the same for `/`.
 
-Only if validation succeeds:
+If the copies already matched (no recreate needed), and only if validation succeeds:
 
 ```bash
 docker compose -f deploy/vps/docker-compose.yml --env-file deploy/vps/.env exec caddy caddy reload --config /etc/caddy/Caddyfile
@@ -116,7 +133,7 @@ For the 18 prepared MUJ/SMU student-category fee blocks, **CMS → Publishing ch
 
 The free `/tools/eligibility-checker` uses only published structured rules. In **Catalog revisions**, seven MUJ/SMU MBA, BBA, BCom and BA courses have **Load prepared checker rules**; review the [pilot evidence and held cases](ELIGIBILITY_CHECKER_PILOT_2026-10-09.md), all applicant categories, accepted routes, thresholds and AIU requirement before submitting. BCom NRI/foreign diploma routes need confirmation. SMU BA's Class 12 route is prepared, but its diploma and NRI/foreign routes are held because official sources differ; the free-text BA draft carries a CMS warning. The CMS editor can create later program rules, defaulting to incomplete so they return **Needs university confirmation** until all academic conditions are sourced. If the eligibility paragraph changes, its older checker rule is removed from the proposal. Applying a reviewed rule updates the tool without a rebuild. Until at least one complete rule is published, the tool is `noindex` and absent from the sitemap. No migration or `.env` setting is needed.
 
-The weekly official-source checker is a separate, draft-only CLI. After deployment, run `bash deploy/vps/scripts/weekly-unnatividya-source-check.sh` once, inspect **CMS → Source imports**, then add the [documented weekly cron entry](WEEKLY_SOURCE_CHECKS_2026-10-09.md) if the results are sound. It does not use the older mutating `source-import.js`, does not create publishable fact changes automatically, and requires no new environment setting or migration.
+The weekly official-source checker is a separate, draft-only CLI. After deployment, run `bash deploy/vps/scripts/weekly-unnatividya-source-check.sh` once, inspect **CMS → Source imports**, then add the [documented weekly cron entry](WEEKLY_SOURCE_CHECKS_2026-10-09.md) if the results are sound. It does not use the older mutating `source-import.js`, does not create publishable fact changes automatically, and requires no new environment setting or migration. **Amity can't be checked from the VPS:** amityonline.com returns 404 to the server's data-centre address (Hostinger, Mumbai), though the same pages load normally from a home or office connection. Owner decision (26 October 2026): keep Amity's 12 sources in the check. Each week they show as Failed in **CMS → Source imports**, with the reason, as a reminder to check those pages by hand. Expect the weekly run to exit 1 because of them.
 
 ### Fees by visitor location and Amity's international fees (Wave 5 E)
 

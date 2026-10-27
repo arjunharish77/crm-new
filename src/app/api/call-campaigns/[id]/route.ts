@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireCurrentUser } from "@/lib/server/auth";
-import { getCallCampaignForTenant, updateCallCampaignForTenant, deleteCallCampaignForTenant } from "@/lib/server/call-campaigns";
+import { getCallCampaignForTenant, updateCallCampaignForTenant, deleteCallCampaignForTenant, CAMPAIGN_DIALLING_MESSAGES } from "@/lib/server/call-campaigns";
 import { badRequest, forbidden, serverError, unauthorized } from "@/lib/server/http";
 
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -30,6 +30,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     if (error instanceof Error && error.message === "FORBIDDEN") return forbidden("You don't have permission to manage call campaigns");
     if (error instanceof Error && error.message === "CALL_CAMPAIGN_NOT_FOUND") return badRequest("Call campaign not found");
     if (error instanceof Error && error.message === "INVALID_STATUS") return badRequest("Invalid status");
+    if (error instanceof Error && CAMPAIGN_DIALLING_MESSAGES[error.message]) return badRequest(CAMPAIGN_DIALLING_MESSAGES[error.message]);
     return serverError("Failed to update call campaign", error);
   }
 }

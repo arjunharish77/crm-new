@@ -297,7 +297,8 @@ export function FormEditor({ initialForm, onSaved }: EditorProps) {
             apiFetch("/custom-fields?objectType=ACTIVITY").catch(() => []),
         ]).then(([oppTypes, actTypes, userList, groupList, leadFields, oppFields, actFields]) => {
             const opportunities = Array.isArray(oppTypes) ? oppTypes : [];
-            const activities = Array.isArray(actTypes) ? actTypes : [];
+            // A form can't create activities of system types (calls, sent messages, voice bots).
+            const activities = (Array.isArray(actTypes) ? actTypes : []).filter((type: any) => !type.isSystem);
             setOpportunityTypes(opportunities);
             setActivityTypes(activities);
             setUsers(Array.isArray(userList) ? userList : []);

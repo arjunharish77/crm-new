@@ -34,6 +34,7 @@ const MODULES = {
   SERVICE_DESK: [null, ["cases", "case-attachments", "case-inbound-addresses", "case-macros", "case-priorities", "case-queues", "case-sla-policies", "case-statuses", "case-types", "knowledge-base"]],
   MARKETPLACE: [null, ["marketplace", "v1/apps"]],
   TELEPHONY: [null, ["agent-availability", "call-campaigns", "call-center", "call-dispositions", "call-queues", "call-scripts", "disposition-groups", "disposition-outcomes", "telephony", "integrations/telephony", "reports/inbuilt/telephony-call-performance"]],
+  VOICE_BOT: [null, ["voice-bots", "reports/inbuilt/voice-bot-performance"]],
   DATA_PLATFORM: [null, ["dedupe", "external-integrations", "integrations/webhooks", "integrations/inbound/leads", "integrations/inbound/settings", "integrations/inbound/events"]],
 };
 

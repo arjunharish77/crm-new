@@ -35,6 +35,7 @@ import {
     Users,
     UsersRound,
     WandSparkles,
+    AudioLines,
 } from 'lucide-react';
 import { useAuth } from '@/providers/auth-provider';
 import { apiFetch } from '@/lib/api';
@@ -44,6 +45,7 @@ import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { useModuleEnabled } from '@/components/auth/feature-gate';
 import { useModuleAccess } from '@/hooks/use-module-access';
+import { voiceBotAccess } from '@/lib/voice-bot-access-level';
 import { BrandLogo, BrandMark } from '@/components/brand/brand-logo';
 
 const drawerWidth = 240;
@@ -53,7 +55,7 @@ const railWidth = 64;
 const MAIN_NAV_GROUPS = [
     { title: "My work", paths: ["/dashboard", "/dashboard/tasks", "/dashboard/activities", "/dashboard/approvals"] },
     { title: "Sales", paths: ["/dashboard/leads", "/dashboard/opportunities", "/dashboard/applications", "/dashboard/lists", "/dashboard/views"] },
-    { title: "Service", paths: ["/dashboard/cases", "/dashboard/call-center"] },
+    { title: "Service", paths: ["/dashboard/cases", "/dashboard/call-center", "/dashboard/voice-bots"] },
     { title: "Marketing & automation", paths: ["/dashboard/marketing", "/dashboard/forms", "/dashboard/automations-v2"] },
     { title: "Insights", paths: ["/dashboard/reports", "/dashboard/leaderboard", "/dashboard/payouts"] },
 ];
@@ -95,6 +97,8 @@ export function NavigationDrawer({ open, isMobile, toggleDrawer }: { open: boole
     const canSeePayouts = !!user?.isTenantAdmin || !!user?.isPlatformAdmin;
     const serviceDeskEnabled = useModuleEnabled('SERVICE_DESK');
     const telephonyEnabled = useModuleEnabled('TELEPHONY');
+    // Voice bots (voice bot plan wave B): the builder is for people who manage bots.
+    const voiceBotsEnabled = useModuleEnabled('VOICE_BOT') && telephonyEnabled && voiceBotAccess(user as any) === 'manage';
     const applicationsEnabled = useModuleEnabled('PRODUCT_CATALOG');
     // Journeys live as a tab on the same /dashboard/marketing page and work independently of
     // Marketing Communications (its own module) -- keep the nav entry reachable if either is
@@ -133,6 +137,7 @@ export function NavigationDrawer({ open, isMobile, toggleDrawer }: { open: boole
             { name: 'Views', href: '/dashboard/views', icon: <LayoutList className="size-5" />, enabled: can('views') },
             { name: 'Cases', href: '/dashboard/cases', icon: <LifeBuoy className="size-5" />, enabled: serviceDeskEnabled },
             { name: 'Call center', href: '/dashboard/call-center', icon: <Phone className="size-5" />, enabled: telephonyEnabled },
+            { name: 'Voice bots', href: '/dashboard/voice-bots', icon: <AudioLines className="size-5" />, enabled: voiceBotsEnabled },
             { name: 'Campaigns', href: '/dashboard/marketing', icon: <Megaphone className="size-5" />, enabled: marketingEnabled || journeyOrchestrationEnabled },
             { name: 'Forms', href: '/dashboard/forms', icon: <FileText className="size-5" />, enabled: user?.features?.formBuilderEnabled !== false && can('forms') },
             { name: 'Automations', href: '/dashboard/automations-v2', icon: <WandSparkles className="size-5" />, enabled: user?.features?.automationEnabled !== false && can('automations') },

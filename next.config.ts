@@ -23,7 +23,10 @@ const CSP_DEFAULT =
   "style-src 'self' 'unsafe-inline'; " + // Tailwind arbitrary values, inline style={{}} usage, and MUI/Emotion's runtime-injected <style> tags (this app is mid-migration off MUI) all need this
   "img-src 'self' data: blob: https:; " + // user-uploaded avatars/attachments/QR codes (data:) and third-party-hosted images referenced in records
   "font-src 'self' data:; " +
-  "connect-src 'self'; " + // confirmed by grep: no frontend code calls an external API/WebSocket directly, everything routes through this app's own /api
+  // Everything routes through this app's own origin: /api, and /voice-bot for voice bot test
+  // calls (Caddy forwards it to the bot service). In development the bot service runs on its own
+  // localhost port, so ws://localhost is allowed there only.
+  `connect-src 'self'${process.env.NODE_ENV === "production" ? "" : " ws://localhost:* ws://127.0.0.1:*"}; ` +
   "frame-src 'self'; " +
   "frame-ancestors 'none'; " + // the default: nothing may iframe the app itself
   "base-uri 'self'; " +
@@ -44,11 +47,14 @@ const CSP_EMBEDDABLE_FORM =
   "form-action 'self'; " +
   "object-src 'none'";
 
+// Voice bot test calls use the microphone (the browser still asks first). It's allowed on every
+// CRM page because a page reached by in-app navigation keeps the policy of the page first loaded;
+// the embeddable form pages below keep it off. Caddy sends the same policy in production.
 const SECURITY_HEADERS = [
   { key: "X-Content-Type-Options", value: "nosniff" },
   { key: "X-Frame-Options", value: "DENY" },
   { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
-  { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=(), payment=(), usb=()" },
+  { key: "Permissions-Policy", value: "camera=(), microphone=(self), geolocation=(), payment=(), usb=()" },
   { key: "Content-Security-Policy", value: CSP_DEFAULT },
   ...(process.env.NODE_ENV === "production"
     ? [{ key: "Strict-Transport-Security", value: "max-age=63072000; includeSubDomains" }]

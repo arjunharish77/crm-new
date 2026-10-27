@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { badRequest, forbidden, notFound, serverError, unauthorized } from "@/lib/server/http";
+import { badRequest, forbidden, notFound, serverError, unauthorized, userMessage } from "@/lib/server/http";
 
 // Shared error mapping for the automation draft, publish and version routes (decision 29).
 export function automationRouteError(error: unknown, fallback: string) {
@@ -14,5 +14,6 @@ export function automationRouteError(error: unknown, fallback: string) {
   if (message === "AUTOMATION_NAME_REQUIRED") return badRequest("Give the automation a name before publishing");
   if (message === "AUTOMATION_TRIGGER_REQUIRED") return badRequest("Choose what starts the automation before publishing");
   if (message === "AUTOMATION_WORKFLOW_INVALID") return badRequest("The workflow can't be read; reload the builder and try again");
+  if (message === "AUTOMATION_STEP_UNSUPPORTED") return userMessage("The workflow has a step this version of the CRM doesn't know. Remove it and publish again.");
   return serverError(fallback, error);
 }

@@ -349,7 +349,7 @@ async function filterByWorkingHours(tenantId: string, rule: RuleRow, bundle: Rul
   if (teamIds.length === 0) return users;
 
   const teams = await query<{ id: string; workingHours: unknown; timezone: string }>(
-    'select id, "workingHours", timezone from "Team" where "tenantId" = $1 and id = any($2::text[])',
+    'select id::text as id, "workingHours", timezone from "Team" where "tenantId" = $1 and id::text = any($2::text[])',
     [tenantId, teamIds],
     client,
   );

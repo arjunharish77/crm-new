@@ -18,10 +18,22 @@ export const HOUSEKEEPING_RULES: ReadonlyArray<{ table: string; where: string; l
   { table: "WebhookOutbox", label: "failed webhooks", where: `status = 'FAILED' and "updatedAt" < now() - interval '90 days'` },
   { table: "TenantAppDelivery", label: "delivered app events", where: `status in ('DELIVERED', 'CANCELLED') and "updatedAt" < now() - interval '30 days'` },
   { table: "TenantAppDelivery", label: "failed app events", where: `status = 'FAILED' and "updatedAt" < now() - interval '90 days'` },
+  { table: "TelephonyWebhookNonce", label: "used Plivo callback nonces", where: `"createdAt" < now() - interval '2 days'` },
+  // Voice bot test calls (wave C) are for checking a bot while building it; a month is plenty.
+  { table: "VoiceBotSession", label: "voice bot test calls", where: `kind = 'TEST' and "createdAt" < now() - interval '30 days'` },
+];
+
+// Voice bot conversations (wave C): unclaimed tokens expire, and a conversation the bot service
+// never reported on is closed as failed.
+export const VOICE_BOT_SESSION_CLOSING = [
+  `update "VoiceBotSession" set status = 'EXPIRED', "updatedAt" = now() where status = 'PENDING' and "expiresAt" < now()`,
+  `update "VoiceBotSession" set status = 'FAILED', error = 'The bot service never reported how this conversation ended.', "endedAt" = now(), "updatedAt" = now()
+   where status = 'ACTIVE' and "claimedAt" < now() - interval '45 minutes'`,
 ];
 
 export async function runHousekeeping(limit = 5000) {
   const removed: Record<string, number> = {};
+  for (const statement of VOICE_BOT_SESSION_CLOSING) await executeAsSystem(statement, []);
   for (const rule of HOUSEKEEPING_RULES) {
     const count = await executeAsSystem(
       `delete from "${rule.table}" where id in (select id from "${rule.table}" where ${rule.where} limit $1)`,

@@ -159,17 +159,16 @@ describe("getTeamForTenant", () => {
 
 describe("getTeamPerformanceForTenant", () => {
   it("filters the tenant-wide rep-performance rows down to only the given member ids, and sums their totals", async () => {
-    vi.doMock("@/lib/server/crm", () => ({
-      listLeadsForTenant: vi.fn(async () => ({
-        data: [
-          { id: "lead-1", ownerId: "user-1", source: "Website", status: "NEW", createdAt: "2026-01-01T00:00:00.000Z" },
-          { id: "lead-2", ownerId: "user-2", source: "Website", status: "NEW", createdAt: "2026-01-01T00:00:00.000Z" },
-          { id: "lead-3", ownerId: "user-3", source: "Website", status: "NEW", createdAt: "2026-01-01T00:00:00.000Z" },
-        ],
-      })),
-      listOpportunitiesForTenant: vi.fn(async () => ({ data: [] })),
-      listActivitiesForTenant: vi.fn(async () => ({ data: [] })),
-      listOpportunityTypesForTenant: vi.fn(async () => []),
+    // Reports read every matching record through report-scope.ts (round-2 plan wave 3).
+    vi.doMock("@/lib/server/report-scope", async (importOriginal) => ({
+      ...(await importOriginal<typeof import("@/lib/server/report-scope")>()),
+      listAllLeadsForReport: vi.fn(async () => [
+        { id: "lead-1", ownerId: "user-1", source: "Website", status: "NEW", createdAt: "2026-01-01T00:00:00.000Z" },
+        { id: "lead-2", ownerId: "user-2", source: "Website", status: "NEW", createdAt: "2026-01-01T00:00:00.000Z" },
+        { id: "lead-3", ownerId: "user-3", source: "Website", status: "NEW", createdAt: "2026-01-01T00:00:00.000Z" },
+      ]),
+      listAllOpportunitiesForReport: vi.fn(async () => []),
+      listAllActivitiesForReport: vi.fn(async () => []),
     }));
     dbMocks.state.User.push(
       { id: "user-1", tenantId: TENANT, name: "Alice", managerId: null, teamId: "team-1" },
@@ -188,6 +187,6 @@ describe("getTeamPerformanceForTenant", () => {
 
     expect(result.rows.map((row) => row.repId).sort()).toEqual(["user-1", "user-2"]);
     expect(result.totals.leadsOwned).toBe(2);
-    vi.doUnmock("@/lib/server/crm");
+    vi.doUnmock("@/lib/server/report-scope");
   });
 });

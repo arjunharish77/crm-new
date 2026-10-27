@@ -18,6 +18,7 @@ import { apiFetch } from '@/lib/api';
 import { RecordPicker } from '@/components/common/record-picker';
 import { useAuth } from '@/providers/auth-provider';
 import { ActivityType } from '@/types/activities';
+import { formFieldType } from '@/lib/custom-field-types';
 
 interface ActivityFormProps {
     initialData?: any;
@@ -76,7 +77,9 @@ export function ActivityForm({ initialData, onSuccess, onCancel }: ActivityFormP
             if (cancelled) return;
 
             if (typesResult.status === 'fulfilled') {
-                setActivityTypes(Array.isArray(typesResult.value) ? typesResult.value : []);
+                // System types (calls, sent messages, page visits, voice bots) are logged by the
+                // CRM itself and can't be picked here.
+                setActivityTypes(Array.isArray(typesResult.value) ? typesResult.value.filter((type) => !type.isSystem && type.isActive !== false) : []);
             } else {
                 setActivityTypes([]);
                 setBootstrapError("Some activity setup data could not be loaded. You can still log a basic activity.");
@@ -102,7 +105,7 @@ export function ActivityForm({ initialData, onSuccess, onCancel }: ActivityFormP
                         id: f.id,
                         key: f.fieldKey,
                         label: f.fieldLabel,
-                        type: f.fieldType,
+                        type: formFieldType(f.fieldType),
                         isRequired: f.isRequired,
                         options: f.fieldConfig?.options || [],
                         order: f.order + 100, // Make sure they come after core fields
@@ -169,6 +172,7 @@ export function ActivityForm({ initialData, onSuccess, onCancel }: ActivityFormP
                         {errors.typeId && (
                             <p className="text-xs text-destructive">{errors.typeId.message}</p>
                         )}
+                        <p className="text-xs text-muted-foreground">Calls and messages sent from the CRM are logged automatically. For ones made outside the CRM, use a &quot;(logged manually)&quot; type.</p>
                         {selectedType?.defaultSLA && (
                             <div className="flex items-center gap-2 rounded-lg border border-primary/20 bg-primary/5 px-3 py-1.5 text-sm text-foreground">
                                 <Info className="size-3.5 shrink-0 text-primary" />

@@ -80,21 +80,23 @@ export function getQueueByClass(queueClass: JobQueueClass): Queue {
   return getQueueForClass(queueClass);
 }
 
-export async function enqueueExportJob(exportRequestId: string, tenantId?: string | null) {
+// `attempt`: a re-run queued by transfers.recoverStale gets its own job id -- the queue ignores a
+// second job with an id it still holds (including the finished first run).
+export async function enqueueExportJob(exportRequestId: string, tenantId?: string | null, attempt = 0) {
   const queue = getQueueForJob("exports.process");
   return queue.add(
     "exports.process" satisfies CrmJobName,
     { exportRequestId, tenantId: tenantId ?? null },
-    { jobId: `export-${exportRequestId}` },
+    { jobId: attempt ? `export-${exportRequestId}-r${attempt}` : `export-${exportRequestId}` },
   );
 }
 
-export async function enqueueImportJob(importJobId: string, tenantId?: string | null) {
+export async function enqueueImportJob(importJobId: string, tenantId?: string | null, attempt = 0) {
   const queue = getQueueForJob("imports.process");
   return queue.add(
     "imports.process" satisfies CrmJobName,
     { importJobId, tenantId: tenantId ?? null },
-    { jobId: `import-${importJobId}` },
+    { jobId: attempt ? `import-${importJobId}-r${attempt}` : `import-${importJobId}` },
   );
 }
 

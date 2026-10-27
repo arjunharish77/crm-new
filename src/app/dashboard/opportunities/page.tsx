@@ -1,11 +1,13 @@
 "use client";
 
+import { buildCustomFieldColumns, customFieldColumnsHidden, customFieldFilterFields, useCustomFieldDefinitions } from "@/components/common/custom-field-columns";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { ColumnDef } from "@tanstack/react-table";
-import { BarChart3 as AnalyticsIcon, Eye, Filter as FilterIcon, Kanban as KanbanIcon, List as ListIcon, MoreHorizontal, Pencil, Trash2, UserCog } from "lucide-react";
+import { AudioLines, BarChart3 as AnalyticsIcon, Eye, Filter as FilterIcon, Kanban as KanbanIcon, List as ListIcon, MoreHorizontal, Pencil, Trash2, UserCog } from "lucide-react";
+import { CallWithVoiceBotDialog, useVoiceBotCalling } from "@/components/voice-bots/call-with-voice-bot";
 import { Opportunity, OpportunityType } from "@/types/opportunities";
 import { PaginatedResponse } from "@/types/common";
 import { apiFetch } from "@/lib/api";
@@ -329,6 +331,10 @@ export default function OpportunitiesPage() {
         { accessorKey: 'pendingNbaCount', id: "pendingNbaCount", header: 'Next best action', size: 130, cell: ({ row }) => <NbaCountChip count={row.original.pendingNbaCount} /> },
         { accessorKey: 'createdAt', id: "createdAt", header: 'Created', enableSorting: true, size: 120, cell: ({ row }) => <span className="text-muted-foreground">{formatWorkspaceDate(row.original.createdAt)}</span> },
     ], []);
+    // Custom fields as list columns, hidden until turned on in the column picker.
+    const customFieldDefinitions = useCustomFieldDefinitions("OPPORTUNITY");
+    const allColumns = useMemo(() => [...columns, ...buildCustomFieldColumns<Opportunity>(customFieldDefinitions)], [columns, customFieldDefinitions]);
+    const columnDefaults = useMemo(() => ({ ...DEFAULT_HIDDEN, ...customFieldColumnsHidden(customFieldDefinitions) }), [customFieldDefinitions]);
 
     const filterFields = useMemo<FilterField[]>(() => [
         { key: "title", label: "Title", type: "text" },
@@ -342,7 +348,8 @@ export default function OpportunitiesPage() {
         { key: "ownerId", label: "Owner", type: "user", options: users.map((u) => ({ label: u.name || u.email, value: u.id })) },
         { key: "createdAt", label: "Created", type: "date" },
         { key: "tags", label: "Tags", type: "tags" },
-    ], [selectedType, allStages, users]);
+        ...customFieldFilterFields(customFieldDefinitions),
+    ], [selectedType, allStages, users, customFieldDefinitions]);
 
     const fieldLabels: Record<string, string> = Object.fromEntries(filterFields.map((field) => [field.key, field.label]));
     const chips = chipsFromGroups(filterGroups, applyFilterGroups, {
@@ -356,6 +363,8 @@ export default function OpportunitiesPage() {
     });
 
     const selectedCount = isAllSelected ? totalItems : selectedRows.length;
+    const voiceBotCalling = useVoiceBotCalling();
+    const [voiceBotOpen, setVoiceBotOpen] = useState(false);
     const clearSelection = () => { setSelectedRows([]); setIsAllSelected(false); };
     const getSelectedIds = async () => (isAllSelected ? fetchMatchingIds("/opportunities", listParams()) : selectedRows.map(String));
     const withSelection = async (run: (ids: string[]) => Promise<void>) => {
@@ -472,8 +481,8 @@ export default function OpportunitiesPage() {
                     <DataTable
                         storageKey="opportunities-table"
                         data={data}
-                        columns={columns}
-                        defaultColumnVisibility={DEFAULT_HIDDEN}
+                        columns={allColumns}
+                        defaultColumnVisibility={columnDefaults}
                         loading={loading}
                         error={fetchError}
                         onRetry={fetchData}
@@ -559,8 +568,21 @@ export default function OpportunitiesPage() {
                     onClear={clearSelection}
                     actions={[
                         { label: "Assign", icon: <UserCog className="size-4" />, onClick: () => { setBulkAssignUserId(null); setBulkAssignReason(""); setBulkAssignOpen(true); } },
+                        ...(voiceBotCalling.canBulkCall || (voiceBotCalling.canCall && selectedCount === 1)
+                            ? [{ label: "Call with voice bot", icon: <AudioLines className="size-4" />, onClick: () => setVoiceBotOpen(true) }]
+                            : []),
                         { label: "Delete", icon: <Trash2 className="size-4" />, onClick: handleDelete, destructive: true },
                     ]}
+                />
+
+                <CallWithVoiceBotDialog
+                    open={voiceBotOpen}
+                    onClose={() => setVoiceBotOpen(false)}
+                    count={selectedCount}
+                    noun={["opportunity", "opportunities"]}
+                    recordName={selectedCount === 1 && !isAllSelected ? data.find((item) => String(item.id) === String(selectedRows[0]))?.title ?? null : null}
+                    resolveTargets={async () => (await getSelectedIds()).map((opportunityId) => ({ opportunityId }))}
+                    onQueued={clearSelection}
                 />
 
                 <StandardDialog

@@ -60,6 +60,10 @@ next-env.d.ts
 # ml-service (Python)
 ml-service/.venv/
 ml-service/**/__pycache__/
+voice-bot/.venv/
+voice-bot/**/__pycache__/
+voice-bot/.pytest_cache/
+voice-bot/models/
 ml-service/.cache/
 
 # Production backups contain database records and credentials.
@@ -76,3 +80,6 @@ deploy/vps/scripts/__pycache__/
 
 # Generated public-catalog readiness validator (built with the seed export).
 /apps/unnatividya/scripts/generated/
+
+# VPS cron logs (scheduled article publishing, weekly source checks)
+deploy/vps/*.log

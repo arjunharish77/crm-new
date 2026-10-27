@@ -10,7 +10,7 @@ import { toast } from "sonner";
 import { useRecordTitle } from "@/components/app-states/page-title";
 import { TRIGGER_TYPES } from "@/components/automations/trigger-types";
 import { useUnsavedChangesGuard } from "@/hooks/use-unsaved-changes-guard";
-import { ACTIVITY_FIELDS, APP_EVENT_FIELDS, COMMUNICATION_FIELDS, LEAD_FIELDS, NODE_TYPES, OPPORTUNITY_FIELDS, OPPORTUNITY_TRIGGER_SCOPES, TASK_FIELDS, branchIdForLabel, configForNode, initialEdges, initialNodes, layoutWorkflow, multiIfLabels, nodeAllowedForScope, normalizeMultiIfElseBranches, sameConfig, samePosition, summarizeAutomationChanges } from "./builder-shared";
+import { VOICE_BOT_CALL_FIELDS, ACTIVITY_FIELDS, APP_EVENT_FIELDS, COMMUNICATION_FIELDS, LEAD_FIELDS, NODE_TYPES, OPPORTUNITY_FIELDS, OPPORTUNITY_TRIGGER_SCOPES, TASK_FIELDS, branchIdForLabel, configForNode, initialEdges, initialNodes, layoutWorkflow, multiIfLabels, nodeAllowedForScope, normalizeMultiIfElseBranches, sameConfig, samePosition, summarizeAutomationChanges } from "./builder-shared";
 
 // The automation builder's state and handlers, moved here from page.tsx unchanged so the page
 // and its panels and dialogs can share them.
@@ -56,6 +56,11 @@ export function useAutomationBuilder() {
     const [triggerType, setTriggerType] = useState('LEAD_CREATED');
     const opportunityEnabled = useFeature("opportunityEnabled");
     const serviceDeskEnabled = useModuleEnabled("SERVICE_DESK");
+    // Voice bots (voice bot plan wave F): the "Call with voice bot" step and its outcome.
+    const voiceBotModuleOn = useModuleEnabled("VOICE_BOT");
+    const telephonyModuleOn = useModuleEnabled("TELEPHONY");
+    const voiceBotsEnabled = voiceBotModuleOn && telephonyModuleOn;
+    const [voiceBots, setVoiceBots] = useState<Array<{ id: string; name: string; description: string }>>([]);
     // Opportunity-scoped triggers disappear from new-selection pickers once the tenant
     // disables Opportunities -- an automation already saved with one keeps working
     // (nothing here touches runAutomationsForEvent), and stays selectable/visible in its
@@ -131,6 +136,11 @@ export function useAutomationBuilder() {
             fetchExecutions();
         }
     }, [routeId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+    useEffect(() => {
+        if (!voiceBotsEnabled) return;
+        apiFetch<{ bots: Array<{ id: string; name: string; description: string }> }>("/voice-bots/callable").then((data) => setVoiceBots(Array.isArray(data?.bots) ? data.bots : [])).catch(() => setVoiceBots([]));
+    }, [voiceBotsEnabled]);
 
     const fetchExecutions = async () => {
         try {
@@ -886,7 +896,7 @@ export function useAutomationBuilder() {
 
     const triggerScope = TRIGGER_TYPES.find((item) => item.value === triggerType)?.scope ?? "lead";
     const triggerScopeLabel = TRIGGER_TYPES.find((item) => item.value === triggerType)?.label ?? "selected trigger";
-    const availableNodeTypes = NODE_TYPES.filter((nodeType) => nodeAllowedForScope(nodeType.type, triggerScope));
+    const availableNodeTypes = NODE_TYPES.filter((nodeType) => nodeAllowedForScope(nodeType.type, triggerScope) && (nodeType.type !== "call_with_voice_bot" || voiceBotsEnabled));
     const selectedOpportunityType = opportunityTypes.find((type) => type.id === triggerOpportunityTypeId);
     const opportunityStageOptions = (selectedOpportunityType?.stages ?? []).map((stage: any) => ({
         label: stage.name,
@@ -980,6 +990,8 @@ export function useAutomationBuilder() {
             options: field.key === "typeId" ? activityTypes.map((type) => ({ label: type.name, value: type.id })) : field.options,
         }))
     );
+    // After a "Call with voice bot" step that waits: how the call went.
+    const voiceBotConditionFields = voiceBotsEnabled && nodes.some((node) => node.data?.type === "call_with_voice_bot") ? VOICE_BOT_CALL_FIELDS : [];
     const taskConditionFields = TASK_FIELDS.map((field) => ({
         ...field,
         key: `task.${field.key}`,
@@ -995,7 +1007,7 @@ export function useAutomationBuilder() {
 
     const isOpportunityScopedTrigger = triggerScope === "opportunity" || triggerScope === "activity_opportunity" || triggerScope === "task_opportunity";
     const isActivityScopedTrigger = triggerScope === "activity_lead" || triggerScope === "activity_opportunity" || triggerScope === "activity_activity";
-    const allConditionFields = triggerScope === "communication"
+    const scopeConditionFields = triggerScope === "communication"
         ? [...communicationConditionFields, ...leadConditionFields, ...opportunityConditionFields]
         : triggerScope === "app_event"
         ? appEventConditionFields
@@ -1008,6 +1020,7 @@ export function useAutomationBuilder() {
                 : triggerScope === "task_lead"
                     ? [...taskConditionFields, ...leadConditionFields, ...leadActivityConditionFields]
             : [...leadConditionFields, ...leadActivityConditionFields];
+    const allConditionFields = triggerScope === "communication" || triggerScope === "app_event" ? scopeConditionFields : [...scopeConditionFields, ...voiceBotConditionFields];
     const defaultConditionField = allConditionFields[0]?.key ?? "lead.source";
 
     const fieldMetaForValue = (fieldKey: string, source = allConditionFields) => source.find((field) => field.key === fieldKey || field.key.replace(/^(lead|opportunity|activity|task|communication)\./, "") === fieldKey);
@@ -1218,6 +1231,8 @@ export function useAutomationBuilder() {
         triggerScope,
         triggerScopeLabel,
         availableNodeTypes,
+        voiceBots,
+        voiceBotsEnabled,
         selectedOpportunityType,
         opportunityStageOptions,
         selectedActivityType,

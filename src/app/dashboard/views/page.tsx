@@ -1,10 +1,11 @@
 "use client";
 
+import { customFieldFilterFields, useCustomFieldDefinitions } from "@/components/common/custom-field-columns";
 import Link from "next/link";
 
 import { ErrorState } from "@/components/common/error-state";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -18,7 +19,7 @@ import { EmptyState } from "@/components/common/empty-state";
 import { QueueExportButton } from "@/components/exports/queue-export-button";
 import { useFeature } from "@/components/auth/feature-gate";
 import { SaveViewDialog } from "@/components/views/save-view-dialog";
-import { fieldLabel, getSmartViewFields, isSmartViewModuleEnabled, smartViewModuleDisabledReason, SMART_VIEW_MODULE_OPTIONS } from "@/components/views/smart-view-fields";
+import { fieldLabel, getSmartViewFields, isSmartViewModuleEnabled, smartViewModuleDisabledReason, SMART_VIEW_MODULE_OPTIONS, type SmartViewReferenceOptions } from "@/components/views/smart-view-fields";
 import { applySmartViewFilters } from "@/components/views/smart-view-filtering";
 import { SERVER_FILTERED_PATHS, serverListUrl, serverSortKey, toServerQuery, type ServerGroup } from "@/components/views/smart-view-server-query";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
@@ -68,6 +69,21 @@ type CurrentUser = {
     isPlatformAdmin?: boolean;
     role?: string | { name: string; permissions?: any } | null;
 };
+
+// Round-2 plan wave 3 (C9): "Set as default" is applied when Smart Views opens -- the view set as
+// default for this person's persona, else the general default, else the first view as before.
+function viewPersona(user: CurrentUser | null): NonNullable<ViewRecord["defaultPersona"]> {
+    const permissions = user?.role && typeof user.role === "object" ? user.role.permissions : null;
+    if (permissions?.isPartnerRole) return "PARTNER";
+    if (user?.isTenantAdmin || user?.isPlatformAdmin) return "ADMIN";
+    if (permissions?.recordAccess === "TEAM") return "MANAGER";
+    return "REP";
+}
+
+function defaultViewId(views: ViewRecord[], user: CurrentUser | null) {
+    const persona = viewPersona(user);
+    return (views.find((view) => view.isDefault && view.defaultPersona === persona) ?? views.find((view) => view.isDefault && !view.defaultPersona) ?? views[0])?.id ?? null;
+}
 
 // Quick actions mutate Lead/Opportunity/Activity/Task records -- gate them by the same
 // module write-permission levels the Role admin UI already exposes (leads/opportunities/
@@ -142,6 +158,8 @@ export default function ViewsPage() {
     const [chipTotals, setChipTotals] = useState<Record<string, number | null>>({});
     const [refreshToken, setRefreshToken] = useState(0);
     const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
+    const [userLoaded, setUserLoaded] = useState(false);
+    const defaultViewApplied = useRef(false);
     const [users, setUsers] = useState<Array<{ id: string; name?: string | null; email?: string | null }>>([]);
     const [leadLists, setLeadLists] = useState<Array<{ id: string; name: string }>>([]);
     const [activityTypes, setActivityTypes] = useState<Array<{ id: string; name: string }>>([]);
@@ -190,7 +208,7 @@ export default function ViewsPage() {
 
     useEffect(() => {
         fetchViews();
-        apiFetch<CurrentUser>("/auth/me").then(setCurrentUser).catch(() => setCurrentUser(null));
+        apiFetch<CurrentUser>("/auth/me").then(setCurrentUser).catch(() => setCurrentUser(null)).finally(() => setUserLoaded(true));
         fetchCached("users", () => apiFetch<any[]>("/users")).then((data) => setUsers(Array.isArray(data) ? data : [])).catch(() => setUsers([]));
         apiFetch<any[]>("/lead-lists").then((data) => setLeadLists(Array.isArray(data) ? data : [])).catch(() => setLeadLists([]));
         fetchCached("activity-types", () => apiFetch<any[]>("/activity-types")).then((data) => setActivityTypes(Array.isArray(data) ? data : [])).catch(() => setActivityTypes([]));
@@ -200,6 +218,16 @@ export default function ViewsPage() {
         const viewId = new URLSearchParams(window.location.search).get("viewId");
         if (viewId) setDeepLinkViewId(viewId);
     }, [fetchViews]);
+
+    // Once the views and the signed-in person are known, open the default view -- unless a link
+    // named a view, or another view was already picked.
+    useEffect(() => {
+        if (defaultViewApplied.current || !userLoaded || loading || !views.length) return;
+        defaultViewApplied.current = true;
+        if (new URLSearchParams(window.location.search).get("viewId")) return;
+        const preferred = defaultViewId(views, currentUser);
+        setSelectedViewId((current) => (current === views[0]?.id || !current ? preferred : current));
+    }, [userLoaded, loading, views, currentUser]);
 
     // A deep-linked View that isn't in this user's normal (access-filtered) list means they
     // don't have access to it -- look up just enough to offer "Request access" without
@@ -496,7 +524,12 @@ export default function ViewsPage() {
 
     const activeRecords = recordsByTab[activeTab?.id ?? ""] ?? [];
     const visibleRecords = useMemo(() => applySearchAndSort(activeRecords, activeTab, search), [activeRecords, activeTab, search]);
-    const columns = useMemo(() => activeTab ? columnsForTab(activeTab) : [], [activeTab]);
+    // Custom fields can be columns of lead and opportunity views.
+    const leadCustomFields = useCustomFieldDefinitions("LEAD");
+    const opportunityCustomFields = useCustomFieldDefinitions("OPPORTUNITY");
+    const columns = useMemo(() => activeTab ? columnsForTab(activeTab, {
+        customFields: { LEADS: customFieldFilterFields(leadCustomFields), OPPORTUNITIES: customFieldFilterFields(opportunityCustomFields) },
+    }) : [], [activeTab, leadCustomFields, opportunityCustomFields]);
     // Server-filtered: the page the server returned. In the browser: a page of the filtered rows.
     const tableRows = useMemo(
         () => activeIsServer ? serverRows : visibleRecords.slice(pageState.pageIndex * pageState.pageSize, (pageState.pageIndex + 1) * pageState.pageSize),
@@ -1022,8 +1055,8 @@ function dueSegment(record: any) {
     return due <= end.getTime() ? "today" : "upcoming";
 }
 
-function columnsForTab(tab: SmartViewTab) {
-    const fields = getSmartViewFields(tab.module);
+function columnsForTab(tab: SmartViewTab, references: SmartViewReferenceOptions = {}) {
+    const fields = getSmartViewFields(tab.module, references);
     const validKeys = new Set(fields.map((field) => field.key));
     const configured = (tab.columns?.length ? tab.columns : DEFAULT_COLUMNS[tab.module]).filter((key) => validKeys.has(key));
     const fallback = DEFAULT_COLUMNS[tab.module].filter((key) => validKeys.has(key));

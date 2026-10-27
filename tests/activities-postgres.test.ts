@@ -98,7 +98,8 @@ describe("F03 fix: Activity field-permission enforcement (hidden/readonly)", () 
       .mockResolvedValueOnce([])
       .mockResolvedValueOnce([{ id: "lead-1", name: "Alpha", phone: "555-1234", email: "a@x.com" }])
       .mockResolvedValueOnce([])
-      .mockResolvedValueOnce([]);
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([]); // custom field values
 
     const { listActivitiesForTenant } = await import("@/lib/repositories/activities-postgres");
     const result = await listActivitiesForTenant(userWithHiddenLeadPhone, 50, null);

@@ -71,7 +71,7 @@ function CallRecordingsPanelContent({ entityType, entityId }: Props) {
         setBusyId(call.id);
         try {
             const result = await apiFetch<{ recordingUrl: string }>(`/telephony/call-recordings/${call.id}?action=${action}`);
-            const url = new URL(result.recordingUrl);
+            const url = new URL(result.recordingUrl, window.location.origin);
             if (!['https:', 'http:'].includes(url.protocol)) throw new Error('Recording link is invalid. Request access again.');
             setReadyRecording({ url: url.href, action });
         } catch (error: any) {

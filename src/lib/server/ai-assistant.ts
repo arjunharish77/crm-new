@@ -9,6 +9,7 @@ import { applyRecordScopeClause } from "@/lib/server/record-scope";
 import { maskFieldsForUser } from "@/lib/server/field-permissions";
 import { assertSafeOutboundUrl } from "@/lib/server/outbound-request-guard";
 import { requireTenantId } from "@/lib/server/tenant-guard";
+import { decryptSecretAtRest, encryptSecretAtRest } from "@/lib/server/secret-encryption";
 
 type Channel = "EMAIL" | "WHATSAPP" | "SMS";
 
@@ -63,10 +64,41 @@ export async function getAiProviderSettingsForTenant(user: TenantUser) {
   return redactSettings(row ?? DEFAULT_SETTINGS);
 }
 
-// Not exported -- internal reads need the real (unredacted) secret to call the provider.
+// The API key (and any other secret value) is stored encrypted, like the Plivo token (voice bot
+// plan §10; it used to be plain text in the database). "********" is the redacted value the
+// settings screen shows; sent back unchanged it keeps the stored secret.
+const ENCRYPTED_PREFIX = "v1:";
+
+function encryptSecretConfig(input: unknown) {
+  if (!input || typeof input !== "object") return {};
+  const entries = Object.entries(input as Record<string, unknown>)
+    .filter(([, value]) => typeof value === "string" && value !== "" && value !== "********")
+    .map(([key, value]) => [key, encryptSecretAtRest(String(value))]);
+  return Object.fromEntries(entries);
+}
+
+function decryptSecretConfig(stored: unknown) {
+  if (!stored || typeof stored !== "object") return { config: {}, hadPlainText: false };
+  let hadPlainText = false;
+  const config = Object.fromEntries(Object.entries(stored as Record<string, unknown>).map(([key, value]) => {
+    const text = String(value ?? "");
+    if (text.startsWith(ENCRYPTED_PREFIX)) return [key, decryptSecretAtRest(text)];
+    hadPlainText = true;
+    return [key, text];
+  }));
+  return { config, hadPlainText };
+}
+
+// Not exported -- internal reads need the real (unredacted) secret to call the provider. A key
+// saved before encryption existed is encrypted in place the first time it's read.
 async function getRawAiProviderSettings(tenantId: string) {
   const row = await queryOne<any>(`select ${SETTINGS_COLUMNS} from "AiProviderSettings" where "tenantId" = $1`, [tenantId]);
-  return row ?? DEFAULT_SETTINGS;
+  if (!row) return DEFAULT_SETTINGS;
+  const { config, hadPlainText } = decryptSecretConfig(row.secretConfig);
+  if (hadPlainText) {
+    await execute(`update "AiProviderSettings" set "secretConfig" = $1 where "tenantId" = $2`, [encryptSecretConfig(config), tenantId]).catch(() => undefined);
+  }
+  return { ...row, secretConfig: config };
 }
 
 export async function upsertAiProviderSettingsForTenant(user: TenantUser, input: Record<string, unknown>) {
@@ -93,7 +125,7 @@ export async function upsertAiProviderSettingsForTenant(user: TenantUser, input:
       input.providerMode ? String(input.providerMode) : "DISABLED",
       input.endpointUrl ? String(input.endpointUrl) : null,
       input.model ? String(input.model) : null,
-      input.secretConfig && typeof input.secretConfig === "object" ? input.secretConfig : {},
+      encryptSecretConfig(input.secretConfig),
       Number(input.maxTokensPerRequest) > 0 ? Number(input.maxTokensPerRequest) : 1024,
       Number(input.timeoutMs) > 0 ? Number(input.timeoutMs) : 30000,
       input.dailySpendLimitUsd != null && input.dailySpendLimitUsd !== "" ? Number(input.dailySpendLimitUsd) : null,

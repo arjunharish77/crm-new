@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Controller } from 'react-hook-form';
 import { DynamicFormRenderer } from '@/components/common/DynamicFormRenderer';
 import { Label } from '@/components/ui/label';
@@ -18,6 +18,8 @@ import { formatWorkspaceDateInput, workspaceDateInputToIso } from '@/lib/date-fo
 import { PaginatedResponse } from '@/types/common';
 import { Lead } from '@/types/leads';
 import { OpportunityType, StageDefinition } from '@/types/opportunities';
+import { useObjectMetadata } from '@/hooks/use-object-metadata';
+import { formFieldType } from '@/lib/custom-field-types';
 
 interface OpportunityFormProps {
     initialData?: any;
@@ -40,6 +42,34 @@ export function OpportunityForm({ initialData, onSuccess, onCancel }: Opportunit
     const [leads, setLeads] = useState<Lead[]>([]);
     const [types, setTypes] = useState<OpportunityType[]>([]);
     const [selectedType, setSelectedType] = useState<OpportunityType | null>(null);
+
+    // The form's fields: built-in and workspace custom fields, plus the chosen type's own fields.
+    const { metadata: baseMetadata, loading: metadataLoading, error: metadataError, retry: retryMetadata } = useObjectMetadata('opportunity');
+    const [typeFields, setTypeFields] = useState<any[]>([]);
+    useEffect(() => {
+        if (!selectedType?.id) { setTypeFields([]); return; }
+        let active = true;
+        apiFetch<any[]>(`/type-custom-fields/by-type/OPPORTUNITY_TYPE/${selectedType.id}`)
+            .then((fields) => {
+                if (!active) return;
+                setTypeFields((Array.isArray(fields) ? fields : []).map((field) => ({
+                    id: field.id,
+                    key: field.fieldKey,
+                    label: field.fieldLabel,
+                    type: formFieldType(field.fieldType),
+                    isRequired: field.isRequired,
+                    options: field.fieldConfig?.options || [],
+                    isCustom: true,
+                })));
+            })
+            .catch(() => { if (active) setTypeFields([]); });
+        return () => { active = false; };
+    }, [selectedType?.id]);
+    const metadata = useMemo(() => {
+        if (!baseMetadata) return null;
+        const known = new Set(baseMetadata.fields.map((field: any) => field.key));
+        return { ...baseMetadata, fields: [...baseMetadata.fields, ...typeFields.filter((field) => !known.has(field.key))] };
+    }, [baseMetadata, typeFields]);
 
     const [loadingOptions, setLoadingOptions] = useState(true);
     const [optionsError, setOptionsError] = useState(false);
@@ -200,12 +230,13 @@ export function OpportunityForm({ initialData, onSuccess, onCancel }: Opportunit
         ),
     };
 
-    if (loadingOptions) return <p role="status" className="text-sm text-muted-foreground">Loading lead and opportunity options…</p>;
+    if (loadingOptions || (metadataLoading && !metadata)) return <p role="status" className="text-sm text-muted-foreground">Loading lead and opportunity options…</p>;
     if (optionsError) return <ErrorState description="Lead and opportunity options could not be loaded." onRetry={() => setAttempt(value => value + 1)} />;
+    if (metadataError || !metadata) return <ErrorState description="The opportunity form could not be loaded." onRetry={retryMetadata} />;
 
     return (
         <DynamicFormRenderer
-            objectName="opportunity"
+            metadata={metadata}
             initialData={initialData}
             fieldOverrides={fieldOverrides as any}
             onSuccess={onSuccess}

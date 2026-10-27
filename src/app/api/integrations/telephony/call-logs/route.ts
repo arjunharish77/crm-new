@@ -20,6 +20,7 @@ export async function POST(request: Request) {
     const user = await requireCurrentUser(request);
     const body = await request.json().catch(() => null);
     if (!body?.fromNumber && !body?.toNumber) return badRequest("At least one phone number is required");
+    if (String(body?.provider ?? "").toLowerCase() === "plivo") return badRequest("Plivo call logs are created by the native connector");
     const log = await createTelephonyCallLogForTenant(user, body);
     return NextResponse.json(log);
   } catch (error) {

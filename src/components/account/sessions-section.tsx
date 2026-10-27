@@ -60,6 +60,7 @@ export function SessionsSection() {
         try {
             await apiFetch(`/sessions/${session.id}`, { method: "DELETE" });
             if (session.isCurrent) {
+                // eslint-disable-next-line @next/next/no-location-assign-relative-destination -- Signing out this device: a full page load drops the cached pages of the ended session.
                 window.location.href = "/login";
                 return;
             }

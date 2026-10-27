@@ -52,6 +52,7 @@ services:
     environment:
       PORT: 3000
       HOSTNAME: 0.0.0.0
+      VOICE_BOT_SERVICE_URL: http://voice-bot:8765
     volumes:
       - app-storage:/app/storage
     depends_on:
@@ -68,6 +69,7 @@ services:
       - data-pg
       - data-redis
       - ml-net
+      - voice-net
       - edge
 
   worker:
@@ -80,6 +82,8 @@ services:
     restart: unless-stopped
     env_file:
       - .env
+    environment:
+      VOICE_BOT_SERVICE_URL: http://voice-bot:8765
     # The same as `npm run worker`; npm isn't in the image (Dockerfile).
     command: ["node_modules/.bin/tsx", "scripts/worker.ts"]
     volumes:
@@ -100,6 +104,7 @@ services:
       - data-pg
       - data-redis
       - ml-net
+      - voice-net
       # Not on `edge`: worker has no HTTP server for Caddy to front, and doesn't need to be
       # reachable from it.
 
@@ -139,6 +144,30 @@ services:
       - ml-net
       # Not on `data-redis` (doesn't use Redis) or `edge` (Caddy never talks to it
       # directly -- only web/worker do, over `ml-net`).
+
+  # Voice bot plan §7 (wave C): holds the voice bots' conversations. Caddy forwards
+  # /voice-bot/* on the CRM domain to it (browser test calls, Plivo call audio); it calls the CRM
+  # back over `voice-net` with the one shared secret. Provider keys aren't in its environment:
+  # the CRM hands each conversation's keys over when the conversation is claimed.
+  voice-bot:
+    build:
+      context: ../../voice-bot
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      VOICE_BOT_SERVICE_SECRET: ${VOICE_BOT_SERVICE_SECRET:-}
+      CRM_INTERNAL_URL: http://web:3000
+      APP_URL: https://${APP_DOMAIN}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8765/health', timeout=5)"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    networks:
+      - voice-net
+      - edge
+      # Not on `data-pg`, `data-redis` or `ml-net`: it reaches the CRM only through its
+      # internal API on web, never the database.
 
   unnatividya-web:
     build:
@@ -265,8 +294,10 @@ services:
 #   ml-net:     ml-service, plus only web/worker, which call it over HTTP as
 #               ML_SERVICE_URL=http://ml-service:8000 -- Caddy and the unnatividya-*
 #               services never reach it.
-#   edge:       caddy, plus only the two HTTP services it reverse-proxies to
-#               (web, unnatividya-web) -- worker and unnatividya-crm-worker aren't fronted
+#   voice-net:  voice-bot, plus web/worker: the CRM calls it as VOICE_BOT_SERVICE_URL and it
+#               calls the CRM's internal API back on web.
+#   edge:       caddy, plus only the HTTP services it reverse-proxies to (web,
+#               unnatividya-web, voice-bot) -- worker and unnatividya-crm-worker aren't fronted
 #               by Caddy and don't need to be reachable from it.
 #
 # Every network is declared explicitly on every service (none rely on Compose's implicit
@@ -279,6 +310,7 @@ networks:
   data-pg:
   data-redis:
   ml-net:
+  voice-net:
   edge:
 
 volumes:

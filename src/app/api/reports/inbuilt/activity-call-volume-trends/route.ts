@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { requireCurrentUser } from "@/lib/server/auth";
 import { serverError, unauthorized } from "@/lib/server/http";
 import { getActivityCallVolumeTrendReportForTenant } from "@/lib/server/inbuilt-reports";
+import { parseReportFilters } from "@/lib/server/report-scope";
 
 export async function GET(request: Request) {
   try {
@@ -13,7 +14,8 @@ export async function GET(request: Request) {
       user,
       grain,
       url.searchParams.get("startDate"),
-      url.searchParams.get("endDate")
+      url.searchParams.get("endDate"),
+      parseReportFilters(url.searchParams, user.id),
     );
     return NextResponse.json(report);
   } catch (error) {

@@ -31,6 +31,7 @@ interface Role {
         modules: Record<string, string>;
         recordAccess: string;
         isPartnerRole?: boolean;
+        voiceBotBulkCalls?: boolean;
     };
 }
 
@@ -51,6 +52,8 @@ const formSchema = z.object({
     modules: z.record(z.string(), z.enum(["unset", "none", "read", "write", "full"])),
     permissionTemplateId: z.string().optional(),
     isPartnerRole: z.boolean(),
+    // Voice bots: may start bot calls on many records at once (decision 18).
+    voiceBotBulkCalls: z.boolean(),
 });
 
 type RoleFormValues = z.infer<typeof formSchema>;
@@ -76,6 +79,11 @@ const permissionLevels: { value: ModuleChoice; label: string; description: strin
     { value: "full", label: "Full", description: "Everything, including delete" },
 ];
 
+// A module can word its levels itself (Voice bots: View bot calls / Use / Manage).
+function levelsFor(module: (typeof PERMISSION_MODULES)[number]) {
+    return permissionLevels.map((level) => ({ ...level, ...(module.levelLabels?.[level.value] ?? {}) }));
+}
+
 const recordAccessLevels = [
     { value: "OWN", label: "Own Records Only", description: "Can only see their own data" },
     { value: "TEAM", label: "Team Records", description: "Can see team members' data" },
@@ -100,6 +108,7 @@ export function RoleDialog({
             modules: moduleChoicesFrom(undefined, true),
             permissionTemplateId: "",
             isPartnerRole: false,
+            voiceBotBulkCalls: false,
         },
     });
 
@@ -115,6 +124,7 @@ export function RoleDialog({
                 modules: moduleChoicesFrom(role.permissions.modules, false),
                 permissionTemplateId: role.permissionTemplateId ?? "",
                 isPartnerRole: !!role.permissions.isPartnerRole,
+                voiceBotBulkCalls: role.permissions.voiceBotBulkCalls === true,
             });
         } else {
             reset({
@@ -124,6 +134,7 @@ export function RoleDialog({
                 modules: moduleChoicesFrom(undefined, true),
                 permissionTemplateId: "",
                 isPartnerRole: false,
+                voiceBotBulkCalls: false,
             });
         }
     }, [role, open, reset]);
@@ -149,6 +160,7 @@ export function RoleDialog({
                     },
                     recordAccess: values.recordAccess,
                     isPartnerRole: values.isPartnerRole,
+                    voiceBotBulkCalls: values.voiceBotBulkCalls,
                 },
             };
 
@@ -285,10 +297,10 @@ export function RoleDialog({
                                         <p className="text-xs text-muted-foreground">{module.description}</p>
                                         <Select value={field.value as string} onValueChange={field.onChange}>
                                             <SelectTrigger id={`role-${module.key}`} className="w-full min-w-0">
-                                                <SelectValue>{permissionLevels.find((level) => level.value === field.value)?.label}</SelectValue>
+                                                <SelectValue>{levelsFor(module).find((level) => level.value === field.value)?.label}</SelectValue>
                                             </SelectTrigger>
                                             <SelectContent>
-                                                {permissionLevels.map((level) => (
+                                                {levelsFor(module).map((level) => (
                                                     <SelectItem key={level.value} value={level.value}>
                                                         <div className="flex min-w-0 flex-col whitespace-normal break-words">
                                                             <span>{level.label}</span>
@@ -302,6 +314,21 @@ export function RoleDialog({
                                 )}
                             />
                         ))}
+                        <Controller
+                            name="voiceBotBulkCalls"
+                            control={control}
+                            render={({ field }) => (
+                                <div className="flex items-start justify-between gap-3 rounded-lg border border-border p-3">
+                                    <div className="space-y-1">
+                                        <Label htmlFor="role-voice-bot-bulk">Voice bots: bulk calls</Label>
+                                        <p className="text-xs text-muted-foreground">
+                                            Can start bot calls for many records at once (selected rows, lists, Smart Views). Needs Use or Manage above.
+                                        </p>
+                                    </div>
+                                    <Switch id="role-voice-bot-bulk" checked={field.value} onCheckedChange={field.onChange} />
+                                </div>
+                            )}
+                        />
                     </div>
                 </div>
 

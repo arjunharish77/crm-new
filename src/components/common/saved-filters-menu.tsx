@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Bookmark, Plus, Trash2, Star, Filter, Loader2 } from 'lucide-react';
 import {
     DropdownMenu,
@@ -64,6 +64,28 @@ export function SavedFiltersMenu({ module, activeFilter, onApply, onClear }: Sav
             setLoading(false);
         }
     };
+
+    // Round-2 plan wave 3 (C9): the filter saved as default is applied when the page opens (it was
+    // only shown in bold before), unless a filter is already active.
+    const defaultApplied = useRef(false);
+    useEffect(() => {
+        if (defaultApplied.current) return;
+        defaultApplied.current = true;
+        apiFetch<SavedFilter[]>(`/saved-views?module=${encodeURIComponent(module)}`)
+            .then((data) => {
+                const list = Array.isArray(data) ? data : [];
+                setViews(list);
+                const preferred = list.find((view) => view.isDefault);
+                const hasActiveFilter = activeFilter && (Array.isArray(activeFilter) ? activeFilter.length > 0 : Object.keys(activeFilter).length > 0);
+                if (preferred && !hasActiveFilter) {
+                    setActiveViewId(preferred.id);
+                    onApply(preferred.filters);
+                }
+            })
+            .catch(() => undefined);
+        // Once, on open.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
 
     const handleOpenChange = (next: boolean) => {
         setOpen(next);

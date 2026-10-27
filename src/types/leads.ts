@@ -9,7 +9,8 @@ export interface Lead {
     score?: number | null;
     notes?: string | null;
     tags?: string[];
-    customFields?: Record<string, string | number | boolean | null>;
+    customFields?: Record<string, unknown> | null;
+    customFieldLabels?: Record<string, string>;
     createdBy?: string | null;
     createdAt: string;
     updatedAt: string;

@@ -149,17 +149,30 @@ function useDensity(storageKey: string | undefined, defaultDensity: Density) {
 // per-table override -- cross-device sync is a further, separate piece not attempted here.
 function useColumnVisibility(storageKey: string | undefined, defaults: VisibilityState = {}) {
   const [columnVisibility, setColumnVisibilityState] = React.useState<VisibilityState>(defaults);
+  const defaultsRef = React.useRef(defaults);
+  defaultsRef.current = defaults;
 
-  // A user's saved choice wins; the screen's defaults apply only until they choose.
+  // A user's saved choice wins for the columns it covers; a column added since (e.g. a new
+  // custom field) takes the screen's default, so it doesn't appear for everyone unasked.
   React.useEffect(() => {
     if (!storageKey) return;
     try {
       const stored = storageGet(`data-table-columns:${storageKey}`);
-      if (stored) setColumnVisibilityState(JSON.parse(stored));
+      if (stored) setColumnVisibilityState({ ...defaultsRef.current, ...JSON.parse(stored) });
     } catch {
       // Malformed cache -- fall back to the defaults.
     }
   }, [storageKey]);
+
+  // Defaults that arrive later (custom field columns load after the page) fill in only the
+  // columns nobody has chosen for yet.
+  const defaultsKey = JSON.stringify(defaults);
+  React.useEffect(() => {
+    setColumnVisibilityState((current) => {
+      const missing = Object.entries(defaultsRef.current).filter(([key]) => !(key in current));
+      return missing.length ? { ...current, ...Object.fromEntries(missing) } : current;
+    });
+  }, [defaultsKey]);
 
   const setColumnVisibility = React.useCallback((updater: React.SetStateAction<VisibilityState>) => {
     setColumnVisibilityState((current) => {

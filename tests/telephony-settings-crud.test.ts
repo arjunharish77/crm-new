@@ -60,4 +60,24 @@ describe("saveTelephonySettingsForTenant", () => {
     const insertCall = dbMocks.queryOne.mock.calls[1];
     expect(insertCall[1][2].webhookSecret).toBeNull();
   });
+
+  it("encrypts a new Plivo token and never stores the browser's plaintext field", async () => {
+    const previousKey = process.env.MARKETPLACE_SECRET_ENCRYPTION_KEY;
+    process.env.MARKETPLACE_SECRET_ENCRYPTION_KEY = "test-plivo-encryption-key";
+    try {
+      dbMocks.queryOne
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce({ id: "setting-1", type: "TELEPHONY", config: {}, isActive: false });
+
+      await saveTelephonySettingsForTenant(user, { provider: "plivo", plivoAuthId: "AUTH", plivoAuthToken: "secret-token", isActive: false });
+
+      const stored = dbMocks.queryOne.mock.calls[1][1][2];
+      expect(stored.plivoAuthTokenEncrypted).toMatch(/^v1:/);
+      expect(stored.plivoAuthTokenEncrypted).not.toContain("secret-token");
+      expect(stored).not.toHaveProperty("plivoAuthToken");
+    } finally {
+      if (previousKey === undefined) delete process.env.MARKETPLACE_SECRET_ENCRYPTION_KEY;
+      else process.env.MARKETPLACE_SECRET_ENCRYPTION_KEY = previousKey;
+    }
+  });
 });

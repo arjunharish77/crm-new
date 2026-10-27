@@ -7,7 +7,7 @@ import { ErrorState } from "@/components/common/error-state";
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
-import { Megaphone, Plus, Pencil, Trash2, Users, BarChart3 } from "lucide-react";
+import { AudioLines, Megaphone, Plus, Pencil, Trash2, Users, BarChart3 } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -17,6 +17,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { StandardDialog } from "@/components/common/standard-dialog";
 import { useConfirm } from "@/components/common/dialogs-provider";
+import { useVoiceBotCalling } from "@/components/voice-bots/call-with-voice-bot";
 
 type CallCampaign = {
     id: string;
@@ -30,6 +31,9 @@ type CallCampaign = {
     assignedTeamId: string | null;
     retryPolicy: { maxAttempts: number; retryDelayMinutes: number };
     status: "DRAFT" | "ACTIVE" | "PAUSED" | "COMPLETED";
+    // People pull calls in the Call center, or a voice bot dials the members (voice bot plan wave F).
+    dialledBy: "PEOPLE" | "BOT";
+    voiceBotId: string | null;
     memberCounts: Record<string, number>;
 };
 
@@ -43,6 +47,8 @@ function emptyCampaign(): Partial<CallCampaign> {
         audienceType: "MANUAL",
         audienceConfig: {},
         retryPolicy: { maxAttempts: 3, retryDelayMinutes: 60 },
+        dialledBy: "PEOPLE",
+        voiceBotId: null,
     };
 }
 
@@ -125,6 +131,7 @@ function CallCampaignsSettingsPageContent() {
                                         <Megaphone className="size-4 text-primary" />
                                         <span className="font-bold">{campaign.name}</span>
                                         <Badge variant={campaign.status === "ACTIVE" ? "default" : "outline"}>{campaign.status}</Badge>
+                                        {campaign.dialledBy === "BOT" ? <Badge variant="secondary" className="gap-1"><AudioLines className="size-3" aria-hidden />Voice bot</Badge> : null}
                                         <span className="text-xs text-muted-foreground">
                                             {completed}/{total} completed
                                         </span>
@@ -143,7 +150,7 @@ function CallCampaignsSettingsPageContent() {
                                             <Users className="size-3.5" />
                                             Add Audience
                                         </Button>
-                                        {campaign.status === "ACTIVE" && (
+                                        {campaign.status === "ACTIVE" && campaign.dialledBy !== "BOT" && (
                                             <Link href={`/dashboard/call-center/campaigns/${campaign.id}`}>
                                                 <Button size="sm">Work Campaign</Button>
                                             </Link>
@@ -219,6 +226,17 @@ function CampaignDialog({
     const [dispositionGroupId, setDispositionGroupId] = useState(campaign.dispositionGroupId ?? "");
     const [assignedTeamId, setAssignedTeamId] = useState(campaign.assignedTeamId ?? "");
     const [saving, setSaving] = useState(false);
+    const voiceBotCalling = useVoiceBotCalling();
+    const [dialledBy, setDialledBy] = useState<CallCampaign["dialledBy"]>(campaign.dialledBy ?? "PEOPLE");
+    const [voiceBotId, setVoiceBotId] = useState(campaign.voiceBotId ?? "");
+    const [voiceBots, setVoiceBots] = useState<Option[]>([]);
+    const botDialled = dialledBy === "BOT";
+    const dialledLocked = campaign.status === "ACTIVE";
+
+    useEffect(() => {
+        if (!voiceBotCalling.canCall) return;
+        apiFetch<{ bots: Option[] }>("/voice-bots/callable").then((data) => setVoiceBots((data?.bots ?? []).map((bot) => ({ id: bot.id, name: bot.name })))).catch(() => undefined);
+    }, [voiceBotCalling.canCall]);
 
     useEffect(() => {
         apiFetch<any[]>("/lead-lists").then((data) => setLeadLists((data ?? []).map((l) => ({ id: l.id, name: l.name })))).catch(() => undefined);
@@ -254,6 +272,7 @@ function CampaignDialog({
                 dispositionGroupId: dispositionGroupId || null,
                 assignedTeamId: assignedTeamId || null,
                 retryPolicy: { maxAttempts: Number(maxAttempts) || 3, retryDelayMinutes: Number(retryDelayMinutes) || 60 },
+                ...(dialledLocked ? {} : { dialledBy, voiceBotId: botDialled ? voiceBotId || null : null }),
             };
             const saved = campaign.id
                 ? await apiFetch<CallCampaign>(`/call-campaigns/${campaign.id}`, { method: "PATCH", body: JSON.stringify(payload) })
@@ -293,6 +312,32 @@ function CampaignDialog({
                     <Label>Description</Label>
                     <Textarea rows={2} value={description} onChange={(e) => setDescription(e.target.value)} />
                 </div>
+
+                {voiceBotCalling.canCall || botDialled ? (
+                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                        <div className="space-y-1.5">
+                            <Label htmlFor="campaign-dialled-by">Dialled by</Label>
+                            <select id="campaign-dialled-by" className="w-full rounded-md border bg-background px-3 py-2 text-sm disabled:opacity-60" value={dialledBy} disabled={dialledLocked}
+                                aria-describedby="campaign-dialled-by-help" onChange={(e) => setDialledBy(e.target.value as CallCampaign["dialledBy"])}>
+                                <option value="PEOPLE">People (from the Call center)</option>
+                                <option value="BOT">A voice bot</option>
+                            </select>
+                            <p id="campaign-dialled-by-help" className="text-xs text-muted-foreground">
+                                {dialledLocked ? "Pause the campaign to change who dials it." : botDialled ? "The bot calls each member within its calling hours and daily limit, with its own retries. Its summary and answers go on each record." : "Agents take the next call from the campaign in the Call center."}
+                            </p>
+                        </div>
+                        {botDialled ? (
+                            <div className="space-y-1.5">
+                                <Label htmlFor="campaign-voice-bot">Bot</Label>
+                                <select id="campaign-voice-bot" className="w-full rounded-md border bg-background px-3 py-2 text-sm disabled:opacity-60" value={voiceBotId} disabled={dialledLocked} onChange={(e) => setVoiceBotId(e.target.value)}>
+                                    <option value="">{voiceBots.length ? "Choose a bot" : "No live bots yet"}</option>
+                                    {voiceBots.map((option) => <option key={option.id} value={option.id}>{option.name}</option>)}
+                                    {voiceBotId && !voiceBots.some((option) => option.id === voiceBotId) ? <option value={voiceBotId}>A bot that isn&apos;t live</option> : null}
+                                </select>
+                            </div>
+                        ) : null}
+                    </div>
+                ) : null}
 
                 <div className="space-y-1.5">
                     <Label>Module</Label>
@@ -350,6 +395,7 @@ function CampaignDialog({
                     </div>
                 )}
 
+                {!botDialled ? (<>
                 <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
                     <div className="space-y-1.5">
                         <Label>Call Script</Label>
@@ -396,6 +442,7 @@ function CampaignDialog({
                         <Input type="number" min={1} value={retryDelayMinutes} onChange={(e) => setRetryDelayMinutes(e.target.value)} />
                     </div>
                 </div>
+                </>) : null}
             </div>
         </StandardDialog>
     );

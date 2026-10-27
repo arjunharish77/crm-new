@@ -79,6 +79,55 @@ export async function writePrivateFile(
   };
 }
 
+// Stream large private files to a temporary file in the same directory, then rename it
+// atomically. This avoids holding long call recordings in the web process's memory.
+export async function writePrivateFileStream(
+  relativePath: string,
+  source: ReadableStream<Uint8Array>,
+  options: { maxBytes: number; bucket?: string; contentType?: string | null },
+): Promise<PrivateFileWrite & { prefix: Buffer }> {
+  const driver = getFileStorageDriver();
+  if (driver === "s3") throw new Error("S3_STORAGE_DRIVER_NOT_CONFIGURED");
+  const storageKey = normalizeStorageKey(relativePath);
+  const absolute = resolveLocalStoragePath(storageKey);
+  await fs.mkdir(path.dirname(absolute), { recursive: true });
+  const temp = `${absolute}.${crypto.randomUUID()}.tmp`;
+  const file = await fs.open(temp, "wx", 0o600);
+  const hash = crypto.createHash("sha256");
+  let byteSize = 0;
+  let prefix = Buffer.alloc(0);
+  const reader = source.getReader();
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      const chunk = Buffer.from(value);
+      byteSize += chunk.length;
+      if (byteSize > options.maxBytes) throw new Error("PRIVATE_FILE_TOO_LARGE");
+      if (prefix.length < 16) prefix = Buffer.concat([prefix, chunk.subarray(0, 16 - prefix.length)]);
+      hash.update(chunk);
+      let offset = 0;
+      while (offset < chunk.length) {
+        const result = await file.write(chunk, offset, chunk.length - offset);
+        if (!result.bytesWritten) throw new Error("PRIVATE_FILE_WRITE_FAILED");
+        offset += result.bytesWritten;
+      }
+    }
+    if (!byteSize) throw new Error("PRIVATE_FILE_EMPTY");
+    await file.sync();
+    await file.close();
+    await fs.rename(temp, absolute);
+    return { storageKey, bucket: options.bucket || "private", driver, byteSize, checksum: hash.digest("hex"), contentType: options.contentType ?? null, prefix };
+  } catch (error) {
+    await reader.cancel().catch(() => undefined);
+    await file.close().catch(() => undefined);
+    await fs.unlink(temp).catch(() => undefined);
+    throw error;
+  } finally {
+    reader.releaseLock();
+  }
+}
+
 export async function readPrivateFile(relativePath: string) {
   const driver = getFileStorageDriver();
   if (driver === "s3") {

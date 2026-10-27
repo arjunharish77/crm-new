@@ -46,9 +46,10 @@ function normalizeLeadListFilters(filters: unknown): LeadFilterInput[] {
   return [];
 }
 
+// Round-2 plan wave 3, B13: a smart list's count is a plain count with the list's filters and the
+// user's record access (it ran the whole lead-list query, with its row lookups, per list before).
 async function countLeadsForTenant(user: TenantUser, filters: LeadFilterInput[] | null = null) {
-  const result = await pgLeads.listLeadsForTenant(user, 1, 1, filters);
-  return result.meta.total;
+  return pgLeads.countLeadsMatchingForTenant(user, filters);
 }
 
 export async function listLeadListsForTenant(user: TenantUser) {
