@@ -59,6 +59,7 @@ const MESSAGES: Record<string, string> = {
     CLAUDE_CAP_REACHED: "This month's Claude budget is used up. Raise it in Providers or wait for next month.",
     CLAUDE_ACCOUNT_LIMIT: "Claude's spend limit in the Anthropic Console has been reached. Raise it there, or wait for next month.",
     CLAUDE_KEY_REFUSED: "Anthropic refused the Claude key. Check it in Providers.",
+    CLAUDE_NO_CREDIT: "Your Anthropic account has no credit. Add credit in the Anthropic Console (Settings › Billing), then try again.",
     CLAUDE_BUSY: "Claude is busy right now. Try again in a minute.",
     CLAUDE_FAILED: "Claude couldn't draft the bot. Try again, or write it yourself.",
 };

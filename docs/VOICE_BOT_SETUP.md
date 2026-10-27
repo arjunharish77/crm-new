@@ -154,12 +154,13 @@ The bots run in their own container, `voice-bot`, next to the CRM on the VPS. Pl
    DC="docker compose -f deploy/vps/docker-compose.yml --env-file deploy/vps/.env"
    $DC up -d --build voice-bot
    $DC up -d --no-deps web worker
-   $DC exec caddy caddy reload --config /etc/caddy/Caddyfile
+   $DC run --rm --no-deps caddy caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
+   $DC up -d --no-deps --force-recreate caddy
    ```
 
    - The first command builds the service; all its packages are pinned in `voice-bot/requirements.txt`.
    - The second recreates `web` and `worker`, so they join the bot service's private network and get its address (`VOICE_BOT_SERVICE_URL=http://voice-bot:8765`, set in the Compose file).
-   - The third loads the Caddyfile, which:
+   - The third checks the new Caddyfile, and the fourth restarts Caddy with it (both sites pause for a second or two). Run the fourth only if the third says `Valid configuration`. `caddy reload` isn't enough: the Caddyfile is mounted as a single file, so after `git pull` the running container still sees the old version. The Caddyfile:
      - sends `/voice-bot/*` on the CRM domain to the service;
      - allows the microphone on CRM pages;
      - blocks `/api/internal/*` from outside.

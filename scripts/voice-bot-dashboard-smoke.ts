@@ -39,6 +39,7 @@ async function main() {
         if (url === "https://api.anthropic.com/v1/messages") {
             const body = JSON.parse(init.body);
             check(String(body.messages[0].content).includes("Goal: Book a counselling session."), "the review sees the bot's brief");
+            check(body.tool_choice?.type === "auto" && String(body.system[0].text).includes("calling the call_summary tool"), "Claude is asked for the tool without forcing it (Claude 5.5 refuses a forced tool)");
             return new Response(JSON.stringify({
                 content: [{ type: "tool_use", name: "call_summary", input: { summary: "Asked about fees.", outcome: "interested", fields: {}, callbackAt: null, callerName: null, review } }],
                 stop_reason: "tool_use", usage: { input_tokens: 1200, output_tokens: 150 },

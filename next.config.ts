@@ -23,6 +23,7 @@ const CSP_DEFAULT =
   "style-src 'self' 'unsafe-inline'; " + // Tailwind arbitrary values, inline style={{}} usage, and MUI/Emotion's runtime-injected <style> tags (this app is mid-migration off MUI) all need this
   "img-src 'self' data: blob: https:; " + // user-uploaded avatars/attachments/QR codes (data:) and third-party-hosted images referenced in records
   "font-src 'self' data:; " +
+  "media-src 'self' blob:; " + // voice samples in the voice bot builder play from a blob: URL; call recordings are same-origin
   // Everything routes through this app's own origin: /api, and /voice-bot for voice bot test
   // calls (Caddy forwards it to the bot service). In development the bot service runs on its own
   // localhost port, so ws://localhost is allowed there only.

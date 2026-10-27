@@ -531,6 +531,7 @@ export function claudeErrorCode(status: number, body: any) {
     const error = body?.error ?? {};
     const message = String(error.message ?? "");
     if (error.details?.error_code === "enforced_spend_limit_reached" || /you have reached your (specified )?(workspace )?api usage limits/i.test(message)) return "CLAUDE_ACCOUNT_LIMIT";
+    if (/credit balance is too low/i.test(message)) return "CLAUDE_NO_CREDIT";
     if (status === 401 || status === 403) return "CLAUDE_KEY_REFUSED";
     if (status === 429 || status === 529 || status === 503) return "CLAUDE_BUSY";
     return "CLAUDE_FAILED";
@@ -555,19 +556,24 @@ export async function callClaude(tenantId: string, request: ClaudeRequest) {
     const response = await fetch("https://api.anthropic.com/v1/messages", {
         method: "POST",
         headers: { "x-api-key": key, "anthropic-version": "2023-06-01", "content-type": "application/json" },
+        // Claude 5.5 models don't accept a forced tool (tool_choice "tool" or "any"), so the tool is
+        // offered with "auto" and the instruction to answer with it; an answer without it fails below.
         body: JSON.stringify({
             model: request.model,
             max_tokens: request.maxTokens,
-            system: [{ type: "text", text: request.system, cache_control: { type: "ephemeral" } }],
+            system: [{ type: "text", text: request.toolChoice ? `${request.system}\n\nAnswer only by calling the ${request.toolChoice.name} tool, once, with every required field.` : request.system, cache_control: { type: "ephemeral" } }],
             messages: request.messages,
             ...(request.tools ? { tools: request.tools } : {}),
-            ...(request.toolChoice ? { tool_choice: request.toolChoice } : {}),
+            ...(request.toolChoice ? { tool_choice: { type: "auto" } } : {}),
         }),
         signal: AbortSignal.timeout(request.timeoutMs ?? 60000),
     });
     const body = await response.json().catch(() => null);
     if (!response.ok) {
-        throw new Error(claudeErrorCode(response.status, body));
+        const code = claudeErrorCode(response.status, body);
+        // Anthropic's reason, for the server log (it never contains the key).
+        console.warn(JSON.stringify({ level: "warn", msg: "CLAUDE_REQUEST_FAILED", code, status: response.status, type: body?.error?.type ?? null, reason: String(body?.error?.message ?? "").slice(0, 300) }));
+        throw new Error(code);
     }
     if (body?.usage) {
         await recordProviderUsage(tenantId, "claude", {
@@ -577,7 +583,12 @@ export async function callClaude(tenantId: string, request: ClaudeRequest) {
             outputTokens: body.usage.output_tokens ?? 0,
         });
     }
-    return body as { content: Array<{ type: string; text?: string; name?: string; input?: any }>; stop_reason: string };
+    const result = body as { content: Array<{ type: string; text?: string; name?: string; input?: any }>; stop_reason: string };
+    if (request.toolChoice && !result?.content?.some((part) => part.type === "tool_use" && part.name === request.toolChoice!.name)) {
+        console.warn(JSON.stringify({ level: "warn", msg: "CLAUDE_TOOL_NOT_USED", tool: request.toolChoice.name, stop: result?.stop_reason ?? null }));
+        throw new Error("CLAUDE_FAILED");
+    }
+    return result;
 }
 
 // ---- Groq (text) -----------------------------------------------------------------------------------

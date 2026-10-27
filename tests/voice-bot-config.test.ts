@@ -82,6 +82,7 @@ describe("Claude errors", () => {
     it("tells Anthropic's own spend limits apart from a busy service", () => {
         expect(claudeErrorCode(429, { error: { type: "rate_limit_error", message: "You have reached your API usage limits: ...", details: { error_code: "enforced_spend_limit_reached" } } })).toBe("CLAUDE_ACCOUNT_LIMIT");
         expect(claudeErrorCode(400, { error: { type: "invalid_request_error", message: "You have reached your specified workspace API usage limits. You will regain access on 2026-11-01." } })).toBe("CLAUDE_ACCOUNT_LIMIT");
+        expect(claudeErrorCode(400, { error: { type: "invalid_request_error", message: "Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits." } })).toBe("CLAUDE_NO_CREDIT");
         expect(claudeErrorCode(429, { error: { type: "rate_limit_error", message: "Number of request tokens has exceeded your per-minute rate limit" } })).toBe("CLAUDE_BUSY");
         expect(claudeErrorCode(529, null)).toBe("CLAUDE_BUSY");
         expect(claudeErrorCode(401, { error: { type: "authentication_error" } })).toBe("CLAUDE_KEY_REFUSED");

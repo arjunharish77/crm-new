@@ -406,6 +406,7 @@ export function knowledgeErrorMessage(error: unknown) {
         CLAUDE_ACCOUNT_LIMIT: "Claude's spend limit in the Anthropic Console has been reached, so the text couldn't be tidied.",
         CLAUDE_NOT_CONFIGURED: "Tidying needs a Claude key in Providers.",
         CLAUDE_KEY_REFUSED: "Anthropic refused the Claude key, so the text couldn't be tidied.",
+        CLAUDE_NO_CREDIT: "The Anthropic account has no credit, so the text couldn't be tidied. Add credit in the Anthropic Console.",
         CLAUDE_BUSY: "Claude was busy. Refresh to try again.",
         CLAUDE_FAILED: "Claude couldn't tidy the text. Refresh to try again, or turn tidying off.",
     };
