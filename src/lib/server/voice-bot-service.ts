@@ -1,4 +1,5 @@
 import { createHmac, timingSafeEqual } from "crypto";
+import { publicAppOrigin } from "@/lib/server/public-app-url";
 
 // The voice bot service (voice bot plan §2, §7; wave C): a separate container that holds the
 // conversation. The CRM and the service trust each other through one shared secret,
@@ -19,8 +20,15 @@ export function voiceBotServiceConfig() {
 // otherwise the CRM's own origin, where Caddy forwards /voice-bot/ to the service.
 export function voiceBotPublicUrl() {
     const explicit = (process.env.VOICE_BOT_PUBLIC_URL ?? "").trim().replace(/\/$/, "");
-    if (explicit) return explicit;
-    const app = new URL(process.env.APP_URL || "http://localhost:3000");
+    if (explicit) {
+        let url: URL;
+        try { url = new URL(explicit); } catch { throw new Error("VOICE_BOT_PUBLIC_URL_INVALID"); }
+        if (!["ws:", "wss:"].includes(url.protocol) || !url.hostname || url.username || url.password || url.search || url.hash || (process.env.NODE_ENV === "production" && url.protocol !== "wss:")) {
+            throw new Error("VOICE_BOT_PUBLIC_URL_INVALID");
+        }
+        return explicit;
+    }
+    const app = new URL(process.env.NODE_ENV !== "production" && !process.env.APP_URL ? "http://localhost:3000" : publicAppOrigin());
     return `${app.protocol === "https:" ? "wss" : "ws"}://${app.host}/voice-bot`;
 }
 

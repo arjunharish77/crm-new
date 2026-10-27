@@ -8,20 +8,32 @@ Voice bots use this same connector. Section 8 covers what they add; the other ke
 
 1. In Platform Admin, enable the **Telephony** module for the tenant. A disabled module rejects calls and provider callbacks.
 2. Deploy the CRM version containing the Plivo connector and run the migrations (`$DC run --rm --no-deps web node scripts/db-migrate-local.js --upgrade`, or `deploy/vps/scripts/deploy.sh`, which migrates). Migration **0140** adds the table that stops a recorded Plivo callback from being replayed. The existing `web` and `worker` Compose services already mount the persistent `app-storage` volume at `/app/storage`; no new Docker volume is needed.
-3. Confirm `APP_URL` is the public HTTPS origin of this CRM, `FILE_STORAGE_DRIVER=local`, `FILE_STORAGE_ROOT=/app/storage`, and `MARKETPLACE_SECRET_ENCRYPTION_KEY` is present in `deploy/vps/.env`. The latter is the existing app secret-encryption key; keep it stable across deployments or saved Plivo credentials become unreadable. There are **no new `.env` keys** for Plivo.
+3. Confirm `APP_DOMAIN` is the public CRM hostname only (for example `app.example.com`, with no `https://`, path, or quotes). Compose sets runtime `APP_URL=https://${APP_DOMAIN}` for `web`, `worker`, and `voice-bot`. Also confirm `FILE_STORAGE_DRIVER=local`, `FILE_STORAGE_ROOT=/app/storage`, and `MARKETPLACE_SECRET_ENCRYPTION_KEY` is present in `deploy/vps/.env`. Keep the encryption key stable across deployments or saved Plivo credentials become unreadable. There are **no new `.env` keys** for Plivo.
 4. Confirm the CRM is reachable over HTTPS from Plivo. Plivo signs each callback over the exact public URL it called, and the CRM checks the signature against `APP_URL`. So the Plivo Application must use the URLs shown in CRM Settings exactly: same host (`www.` or not), same scheme, no redirect in between. The HTTPS proxy must forward the `/api/integrations/telephony/plivo/` paths to the web container and pass the `X-Plivo-Signature-V3` and `X-Plivo-Signature-V3-Nonce` headers through unchanged.
 
 From `/opt/unnatify-crm` on the VPS, these checks only display setting names and mounted paths, not secret values:
 
 ```bash
 cd /opt/unnatify-crm
-grep -E '^(APP_URL|FILE_STORAGE_DRIVER|FILE_STORAGE_ROOT)=' deploy/vps/.env
+grep -E '^(APP_DOMAIN|APP_URL|FILE_STORAGE_DRIVER|FILE_STORAGE_ROOT)=' deploy/vps/.env
 awk -F= '/^MARKETPLACE_SECRET_ENCRYPTION_KEY=/{print "MARKETPLACE_SECRET_ENCRYPTION_KEY=" (length($2) ? "<set>" : "<empty>")}' deploy/vps/.env
 docker compose -f deploy/vps/docker-compose.yml --env-file deploy/vps/.env config --volumes
+docker compose -f deploy/vps/docker-compose.yml --env-file deploy/vps/.env exec -T web node -e 'console.log("web APP_URL:", process.env.APP_URL || "<missing>")'
+docker compose -f deploy/vps/docker-compose.yml --env-file deploy/vps/.env exec -T worker node -e 'console.log("worker APP_URL:", process.env.APP_URL || "<missing>")'
 docker compose -f deploy/vps/docker-compose.yml --env-file deploy/vps/.env exec -T web node -e 'const fs=require("fs"); try { fs.accessSync("/app/storage", fs.constants.W_OK); console.log("/app/storage is mounted and writable") } catch { console.log("/app/storage is missing or not writable"); process.exitCode=1 }'
 ```
 
-If any of those existing environment values is missing, edit `deploy/vps/.env` on the VPS and recreate `web` and `worker` with the normal deployment command. Do not generate a new `MARKETPLACE_SECRET_ENCRYPTION_KEY` on an existing installation that has encrypted secrets.
+If `APP_DOMAIN` is missing or wrong, edit `deploy/vps/.env` on the VPS. After pushing the code and waiting for the GitHub Actions image build to finish, pull the repository and deploy the new image. The deployment script recreates `web` and `worker` when the image or environment changes:
+
+```bash
+cd /opt/unnatify-crm
+git pull --ff-only origin main
+bash deploy/vps/scripts/deploy.sh latest
+docker compose -f deploy/vps/docker-compose.yml --env-file deploy/vps/.env exec -T web node -e 'console.log("web APP_URL:", process.env.APP_URL || "<missing>")'
+docker compose -f deploy/vps/docker-compose.yml --env-file deploy/vps/.env exec -T worker node -e 'console.log("worker APP_URL:", process.env.APP_URL || "<missing>")'
+```
+
+Both outputs must be the same `https://` CRM origin that the browser uses. A container restart alone does not reload environment variables; if the image is already current and you only changed `.env`, use `docker compose -f deploy/vps/docker-compose.yml --env-file deploy/vps/.env up -d --no-deps --force-recreate web worker`. Do not generate a new `MARKETPLACE_SECRET_ENCRYPTION_KEY` on an existing installation that has encrypted secrets.
 
 ## 2. Phone numbers
 
@@ -86,6 +98,7 @@ Each Plivo callback is checked against its V3 signature, and its one-time nonce 
 | Symptom | Cause and fix |
 |---|---|
 | Plivo's debug log shows `403` for the CRM URL | The signature didn't match, Plivo is off for the workspace, or the Telephony module is disabled. Check that the Application's URLs are exactly the ones in CRM Settings (same host as `APP_URL`, `https`, no redirect) and that the Auth Token saved in the CRM belongs to the account or subaccount that owns the number. |
+| Plivo Application URLs are missing in CRM Settings | Read the exact message in the URL card. Check `APP_DOMAIN` in `deploy/vps/.env`, then check the running `web APP_URL` using the command in section 1. Pull the latest Compose file and recreate `web` and `worker`. The URL card does not require the connector to be enabled. |
 | `404 Unknown call` | A callback for an outbound call the CRM didn't place (for example an old call from before the upgrade, or a call made from the Plivo Console). Safe to ignore. |
 | `500` | A server error; the CRM's logs have the details (`Plivo webhook failed`). |
 | Click-to-call says the agent number is missing | Neither the user nor the default agent phone has a usable number. Set the user's phone (or a User-Agent Mapping) or the Default agent phone. |

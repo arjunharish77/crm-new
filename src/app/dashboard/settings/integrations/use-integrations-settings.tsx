@@ -126,6 +126,7 @@ export function useIntegrationsSettings() {
     });
     const [telephonySection, setTelephonySection] = useState('plivo');
     const [plivoCallbackUrls, setPlivoCallbackUrls] = useState<{ answer: string; hangup: string } | null>(null);
+    const [plivoCallbackError, setPlivoCallbackError] = useState<string | null>(null);
     const [rotatingTelephonySecret, setRotatingTelephonySecret] = useState(false);
     const [doNotCallList, setDoNotCallList] = useState<Array<{ id: string; address: string; reason: string | null; createdAt: string }>>([]);
     const [teams, setTeams] = useState<Array<{ id: string; name: string }>>([]);
@@ -162,7 +163,7 @@ export function useIntegrationsSettings() {
     const fetchTelephony = () => {
         setSectionState(current => ({ ...current, telephony: 'loading' }));
         return apiFetch('/integrations/telephony')
-                .then((data) => { setPlivoCallbackUrls(data?.plivoCallbackUrls ?? null); setTelephony({
+                .then((data) => { setPlivoCallbackUrls(data?.plivoCallbackUrls ?? null); setPlivoCallbackError(data?.plivoCallbackError ?? null); setTelephony({
                     provider: data?.config?.provider ?? '',
                     plivoAuthId: data?.config?.plivoAuthId ?? '',
                     plivoAuthToken: '',
@@ -575,6 +576,8 @@ export function useIntegrationsSettings() {
                 method: 'POST',
                 body: JSON.stringify(rest),
             });
+            setPlivoCallbackUrls(saved?.plivoCallbackUrls ?? null);
+            setPlivoCallbackError(saved?.plivoCallbackError ?? null);
             // The server saves Plivo numbers with their country code; show what it saved.
             const savedConfig = saved?.config ?? {};
             setTelephony((current: any) => ({
@@ -871,6 +874,7 @@ export function useIntegrationsSettings() {
         telephonySection,
         setTelephonySection,
         plivoCallbackUrls,
+        plivoCallbackError,
         rotatingTelephonySecret,
         setRotatingTelephonySecret,
         doNotCallList,

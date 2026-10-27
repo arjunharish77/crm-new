@@ -10,7 +10,7 @@ import { checkTelephonyComplianceForCall, recordTelephonyCallEvent } from "@/lib
 import { createCallSession, issueCallStreamUrl } from "@/lib/server/voice-bot-sessions";
 import { loadVoiceBotForSession } from "@/lib/server/voice-bots";
 import { callClaude, callGroqJson, claudeCapReached, providerKey } from "@/lib/server/voice-providers";
-import { voiceBotServiceConfig } from "@/lib/server/voice-bot-service";
+import { voiceBotPublicUrl, voiceBotServiceConfig, voiceBotServiceHealthy } from "@/lib/server/voice-bot-service";
 import { canBulkCallWithVoiceBots, voiceBotAccess } from "@/lib/voice-bot-access-level";
 import { readPrivateFile } from "@/lib/storage/file-storage";
 import { requireTenantId } from "@/lib/server/tenant-guard";
@@ -179,6 +179,11 @@ export async function queueVoiceBotCalls(user: TenantUser, botId: string, input:
 // its saved settings, without a record. Works before the bot is live and outside calling hours.
 export async function queueTestPhoneCall(user: TenantUser, botId: string, phoneInput: unknown) {
     const tenantId = requireTenantId(user);
+    // Reject a broken public address before queueing a call that can never be placed.
+    publicPlivoBaseUrl();
+    voiceBotPublicUrl();
+    if (!voiceBotServiceConfig().configured) throw new Error("VOICE_BOT_SERVICE_NOT_SET_UP");
+    if (!(await voiceBotServiceHealthy())) throw new Error("VOICE_BOT_SERVICE_DOWN");
     const config = await getActivePlivoConfig(tenantId).catch(() => { throw new Error("VOICE_BOT_CALL_PLIVO_OFF"); });
     const profile = await queryOne<{ phone: string | null }>(`select phone from "User" where id = $1 and "tenantId" = $2`, [user.id, tenantId]);
     const phone = normalizePhone(typeof phoneInput === "string" && phoneInput.trim() ? phoneInput : profile?.phone, plivoCountryCode(config));
@@ -345,7 +350,7 @@ export async function placeVoiceBotCall(call: CallRow) {
         session = await createCallSession(actor, call.botId, { leadId: call.leadId, opportunityId: call.opportunityId }, call.id, ringSeconds);
     } catch (error) {
         const code = error instanceof Error ? error.message : "";
-        return blockCall(call, code.startsWith("VOICE_BOT_SERVICE") ? "SERVICE" : "NOT_READY", code);
+        return blockCall(call, code.startsWith("VOICE_BOT_SERVICE") || code.startsWith("PUBLIC_APP_URL") || code === "VOICE_BOT_PUBLIC_URL_INVALID" ? "SERVICE" : "NOT_READY", code);
     }
     const machine = bot.config.answeringMachine === "NOT_ANSWERED" && call.trigger !== "TEST_PHONE";
     await recordTelephonyCallEvent(call.tenantId, {

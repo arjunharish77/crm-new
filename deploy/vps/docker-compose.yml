@@ -52,6 +52,7 @@ services:
     environment:
       PORT: 3000
       HOSTNAME: 0.0.0.0
+      APP_URL: https://${APP_DOMAIN}
       VOICE_BOT_SERVICE_URL: http://voice-bot:8765
     volumes:
       - app-storage:/app/storage
@@ -83,6 +84,7 @@ services:
     env_file:
       - .env
     environment:
+      APP_URL: https://${APP_DOMAIN}
       VOICE_BOT_SERVICE_URL: http://voice-bot:8765
     # The same as `npm run worker`; npm isn't in the image (Dockerfile).
     command: ["node_modules/.bin/tsx", "scripts/worker.ts"]

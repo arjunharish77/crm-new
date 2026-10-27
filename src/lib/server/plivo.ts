@@ -4,6 +4,7 @@ import { assertModuleEnabled } from "@/lib/server/module-entitlements";
 import { decryptSecretAtRest } from "@/lib/server/secret-encryption";
 import { fireRecordingAvailableAutomation, recordTelephonyCallEvent } from "@/lib/server/telephony-webhook";
 import { deletePrivateFile, writePrivateFileStream } from "@/lib/storage/file-storage";
+import { publicAppOrigin } from "@/lib/server/public-app-url";
 
 export type PlivoConfig = {
   provider?: string;
@@ -29,11 +30,7 @@ export type PlivoCallbackAction = (typeof PLIVO_CALLBACK_ACTIONS)[number];
 export const DEFAULT_PLIVO_UNAVAILABLE_MESSAGE = "Sorry, no one is available to take your call right now. We will call you back soon.";
 
 export function publicPlivoBaseUrl() {
-  const value = process.env.APP_URL;
-  if (!value) throw new Error("APP_URL is required for Plivo callbacks");
-  const parsed = new URL(value);
-  if (parsed.protocol !== "https:" && process.env.NODE_ENV === "production") throw new Error("Plivo callbacks require HTTPS APP_URL");
-  return parsed.origin;
+  return publicAppOrigin();
 }
 
 // Callback URLs carry the CRM's own call ID (a random UUID) and never a phone number: Plivo logs

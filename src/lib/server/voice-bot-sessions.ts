@@ -185,10 +185,11 @@ async function prepareSession(actor: TenantUser, botId: string, target: SessionT
 // Start a browser test call (manage access is checked by the route). Returns where the browser
 // connects; the token in that address is good for one connection within two minutes.
 export async function createTestSession(user: TenantUser, botId: string, target: SessionTarget) {
+    const publicUrl = voiceBotPublicUrl();
     const session = await prepareSession(user, botId, target, { kind: "TEST", sampleRate: TEST_SAMPLE_RATE, claimWindowMs: CLAIM_WINDOW_MS });
     return {
         sessionId: session.id,
-        url: `${voiceBotPublicUrl()}/test/${session.token}`,
+        url: `${publicUrl}/test/${session.token}`,
         expiresAt: session.expiresAt,
         sampleRate: TEST_SAMPLE_RATE,
         ai: session.snapshot.ai.primary.label,
@@ -201,8 +202,9 @@ export async function createTestSession(user: TenantUser, botId: string, target:
 // A phone call's conversation (wave E): Plivo streams the call's audio, 8 kHz, to the address
 // returned. The token waits while the phone rings.
 export async function createCallSession(actor: TenantUser, botId: string, target: SessionTarget, voiceBotCallId: string, ringSeconds: number) {
+    const publicUrl = voiceBotPublicUrl();
     const session = await prepareSession(actor, botId, target, { kind: "CALL", sampleRate: PHONE_SAMPLE_RATE, claimWindowMs: (ringSeconds + 120) * 1000, voiceBotCallId });
-    return { sessionId: session.id, streamUrl: `${voiceBotPublicUrl()}/plivo/${session.token}`, snapshot: session.snapshot, record: session.record };
+    return { sessionId: session.id, streamUrl: `${publicUrl}/plivo/${session.token}`, snapshot: session.snapshot, record: session.record };
 }
 
 // A phone call's stream token is issued when the call is answered (wave E): Plivo connects at

@@ -15,6 +15,7 @@ function hasTelephonyAdminAccess(user: any) {
 function publicTelephonySettings(settings: any, tenantId: string | null) {
   const { plivoAuthTokenEncrypted, plivoAuthToken, ...config } = settings?.config ?? {};
   let plivoCallbackUrls: { answer: string; hangup: string } | null = null;
+  let plivoCallbackError: string | null = null;
   // These two go on the Plivo Application (inbound calls). Outbound calls send their own URLs.
   if (tenantId) {
     try {
@@ -22,9 +23,16 @@ function publicTelephonySettings(settings: any, tenantId: string | null) {
         answer: plivoCallbackUrl(tenantId, "answer"),
         hangup: plivoCallbackUrl(tenantId, "event", { source: "hangup" }),
       };
-    } catch { /* APP_URL is not configured yet; settings can still be edited. */ }
+    } catch (error) {
+      const code = error instanceof Error ? error.message : "";
+      plivoCallbackError = code === "PUBLIC_APP_URL_MISSING"
+        ? "The CRM public URL is missing in the running web container. Check APP_DOMAIN in deploy/vps/.env and recreate web and worker."
+        : code === "PUBLIC_APP_URL_HTTPS_REQUIRED"
+          ? "The CRM public URL must use HTTPS. Check APP_DOMAIN in deploy/vps/.env."
+          : "The CRM public URL is invalid. APP_DOMAIN must be a hostname without https:// or a path; recreate web and worker after changing it.";
+    }
   }
-  return { ...settings, config: { ...config, hasPlivoAuthToken: !!plivoAuthTokenEncrypted }, plivoCallbackUrls };
+  return { ...settings, config: { ...config, hasPlivoAuthToken: !!plivoAuthTokenEncrypted }, plivoCallbackUrls, plivoCallbackError };
 }
 
 const PLIVO_SETTING_ERRORS: Record<string, string> = {

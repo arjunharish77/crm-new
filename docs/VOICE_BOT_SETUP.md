@@ -179,6 +179,18 @@ The bots run in their own container, `voice-bot`, next to the CRM on the VPS. Pl
 5. **Test call from the browser.** Each bot has a **Test call** button: you talk to the bot through your computer's microphone, without Plivo. The browser asks for microphone permission for the CRM site. This tests the voice, language switching and replies before any real call.
 6. **A real call to your phone.** Once Plivo is set up, the bot's **Calls** tab has **Call my phone**: the bot calls the phone on your profile through Plivo. The **worker** container places bot calls, so it must be running (it is in the normal deployment).
 
+If browser **Test call** reports a public URL error, or **Call my phone** stays queued or fails, check the runtime URL in both containers. From `/opt/unnatify-crm` on the VPS, run these lines one at a time:
+
+```bash
+grep '^APP_DOMAIN=' deploy/vps/.env
+docker compose -f deploy/vps/docker-compose.yml --env-file deploy/vps/.env exec -T web node -e 'console.log("web APP_URL:", process.env.APP_URL || "<missing>")'
+docker compose -f deploy/vps/docker-compose.yml --env-file deploy/vps/.env exec -T worker node -e 'console.log("worker APP_URL:", process.env.APP_URL || "<missing>")'
+docker compose -f deploy/vps/docker-compose.yml --env-file deploy/vps/.env exec -T web node -e 'console.log("VOICE_BOT_PUBLIC_URL:", process.env.VOICE_BOT_PUBLIC_URL || "<automatic>")'
+docker compose -f deploy/vps/docker-compose.yml --env-file deploy/vps/.env ps web worker voice-bot
+```
+
+`APP_DOMAIN` must be the CRM hostname alone, and both runtime values must be `https://` plus that hostname. Leave `VOICE_BOT_PUBLIC_URL` unset on the VPS; if set, it must point to the public `wss://` bot path. After correcting the `.env` file or pulling a Compose change, recreate the containers with `docker compose -f deploy/vps/docker-compose.yml --env-file deploy/vps/.env up -d --no-deps --force-recreate web worker`. Then refresh the Plivo Application URLs in CRM Settings. If URLs appear but calls still fail, inspect the bot's Calls tab for the call error and compare Plivo **Voice → Logs → Calls**; a browser test does not require Plivo, but a phone call does.
+
 ## 8. Troubleshooting
 
 | What you see | What to do |
