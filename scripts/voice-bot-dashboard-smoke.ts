@@ -5,7 +5,7 @@
  *     the CRM's own calls; one admin alert at 80% of a free limit, per period;
  *   - the quality review: Claude's score and "worth a listen" saved with the call, Groq's when
  *     Claude isn't set up;
- *   - the dashboard: totals, answer rate, outcomes, calls per day, reply times per AI, calls to
+ *   - the dashboard: totals, answer rate, outcomes, calls per day, answer and first-sound times per AI, calls to
  *     listen to, Claude spend per bot, the meters; one bot's view; "Call my phone" not counted;
  *   - Voice Bot Performance in Reports, with dates.
  * A temporary tenant, removed afterwards. Run: tsx scripts/voice-bot-dashboard-smoke.ts
@@ -97,7 +97,7 @@ async function main() {
         const reviewedSession = randomUUID();
         await q(`insert into "VoiceBotSession" (id, "tenantId", "botId", kind, status, "tokenHash", "expiresAt", transcript, turns) values ($1, $2, $3, 'CALL', 'ENDED', 'x', now(), $4, $5)`, [reviewedSession, tenantId, botA.id,
             JSON.stringify([{ role: "bot", text: "Namaste!" }, { role: "caller", text: "MBA ki fees kitni hai?" }, { role: "bot", text: "Ek lakh rupaye." }]),
-            JSON.stringify([{ replyMs: 700, sttMs: 200, llmMs: 300, ttsMs: 150, ai: "Groq · gpt-oss-20b" }, { replyMs: 900, ai: "Groq · gpt-oss-20b" }, { replyMs: 1500, ai: "Claude Haiku 5.5" }, { replyMs: 2100, ai: "Groq · gpt-oss-20b" }])]);
+            JSON.stringify([{ replyMs: 700, answerMs: 1100, sttMs: 200, llmMs: 300, ttsMs: 150, ai: "Groq · gpt-oss-20b" }, { replyMs: 900, answerMs: 1500, ai: "Groq · gpt-oss-20b" }, { replyMs: 1500, ai: "Claude Haiku 5.5" }, { replyMs: 2100, ai: "Groq · gpt-oss-20b" }])]);
         const reviewed = await call(botA.id, { status: "COMPLETED", answered: true, duration: 120, sessionId: reviewedSession });
         await processVoiceBotCall(tenantId, reviewed);
         const saved = (await q(`select review, outcome from "VoiceBotCall" where id = $1`, [reviewed])).rows[0];
@@ -133,7 +133,10 @@ async function main() {
         equal(all.daily.length, 30, "a bar for each of the 30 days");
         equal(all.daily[29].placed + all.daily[29].inbound, 6, "today's calls are on today's bar");
         const groq = all.replyTimes.find((row) => row.ai === "Groq · gpt-oss-20b")!;
-        equal([groq.turns, groq.medianMs, groq.slowestMs, groq.sttMs], [3, 900, 2100, 200], "reply times per AI: replies, typical, slowest, and the hearing part");
+        equal([groq.turns, groq.answerTurns, groq.firstSoundMs, groq.medianMs, groq.p90Ms, groq.slowestMs, groq.sttMs],
+            [3, 2, 900, 1300, 1460, 1500, 200], "answer timing excludes the legacy turn while first-sound timing includes it");
+        const claude = all.replyTimes.find((row) => row.ai === "Claude Haiku 5.5")!;
+        equal([claude.turns, claude.answerTurns, claude.medianMs, claude.firstSoundMs], [1, 0, null, 1500], "legacy-only calls do not show a fabricated answer time");
         equal(all.toListen.map((item) => [item.botName, item.score]), [["Admissions", 2]], "the call to listen to");
         check(all.usage.meters.some((meter) => meter.name === "Groq gpt-oss-20b") && all.claude.capUsd === 160, "the meters and the Claude budget");
 
