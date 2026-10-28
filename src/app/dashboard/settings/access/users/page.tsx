@@ -49,15 +49,9 @@ export default function UsersPage() {
         setLoadError(false);
         try {
             const data = await apiFetch<User[]>("/users");
-            // Stub data enhancement for missing fields till backend is ready
-            const enhancedData = (Array.isArray(data) ? data : []).map((u) => ({
-                ...u,
-                team: u.team || { id: 'unassigned', name: 'Unassigned' },
-                manager: u.manager || undefined,
-                lastLoginAt: u.lastLoginAt,
-            }));
-            setUsers(enhancedData);
-            setTotalItems(enhancedData.length); // Assuming no pagination for now, or get from meta if available
+            const loadedUsers = Array.isArray(data) ? data : [];
+            setUsers(loadedUsers);
+            setTotalItems(loadedUsers.length);
         } catch (error: any) {
             setLoadError(true);
             console.error("Users fetch error:", error);

@@ -92,12 +92,16 @@ export async function updateTenantScopedUser(tenantId: string, userId: string, i
   const permissionRelevant = input.roleId !== undefined || input.permissionTemplateId !== undefined;
   const before = permissionRelevant ? await pgAdmin.getTenantScopedUserPermissionSummary(tenantId, userId) : null;
   const updated: any = await pgAdmin.updateTenantScopedUser(tenantId, userId, input);
+  const permissionChanged = permissionRelevant && !!before && (
+    (before.roleId ?? null) !== (updated.roleId ?? null) ||
+    (before.permissionTemplateId ?? null) !== (updated.permissionTemplateId ?? null)
+  );
   // Deactivating someone, or changing their role or permission template, ends their open
   // sessions, so the change applies at once rather than when a token expires (S3).
-  if ((input.status !== undefined && input.status !== "ACTIVE") || permissionRelevant) {
+  if ((input.status !== undefined && input.status !== "ACTIVE") || permissionChanged) {
     await revokeAllSessionsForUser(userId, input.status !== undefined && input.status !== "ACTIVE" ? "USER_DEACTIVATED" : "PERMISSIONS_CHANGED");
   }
-  if (permissionRelevant && actor) {
+  if (permissionChanged && actor) {
     await createAuditLog(actor, "UPDATE", "USER_PERMISSIONS", userId, before, {
       roleId: updated.roleId,
       permissionTemplateId: updated.permissionTemplateId,

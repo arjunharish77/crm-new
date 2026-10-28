@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireTenantAdmin } from "@/lib/server/auth";
 import { updateTenantScopedUser } from "@/lib/server/admin";
-import { badRequest, forbidden, serverError, unauthorized } from "@/lib/server/http";
+import { forbidden, serverError, unauthorized, userMessage } from "@/lib/server/http";
 
 // F02 fix (WP03): this route mutates roleId/team/manager/permissionTemplate/status -- i.e. it
 // IS the user-administration surface, not a self-profile-edit surface (confirmed: the only
@@ -26,11 +26,11 @@ export async function PATCH(
   } catch (error) {
     if (error instanceof Error && error.message === "UNAUTHORIZED") return unauthorized();
     if (error instanceof Error && error.message === "FORBIDDEN") return forbidden();
-    if (error instanceof Error && error.message === "ROLE_NOT_FOUND_FOR_TENANT") return badRequest("Selected role was not found for this workspace");
-    if (error instanceof Error && error.message === "TEAM_NOT_FOUND_FOR_TENANT") return badRequest("Selected team was not found for this workspace");
-    if (error instanceof Error && error.message === "MANAGER_NOT_FOUND_FOR_TENANT") return badRequest("Selected manager was not found for this workspace");
-    if (error instanceof Error && error.message === "PERMISSION_TEMPLATE_NOT_FOUND_FOR_TENANT") return badRequest("Selected permission template was not found for this workspace");
-    if (error instanceof Error && error.message === "USER_PHONE_INVALID") return badRequest("Enter a dialable phone number, such as +919876543210 or 9876543210");
+    if (error instanceof Error && error.message === "ROLE_NOT_FOUND_FOR_TENANT") return userMessage("Selected role was not found for this workspace");
+    if (error instanceof Error && error.message === "TEAM_NOT_FOUND_FOR_TENANT") return userMessage("Selected team was not found for this workspace");
+    if (error instanceof Error && error.message === "MANAGER_NOT_FOUND_FOR_TENANT") return userMessage("Selected manager was not found for this workspace");
+    if (error instanceof Error && error.message === "PERMISSION_TEMPLATE_NOT_FOUND_FOR_TENANT") return userMessage("Selected permission template was not found for this workspace");
+    if (error instanceof Error && error.message === "USER_PHONE_INVALID") return userMessage("Enter a dialable phone number, such as +919876543210 or 9876543210");
     return serverError("Failed to update user", error);
   }
 }

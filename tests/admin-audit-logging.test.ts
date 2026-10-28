@@ -43,6 +43,7 @@ describe("admin.ts audit logging", () => {
   beforeEach(() => {
     Object.values(pgAdminMocks).forEach((mock) => mock.mockReset());
     crmMocks.createAuditLog.mockClear();
+    dbMocks.executeAsSystem.mockClear();
   });
 
   it("audit-logs a role creation when an actor is provided", async () => {
@@ -100,6 +101,7 @@ describe("admin.ts audit logging", () => {
     expect(entityType).toBe("USER_PERMISSIONS");
     expect(entityId).toBe("user-1");
     expect(diff).toMatchObject({ roleId: { before: "role-old", after: "role-new" } });
+    expect(dbMocks.executeAsSystem).toHaveBeenCalledWith(expect.stringContaining('update "UserSession"'), expect.arrayContaining(["user-1", "PERMISSIONS_CHANGED"]));
   });
 
   it("does not audit-log a user update that touches no permission fields", async () => {
@@ -108,6 +110,16 @@ describe("admin.ts audit logging", () => {
     await updateTenantScopedUser("tenant-a", "user-1", { name: "Renamed" }, actor);
 
     expect(pgAdminMocks.getTenantScopedUserPermissionSummary).not.toHaveBeenCalled();
+    expect(crmMocks.createAuditLog).not.toHaveBeenCalled();
+  });
+
+  it("keeps sessions active when a supplied role is unchanged", async () => {
+    pgAdminMocks.getTenantScopedUserPermissionSummary.mockResolvedValueOnce({ id: "user-1", roleId: "role-1", permissionTemplateId: null });
+    pgAdminMocks.updateTenantScopedUser.mockResolvedValueOnce({ id: "user-1", roleId: "role-1", permissionTemplateId: null, phone: "+91 98765 43210" });
+
+    await updateTenantScopedUser("tenant-a", "user-1", { roleId: "role-1", phone: "+91 98765 43210" }, actor);
+
+    expect(dbMocks.executeAsSystem).not.toHaveBeenCalled();
     expect(crmMocks.createAuditLog).not.toHaveBeenCalled();
   });
 

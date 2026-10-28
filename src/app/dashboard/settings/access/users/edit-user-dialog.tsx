@@ -22,6 +22,7 @@ import {
 import { apiFetch } from "@/lib/api";
 import { Role, User } from "@/types/user";
 import { isValidUserPhone, USER_PHONE_ERROR } from "@/lib/user-phone";
+import { buildUserEditPatch } from "@/lib/user-edit-patch";
 
 interface EditUserDialogProps {
     user: User | null;
@@ -161,7 +162,7 @@ export function EditUserDialog({
         control,
         handleSubmit,
         reset,
-        formState: { errors },
+        formState: { errors, dirtyFields },
     } = useForm<EditUserFormValues>({
         resolver: zodResolver(formSchema),
         defaultValues: {
@@ -212,7 +213,7 @@ export function EditUserDialog({
                     phone: user.phone ?? "",
                     roleId: user.role?.id || user.roleId || "",
                     permissionTemplateId: user.permissionTemplateId || "",
-                    teamId: user.team?.id || user.teamId || "",
+                    teamId: user.teamId || user.team?.id || "",
                     managerId: user.manager?.id || user.managerId || "",
                     skills: transformSkillsToArray(user.skills || {}),
                     isAvailableForAssignment: user.isAvailableForAssignment !== false,
@@ -229,25 +230,15 @@ export function EditUserDialog({
         if (!user) return;
         setLoading(true);
         try {
-            const skillsObj = values.skills.reduce<Record<string, string[]>>((acc, curr) => {
-                acc[curr.category] = curr.values;
-                return acc;
-            }, {});
+            const patch = buildUserEditPatch(values, dirtyFields);
+            if (Object.keys(patch).length === 0) {
+                handleClose();
+                return;
+            }
 
             await apiFetch(`/users/${user.id}`, {
                 method: "PATCH",
-                body: JSON.stringify({
-                    name: values.name,
-                    phone: values.phone,
-                    roleId: values.roleId,
-                    // Was missing, so changing the template override never saved (UI/UX plan B13).
-                    // "" (use the role's template) is stored as no override.
-                    permissionTemplateId: values.permissionTemplateId || null,
-                    teamId: values.teamId,
-                    managerId: values.managerId,
-                    skills: skillsObj,
-                    isAvailableForAssignment: values.isAvailableForAssignment,
-                }),
+                body: JSON.stringify(patch),
             });
 
             toast.success("User updated successfully");
