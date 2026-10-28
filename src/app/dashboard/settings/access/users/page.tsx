@@ -193,6 +193,7 @@ export default function UsersPage() {
                         <div className="mt-1 block truncate text-xs text-muted-foreground opacity-80">
                             {row.original.email}
                         </div>
+                        {row.original.phone ? <div className="truncate text-xs text-muted-foreground">{row.original.phone}</div> : null}
                     </div>
                 </div>
             ),

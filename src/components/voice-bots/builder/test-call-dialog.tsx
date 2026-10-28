@@ -120,7 +120,7 @@ export function TestCallDialog({ botId, open, onClose }: { botId: string; open: 
         onClose();
     };
 
-    const replyMedian = median(call.turns.map((turn) => turn.replyMs));
+    const replyMedian = median(call.turns.map((turn) => turn.answerMs ?? turn.replyMs));
     const timeline = useMemo(() => {
         const items: Array<{ at: number; kind: "line" | "event"; key: string; role?: "bot" | "caller"; text: string; interrupted?: boolean }> = [];
         call.lines.forEach((line, index) => items.push({ at: line.at, kind: "line", key: `l${index}`, role: line.role, text: line.text, interrupted: line.interrupted }));

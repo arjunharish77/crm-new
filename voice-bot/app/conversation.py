@@ -7,7 +7,6 @@ the call through it too.
 
 import asyncio
 import base64
-import random
 import re
 import time
 from datetime import date
@@ -22,6 +21,7 @@ from pipecat.services.llm_service import FunctionCallParams
 
 from .knowledge import KnowledgeIndex
 from .language import ReplyLanguage
+from .fillers import FillerRotation
 
 if TYPE_CHECKING:
     from .processors import Mouth
@@ -116,6 +116,7 @@ class Conversation:
         self.ending = False
         self.end_call_attempts = 0
         self.silence_count = 0
+        self.filler_rotation = FillerRotation()
         self.ai_label: str | None = None
         self.context: LLMContext | None = None
         self.mouth: "Mouth | None" = None
@@ -179,7 +180,9 @@ class Conversation:
     async def say_filler(self):
         language = self.language.current
         fillers = self.bot["lines"][language]["fillers"]
-        index = random.randrange(len(fillers))
+        index = self.filler_rotation.choose(language, len(fillers), time.monotonic())
+        if index is None:
+            return
         await self.mouth.play_recorded(f"filler.{language}.{index}", fillers[index], language, record=False)
 
     # ---- Starting and ending ------------------------------------------------------------------
@@ -396,8 +399,9 @@ class Conversation:
 
     async def _tool_search_knowledge(self, params: FunctionCallParams):
         question = str(params.arguments.get("question") or "")[:300]
+        started = time.monotonic()
         found = await asyncio.to_thread(self.knowledge.search, question) if len(self.knowledge) else []
-        await self.add_event("knowledge_searched", question=question, found=bool(found), sources=sorted({item["source"] for item in found}))
+        await self.add_event("knowledge_searched", question=question, found=bool(found), sources=sorted({item["source"] for item in found}), searchMs=round((time.monotonic() - started) * 1000))
         if not found:
             await params.result_callback({
                 "found": False,

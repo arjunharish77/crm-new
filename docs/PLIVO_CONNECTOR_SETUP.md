@@ -23,17 +23,17 @@ docker compose -f deploy/vps/docker-compose.yml --env-file deploy/vps/.env exec 
 docker compose -f deploy/vps/docker-compose.yml --env-file deploy/vps/.env exec -T web node -e 'const fs=require("fs"); try { fs.accessSync("/app/storage", fs.constants.W_OK); console.log("/app/storage is mounted and writable") } catch { console.log("/app/storage is missing or not writable"); process.exitCode=1 }'
 ```
 
-If `APP_DOMAIN` is missing or wrong, edit `deploy/vps/.env` on the VPS. After pushing the code and waiting for the GitHub Actions image build to finish, pull the repository and deploy the new image. The deployment script recreates `web` and `worker` when the image or environment changes:
+If `APP_DOMAIN` is missing or wrong, edit `deploy/vps/.env` on the VPS. Check `CRM_IMAGE` before choosing how to deploy. If it is absent (Compose uses `unnatify-crm:latest`), this VPS builds the CRM from source. Pull the repository and rebuild/recreate the services:
 
 ```bash
 cd /opt/unnatify-crm
 git pull --ff-only origin main
-bash deploy/vps/scripts/deploy.sh latest
+docker compose -f deploy/vps/docker-compose.yml --env-file deploy/vps/.env up -d --build --no-deps --wait web worker
 docker compose -f deploy/vps/docker-compose.yml --env-file deploy/vps/.env exec -T web node -e 'console.log("web APP_URL:", process.env.APP_URL || "<missing>")'
 docker compose -f deploy/vps/docker-compose.yml --env-file deploy/vps/.env exec -T worker node -e 'console.log("worker APP_URL:", process.env.APP_URL || "<missing>")'
 ```
 
-Both outputs must be the same `https://` CRM origin that the browser uses. A container restart alone does not reload environment variables; if the image is already current and you only changed `.env`, use `docker compose -f deploy/vps/docker-compose.yml --env-file deploy/vps/.env up -d --no-deps --force-recreate web worker`. Do not generate a new `MARKETPLACE_SECRET_ENCRYPTION_KEY` on an existing installation that has encrypted secrets.
+If `CRM_IMAGE=ghcr.io/arjunharish77/crm-new` is configured **and** GitHub Actions is publishing images (`PUBLISH_IMAGE=true`), use `bash deploy/vps/scripts/deploy.sh sha-<commit>` after the image build passes instead. The deployment script pulls from GHCR and will fail with `pull access denied for unnatify-crm` on a source-build VPS. Both URL outputs must be the same `https://` CRM origin that the browser uses. A container restart alone does not reload environment variables; if the image is already current and you only changed `.env`, use `docker compose -f deploy/vps/docker-compose.yml --env-file deploy/vps/.env up -d --no-deps --force-recreate web worker`. Do not generate a new `MARKETPLACE_SECRET_ENCRYPTION_KEY` on an existing installation that has encrypted secrets.
 
 ## 2. Phone numbers
 
@@ -56,7 +56,7 @@ For Indian numbers, Plivo requires KYC on the account and an India-registered bu
 2. Select **Plivo (native)**. Enter **Auth ID** and **Auth Token** from the Plivo Console overview page. Use the main account's credentials, or a subaccount's if this workspace's number lives in a subaccount; the number, the Application and the credentials must all be in the same (sub)account. A saved token is not shown again; leave its field blank to keep it. Re-enter a token to rotate it.
 3. Enter the Plivo **inbound number** and **outbound caller ID** (usually the same Plivo number). Customers see the outbound caller ID when you call them. Enter a **Default agent phone**: it rings for callers who match no lead (or several leads), for a matched lead whose owner has no phone, for click-to-call by a user with no phone, and as the second try when the lead owner doesn't answer. It must be a different number from the Plivo number, or calls would loop.
 4. **Ring time** (10–120 seconds, default 30) is how long a phone rings before the call counts as not answered. **Message for inbound callers when nobody answers** is spoken (in English) before the call ends; blank uses a standard message.
-5. Set each CRM agent's phone in their user profile. Click-to-call rings that user's phone; incoming calls with one clear lead match ring the lead owner's phone. A **User-Agent Mapping** entry with `userId` and `phoneNumber` overrides the profile phone for both. Agents see the Plivo number as the caller on both kinds of call (the customer's number is in the CRM's incoming-call popup and call log).
+5. Set each agent's phone when inviting them under **Settings → Access → Users**, or edit an existing user's phone there. Agents can also change their own number under **My Account → Profile**. Click-to-call rings that user's phone; incoming calls with one clear lead match ring the lead owner's phone. A **User-Agent Mapping** entry with `userId` and `phoneNumber` overrides the profile phone for both. If neither the mapping nor profile has a usable phone, the default agent phone is used. Agents see the Plivo number as the caller on both kinds of call (the customer's number is in the CRM's incoming-call popup and call log).
 6. Turn **Record calls and store audio on this VPS** on only if your calling policy requires it. It defaults to off. Recording starts when the dialled phone answers and stops at 4 hours. In **Compliance & Consent**, set **Recording Retention (days)**; blank or `0` keeps local audio indefinitely.
 7. Turn the connector **Enabled** on and save. Click **Test Plivo connection**; it checks the saved credentials with Plivo's [Account API](https://docs.plivo.com/docs/account/api/account) without placing a call. Copy the **Answer URL** and **Hangup URL** shown in the Plivo section. They are specific to this workspace. The universal connector's webhook signing secret does not apply to Plivo.
 

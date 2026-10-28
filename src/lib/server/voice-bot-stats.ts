@@ -112,12 +112,15 @@ export async function voiceBotDashboard(user: TenantUser, input: { days?: number
              group by 1 order by 1`,
             [...values, timeZone],
         ),
-        // Reply time as the caller heard it: from the end of their speech to the bot's first sound.
+        // Old calls only have first-sound timing. New calls measure answer audio separately,
+        // so a quick filler cannot make a slow answer look fast.
         query<any>(
             `select coalesce(t ->> 'ai', 'Unknown') as ai, count(*)::int as turns,
-                    percentile_cont(0.5) within group (order by (t ->> 'replyMs')::numeric) as median,
-                    percentile_cont(0.9) within group (order by (t ->> 'replyMs')::numeric) as p90,
-                    max((t ->> 'replyMs')::numeric) as slowest,
+                    count(*) filter (where t ->> 'answerMs' is not null)::int as "answerTurns",
+                    percentile_cont(0.5) within group (order by (t ->> 'answerMs')::numeric) as median,
+                    percentile_cont(0.9) within group (order by (t ->> 'answerMs')::numeric) as p90,
+                    max((t ->> 'answerMs')::numeric) as slowest,
+                    percentile_cont(0.5) within group (order by (t ->> 'replyMs')::numeric) as "firstSoundMs",
                     percentile_cont(0.5) within group (order by (t ->> 'sttMs')::numeric) as "sttMs",
                     percentile_cont(0.5) within group (order by (t ->> 'llmMs')::numeric) as "llmMs",
                     percentile_cont(0.5) within group (order by (t ->> 'ttsMs')::numeric) as "ttsMs"
@@ -160,7 +163,7 @@ export async function voiceBotDashboard(user: TenantUser, input: { days?: number
         outcomes: outcomes.map((row) => ({ outcome: row.outcome, label: OUTCOME_LABELS[row.outcome] ?? row.outcome, count: num(row.count) })),
         daily: series,
         replyTimes: replies.map((row) => ({
-            ai: row.ai as string, turns: num(row.turns), medianMs: round(row.median), p90Ms: round(row.p90), slowestMs: round(row.slowest),
+            ai: row.ai as string, turns: num(row.turns), answerTurns: num(row.answerTurns), medianMs: round(row.median), p90Ms: round(row.p90), slowestMs: round(row.slowest), firstSoundMs: round(row.firstSoundMs),
             sttMs: round(row.sttMs), llmMs: round(row.llmMs), ttsMs: round(row.ttsMs),
         })),
         toListen: toListen.map((row) => ({

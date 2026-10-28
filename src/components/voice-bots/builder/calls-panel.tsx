@@ -31,7 +31,7 @@ type CallDetail = CallRow & {
     transfer: { status: string; connectedTo: string | null; people: number } | null;
     results: { mapping?: { applied: Array<{ field: string; target: string; value: unknown }>; skipped: Array<{ field: string; target: string; reason: string }> }; taskId?: string; retry?: { at: string }; stopListed?: boolean };
     transcript: Array<{ role: "bot" | "caller"; text: string; interrupted?: boolean }> | null;
-    turns: Array<{ replyMs: number }> | null;
+    turns: Array<{ replyMs: number; answerMs?: number | null }> | null;
 };
 
 const STATUS: Record<string, { label: string; tone: "neutral" | "info" | "success" | "warning" | "danger" }> = {
@@ -199,7 +199,7 @@ function CallSheet({ botId, callId, onClose }: { botId: string; callId: string |
         return () => { stop = true; clearInterval(timer); };
     }, [botId, callId]);
     const status = call ? STATUS[call.status] ?? { label: call.status, tone: "neutral" as const } : null;
-    const replies = (call?.turns ?? []).map((turn) => turn.replyMs).sort((a, b) => a - b);
+    const replies = (call?.turns ?? []).map((turn) => turn.answerMs ?? turn.replyMs).sort((a, b) => a - b);
     const typical = replies.length ? replies[Math.floor((replies.length - 1) / 2)] : null;
     return (
         <StandardSheet open={!!callId} onClose={onClose} title={call ? call.leadName ?? call.phone : "Call"} description={call ? `${TRIGGER[call.trigger] ?? call.trigger}${call.attempt > 1 ? ` · attempt ${call.attempt}` : ""} · ${formatWorkspaceRelativeTime(call.dialedAt ?? call.createdAt)}` : undefined}

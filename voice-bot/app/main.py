@@ -12,6 +12,8 @@ claims it from the CRM before saying anything, so no other audio is accepted.
 import asyncio
 import base64
 import json
+import os
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request, WebSocket
 from fastapi.concurrency import run_in_threadpool
@@ -30,7 +32,27 @@ MAX_CONVERSATIONS = 4  # Whisper's free tier allows about two at once (plan §3)
 
 settings = load_settings()
 crm = CrmClient(settings.crm_url, settings.secret)
-app = FastAPI(title="Voice bot service", docs_url=None, redoc_url=None, openapi_url=None)
+
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    # Load the local search model off the event loop before a caller asks the first course
+    # question. Test installations without the downloaded model keep their existing behavior.
+    model_file = os.path.join(knowledge.MODEL_DIR, "model_quantized.onnx")
+    if os.path.isfile(model_file):
+        task = asyncio.create_task(asyncio.to_thread(knowledge.Embedder.get))
+
+        def finished(completed: asyncio.Task):
+            try:
+                completed.result()
+            except Exception as error:
+                logger.warning(f"Knowledge model could not be warmed: {error}")
+
+        task.add_done_callback(finished)
+    yield
+
+
+app = FastAPI(title="Voice bot service", docs_url=None, redoc_url=None, openapi_url=None, lifespan=lifespan)
 active: set[str] = set()
 
 

@@ -20,6 +20,7 @@ type CreateTenantInput = TenantProvisioningInput;
 type CreateUserInput = {
   name: string;
   email: string;
+  phone?: string | null;
   password: string;
   roleId: string;
   permissionTemplateId?: string;
@@ -30,6 +31,7 @@ type CreateUserInput = {
 
 type UpdateUserInput = {
   name?: string;
+  phone?: string | null;
   roleId?: string;
   permissionTemplateId?: string;
   teamId?: string;

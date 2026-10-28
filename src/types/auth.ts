@@ -3,6 +3,7 @@ export interface User {
     sub?: string;         // from decoded JWT (id = sub)
     email: string;
     name?: string;
+    phone?: string | null;
     tenantId: string | null; // null for Super Admin
     roleId?: string;
     role?: string | { name: string; permissions?: any };

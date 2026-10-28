@@ -31,7 +31,7 @@ type Dashboard = {
     bots: Array<{ botId: string; botName: string; archived: boolean; placed: number; answered: number; answerRate: number; inbound: number; interested: number; callbacks: number; transferred: number; averageSeconds: number; averageScore: number | null; toListen: number; claudeSpendUsd: number }>;
     outcomes: Array<{ outcome: string; label: string; count: number }>;
     daily: Array<{ day: string; placed: number; answered: number; inbound: number }>;
-    replyTimes: Array<{ ai: string; turns: number; medianMs: number | null; p90Ms: number | null; slowestMs: number | null; sttMs: number | null; llmMs: number | null; ttsMs: number | null }>;
+    replyTimes: Array<{ ai: string; turns: number; answerTurns: number; medianMs: number | null; p90Ms: number | null; slowestMs: number | null; firstSoundMs: number | null; sttMs: number | null; llmMs: number | null; ttsMs: number | null }>;
     toListen: Array<{ id: string; botId: string; botName: string; name: string; score: number; reason: string; issues: string[]; outcomeLabel: string | null; createdAt: string }>;
     claude: { month: string; spentUsd: number; capUsd: number; unassignedUsd: number };
     usage: { day: string; month: string; meters: Meter[] };
@@ -180,17 +180,18 @@ export function DashboardPanel({ botId }: { botId?: string }) {
                             ) : <p className="text-sm text-muted-foreground">No finished calls yet.</p>}
                         </Card>
 
-                        <Card title="Reply time" description="From the end of the caller's speech to the bot's first sound, on phone calls. Typical is the median; 9 in 10 replies were quicker than the next column.">
+                        <Card title="Answer time" description="From the end of the caller's speech to the first answer audio, on phone calls. Fillers do not count as answers. Older calls only have first-sound timing.">
                             {data.replyTimes.length ? (
                                 <div className="overflow-x-auto">
                                     <Table>
                                         <TableHeader>
                                             <TableRow>
                                                 <TableHead>AI</TableHead>
-                                                <TableHead className="text-right">Typical</TableHead>
+                                                <TableHead className="text-right">Typical answer</TableHead>
                                                 <TableHead className="text-right">9 in 10</TableHead>
+                                                <TableHead className="hidden text-right sm:table-cell">First sound</TableHead>
                                                 <TableHead className="hidden text-right sm:table-cell">Slowest</TableHead>
-                                                <TableHead className="text-right">Replies</TableHead>
+                                                <TableHead className="text-right">Measured / total</TableHead>
                                             </TableRow>
                                         </TableHeader>
                                         <TableBody>
@@ -202,8 +203,9 @@ export function DashboardPanel({ botId }: { botId?: string }) {
                                                     </TableCell>
                                                     <TableCell className="text-right tabular-nums">{seconds(row.medianMs)}</TableCell>
                                                     <TableCell className="text-right tabular-nums">{seconds(row.p90Ms)}</TableCell>
+                                                    <TableCell className="hidden text-right tabular-nums sm:table-cell">{seconds(row.firstSoundMs)}</TableCell>
                                                     <TableCell className="hidden text-right tabular-nums sm:table-cell">{seconds(row.slowestMs)}</TableCell>
-                                                    <TableCell className="text-right tabular-nums">{row.turns.toLocaleString()}</TableCell>
+                                                    <TableCell className="text-right tabular-nums">{row.answerTurns.toLocaleString()} / {row.turns.toLocaleString()}</TableCell>
                                                 </TableRow>
                                             ))}
                                         </TableBody>

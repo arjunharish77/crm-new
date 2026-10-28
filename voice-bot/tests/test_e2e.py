@@ -252,6 +252,7 @@ def test_browser_call_with_real_turn_detection(speech_clips, monkeypatch):
     assert roles.count("bot") >= 3
     turns = received["ends"][0]["turns"]
     assert len(turns) == 2 and all(turn["ai"] == "Primary" for turn in turns)
+    assert all(turn["answerMs"] >= turn["replyMs"] for turn in turns)
     # The reply time the service reports is what the caller hears: from the end of their speech.
     for turn, heard in zip(turns, replies):
         assert abs(turn["replyMs"] - heard) < 400, (turn["replyMs"], heard)

@@ -5,6 +5,7 @@ import { query, queryOne, execute, queryAsSystem, queryOneAsSystem, executeAsSys
 import { withTransaction, type TransactionClient } from "@/lib/db/transaction";
 import { assertSeatAvailable, lockTenantSeats } from "@/lib/server/usage-limits";
 import { seedDefaultLeadStatuses } from "@/lib/repositories/lead-statuses-postgres";
+import { userPhoneForStorage } from "@/lib/user-phone";
 
 type RoleInput = {
   name: string;
@@ -27,6 +28,7 @@ type PermissionTemplateInput = {
 type CreateUserInput = {
   name: string;
   email: string;
+  phone?: string | null;
   password: string;
   roleId: string;
   permissionTemplateId?: string;
@@ -37,6 +39,7 @@ type CreateUserInput = {
 
 type UpdateUserInput = {
   name?: string;
+  phone?: string | null;
   roleId?: string;
   permissionTemplateId?: string;
   teamId?: string;
@@ -257,7 +260,7 @@ export async function bootstrapPlatformAdmin(input: { name: string; email: strin
 // function returns, and every query anywhere else in the app runs after that point.
 export async function getCurrentUserById(userId: string) {
   const userRecord = await queryOneAsSystem<any>(
-    'select id, email, name, "tenantId", "roleId", "permissionTemplateId", "mfaEnabled", "teamId", status, "deletedAt" from "User" where id::text = $1 limit 1',
+    'select id, email, name, phone, "tenantId", "roleId", "permissionTemplateId", "mfaEnabled", "teamId", status, "deletedAt" from "User" where id::text = $1 limit 1',
     [userId],
   );
   if (!userRecord) return null;
@@ -325,6 +328,7 @@ export async function getCurrentUserById(userId: string) {
     id: userRecord.id,
     email: userRecord.email,
     name: userRecord.name,
+    phone: userRecord.phone ?? null,
     tenantId: userRecord.tenantId,
     roleId: userRecord.roleId,
     // F03 fix (WP04): needed so TEAM-scoped record access (leads-postgres.ts/
@@ -356,7 +360,7 @@ export async function getCurrentUserById(userId: string) {
 
 export async function listTenantUsers(tenantId: string | null) {
   const users = await query<any>(
-    `select id, name, email, status, "roleId", "permissionTemplateId", "managerId", "teamId", skills, "isAvailableForAssignment", "createdAt"
+    `select id, name, email, phone, status, "roleId", "permissionTemplateId", "managerId", "teamId", skills, "isAvailableForAssignment", "createdAt"
      from "User"
      where ${tenantId ? '"tenantId"::text = $1' : '"tenantId" is null'}
      order by "createdAt" desc`,
@@ -421,6 +425,7 @@ async function assertUserReferencesBelongToTenant(tenantId: string, input: { rol
 }
 
 export async function createTenantScopedUser(tenantId: string, input: CreateUserInput) {
+  const phone = input.phone === undefined ? null : userPhoneForStorage(input.phone);
   await assertUserReferencesBelongToTenant(tenantId, input);
   const now = new Date().toISOString();
   const passwordHash = await bcrypt.hash(input.password, 10);
@@ -429,6 +434,7 @@ export async function createTenantScopedUser(tenantId: string, input: CreateUser
     tenantId,
     email: input.email.toLowerCase(),
     name: input.name,
+    phone,
     password: passwordHash,
     status: "ACTIVE",
     roleId: input.roleId,
@@ -445,7 +451,7 @@ export async function createTenantScopedUser(tenantId: string, input: CreateUser
   return withTransaction(null, async (tx) => {
     await lockTenantSeats(tx, tenantId);
     await assertSeatAvailable(tx, tenantId, { roleId: input.roleId, becomesActive: true });
-    return insertReturning("User", row, 'id, name, email, status, "roleId", "permissionTemplateId", "managerId", "teamId", skills, "createdAt"', tx);
+    return insertReturning("User", row, 'id, name, email, phone, status, "roleId", "permissionTemplateId", "managerId", "teamId", skills, "createdAt"', tx);
   });
 }
 
@@ -465,6 +471,7 @@ export async function updateTenantScopedUser(tenantId: string, userId: string, i
   await assertUserReferencesBelongToTenant(tenantId, input);
   const patch: Record<string, unknown> = { updatedAt: new Date().toISOString() };
   if (input.name !== undefined) patch.name = input.name;
+  if (input.phone !== undefined) patch.phone = userPhoneForStorage(input.phone);
   if (input.roleId !== undefined) patch.roleId = input.roleId;
   if (input.permissionTemplateId !== undefined) patch.permissionTemplateId = asUuidOrNull(input.permissionTemplateId);
   if (input.teamId !== undefined) patch.teamId = input.teamId || null;
@@ -472,7 +479,7 @@ export async function updateTenantScopedUser(tenantId: string, userId: string, i
   if (input.skills !== undefined) patch.skills = input.skills;
   if (input.status !== undefined) patch.status = input.status;
   if (input.isAvailableForAssignment !== undefined) patch.isAvailableForAssignment = input.isAvailableForAssignment;
-  const returning = 'id, name, email, status, "roleId", "permissionTemplateId", "managerId", "teamId", skills, "isAvailableForAssignment", "createdAt"';
+  const returning = 'id, name, email, phone, status, "roleId", "permissionTemplateId", "managerId", "teamId", skills, "isAvailableForAssignment", "createdAt"';
   if (input.status === undefined && input.roleId === undefined) {
     return updateReturning("User", patch, 'where "tenantId"::text = $1 and id::text = $2', [tenantId, userId], returning);
   }

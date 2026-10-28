@@ -177,7 +177,7 @@ The bots run in their own container, `voice-bot`, next to the CRM on the VPS. Pl
 
    Then, in the CRM, open any bot. If the service can't be reached, its **Before this bot can go live** list says so.
 5. **Test call from the browser.** Each bot has a **Test call** button: you talk to the bot through your computer's microphone, without Plivo. The browser asks for microphone permission for the CRM site. This tests the voice, language switching and replies before any real call.
-6. **A real call to your phone.** Once Plivo is set up, the bot's **Calls** tab has **Call my phone**: the bot calls the phone on your profile through Plivo. The **worker** container places bot calls, so it must be running (it is in the normal deployment).
+6. **A real call to your phone.** Once Plivo is set up, enter your phone under **My Account → Profile** (or ask an admin to set it under **Settings → Access → Users**). The bot's **Calls** tab has **Call my phone**: the bot calls that profile phone through Plivo, or the number entered in the dialog. The **worker** container places bot calls, so it must be running (it is in the normal deployment).
 
 If browser **Test call** reports a public URL error, or **Call my phone** stays queued or fails, check the runtime URL in both containers. From `/opt/unnatify-crm` on the VPS, run these lines one at a time:
 
@@ -210,7 +210,7 @@ docker compose -f deploy/vps/docker-compose.yml --env-file deploy/vps/.env ps we
 
 - **Voice bots → Overview** shows every bot's calls for the last 7, 30 or 90 days. Each bot's **Results** tab shows the same for that bot.
   - Calls placed and answered, incoming calls, interested, callbacks and hand-overs, and calls per day.
-  - **Reply time** per AI: the typical time, and the time 9 in 10 replies beat, from the end of the caller's speech to the bot's first sound. It is split into hearing, thinking and voice. Use it to compare Groq with Claude on real calls.
+  - **Answer time** per AI: the typical time and the time 9 in 10 answers beat, from the end of the caller's speech to the first answer audio. **First sound** is shown separately because a short filler can begin before the answer. Hearing, thinking and voice timings help locate the delay. Older calls have first-sound timing only, so they show a dash for answer time.
   - **Free limits and budget**: today's use of each Groq model and Whisper (Groq's limits reset daily, UTC), this month's Google and Azure voice characters, and the Claude budget.
   - **Calls to listen to**: see below.
 - **Quality review.** After each answered call, Claude scores how the bot did (1–5) against the bot's persona, goal and rules. It flags a call **worth a listen** when the bot made something up, broke a rule, misunderstood the caller, upset or confused them, or missed a hand-over they asked for. The review is part of the summary request, so it costs about the same (well under a cent a call). When Claude isn't set up or its budget is used up, Groq writes it. Flagged calls are under **Calls → To listen**, with the reasons, the transcript and the recording when the bot keeps audio.
@@ -232,7 +232,7 @@ Do these in order, after sections 2–7 and Plivo's section 8. Note anything odd
    - a question from the bot's knowledge (it answers from it, not made up);
    - staying silent for the silence limit (it asks if you're there, then ends politely);
    - saying "don't call me again", **from a spare phone only**: the number goes on the bot stop list, and there's no screen yet to take a number off it.
-4. **Reply time.** Open the call's line: typical replies under about 1 second on Groq is good; Claude is usually a little slower. Over 1.5 seconds often means the server is far from the providers or busy.
+4. **Answer time.** Open the call's line and the bot's Results tab. Compare answer time with first sound, then check the hearing, thinking and voice timings. Use several English, Hindi and Hinglish calls before changing providers or turn detection. A short filler alone is not evidence that the answer was fast.
 5. **Hand-over.** Ask the bot to talk to a person. Your owner phone should ring, then the team's online agents. Try once answering and once letting it ring out (you should hear the bot's "nobody is free" line, and a callback task should appear).
 6. **A lead call.** Make yourself a lead with your number, then **More → Call with voice bot**. Afterwards the lead shows the bot's activity with its summary and fields, any mapped fields changed ("modified by voice bot" in History), and a task if you asked for a callback.
 7. **Unanswered and machine.** Call a number that won't answer, and one with voicemail. Both should count as not answered and be tried again per the bot's retries, inside calling hours.

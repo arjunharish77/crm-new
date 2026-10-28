@@ -9,7 +9,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 export type TestCallLine = { role: "bot" | "caller"; text: string; language: "hi" | "en" | null; at: number; interrupted?: boolean };
 export type TestCallEvent = { event: string; detail: Record<string, any>; at: number };
-export type TestCallTurn = { replyMs: number; ai: string | null; language: string | null };
+export type TestCallTurn = { replyMs: number; answerMs?: number | null; ai: string | null; language: string | null };
 export type TestCallState = "idle" | "connecting" | "live" | "ended" | "failed";
 
 export function useTestCall() {

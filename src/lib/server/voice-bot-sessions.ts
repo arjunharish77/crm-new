@@ -162,10 +162,25 @@ async function prepareSession(actor: TenantUser, botId: string, target: SessionT
         if (step.text.trim()) toRecord.push({ id: `step.${step.id}`, language: snapshot.startLanguage, text: step.text });
     }
     try {
-        for (const item of toRecord) {
-            const result = await cachedLineAudio(tenantId, bot.id, snapshot.voices[item.language], item.language, item.text, options.sampleRate);
-            snapshot.audio[item.id] = { path: result.path, text: item.text, language: item.language };
-        }
+        // Cold caches require remote synthesis. Keep a small concurrency limit so starting a
+        // call does not wait for every independent line in sequence or flood the voice provider.
+        const pending = new Map<string, Promise<Awaited<ReturnType<typeof cachedLineAudio>>>>();
+        let next = 0;
+        const recordNext = async () => {
+            while (next < toRecord.length) {
+                const item = toRecord[next++];
+                const voice = snapshot.voices[item.language];
+                const key = `${voice.provider}|${voice.voice}|${item.language}|${options.sampleRate}|${item.text}`;
+                let result = pending.get(key);
+                if (!result) {
+                    result = cachedLineAudio(tenantId, bot.id, voice, item.language, item.text, options.sampleRate);
+                    pending.set(key, result);
+                }
+                const audio = await result;
+                snapshot.audio[item.id] = { path: audio.path, text: item.text, language: item.language };
+            }
+        };
+        await Promise.all(Array.from({ length: Math.min(3, toRecord.length) }, () => recordNext()));
     } catch (error) {
         if (error instanceof Error && error.message === "VOICE_PROVIDER_NOT_CONFIGURED") throw new Error("VOICE_BOT_TEST_NEEDS_VOICE_KEY");
         throw new Error("VOICE_BOT_TEST_VOICE_FAILED");
@@ -328,6 +343,7 @@ const endSchema = z.object({
     })).max(600).default([]),
     turns: z.array(z.object({
         replyMs: z.number().int().min(0).max(120_000), sttMs: z.number().int().min(0).max(120_000).nullable().default(null),
+        answerMs: z.number().int().min(0).max(120_000).nullable().default(null),
         llmMs: z.number().int().min(0).max(120_000).nullable().default(null), ttsMs: z.number().int().min(0).max(120_000).nullable().default(null),
         ai: z.string().max(40).nullable().default(null), language: z.enum(["hi", "en"]).nullable().default(null),
     })).max(600).default([]),

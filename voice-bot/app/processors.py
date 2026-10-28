@@ -7,7 +7,7 @@ Order in the pipeline (bot.py):
 
 import asyncio
 import time
-from typing import Any, Callable
+from typing import Any, Awaitable, Callable
 
 from loguru import logger
 from pipecat.frames.frames import (
@@ -27,6 +27,7 @@ from pipecat.frames.frames import (
     OutputAudioRawFrame,
     TranscriptionFrame,
     TTSSpeakFrame,
+    TTSAudioRawFrame,
     TTSUpdateSettingsFrame,
     UserStartedSpeakingFrame,
     UserStoppedSpeakingFrame,
@@ -108,11 +109,14 @@ class Mouth(FrameProcessor):
         self._filler_task: asyncio.Task | None = None
         self._filled_this_turn = False
         self._chunk_bytes = int(sample_rate * 0.02) * 2  # 20 ms of 16-bit mono
+        self.on_recorded_answer_start: Callable[[], Awaitable[None]] | None = None
 
     async def play_recorded(self, audio_id: str, text: str, language: str | None, *, record: bool = True) -> bool:
         audio = self._conversation.audio.get(audio_id)
         if not audio:
             return False
+        if record and self.on_recorded_answer_start:
+            await self.on_recorded_answer_start()
         for offset in range(0, len(audio), self._chunk_bytes):
             chunk = audio[offset : offset + self._chunk_bytes]
             if len(chunk) % 2:
@@ -167,8 +171,7 @@ class Mouth(FrameProcessor):
 
 
 class TurnObserver(BaseObserver):
-    """Measures each reply as the caller hears it, from the end of their speech to the bot's
-    first sound, and collects provider usage."""
+    """Separates the first sound (which may be a filler) from the first answer audio."""
 
     def __init__(self, conversation: Conversation, on_usage: Callable[[dict[str, Any]], None], vad_stop_seconds: float = 0.2):
         super().__init__()
@@ -177,15 +180,43 @@ class TurnObserver(BaseObserver):
         self._vad_stop_seconds = vad_stop_seconds
         self._speech_ended_at: float | None = None
         self._turn_ended_at: float | None = None
+        self._first_sound_at: float | None = None
+        self._answer_audio_at: float | None = None
         self._current: dict[str, Any] = {}
+        self._last_turn: dict[str, Any] | None = None
         self._seen: set[int] = set()
+
+    async def recorded_answer_started(self):
+        """A fixed line is already PCM, so it never produces a TTS audio frame."""
+        self._mark_answer_audio()
+        await self._publish_answer()
+
+    def _mark_answer_audio(self):
+        if self._turn_ended_at is not None and self._answer_audio_at is None:
+            self._answer_audio_at = time.monotonic()
+
+    async def _publish_answer(self):
+        if self._turn_ended_at is None or self._answer_audio_at is None or self._first_sound_at is None:
+            return
+        started = self._turn_ended_at
+        turn = {
+            "replyMs": max(0, round((self._first_sound_at - started) * 1000)),
+            "answerMs": max(0, round((max(self._answer_audio_at, self._first_sound_at) - started) * 1000)),
+            **self._current,
+            "ai": self._conversation.ai_label,
+            "language": self._conversation.language.current,
+        }
+        self._conversation.turns.append(turn)
+        self._last_turn = turn
+        await self._conversation.send({"type": "turn", **turn})
+        self._turn_ended_at = self._first_sound_at = self._answer_audio_at = None
 
     async def on_push_frame(self, data: FramePushed):
         frame = data.frame
         # Speaking frames are broadcast both ways as two separate frames; count each event once.
         if data.direction != FrameDirection.DOWNSTREAM or frame.id in self._seen:
             return
-        if isinstance(frame, (UserStoppedSpeakingFrame, BotStartedSpeakingFrame, MetricsFrame, UserStartedSpeakingFrame, VADUserStartedSpeakingFrame, VADUserStoppedSpeakingFrame)):
+        if isinstance(frame, (UserStoppedSpeakingFrame, BotStartedSpeakingFrame, TTSAudioRawFrame, MetricsFrame, UserStartedSpeakingFrame, VADUserStartedSpeakingFrame, VADUserStoppedSpeakingFrame)):
             self._seen.add(frame.id)
             if len(self._seen) > 5000:
                 self._seen.clear()
@@ -196,6 +227,8 @@ class TurnObserver(BaseObserver):
             conversation.silence_count = 0
         elif isinstance(frame, VADUserStartedSpeakingFrame):
             self._speech_ended_at = None
+            self._current = {"sttMs": None, "llmMs": None, "ttsMs": None}
+            self._last_turn = None
         elif isinstance(frame, VADUserStoppedSpeakingFrame):
             # The detector reports a stop after this much silence; the speech itself ended earlier.
             # The first stop after the caller last spoke counts (the stop is reported more than once).
@@ -204,23 +237,33 @@ class TurnObserver(BaseObserver):
         elif isinstance(frame, UserStoppedSpeakingFrame):
             self._turn_ended_at = self._speech_ended_at or time.monotonic()
             self._speech_ended_at = None
-            self._current = {"sttMs": None, "llmMs": None, "ttsMs": None}
+            self._first_sound_at = None
+            self._answer_audio_at = None
+            if not self._current:
+                self._current = {"sttMs": None, "llmMs": None, "ttsMs": None}
         elif isinstance(frame, BotStartedSpeakingFrame) and self._turn_ended_at is not None:
-            reply_ms = int((time.monotonic() - self._turn_ended_at) * 1000)
-            self._turn_ended_at = None
-            turn = {"replyMs": reply_ms, **self._current, "ai": conversation.ai_label, "language": conversation.language.current}
-            conversation.turns.append(turn)
-            await conversation.send({"type": "turn", **turn})
+            if self._first_sound_at is None:
+                self._first_sound_at = time.monotonic()
+            await self._publish_answer()
+        elif isinstance(frame, TTSAudioRawFrame):
+            self._mark_answer_audio()
+            await self._publish_answer()
         elif isinstance(frame, MetricsFrame):
             for item in frame.data:
                 name = (item.processor or "").lower()
                 if isinstance(item, TTFBMetricsData) and item.value:
                     if "tts" in name and self._current.get("ttsMs") is None:
                         self._current["ttsMs"] = int(item.value * 1000)
+                        if self._last_turn is not None:
+                            self._last_turn["ttsMs"] = self._current["ttsMs"]
                     elif "llm" in name and self._current.get("llmMs") is None:
                         self._current["llmMs"] = int(item.value * 1000)
+                        if self._last_turn is not None:
+                            self._last_turn["llmMs"] = self._current["llmMs"]
                 elif isinstance(item, ProcessingMetricsData) and "stt" in name and item.value:
                     self._current["sttMs"] = int(item.value * 1000)
+                    if self._last_turn is not None:
+                        self._last_turn["sttMs"] = self._current["sttMs"]
                 elif isinstance(item, LLMUsageMetricsData):
                     tokens = item.value
                     provider = "claude" if "anthropic" in name else "groq"

@@ -37,7 +37,7 @@ VAD_STOP_SECONDS = 0.2
 # When Smart Turn thinks the caller hasn't finished, the longest it waits through silence before
 # answering anyway. Pipecat's default is 3 s, which is long dead air on a phone call; the bot can
 # be interrupted if it starts too soon. To be tuned on real calls (wave G).
-UNSURE_TURN_WAIT_SECONDS = 2.0
+UNSURE_TURN_WAIT_SECONDS = 1.5
 
 
 class UsageReporter:
@@ -156,10 +156,12 @@ async def run_conversation(websocket: WebSocket, claim: dict[str, Any], *, crm: 
             await worker.queue_frame(ManuallySwitchServiceFrame(service=groq))
 
     usage = UsageReporter(crm, conversation.session_id, on_claude_cap)
+    turn_observer = TurnObserver(conversation, lambda item: usage.add(item), vad_stop_seconds=VAD_STOP_SECONDS)
+    mouth.on_recorded_answer_start = turn_observer.recorded_answer_started
     worker = PipelineWorker(
         pipeline,
         params=PipelineParams(audio_in_sample_rate=input_rate, audio_out_sample_rate=output_rate, enable_metrics=True, enable_usage_metrics=True),
-        observers=[TurnObserver(conversation, lambda item: usage.add(item), vad_stop_seconds=VAD_STOP_SECONDS)],
+        observers=[turn_observer],
         enable_rtvi=False,
         idle_timeout_secs=180,
     )

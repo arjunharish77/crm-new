@@ -30,6 +30,7 @@ export async function PATCH(
     if (error instanceof Error && error.message === "TEAM_NOT_FOUND_FOR_TENANT") return badRequest("Selected team was not found for this workspace");
     if (error instanceof Error && error.message === "MANAGER_NOT_FOUND_FOR_TENANT") return badRequest("Selected manager was not found for this workspace");
     if (error instanceof Error && error.message === "PERMISSION_TEMPLATE_NOT_FOUND_FOR_TENANT") return badRequest("Selected permission template was not found for this workspace");
+    if (error instanceof Error && error.message === "USER_PHONE_INVALID") return badRequest("Enter a dialable phone number, such as +919876543210 or 9876543210");
     return serverError("Failed to update user", error);
   }
 }

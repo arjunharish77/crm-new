@@ -20,6 +20,7 @@ import {
 } from "@/components/ui/select";
 import { apiFetch } from "@/lib/api";
 import { Role, User } from "@/types/user";
+import { isValidUserPhone, USER_PHONE_ERROR } from "@/lib/user-phone";
 
 interface InviteUserDialogProps {
     open: boolean;
@@ -42,6 +43,7 @@ const NONE_VALUE = "__none__";
 const formSchema = z.object({
     name: z.string().min(2, "Name is required"),
     email: z.string().email("Valid email is required"),
+    phone: z.string().refine(isValidUserPhone, USER_PHONE_ERROR),
     roleId: z.string().min(1, "Role is required"),
     permissionTemplateId: z.string().optional(),
     teamId: z.string().optional(),
@@ -93,6 +95,7 @@ export function InviteUserDialog({
         defaultValues: {
             name: "",
             email: "",
+            phone: "",
             roleId: "",
             permissionTemplateId: "",
             teamId: "",
@@ -185,6 +188,17 @@ export function InviteUserDialog({
                     render={({ field }) => (
                         <Field htmlFor="invite-email" label="Email" error={errors.email?.message}>
                             <Input id="invite-email" {...field} type="email" placeholder="john@example.com" />
+                        </Field>
+                    )}
+                />
+
+                <Controller
+                    name="phone"
+                    control={control}
+                    render={({ field }) => (
+                        <Field htmlFor="invite-phone" label="Agent phone (optional)" error={errors.phone?.message}>
+                            <Input id="invite-phone" {...field} type="tel" inputMode="tel" autoComplete="tel" placeholder="+91 98765 43210" aria-invalid={!!errors.phone} />
+                            <p className="text-xs text-muted-foreground">Plivo rings this number for the user’s calls. A number without a country code uses the phone system’s default country code.</p>
                         </Field>
                     )}
                 />

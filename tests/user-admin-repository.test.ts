@@ -29,7 +29,24 @@ describe("updateTenantScopedUser — F28 fix: omitted fields must not be cleared
     expect(setClause).not.toContain('"teamId" = ');
     expect(setClause).not.toContain('"managerId" = ');
     expect(setClause).not.toContain('"skills" = ');
+    expect(setClause).not.toContain('"phone" = ');
     expect(values).not.toContain(null); // no incidental null writes from omitted fields
+  });
+
+  it("updates or clears an agent phone without changing other profile fields", async () => {
+    dbMocks.queryOne.mockResolvedValue({ id: "user-1", phone: "+91 98765 43210" });
+    await updateTenantScopedUser(TENANT, "user-1", { phone: "+91 98765 43210" });
+    expect(dbMocks.queryOne.mock.calls[0][0]).toContain('"phone" = ');
+    expect(dbMocks.queryOne.mock.calls[0][1]).toContain("+91 98765 43210");
+
+    dbMocks.queryOne.mockReset().mockResolvedValue({ id: "user-1", phone: null });
+    await updateTenantScopedUser(TENANT, "user-1", { phone: "" });
+    expect(dbMocks.queryOne.mock.calls[0][1]).toContain(null);
+  });
+
+  it("rejects an invalid agent phone before writing", async () => {
+    await expect(updateTenantScopedUser(TENANT, "user-1", { phone: "call me tomorrow" })).rejects.toThrow("USER_PHONE_INVALID");
+    expect(dbMocks.queryOne).not.toHaveBeenCalled();
   });
 
   it("still allows explicitly clearing teamId with an empty string", async () => {
@@ -79,6 +96,16 @@ describe("createTenantScopedUser — cross-tenant reference rejection", () => {
     await expect(
       createTenantScopedUser(TENANT, { name: "New User", email: "n@x.invalid", password: "pw", roleId: "role-1", teamId: "other-tenant-team" }),
     ).rejects.toThrow("TEAM_NOT_FOUND_FOR_TENANT");
+  });
+
+  it("stores the new agent phone in User.phone", async () => {
+    dbMocks.queryOne
+      .mockResolvedValueOnce({ id: "role-1" })
+      .mockResolvedValueOnce({ id: "new-user", phone: "+91 98765 43210" });
+    await createTenantScopedUser(TENANT, { name: "Agent", email: "agent@example.invalid", password: "password", roleId: "role-1", phone: "+91 98765 43210" });
+    const [sql, values] = dbMocks.queryOne.mock.calls[1];
+    expect(sql).toContain('"phone"');
+    expect(values).toContain("+91 98765 43210");
   });
 });
 

@@ -21,6 +21,7 @@ import {
 } from "@/components/ui/select";
 import { apiFetch } from "@/lib/api";
 import { Role, User } from "@/types/user";
+import { isValidUserPhone, USER_PHONE_ERROR } from "@/lib/user-phone";
 
 interface EditUserDialogProps {
     user: User | null;
@@ -44,6 +45,7 @@ const NONE_VALUE = "__none__";
 const formSchema = z.object({
     name: z.string().min(2, "Name is required"),
     email: z.string().email("Valid email is required"),
+    phone: z.string().refine(isValidUserPhone, USER_PHONE_ERROR),
     roleId: z.string().min(1, "Role is required"),
     permissionTemplateId: z.string().optional(),
     teamId: z.string().optional(),
@@ -165,6 +167,7 @@ export function EditUserDialog({
         defaultValues: {
             name: "",
             email: "",
+            phone: "",
             roleId: "",
             permissionTemplateId: "",
             teamId: "",
@@ -206,6 +209,7 @@ export function EditUserDialog({
                 reset({
                     name: user.name,
                     email: user.email,
+                    phone: user.phone ?? "",
                     roleId: user.role?.id || user.roleId || "",
                     permissionTemplateId: user.permissionTemplateId || "",
                     teamId: user.team?.id || user.teamId || "",
@@ -234,6 +238,7 @@ export function EditUserDialog({
                 method: "PATCH",
                 body: JSON.stringify({
                     name: values.name,
+                    phone: values.phone,
                     roleId: values.roleId,
                     // Was missing, so changing the template override never saved (UI/UX plan B13).
                     // "" (use the role's template) is stored as no override.
@@ -295,6 +300,17 @@ export function EditUserDialog({
                         )}
                     />
                 </div>
+
+                <Controller
+                    name="phone"
+                    control={control}
+                    render={({ field }) => (
+                        <Field htmlFor="edit-phone" label="Agent phone (optional)" error={errors.phone?.message}>
+                            <Input id="edit-phone" {...field} type="tel" inputMode="tel" autoComplete="tel" placeholder="+91 98765 43210" aria-invalid={!!errors.phone} />
+                            <p className="text-xs text-muted-foreground">Plivo rings this number for the user’s calls. A User-Agent Mapping overrides it; a number without a country code uses the phone system’s default country code.</p>
+                        </Field>
+                    )}
+                />
 
                 <Controller
                     name="roleId"
